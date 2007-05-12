@@ -1,0 +1,10 @@
+XSLT "eXtensible Stylesheet Language Transformations" funkcionální­ programovací jazyk v XML pro specifikaci pøevodu vstupního XML na výstupní formát (více v \cite{nutshellXML})
+JOP "Jednotné obslu¾né pracovi¹tì" øídící zaøízení umo¾òující kontrolovat nìkolik stanic najednou
+M\&S "Modelování a simulace" viz sekce \ref{modelling}
+DOM "Document Object Model" více v \cite{nutshellXML}
+SAX "Simple API for XML" více v \cite{nutshellXML}
+GCC "GNU Compiler Collection" \url{http://www.gnu.org/software/gcc/}
+STL "Standard Template Library" knihovní funkce jazyka C++
+PS "Petriho sí»" viz sekce \ref{modelling}
+SIMLIB "SIMLIB/C++" \url{http://www.fit.vutbr.cz/~peringer/SIMLIB/}
+AB "Automatický blok" tra»ové zabezpeèovací zaøízení rozdìlené na prostorové oddíly
