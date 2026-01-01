@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -24,7 +24,7 @@ import java.util.Map.Entry;
 public class EnumUnorientedGraph<N extends Enum<N>, E> extends AbstractUnorientedGraph<N,E> {
 	private final Map<N, Map<N, E>> map;
 	private final Class<N> clazz;
-	
+
 	/**
 	 * @param clazz
 	 */
@@ -32,7 +32,7 @@ public class EnumUnorientedGraph<N extends Enum<N>, E> extends AbstractUnoriente
 		this.clazz = clazz;
 		this.map = new EnumMap<N, Map<N, E>>(clazz);
 	}
-	
+
 	@Override
 	protected Object implementationContainer() {
 		return map;
@@ -55,7 +55,7 @@ public class EnumUnorientedGraph<N extends Enum<N>, E> extends AbstractUnoriente
 	public Collection<E> get(N node) {
 		throw new NotImplementedException();
 	}
-	
+
 	/**
 	 * @param node
 	 * @return node around in graph
@@ -66,7 +66,7 @@ public class EnumUnorientedGraph<N extends Enum<N>, E> extends AbstractUnoriente
 			final N key = e.getKey();
 			final Map<N, E> value = e.getValue();
 			assert !value.containsKey(key) : value;
-			
+
 			if (key == node) {
 				enumMap.putAll(value);
 			} else {
@@ -107,18 +107,18 @@ public class EnumUnorientedGraph<N extends Enum<N>, E> extends AbstractUnoriente
 	public Collection<E> values() {
 		throw new NotImplementedException();
 	}
-	
+
 	private N[] nodesInOrder(N n1, N n2) {
 		assert n1 != n2;
 		final N[] nodes = (N[]) new Enum[]{n1,n2};
 		Arrays.sort(nodes);
 		return nodes;
 	}
-	
+
 	private Map<N, E> getSubmap(N[] sortedNodes) {
 		return map.get(sortedNodes[0]);
 	}
-	
+
 	private Map<N, E> getSubmapWithCreation(N[] sortedNodes) {
 		Map<N, E> subMap = getSubmap(sortedNodes);
 		if (subMap == null) {

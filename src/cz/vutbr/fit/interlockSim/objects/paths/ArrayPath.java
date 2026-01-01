@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.paths;
@@ -39,7 +39,7 @@ public final class ArrayPath extends AbstractPath {
 	public boolean addAll(PathElement...elements) {
 		return Collections.addAll(deque, elements);
 	}
-	
+
 	public boolean add(PathElement e) {
 		return deque.add(e);
 	}
@@ -179,7 +179,7 @@ public final class ArrayPath extends AbstractPath {
 	public <T> T[] toArray(T[] a) {
 		return deque.toArray(a);
 	}
-	
+
 	@Override
 	public String toString() {
 		return deque.toString();

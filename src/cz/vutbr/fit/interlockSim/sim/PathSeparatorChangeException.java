@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -47,7 +47,7 @@ public class PathSeparatorChangeException extends SimulationException {
 	public PathSeparatorChangeException(String message, Throwable cause, PathSeparator object) {
 		super(message, cause, object);
 	}
-	
+
 	@Override
 	public PathSeparator getObject() {
 		return (PathSeparator) super.getObject();

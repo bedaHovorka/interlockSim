@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -22,17 +22,17 @@ import java.util.Map;
  */
 public abstract class AbstractUnorientedGraph<N,E> implements UnorientedGraph<N,E> {
 	protected abstract Object implementationContainer();
-	
+
 	public boolean containsEdge(E edge) {
 		return values().contains(edge);
 	}
-	
+
 	@Override
 	public String toString() {
 		final Object o = implementationContainer();
 		return (o == null) ? super.toString() : o.toString();
 	}
-	
+
 	public int size() {
 		final Object o = invokeForImplementationContainer();
 		assert o instanceof Integer;
@@ -42,11 +42,11 @@ public abstract class AbstractUnorientedGraph<N,E> implements UnorientedGraph<N,
 	public void clear() {
 		invokeForImplementationContainer();
 	}
-	
+
 	private Object invokeForImplementationContainer(Object... args) {
 		final Object o = implementationContainer();
 		if (o == null || (!(o instanceof Map) && !(o instanceof Collection))) throw new UnsupportedOperationException();
-		
+
 		final StackTraceElement e = new Throwable().getStackTrace()[1];
 		final String methodName = e.getMethodName();
 		try {

@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.paths;
@@ -24,24 +24,24 @@ public interface Path extends Deque<PathElement>, Track {
 	 * @return last element must be semaphore
 	 */
 	public RailSemaphore getLastPathSemaphore();
-	
+
 	/**
 	 * @return minimal value of {@link Track#maxSpeed(PathSeparator)} in sequence
 	 */
 	public double maxSpeed(PathSeparator sep);
-	
+
 	/**
 	 * @return copy of this aPath in reverse
 	 */
 	public Path reversePath();
-	
+
 	public PathSeparator getFirst();
-	
+
 	public OrientedPathSeparator getLast();
-	
+
 	/**
 	 * Same as list equals, because {@link Deque#equals(Object)} should test identity
-	 * @param path 
+	 * @param path
 	 * @return if path have same elements in same order
 	 */
 	public boolean equalsWithElements(Path path);

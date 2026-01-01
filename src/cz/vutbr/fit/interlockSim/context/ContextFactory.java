@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.context;
@@ -20,34 +20,34 @@ import java.io.OutputStream;
 public interface ContextFactory {
 	/**
 	 * create context from file
-	 * @param file source 
+	 * @param file source
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-    public Context createContext(File file) throws ContextCreationException;
-	
-    /**
+	public Context createContext(File file) throws ContextCreationException;
+
+	/**
 	 * create context from stream
-	 * @param stream source 
+	 * @param stream source
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-    public Context createContext(InputStream stream) throws ContextCreationException;
-    
-    /**
-     * save context to file
-     * @param context
-     * @param file
-     * @return if save was success
-     */
-    public boolean saveContext(Context context, File file);
-    
-    /**
-     * save context to stream
-     * @param context
-     * @param stream
-     * @return if save was success
-     */
-    public boolean saveContext(Context context, OutputStream stream);
+	public Context createContext(InputStream stream) throws ContextCreationException;
+
+	/**
+	 * save context to file
+	 * @param context
+	 * @param file
+	 * @return if save was success
+	 */
+	public boolean saveContext(Context context, File file);
+
+	/**
+	 * save context to stream
+	 * @param context
+	 * @param stream
+	 * @return if save was success
+	 */
+	public boolean saveContext(Context context, OutputStream stream);
 }
 

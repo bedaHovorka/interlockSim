@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.gui;
@@ -17,10 +17,10 @@ import java.awt.event.MouseEvent;
  * @see StatusBar
  */
 public interface StatusProducer {
-    	/**
-    	 * get status of Component
-    	 * @param e
-    	 * @return status of Component
-    	 */
+		/**
+		 * get status of Component
+		 * @param e
+		 * @return status of Component
+		 */
 	public String getStatus(MouseEvent e);
 }

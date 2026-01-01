@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -30,7 +30,7 @@ public abstract class LoopProcess extends Process {
 		}
 		byTerminateAction();
 	}
-	
+
 	protected void startAction() {
 		// EMPTY
 	}
@@ -40,11 +40,11 @@ public abstract class LoopProcess extends Process {
 	}
 
 	protected abstract void iteration();
-	
+
 	protected void interLoopSleep() {
 		passivate();
 	}
-	
+
 	/**
 	 * safe canceling of process
 	 */

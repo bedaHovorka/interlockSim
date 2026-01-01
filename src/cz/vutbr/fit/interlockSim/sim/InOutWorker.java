@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -32,7 +32,7 @@ public class InOutWorker extends LoopProcess {
 	private Path path; //	cesta k naskedujicimu semaforu - pokud existuje
 
 	/**
-	 * @param context 
+	 * @param context
 	 * @param out
 	 */
 	public InOutWorker(SimulationContext context, InOut out) {
@@ -40,7 +40,7 @@ public class InOutWorker extends LoopProcess {
 		this.context = context;
 		this.next = context.getNextTrackSection(inOut, null);
 	}
-	
+
 	private Condition pathFree = new Condition() {
 		public boolean test() {
 			//EXTENSION az bude Interlocking: co kdyz cesta vubec neexistuje
@@ -53,7 +53,7 @@ public class InOutWorker extends LoopProcess {
 			}
 		}
 	};
-	
+
 	@Override
 	protected void iteration() {
 		while (!queqe.empty()) {
@@ -61,7 +61,7 @@ public class InOutWorker extends LoopProcess {
 			context.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS);
 			waitUntil(pathFree);
 			final Link first = queqe.first();
-			
+
 			try {
 				//zarezervovat koleje
 				path.setUpPath(inOut);
@@ -70,7 +70,7 @@ public class InOutWorker extends LoopProcess {
 				return;
 			}
 			context.report("Path reserved for " + first, inOut, ReportType.NODE_EVENTS);
-			
+
 			//cekej na odchod vlaku z fronty (bez te anonymni tridy please)
 			waitUntil(new Condition() {
 				public boolean test() {
@@ -80,25 +80,25 @@ public class InOutWorker extends LoopProcess {
 		}
 		myIdle = true;
 	}
-	
+
 	/**
 	 * @return input queque
 	 */
 	public Head getQueqe() {
 		return queqe;
 	}
-	
+
 	/**
 	 * in Inout is new Train - budicek procesu
-	 * @param train 
+	 * @param train
 	 */
-	public void enterTrain(Train train) {		
+	public void enterTrain(Train train) {
 		if (queqe.empty()) {
-			train.into(queqe); 
+			train.into(queqe);
 		} else {
 			Process.wait(queqe);
 		}
-		
+
 		if (myIdle) Process.activate(this);
 	}
 }

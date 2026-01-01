@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.gui;
@@ -54,16 +54,16 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 	private Context context;
 	private GridMouseEditListener editListener = new GridMouseEditListener();
 	private GridMouseSimulationControlListener simulationControlListener = new GridMouseSimulationControlListener();
-	
+
 	private State state;
 	private Class<? extends NodeCell> toolbarCellClass;
 	private Object[] toolbarArgs;
 	private Point selectedkey;
-	
+
 	private abstract class GridMouseAdapter implements MouseMotionListener, MouseListener {
 
 		public void mouseDragged(MouseEvent e) {
-			//EMPTY			
+			//EMPTY
 		}
 
 		public void mouseMoved(MouseEvent e) {
@@ -71,25 +71,25 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 		}
 
 		public final void mouseClicked(MouseEvent e) {
-		    switch (e.getButton()) {
-		    case MouseEvent.BUTTON1:
+			switch (e.getButton()) {
+			case MouseEvent.BUTTON1:
 			leftMouseClicked(e);
 			break;
-		    case MouseEvent.BUTTON2:
+			case MouseEvent.BUTTON2:
 			middleMouseClicked(e);
 			break;
-		    case MouseEvent.BUTTON3:
+			case MouseEvent.BUTTON3:
 			rightMouseClicked(e);
-		    	break;
-		    default:
-		    	assert(false);
-		    }
+				break;
+			default:
+				assert(false);
+			}
 		}
-		
+
 		public final void rightMouseClicked(MouseEvent e) {
-		    state.getPopupMenu().show(RailwayNetGridCanvas.this, e, currentKey(e), cellOn(e));
+			state.getPopupMenu().show(RailwayNetGridCanvas.this, e, currentKey(e), cellOn(e));
 		}
-		
+
 		public abstract void middleMouseClicked(MouseEvent e);
 		public abstract void leftMouseClicked(MouseEvent e);
 
@@ -108,143 +108,143 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 		public void mouseReleased(MouseEvent e) {
 //			EMPTY
 		}
-		
+
 	}
-	
+
 	private class GridMouseEditListener extends GridMouseAdapter {
 
-	    @Override
-	    public void leftMouseClicked(MouseEvent e) {
+		@Override
+		public void leftMouseClicked(MouseEvent e) {
 		final Cell cellOn = cellOn(e);
 		final EditingContext editingContext = getEditingContext();
 		final Point currentKey = currentKey(e);
 		if (cellOn == null) {
-		    if (toolbarCellClass == null) {
-		    	selectedkey = null;
-		    	repaint();
-		    	return;
-		    }
-		    try {
-		    	final NodeCell clone = (NodeCell) getEditingContextFactory().createNew(editingContext, toolbarCellClass, toolbarArgs);
-		    	if (clone instanceof InOut) ((InOut) clone).setName(editingContext.getCurrentNameString());
+			if (toolbarCellClass == null) {
+				selectedkey = null;
+				repaint();
+				return;
+			}
+			try {
+				final NodeCell clone = (NodeCell) getEditingContextFactory().createNew(editingContext, toolbarCellClass, toolbarArgs);
+				if (clone instanceof InOut) ((InOut) clone).setName(editingContext.getCurrentNameString());
 				editingContext.putCell(currentKey,clone);
-		    } catch (Exception e1) {
-		    	assert false : e1;
-		    	e1.printStackTrace();
-		    }
+			} catch (Exception e1) {
+				assert false : e1;
+				e1.printStackTrace();
+			}
 		} else {
-		    if (selectedkey != null) {
+			if (selectedkey != null) {
 			if (selectedkey.equals(currentKey)) return;
 				Point sk = selectedkey;
 				selectedkey = null;
-				
+
 				if (cellOn instanceof NodeCell) {
-					TrackBlock tl = new SimpleTrackBlock((NodeCell) cellOn(sk.x, sk.y), (NodeCell) cellOn, 
+					TrackBlock tl = new SimpleTrackBlock((NodeCell) cellOn(sk.x, sk.y), (NodeCell) cellOn,
 							editingContext.getCurrentTrackLength(), editingContext.getCurrentMaxSpeed());
 					editingContext.joinCells(sk, currentKey, tl);
 				}
-		    } else if (cellOn instanceof NodeCell){
-		    	selectedkey = currentKey;
-		    	repaint();
-		    }
+			} else if (cellOn instanceof NodeCell){
+				selectedkey = currentKey;
+				repaint();
+			}
 		}
-	    }
+		}
 
-	    @Override
-	    public void middleMouseClicked(MouseEvent e) {
-	    	final EditingContext editingContext = getEditingContext();
-	    	editingContext.removeCell(currentKey(e));
-	    }
+		@Override
+		public void middleMouseClicked(MouseEvent e) {
+			final EditingContext editingContext = getEditingContext();
+			editingContext.removeCell(currentKey(e));
+		}
 
 	}
-	
+
 	private class GridMouseSimulationControlListener extends GridMouseAdapter {
 
-	    @Override
-	    public void leftMouseClicked(MouseEvent e) {
-	    	//EMPTY
-	    }
+		@Override
+		public void leftMouseClicked(MouseEvent e) {
+			//EMPTY
+		}
 
-	    @Override
-	    public void middleMouseClicked(MouseEvent e) {
-	    	//EMPTY
-	    }
+		@Override
+		public void middleMouseClicked(MouseEvent e) {
+			//EMPTY
+		}
 
 	}
-	
+
 	private enum State { //EXTENSION jinam?
-	    EDITING(new EditorCellRenderer(cellWidth, cellHeight), new GridCanvasEditingPopupMenu()),
-	    SIMULATION(null, null);
-	    
-	    private final CellRenderer cellRenderer;
-	    private final GridCanvasPopupMenu popupMenu;
-	    
-	    State(CellRenderer cellRenderer, GridCanvasPopupMenu popupMenu) {
+		EDITING(new EditorCellRenderer(cellWidth, cellHeight), new GridCanvasEditingPopupMenu()),
+		SIMULATION(null, null);
+
+		private final CellRenderer cellRenderer;
+		private final GridCanvasPopupMenu popupMenu;
+
+		State(CellRenderer cellRenderer, GridCanvasPopupMenu popupMenu) {
 		this.cellRenderer = cellRenderer;
 		this.popupMenu = popupMenu;
-	    }
-	    public CellRenderer getCellRenderer() {
-	        return cellRenderer;
-	    }
-	    public GridCanvasPopupMenu getPopupMenu() {
-	        return popupMenu;
-	    }
+		}
+		public CellRenderer getCellRenderer() {
+			return cellRenderer;
+		}
+		public GridCanvasPopupMenu getPopupMenu() {
+			return popupMenu;
+		}
 	}
 
-	
+
 	/**
 	 * Create object for painting reailway Grid on screen
 	 */
 	public RailwayNetGridCanvas() {
-	    state = State.EDITING;
-	    setBackground(Color.BLACK);
-	    setAutoscrolls(true);
-	    addMouseMotionListener(this);
+		state = State.EDITING;
+		setBackground(Color.BLACK);
+		setAutoscrolls(true);
+		addMouseMotionListener(this);
 	}
 
 	public void setContext(Context context) {
 		if (context instanceof EditingContext) {
-		    	state = State.EDITING;
-		    	changeListeners(simulationControlListener, editListener);
+				state = State.EDITING;
+				changeListeners(simulationControlListener, editListener);
 		} else if (context instanceof SimulationContext) {
-		    	state = State.SIMULATION;
-		    	changeListeners(editListener, simulationControlListener);
+				state = State.SIMULATION;
+				changeListeners(editListener, simulationControlListener);
 		} else assert(false);
 		changeContext(context);
 	}
-	
+
 	private void changeListeners(GridMouseAdapter oldListener, GridMouseAdapter newListener) {
-	    removeListener(oldListener);
-	    addListener(newListener);
+		removeListener(oldListener);
+		addListener(newListener);
 	}
-	
+
 	private void addListener(GridMouseAdapter listener) {
-	    addMouseMotionListener(listener);
-	    addMouseListener(listener);
+		addMouseMotionListener(listener);
+		addMouseListener(listener);
 	}
-	
+
 	private void removeListener(GridMouseAdapter listener) {
-	    removeMouseMotionListener(listener);
-	    removeMouseListener(listener);
+		removeMouseMotionListener(listener);
+		removeMouseListener(listener);
 	}
 
 	private void changeContext(Context cont) {
 		assert(cont != null);
 		if (context != null) context.deleteObserver(this);
 		cont.addObserver(this);
-	    	context = cont;
+			context = cont;
 		RailwayNetGrid nt = cont.getRailWayNetGrid();
 		setPreferredSize(new Dimension(cellWidth*nt.getCols(), cellHeight*nt.getRows()));
 		setSize(getPreferredSize());
 		revalidate();
 	}
-	
+
 	@Override
 	public final void paintComponent(Graphics g) {
 		assert (g instanceof Graphics2D);
 		paint((Graphics2D) g);
 	}
-	
+
 	/**
 	 * @see java.awt.Component#paint(java.awt.Graphics)
 	 * @param g graphics context
@@ -252,40 +252,40 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 	public void paint(Graphics2D g) {
 		if (context == null) return;
 		cancelClip(g);
-		
+
 		int x = 0, y = 0;
 		for (Entry<Point, Cell> cellEntry : context.getRailWayNetGrid()) {
 			Point key = cellEntry.getKey();
 			assert key != null && cellEntry.getValue() != null : cellEntry;
-			
+
 			x = key.x*cellWidth; y = key.y*cellHeight;
-			
+
 			g.translate(x, y);
 			g.clipRect(0, 0, cellWidth+1, cellHeight+1);
 			state.getCellRenderer().draw(g, cellEntry.getValue());
 			g.translate(-x, -y);
 			cancelClip(g);
 		}
-		
+
 		if (showGrid) paintGrid(g);
 		if (selectedkey != null) paintMarkSelected(g);
 	}
-	
+
 	private void paintMarkSelected(Graphics2D g) {
-	    final Cell cell = context.getRailWayNetGrid().get(selectedkey);
-	    if (!(cell instanceof NodeCell)) {
+		final Cell cell = context.getRailWayNetGrid().get(selectedkey);
+		if (!(cell instanceof NodeCell)) {
 		selectedkey = null;
 		return;
-	    }
-	    cancelClip(g);
-	    g.setColor(Color.RED);
-	    g.drawRect(selectedkey.x*cellWidth, selectedkey.y*cellHeight, getCellWidth(), getCellHeight());
+		}
+		cancelClip(g);
+		g.setColor(Color.RED);
+		g.drawRect(selectedkey.x*cellWidth, selectedkey.y*cellHeight, getCellWidth(), getCellHeight());
 	}
 
 	private void cancelClip(Graphics2D g) {
 		g.setClip(getVisibleRect());
 	}
-	
+
 	private void paintGrid(Graphics2D g) {
 		RailwayNetGrid nt = context.getRailWayNetGrid();
 		g.setColor(Color.GRAY);
@@ -294,47 +294,47 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 			int x = i*cellWidth;
 			g.drawLine(x, 0, x, getHeight());
 		}
-		
+
 		//vodorovne cary
 		for (int i = 0; i <= nt.getRows(); i++) {
 			int y = i*cellHeight;
 			g.drawLine(0, y, getWidth(), y);
 		}
 	}
-	
+
 	public String getStatus(MouseEvent e) {
 		Cell cell = cellOn(e.getX(), e.getY());
 		return cell==null ? "" : cell.toString();
 	}
-	
+
 	protected Point currentKey(MouseEvent e) {
-	    return new Point(e.getX()/cellWidth, e.getY()/cellHeight);
+		return new Point(e.getX()/cellWidth, e.getY()/cellHeight);
 	}
-	
+
 	private Cell cellOn(int x, int y) {
 		return context.getRailWayNetGrid().getCellAt(x/cellWidth, y/cellHeight);
-	} 
-	
-	protected Cell cellOn(MouseEvent e) {
-	    return cellOn(e.getX(), e.getY());
 	}
-	
+
+	protected Cell cellOn(MouseEvent e) {
+		return cellOn(e.getX(), e.getY());
+	}
+
 	/**
 	 * @deprecated asi jinde
 	 * @param editingContext
 	 */
 	public void setEditing(EditingContext editingContext) {
-	    setContext(editingContext);
+		setContext(editingContext);
 	}
-	
+
 	/**
 	 * @deprecated asi jinde
 	 * @param editingContext
 	 */
 	public void setSimulation(SimulationContext simulationContext) {
-	    setContext(simulationContext);
+		setContext(simulationContext);
 	}
-	
+
 //	nasledujicich 8 metod osetruje spravne rolovani zobrazovani scrollbaru
 	public Dimension getPreferredScrollableViewportSize() {
 		return getPreferredSize();
@@ -353,20 +353,20 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 	}
 
 	public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-	    int currentPosition = 0;
-	    if (orientation == SwingConstants.HORIZONTAL) {
-	        currentPosition = visibleRect.x;
-	    } else {
-	        currentPosition = visibleRect.y;
-	    }
+		int currentPosition = 0;
+		if (orientation == SwingConstants.HORIZONTAL) {
+			currentPosition = visibleRect.x;
+		} else {
+			currentPosition = visibleRect.y;
+		}
 
-	    if (direction < 0) {
-	        int newPosition = currentPosition -
-	                         (currentPosition / maxUnitIncrement)
-	                          * maxUnitIncrement;
-	        return (newPosition == 0) ? maxUnitIncrement : newPosition;
-	    } 
-	    return ((currentPosition / maxUnitIncrement) + 1) * maxUnitIncrement- currentPosition;
+		if (direction < 0) {
+			int newPosition = currentPosition -
+							 (currentPosition / maxUnitIncrement)
+							  * maxUnitIncrement;
+			return (newPosition == 0) ? maxUnitIncrement : newPosition;
+		}
+		return ((currentPosition / maxUnitIncrement) + 1) * maxUnitIncrement- currentPosition;
 	}
 
 	public void mouseDragged(MouseEvent ev) {
@@ -379,43 +379,43 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 	}
 	private void mouseMoveScroll(MouseEvent ev) {
 		Rectangle r = new Rectangle(ev.getX(), ev.getY(), 1, 1);
-        scrollRectToVisible(r);
+		scrollRectToVisible(r);
 	}
 
 	public EditingContext getEditingContext() {//kontrolni metoda :o)
-	    //assert state == State.EDITING && context instanceof EditingContext : "Getting editing context in non-editing mode";
-	    return (EditingContext) context;
+		//assert state == State.EDITING && context instanceof EditingContext : "Getting editing context in non-editing mode";
+		return (EditingContext) context;
 	}
-	
+
 	public boolean isShowGrid() {
-	    return showGrid;    
+		return showGrid;
 	}
 
 	public void setShowGrid(boolean b) {
-	    this.showGrid = b;
+		this.showGrid = b;
 	}
 
 	public static int getCellHeight() {
-	    return cellHeight;
+		return cellHeight;
 	}
 
 	public static int getCellWidth() {
-	    return cellWidth;
+		return cellWidth;
 	}
 
 	public void update(Observable o, Object arg) {
-	    if (arg instanceof Point) {
+		if (arg instanceof Point) {
 		Point point = (Point) arg;
 		repaint(10, point.x*cellWidth, point.y*cellHeight, getCellWidth(), getCellHeight());
-	    } else repaint(100);
+		} else repaint(100);
 	}
 
-	
+
 	public void setNodeOnToolbar(Class<? extends NodeCell> cellClass, Object[] args) {
 		this.toolbarArgs = args;
 		this.toolbarCellClass = cellClass;
 	}
-	
+
 	private EditingContextFactory getEditingContextFactory() {
 		return (EditingContextFactory) Main.getInstance().getContextFactory();
 	}

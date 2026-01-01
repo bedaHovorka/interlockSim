@@ -12,7 +12,7 @@
 package jDisco;
 
 /**
- * This class is used for representing the linkages of a circular 
+ * This class is used for representing the linkages of a circular
  * two-way list.<p>
  *
  * Class <tt>Linkage</tt> contains basic linking attributes for forming lists.
@@ -22,56 +22,56 @@ package jDisco;
  * whereas a <tt>Head</tt> object represents the start and end of a list.
  *
  * @see jDisco.Link
- * @see jDisco.Head 
+ * @see jDisco.Head
  */
 public class Linkage {
-    /**
-     * Returns the item in the list before this <tt>Linkage</tt>.
-     *
-     * @return If this <tt>Linkage</tt> is a <tt>Link</tt>,
-     * its predecessor item in the list is returned. 
-     * If this <tt>Linkage</tt> is a <tt>Head</tt>,
-     * the last item in the list is returned.
-     */
-    public final Link pred() { 
-         return PRED instanceof Link ? (Link) PRED : null; 
-    }
-        
-    
-    /**
-     * Returns the item in the list after this <tt>Linkage</tt>.
-     *
-     * @return If this <tt>Linkage</tt> is a <tt>Link</tt>,
-     * its predecessor item in the list is returned. 
-     * If this <tt>Linkage</tt> is a <tt>Head</tt>,
-     * the first item in the list is returned.
-     */
-    public final Link suc() { 
-         return SUC instanceof Link ? (Link) SUC : null; 
-    }
-    
-    /**
-     * Returns the <tt>Linkage</tt> object before this one,
-     * whether this is a <tt>Link</tt> object, a <tt>Head</tt> object
-     * or <tt>null</tt>.
-     *  
-     * @return If this <tt>Linkage</tt> is a <tt>Link</tt> 
-     * and not a member of any list, <tt>null</tt> is returned.
-     * If this <tt>Linkage</tt> is the first item in a list, 
-     * the corresponding <tt>Head</tt> object.
-     * If this <tt>Linkage</tt> is a <tt>Head</tt>, 
-     * the last item in the list.
-     */
-    public final Linkage prev() { return PRED; }
+	/**
+	 * Returns the item in the list before this <tt>Linkage</tt>.
+	 *
+	 * @return If this <tt>Linkage</tt> is a <tt>Link</tt>,
+	 * its predecessor item in the list is returned.
+	 * If this <tt>Linkage</tt> is a <tt>Head</tt>,
+	 * the last item in the list is returned.
+	 */
+	public final Link pred() {
+		 return PRED instanceof Link ? (Link) PRED : null;
+	}
 
-    /**
-    * The predecessor this <tt>Linkage</tt>.
-    */
-    Linkage PRED;
-    
-    
-    /**
-     * The successor this <tt>Linkage</tt>.
-     */
-    Linkage SUC; 
+
+	/**
+	 * Returns the item in the list after this <tt>Linkage</tt>.
+	 *
+	 * @return If this <tt>Linkage</tt> is a <tt>Link</tt>,
+	 * its predecessor item in the list is returned.
+	 * If this <tt>Linkage</tt> is a <tt>Head</tt>,
+	 * the first item in the list is returned.
+	 */
+	public final Link suc() {
+		 return SUC instanceof Link ? (Link) SUC : null;
+	}
+
+	/**
+	 * Returns the <tt>Linkage</tt> object before this one,
+	 * whether this is a <tt>Link</tt> object, a <tt>Head</tt> object
+	 * or <tt>null</tt>.
+	 *
+	 * @return If this <tt>Linkage</tt> is a <tt>Link</tt>
+	 * and not a member of any list, <tt>null</tt> is returned.
+	 * If this <tt>Linkage</tt> is the first item in a list,
+	 * the corresponding <tt>Head</tt> object.
+	 * If this <tt>Linkage</tt> is a <tt>Head</tt>,
+	 * the last item in the list.
+	 */
+	public final Linkage prev() { return PRED; }
+
+	/**
+	* The predecessor this <tt>Linkage</tt>.
+	*/
+	Linkage PRED;
+
+
+	/**
+	 * The successor this <tt>Linkage</tt>.
+	 */
+	Linkage SUC;
 }

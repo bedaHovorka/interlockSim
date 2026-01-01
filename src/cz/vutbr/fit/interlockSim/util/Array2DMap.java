@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -50,9 +50,9 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 		public V setValue(V value) {
 			return Array2DMap.this.put(key, value);
 		}
-		
+
 	}
-	
+
 	private final class Array2DEntrySet extends AbstractSet<Map.Entry<Point, V>> {
 
 		private final class Array2DIterator implements Iterator<Map.Entry<Point, V>> {
@@ -85,19 +85,19 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 			return keys.size();
 		}
 
-		
+
 	}
-	
+
 	//seznam s dirama
 	private class RelocableList<T> extends AbstractList<T> implements RandomAccess {
 		private transient T[] elements;
-		
+
 		@Override
 		public T get(int index) {
 			if (elements == null || index >= elements.length || index < 0) return null;
 			return elements[index];
 		}
-		
+
 		@Override
 		public T set(int index, T element) {
 			if (index < 0) throw new IndexOutOfBoundsException();
@@ -119,12 +119,12 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 			elements[index] = null;
 			return prev;
 		}
-		
+
 		@Override
 		public int size() {
 			return elements==null ? 0 : elements.length;
 		}
-		
+
 	}
 
 	private static final class PointComparator implements Comparator<Point> {
@@ -137,7 +137,7 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 	 * Compare points in order for grid
 	 */
 	public static final Comparator<Point> POINT_COMPARATOR = new PointComparator();
-	
+
 	private final RelocableList<RelocableList<V>> array = new RelocableList<RelocableList<V>> ();
 	private final TreeSet<Point> keys = new TreeSet<Point>(POINT_COMPARATOR);
 
@@ -150,24 +150,24 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 	}
 
 	/**
-	 * 
+	 *
 	 * @param x column
 	 * @param y row
-	 * @return element in map or null if 
+	 * @return element in map or null if
 	 */
 	public V get(int x, int y) {
 		RelocableList<V> iArray = array.get(y);
 		if (iArray == null) return null;
 		return iArray.get(x);
 	}
-	
+
 	@Override
 	public V get(Object key) {
 		if (!(key instanceof Point)) return null;
 		Point p = (Point) key;
 		return get(p.x, p.y);
 	}
-	
+
 	@Override
 	public V put(Point key, V value) {
 		RelocableList<V> iArray = array.get(key.y);
@@ -178,7 +178,7 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 		keys.add(key);
 		return iArray.set(key.x, value);
 	}
-	
+
 	@Override
 	public V remove(Object key) {
 		keys.remove(key);
@@ -188,12 +188,12 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 		if (iArray == null) return null;
 		return iArray.remove(p.x);
 	}
-	
+
 	@Override
 	public boolean containsKey(Object key) {
 		return keys.contains(key);
 	}
-	
+
 	/**
 	 * @param y
 	 * @return elements at row
@@ -203,7 +203,7 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 		//EXTENSION zatim unmodifieable
 		return list==null ? Collections.<V>emptyList() : Collections.unmodifiableList(list);
 	}
-	
+
 	@Override
 	public void clear() {
 		keys.clear();

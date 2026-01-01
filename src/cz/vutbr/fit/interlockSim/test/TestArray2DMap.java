@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.test;
@@ -30,7 +30,7 @@ public class TestArray2DMap extends TestCase {
 	private final Array2DMap<Integer> array2DMap = new Array2DMap<Integer>();
 	private final TreeMap<Point, Integer> treeMap = new TreeMap<Point, Integer>(Array2DMap.POINT_COMPARATOR);
 	private final int BOUND = 1000;
-	
+
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#clear()}.
 	 */
@@ -143,11 +143,11 @@ public class TestArray2DMap extends TestCase {
 		}
 		EQ();
 	}
-	
+
 	private void EQ() {
 		assertEquals(treeMap, array2DMap);
 	}
-	
+
 	/**
 	 * Test method for {@link Array2DMap#POINT_COMPARATOR}
 	 *
@@ -161,8 +161,8 @@ public class TestArray2DMap extends TestCase {
 			all3Variation(p1, p2, p3);
 		}
 	}
-	
-	private void all3Variation(Point... points) { 
+
+	private void all3Variation(Point... points) {
 		//vybirame trojice (s opakovanim) z pole - EXTENSION obecna k-tice
 		if (points == null || points.length == 0) return;
 		for (Point p1 : points) {
@@ -173,7 +173,7 @@ public class TestArray2DMap extends TestCase {
 			}
 		}
 	}
-	
+
 	private void threeTest(Point p1, Point p2, Point p3) {
 		final Comparator<Point> c = Array2DMap.POINT_COMPARATOR;
 		//		transitivity
@@ -181,7 +181,7 @@ public class TestArray2DMap extends TestCase {
 		else if (c.compare(p1, p2) < 0 && c.compare(p2, p3) < 0) assertTrue(c.compare(p1, p3) < 0);
 		else if (c.compare(p1, p2) == 0 && c.compare(p2, p3) == 0) assertTrue(c.compare(p1, p3) == 0);
 	}
-	
+
 	private void twoTest(Point p1, Point p2) {
 		final Comparator<Point> c = Array2DMap.POINT_COMPARATOR;
 		final int fc = Integer.signum(c.compare(p1, p2));
@@ -189,11 +189,11 @@ public class TestArray2DMap extends TestCase {
 		//		asymetry
 		assertTrue(fc == -Integer.signum(c.compare(p2, p1)));
 	}
-	
+
 	private Point randomPoint() {
 		return new Point(RANDOM.nextInt(BOUND), RANDOM.nextInt(BOUND));
 	}
-	
+
 	private long tst(Map<Point, Integer> map) {
 		final ArrayList<Point> keys = new ArrayList<Point>();
 		for (int i = 0; i < BOUND; i++) {
@@ -202,9 +202,9 @@ public class TestArray2DMap extends TestCase {
 			map.put(randomPoint, i);
 		}
 		assert keys.size() > 0;
-		
+
 		final ArrayList<Long> delays = new ArrayList<Long>();
-		
+
 		for (int i = 0; i < 100; i++) {
 			final long before = System.nanoTime();
 			for (Point key : keys) {
@@ -214,7 +214,7 @@ public class TestArray2DMap extends TestCase {
 		}
 		return avg(delays);
 	}
-	
+
 	private long avg(Collection<Long> c) {
 		long sum = 0;
 		for (Long l : c) {
@@ -222,7 +222,7 @@ public class TestArray2DMap extends TestCase {
 		}
 		return sum / c.size();
 	}
-	
+
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap}.
 	 */

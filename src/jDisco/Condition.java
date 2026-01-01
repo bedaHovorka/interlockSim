@@ -5,7 +5,7 @@
   This may be used for any purposes whatsoever without acknowledgment.
 
   History:
-  Date       	Who                What
+  Date         Who                What
   20Sep2001    kh         Created public version
 */
 
@@ -15,9 +15,9 @@ package jDisco;
  * This interface is used in combination with the <tt>waitUntil</tt>-method for
  * specifying state-events.
  * <p>
- * <tt>waitUntil(cond)</tt>, where <tt>cond</tt> is a <tt>Condition</tt>-object, 
- * causes the active discrete process, <tt>current</tt>, to become passive 
- * (<tt>idle</tt>) over a period which is planned to last until the 
+ * <tt>waitUntil(cond)</tt>, where <tt>cond</tt> is a <tt>Condition</tt>-object,
+ * causes the active discrete process, <tt>current</tt>, to become passive
+ * (<tt>idle</tt>) over a period which is planned to last until the
  * <tt>test</tt>-method of <tt>cond</tt> evaluates to <tt>true</tt>.
  * <p>
  * Example:<br>
@@ -26,9 +26,9 @@ package jDisco;
  *        public void test() {
  *            return pressure.state >= 200;
  *        }
- *    }); 
+ *    });
  * </tt></pre>
- * 
+ *
  * @see jDisco.Process#waitUntil(jDisco.Condition)
  * @see jDisco.Process#waitUntil(jDisco.Condition, double)
  * @see jDisco.Process#waitUntil(jDisco.Condition, jDisco.Process.Prior)

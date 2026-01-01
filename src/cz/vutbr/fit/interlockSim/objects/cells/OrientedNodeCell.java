@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.cells;
@@ -28,11 +28,11 @@ public abstract class OrientedNodeCell extends NodeCell implements OrientedPathS
 	public Set<Segment> possibleFollowers(Segment from) {
 		return EnumSet.of(getFollowingSegment(from));
 	}
-	
+
 	public boolean getOrientation() {
 		return orientation;
 	}
-	
+
 	public Segment direction() {
 		SpatialType st = getSpatialType(); assert st != null : this;
 		return st.getSegments()[getOrientation()? 1 : 0];

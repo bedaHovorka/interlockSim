@@ -1,19 +1,19 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -21,14 +21,14 @@ package cz.vutbr.fit.interlockSim.sim;
 import cz.vutbr.fit.interlockSim.objects.tracks.Track;
 
 /**
- * 
+ *
  *
  */
 public class TrackOperationException extends SimulationException {
 
 	/**
-	 * @param track 
-	 * 
+	 * @param track
+	 *
 	 */
 	public TrackOperationException(Track track) {
 		super(track);
@@ -36,7 +36,7 @@ public class TrackOperationException extends SimulationException {
 
 	/**
 	 * @param message
-	 * @param track 
+	 * @param track
 	 */
 	public TrackOperationException(String message, Track track) {
 		super(message, track);
@@ -44,7 +44,7 @@ public class TrackOperationException extends SimulationException {
 
 	/**
 	 * @param cause
-	 * @param track 
+	 * @param track
 	 */
 	public TrackOperationException(Throwable cause, Track track) {
 		super(cause, track);
@@ -53,7 +53,7 @@ public class TrackOperationException extends SimulationException {
 	/**
 	 * @param message
 	 * @param cause
-	 * @param track 
+	 * @param track
 	 */
 	public TrackOperationException(String message, Throwable cause, Track track) {
 		super(message, cause, track);

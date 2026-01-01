@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.cells;
@@ -17,7 +17,7 @@ import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
 /**
  * "Navestidlo"
  */
-public class RailSemaphore extends OrientedNodeCell {	
+public class RailSemaphore extends OrientedNodeCell {
 	/**
 	 * Represents ligths (command) on semaphore
 	 */
@@ -50,13 +50,13 @@ public class RailSemaphore extends OrientedNodeCell {
 		 * allow speed maximal in track section
 		 */
 		FREE(),
-		
+
 //		MOVE(20), //? posun
 //		CALL(20) //? privolavacka
 		;
 		private final double allowedSpeed;
 		private static final Signal[] values = values();
-		
+
 		/**
 		 * in km/h !!!!
 		 * @param speed
@@ -64,25 +64,25 @@ public class RailSemaphore extends OrientedNodeCell {
 		Signal(int speed) {
 			this.allowedSpeed = speed  / 3.6;
 		}
-		
+
 		Signal() {
 			this.allowedSpeed = PathElement.ABSOLUTE_MAX_SPEED;
 		}
-		
+
 		/**
 		 * @return if the signal allow next move
 		 */
 		public boolean isAllowing() {
 			return allowedSpeed > 0;
 		}
-		
+
 		/**
 		 * @return speed in in m/s !!!
 		 */
 		public double allowedSpeed() {
 			return allowedSpeed;
 		}
-		
+
 		/**
 		 * @param speed
 		 * @return signal with allowedSpeed less then speed
@@ -107,9 +107,9 @@ public class RailSemaphore extends OrientedNodeCell {
 			//EMPTY
 		}
 	}
-	
+
 	private Signal signal = Signal.STOP;
-	
+
 	/**
 	 * @param orientation
 	 * @param spatialType
@@ -117,7 +117,7 @@ public class RailSemaphore extends OrientedNodeCell {
 	public RailSemaphore(Boolean orientation, SpatialType spatialType) {
 		super(orientation, spatialType);
 	}
-	
+
 	/**
 	 * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
 	 * @param orientation
@@ -131,18 +131,18 @@ public class RailSemaphore extends OrientedNodeCell {
 
 	@Override
 	public RailSemaphore clone() throws CloneNotSupportedException {
-	    return (RailSemaphore) super.clone();//CAUTION
+		return (RailSemaphore) super.clone();//CAUTION
 	}
-	
+
 	public Set<Segment> joins() {
 		return joinsOnLine();
 	}
-	
+
 	@Override
 	public Segment getFollowingSegment(Segment from) {
 		return secondOnLine(from);
 	}
-	
+
 	/**
 	 * @return atribute getter {@link Signal}
 	 */
@@ -172,10 +172,10 @@ public class RailSemaphore extends OrientedNodeCell {
 	public double allowedSpeed() {
 		return getSignal().allowedSpeed();
 	}
-	
+
 	private boolean checkPathSegments(Segment from, Segment to) throws PathSeparatorChangeException {
 		final Segment d = direction();
-		if (to == d && from == Segment.anti(d)) return true; 
+		if (to == d && from == Segment.anti(d)) return true;
 		else if (from == d && to == Segment.anti(d)) return false;
 		throw new PathSeparatorChangeException("wrong aPath segments", this);
 	}

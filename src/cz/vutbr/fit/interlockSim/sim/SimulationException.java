@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -18,15 +18,15 @@ public class SimulationException extends Exception {
 	private final Object object;
 	private final double time;
 	/**
-	 * 
+	 *
 	 */
 	public SimulationException() {
 		this((Object)null);
 	}
-	
+
 	/**
-	 * @param object 
-	 * 
+	 * @param object
+	 *
 	 */
 	public SimulationException(Object object) {
 		this("", object);
@@ -38,10 +38,10 @@ public class SimulationException extends Exception {
 	public SimulationException(String message) {
 		this(message, null);
 	}
-	
+
 	/**
 	 * @param message
-	 * @param object 
+	 * @param object
 	 */
 	public SimulationException(String message, Object object) {
 		this(message, null, object);
@@ -53,10 +53,10 @@ public class SimulationException extends Exception {
 	public SimulationException(Throwable cause) {
 		this(cause, null);
 	}
-	
+
 	/**
 	 * @param cause
-	 * @param object 
+	 * @param object
 	 */
 	public SimulationException(Throwable cause, Object object) {
 		this("", cause, object);
@@ -65,7 +65,7 @@ public class SimulationException extends Exception {
 	/**
 	 * @param message
 	 * @param cause
-	 * @param object 
+	 * @param object
 	 */
 	public SimulationException(String message, Throwable cause, Object object) {
 		super(message, cause);
@@ -79,14 +79,14 @@ public class SimulationException extends Exception {
 	public Object getObject() {
 		return object;
 	}
-	
+
 	/**
 	 * @return model time of exception
 	 */
 	public double getTime() {
 		return time;
 	}
-	
+
 	@Override
 	public String getMessage() {
 		return getTime() + ":" + String.valueOf(getObject()) + " " + super.getMessage();

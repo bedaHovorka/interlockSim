@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.test;
@@ -32,7 +32,7 @@ public class TestContext extends TestCase {
 	private final InOut outB = new InOut("B", true, SpatialType.HORIZONTAL);
 	private final SimpleTrackBlock tl = new SimpleTrackBlock(inA, outB, 1000, 80);
 	private final RailSemaphore rs1 = new RailSemaphore(false, SpatialType.DIAGONAL1);
-	
+
 	@Override
 	protected void setUp() throws Exception {
 		final Point pA = new Point(1,1); final Point r1 = new Point(4,2); final Point pB = new Point(5,5);
@@ -40,7 +40,7 @@ public class TestContext extends TestCase {
 		context.joinCells(r1, pB, tl);
 		context.joinCells(pA, r1, tl);
 	}
-	
+
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.context.SimulationContext#getNextTrackBlock(cz.vutbr.fit.interlockSim.objects.cells.NodeCell, cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock)}.
 	 */
@@ -70,7 +70,7 @@ public class TestContext extends TestCase {
 		assertTrue(context.isSeparatorInDirection(inA, tl, null));
 		assertTrue(context.isSeparatorInDirection(outB, tl, null));
 		//TODO semafory
-		
+
 	}
 
 	/**
@@ -84,7 +84,7 @@ public class TestContext extends TestCase {
 		assertPathToNextSemaphoreTrowExeption(inA, null);
 		assertPathToNextSemaphoreTrowExeption(outB, null);
 	}
-	
+
 	private void assertPathToNextSemaphoreTrowExeption(PathSeparator separator, TrackSection section) {
 		try {
 			context.pathToNextSemaphore(separator, section);

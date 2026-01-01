@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.tracks;
@@ -54,7 +54,7 @@ public class SimpleTrackBlock extends SimpleTrack implements TrackBlock {
 		if (current == this) return null;
 		throw new IllegalArgumentException("simpletrackblock: current must be only this or null");
 	}
-	
+
 	public boolean isInnerElement(PathElement separator) {
 		return false;
 	}
@@ -63,7 +63,7 @@ public class SimpleTrackBlock extends SimpleTrack implements TrackBlock {
 		assert false;
 		return null;
 	}
-	
+
 	@Override
 	public NodeCell[] ends() {
 		final PathSeparator[] pathSeparators = super.ends();
@@ -77,7 +77,7 @@ public class SimpleTrackBlock extends SimpleTrack implements TrackBlock {
 	public void setName(String name) {
 		this.name = name;
 	}
-	
+
 	@Override
 	public String toString() {
 		return name==null ? Arrays.toString(ends()) : name;

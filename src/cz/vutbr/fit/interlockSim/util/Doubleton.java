@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -21,14 +21,14 @@ import java.util.NoSuchElementException;
  */
 public class Doubleton<T,V> extends AbstractSet<T> {
 	enum IteratorState {
-		INIT, 
+		INIT,
 		FIRST,
 		SECOND;
 	}
-	
+
 	final class DoubletonIterator implements Iterator<T> {
 		IteratorState state = IteratorState.INIT;
-		
+
 		public boolean hasNext() {
 			assert state != null;
 			return state != IteratorState.SECOND;
@@ -54,7 +54,7 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 	private final T second;
 	private V firstValue;
 	private V secondValue;
-	
+
 	/**
 	 * Create with additional information
 	 * @param first
@@ -78,14 +78,14 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 		this.first = first;
 		this.second = second;
 	}
-	
+
 	@Override
 	public int hashCode() {
 		int result = (first == null) ? 0 : first.hashCode();
 		result += (second == null) ? 0 : second.hashCode();//kongruentni komutativita?
 		return result;
 	}
-	
+
 	@Override
 	public Iterator<T> iterator() {
 		return new DoubletonIterator();
@@ -95,12 +95,12 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 	public int size() {
 		return 2;
 	}
-	
+
 	@Override
 	public boolean isEmpty() {
 		return false;
 	}
-	
+
 	/**
 	 * @param key
 	 * @return value assigned to key
@@ -110,16 +110,16 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 		if (nullEq(key, first)) {
 			assert !secondEq;
 			return firstValue;
-		}	
+		}
 		if (secondEq) return secondValue;
 		throw new IllegalArgumentException("Key " + key + " is not contain in set");
 	}
-	
+
 	private boolean nullEq(final Object a, final Object b) {
 		if (a == null) return b == null;
 		return b != null && a.equals(b);
 	}
-	
+
 	/**
 	 * @param first
 	 * @param second

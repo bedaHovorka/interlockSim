@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.cells;
@@ -17,48 +17,48 @@ import java.util.Set;
  *
  */
 public interface Cell {
-    /**
-     * Topology joins with other cells
-     * 
-     * for drawing cells - "Segment analogy from displays"
-     */	
-    public enum Segment {
-    	/**
-    	 * left middle
-    	 */
-    	A(-1,0),
-    	/**
-    	 * left top
-    	 */
-    	B(-1,-1),
-    	/**
-    	 * center top
-    	 */
-    	C(0,-1),
-    	/**
-    	 * left bottom
-    	 */
-    	D(-1,1),
-    	/**
-    	 * right top
-    	 */
-    	E(1,-1),
-    	/**
-    	 * right middle
-    	 */
-    	F(1,0),
-    	/**
-    	 * right bottom
-    	 */
-    	G(1,1),
-    	/**
-    	 * center bottom
-    	 */
-    	H(0,1)
+	/**
+	 * Topology joins with other cells
+	 *
+	 * for drawing cells - "Segment analogy from displays"
+	 */
+	public enum Segment {
+		/**
+		 * left middle
+		 */
+		A(-1,0),
+		/**
+		 * left top
+		 */
+		B(-1,-1),
+		/**
+		 * center top
+		 */
+		C(0,-1),
+		/**
+		 * left bottom
+		 */
+		D(-1,1),
+		/**
+		 * right top
+		 */
+		E(1,-1),
+		/**
+		 * right middle
+		 */
+		F(1,0),
+		/**
+		 * right bottom
+		 */
+		G(1,1),
+		/**
+		 * center bottom
+		 */
+		H(0,1)
 		;
-		
+
 		private final int dx, dy;
-	
+
 		private Segment(final int dx, final int dy) {
 			this.dx = dx;
 			this.dy = dy;
@@ -72,7 +72,7 @@ public interface Cell {
 		public static final float d2r(int d) {
 			return (d + 1)*0.5f;
 		}
-		
+
 		/**
 		 * conversion
 		 * @param r
@@ -81,14 +81,14 @@ public interface Cell {
 		public static final int r2d(float r) {
 			return (int) (2*r-1);
 		}
-		
+
 		/**
 		 * @return 0 - left, 0.5f - center, 1 - right
 		 */
 		public final float getRx() {
 			return d2r(dx);
 		}
-		
+
 		/**
 		 * @return -1 - left, 0 - center, 1 - right
 		 */
@@ -102,14 +102,14 @@ public interface Cell {
 		public final float getRy() {
 			return d2r(dy);
 		}
-		
+
 		/**
 		 * @return -1 - top, 0 - middle, 1 - bottom
 		 */
 		public final int getDy() {
 			return dy;
 		}
-		
+
 		/**
 		 * This is from d-coordinates conversion
 		 * @param dx
@@ -131,7 +131,7 @@ public interface Cell {
 				return Cell.Segment.F;
 			} else return null;
 		}
-		
+
 		/**
 		 * if segments can consist in regular cell
 		 * @param a
@@ -170,35 +170,35 @@ public interface Cell {
 			return anti;
 		}
 	}
-    
-    /**
+
+	/**
 	 * "Natoceni bunky" - "pro prehlednednejsi vytvareni bunek"
 	 */
-    public enum SpatialType {//!!! prvni segment pro false orientaci !!!
+	public enum SpatialType {//!!! prvni segment pro false orientaci !!!
 		/**
-		 * 
+		 *
 		 */
-    	    	VERTICAL(Segment.H, Segment.C),
+				VERTICAL(Segment.H, Segment.C),
 		/**
-		 * 
+		 *
 		 */
-    	    	HORIZONTAL(Segment.F, Segment.A),
+				HORIZONTAL(Segment.F, Segment.A),
 		/**
-		 * 
+		 *
 		 */
-    	    	DIAGONAL1(Segment.E, Segment.D), //  /
+				DIAGONAL1(Segment.E, Segment.D), //  /
 		/**
-		 * 
+		 *
 		 */
-    	    	DIAGONAL2(Segment.G, Segment.B)  //  \
+				DIAGONAL2(Segment.G, Segment.B)  //  \
 		;
-		
-    	private final Segment[] segments;
+
+		private final Segment[] segments;
 
 		SpatialType(final Segment s1, final Segment s2) {
-		    this.segments = new Segment[]{s1,s2};
+			this.segments = new Segment[]{s1,s2};
 		}
-		
+
 		/**
 		 * @return segments which created this enum
 		 */
@@ -206,13 +206,13 @@ public interface Cell {
 			return segments;
 		}
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @return {@link SpatialType}
 	 */
 	public SpatialType getSpatialType();
-	
+
 	/**
 	 * @return Possible joins
 	 */

@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.context;
@@ -44,23 +44,23 @@ public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
 			return new Iterator<Point>() {
 				private Iterator<Entry<Point, Cell>> i = set.iterator();
 				private Entry<Point, Cell> next;
-			
+
 				public void remove() {
 					if (next == null) throw new IllegalStateException();
 					i.remove();
 					getReverseTable().remove(next.getValue());
 					getReverseTable().values().remove(next.getKey());
 				}
-			
+
 				public Point next() {
 					next = i.next();
 					return next.getKey();
 				}
-			
+
 				public boolean hasNext() {
 					return i.hasNext();
 				}
-			
+
 			};
 		}
 
@@ -69,10 +69,10 @@ public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
 			return set.size();
 		}
 	}
-	
+
 	/**
 	 * @param key
-	 * @param cell 
+	 * @param cell
 	 * @return previous cell in place
 	 */
 	public final Cell put(final Point key,final Cell cell) {
@@ -95,7 +95,7 @@ public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
 
 	/**
 	 * @param newPoint
-	 * @return true if point is present 
+	 * @return true if point is present
 	 */
 	public boolean containsKey(Point newPoint) {
 		if (getCells().containsKey(newPoint)) {

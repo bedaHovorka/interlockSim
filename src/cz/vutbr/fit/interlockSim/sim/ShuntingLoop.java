@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -52,16 +52,16 @@ public class ShuntingLoop extends Interlocking {
 	private final ArrayList<SimpleTrackBlock> innerTrackBlocks = new ArrayList<SimpleTrackBlock>();
 	private final HashMap<SimpleTrackBlock, RailSemaphore> outerTrackblocks = new HashMap<SimpleTrackBlock, RailSemaphore>();
 	private final long endTime;
-	
+
 	private class RealTimeSynch extends LoopProcess {
 		private double presvihnuto = 0;
 		private long beginTime;
-		
+
 		@Override
 		protected void startAction() {
 			interLoopSleep();
 		}
-		
+
 		@Override
 		protected void iteration() {
 			long endTime = System.currentTimeMillis();
@@ -77,7 +77,7 @@ public class ShuntingLoop extends Interlocking {
 				presvihnuto = sleepTime / 1000.0;
 			}
 		}
-		
+
 		@Override
 		protected void interLoopSleep() {
 			beginTime = System.currentTimeMillis();
@@ -85,12 +85,12 @@ public class ShuntingLoop extends Interlocking {
 			presvihnuto = 0.0;
 		}
 	}
-	
+
 	private class InnerGenerator extends Generator {
 		private InnerGenerator(SimulationContext context) {
 			super(context);
 		}
-		
+
 		@Override
 		protected void placeTrain(Train train) {
 			unapprowedTrains.offer(train);
@@ -105,10 +105,10 @@ public class ShuntingLoop extends Interlocking {
 		super(context);
 		this.endTime = endTime;
 		generator = new InnerGenerator(context);
-		
+
 		assert context.getGraph().size() > 0;
 		//Sit jiz musi byt nactena z vyhybna.xml !!!
-		
+
 		final InOut B = elementAt(InOut.class, 30, 8);
 		final InOut A = elementAt(InOut.class, 11, 8);
 		final RailSemaphore zA = elementAt("zA", RailSemaphore.class, 14, 8);
@@ -119,12 +119,12 @@ public class ShuntingLoop extends Interlocking {
 		final RailSemaphore doB2 = elementAt("doB2", RailSemaphore.class, 24, 9);
 		final RailSwitch vA = elementAt("vA", RailSwitch.class, 15, 8);
 		final RailSwitch vB = elementAt("vB", RailSwitch.class, 26, 8);
-		
+
 		final SimpleTrackBlock k1 = getBlock("k1", doA1, doB1);
 		final SimpleTrackBlock k2 = getBlock("k2", doA2, doB2);
 		final SimpleTrackBlock kA = getBlock("kA", A, zA);
 		final SimpleTrackBlock kB = getBlock("kB", B, zB);
-		
+
 		//usporadani znalostni pro jednoduche rizeni
 		constructPath(zA, vA, doA1, k1, doB1);
 		constructPath(doA1, vA, zA, kA, A);
@@ -138,7 +138,7 @@ public class ShuntingLoop extends Interlocking {
 		outerTrackblocks.put(kB, zB);
 		outerTrackblocks.put(kA, zA);
 	}
-	
+
 	private ArrayPath constructPath(PathElement...elements) {
 		final ArrayPath arrayPath = new ArrayPath(getContext());
 		try {
@@ -165,22 +165,22 @@ public class ShuntingLoop extends Interlocking {
 		sublist.add(arrayPath);
 		return arrayPath;
 	}
-	
+
 	private String switchName(PathElement el) {
 		return Util.assertInstanceOf(RailSwitch.class, el).getName()+"-around";
 	}
-	
+
 	private <T extends Cell> T elementAt(Class<T> clazz, int x, int y) {
 		final RailwayNetGrid railWayNetGrid = getContext().getRailWayNetGrid();
 		return Util.assertInstanceOf(clazz, railWayNetGrid.getCellAt(x, y));
 	}
-	
+
 	private <T extends NodeCell> T elementAt(String name, Class<T> clazz, int x, int y) {
 		final T elementAt = elementAt(clazz, x, y);
 		elementAt.setName(name);
 		return elementAt;
 	}
-	
+
 	private SimpleTrackBlock getBlock(String name, Cell cell1, Cell cell2) {
 		final RailwayNetGrid railWayNetGrid = getContext().getRailWayNetGrid();
 		final ExtendedUnorientedGraph<Point, TrackBlock, Segment> graph = getContext().getGraph();
@@ -195,7 +195,7 @@ public class ShuntingLoop extends Interlocking {
 		//activate(new RealTimeSynch());
 		activate(generator);
 	}
-	
+
 	@Override
 	protected void iteration() {
 		//stare vlaky
@@ -209,13 +209,13 @@ public class ShuntingLoop extends Interlocking {
 		for (SimpleTrackBlock  block : innerTrackBlocks) checkBothEnds(block);
 		for (Entry<SimpleTrackBlock, RailSemaphore> e : outerTrackblocks.entrySet()) checkOneEnd(e.getKey(), e.getValue());
 	}
-	
+
 	private void checkBothEnds(SimpleTrackBlock block) {
 		for (NodeCell sep : block.ends()) {
 			if (checkOneEnd(block, Util.assertInstanceOf(RailSemaphore.class, sep))) return;
 		}
 	}
-	
+
 	private boolean trySetupPath(Path path) {
 		try {
 			final PathSeparator from = path.getFirst();
@@ -227,10 +227,10 @@ public class ShuntingLoop extends Interlocking {
 			return false;
 		}
 	}
-	
+
 	private boolean trySetupPaths(RailSemaphore sem) {
 		for (Path path : paths.get(sem)) {
-            //zkusit postavit cestu
+			//zkusit postavit cestu
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) return true;
 			} catch (TrackOperationException e) {
@@ -239,7 +239,7 @@ public class ShuntingLoop extends Interlocking {
 		}
 		return false;
 	}
-	
+
 	private boolean checkOneEnd(SimpleTrackBlock block, RailSemaphore to) {
 //		 je v bloku vlak?
 		if (block.getState() == State.FREE) return false;

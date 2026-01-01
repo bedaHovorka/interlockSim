@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim;
@@ -36,12 +36,12 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
 
 /**
  * Main class, for run program
- * 
+ *
  * usage: java -ea cz.vutbr.fit.interlockSim.Main (sim|edit) [file]
  *        java -ea cz.vutbr.fit.interlockSim.Main example name
- * 
+ *
  * or: ant start
- * 
+ *
  * !!! Please check JAVA_HOME for JDK/JRE 1.6 !!!
  */
 public class Main {
@@ -57,26 +57,26 @@ public class Main {
 	 * Program title
 	 */
 	public static final String PROGRAM_FULL_NAME = PROGRAM_NAME + " " + PROGRAM_VERSION;
-	
+
 	private Frame frame;
 	private static Main instance = new Main();
-	
+
 	//kam poustet hlasky
 	private static final PrintStream out = System.err;
-	
+
 	private Main() {
 		//?
 	}
-	
+
 	private void loadGui(String[] args) {
 		frame = new Frame();
 		frame.setContext(createContext(args));
 		frame.setVisible(true);
 	}
-	
+
 	private final Context createContext(String[] args) {
 		final EditingContextFactory factory = (EditingContextFactory) getContextFactory();
-		
+
 		if (args.length > 1) {
 			try {
 				return factory.createContext(new File(args[1]));
@@ -87,7 +87,7 @@ public class Main {
 		}
 		return factory.createEmptyContext();
 	}
-	
+
 	private void loadSim(String[] args) {
 		final SimulationContext context = (SimulationContext) createContext(args);
 		context.addReportTypes(ReportType.values());
@@ -100,7 +100,7 @@ public class Main {
 			e.printStackTrace();
 		}
 	}
-	
+
 	private void runExample(String[] args) {
 		if (args.length == 1) {
 			printListOfExamples();
@@ -135,7 +135,7 @@ public class Main {
 			Report.e(e);
 		}
 	}
-	
+
 	/**
 	 * @param factory
 	 * @return loaded and initialed context
@@ -161,10 +161,10 @@ public class Main {
 			}
 		}
 		Collections.sort(list, String.CASE_INSENSITIVE_ORDER);
-		out.println(list.size() > 0 ? "You must specifify valid name of example\nList of examles: "+ list : 
+		out.println(list.size() > 0 ? "You must specifify valid name of example\nList of examles: "+ list :
 						"No Examples in program");
 	}
-	
+
 	/**
 	 * @param args
 	 */
@@ -193,7 +193,7 @@ public class Main {
 		assert instance != null;
 		return instance;
 	}
-	
+
 	/**
 	 * temporary method
 	 * @return current Context Factory

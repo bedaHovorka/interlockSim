@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.paths;
@@ -24,15 +24,15 @@ public interface PathSeparator extends PathElement, Cell {
 	 * @throws PathSeparatorChangeException
 	 */
 	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException;
-	
+
 	/**
 	 * @param from
 	 * @param to
-	 * @param allowedSpeed 
+	 * @param allowedSpeed
 	 * @throws PathSeparatorChangeException
 	 */
 	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException;
-	
+
 	/**
 	 * @param from
 	 * @return segment reprezents element configuration (dynamic)
@@ -44,7 +44,7 @@ public interface PathSeparator extends PathElement, Cell {
 	 * @return following segments - static
 	 */
 	public Set<Segment> possibleFollowers(Segment from);
-	
+
 	/**
 	 * @return allowed speed through separator in m/s
 	 */

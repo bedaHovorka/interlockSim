@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -19,7 +19,7 @@ import jDisco.Variable;
 public final class SimpleIntegration extends Continuous {
 	private final Variable x;
 	private final Variable dx;
-	
+
 	/**
 	 * @param x integrator output
 	 * @param dx integrator input

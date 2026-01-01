@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.context;
@@ -29,7 +29,7 @@ import cz.vutbr.fit.interlockSim.sim.SimulationException;
  *
  */
 public interface SimulationContext extends Context {
-	
+
 	/**
 	 * simulation reporting types
 	 */
@@ -54,80 +54,80 @@ public interface SimulationContext extends Context {
 		 * not standard
 		 */
 		_DEBUG;
-		
+
 		/**
 		 * all standard reports (without debug)
 		 */
 		public static final ReportType[] ALL = EnumSet.complementOf(EnumSet.of(_DEBUG)).toArray(new ReportType[0]);
 	}
-	
-    /**
-     * Object come from <code>current</code> to <code>separator</code> and need know, how continue
-     * @param separator
-     * @param current
-     * @return next section in aPath
-     */
+
+	/**
+	 * Object come from <code>current</code> to <code>separator</code> and need know, how continue
+	 * @param separator
+	 * @param current
+	 * @return next section in aPath
+	 */
 	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current);
-    
+
 	/**
-     * Runs the simulation
-	 * @throws EmptyContextException Context must not be empty 
+	 * Runs the simulation
+	 * @throws EmptyContextException Context must not be empty
 	 * @throws SimulationException if simulation failed
-     */
-    public void run() throws EmptyContextException, SimulationException;
-    
-    /**
-     * stops the simulation with error
-     * @param error 
-     */
-    public void errorStop(Throwable error);
-    
-    /**
-     * stops the simulation
-     * @throws SimulationException if the simulation didn't stop correctly
-     *
-     */
-    public void stop();
-	
+	 */
+	public void run() throws EmptyContextException, SimulationException;
+
 	/**
-	 * 
+	 * stops the simulation with error
+	 * @param error
+	 */
+	public void errorStop(Throwable error);
+
+	/**
+	 * stops the simulation
+	 * @throws SimulationException if the simulation didn't stop correctly
+	 *
+	 */
+	public void stop();
+
+	/**
+	 *
 	 * @param separator start of aPath
 	 * @param next first section
 	 * @return aPath with all elements
 	 */
-    public Path pathToNextSemaphore(PathSeparator separator, TrackSection next);
-    
-    /**
-     * Reporting - if report type is allowed
-     * @param report
-     * @param obj this object report message
-     * @param type 
-     */
-    public void report(CharSequence report, Object obj, ReportType type);
-    
-    /**
-     * 
-     * @param types
-     */
-    public void addReportTypes(ReportType... types);
-    
-    /**
-     * @param type
-     * @return true if is the type now reporting
-     */
-    public boolean isReporting(ReportType type);
-    
-    /**
-     * 
-     * @param types
-     */
-    public void removeReportTypes(ReportType... types);
-    
-    /**
-     * @param nodeCell
-     * @param current from, for determine direction
+	public Path pathToNextSemaphore(PathSeparator separator, TrackSection next);
+
+	/**
+	 * Reporting - if report type is allowed
+	 * @param report
+	 * @param obj this object report message
+	 * @param type
+	 */
+	public void report(CharSequence report, Object obj, ReportType type);
+
+	/**
+	 *
+	 * @param types
+	 */
+	public void addReportTypes(ReportType... types);
+
+	/**
+	 * @param type
+	 * @return true if is the type now reporting
+	 */
+	public boolean isReporting(ReportType type);
+
+	/**
+	 *
+	 * @param types
+	 */
+	public void removeReportTypes(ReportType... types);
+
+	/**
+	 * @param nodeCell
+	 * @param current from, for determine direction
 	 * @return block, which follow dependly on node configuration
-     */
+	 */
 	public TrackBlock getNextTrackBlock(NodeCell nodeCell, TrackBlock current);
 
 	/**
@@ -136,7 +136,7 @@ public interface SimulationContext extends Context {
 	 * @return topology join
 	 */
 	public Segment getSegment(PathSeparator separator, Track track);
-	
+
 	/**
 	 * @param separator
 	 * @param next track behind separator
@@ -152,7 +152,7 @@ public interface SimulationContext extends Context {
 	 * @return segment for track
 	 */
 	public Segment getSegment(PathSeparator separator, Track track, Track secondEndTrack);
-	
+
 	/**
 	 * @param inOut
 	 * @return worker

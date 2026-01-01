@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas;
@@ -17,12 +17,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart;
 
 /**
- * 
+ *
  *
  */
 public class EditorCellRenderer extends CellRenderer {
 	/**
-	 * 
+	 *
 	 * @param cellWidth
 	 * @param cellHeight
 	 */
@@ -33,18 +33,18 @@ public class EditorCellRenderer extends CellRenderer {
 	@Override
 	public void draw(Graphics2D g, RailSwitch cell) {
 		drawLine(g, cell.getSpatialType());
-	    drawSegments(g, cell.getBranchSegments());
+		drawSegments(g, cell.getBranchSegments());
 	}
 
 	@Override
 	public void draw(Graphics2D g, RailSemaphore cell) {
-	    drawLine(g, cell.getSpatialType());
-	    drawTriangle(g, cell);
+		drawLine(g, cell.getSpatialType());
+		drawTriangle(g, cell);
 	}
 
 	@Override
 	public void draw(Graphics2D g, TrackBlockPart cell) {
-	    drawSegments(g, cell.getSegments());
+		drawSegments(g, cell.getSegments());
 	}
 
 	@Override

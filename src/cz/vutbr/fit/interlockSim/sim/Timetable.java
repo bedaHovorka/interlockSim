@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.sim;
@@ -20,17 +20,17 @@ public class Timetable {
 	private final InOut out;
 	private final Time inTime;
 	private final Time outTime;
-	
+
 	//private TreeMap<Time, Station> stations; nekdy...
 	private double length;
-	
+
 	/**
 	 * Create time table for train
 	 * @param in
 	 * @param out
-	 * @param inTime 
-	 * @param outTime 
-	 * @param length 
+	 * @param inTime
+	 * @param outTime
+	 * @param length
 	 */
 	public Timetable(final InOut in, final InOut out, final Time inTime, final Time outTime, double length) {
 		super();
@@ -40,7 +40,7 @@ public class Timetable {
 		this.outTime = outTime;
 		this.length = length;
 	}
-	
+
 	/**
 	 * @return start point of train
 	 */
@@ -63,7 +63,7 @@ public class Timetable {
 //	}
 
 	/**
-	 * @return time of departure from In 
+	 * @return time of departure from In
 	 */
 	public Time getInTime() {
 		return inTime;
@@ -76,7 +76,7 @@ public class Timetable {
 		return outTime;
 	}
 
-	/** 
+	/**
 	 * @return get length of train
 	 */
 	public double getLength() {

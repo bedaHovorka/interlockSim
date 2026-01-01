@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.paths;
@@ -19,7 +19,7 @@ public interface OrientedPathSeparator extends PathSeparator {
 	 * @return orientation atribute
 	 */
 	public boolean getOrientation();
-	
+
 	/**
 	 * @return direction segment
 	 */

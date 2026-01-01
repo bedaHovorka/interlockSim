@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -49,7 +49,7 @@ public final class Util {
 	public static NodeCell assertNodeCell(Object obj) {
 		return assertInstanceOf(NodeCell.class, obj);
 	}
-	
+
 	/**
 	 * assert and cast routine
 	 * @param <T>

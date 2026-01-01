@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.gui;
@@ -36,36 +36,36 @@ public class StatusBar extends JLabel implements Observer {
 			final String status = ((StatusProducer) source).getStatus(e);
 			if (status != null) setText(status);
 		}
-		
+
 	}
-	
+
 	private final MouseL mouseL = new MouseL();
-	
+
 	public StatusBar() {
 		setPreferredSize(new Dimension(100, 25));
 		setText("Welcome to " + Main.PROGRAM_NAME);
 	}
-	
+
 	private Component checkComponent(StatusProducer producer) {
 		assert producer instanceof Component : producer;
 		Component producerComponent = (Component) producer;
 		return producerComponent;
 	}
-	
+
 	public void registerProducer(StatusProducer producer) {
 		Component producerComponent = checkComponent(producer);
 		producerComponent.addMouseMotionListener(mouseL);
 	}
-	
+
 	public void unregisterProducer(StatusProducer producer) {
 		Component producerComponent = checkComponent(producer);
 		producerComponent.removeMouseMotionListener(mouseL);
 	}
 
 	public void update(Observable o, Object arg) {
-	    if (arg instanceof CharSequence) {
+		if (arg instanceof CharSequence) {
 		CharSequence string = (CharSequence) arg;
 		setText(string.toString());
-	    }
+		}
 	}
 }

@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.objects.paths;
@@ -41,7 +41,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 	private static final Map<String, Method> trackMethods =  new HashMap<String, Method>();
 	private static final Map<Class<?>, Class<?>[]> parameterTypes =  new HashMap<Class<?>, Class<?>[]>();
 	private final SimulationContext context;
-	
+
 	static {
 		try {
 			parameterTypes.put(Track.class, new Class[]{PathSeparator.class});
@@ -53,12 +53,12 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 			e.printStackTrace();
 		}
 	}
-	
+
 	protected AbstractPath(final SimulationContext context) {
 		super();
 		this.context = context;
 	}
-	
+
 	private static void fillMethodMap(Map<String, Method> map, Class<?> clazz, List<String> methodNames) throws Exception {
 		for (String name : methodNames) {
 			final Method method = clazz.getMethod(name, parameterTypes.get(clazz));
@@ -66,7 +66,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		}
 	}
 
-	public RailSemaphore getLastPathSemaphore() {		
+	public RailSemaphore getLastPathSemaphore() {
 		final PathElement last = getLast();
 		if (last instanceof RailSemaphore) return (RailSemaphore) last;
 		return Util.assertInstanceOf(InOut.class, last).getOutSemaphore();
@@ -77,10 +77,10 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		PathSeparator prevSep = sep;
 		//Track prevTrack = null;
 		double min = sep.allowedSpeed();
-		
+
 		for (Iterator<PathElement> it = getIterator(sep); it.hasNext();) {
 			final PathElement e = it.next();
-			
+
 			if (e == getLast() || e == getFirst()) {
 				//EMPTY
 			} else {
@@ -93,7 +93,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 					final PathSeparator ps = Util.assertInstanceOf(PathSeparator.class, e);
 					prevSep = ps;
 					continue; //DEBUG
-//					if (ps instanceof OrientedPathSeparator && 
+//					if (ps instanceof OrientedPathSeparator &&
 //							!context.isSeparatorInDirection((OrientedPathSeparator)sep, null, prevTrack)) continue;
 //					es = ps.allowedSpeed();
 				}
@@ -102,7 +102,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		}
 		return min;
 	}
-	
+
 	@Override
 	public double length() {
 		double sum = 0;
@@ -113,7 +113,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		}
 		return sum;
 	}
-	
+
 	public PathSeparator[] ends() {
 		return new PathSeparator[]{getFirst(), getLast()};
 	}
@@ -125,16 +125,16 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 	public boolean isSetUpPath(PathSeparator sep) throws TrackOperationException {
 		return pathIterating(sep);
 	}
-	
+
 	@Override
 	public void setUpPath(PathSeparator sep) throws TrackOperationException {
 		pathIterating(sep);
 	}
-	
+
 	public void cancelPathSetup(PathSeparator sep) throws TrackOperationException {
 		pathIterating(sep);
 	}
-	
+
 	private boolean pathIterating(PathSeparator sep) throws TrackOperationException {
 		try {
 			// lepsi nez 10x copypastovat kod z cyklem a vymenit jen volani metody
@@ -142,14 +142,14 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 			final String methodName = e.getMethodName();
 			final Method method = trackMethods.get(methodName);
 			Track previous = null;
-			
+
 			for (Iterator<PathElement> iterator = getIterator(sep); iterator.hasNext();) {
 				final PathSeparator separator = Util.assertInstanceOf(PathSeparator.class, iterator.next());
 				if (!iterator.hasNext()) break; // posledni prvek je semafor a separatorSetting ho nenastavuje
 				final Track nextTrack = Util.assertInstanceOf(Track.class, iterator.next());
-				
+
 				if (!separatorSetting(methodName, separator, previous, nextTrack)) return false;
-				
+
 				final Object invoke = method.invoke(nextTrack, new Object[]{separator});
 				if (Boolean.FALSE.equals(invoke)) return false;
 				assert invoke == null || Boolean.TRUE.equals(invoke) : invoke;
@@ -170,7 +170,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		final Segment from = context.getSegment(separator, previous, next);
 		final Segment to = context.getSegment(separator, next, previous);
 		assert !Segment.conflict(from, to) : from + " " + to;
-		
+
 		if (methodName.equals(IS_SET_UP_PATH)) {
 			return separator.getFollowingSegment(from) == to;
 		} else if (methodName.equals(CANCEL_PATH_SETUP)) {
@@ -185,7 +185,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		}
 		return true;
 	}
-	
+
 	private void setUpSemaphores(PathSeparator sep) throws PathSeparatorChangeException {
 		//ukolem je natavit zpetnym pruchodem rychlosti semaforu podle vyhybek
 		RailSwitch previousSwitch = null;
@@ -215,19 +215,19 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 	protected Iterator<PathElement> getIterator(PathSeparator sep) {
 		if (!isEnd(sep)) throw new IllegalArgumentException("Is not end of abstrPath");
 		if (sep == getFirst()) return iterator();
-		assert sep == getLast(); 
+		assert sep == getLast();
 		return descendingIterator();
 	}
-	
+
 	public boolean equalsWithElements(Path path) {
 		if (path == null) return false;
 		if (path == this) return true;
 		if (size() != path.size()) return false;
 		if (size() == 0) return true;
-		
+
 		final Iterator<PathElement> thisIt = this.iterator();
 		final Iterator<PathElement> pathIt = path.iterator();
-		
+
 		while (thisIt.hasNext()) {
 			assert pathIt.hasNext();
 			final PathElement thisNext = thisIt.next();
@@ -235,17 +235,17 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 			assert thisNext != null;
 			if (!thisNext.equals(pathNext)) return false;
 		}
-		
+
 		return !pathIt.hasNext();
 	}
-	
+
 	/**
 	 * @return context getter
 	 */
 	public SimulationContext getContext() {
 		return context;
 	}
-	
+
 	public Path reversePath() {
 		final ArrayPath arrayPath = new ArrayPath(getContext());
 		for (Iterator<PathElement> iter = descendingIterator(); iter.hasNext();) {

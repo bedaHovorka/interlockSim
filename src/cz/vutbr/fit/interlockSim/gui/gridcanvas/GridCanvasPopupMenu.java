@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas;
@@ -26,56 +26,56 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
  * EXTENSION
  */
 public abstract class GridCanvasPopupMenu extends JPopupMenu {
-    protected enum State {
-	    NODECELL,
-	    TRACKLINE
-    }
-    
-    protected abstract class PopupMenuAction extends AbstractAction {
-	
+	protected enum State {
+		NODECELL,
+		TRACKLINE
+	}
+
+	protected abstract class PopupMenuAction extends AbstractAction {
+
 	public PopupMenuAction(String n) {
-	    super(n);
+		super(n);
 	}
 
 	public final void actionPerformed(ActionEvent e) {
-	    if (getState() == State.NODECELL) {
+		if (getState() == State.NODECELL) {
 		nodeCellAction(e);
-	    } else if (getState() == State.TRACKLINE) {
+		} else if (getState() == State.TRACKLINE) {
 		trackLineAction(e);
-	    } else assert false;
+		} else assert false;
 	}
-	
+
 	protected abstract void nodeCellAction(ActionEvent e);
 	protected abstract void trackLineAction(ActionEvent e);
-    }
-    
-    private State state;
-    protected RailwayNetGridCanvas canvas;
+	}
 
-    public final void show(RailwayNetGridCanvas canvas, MouseEvent e, Point key, Cell cell) {
+	private State state;
+	protected RailwayNetGridCanvas canvas;
+
+	public final void show(RailwayNetGridCanvas canvas, MouseEvent e, Point key, Cell cell) {
 	assert canvas != null && e != null;
 	if (key == null || cell == null) return;
 	this.canvas = canvas;
 	reorganizeMenu(key, cell);
 	show(canvas, e.getX(), e.getY());
-    }
-    
-    private final void reorganizeMenu(Point key, Cell cell) {
-	if (cell instanceof NodeCell) {
-	    state = State.NODECELL;
-	    reorganizeMenu(key, (NodeCell) cell);
-	} else if (cell instanceof TrackBlockPart) {
-	    TrackBlockPart linePart = (TrackBlockPart) cell;
-	    state = State.TRACKLINE;
-	    reorganizeMenu(linePart.getTrackBlock());
-	} else assert(false) : cell;
-    }
-    
-    protected abstract void reorganizeMenu(TrackBlock line);
-    
-    protected abstract void reorganizeMenu(Point key, NodeCell cell);
+	}
 
-    protected State getState() {
-        return state;
-    }
+	private final void reorganizeMenu(Point key, Cell cell) {
+	if (cell instanceof NodeCell) {
+		state = State.NODECELL;
+		reorganizeMenu(key, (NodeCell) cell);
+	} else if (cell instanceof TrackBlockPart) {
+		TrackBlockPart linePart = (TrackBlockPart) cell;
+		state = State.TRACKLINE;
+		reorganizeMenu(linePart.getTrackBlock());
+	} else assert(false) : cell;
+	}
+
+	protected abstract void reorganizeMenu(TrackBlock line);
+
+	protected abstract void reorganizeMenu(Point key, NodeCell cell);
+
+	protected State getState() {
+		return state;
+	}
 }

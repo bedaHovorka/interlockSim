@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.context;
@@ -18,7 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell;
 /**
  * Read-only access interface to Grid...
  *
- * aby bylo rozhrani dokonale tak iterator vraceny implementaci tohoto rozhrani 
+ * aby bylo rozhrani dokonale tak iterator vraceny implementaci tohoto rozhrani
  * musi u {@link Iterator#remove()} hazet {@link UnsupportedOperationException}
  */
 public interface RailwayNetGrid extends Iterable<Entry<Point, Cell>> {
@@ -28,13 +28,13 @@ public interface RailwayNetGrid extends Iterable<Entry<Point, Cell>> {
 	 * @return cell
 	 */
 	public Cell getCellAt(int x, int y);
-	
-	/** 
+
+	/**
 	 * @param point
 	 * @return cell
 	 */
 	public Cell get(Point point);
-	
+
 	/**
 	 * @return count of colums (width)
 	 */

@@ -1,9 +1,9 @@
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
-# 
+#
 #      BSc Thesis	2006/2007
-# 
+#
 #      Railway Interlocking Simulator
 #
 #      Bedrich Hovorka
@@ -70,11 +70,11 @@ $(DOC).dvi: $(DOC).tex zkratky.tex $(DOC).bib images
 	latex $(DOC)
 
 clean:
-	rm -f *.dvi *.log $(DOC).blg $(DOC).bbl $(DOC).toc *.aux $(DOC).out $(DOC).tex 
+	rm -f *.dvi *.log $(DOC).blg $(DOC).bbl $(DOC).toc *.aux $(DOC).out $(DOC).tex
 	rm -f $(DOC).lof $(PLOTS_TEX) $(PLOTS_EPS) $(PLOTS_PDF) zkratky.tex *~
 	make -C img clean
 
-spell:    
+spell:
 	export LANG=cs_CZ.UTF-8; aspell --lang=cs --encoding=utf-8 --mode=tex check $(DOC).utf8.tex
 	export LANG=cs_CZ.UTF-8; aspell --lang=cs --encoding=iso-8859-2 --mode=tex check zkratky.dat
 

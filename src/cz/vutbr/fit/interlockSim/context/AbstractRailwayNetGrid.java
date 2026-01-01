@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.context;
@@ -28,7 +28,7 @@ public abstract class AbstractRailwayNetGrid implements RailwayNetGrid {
 	private final int rows;
 	private final Map<Cell, Point> reverseTable = new WeakHashMap<Cell, Point>();
 	private final Array2DMap<Cell> cells = new Array2DMap<Cell>();
-	
+
 	/**
 	 * @param cols count of colums
 	 * @param rows count of rows
@@ -37,14 +37,14 @@ public abstract class AbstractRailwayNetGrid implements RailwayNetGrid {
 		this.cols = cols;
 		this.rows = rows;
 	}
-	
+
 	public Cell getCellAt(int x, int y) {
 		if (x < 0 || y < 0 || x >= cols || y >= rows) throw new IndexOutOfBoundsException("Grid bounds");
 		return cells.get(x,y);
 	}
-	 
+
 	public Cell get(Point point) {
-	    return getCellAt(point.x, point.y);
+		return getCellAt(point.x, point.y);
 	}
 
 	public int getCols() {
@@ -66,7 +66,7 @@ public abstract class AbstractRailwayNetGrid implements RailwayNetGrid {
 	protected Map<Cell, Point> getReverseTable() {
 		return reverseTable;
 	}
-	
+
 	public Point getLocation(Cell value) {
 		return reverseTable.get(value);
 	}

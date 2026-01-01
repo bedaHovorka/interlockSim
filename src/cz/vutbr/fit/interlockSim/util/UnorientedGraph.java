@@ -1,10 +1,10 @@
 /* Brno University of Technology
  * Faculty of Information Technology
- * 
- * BSc Thesis	2006/2007
- * 
+ *
+ * BSc Thesis  2006/2007
+ *
  * Railway Interlocking Simulator
- * 
+ *
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.util;
@@ -20,7 +20,7 @@ import java.util.Set;
  * @param <E> edges
  */
 public interface UnorientedGraph<N,E>{
-	
+
 	/**
 	 * Put element to ExtendedUnorientedGraph
 	 * @param first
@@ -28,7 +28,7 @@ public interface UnorientedGraph<N,E>{
 	 * @param value
 	 */
 	public void put(N first, N second, E value);
-	
+
 	/**
 	 * get edge from graph
 	 * @param first
@@ -36,7 +36,7 @@ public interface UnorientedGraph<N,E>{
 	 * @return edge
 	 */
 	public E get(N first, N second);
-	
+
 	/**
 	 * @param node
 	 * @return all edges, which joins with node
@@ -61,10 +61,10 @@ public interface UnorientedGraph<N,E>{
 	/**
 	 * Remove edge from graph
 	 * @param edge
-	 * @return nodes which were joined with this edge  
+	 * @return nodes which were joined with this edge
 	 */
 	public Collection<N> remove(E edge);
-	
+
 	/**
 	 * @return all nodes, which is in graph
 	 */
@@ -74,7 +74,7 @@ public interface UnorientedGraph<N,E>{
 	 * @return {@link Map#isEmpty()}
 	 */
 	public boolean isEmpty();
-	
+
 	/**
 	 * @see Map#values()
 	 * @return all edges in graph
@@ -90,16 +90,16 @@ public interface UnorientedGraph<N,E>{
 	 * Remove all edges from graph
 	 */
 	public void clear();
-	
+
 	/**
-	 * @param node1 
-	 * @param node2 
+	 * @param node1
+	 * @param node2
 	 * @return true If graph contains edge between nodes
 	 */
 	public boolean contains(N node1, N node2);
-	
+
 	/**
-	 * @param edge 
+	 * @param edge
 	 * @return true If graph contains edge
 	 */
 	public boolean containsEdge(E edge);
