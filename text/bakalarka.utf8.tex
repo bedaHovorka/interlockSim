@@ -9,19 +9,19 @@
 %      Bedrich Hovorka
 %-----------------------------------------------------
 %
-\documentclass{cls/fitthesis}
+\documentclass[english]{cls/fitthesis}
 \usepackage[latin2]{inputenc}
 \usepackage{amsfonts}
 \usepackage{amsthm}
 \usepackage{url}
 
-% balíčky amsmath, babel, graphics a epsfig (resp. graphicx) jsou již zařazeny
+% packages amsmath, babel, graphics and epsfig (resp. graphicx) are already included
 
 % =======================================================================
-% balíček "hyperref" vytváří klikací odkazy v pdf, pokud tedy použijeme pdflatex
-% problém je, že balíček hyperref musí být uveden jako poslední, takže nemůže
-% být v šabloně
-\ifx\pdfoutput\undefined % nejedeme pod pdflatexem
+% package "hyperref" creates clickable links in pdf, if we use pdflatex
+% problem is that package hyperref must be included last, so it cannot
+% be in the template
+\ifx\pdfoutput\undefined % not running under pdflatex
 \else
   \usepackage{color}
   \usepackage[colorlinks,hyperindex,plainpages=false,pdftex]{hyperref}
@@ -29,18 +29,18 @@
   \definecolor{anchors}{rgb}{1,0,0}
   \def\AnchorColor{anchors}
   \def\LinkColor{links}
-  \def\pdfBorderAttrs{/Border [0 0 0] } % bez okrajů kolem odkazů
+  \def\pdfBorderAttrs{/Border [0 0 0] } % without borders around links
   \pdfcompresslevel=9
 \fi
 
 
-%  sekce rutin  --------------------------------------------------------
+%  routine section  --------------------------------------------------------
 \newsymbol\blacktriangleright 1349
 
-% pro czechiso...
+% for czechiso...
 %\DeclareUrlCommand\url{\def\UrlLeft{<}\def\UrlRight{>} \urlstyle{tt}}
 
-% vlozi obrazek
+% insert image
 \newcommand{\insertimage}[3][\textwidth]{
   \begin{figure}[htbp]
   \begin{center}
@@ -61,16 +61,16 @@
   \end{figure}
 }
 
-% :o) pouzit jen v matematickem rezimu , TODO check?
+% :o) use only in math mode , TODO check?
 \newcommand{\dv}{\Delta v}
 
 \newcommand{\cfr}[1]{\texttt{#1}}
 
-% odkaz (formatovani) do zdrojových kódů
-% TODO java-baliky ?
+% reference (formatting) to source code
+% TODO java-packages ?
 \newcommand{\sourceRef}[1]{\cfr{#1}}
 
-% dalsi krok - next state - math
+% next step - next state - math
 \newcommand{\ns}[1][]{
   y^{#1}_{n + 1}
 }
@@ -87,35 +87,35 @@
 }
 
 \newcommand{\zkratky}{
-  \nadepsanaStranka{Seznam použitých zkratek}
+  \nadepsanaStranka{List of Used Abbreviations}
   \input{zkratky}
 }
 
 \newcommand{\beeeegin}{
-  % generujeme titulní stránku
+  % generate title page
   \maketitle
   \pagenumbering{Roman}
-  % za titulní stránku ručně vložíte oficiální zadání a lic smlouvu
-  \nadepsanaStranka{Zadání}
+  % after title page manually insert official assignment and license agreement
+  \nadepsanaStranka{Assignment}
   \begin{enumerate}
-    \item Prostudujte funkce a součásti elektronického železničního stavědla používaného pro řízení provozu v železničních stanicích.
-    \item Prostudujte simulační metody použitelné pro realizaci simulátoru železniční sítě v že\-lez\-nič\-ní stanici, zejména diskrétní, spojitou a kombinovanou simulaci. Navrhněte  vhodný simulační přístup, či kombinaci přístupů pro realizaci tohoto simulátoru. Navrhněte vhodný formát dat pro reprezentaci modelu železniční sítě.
-    \item Navrhněte a implementujte vybranou část simulátoru a demonstrujte funkčnost na dostatečně názorném modelu.
-    \item Diskutujte získané výsledky a další možné směry vývoje.
+    \item Study the functions and components of electronic railway interlocking used for traffic control in railway stations.
+    \item Study simulation methods applicable for implementing a railway network simulator in a railway station, particularly discrete, continuous and combined simulation. Propose a suitable simulation approach, or combination of approaches for implementing this simulator. Propose a suitable data format for representing the railway network model.
+    \item Design and implement a selected part of the simulator and demonstrate functionality on a sufficiently illustrative model.
+    \item Discuss the obtained results and other possible directions of development.
   \end{enumerate}
   \medskip
   \begin{description}
-    \item[Kategorie:] Modelování a simulace
-    \item[Implementační jazyk:] Java, nebo podle vlastního uvážení
-    \item[Operační systém:] Windows, Linux
-    \item[Literatura:] Podle pokynů vedoucího
-    \item[Datum zadání:] 1. listopadu 2006
-    \item[Datum odevzdání:] 15. května 2007
+    \item[Category:] Modeling and Simulation
+    \item[Implementation language:] Java, or at your own discretion
+    \item[Operating system:] Windows, Linux
+    \item[Literature:] According to supervisor's instructions
+    \item[Date of assignment:] November 1, 2006
+    \item[Date of submission:] May 15, 2007
   \end{description}
 
-  \nadepsanaStranka{Licenční smlouva}
-  Licenční smlouva je uložena v archivu Fakulty
-  informačních technologií Vysokého učení technického v Brně.
+  \nadepsanaStranka{License Agreement}
+  The license agreement is stored in the archive of the Faculty
+  of Information Technology, Brno University of Technology.
 
   \newpage
   \makeabstract\makedeclaration
@@ -126,35 +126,35 @@
   \setcounter{page}{1}
 }
 
-%  sekce globálních nastavení ------------------------------------------
+%  global settings section ------------------------------------------
 
-%Informace o praci/projektu
+%Information about the work/project
 %---------------------------------------------------------------------------
 \projectinfo{
-  %Prace
-  project=BP,           %typ prace BP/DP
-  year=2007,             %rok
-  date=\today,           %datum odevzdani
-  %Nazev prace
-  title.cs=Simulátor železničního stavědla,  %nazev prace v cestine
-  title.en=Simulator of railway interlocking, %nazev prace v anglictine
-  %Autor
-  author=Bedřich Hovorka,   %jmeno prijmeni autora
-  %author.title.p=Bc., %titul pred jmenem (nepovinne)
-  %author.title.a=PhD, %titul za jmenem (nepovinne)
-  %Ustav
+  %Work
+  project=BP,           %type of work BP/DP
+  year=2007,             %year
+  date=\today,           %submission date
+  %Title of work
+  title.cs=Simulátor železničního stavědla,  %title of work in Czech
+  title.en=Simulator of railway interlocking, %title of work in English
+  %Author
+  author=Bedřich Hovorka,   %name surname of author
+  %author.title.p=Bc., %title before name (optional)
+  %author.title.a=PhD, %title after name (optional)
+  %Institute
   department=UITS,
-  %Skolitel
-  supervisor=David Martinek, %jmeno prijmeni skolitele
-  supervisor.title.p=Ing.,   %titul pred jmenem (nepovinne)
-  %supervisor.title.a=~,    %titul za jmenem (nepovinne)
+  %Supervisor
+  supervisor=David Martinek, %name surname of supervisor
+  supervisor.title.p=Ing.,   %title before name (optional)
+  %supervisor.title.a=~,    %title after name (optional)
   %
-  %Klicova slova, abstrakty, prohlaseni a podekovani je mozne definovat
-  %bud pomoci nasledujicich parametru nebo pomoci vyhrazenych maker (viz dale)
+  %Keywords, abstracts, declaration and acknowledgment can be defined
+  %either using the following parameters or using reserved macros (see below)
   %===========================================================================
-  %Klicova slova
-  keywords.cs={železniční stavědlo, kombinovaná simulace, XML, Java, OOP}, %klicova slova v ceskem jazyce
-  keywords.en={railway interlocking, combined simulation, XML, Java, OOP}, %klicova slova v anglickem jazyce
+  %Keywords
+  keywords.cs={železniční stavědlo, kombinovaná simulace, XML, Java, OOP}, %keywords in Czech language
+  keywords.en={railway interlocking, combined simulation, XML, Java, OOP}, %keywords in English language
   %Abstract
   abstract.cs={
   		 Stavědlo je dispečerské zařízení pro řízení dopravy. Dispečer určuje nastavováním
@@ -162,7 +162,7 @@
   		 V této práci se zabývám návrhem a výstavbou základu simulátoru takového zařízení v jazyce Java.
   		 Nastudoval jsem funkce tohoto zařízení. Zabýval jsem se strukturou celé aplikace a
                  implementoval chování základních prvků.
-	      }, % abstrakt v ceskem jazyce
+	      }, % abstract in Czech language
   abstract.en={
                 Railway interlocking is a dispatching facility for traffic control.
                 The dispatcher controls train paths by setting switches and signals.
@@ -170,15 +170,15 @@
 in the Java language. I have studied functions of this facility.
                 I interested with structure of whole application.
                 And I implemented behaviour of foundamental elements.
-	      }, % abstrakt v anglickem jazyce
-  %Prohlaseni
+	      }, % abstract in English language
+  %Declaration
   declaration={
-    Prohlašuji, že jsem tuto bakalářskou práci vypracoval samostatně pod
-     vedením Ing. Davida Martinka.  %Další informace mi poskytli ........
-    Uvedl jsem všechny literární prameny a publikace, ze kterých jsem čerpal.
+    I declare that I have worked out this bachelor's thesis independently under
+     the supervision of Ing. David Martinek.  %Additional information was provided by ........
+    I have listed all literary sources and publications from which I have drawn.
     },
-  %Podekovani (nepovinne) TODO
-  %acknowledgment={Tímto bych chtěl poděkovat svému vedoucímu Ing. Davida Martinkovi} % nepovinne
+  %Acknowledgment (optional) TODO
+  %acknowledgment={I would like to thank my supervisor Ing. David Martinek} % optional
 }
 
 % =======================================================================
@@ -188,136 +188,136 @@ in the Java language. I have studied functions of this facility.
 
 % ----------------------------------------------------------------
 
-\chapter{Úvod}
-  V této bakalářské práci jsem se zabýval problematikou dopravní simulace.
-  Moje práce spočívala v nastudování součástí systému,
-  experimentováním s existujícími implementacemi her řízení železniční dopravy,
-  nalezením vhodné simulační knihovny a
-  jako hlavní činností -- návrhem a implementací základu simulátoru.
-  Nejprve bylo třeba navrhnout strukturu aplikace, vnitřní reprezentací modelu a formát dat.
-  Poté jsem mohl s vnitřní reprezentací implementovat grafické rozhraní umožňující editaci.
-  Dále jsem se už zabýval především simulačním modelem.
+\chapter{Introduction}
+  In this bachelor's thesis I dealt with the topic of traffic simulation.
+  My work consisted of studying the system components,
+  experimenting with existing implementations of railway traffic control games,
+  finding a suitable simulation library and
+  as the main activity -- designing and implementing the foundation of a simulator.
+  First it was necessary to design the application structure, internal model representation and data format.
+  Then I could implement a graphical interface for editing with the internal representation.
+  Furthermore I mainly dealt with the simulation model.
 
-  V druhé kapitole představím modelovaný systém.
-  Jeho chování je lépe ukázat na již existujících programech.
+  In the second chapter I present the modeled system.
+  Its behavior is better shown on already existing programs.
 
-  V třetí kapitole se zmíním o numerickém řešení diferenciálních rovnic. V další sekci
-  narazíte na základní pojmy z modelování a simulace. Letmo se zmíním i o
-  tom co to je diskrétní, spojitá a kombinovaná simulace, u kombinované trochu podrobněji.
-  %Převládá tu však vlastní neformální způsob vyjádření.
+  In the third chapter I mention numerical solution of differential equations. In the next section
+  you will encounter basic concepts from modeling and simulation. I will briefly mention
+  what discrete, continuous and combined simulation is, with combined simulation in somewhat more detail.
+  %However, informal way of expression prevails here.
 
-  Ve čtvrté kapitole popisuji spíše než běžně známé vlastnosti použitých nástrojů,
-  %které je možné snadno získat z webu, %podloudne
-  vlastní postřehy a příklady z implementace. To platí hlavně o sekcích o Javě a XML.
-  V sekci o simulační knihovně \emph{jDisco} stručně vysvětlím, jak se používá, aby nedošlo
-  k některým nedorozuměním, co jsem musel dále v implementaci řešit a co ne.
+  In the fourth chapter I describe rather than commonly known properties of the used tools,
+  %which can be easily obtained from the web, %sneaky
+  my own observations and examples from the implementation. This applies mainly to sections about Java and XML.
+  In the section about the \emph{jDisco} simulation library I will briefly explain how it is used, to avoid
+  some misunderstandings, what I had to solve further in the implementation and what not.
 
-  Do páté kapitoly jsem vybral, podle mého, důležité myšlenky z návrhu a popisu implementace.
-  Do podrobností zacházím v případě, že mi to připadá nutné.
-  %Větší důraz na detail by mohl zderivovat na suchý a bezúčelný výčet.
-  Nejprve se zamýšlím nad celkovou strukturou aplikace. Poté popíšu organizaci prvků
-  v systému. Následováno popisem jak je implementována simulace. A nakonec
-  představím příklad demonstrující, to co bylo naimplementováno.
+  In the fifth chapter I selected, in my opinion, important ideas from the design and implementation description.
+  I go into details in case I find it necessary.
+  %Greater emphasis on detail could degenerate into a dry and pointless enumeration.
+  First I reflect on the overall application structure. Then I describe the organization of elements
+  in the system. Followed by a description of how simulation is implemented. And finally
+  I present an example demonstrating what was implemented.
 
-  V závěrečné kapitole projdu některá možná rozšíření, zejména ta, která úzce navazují na současnou implementaci.
-  Tuto sekci následuje již jen zhodnocení celé práce.
+  In the final chapter I go through some possible extensions, especially those that closely follow the current implementation.
+  This section is followed only by an evaluation of the entire work.
 
-Některé názvosloví bylo použito z \cite{z173_1995sb} a existujících implementací.
-Také názvy v obrázkách a schématech budou většinou anglicky, aby odpovídaly zdrojovým kódům.
-Pro pochopení tohoto textu předpokládám, že čtenář je alespoň zběhlejším studentem informatiky
-a rozumí pojmům z diskrétní a numerické matematiky, algoritmů a objektové orientace.
-%Text bude psán stručně s odkazy mezi kapitolami na souvislosti bez zbytečného okecávání.
+Some terminology was used from \cite{z173_1995sb} and existing implementations.
+Also names in figures and schemes will be mostly in English to match the source code.
+For understanding this text I assume that the reader is at least an experienced computer science student
+and understands concepts from discrete and numerical mathematics, algorithms and object orientation.
+%The text will be written concisely with cross-references between chapters on connections without unnecessary verbosity.
 
-Příklad odkazu do zdrojových souborů: \sourceRef{Example}.
-\section{Etapy a cíle}
+Example of reference to source files: \sourceRef{Example}.
+\section{Stages and Goals}
 
-    \subsection*{Co bylo implementováno před bakalářským projektem}
-    Během Semestrálního projektu vytvořil prototyp objektového modelu sítě, zejména statické vlastnosti.
-    Na základě toho jsem navrhl XML formát a implementoval továrnu pro načítání a ukládání.
-    V rámci projektu do Modelování a simulace jsem vytvořil kombinovaný model pohybu
-    vlaku podle dané posloupnosti semaforů a hran (ne v síti).
-    Do předmětu Tvorba uživatelských rozhraní jsem odevzdal jednoduchý grafický editor výše zmíněného modelu sítě,
-    který zobrazuje síť v zažitém schématu obdobném tomu použitém v elektronických stavědlech.
-    Vše jsem během bakalářského projektu doplnil do následujících cílů:
-    \subsection*{Cíle bakalářského projektu}
-    Vytvořit jádro přenositelného programu:
+    \subsection*{What was implemented before the bachelor's project}
+    During the Semester project I created a prototype of an object model of the network, especially static properties.
+    Based on this I designed an XML format and implemented a factory for loading and saving.
+    Within the Modeling and Simulation project I created a combined model of train movement
+    according to a given sequence of semaphores and edges (not in a network).
+    For the User Interface Design course I submitted a simple graphical editor of the aforementioned network model,
+    which displays the network in a familiar scheme similar to that used in electronic interlockings.
+    I completed everything during the bachelor's project to the following goals:
+    \subsection*{Goals of the bachelor's project}
+    Create the core of a portable program:
     \begin{itemize}
-      \item na základě nastudovaných podkladů navrhnout rozšiřitelný systém tříd, propojitelné komunikující moduly
-      \item Dynamické vlastnosti a chování základních prvků -- semafor, výhybka, kolej
-      \item Pohyb a lokalizace vlaků v síti
-      \item Datová struktura pro manipulaci z cestou, zejména stavění cest (bez jejich rušení)
-      \item Vytvořit příklad, který demonstruje funkčnost výše zmíněných cílů
+      \item based on studied materials, design an extensible system of classes, connectable communicating modules
+      \item Dynamic properties and behavior of basic elements -- semaphore, switch, track
+      \item Movement and localization of trains in the network
+      \item Data structure for manipulating paths, especially setting paths (without their cancellation)
+      \item Create an example that demonstrates the functionality of the aforementioned goals
     \end{itemize}
-    Vlastní modelování dalších prvků a všech detailů systému bych přenechal jako rozšíření.
+    I would leave modeling of other elements and all system details as extensions.
 
-\chapter{Modelovaný systém a existující implementace}
-V této kapitole budou stručně popsány funkce modelovaného systému. Dále uvedu některé již existující aplikace.
-Budou zde zmíněna i fakta, která je třeba brát v úvahu, i když jejich implementace nebyla dokončena.
-  \section{Železniční stavědlo}
-  Železniční stavědlo je zařízení, které umožňuje řídit dopravní síť nějakého uzlu
-  či traťového úseku z jednoho místa. Ovládá chování několika prvků.
-  Například nastavuje signály na semaforech a přestavuje výhybky.
-  Některá dnešní stavědla mají počítačové rozhraní a jsou ovládána jedním dispečerem. Ten každému vlaku
-  vymezí určitou cestu, tak že zadá počáteční a cílový semafor. Na stavědlu je pak, aby našlo nejvhodnější
-  neobsazenou cestu.
+\chapter{Modeled System and Existing Implementations}
+This chapter will briefly describe the functions of the modeled system. I will also list some already existing applications.
+Facts that need to be taken into account will also be mentioned here, even if their implementation was not completed.
+  \section{Railway Interlocking}
+  Railway interlocking is a device that allows controlling a traffic network of some node
+  or track section from one place. It controls the behavior of several elements.
+  For example, it sets signals on semaphores and switches rail switches.
+  Some today's interlockings have a computer interface and are operated by one dispatcher. He allocates
+  a certain path to each train by entering the initial and target semaphore. It is then up to the interlocking to find the most suitable
+  unoccupied path.
   \begin{enumerate}
-    \item Pokud ji nenajde z důvodu obsazení všech možností uloží požadavek (dvojici -- počátek a cíl) do fronty.
-          Při uvolňování kolejí testuje možnost sestavit první prvek ve frontě. Frontu je možné editovat.
-    \item V opačném případě nastaví prvky v cestě
+    \item If it doesn't find it due to all possibilities being occupied, it saves the request (pair -- start and destination) to a queue.
+          When releasing tracks it tests the possibility of assembling the first element in the queue. The queue can be edited.
+    \item Otherwise it sets elements in the path
   \end{enumerate}
-  Toto souvisí i z bezpečností. Systém nesmí na každé koleji dovolit více než jednu
-  vlakovou cestu\footnote{Existují i tzv. posunové, ale ty zatím neuvažuji}.
-  Jak může takový simulátor vypadat prozradí následující sekce.
+  This is also related to safety. The system must not allow more than one
+  train path on each track\footnote{There are also so-called shunting paths, but I don't consider them yet}.
+  The following section will reveal what such a simulator can look like.
 
-  \section{Existující implementace}\label{recenzes}
-  Pro lepší představu jak taková aplikace funguje zde popisuji
-  některé již existující simulátory řízení železniční dopravy. Sice se vesměs jedná o hry, ale svojí koncepcí
-  se blíží k trenažéru reálného systému. Zachovávají si však jednoduchost ovládání.
-  Použil jsem je také jako prostředek pro analýzu systému. Experimentováním s těmito programy jako metodou
-  zpět\-né\-ho inženýrství\footnote{\url{http://en.wikipedia.org/wiki/Reverse_engineering}} lze nastudovat strukturu
-  a chování většiny systému. Každý má svá národní specifika (detaily v pravidlech řízení), však mnoho principů je společných, které popisuji u prvního. U dalších zmiňuji již jen rozdíly.
+  \section{Existing Implementations}\label{recenzes}
+  For a better idea of how such an application works, I describe here
+  some already existing railway traffic control simulators. Although they are mostly games, in their concept
+  they are close to a real system trainer. However, they maintain simplicity of operation.
+  I also used them as a means for system analysis. Experimenting with these programs as a method
+  of reverse engineering\footnote{\url{http://en.wikipedia.org/wiki/Reverse_engineering}} allows studying the structure
+  and behavior of most of the system. Each has its national specifics (details in control rules), but many principles are common, which I describe for the first one. For the others I only mention differences.
     \subsection*{Staničář}
-      Tento herní simulátor má modelovat české JOP.
-      Uživatel si zvolí čas a stanici. Stanice a vlaky je uložena v 1 velkém XML souboru.
-      Poté se mu zobrazí kolejiště a seznam vlaků v systému.
-      Nyní může ovládat jednotlivé prvky a sledovat chování systému.
-      Do kolejiště určenými místy vjíždějí vlaky (podle jízdního řádu, generátor s exponenciálním
-      rozložením doby mezi generováními).
-      Úkolem dovést vlaky na místo podle jízdního řádu a udržet plynulost dopravy.
-      Každá stanice či větší systém má svůj zásobník (tak je zde nazývaná FIFO fronta) povelů, kam
-      se uloží když zrovna nemohou být vykonány. U každého vlaku je možnost prohlížet jízdní řád
-      (čas, zastávka, číslo koleje). Stanice je možné vytvářet vlastní v odděleném editoru.
-      Dále je tu i editor jízdních řádů.
-      V současné verzi funguje tato hra pod .NET 2.0 ve Windows. Dřívější verze byly spustitelné v dotGNU.
+      This game simulator is intended to model Czech interlocking systems.
+      The user chooses time and station. Stations and trains are stored in one large XML file.
+      Then the track layout and list of trains in the system are displayed.
+      Now they can control individual elements and observe system behavior.
+      Trains enter the track layout at designated places (according to timetable, generator with exponential
+      distribution of time between generations).
+      The task is to guide trains to their destination according to timetable and maintain traffic flow.
+      Each station or larger system has its stack (here called FIFO queue) of commands, where
+      they are stored when they cannot currently be executed. For each train there is an option to view the timetable
+      (time, stop, track number). Stations can be created in a separate editor.
+      There is also a timetable editor.
+      In the current version this game runs under .NET 2.0 in Windows. Earlier versions were executable in dotGNU.
     \subsection*{SimSig}
-      Tento britský simulátor podporuje sice více stanic, ale každá má svůj vlastní instalátor.
-      Funkčně je obsáhlejší. Umí simulovat výpadek elektřiny, náhodné výluky v různých částech sítě.
-      a další poruchy vlaků a síťových prvků. Je tu také
-      určitá míra automatického řízení i v roz\-vět\-ve\-ném kolejišti (provedení jízdního řádu).
-      Sice určená pro Windows, ale na rozdíl od předcházejícího jsem ji spustil i
-      ve wine\footnote{wine-0.9.36}.
+      This British simulator supports multiple stations, but each has its own installer.
+      Functionally it is more comprehensive. It can simulate power outages, random disruptions in various parts of the network,
+      and other failures of trains and network elements. There is also
+      a certain degree of automatic control even in branched track layouts (timetable execution).
+      Although intended for Windows, unlike the previous one I managed to run it
+      in wine\footnote{wine-0.9.36}.
     \begin{description}
-      %\item[TrainDispatcher] Spojené státy
-      \item[Gordikon, Multikon, Brno] Síť je nastavena napevno.
-        Oproti ostatním jsou na začátku simulace také vlaky umístěny na kolejích v síti,
-        nejenom, že napřed musí vstoupit do systému zvláštním prvkem v síti, což je reálnější.
+      %\item[TrainDispatcher] United States
+      \item[Gordikon, Multikon, Brno] The network is fixed.
+        Unlike the others, at the beginning of simulation trains are also placed on tracks in the network,
+        not just that they must first enter the system through a special element in the network, which is more realistic.
     \end{description}
-\chapter{Teorie}
-V této kapitole popisuji některé teoretické základy. Pojmy jako \emph{množina} či \emph{relace} před\-po\-klá\-dám, že čtenář zná.
-    \section{Numerické metody}\label{numMethods}
-      K výpočtu diferenciálních rovnic na číslicových počítačích bývají nejvhodnější numerické metody,
-      neboť jsou zde operace prováděny diskrétně. Spojité výpočty je nutné na ně převést.
-      A právě tímto převodním prostředkem jsou numerické metody.
-      V závislosti na použití je nezbytné prozkoumat jejich vlastnosti jako je přesnost a stabilita řešení.
-      Touto problematikou se podrobněji zabývá \cite{rektorys}. Zmenšováním kroku se zvyšuje přesnost výpočtu
-      (různě u různých metod), však při velmi malých krocích už hraje roli nepřesnost elementárních operací číslicové aritmetiky.
+\chapter{Theory}
+In this chapter I describe some theoretical foundations. Terms like \emph{set} or \emph{relation} I assume the reader knows.
+    \section{Numerical Methods}\label{numMethods}
+      For computing differential equations on digital computers, numerical methods are usually most suitable,
+      because operations are performed discretely here. Continuous computations must be converted to them.
+      And numerical methods are precisely this conversion means.
+      Depending on usage, it is necessary to examine their properties such as accuracy and stability of solution.
+      This problem is dealt with in more detail in \cite{rektorys}. By decreasing the step size, computation accuracy increases
+      (differently for different methods), but at very small steps, the imprecision of elementary operations of digital arithmetic plays a role.
 
-      % zakladni princip NRODR, změna kroku,
-      Jako příklad zde uvádím jednokrokovou metodu řešení ODR z počátečními podmínkami -- \emph{Runge-Kutta-Fehlberg}
-      (rovnice \ref{eqRKF45_beg} - \ref{eqRKF45_end}), protože je dále v této práci použita. Je pátého řádu a
-      navíc můžeme mezihodnoty $k_n$ zkombinovat na aproximaci čtvrtého řádu (rovnice \ref{eqRKF45_4aprox}). Z té pak
-      můžeme vypočítat odhad chyby $ \ns - \ns[*] $ . Využití těchto vlastností viz sekce \ref{modelling}. Na obrázku
-      \ref{rkf45} vidíme její použití, když očekáváme výsledek blízký polynomu druhého stupně.
+      % basic principle NRODR, step change,
+      As an example I present here a single-step method for solving ODE with initial conditions -- \emph{Runge-Kutta-Fehlberg}
+      (equations \ref{eqRKF45_beg} - \ref{eqRKF45_end}), because it is used further in this thesis. It is of fifth order and
+      moreover we can combine the intermediate values $k_n$ into a fourth-order approximation (equation \ref{eqRKF45_4aprox}). From that we can
+      then calculate an error estimate $ \ns - \ns[*] $ . Use of these properties see section \ref{modelling}. In figure
+      \ref{rkf45} we see its use when we expect a result close to a second-degree polynomial.
 
       \begin{eqnarray}
         k_1 & = & f(x_n, y_n) , \label{eqRKF45_beg} \\
@@ -333,35 +333,35 @@ V této kapitole popisuji některé teoretické základy. Pojmy jako \emph{množ
                           \frac{1}{5}k_5) \label{eqRKF45_4aprox}
       \end{eqnarray}
 
-      \insertplot{rkf45}{Demonstrace kroku metody}
+      \insertplot{rkf45}{Demonstration of method step}
 
-  %\section{Objektově orientované modelování}
+  %\section{Object-oriented modeling}
   %... \cite{umlDesign}
-  \section{Modelování a simulace}\label{modelling}
-    V této sekci uvádím základní pojmy z modelování a simulace.
-    Podrobnosti v \cite{imsSkripta, helsgaun2001}
+  \section{Modeling and Simulation}\label{modelling}
+    In this section I present basic concepts from modeling and simulation.
+    Details in \cite{imsSkripta, helsgaun2001}
     \begin{description}
-      \item[Systém] je cokoliv u čeho můžeme popsat jeho chování. Může být reálný i imaginární. Například
- 	železniční síť s vlaky a řídícími prvky.
-      \item[Prvek systému] je elementární, dále nedělitelná, část systému. Vzájemná interakce prvků určuje chování
-        celého systému. Například kolejový oddíl. Zde záleží na míře abstrakce.
-      \item[Model] je systém, který napodobuje vlastnosti a chování původního systému.
-      \item[Modelování] je postupné vytváření modelů. Z pozorování a studování systému vznikne
-      \emph{konceptuální model}, což je soubor neurčitých informací (nástin).
-      Z něj vytváříme \emph{abstraktní model} -- formální popis systému.
-      A z toho pak izomorfním zobrazením naprogramujeme \emph{simulační model}.
-      \item[Simulace] Získávání nových znalostí o systému experimentováním se simulačním modelem.
-      \item[Reálný čas] skutečný čas, ve kterém běží model
-      \item[Modelový čas] časová osa modelu
-      \item[Strojový čas] čas, který byl potřebný k výpočtu (tj. jak dlouho byl procesor přepnut do kontextu
-       daného procesu)
+      \item[System] is anything for which we can describe its behavior. It can be real or imaginary. For example
+ 	a railway network with trains and control elements.
+      \item[System element] is an elementary, further indivisible, part of the system. Mutual interaction of elements determines behavior
+        of the entire system. For example a track section. Here it depends on the level of abstraction.
+      \item[Model] is a system that mimics properties and behavior of the original system.
+      \item[Modeling] is the gradual creation of models. From observation and study of the system arises
+      a \emph{conceptual model}, which is a set of uncertain information (outline).
+      From it we create an \emph{abstract model} -- formal description of the system.
+      And from that by isomorphic mapping we program a \emph{simulation model}.
+      \item[Simulation] Acquiring new knowledge about the system by experimenting with the simulation model.
+      \item[Real time] actual time in which the model runs
+      \item[Model time] time axis of the model
+      \item[Machine time] time that was needed for computation (i.e. how long the processor was switched to the context
+       of the given process)
     \end{description}
 
-    \subsection{Diskrétní simulace}
-      Stav všech prvků je definován pouze v diskrétních časových okamžicích.
-      Během tohoto okamžiku je provedena atomická operace zvaná událost, která tento stav může změnit.
-      K formálnímu popisu se používá často Petriho síť. Simulace je řízena pomocí kalendáře událostí
-      tímto jednoduchým algoritmem:
+    \subsection{Discrete Simulation}
+      The state of all elements is defined only at discrete time moments.
+      During this moment an atomic operation called an event is performed, which can change this state.
+      For formal description, Petri nets are often used. Simulation is controlled using an event calendar
+      with this simple algorithm:
 
       \begin{verbatim}
       	for event in calendar.remove_iterator :
@@ -378,352 +378,352 @@ V této kapitole popisuji některé teoretické základy. Pojmy jako \emph{množ
       %	\item $
       %\end{itemize}
 
-    \subsection{Spojitá simulace}
-      Stav každého prvku je definován v každém okamžiku vymezeného časového intervalu.
-      Abstraktním modelem jsou algebraické, diferenční či diferenciální rovnice a jejich soustavy.
-      U jednokrokových metod lze na základě odhadu chyby měnit krok a tím urychlit výpočet.
-      Metoda uvedená v sekci \ref{numMethods} má takové vlastnosti.
+    \subsection{Continuous Simulation}
+      The state of each element is defined at every moment of the specified time interval.
+      The abstract model consists of algebraic, difference or differential equations and their systems.
+      For single-step methods, based on error estimate the step can be changed and thus accelerate computation.
+      The method presented in section \ref{numMethods} has such properties.
 
       \begin{verbatim}
-        #zneplatnění předcházejících změn (derivace=0)
+        #invalidate previous changes (derivative=0)
         for variable in all_variables : variable.state_fix()
-        #výpočet změn stavů z předcházejících
+        #compute state changes from previous
         for continous in all_cont_processes : continous.derivatives()
-        integrate() #krok numerické metody s posunem modelového času
+        integrate() #step of numerical method with model time shift
       \end{verbatim}
 
-    \subsection{Kombinovaná simulace}\label{sim:comb}
-      Systém obsahuje spojité i diskrétní prvky. Řízení simulace musí při výpočtu spojitých stavů
-      měnit krok, aby dokročila k naplánované diskrétní události. Dále musí detekovat stavové podmínky a
-      naplánovat provedení události k podmínce přiřazené.
-      Z numerických metod jsou proto vhodné jednokrokové, protože u nich záleží jen na předchozím výsledku.
+    \subsection{Combined Simulation}\label{sim:comb}
+      The system contains both continuous and discrete elements. Simulation control must during computation of continuous states
+      change the step to reach the planned discrete event. Furthermore it must detect state conditions and
+      schedule execution of the event assigned to the condition.
+      From numerical methods, single-step ones are therefore suitable, because for them only the previous result matters.
 
-      \subsubsection{Petriho síť při vytváření kombinovaného modelu}
-      Během návrhu aplikace jsem použil Petriho sítí k přehlednému
-      vyjádření procesů. Takto jsem si lépe představil průběh simulace a jak ho mám vyjádřit v programovacím
-      jazyce. Vesměs se jednalo o C/E sítě, tj. místo, zde zvané podmínka, obsahuje maximálně
-      jednu značku a přechod, zde nazývaný událost, je proveditelný v případě, že všechny podmínky před ním platí a podmínky za ním neplatí. V závislosti na lepším vyjádření jsem
-      přechody prohlásil buď za události reagující na stavovou podmínku, která ruší
-      platnost značky před ní, nebo za spojitý proces a místo za ním je stavová podmínka, na kterou čeká
-      následující událost.
+      \subsubsection{Petri net when creating a combined model}
+      During application design I used Petri nets for clear
+      expression of processes. This way I better imagined the simulation flow and how to express it in programming
+      language. Mostly these were C/E nets, i.e. a place, here called condition, contains at most
+      one token and a transition, here called event, is executable in case all conditions before it hold and conditions after it do not hold. Depending on better expression I
+      declared transitions either as events reacting to a state condition, which cancels
+      validity of the token before it, or as a continuous process and the place after it is a state condition, which the
+      following event waits for.
 
-      Mimo jiné jsem je také mohl ověřit pomocí nástroje CESim (viz \cite{novosad2006}),
-      pokud se síť dala vyjádřit, aniž by to bylo na úkor přehlednosti.
-      Například síť na obrázku \ref{autoblok} je tímto nástrojem ověřená.
+      Among other things I could also verify them using the CESim tool (see \cite{novosad2006}),
+      if the net could be expressed without sacrificing clarity.
+      For example the net in figure \ref{autoblok} is verified by this tool.
 
-      \insertimage{trainProcess}{Petriho síť řízení vlaku podle signálů na semaforech}
+      \insertimage{trainProcess}{Petri net of train control according to signal aspects}
 
-      V síti na obrázku \ref{trainProcess} se navíc nacházejí externí podmínky a priorita.
-      Proces se vrací do stejného stavu -- tj. je před návěstidlem
-      , když vlak dojede k dalšímu návěstidlu nebo změnou signálu
-      skončilo čekání před ním. Podmínky \uv{red} a \uv{allowing signal} představují stav tohoto návěstidla
-      a samozřejmě vždy\footnote{v každém diskrétním okamžiku stavu procesu} platí právě jedna z nich.
-      Podmínkou \uv{$v \le 0$, next red} a prioritou ošetřuji možnost zastavení na konci následujícího bloku,
-      kterému přecházelo rozjetí na jeho začátku.
+      In the net in figure \ref{trainProcess} there are additionally external conditions and priority.
+      The process returns to the same state -- i.e. is before a signal
+      , when the train arrives at the next signal or by signal change
+      waiting before it ended. Conditions \uv{red} and \uv{allowing signal} represent the state of this signal
+      and of course always\footnote{at each discrete moment of process state} exactly one of them holds.
+      With condition \uv{$v \le 0$, next red} and priority I handle the possibility of stopping at the end of the following block,
+      which was preceded by acceleration at its beginning.
 
-\chapter{Použité jazyky a nástroje}
-  Tato kapitola popisuje jazyky resp. nástroje, které jsem použil ve své práci.
-  S Javou a XML jsem se seznámil již dříve, proto nechci zacházet
-  do podrobností. Na druhou stranu zde napíšu moje názory,
-  proč jsem tyto jazyky či nástroje použil a případně pro co byly v mé práci nevhodné.
+\chapter{Used Languages and Tools}
+  This chapter describes languages or tools that I used in my work.
+  I became familiar with Java and XML earlier, so I don't want to go
+  into details. On the other hand I will write here my opinions,
+  why I used these languages or tools and possibly for what they were unsuitable in my work.
 
   \section{XML} \label{secXML}
-  XML je standardizovaný značkovací jazyk pro ukládání různých typů dat. Rozšiřuje text o značky, zvané tagy, ty
-  jsou uzavřeny do $<$ $>$, mají název a mohou mít několik atributů. Tagy jsou počáteční (začínají $<$), koncové
-  (začínají $</$) nebo ``obojetné'' (počáteční s $/$ před $>$).
-  Využívá se v různých oblastech, jako například webové stránky, vektorová grafika, katastr nemovitostí, serializace
-  objektů (v JavaBeans) a samozřejmě také pro ukládání modelů v M\&S (např. Ptolemy II.).
+  XML is a standardized markup language for storing various types of data. It extends text with marks, called tags, which
+  are enclosed in $<$ $>$, have a name and can have several attributes. Tags are opening (starting with $<$), closing
+  (starting with $</$) or ``self-closing'' (opening with $/$ before $>$).
+  It is used in various areas, such as web pages, vector graphics, real estate registry, object
+  serialization (in JavaBeans) and of course also for storing models in M\&S (e.g. Ptolemy II.).
 
-  XML definuje obecnou syntaxi, ve které je možné vytvářet vlastní značky.
-  Vnitřní reprezentaci představuje n-ární strom různých typů uzlů jako element, atribut, text atd.
-  Data tedy mohou být rozmístěna hierarchicky podle logických vazeb.
-  Snadno se rozšiřuje a je podporován mnoha jazyky, což umožňuje vytváření datových formátů postupně prototypováním.
-  Díky jmenným prostorům lze do
-  dokumentu jednoho typu vložit část jiného (třeba již existujícího). Například do popisu dopravní sítě, jež
-  představuje hlavně topologii, lze přidat ke každé cestě její geometrické vlastnosti pomocí externího vektorového
-  grafického formátu. Pro strojovou výměnu dat je to výborný jazyk, však pro ruční zápis či dokonce programování
-  (např. XSLT) se mi zdá nevhodný. Často je vhodné jej před odesláním přes síť zkomprimovat, neboť se zde projevuje
-  nevýhoda tohoto typu značkování -- opakovaná informace navíc.
+  XML defines a general syntax in which it is possible to create custom tags.
+  The internal representation is an n-ary tree of various node types like element, attribute, text etc.
+  Data can thus be arranged hierarchically according to logical relationships.
+  It is easily extensible and is supported by many languages, which allows creating data formats gradually by prototyping.
+  Thanks to namespaces it is possible to
+  insert into a document of one type a part of another (perhaps already existing). For example into a traffic network description, which
+  represents mainly topology, one can add to each path its geometric properties using an external vector
+  graphics format. For machine data exchange it is an excellent language, but for manual writing or even programming
+  (e.g. XSLT) it seems unsuitable to me. Often it is advisable to compress it before sending over network, because here manifests
+  the disadvantage of this type of markup -- repeated information overhead.
 
-  \subsection{Analyzátory XML}
-  \paragraph{Validace dokumentů} Lexikální a syntaktická pravidla jsou stejná pro všechna XML.
-  Tvůrce XML aplikace určuje až sémantiku. Částečně mu mohou být nápomocny následující definiční nástroje.
-  Pro určení jak má vypadat tzv. \emph{správně formulovaný dokument}
-  v XML slouží Definice typu dokumentu (DTD),
-  kde se určí metadata -- co může dokument obsahovat za tagy, jaké mají atributy a co mohou
-  obsahovat, ale jen na úrovni prvků XML, chybí například typová kontrola atributů ap.
-  Tudíž DTD nestačilo a muselo vzniknout XML Schema \cite{XMLSchema2004},
-  což je XML aplikace popisující navíc také objektové vazby mezi značkami.
+  \subsection{XML Parsers}
+  \paragraph{Document Validation} Lexical and syntactic rules are the same for all XML.
+  The creator of an XML application determines the semantics. The following definition tools can partially help.
+  For determining how the so-called \emph{well-formed document} should look
+  in XML, Document Type Definition (DTD) serves,
+  where metadata is determined -- what tags the document can contain, what attributes they have and what they can
+  contain, but only at the level of XML elements, missing for example type checking of attributes etc.
+  Thus DTD was not enough and XML Schema \cite{XMLSchema2004} had to be created,
+  which is an XML application describing additionally also object relationships between tags.
 
-  Pro zvolení XML jako datového formátu hovoří také to,
-  že již existují analyzátory pro různé jazyky
-  %Například v Javě jsou dokonce součástí standardní knihovny (od verze 1.4)}.
-  Postarají se o lexikální a syntaktickou
-  analýzu podle obecné XML gramatiky a případně provedou validaci.
-  Existují dva hlavní: SAX a DOM. SAX prochází dokumentem a volá metody zaregistrovaného \cfr{Handleru}, když
-  narazí na začátek či konec elementu. Během tohoto průchodu může být provedena i validace. Při analýze DOM se
-  použije SAX k převodu textu na standardizovanou vnitřní podobu dokumentu (strom).
-  Proto se používá spíše v programech,
-  které potřebují náhodný přístup k různým úrovním dokumentu, jako jsou editory a prohlížeče. Avšak má-li aplikace
-  vlastní lepší vnitřní reprezentaci dat či je třeba provádět dlouhé sekvenční transformace, je vhodnější SAX. Více o XML v \cite{nutshellXML}
+  In favor of choosing XML as data format speaks also that
+  parsers already exist for various languages
+  %For example in Java they are even part of the standard library (from version 1.4)}.
+  They take care of lexical and syntactic
+  analysis according to the general XML grammar and possibly perform validation.
+  There are two main ones: SAX and DOM. SAX walks through the document and calls methods of a registered \cfr{Handler}, when
+  it encounters the beginning or end of an element. During this walk validation can also be performed. In DOM parsing,
+  SAX is used to convert text to the standardized internal form of the document (tree).
+  Therefore it is used rather in programs
+  that need random access to various levels of the document, such as editors and browsers. However, if an application has
+  its own better internal data representation or long sequential transformations need to be performed, SAX is more suitable. More about XML in \cite{nutshellXML}
 
   \section{Java} \label{java}
-  Java je obecný objektově-orientovaný programovací jazyk.
-  Jeho hlavní výhodou je, že se spouští v prostředí virtuálního stroje, jehož implementace
-  je dostupná pro mnoho běžných operačních systémů. Takže umožňuje vytvářet přenositelné
-  spustitelné soubory.
-  Vybral jsem jej, že s tímto jazykem mám nejvíc zkušeností.
-  K implementaci jsem nakonec zvolil verzi 6 Standard Edition.
-  Existuje i překladač v GCC je však s nejnovější oficiální verzí nekompatibilní.
-  Navíc od verze 7 by měla být otevřená již i oficiální verze (viz projekt OpenJava).
-  Existuje mnoho publikací -- např. \cite{pecinovskyJ5u, spellProfJava}.
-  Java od svého vzniku prošla řadou inovací, leccos bylo doplněno a některé knihovní třídy
-  jsou zavržené. Proto některé informace ve starší literatuře jsou zastaralé.
-  Nejspolehlivějším zdrojem je tedy \cite{javaapidoc}.
-  V Javě jsem zvyklý psát kód tak, že názvy proměnných a metod samy o sobě komentují.
+  Java is a general object-oriented programming language.
+  Its main advantage is that it runs in a virtual machine environment, whose implementation
+  is available for many common operating systems. Thus it allows creating portable
+  executable files.
+  I chose it because I have the most experience with this language.
+  For implementation I finally chose version 6 Standard Edition.
+  There is also a compiler in GCC but it is incompatible with the latest official version.
+  Moreover from version 7 the official version should also be open (see OpenJava project).
+  Many publications exist -- e.g. \cite{pecinovskyJ5u, spellProfJava}.
+  Java since its inception has undergone many innovations, much has been added and some library classes
+  are deprecated. Therefore some information in older literature is outdated.
+  The most reliable source is thus \cite{javaapidoc}.
+  In Java I am used to writing code so that variable and method names are self-commenting.
 
-    \paragraph{Kontejnery (Kolekce)} Jsou obdobou STL z C++ a slouží k ukládání předem nedefinovaného množství dat. V Javě jsou to objekty, tedy sami mohou být prvky jiné kolekce.
-    Například \sourceRef{Map} slouží k vytváření zobrazení objektu na objekt, čímž snižuje
-    vytváření referencí přímo v objektech a tedy i závislost kódu jedné třídy na jinou.
-    Problematika kontejnerů je více rozvedena v \cite{heroutUtil}, avšak při použití Javy 5 je
-    třeba brát zřetel na to, že kontejnery jsou parametrizované.
-    Skládáním kolekcí jsem vytvořil vlastní datové struktury. Především jsem doplnil nebo zcela
-    definoval rozhraní a implementoval neoptimalizované prototypy. Z nich se mohou vyvinout úložiště přímo
-    na míru, však si stále mohou zachovat určitou míru obecnosti. Například \sourceRef{Array2DMap}
-    v rychlosti je srovnatelná s \sourceRef{TreeMap}, ale
-    nejčastěji volanou je právě vybrání položky a provádí se za kritických výpočtů.
-    Zde šlo hlavně o to minimalizovat vytváření klíčových objektů dvojicí celých čísel a přitom zachovat
-    kompatibilitu z \sourceRef{Map}.
+    \paragraph{Containers (Collections)} Are analogous to STL from C++ and serve for storing a predefined amount of data. In Java these are objects, thus they themselves can be elements of another collection.
+    For example \sourceRef{Map} serves for creating mappings from object to object, which reduces
+    creating references directly in objects and thus also dependency of code of one class on another.
+    The issue of containers is elaborated more in \cite{heroutUtil}, but when using Java 5 it is
+    necessary to take into account that containers are parameterized.
+    By composing collections I created custom data structures. Primarily I supplemented or fully
+    defined interfaces and implemented unoptimized prototypes. From them can evolve storage
+    tailored directly, yet they can still maintain a certain degree of generality. For example \sourceRef{Array2DMap}
+    in speed is comparable to \sourceRef{TreeMap}, but
+    most frequently called is just item retrieval and is performed during critical computations.
+    Here it was mainly about minimizing creation of key objects of integer pairs while maintaining
+    compatibility with \sourceRef{Map}.
 
-    \paragraph{Výhody a nevýhody}\label{java:col}
-    Svou syntaxí více inklinuje k obecným jazykům (C, C++), přesto množstvím standardních knihoven dohání mnohý skriptovací jazyk.
-    Přísná statická typová kontrola může na první pohled zdržovat vývoj,
-    ale při správném návrhu a použití vhodných editorů naopak zrychluje odladění, protože se můžu
-    soustředit hlavně na logické chyby v kódu.
-    Co však na rozdíl od skriptovacích jazyků postrádá je podpora funkcionálního programování.
-    Pro modelování komplexních systémů se strukturami s rekurzivní agregací
-    (např. cesta, která je podtřídou dráhy, rozsekaná na části, které jsou také podtřídami dráhy)
-    je pro určení zprávy posílané všem částem z cesty bych raději implementoval pomocí delegace a referencí na metody.
-    Zde totiž může vzniknout neúměrné množství podobného (rozkopírovaného kódu), což jsem částečně
-    vyřešil pomocí reflexe, ale toto řešení je neefektivní, protože se musí nalézt metoda podle řetězce se jménem a ty řetězce \uv{evidovat} navíc.
+    \paragraph{Advantages and Disadvantages}\label{java:col}
+    By its syntax it inclines more to general languages (C, C++), yet by amount of standard libraries it catches up with many scripting languages.
+    Strict static type checking may at first glance delay development,
+    but with proper design and use of suitable editors it conversely speeds up debugging, because I can
+    concentrate mainly on logical errors in code.
+    What however unlike scripting languages it lacks is support for functional programming.
+    For modeling complex systems with structures with recursive aggregation
+    (e.g. path, which is a subclass of track, split into parts, which are also subclasses of track)
+    for determining a message sent to all parts from the path I would rather implement using delegation and method references.
+    Here namely a disproportionate amount of similar (copied) code can arise, which I partially
+    solved using reflection, but this solution is inefficient, because the method must be found by string with name and those strings must be \uv{registered} additionally.
   \section{JDisco}
-  Implementovat simulační rutiny a navíc ještě kód modelu je dlouhodobější záležitost.
-  Existuje spoustu simulačních knihoven\footnote{SimPack, JDEVS, pak několik stejnojmenných JSimů a JavaSimů},
-  povětšinou jsou však pouze diskrétní. Tyto knihovny bych mohl o kombinovanou simulaci rozšířit.
-  Ale proč, když existuje již hotová, celkem snadno použitelná
-  knihovna. Navíc se obávám, že by tato implementace sama o sobě vydala minimálně na jeden samostatný
-  projekt. Další možností je spojení přes nativní metody
-  s knihovnou v jiném jazyce (např. SIMLIB). To je také časově náročné.
+  Implementing simulation routines and additionally model code is a longer-term matter.
+  Many simulation libraries exist\footnote{SimPack, JDEVS, then several identically named JSims and JavaSims},
+  but mostly they are only discrete. These libraries I could extend with combined simulation.
+  But why, when there already exists a ready, quite easily usable
+  library. Moreover I fear that this implementation by itself would be worth at least one separate
+  project. Another possibility is connection through native methods
+  with a library in another language (e.g. SIMLIB). That is also time-consuming.
 
-  \emph{JDisco} -- \cite{helsgaun2001} je balík javových tříd pro popis a simulaci kombinovaných modelů.
-  Byla vyvinuta na Roskilde University v Dánsku.
-  Existují zde dva typy procesů: \emph{diskrétní} a \emph{spojitý} (jak bylo řečeno v \ref{modelling}).
-  Mezi naplánovanými \emph{diskrétními} procesy jsou neaktivní fáze, ve kterých mohou být aktivní \emph{spojité}.
-  Pro popis spojitých proměnných slouží třída \sourceRef{jDisco.Variable}. Ta má dva hlavní atributy:
-  okamžitou hodnotu -- \cfr{state} a okamžitou derivaci -- \cfr{rate}.
-  Spojité procesy vytvořím zděděním od \sourceRef{jDisco.Continuous} a povinnou implementací metody
-  \cfr{derivatives}, ve které se popíší vztahy mezi proměnnými.
-  Obě tyto třídy mají metody \cfr{start} a \cfr{stop},
-  jimiž můžu určit, kdy má běžet spojitý výpočet jejich zavoláním v popisu události.
-  Jinak řečeno lze takto definovat intervaly spojitosti procesů či proměnných.
-  Zděděním od \sourceRef{jDisco.Process} a implementováním metody \cfr{actions} vznikne diskrétní proces.
-  Implementací rozhraní \sourceRef{jDisco.Condition} vytvořím stavovou podmínku, na kterou bude proces
-  čekat ve volání metody \cfr{waitUntil}. Dále balík obsahuje další třídy pro zjednodušení popisu modelu,
-  také několik numerických metod (různé \cfr{Monitory}). Nebudu zde dělat jejich výčet.
-  Dokumentaci této knihovny jsem přidal\footnote{resp. se vygeneruje s programovou dokumentací}
-  k programové dokumentaci své práce. Více tedy tam.
+  \emph{JDisco} -- \cite{helsgaun2001} is a package of Java classes for description and simulation of combined models.
+  It was developed at Roskilde University in Denmark.
+  There are two types of processes: \emph{discrete} and \emph{continuous} (as was said in \ref{modelling}).
+  Between scheduled \emph{discrete} processes are inactive phases, in which \emph{continuous} ones can be active.
+  For description of continuous variables serves the class \sourceRef{jDisco.Variable}. It has two main attributes:
+  instantaneous value -- \cfr{state} and instantaneous derivative -- \cfr{rate}.
+  Continuous processes I create by inheriting from \sourceRef{jDisco.Continuous} and mandatory implementation of method
+  \cfr{derivatives}, in which relationships between variables are described.
+  Both these classes have methods \cfr{start} and \cfr{stop},
+  by which I can determine when continuous computation should run by calling them in event description.
+  In other words it is possible to define intervals of continuity of processes or variables this way.
+  By inheriting from \sourceRef{jDisco.Process} and implementing method \cfr{actions} a discrete process arises.
+  By implementing interface \sourceRef{jDisco.Condition} I create a state condition, which the process will
+  wait for in calling method \cfr{waitUntil}. Furthermore the package contains other classes for simplifying model description,
+  also several numerical methods (various \cfr{Monitors}). I will not make their list here.
+  Documentation of this library I added\footnote{resp. it generates with program documentation}
+  to program documentation of my thesis. More thus there.
 
-    \subsection{Řízení simulace}
-    Simulace je řízena na pozadí zvoleným \cfr{Monitorem}, který je zodpovědný za to, že se:
+    \subsection{Simulation Control}
+    Simulation is controlled in background by chosen \cfr{Monitor}, which is responsible for:
     \begin{enumerate}
-      \item stav modelu mění spojitě mezi událostmi
-      \item diskrétní události provedou ve správný čas
-      \item provede sběr informací o chování modelu
+      \item model state changes continuously between events
+      \item discrete events execute at correct time
+      \item collection of information about model behavior is performed
     \end{enumerate}
-    Spojité procesy pracují paralelně a jsou synchronizovány s diskrétními, které jsou pomocí kalendáře prováděny
-    kvaziparalelně. V jednom okamžiku simulace běží tedy buď jeden diskrétní proces nebo \cfr{Monitor}
-    řídí výpočet několika spojitých.
-    Proces je javové vlákno vzdávající se procesoru těsně před
-    zavoláním \sourceRef{Object.wait} na sebe, zavolá \sourceRef{Object.notify} procesu následujícím v kalendáři.
+    Continuous processes work in parallel and are synchronized with discrete ones, which are performed using calendar
+    quasi-parallel. At one moment of simulation thus runs either one discrete process or \cfr{Monitor}
+    controls computation of several continuous ones.
+    Process is a Java thread giving up the processor just before
+    calling \sourceRef{Object.wait} on itself, calls \sourceRef{Object.notify} to process following in calendar.
 
-\chapter{Návrh a implementace}
-Tato kapitola je zaměřena na stručný popis implementovaných součástí. Podrobnosti obsahuje programová dokumentace a zdrojové soubory. Nejprve je popsána celková struktura zdrojových kódů a poté rozvedeny jednotlivé součásti, především ty nejdůležitější.
+\chapter{Design and Implementation}
+This chapter focuses on a brief description of implemented components. Details are contained in program documentation and source files. First the overall structure of source codes is described and then individual components are elaborated, primarily the most important ones.
 
-  \section{Rozdělení do modulů -- balíků}
-  Úplně nejprve je třeba si uvědomit a mít na paměti celkovou strukturu aplikace, i když z ní zatím
-  budou implementovány některé části. Mohlo by se stát, že něco naimplementuji a pak to budu pracně
-  předělávat\footnote{během návrhu nelze mít na mysli všechny detaily, obzvlášť tam kde se mění požadavky --
-  tak se sem tam provede menší předělávka}, protože to nepůjde spojit.
-  Na obrázku \ref{dataFlow} jsou ve vyšší abstrakci znázorněny základní funkční moduly aplikace a komunikaci mezi
-  nimi, tak jak jsem předpokládal na začátku návrhu.
-  \insertimage[300pt]{dataFlow}{Základní struktura aplikace a tok dat}
-  Program má pracovat ve dvou módech: editace a simulace. Zde jsem se rozhodl, že bude lepší vytvořit si obálku
-  pro přístup k datovému modelu. Módy mají společné operace, ale také ty, které jsou možné jen v tom
-  určitém módu. Toto tedy zapouzdřuje rozhraní\footnote{Java interfaces -- v sekci \ref{java}}
-  \sourceRef{Context} a jeho podrozhraní.
-  Jeho zatím jediná implementace \sourceRef{DefaultContext} na první pohled vypadá jako jako vševědoucí třída
-  či jako odkladna neumístitelných funkčností. Faktem ale je,
-  že jsou zde většinou soustředěny metody, propojující různé části programu.
-  Pro základ projektu však nepotřebuji mít zatím dvě různé implementace, postačí dbát na oddělování pomocí rozhraní. Ale umožňuje to, že simulační kontext nebude jen v paměti, ale může být sdílen mezi aplikacemi
-  například po síti nebo v databázi.
+  \section{Division into Modules -- Packages}
+  First of all it is necessary to realize and keep in mind the overall application structure, even though only
+  some parts will be implemented from it for now. It could happen that I implement something and then will laboriously
+  redo it\footnote{during design it is not possible to keep in mind all details, especially where requirements change --
+  so here and there a smaller rework is done}, because it won't connect.
+  In figure \ref{dataFlow} are shown at higher abstraction basic functional modules of the application and communication between
+  them, as I assumed at the beginning of design.
+  \insertimage[300pt]{dataFlow}{Basic application structure and data flow}
+  The program should work in two modes: editing and simulation. Here I decided that it would be better to create a wrapper
+  for access to the data model. Modes have common operations, but also those that are possible only in that
+  certain mode. This thus encapsulates the interface\footnote{Java interfaces -- in section \ref{java}}
+  \sourceRef{Context} and its sub-interfaces.
+  Its only implementation so far \sourceRef{DefaultContext} at first glance looks like an all-knowing class
+  or like a storage for unplaceable functionalities. But the fact is
+  that here are mostly concentrated methods connecting various parts of the program.
+  For project foundation however I don't need to have two different implementations yet, it suffices to mind separation using interfaces. But it allows that simulation context won't be only in memory, but can be shared between applications
+  for example over network or in database.
 
-  \insertimage[211pt]{packageDependencies}{Graf bezprostředních závislostí balíků}
-  Mezi moduly (balíky) vznikají závislosti, tj. kód jednoho balíku se odkazuje na jiný.
-  Zvlášť nepříjemné jsou cyklické, které nejsou znakem
-  dobrého návrhu, pokud vznikají neřízeně ve velkém množství. Je-li snaha vytvářet moduly co nejvíc nezávislé,
-  bude kód znovupoužitelnější. Na obrázku \ref{packageDependencies} jsou znázorněny
-  stanovené závislosti modulů v současné implementaci.
-  Předpokládám, že čtenáři z toho vyplynou i tranzitivní.
-  Této zásady jsem držel až na nějaké výjimky, za něž v budoucnu pravděpodobně zaplatím.
-  Zpětná závislost dat na kontextu je ale řešena přes rozhraní. Navíc třeba třída \sourceRef{AbstractPath}
-  je spíše základem pro balík řízení.
+  \insertimage[211pt]{packageDependencies}{Graph of direct package dependencies}
+  Between modules (packages) dependencies arise, i.e. code of one package refers to another.
+  Especially unpleasant are cyclic ones, which are not a sign of
+  good design, if they arise uncontrolled in large amounts. If there is an effort to create modules as independent as possible,
+  code will be more reusable. In figure \ref{packageDependencies} are shown
+  established module dependencies in current implementation.
+  I assume that transitive ones will follow for the reader from it.
+  This principle I held except for some exceptions, for which I will probably pay in future.
+  Backward dependency of data on context is however solved through interface. Moreover for example class \sourceRef{AbstractPath}
+  is rather a foundation for control package.
 
-  Všechny balíky z obrázku \ref{packageDependencies} jsou také závislé na balíku \sourceRef{util}, ten už
-  je závislý jen na standardních knihovnách. Zejména na kolekcích, které rozšiřuje o další potřebné datové
-  struktury, jako například neorientovaný graf. O těchto strukturách více na straně \pageref{java:col}.
-  V ná\-sle\-du\-jí\-cích podkapitolách popíši další balíky jednotlivě.
+  All packages from figure \ref{packageDependencies} are also dependent on package \sourceRef{util}, which
+  is dependent only on standard libraries. Especially on collections, which it extends with other needed data
+  structures, such as undirected graph. About these structures more on page \pageref{java:col}.
+  In following subsections I will describe other packages individually.
 
-  \section{Síť a datový model}
-    V této sekci je blíže popsána vnitřní reprezentace sítě.
+  \section{Network and Data Model}
+    In this section is described in more detail the internal representation of the network.
     \cite{algorithms}
-    Částečně jsem se inspiroval také v \cite{Fleischanderl2001}.
-    %  Objekt zachovává stav prvku, tím zajistí že je definován v diskrétní časové okamžiky.
+    Partially I was also inspired by \cite{Fleischanderl2001}.
+    %  Object preserves element state, thus ensures it is defined at discrete time moments.
 
-    Z pohledu dispečera je to neorientovaný graf $ G = (U, H) $.
-    Ke každé dvojici objektů $(uzel1, uzel2)$ kde $uzel1 \neq uzel2$ je přiřazen maximálně jeden objekt hrany.
-    Tento graf (především jeho uzly)
-    je umístěn ve dvourozměrném prostoru s celočíselnými indexy. Tento prostor je jakýsi pseudorastr
-    -- matice objektů. Hrana je rozdělena na části a ty vyplňují volné buňky
-    na přímce\\footnote{Bresenhamův algoritmus} mezi nimi. V každé buňce se samozřejmě může nacházet nejvýše
-    jeden objekt.
-    Uzly jsou na hrany propojeny pomocí určení okolí buňky (při editaci je nalezena), které zapouzdřuje
-    výčtový typ \sourceRef{Cell.Segment}. Každá buňka má množinu segmentů\footnote{slouží i k vykreslování}
-    , a pouze do tohoto okolí lze ke každé dvojici $(segment, uzel)$ lze připojit maximálně jednu hranu.
-    Z pohledu vlaku se blok, představovaný hranou, může skládat z více oddílů, mezi nimiž jsou dispečerem
-    neovlivnitelná (automatická) návěstidla. Dále existuje tzv. \sourceRef{TrackFacility}
-    -- je to nejmenší i více-oddílová jednotka, ve které se může nacházet maximálně jeden vlak.
-    \insertimage[300pt]{trackLifeCycle}{Životní cyklus \sourceRef{TrackFacility}}
-    Na obrázku \ref{trackLifeCycle} jsou znázorněny stavy koleje a co může vyvolat jejich přechod.
-    Tyto stavy jsou diskrétní a vyjádřil jsem je pomocí výčtového typu. Mělo by být jasné, že vlak
-    může vjet pouze na rezervovanou kolej, také že rezervovat nelze pokud již je rezervovaná či obsazená.
-    Rezervuje ji příkaz dispečera a obsazuje resp. uvolňuje vlak.
-    \subsection{Prvky sítě}
+    From dispatcher's viewpoint it is an undirected graph $ G = (U, H) $.
+    To each pair of objects $(node1, node2)$ where $node1 \neq node2$ is assigned at most one edge object.
+    This graph (primarily its nodes)
+    is placed in two-dimensional space with integer indices. This space is a kind of pseudo-raster
+    -- matrix of objects. Edge is divided into parts and they fill free cells
+    on a line\footnote{Bresenham's algorithm} between them. In each cell can of course be located at most
+    one object.
+    Nodes are connected to edges by determining cell neighborhood (found during editing), which encapsulates
+    enumeration type \sourceRef{Cell.Segment}. Each cell has a set of segments\footnote{also serves for rendering}
+    , and only to this neighborhood can be connected to each pair $(segment, node)$ at most one edge.
+    From train's viewpoint the block, represented by edge, can consist of multiple sections, between which are by dispatcher
+    uncontrollable (automatic) signals. Furthermore there exists so-called \sourceRef{TrackFacility}
+    -- it is the smallest even multi-section unit, in which can be located at most one train.
+    \insertimage[300pt]{trackLifeCycle}{Life cycle of \sourceRef{TrackFacility}}
+    In figure \ref{trackLifeCycle} are shown track states and what can trigger their transition.
+    These states are discrete and I expressed them using enumeration type. It should be clear that a train
+    can enter only a reserved track, also that reserving is not possible if it is already reserved or occupied.
+    It is reserved by dispatcher command and occupied resp. released by train.
+    \subsection{Network Elements}
       \begin{itemize}
-        \item Uzly: \sourceRef{NodeCell} -- předpokládám, že v každém uzlu je čidlo,
-          ovlivňující obsazení napojených hran.
-          Jeho činnost je simulována jízdou vlaku (viz \ref{trainMoveSection})
-          Kromě výhybky jsou následující uzly orientované.
+        \item Nodes: \sourceRef{NodeCell} -- I assume that in each node is a sensor,
+          influencing occupation of connected edges.
+          Its activity is simulated by train movement (see \ref{trainMoveSection})
+          Except for switch, following nodes are directed.
           \begin{description}
-            \item[Výhybka] je nastavena buď na hlavní směr nebo do odbočky
-            \item[Hlavní návěst] měnící se signál
-            \item[Vstupně-výstupní bod] představuje externí kolejový systém.
-                 Nebo můžou být jako rozšíření propojeny dva uvnitř modelu bez simulačního Workeru
-                 -- podpora mimoúrovňových křížení.
-            \item[Zakončení koleje] konstantní návěst \uv{Stůj} %dokud vsak nebude obrat vlaku -> slepa past
+            \item[Switch] is set either to main direction or to diverging
+            \item[Main signal] changing signal aspect
+            \item[Entry-exit point] represents external track system.
+                 Or they can be as extension connected two inside model without simulation Worker
+                 -- support for grade-separated crossings.
+            \item[Track end] constant signal \uv{Stop} %until however turn of train -> dead end
           \end{description}
-        \item Hrany: \sourceRef{TrackBlock}
-          Obrázek \ref{trackDiagram} znázorňuje odvození bloku od dráhy.
-          Jednu z možných hran představuje jednoduchá kolej \sourceRef{SimpleTrackBlock}.
-          Je to \sourceRef{TrackFacility} s jedním oddílem.
-          Dalšími hranami mohou být mezistaniční úseky:
+        \item Edges: \sourceRef{TrackBlock}
+          Figure \ref{trackDiagram} illustrates derivation of block from track.
+          One of possible edges represents simple track \sourceRef{SimpleTrackBlock}.
+          It is \sourceRef{TrackFacility} with one section.
+          Other edges can be inter-station sections:
           \begin{description}
-            \item[Automatický blok] má více oddílů -- viz strana \pageref{autoblokSection}
-            \item[Poloautomatický blok] facility, 1 hlavní oddíl + 2 předstaniční
+            \item[Automatic block] has multiple sections -- see page \pageref{autoblokSection}
+            \item[Semi-automatic block] facility, 1 main section + 2 pre-station
           \end{description}
-          \insertimage{trackDiagram}{Diagram odvozenin dráhy}
+          \insertimage{trackDiagram}{Diagram of track derivatives}
       \end{itemize}
 
-    \subsection{Dynamická konfigurace a cesty v síti}
-      Rezervované koleje a dovolující signály představují jednu či více tzv.
-      "postavených vlakových cest".
-      Tato cesta se jízdou vlaku postupně rozpadá a může se za určitých podmínek měnit.
-      Formálně je to cesta z teorie grafů tj. posloupnost uzlů a neobsazených hran,
-      ale s ohledem na konfiguraci prvků -- konkrétněji:
+    \subsection{Dynamic Configuration and Paths in Network}
+      Reserved tracks and allowing signals represent one or more so-called
+      "set train routes".
+      This path gradually dissolves by train movement and can change under certain conditions.
+      Formally it is a path from graph theory i.e. sequence of nodes and unoccupied edges,
+      but with regard to element configuration -- more specifically:
       \begin{itemize}
-        \item počáteční a koncový uzel je návěstidlo ve směru cesty či vstupně-výstupní bod
-        \item výhybky propojují hrany (oba sousedy z posloupnosti)
-        \item návěstidla ve směru musí dovolovat jízdu, až na poslední, které ji zakazuje
-        \item protisměrná návěstidla: hlavní zakazují (dále v nedoimplementovných -- oddílová jsou vypnutá a na předzvěsti nemá cesta vliv)
+        \item initial and final node is a signal in path direction or entry-exit point
+        \item switches connect edges (both neighbors from sequence)
+        \item signals in direction must allow movement, except last one, which forbids it
+        \item opposite direction signals: main ones forbid (further in not-implemented -- section ones are off and on distant signal path has no effect)
       \end{itemize}
-      Tato funkčnost\footnote{pracující s hlavními návěstidly, protože ostatní jsou uvnitř bloku}
-      je implementována v \sourceRef{AbstractPath}. Na obrázku \ref{trackDiagram} je také
-      znázorněna návaznost cesty na dráhu.
+      This functionality\footnote{working with main signals, because others are inside block}
+      is implemented in \sourceRef{AbstractPath}. In figure \ref{trackDiagram} is also
+      shown connection of path to track.
 
-    \subsection{Datový soubor}
-      Pro ukládání a načítání dat jsem navrhl tzv. \sourceRef{ContextFactory}.
-      Zvolil jsem XML s validací pomocí XML Schema (viz \ref{secXML}).
-      Současný datový formát je v základní podobě a představuje skládání prvků sítě na nejnižší
-      uživatelem upravitelné úrovni. Představuje statický popis sítě stanice.
-      Jednotivé uzly a hrany jsou obyčejně vyjmenovány jako podelementy kořenového elementu.
-      K rozlišení typů prvků používám mj. výčtové typy. Nejenže šetří místo a jsou jednoduše rozšiřitelné,
-      ale snadno se i načítají a zapisují.
-      %V sekci \ref{chapExtensions} se budu zabývat možnými rozšířeními.
+    \subsection{Data File}
+      For storing and loading data I designed so-called \sourceRef{ContextFactory}.
+      I chose XML with validation using XML Schema (see \ref{secXML}).
+      Current data format is in basic form and represents assembly of network elements at lowest
+      user-editable level. It represents static description of station network.
+      Individual nodes and edges are simply enumerated as sub-elements of root element.
+      For distinguishing element types I use among others enumeration types. Not only do they save space and are easily extensible,
+      but they are also easily loaded and written.
+      %In section \ref{chapExtensions} I will deal with possible extensions.
 
-  \section{Simulace}
-    Tato sekce popisuje průběh simulace -- neformálním popisem a pomocí vybraných
-    abstraktních modelů nejdů\-le\-ži\-těj\-ších procesů.
+  \section{Simulation}
+    This section describes simulation flow -- by informal description and using selected
+    abstract models of most important processes.
 
-    \subsubsection{Proč kombinovaná simulace?}
-      Poloha vlaku se dá pojmout jak diskrétně - tj. které kolejové obvody obsazuje.
-      Také je však třeba znát jeho přesnější polohu, rychlost a zrychlení v každém okamžiku.
-      Míra přesnosti je nastavitelná. Umožňuje více možností a lépe se mění. Například
-      lze změnit rovnici v popisu pohybu.
+    \subsubsection{Why Combined Simulation?}
+      Train position can be conceived discretely - i.e. which track circuits it occupies.
+      However it is also necessary to know its more precise position, speed and acceleration at each moment.
+      The degree of precision is adjustable. It allows more possibilities and changes better. For example
+      one can change equation in motion description.
 
-    \subsection{Vstupně-výstupní body -- \sourceRef{InOut}}
-      Představuje vstup a výstup do kolejiště.
-      Jeho chování, jehož základem je fronta vlaků, popisuje \sourceRef{InOutWorker}.
-      V jednoduchých modelech lze do ní vkládat přímo generátorem,
-      ve složitějších to musí provést vyšší řídící logika -- dispečer.
-      Sám o sobě umí povolit cestu k nejbližšímu návěstidlu orientovanému ve směru jízdy, pokud
-      výhybky k nějakému cestu propojují\footnote{zde se je možné vstup odclonit}
-      a zároveň je nějaký vlak ve frontě a zároveň jsou na ní volné všechny koleje.
-      V budoucnosti může představovat připojení externího kolejiště.
-      Momentálně uvažuji modely o dvou \sourceRef{InOut}.
-      Když propojím pouze dva tyto \sourceRef{InOut} jednou kolejí, rozpoutá se mezi nimi
-      o tu kolej konkurenční boj. Kdo dřív přijde na řadu, může vpustit vlak do systému. Nemůže
-      se však stát, že to provedou oba najednou nebo pustí vlaky proti sobě.
+    \subsection{Entry-exit Points -- \sourceRef{InOut}}
+      Represents entry and exit to track layout.
+      Its behavior, which is based on train queue, describes \sourceRef{InOutWorker}.
+      In simple models one can insert into it directly by generator,
+      in more complex ones higher control logic must do it -- dispatcher.
+      By itself it can allow path to nearest signal oriented in direction of movement, if
+      switches connect some path\footnote{here it is possible to shield entry}
+      and at the same time there is some train in queue and at the same time all tracks on it are free.
+      In future it can represent connection of external track layout.
+      Currently I consider models with two \sourceRef{InOut}.
+      When I connect only two these \sourceRef{InOut} with one track, a competitive
+      fight for that track breaks out between them. Whoever comes first can let train into system. However it cannot
+      happen that both do it at once or let trains against each other.
 
-    \subsection{Jízda vlaku} \label{trainMoveSection}
-      Vlak čeká ve frontě vstupně-výstupního bodu na povolení k jízdě. Po jeho získání se
-      spustí podproces \sourceRef{Train.Front}, který při tom, když narazí na uzel
-      (\sourceRef{PathSeparator}), případně změní parametry podle něj a obsadí oddíl před ním.
-      Až vyjede vlak celý spustí se \sourceRef{Train.Tail}. Ten při průjezdu každým uzlem
-      uvolní oddíl za ním.
+    \subsection{Train Movement} \label{trainMoveSection}
+      Train waits in entry-exit point queue for movement permission. After obtaining it
+      subprocess \sourceRef{Train.Front} starts, which when encountering a node
+      (\sourceRef{PathSeparator}), possibly changes parameters according to it and occupies section before it.
+      When train exits completely \sourceRef{Train.Tail} starts. It when passing through each node
+      releases section behind it.
 
-      Každé návěstidlo poskytuje informaci o povolené rychlosti za ním a o signálu na
-      ná\-sle\-du\-jí\-cím návěstidle, pokud ovšem nesvítí signál \uv{Stůj}. V tomto případě by
-      měl vlak dobrzdit před ním a čekat na signál umožňující jízdu.
-      Pro zjednodušení předpokládám, že stav návěstidel může být zjišťován pouze v diskrétním stavu,
-      když vlak dojede k návěstidlu, protože stanovit, kdy může zaregistrovat změnu
-      signálu je v reálu neurčité na rozdíl od programu.
+      Each signal provides information about permitted speed behind it and about signal aspect at
+      following signal, unless signal \uv{Stop} is showing. In this case the
+      train should brake before it and wait for signal allowing movement.
+      For simplification I assume that signal state can be detected only in discrete state,
+      when train arrives at signal, because determining when it can register signal
+      change is in reality indeterminate unlike in program.
 
-      %Pokud je ve stanici, ve
-      %které má stanovený čas odjezdu, musí zde zastavit a čekat na stanovený čas a minimálně
-      %až nastoupí a vystoupí cestující (na ně čeká s normálním rozložením se středem
-      %2 a rozptylem 1 minuta), poté se může rozjet.
-      Při průjezdu kolem návěstidla začíná měnit rychlost v závislosti na signálu.
-      Tzv. "rozjezd na výstrahu", kdy se vlak u prvního návěstidla začíná rozjíždět a před
-      následujícím zastaví, je ošetřena zvlášť. Podprocesy končí v koncových
-      vstupně-výstupních bodech \sourceRef{InOut}. Zde jsem zjednodušil model předpokladem,
-      že největší délka vlaku musí být přeci menší než nejmenší možná délka kolejového bloku mezi dvěma
-      \sourceRef{InOut}. Takovéhle podobné okrajové případy nemá cenu jinak ošetřovat, než prohlásit model
-      za chybný. Detekce této chyby vyžaduje hledání minimálních cest.
+      %If it is at station, at
+      %which it has scheduled departure time, it must stop here and wait for scheduled time and at least
+      %until passengers board and alight (waits for them with normal distribution with mean
+      %2 and variance 1 minute), then it can depart.
+      When passing by signal it starts changing speed depending on signal aspect.
+      So-called "start on caution", when train at first signal starts accelerating and before
+      following one stops, is handled separately. Subprocesses end at terminal
+      entry-exit points \sourceRef{InOut}. Here I simplified model by assumption
+      that maximum train length must surely be less than minimum possible length of track block between two
+      \sourceRef{InOut}. Such similar edge cases are not worth handling otherwise than declaring model
+      erroneous. Detection of this error requires finding minimal paths.
 
-      Formálně je to kombinovaný proces (viz sekce \ref{sim:comb}). Diskrétní část čeká na stavové podmínky
-      dojezdu k semaforu a nastavuje zrychlení. Tuto interakci popisuje Petriho síť na obrázku \ref{trainProcess},
-      ta slouží však jen pro názornost. Simulace není implementována přímo pomocí PS.
-      Zvolil jsem jednoduchý spojitý model, protože je z hlediska odladění diskrétních interakcí
-      předvídatelnější.
-      Základní pohybové rovnice \ref{vaIntegrator} a \ref{svIntegrator}
-      pro zrychlení $a$, rychlost $v$ a dráhu $s$:
+      Formally it is a combined process (see section \ref{sim:comb}). Discrete part waits for state conditions
+      of arrival at signal and sets acceleration. This interaction describes Petri net in figure \ref{trainProcess},
+      it serves however only for illustration. Simulation is not implemented directly using PN.
+      I chose simple continuous model, because from viewpoint of debugging discrete interactions
+      it is more predictable.
+      Basic motion equations \ref{vaIntegrator} and \ref{svIntegrator}
+      for acceleration $a$, velocity $v$ and distance $s$:
 	\nopagebreak
         \begin{eqnarray}
         v & = & \int{a\, \mathrm{d}t} \label{vaIntegrator}\\
         s & = & \int{v\, \mathrm{d}t} \label{svIntegrator}
         \end{eqnarray}
 
-      Výpočet zrychlení $a$ v rovnici \ref{aInSpeedChange}
-      z počáteční rychlosti $v_0$, cílové rychlosti $v_1$ a dráhy $s$ pro zrychlování:
+      Computation of acceleration $a$ in equation \ref{aInSpeedChange}
+      from initial velocity $v_0$, target velocity $v_1$ and distance $s$ for acceleration:
       \nopagebreak
       \begin{eqnarray}
          \dv & = & v_1 - v_0 \nonumber \\
@@ -731,145 +731,145 @@ Tato kapitola je zaměřena na stručný popis implementovaných součástí. Po
          %t  & = & \left| \frac{\dv}{a} \right| \label{tInSpeedChange}
       \end{eqnarray}
 
-      \section{Příklad -- Výhybna}
-      Pro lepší demonstraci jak funguje simulační model jsem vytvořil \uv{výhybnu} řízenou na základě jednoduchých pravidel.
-      Ke každému ovlivnitelnému návěstidlu je na pevno přiřazena alespoň jedna vytvořená cesta, která vede na další
-      kolej buď s možností odstávky či opuštění systému,
-      tedy z určitého pohledu představuje jednu nedělitelnou operaci přesunu.
-      Vlaky jsou vytvářeny s jednoduchým jízdním řádem (dva údaje odkud, kam -- \sourceRef{InOut}) pomocí generátoru
-      s exponenciálním rozložením doby mezi jednotlivými generováními.
-      Dříve než jsou před vloženy do fronty \sourceRef{InOut}, mělo by se předejít zahlcení kolejiště.
-      Řídící proces iterativně prochází znalostmi o systému:
+      \section{Example -- Shunting Loop}
+      For better demonstration how simulation model works I created a \uv{shunting loop} controlled based on simple rules.
+      To each controllable signal is permanently assigned at least one created path, which leads to another
+      track either with possibility of stopover or leaving system,
+      thus from certain viewpoint represents one indivisible transfer operation.
+      Trains are created with simple timetable (two data from where, to where -- \sourceRef{InOut}) using generator
+      with exponential distribution of time between individual generations.
+      Before they are inserted into \sourceRef{InOut} queue, congestion of track layout should be prevented.
+      Control process iteratively goes through knowledge about system:
 
       \begin{enumerate}
-        \item zapomene vlaky, které už projely systémem
-        \item z vlaků, které čekají na vstup vybere tolik, aby byly celkem v systému nejvýše dva
-              a udělí jim souhlas (aktivováním procesu)
-        \item projde všechny kolejové bloky
+        \item forgets trains that already passed through system
+        \item from trains waiting for entry selects enough so that at most two are in system in total
+              and grants them permission (by activating process)
+        \item goes through all track blocks
 	      \begin{enumerate}
-	        \item ve kterých se nachází vlak nebo je rezervovaná cesta, zjistí jeho resp. její směr
-                      -- návěstidlo ke kterému je vlak veden
-	        \item pokud je z tohoto návěstidla volná cesta (předem uložená) postaví ji
+	        \item in which is located a train or reserved path, determines its resp. its direction
+                      -- signal to which train is guided
+	        \item if from this signal is free path (previously stored) sets it
               \end{enumerate}
       \end{enumerate}
-      \insertimage{vyhybna}{Kolejové schéma výhybny}
-      Ke schématu na obrázku \ref{vyhybna}: úsečky jsou koleje, jejich spojení jsou výhybky,
-                   $\bullet$ je \sourceRef{InOut} a~$\blacktriangleright$ je návěstidlo.
-      Po spuštění simulace se na standardní výstup programu vypisují po řádkách zprávy:
+      \insertimage{vyhybna}{Track diagram of shunting loop}
+      To diagram in figure \ref{vyhybna}: line segments are tracks, their connections are switches,
+                   $\bullet$ is \sourceRef{InOut} and~$\blacktriangleright$ is signal.
+      After simulation start messages are printed line by line to standard program output:
       \begin{enumerate}
-       \item jízda vlaku, spojitý vzorek:
+       \item train movement, continuous sample:
 \begin{verbatim}
-čas objekt zrychlení rychlost dráha kolej_od kolej_do vzd_návěstidlo
+time object acceleration velocity distance track_from track_to dist_signal
 \end{verbatim}
-       \item diskrétní událost prvku:
+       \item discrete element event:
 \begin{verbatim}
-čas objekt zpráva
+time object message
 \end{verbatim}
       \end{enumerate}
-       \insertplot{shunting}{Graf rychlosti vlaku při průjezdu výhybnou}
-      \verb|dráha| je celková dráha ujetá vlakem, \verb|kolej_od| kolej na které se nachází začátek vlaku,
-      \verb|kolej_do| kolej na které se nachází konec vlaku, \verb|vzd_návěstidlo| vzdálenost k nejbližšímu návěstidlu.
+       \insertplot{shunting}{Graph of train velocity during passage through shunting loop}
+      \verb|distance| is total distance traveled by train, \verb|track_from| track where train beginning is located,
+      \verb|track_to| track where train end is located, \verb|dist_signal| distance to nearest signal.
 
-      V grafu na obrázku \ref{shunting} je znázorněno, jak vlak v modelu reaguje na signály
-      během události dojezdu k návěstidlu.
-      Zde je zrovna vidět jak řídící logika nestačí povolit cestu do následujícího bloku včas,
-      a vlak se mezi semafory rozjíždí a zastavuje.
-      V sekci \ref{trainMoveSection} je vysvětleno chování vlaku.
+      In graph in figure \ref{shunting} is shown how train in model reacts to signal aspects
+      during event of arrival at signal.
+      Here one can see how control logic fails to allow path to following block in time,
+      and train accelerates and stops between signals.
+      In section \ref{trainMoveSection} is explained train behavior.
 
-\chapter{Závěr}
-V této kapitole jsou popsána možná rozšíření programu a zhodnocení celé práce.
-\section{Náměty na rozšíření}\label{chapExtensions}
-Nápadů na to jak rozšířit současnou aplikaci je plno, ale zde se zaměřím spíše na ty, pro které je
-současná implementace přímo navržena, nebo z ní vyplývají a jsou v nejbližší době realizovatelné.
+\chapter{Conclusion}
+In this chapter are described possible program extensions and evaluation of entire thesis.
+\section{Suggestions for Extensions}\label{chapExtensions}
+There are many ideas how to extend current application, but here I will focus rather on those, for which
+current implementation is directly designed, or which follow from it and are realizable in near future.
 
-  \subsection*{Cíle výsledné aplikace}
-    Tyto cíle jsem vytyčil z důvodu, že nechci, aby naimplementovaný kód byl vytvořen jen pro jeden účel.
-    Tímto bych chtěl nějak vyjádřit možnosti dalšího rozvoje celé aplikace.
-    Na mou práci mohou navázat a uskutečnit je jiní studenti.
+  \subsection*{Goals of Final Application}
+    These goals I set out because I don't want implemented code to be created for only one purpose.
+    By this I would like to somehow express possibilities of further development of entire application.
+    Other students can build on my work and realize them.
     \begin{itemize}
-        \item grafický editor a simulátor řízení železniční sítě v jedné aplikaci,
-              zaměření na funkčnost, minimalizace klikání
- 	\item platformní nezávislost -- alespoň na úrovni zdrojových kódů
- 	\item formát dat, který umožňuje vytvářet šablony prvků kompozicí z jiných
- %	\item Rutiny v řídícím procesu zautomatizovat pomocí fuzzy logiky, neuronových sítí či
- %   genetických algoritmů. Ne všechno ale bude hned možné.
+        \item graphical editor and railway network control simulator in one application,
+              focus on functionality, minimization of clicking
+ 	\item platform independence -- at least at source code level
+ 	\item data format that allows creating element templates by composition from others
+ %	\item Automate routines in control process using fuzzy logic, neural networks or
+ %   genetic algorithms. Not everything however will be possible immediately.
     \end{itemize}
 
-  \subsection*{Fyzikální model jízdy}
-    Pro současný popis jízdy existuje i analytické řešení. Popis pomocí diferenciální rovnice
-    ale umožňuje její změnu za složitější, která bude věrněji modelovat další možné případy.
-    Dráhu vlaku (hlavně v mezistaničních úsekoch) bych pojal jako křivku
-    v trojrozměrném prostoru -- tj. další vlastnost hrany.
-    Při tom je třeba rozložit si současnou jedinou sílu udělující výsledné zrychlení na několik složek
-    -- nakloněná rovina v kopcích, tření, tažná síla motoru, ta by mohla být řízena například fuzzy
-    regulátorem. Můžu pak uvažovat i poruchy, při které je síla motoru nulová.
+  \subsection*{Physical Model of Movement}
+    For current movement description also analytical solution exists. Description using differential equation
+    however allows its change for more complex one, which will more faithfully model other possible cases.
+    Train path (mainly in inter-station sections) I would conceive as curve
+    in three-dimensional space -- i.e. another edge property.
+    In doing so it is necessary to decompose current single force giving resulting acceleration into several components
+    -- inclined plane on hills, friction, motor traction force, which could be controlled for example by fuzzy
+    regulator. I can then also consider failures, during which motor force is zero.
 
-  \subsection*{Automatický blok}\label{autoblokSection}
-     Automatický blok (AB) je pevně postavená, automaticky obnovovaná, cesta pro více vlaků.
-     Může to být napevno \sourceRef{TrackBlock} poskládaný z několika oddílů \sourceRef{SimpleTrack}.
-     AB jako celek má dipečerem nastavený směr. Jednotlivé oddíly
-     okamžitě rezervují cestu v tom směru, když dojde k jejich uvolnění.
-     Na obrázku \ref{autoblok} je znázorněno chování oddílu AB.
-     \insertimage{autoblok}{C/E Petriho síť oddílu v autobloku}
-     AB by také mělo být možné vytvořit z postavené cesty.
-     Dále s mezistaničními úseky souvisí i použití dalších druhů návěstí (záleží kde budou v síti umístěny):
+  \subsection*{Automatic Block}\label{autoblokSection}
+     Automatic block (AB) is permanently set, automatically renewed, path for multiple trains.
+     It can be fixed \sourceRef{TrackBlock} assembled from several sections \sourceRef{SimpleTrack}.
+     AB as whole has direction set by dispatcher. Individual sections
+     immediately reserve path in that direction when their release occurs.
+     In figure \ref{autoblok} is shown behavior of AB section.
+     \insertimage{autoblok}{C/E Petri net of section in automatic block}
+     AB should also be possible to create from set path.
+     Furthermore with inter-station sections is related also use of other signal types (depends where they will be placed in network):
      \begin{description}
-       \item[Oddílová návěst] v automatickém bloku
-       \item[Předzvěst] pomocí konstantní návěsti s \uv{Volno}
+       \item[Section signal] in automatic block
+       \item[Distant signal] using constant signal with \uv{Clear}
      \end{description}
-  \subsection*{Ukládání stavu simulace}
-   Diskrétní proces je rozkouskovaný na události příkazy, jako je čekání, vedoucí ke ztrátě aktivity. Pokud nějakým univerzálním způsobem vytvořím možnost pamatovat
-   stav ve kterém je každý proces zrovna pasivní mezi událostmi a definuji transformaci z počátku do tohoto stavu, můžu tuto informaci uložit společně s dalšími vlastnostmi při serializaci.
-   Proces by mohl být vnitřně reprezentován jako automat či Petriho síť a jeho resp. její stav by se
-   uložil a obnovil.
-   U spojitých proměnných je třeba ukládat \sourceRef{jDisco.Variable}.
-   Je možné, že kvůli univerzálnímu řešení, bude vyžadovat úpravy v knihovně \emph{jDisco} pro podporu serializace. Stav potomků \sourceRef{LoopProcess}, který uvnitř iterace nepřichází do pasivního stavu,
-   je možné již ukládat.
- \subsection*{Vizualizace pomocí celulárních automatů, Real-time}
-   Čtvercová síť modelu přímo předurčuje použít pro řízení vykreslování celulární automaty.
-   Snahou je minimalizovat množství překreslované plochy a zbytečnou výpočetní zátěž,
-   způ\-so\-be\-nou procházením stavů všech buněk, omezením pouze na malé množství buněk některých typů
-   a u ostatních budu vycházet z předpokladu, že pokud se změní jedna buňka, tak prav\-dě\-po\-dob\-nost
-   změny v buňkách v okolí\footnote{neprázdné buňky} se nastaví na maximum a pak klesá s časem.
-   Dále bude vhodné vytvořit \sourceRef{Monitor} se synchronizací reálného času s modelovým. Ten by měl
-   lépe detekovat a vhodně vkládat \uv{odmlky} mezi spojitý výpočet. V současnosti to ošetřuji diskrétním
-   procesem, který pro každou sekundu modelového času, po kterou čeká tj. simulují se jiné procesy,
-   spočítá uběhlý čas a vloží přímo potřebnou pauzu javového vlákna.
-   Kvaziparalelismus zajistí, že se pozdrží výpočet celé simulace. Je to tedy vložení jakýchsi
-   synchronizačních impulsů, které je však třeba naplánovat v lepší okamžik.
- \subsection*{Rozhraní do modelu pro řízení dispečerem}
-   Navázat je možné na současnou formalizaci cest, doimplementovat jejich vyhledávání.
-   Vytvořit balíček rutin a funkcí zastřešující přístup do modelu pro řízení z několika úrovní.
-   Na to také navazuje dodělat příkazy z GUI rozhraní.
-   Vhodné bude zformalizovat posloupnost příkazů jako jazyk, který se dá případně optimalizovat.
+  \subsection*{Saving Simulation State}
+   Discrete process is fragmented into event commands, such as waiting, leading to activity loss. If by some universal way I create possibility to remember
+   state in which each process is just passive between events and define transformation from beginning to this state, I can save this information together with other properties during serialization.
+   Process could be internally represented as automaton or Petri net and its resp. its state would be
+   saved and restored.
+   For continuous variables it is necessary to save \sourceRef{jDisco.Variable}.
+   It is possible that due to universal solution, it will require modifications in \emph{jDisco} library for serialization support. State of \sourceRef{LoopProcess} descendants, which inside iteration doesn't come to passive state,
+   is possible to save already.
+ \subsection*{Visualization Using Cellular Automata, Real-time}
+   Square network of model directly predetermines using cellular automata for rendering control.
+   The effort is to minimize amount of redrawn area and unnecessary computational load,
+   caused by traversing states of all cells, by limitation only to small amount of cells of some types
+   and for others I will proceed from assumption that if one cell changes, then probability
+   of change in cells in neighborhood\footnote{non-empty cells} is set to maximum and then decreases with time.
+   Furthermore it will be suitable to create \sourceRef{Monitor} with synchronization of real time with model time. It should
+   better detect and suitably insert \uv{pauses} between continuous computation. Currently I handle this with discrete
+   process, which for each second of model time, during which it waits i.e. other processes are simulated,
+   calculates elapsed time and inserts directly needed pause of Java thread.
+   Quasi-parallelism ensures that computation of entire simulation is delayed. It is thus insertion of some
+   synchronization pulses, which however need to be scheduled at better moment.
+ \subsection*{Interface to Model for Dispatcher Control}
+   It is possible to build on current path formalization, implement their search.
+   Create package of routines and functions covering access to model for control from several levels.
+   This also follows completing commands from GUI interface.
+   It will be suitable to formalize command sequence as language, which can be possibly optimized.
 
-\section{Zhodnocení dosažených výsledků}
-Program simuluje pohyb několika vlaků v síti současně.
-Každý vlak se pohybuje podle během simulace stanovené cesty -- reaguje na signály návěstidel.
-Do obsazených kolejí nemůže vjet další vlak.
-Stanovených minimálních cílů bylo tedy dosaženo, což demonstruje příklad. Složitější síť je rozumně předveditelná až v případě doimplementování řídícího modulu a vizualizace simulace, kdy kontrolu musí převzít člověk.
-Validita tohoto simulačního modelu by šla ověřit sbíráním statistik o skutečných vlakových sítích a srovnáním
-s modelem.
+\section{Evaluation of Achieved Results}
+Program simulates movement of several trains in network simultaneously.
+Each train moves according to path determined during simulation -- reacts to signal aspects.
+Another train cannot enter occupied tracks.
+Established minimal goals were thus achieved, which example demonstrates. More complex network is reasonably demonstrable only in case of implementing control module and simulation visualization, when control must be taken over by human.
+Validity of this simulation model could be verified by collecting statistics about real train networks and comparing
+with model.
 
-Vhodné rysy jazyků resp. nástrojů nakonec převažují, přestože některé konstrukce v nich byly obtížněji
-vyjádřitelné.
-Pokud jsem měl prověřit jakou zátěží je simulace na operační systém, vždy se hodnoty během
-spuštěné instance virtuálního stroje\footnote{Spustil jsem výhybnu bez synchronizace s reálným časem na 15 minut} pohybovaly na mém přístroji kolem těchto hodnot a nijak výrazně se neměnily:
-sdílená paměť -- 10\,MB, kód a data ve fyzické paměti -- 25\,MB, množství virtuální paměti -- 213\,MB,
-výkon CPU 91\,\% (toto není pokus o sofistikovanou výkonostní analýzu, jenom jsem sledoval, zda si program nevynucuje zbytečně moc prostředků).
+Suitable features of languages resp. tools finally prevail, although some constructs in them were more difficult
+to express.
+If I had to verify what load simulation is on operating system, always values during
+running virtual machine instance\footnote{I ran shunting loop without synchronization with real time for 15 minutes} moved on my device around these values and didn't change significantly:
+shared memory -- 10\,MB, code and data in physical memory -- 25\,MB, amount of virtual memory -- 213\,MB,
+CPU performance 91\,\% (this is not attempt at sophisticated performance analysis, I only monitored whether program doesn't demand unnecessarily many resources).
 
-Z vlastní iniciativy jsem si vyzkoušel možnost pracovat na takovémto projektu a
-ponořit se do problematiky analýzy a modelování komplexních systémů,
-což zahrnuje zabývat se případovými studiemi technických zařízení.
-Dále jsem si rozšířil obzor, o to jak zakomponovat simulaci,
-a zdokonalil se v návrhu a programování aplikace.
-Problém jsem měl zejména ze začátku s odhadem časové náročnosti prací.
-% numericka chyba
-Samotné kódování šlo poměrně rychle, ale na ladění jsem v odhadech času pozapomněl.
-Raději testuji průběžně, chyba se potom snadněji hledá. U rozsáhlých projektů je však třeba ještě vytvářet
-testovací skripty.
-V oblasti návrhu je stále se co učit a více využít návrhových vzorů a hlavně se držet jejich zásad.
-Ale musím poznamenat, že doba strávená studováním a návrhem systému byla delší než doba programování, kterou bych chtěl v pokračování na výstavbě této aplikace ještě zkrátit o vyvarování se chybám, z kterých jsem se dopustil.
+On own initiative I tried possibility to work on such project and
+immerse myself in problematics of analysis and modeling of complex systems,
+which includes dealing with case studies of technical devices.
+Furthermore I expanded horizon about how to incorporate simulation,
+and improved in application design and programming.
+Problem I had especially at beginning with estimation of time complexity of work.
+% numerical error
+Coding itself went quite quickly, but I forgot about debugging in time estimates.
+I prefer to test continuously, error is then easier to find. For extensive projects however it is still necessary to create
+testing scripts.
+In design area there is still what to learn and more utilize design patterns and mainly adhere to their principles.
+But I must note that time spent studying and designing system was longer than programming time, which I would like in continuation of building this application to further shorten by avoiding mistakes which I committed.
 
 \bibliographystyle{czechiso}
 \begin{flushleft}
