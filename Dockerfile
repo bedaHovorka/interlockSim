@@ -21,10 +21,10 @@ RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/source
     sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
     sed -i '/buster-updates/d' /etc/apt/sources.list
 
-# Install OpenJDK 11 (closest available in Buster) and Ant
-# Note: Java 6 is no longer available in modern repos, but Java 11 can compile Java 6 source
+# Install OpenJDK 11, Maven, and Ant
 RUN apt-get update && apt-get install -y \
     openjdk-11-jdk \
+    maven \
     ant \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,6 +32,12 @@ RUN apt-get update && apt-get install -y \
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
+# Build jDisco dependency first
+WORKDIR /build/jdisco
+COPY jdisco/ /build/jdisco/
+RUN mvn clean install
+
+# Then build interlockSim
 WORKDIR /build/interlockSim
 
 # Copy source files and build configuration

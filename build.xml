@@ -1,4 +1,99 @@
-<?xml version="1.0"?><!-- Brno University of TechnologyFaculty of Information Technology BSc Thesis	2006/2007 Railway Interlocking Simulatorant build - kompilaceant start - spusteniant doc - vygenerovani programove dokumentace ze zdrojoveho koduHovorka Bedrich <xhovor07@stud.fit.vutbr.cz>--><!DOCTYPE project><project basedir="." default="build" name="interlockSim">    <path id="project.classpath">        <pathelement location="build"/>    </path>    <target name="init">        <mkdir dir="build"/>    </target>    <target name="clean">        <delete dir="build"/>        <delete dir="jar"/>    </target>    <target depends="init" name="build">        <echo message="${ant.project.name}: ${ant.file}"/>        <javac destdir="build">            <src path="src"/>            <classpath refid="project.classpath"/>        </javac>
+<?xml version="1.0"?>
+<!--
+Brno University of Technology
+Faculty of Information Technology
+
+BSc Thesis	2006/2007
+Railway Interlocking Simulator
+
+ant build - kompilace
+ant start - spusteni
+ant doc - vygenerovani programove dokumentace ze zdrojoveho kodu
+
+Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
+-->
+<!DOCTYPE project>
+<project basedir="." default="build" name="interlockSim">
+    <!-- Maven local repository path -->
+    <property name="maven.local.repo" location="${user.home}/.m2/repository"/>
+    <property name="jdisco.jar" location="${maven.local.repo}/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar"/>
+
+    <path id="project.classpath">
+        <pathelement location="build"/>
+        <pathelement location="${jdisco.jar}"/>
+    </path>
+
+    <!-- Check jDisco dependency -->
+    <target name="check-jdisco">
+        <available file="${jdisco.jar}" property="jdisco.present"/>
+        <fail unless="jdisco.present">
+jDisco library not found at ${jdisco.jar}
+Please build and install jDisco first:
+  cd jdisco &amp;&amp; mvn install
+Or use Docker:
+  cd jdisco &amp;&amp; docker-compose run jdisco mvn install
+        </fail>
+    </target>
+
+    <target name="init">
+        <mkdir dir="build"/>
+    </target>
+
+    <target name="clean">
+        <delete dir="build"/>
+        <delete dir="jar"/>
+    </target>
+
+    <target depends="init,check-jdisco" name="build">
+        <echo message="${ant.project.name}: ${ant.file}"/>
+        <javac destdir="build">
+            <src path="src"/>
+            <classpath refid="project.classpath"/>
+        </javac>
     	<copy todir="build/cz/vutbr/fit/interlockSim/resource">
     	 <fileset dir="src/cz/vutbr/fit/interlockSim/resource" />
-    	</copy>    </target>    <target depends="build" name="start"><!-- spusteni bez jar -->        <java jvmargs="-ea" classname="cz.vutbr.fit.interlockSim.Main" args="example shuntingLoop 60" failonerror="true" fork="yes">            <classpath refid="project.classpath"/>        </java>    </target>    <target depends="build" name="pack">	<mkdir dir="jar"/>        <jar destfile="jar/interlockSim.jar" basedir="build">          <manifest>		<attribute name="Main-Class" value="cz.vutbr.fit.interlockSim.Main"/>          </manifest>        </jar>    </target>    <target depends="pack" name="run"><!-- spusteni z jar -->        <java jar="jar/interlockSim.jar" args="edit" failonerror="true" fork="yes">          <classpath>           <pathelement location="jar"/>           <pathelement path="${java.class.path}"/>          </classpath>        </java>    </target>    <target depends="init" name="doc">	    <mkdir dir="doc"/>	    <javadoc packagenames="cz.vutbr.fit.interlockSim.*,jDisco.*" destdir="doc" sourcepath="src" 		     windowtitle="InterlockSim Packages and Classes">		    <doctitle><![CDATA[jDisco &amp; InterlockSim Generated Documentation]]></doctitle>		    <bottom>          <![CDATA[            jDisco &#169; 2001 - 2004 Keld Helsgaun - keld@ruc.dk <br>            interlockSim &#169; 2006 - 2007 Bedrich Hovorka - xhovor07@stud.fit.vutbr.cz          ]]>        </bottom>		    <link href="http://java.sun.com/javase/6/docs/api/" />            </javadoc>    </target></project>
+    	</copy>
+    </target>
+
+    <target depends="build" name="start">
+        <!-- spusteni bez jar -->
+        <java jvmargs="-ea" classname="cz.vutbr.fit.interlockSim.Main" args="example shuntingLoop 60" failonerror="true" fork="yes">
+            <classpath refid="project.classpath"/>
+        </java>
+    </target>
+
+    <target depends="build" name="pack">
+	<mkdir dir="jar"/>
+	<!-- Create uber JAR with both interlockSim and jDisco classes -->
+        <jar destfile="jar/interlockSim.jar">
+          <manifest>
+		<attribute name="Main-Class" value="cz.vutbr.fit.interlockSim.Main"/>
+          </manifest>
+          <!-- Include interlockSim classes -->
+          <fileset dir="build"/>
+          <!-- Extract and include jDisco classes -->
+          <zipfileset src="${jdisco.jar}" excludes="META-INF/*.SF,META-INF/*.DSA,META-INF/*.RSA"/>
+        </jar>
+    </target>
+
+    <target depends="pack" name="run">
+        <!-- spusteni z jar (uber JAR includes all dependencies) -->
+        <java jar="jar/interlockSim.jar" args="edit" failonerror="true" fork="yes"/>
+    </target>
+
+    <target depends="init" name="doc">
+	    <mkdir dir="doc"/>
+	    <javadoc packagenames="cz.vutbr.fit.interlockSim.*" destdir="doc" sourcepath="src"
+		     windowtitle="InterlockSim Packages and Classes">
+		    <classpath refid="project.classpath"/>
+		    <doctitle><![CDATA[InterlockSim Generated Documentation]]></doctitle>
+		    <bottom>
+          <![CDATA[
+            interlockSim &#169; 2006 - 2007 Bedrich Hovorka - xhovor07@stud.fit.vutbr.cz<br>
+            jDisco &#169; 2001 - 2004 Keld Helsgaun - keld@ruc.dk
+          ]]>
+        </bottom>
+		    <link href="http://java.sun.com/javase/6/docs/api/" />
+            </javadoc>
+    </target>
+</project>

@@ -1,0 +1,17 @@
+Public Domain
+
+Originally written by Keld Helsgaun and released into the public domain.
+
+This software may be used for any purposes whatsoever without acknowledgment.
+
+History:
+  Date         Who                What
+  2001         Keld Helsgaun      Created public version
+  2004         Keld Helsgaun      Last update (v1.2)
+  2025         Bedrich Hovorka    Extracted as standalone Maven library
+
+Author:
+  Keld Helsgaun
+  Roskilde University, Denmark
+  Email: keld@ruc.dk
+  Website: http://webhotel4.ruc.dk/~keld/research/JDISCO/

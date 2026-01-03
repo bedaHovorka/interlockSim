@@ -1,6 +1,6 @@
 # Railway Interlocking Simulator
 
-A discrete-event/continuos combined simulation system for railway interlocking 
+A discrete-event/continuous combined simulation system for railway interlocking 
 with a graphical track editor and XML-based configuration.
 
 **BSc Thesis Project (2006/2007)**

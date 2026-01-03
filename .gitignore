@@ -38,6 +38,10 @@ text/*.ps
 # Docker artifacts
 artifacts/
 
+# Maven artifacts (jDisco)
+jdisco/target/
+.m2/
+
 # OS files
 .DS_Store
 Thumbs.db
