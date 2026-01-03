@@ -1,0 +1,41 @@
+# Build directories
+build/
+jar/
+doc/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# LaTeX build artifacts (text directory)
+text/*.aux
+text/*.bbl
+text/*.blg
+text/*.dvi
+text/*.fdb_latexmk
+text/*.fls
+text/*.log
+text/*.out
+text/*.synctex.gz
+text/*.toc
+text/*.lof
+text/*.lot
+text/*.pdf
+
+# Gnuplot output
+text/*.eps
+text/*.ps
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
