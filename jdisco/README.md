@@ -47,8 +47,8 @@ mvn clean install
 
 **Docker build:**
 ```bash
-docker-compose build
-docker-compose run jdisco mvn install
+docker compose build
+docker compose run jdisco mvn install
 ```
 
 ## Example: Simple Discrete-Event Simulation

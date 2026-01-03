@@ -59,23 +59,23 @@ The project includes Docker support for building with Java 6 compatibility. This
 
 **Build library:**
 ```bash
-docker-compose build
+docker compose build
 ```
 
 **Run tests:**
 ```bash
-docker-compose run jdisco mvn test
+docker compose run jdisco mvn test
 ```
 
 **Install to artifacts directory:**
 ```bash
-docker-compose run jdisco mvn install
+docker compose run jdisco mvn install
 # JAR files will be available in artifacts/
 ```
 
 **Clean build:**
 ```bash
-docker-compose run jdisco mvn clean install
+docker compose run jdisco mvn clean install
 ```
 
 ### Artifacts
@@ -194,7 +194,7 @@ JUnit 4.13.2 is used for testing.
 ```bash
 mvn test
 # Or with Docker:
-docker-compose run jdisco mvn test
+docker compose run jdisco mvn test
 ```
 
 Tests are located in `src/test/java/jDisco/`. Current test coverage includes:

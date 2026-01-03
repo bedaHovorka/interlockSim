@@ -86,17 +86,17 @@ The project includes Docker support for both the Java application and LaTeX thes
 
 **Build both services:**
 ```bash
-docker-compose build
+docker compose build
 ```
 
 **Run editor GUI:**
 ```bash
 # Method 1 (Recommended): Use .Xauthority file (more secure)
-docker-compose up app
+docker compose up app
 
 # Method 2: If you get authorization errors, allow X11 connections from Docker
 xhost +local:docker
-docker-compose up app
+docker compose up app
 
 # When done with Method 2, revoke access for security:
 xhost -local:docker
@@ -104,23 +104,23 @@ xhost -local:docker
 
 **Run simulation example:**
 ```bash
-docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
 ```
 
 **Run simulation with custom XML:**
 ```bash
-docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
 ```
 
 **Build thesis PDF:**
 ```bash
-docker-compose up text
+docker compose up text
 # PDF will be available in artifacts/text/bakalarka.pdf
 ```
 
 **Extract compiled JAR:**
 ```bash
-docker-compose build app
+docker compose build app
 # JAR will be available in artifacts/app/interlockSim.jar
 ```
 
@@ -167,7 +167,7 @@ If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
 3. **Use xhost as fallback:**
    ```bash
    xhost +local:docker
-   docker-compose up app
+   docker compose up app
    # When done:
    xhost -local:docker
    ```
