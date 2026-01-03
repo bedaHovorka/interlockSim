@@ -35,6 +35,9 @@ text/*.pdf
 text/*.eps
 text/*.ps
 
+# Docker artifacts
+artifacts/
+
 # OS files
 .DS_Store
 Thumbs.db

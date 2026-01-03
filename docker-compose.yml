@@ -1,0 +1,73 @@
+#
+#      Brno University of Technology
+#      Faculty of Information Technology
+#
+#      BSc Thesis       2006/2007
+#
+#      Railway Interlocking Simulator
+#
+#      Dockerization: 2025
+#
+#      Docker Compose orchestration for interlockSim project
+#
+#      Usage:
+#        docker-compose up --build       # Build both services
+#        docker-compose build app        # Build only app service
+#        docker-compose build text       # Build only text service
+#        docker-compose up app           # Run GUI editor (requires X11)
+#        docker-compose up text          # Build thesis PDF
+#
+#        # Run simulation with example:
+#        docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+#
+#        # Run simulation with custom XML:
+#        docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+#
+
+services:
+  # Build and run Java application with GUI support
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    environment:
+      # Pass host DISPLAY to container for X11 forwarding
+      - DISPLAY=${DISPLAY:-:0}
+      # Pass X11 authentication
+      - XAUTHORITY=/tmp/.docker.xauth
+    volumes:
+      # Mount X11 socket for GUI display
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Mount X11 authentication file
+      - ${XAUTHORITY:-$HOME/.Xauthority}:/tmp/.docker.xauth:ro
+      # Mount local directory to extract artifacts
+      - ./artifacts/app:/artifacts
+      # Optional: mount XML files for simulation
+      # - ./src/cz/vutbr/fit/interlockSim/resource:/app/xml:ro
+    network_mode: host
+    container_name: interlocksim-app
+    # Allow X11 forwarding
+    security_opt:
+      - seccomp:unconfined
+    # Optional: uncomment to keep container running for debugging
+    # stdin_open: true
+    # tty: true
+
+  # Build LaTeX thesis with Czech language tools
+  text:
+    build:
+      context: .
+      dockerfile: text/Dockerfile
+    volumes:
+      # Mount local directory to extract artifacts
+      - ./artifacts/text:/artifacts
+    container_name: interlocksim-text-build
+    # Optional: uncomment to see more detailed build output
+    # stdin_open: true
+    # tty: true
+
+# Explicit network for clarity (optional)
+networks:
+  default:
+    name: interlocksim-network

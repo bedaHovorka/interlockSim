@@ -37,12 +37,60 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 
 ## System Requirements
 
+### Option 1: Docker (Recommended)
+
+- **Docker** and **Docker Compose**
+- **X11 Server** (for GUI display)
+  - Linux: Usually already running
+  - macOS: Install XQuartz
+  - Windows: Install VcXsrv or Xming
+
+### Option 2: Native Build
+
 - **Java**: JDK 6 or compatible (javac 1.6)
 - **Build Tool**: Apache Ant
 - **Testing**: JUnit (included as `junit.jar`)
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed
+
+---
+
+## Quick Start with Docker
+
+**Dockerization: 2025** - Complete containerized build and runtime environment with no host dependencies.
+
+### Build and Run
+
+```bash
+# Build Docker images
+docker-compose build
+
+# Run graphical editor (X11 forwarding)
+docker-compose up app
+
+# Run simulation example
+docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+
+# Build thesis PDF
+docker-compose up text
+# PDF available in artifacts/text/bakalarka.pdf
+```
+
+### X11 Troubleshooting
+
+If you encounter `Can't connect to X11 window server`:
+
+```bash
+# Allow Docker X11 access
+xhost +local:docker
+docker-compose up app
+
+# When done, revoke access
+xhost -local:docker
+```
+
+For more details, see the Docker section below or `CLAUDE.md`.
 
 ---
 
@@ -91,6 +139,10 @@ Or manually:
 ```bash
 java -ea cz.vutbr.fit.interlockSim.Main edit [xmlFile]
 ```
+
+![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
+
+*The graphical track editor showing a simple shunting loop layout with entry/exit points and rail switches.*
 
 ### 2. Simulation Mode
 
@@ -188,6 +240,83 @@ Built on **jDisco** (Java framework for combined discrete and continuous simulat
 - **Object Model** - Track facilities, blocks, cells, and paths
 - **GUI** - Swing-based editor with grid canvas
 - **XML Factory** - Schema-validated configuration loading
+
+---
+
+## Docker Setup (Detailed)
+
+The project includes Docker support for both the Java application and LaTeX thesis compilation, eliminating the need to install Java 6, Ant, or LaTeX tools on the host machine.
+
+### Docker Services
+
+- **app** - Java application with GUI support (X11 forwarding)
+- **text** - LaTeX thesis compilation
+
+### Common Docker Commands
+
+**Build both services:**
+```bash
+docker-compose build
+```
+
+**Run editor GUI:**
+```bash
+# Method 1 (Recommended): Use .Xauthority file (more secure)
+docker-compose up app
+
+# Method 2: If you get authorization errors, allow X11 connections from Docker
+xhost +local:docker
+docker-compose up app
+
+# When done with Method 2, revoke access for security:
+xhost -local:docker
+```
+
+**Run simulation example:**
+```bash
+docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+```
+
+**Run simulation with custom XML:**
+```bash
+docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+```
+
+**Build thesis PDF:**
+```bash
+docker-compose up text
+# PDF will be available in artifacts/text/bakalarka.pdf
+```
+
+**Extract compiled JAR:**
+```bash
+docker-compose build app
+# JAR will be available in artifacts/app/interlockSim.jar
+```
+
+### Docker Architecture
+
+**Root Dockerfile (multi-stage build):**
+1. **Builder stage** - Uses `caninjas/jdk6` with Ant
+   - Compiles Java sources
+   - Runs tests
+   - Creates JAR with all dependencies
+2. **Runner stage** - JRE 6 with X11 libraries
+   - Minimal runtime environment
+   - X11 forwarding for GUI support
+   - No build tools in final image
+
+**text/Dockerfile:**
+- Based on Debian Bookworm
+- Full TeX Live installation with Czech language support
+- Image conversion tools (wmf2eps, autotrace, gnuplot)
+- Compiles thesis PDF from LaTeX sources
+
+### Artifacts
+
+Both services copy build outputs to `/artifacts` inside the container, which is mounted to `./artifacts/` on the host:
+- `artifacts/app/interlockSim.jar` - Compiled application
+- `artifacts/text/bakalarka.pdf` - Compiled thesis
 
 ---
 
