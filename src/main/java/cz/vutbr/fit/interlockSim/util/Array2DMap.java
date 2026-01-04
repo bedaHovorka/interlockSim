@@ -51,6 +51,29 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 			return Array2DMap.this.put(key, value);
 		}
 
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof Map.Entry)) return false;
+			Map.Entry<?, ?> e = (Map.Entry<?, ?>) o;
+			Object k1 = getKey();
+			Object k2 = e.getKey();
+			if (k1 == k2 || (k1 != null && k1.equals(k2))) {
+				Object v1 = getValue();
+				Object v2 = e.getValue();
+				if (v1 == v2 || (v1 != null && v1.equals(v2))) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public int hashCode() {
+			Object k = getKey();
+			Object v = getValue();
+			return (k == null ? 0 : k.hashCode()) ^ (v == null ? 0 : v.hashCode());
+		}
+
 	}
 
 	private final class Array2DEntrySet extends AbstractSet<Map.Entry<Point, V>> {
