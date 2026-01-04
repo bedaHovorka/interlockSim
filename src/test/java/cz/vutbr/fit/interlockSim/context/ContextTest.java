@@ -7,12 +7,11 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.test;
+package cz.vutbr.fit.interlockSim.context;
 
 import java.awt.Point;
 
 import junit.framework.TestCase;
-import cz.vutbr.fit.interlockSim.context.DefaultContext;
 import cz.vutbr.fit.interlockSim.objects.cells.InOut;
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
@@ -26,7 +25,7 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
  * Context testing
  *
  */
-public class TestContext extends TestCase {
+public class ContextTest extends TestCase {
 	private final DefaultContext context = XMLContextFactory.getInstance().createEmptyContext();
 	private final InOut inA = new InOut("A", false, SpatialType.HORIZONTAL);
 	private final InOut outB = new InOut("B", true, SpatialType.HORIZONTAL);

@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.test;
+package cz.vutbr.fit.interlockSim.util;
 
 import java.awt.Point;
 import java.util.ArrayList;
@@ -20,12 +20,11 @@ import java.util.Random;
 import java.util.TreeMap;
 
 import junit.framework.TestCase;
-import cz.vutbr.fit.interlockSim.util.Array2DMap;
 
 /**
  * Test compares {@link Array2DMap} with {@link TreeMap}
  */
-public class TestArray2DMap extends TestCase {
+public class Array2DMapTest extends TestCase {
 	private static final Random RANDOM = new Random(0);
 	private final Array2DMap<Integer> array2DMap = new Array2DMap<Integer>();
 	private final TreeMap<Point, Integer> treeMap = new TreeMap<Point, Integer>(Array2DMap.POINT_COMPARATOR);

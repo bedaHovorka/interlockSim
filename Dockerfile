@@ -9,6 +9,7 @@
 #      Dockerization: 2025
 #
 #      Multi-stage build for interlockSim with GUI support
+#      Dependency management: Apache Ivy
 #
 
 # ============================================
@@ -43,21 +44,12 @@ WORKDIR /build/interlockSim
 # Copy source files and build configuration
 COPY src/ /build/interlockSim/src/
 COPY build.xml /build/interlockSim/
-COPY junit.jar /build/interlockSim/
+COPY ivy.xml /build/interlockSim/
+COPY ivysettings.xml /build/interlockSim/
 
-# Patch build.xml to add Java 6 source/target compatibility and ISO-8859-1 encoding
-# Note: jDisco library files use ISO-8859-1 encoding
-RUN sed -i 's|<javac destdir="build">|<javac destdir="build" source="1.6" target="1.6" encoding="ISO-8859-1" includeantruntime="false">|g' build.xml
-
-# Patch build.xml to add junit.jar to the classpath
-RUN sed -i 's|<path id="project.classpath">|<path id="project.classpath">\n        <pathelement location="junit.jar"/>|g' build.xml
-
-# Build the project (compiles code and resources)
+# Build the project (compiles code, runs tests)
+# Ivy downloads dependencies automatically during resolve phase
 RUN ant clean build
-
-# Run tests if they exist
-# Note: build.xml doesn't have explicit test target, but tests are in src
-RUN ant build
 
 # Create JAR with manifest
 RUN ant pack
@@ -104,7 +96,7 @@ WORKDIR /app
 COPY --from=builder /build/interlockSim/jar/interlockSim.jar /app/
 
 # Copy resources if needed at runtime (XML schemas, examples)
-COPY --from=builder /build/interlockSim/build/cz/vutbr/fit/interlockSim/resource/ \
+COPY --from=builder /build/interlockSim/build/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
 # Create artifacts directory for extraction
@@ -117,5 +109,5 @@ RUN cp /app/interlockSim.jar /artifacts/
 ENV DISPLAY=:0
 
 # Default command: run editor GUI
-# Users can override with: docker-compose run app java -ea -jar interlockSim.jar sim file.xml
+# Users can override with: docker compose run app java -ea -jar interlockSim.jar sim file.xml
 CMD ["java", "-ea", "-jar", "interlockSim.jar", "edit"]

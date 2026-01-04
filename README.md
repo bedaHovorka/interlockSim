@@ -48,8 +48,10 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 ### Option 2: Native Build
 
 - **Java**: JDK 6 or compatible (javac 1.6)
-- **Build Tool**: Apache Ant
-- **Testing**: JUnit (included as `junit.jar`)
+- **Build Tool**: Apache Ant with Apache Ivy
+- **Dependencies**: Automatically managed via Ivy
+  - jDisco 1.2.0 (from Maven local repository)
+  - JUnit 3.8.2 (from Maven Central)
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed
@@ -99,7 +101,10 @@ For more details, see the Docker section below or `CLAUDE.md`.
 ### Quick Start
 
 ```bash
-# Clean and build
+# Resolve dependencies (automatic via Ivy)
+ant resolve
+
+# Clean and build (compiles main + tests, runs tests)
 ant clean build
 
 # Run simulation (shunting loop example)
@@ -116,12 +121,17 @@ ant doc
 
 | Target | Description |
 |--------|-------------|
-| `ant build` | Compile all sources |
+| `ant resolve` | Download dependencies via Apache Ivy |
+| `ant build` | Compile all sources, run tests (build fails if tests fail) |
+| `ant test` | Run JUnit tests only |
 | `ant clean` | Remove build artifacts |
+| `ant clean-all` | Clean everything including Ivy cache |
 | `ant start` | Run pre-configured shunting loop simulation |
 | `ant run` | Launch graphical editor |
-| `ant pack` | Create JAR file |
+| `ant pack` | Create uber JAR file with all dependencies |
 | `ant doc` | Generate JavaDoc documentation |
+
+**Note:** Dependencies are automatically resolved during build. The `ant resolve` target is only needed if you want to download dependencies separately.
 
 ---
 
@@ -135,9 +145,9 @@ Open the track editor to design railway layouts:
 ant run
 ```
 
-Or manually:
+Or manually (after building):
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main edit [xmlFile]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main edit [xmlFile]
 ```
 
 ![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
@@ -149,7 +159,7 @@ java -ea cz.vutbr.fit.interlockSim.Main edit [xmlFile]
 Run a simulation from an XML configuration file:
 
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main sim [xmlFile]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main sim [xmlFile]
 ```
 
 ### 3. Built-in Examples
@@ -158,23 +168,23 @@ Run pre-configured simulation scenarios:
 
 ```bash
 # List all available examples
-java -ea cz.vutbr.fit.interlockSim.Main example
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example
 
 # Run shunting loop example for 300 time units
-java -ea cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
 ```
 
 **Quick example:**
 ```bash
 # Build and run shunting yard simulation (5 minutes model time)
 ant clean build
-java -ea -cp build cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
 ```
 
 ### Command-Line Synopsis
 
 ```
-java -ea cz.vutbr.fit.interlockSim.Main (sim|edit|example) [arguments]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main (sim|edit|example) [arguments]
 ```
 
 **Modes:**
@@ -191,21 +201,36 @@ java -ea cz.vutbr.fit.interlockSim.Main (sim|edit|example) [arguments]
 ```
 interlockSim/
 ├── build.xml              # Ant build configuration
-├── junit.jar              # JUnit testing library
-├── src/                   # Java source files
-│   ├── cz/vutbr/fit/interlockSim/
-│   │   ├── Main.java      # Application entry point
-│   │   ├── context/       # Simulation context management
-│   │   ├── gui/           # Swing-based editor
-│   │   ├── objects/       # Domain model (tracks, cells, paths)
-│   │   ├── sim/           # Simulation scenarios
-│   │   ├── test/          # JUnit tests
-│   │   ├── xml/           # XML parsing/serialization
-│   │   └── resource/      # XML schemas and examples
-│   └── jDisco/            # Third-party simulation library
+├── ivy.xml                # Ivy dependency declarations
+├── ivysettings.xml        # Ivy resolver configuration
+├── src/
+│   ├── main/
+│   │   ├── java/cz/vutbr/fit/interlockSim/
+│   │   │   ├── Main.java      # Application entry point
+│   │   │   ├── context/       # Simulation context management
+│   │   │   ├── gui/           # Swing-based editor
+│   │   │   ├── objects/       # Domain model (tracks, cells, paths)
+│   │   │   ├── sim/           # Simulation scenarios
+│   │   │   ├── xml/           # XML parsing/serialization
+│   │   │   └── util/          # Utilities
+│   │   └── resources/cz/vutbr/fit/interlockSim/resource/
+│   │       ├── data.xsd       # XML schema
+│   │       └── vyhybna.xml    # Example configuration
+│   └── test/
+│       └── java/cz/vutbr/fit/interlockSim/test/
+│           ├── TestArray2DMap.java
+│           ├── TestCell.java
+│           └── TestContext.java
+├── jdisco/                # jDisco library (separate Maven module)
+├── lib/                   # Downloaded dependencies (Ivy)
+│   ├── compile/           # Compile dependencies (jDisco)
+│   └── test/              # Test dependencies (JUnit)
+├── build/                 # Compiled classes
+│   ├── main/              # Main code
+│   └── test/              # Test code
 ├── text/                  # LaTeX thesis source
 ├── doc/                   # Generated JavaDoc (ant doc)
-└── build/                 # Compiled classes (ant build)
+└── jar/                   # Packaged JAR (ant pack)
 ```
 
 ---
@@ -219,8 +244,8 @@ Railway networks are defined using XML with the following elements:
 - `<InOut>` - Entry and exit points
 - Track connections with spatial coordinates
 
-**Example configuration:** `src/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
-**XML Schema:** `src/cz/vutbr/fit/interlockSim/resource/data.xsd`
+**Example configuration:** `src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
+**XML Schema:** `src/main/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`
 
 ---
 
@@ -297,11 +322,13 @@ docker compose build app
 ### Docker Architecture
 
 **Root Dockerfile (multi-stage build):**
-1. **Builder stage** - Uses `caninjas/jdk6` with Ant
-   - Compiles Java sources
-   - Runs tests
-   - Creates JAR with all dependencies
-2. **Runner stage** - JRE 6 with X11 libraries
+1. **Builder stage** - Uses Debian Buster with OpenJDK 11, Maven, and Ant
+   - Builds jDisco dependency (Maven install)
+   - Resolves dependencies via Apache Ivy (automatic download)
+   - Compiles Java sources (Java 6 compatibility mode)
+   - Runs all tests (build fails if tests fail)
+   - Creates uber JAR with all dependencies
+2. **Runner stage** - Debian Buster with OpenJDK 11 JRE and X11 libraries
    - Minimal runtime environment
    - X11 forwarding for GUI support
    - No build tools in final image
@@ -322,12 +349,23 @@ Both services copy build outputs to `/artifacts` inside the container, which is 
 
 ## Testing
 
-JUnit tests are located in `src/cz/vutbr/fit/interlockSim/test/`.
+JUnit 3.8.2 tests are located in `src/test/java/cz/vutbr/fit/interlockSim/test/`.
 
-Run tests during build:
+**Test coverage:**
+- `TestArray2DMap` - 10 tests for 2D array-based map implementation
+- `TestCell` - 2 tests for cell segment and direction logic
+- `TestContext` - 4 tests for railway network context operations
+
+Run tests:
 ```bash
+# Run tests only
+ant test
+
+# Or as part of build
 ant clean build
 ```
+
+Tests are automatically executed during the build process. The build will fail if any test fails.
 
 ---
 

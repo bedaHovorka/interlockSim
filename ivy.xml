@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Brno University of Technology
+    Faculty of Information Technology
+
+    BSc Thesis       2006/2007
+    Railway Interlocking Simulator
+
+    Ivy Dependency Management Configuration
+
+    Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
+    Ivy integration: 2025
+-->
+<ivy-module version="2.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:noNamespaceSchemaLocation="http://ant.apache.org/ivy/schemas/ivy.xsd">
+
+    <info organisation="cz.vutbr.fit" module="interlockSim" revision="1.0"/>
+
+    <configurations>
+        <!-- Compile configuration: runtime dependencies -->
+        <conf name="compile" description="Compile-time dependencies"/>
+        <!-- Test configuration: extends compile, adds test-only dependencies -->
+        <conf name="test" extends="compile" description="Test-time dependencies"/>
+    </configurations>
+
+    <dependencies>
+        <!-- jDisco: Discrete event simulation library -->
+        <!-- Resolved from Maven local repository (~/.m2/repository) -->
+        <dependency org="dk.ruc.keld" name="jdisco" rev="1.2.0" conf="compile->default"/>
+
+        <!-- JUnit 3.8.2: Testing framework -->
+        <!-- Using JUnit 3.x for backward compatibility with existing tests -->
+        <dependency org="junit" name="junit" rev="3.8.2" conf="test->default"/>
+    </dependencies>
+
+</ivy-module>

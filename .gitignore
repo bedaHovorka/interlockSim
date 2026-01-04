@@ -42,7 +42,12 @@ artifacts/
 jdisco/target/
 .m2/
 
+# Ivy artifacts
+.ivy2/
+lib/
+
 # OS files
 .DS_Store
 Thumbs.db
 *~
+/out/

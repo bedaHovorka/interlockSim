@@ -7,17 +7,12 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.test;
+package cz.vutbr.fit.interlockSim.objects.cells;
 
 import java.awt.Point;
 import java.util.EnumMap;
 
 import junit.framework.TestCase;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
 
@@ -25,7 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
  * This class checks cells atributes (mainly topology)
  */
 @SuppressWarnings("unchecked")
-public class TestCell extends TestCase {
+public class CellTest extends TestCase {
 
 	private static final Class<? extends Cell>[] TESTED_CLASSES = new Class[]{RailSemaphore.class, InOut.class};
 

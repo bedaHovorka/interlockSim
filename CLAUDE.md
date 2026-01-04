@@ -8,18 +8,38 @@ Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno Univ
 
 ## Build System
 
-This project uses Apache Ant for building. Java 6 is required (`javac 1.6`), with JUnit for testing.
+This project uses Apache Ant for building with Apache Ivy for dependency management. Java 6 is required (`javac 1.6`).
+
+### Dependency Management
+
+Dependencies are managed via Apache Ivy:
+- **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository)
+- **JUnit 3.8.2** - Testing framework (from Maven Central)
+
+Ivy automatically downloads dependencies during the build. Configuration files:
+- `ivy.xml` - Dependency declarations
+- `ivysettings.xml` - Repository resolver configuration
 
 ### Common Build Commands
 
-**Clean build:**
+**Resolve dependencies:**
+```bash
+ant resolve
+```
+
+**Clean build (includes dependency resolution and test execution):**
 ```bash
 ant clean build
 ```
 
-**Build only:**
+**Build only (compiles main code, tests, and runs tests):**
 ```bash
 ant build
+```
+
+**Run tests only:**
+```bash
+ant test
 ```
 
 **Run simulation (pre-configured shunting loop example):**
@@ -37,28 +57,44 @@ ant run
 ant doc
 ```
 
+**Clean everything including Ivy cache:**
+```bash
+ant clean-all
+```
+
+### Directory Structure
+
+The project follows Maven/Gradle standard directory layout:
+- `src/main/java/` - Main source code
+- `src/test/java/` - Test source code
+- `src/main/resources/` - Resource files (XML schemas, examples)
+- `build/main/` - Compiled main classes
+- `build/test/` - Compiled test classes
+- `lib/compile/` - Compile-time dependencies (jDisco)
+- `lib/test/` - Test dependencies (JUnit)
+
 ### Running Manually
 
-After building with `ant build`, run from the `build/` directory:
+After building with `ant build`, run from the project root:
 
 **Simulation mode:**
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main sim [xmlFile]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main sim [xmlFile]
 ```
 
 **Editor mode:**
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main edit [xmlFile]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main edit [xmlFile]
 ```
 
 **Built-in examples:**
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main example [exampleName] [endTime]
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example [exampleName] [endTime]
 ```
 
 To list available examples, run:
 ```bash
-java -ea cz.vutbr.fit.interlockSim.Main example
+java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example
 ```
 
 **Note:** Enable assertions with `-ea` flag. For memory-constrained environments, add `-Xmx300`.
@@ -127,11 +163,13 @@ docker compose build app
 ### Docker Architecture
 
 **Root Dockerfile (multi-stage build):**
-1. **Builder stage** - Uses `caninjas/jdk6` with Ant
-   - Compiles Java sources
-   - Runs tests
-   - Creates JAR with all dependencies
-2. **Runner stage** - JRE 6 with X11 libraries
+1. **Builder stage** - Uses Debian Buster with OpenJDK 11, Maven, and Ant
+   - Builds jDisco dependency (Maven install)
+   - Resolves dependencies via Apache Ivy (automatic download)
+   - Compiles Java sources (Java 6 compatibility mode)
+   - Runs all tests (build fails if tests fail)
+   - Creates uber JAR with all dependencies
+2. **Runner stage** - Debian Buster with OpenJDK 11 JRE and X11 libraries
    - Minimal runtime environment
    - X11 forwarding for GUI support
    - No build tools in final image
@@ -223,25 +261,32 @@ Both services copy build outputs to `/artifacts` inside the container, which is 
 
 **XML Configuration:**
 - Railway networks defined in XML format
-- Schema: `src/cz/vutbr/fit/interlockSim/resource/data.xsd`
-- Example: `src/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
+- Schema: `src/main/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`
+- Example: `src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml`
 - Elements include: RailSwitch, RailSemaphore, InOut (entry/exit points), track connections
 
 ### Package Structure
 
 ```
-cz.vutbr.fit.interlockSim/
-├── Main.java              - Application entry point
-├── context/               - Context management and factories
-├── gui/                   - Graphical editor
-├── objects/               - Domain model (tracks, paths, cells)
-├── sim/                   - Simulation scenarios
-├── test/                  - Unit tests (JUnit)
-├── util/                  - Utilities and reporting
-├── xml/                   - XML parsing and serialization
-└── resource/              - XML schemas and configuration files
+src/
+├── main/
+│   ├── java/cz/vutbr/fit/interlockSim/
+│   │   ├── Main.java              - Application entry point
+│   │   ├── context/               - Context management and factories
+│   │   ├── gui/                   - Graphical editor
+│   │   ├── objects/               - Domain model (tracks, paths, cells)
+│   │   ├── sim/                   - Simulation scenarios
+│   │   ├── util/                  - Utilities and reporting
+│   │   └── xml/                   - XML parsing and serialization
+│   └── resources/cz/vutbr/fit/interlockSim/
+│       └── resource/              - XML schemas and configuration files
+└── test/
+    └── java/cz/vutbr/fit/interlockSim/test/
+        ├── TestArray2DMap.java    - Array2DMap unit tests
+        ├── TestCell.java          - Cell unit tests
+        └── TestContext.java       - Context unit tests
 
-jDisco/                    - Third-party discrete event simulation library
+jdisco/                            - Third-party discrete event simulation library (separate module)
 ```
 
 ## Code Style
@@ -265,13 +310,21 @@ This is a working historical codebase from 2007. Stability and preservation are 
 
 ## Testing
 
-JUnit tests located in `cz.vutbr.fit.interlockSim.test/`. The `junit.jar` library is included in the repository root.
+JUnit 3.8.2 tests located in `src/test/java/cz/vutbr/fit/interlockSim/test/`. JUnit is managed via Apache Ivy.
+
+**Current tests:**
+- `TestArray2DMap` - 10 tests for 2D array-based map implementation
+- `TestCell` - 2 tests for cell segment and direction logic
+- `TestContext` - 4 tests for railway network context operations
 
 **Run tests:**
 ```bash
+ant test
+# Or as part of build:
 ant build
-# Tests run during build
 ```
+
+Tests are automatically executed during the build process. The build will fail if any test fails (`haltonfailure="yes"`).
 
 ## Documentation
 
