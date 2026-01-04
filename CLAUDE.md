@@ -6,15 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
 
+[![Ant Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml)
+
 ## Build System
 
-This project uses Apache Ant for building with Apache Ivy for dependency management. Java 6 is required (`javac 1.6`).
+This project uses Apache Ant for building with Apache Ivy for dependency management. Java 11 is required (`javac 11`). The jDisco library module remains at Java 6 for compatibility.
 
 ### Dependency Management
 
 Dependencies are managed via Apache Ivy:
-- **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository)
-- **JUnit 3.8.2** - Testing framework (from Maven Central)
+- **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository, Java 6)
+- **JUnit 5.10.1** - Testing framework (JUnit Jupiter API and Engine)
+- **AssertJ 3.24.2** - Fluent assertion library for better test readability
 
 Ivy automatically downloads dependencies during the build. Configuration files:
 - `ivy.xml` - Dependency declarations
@@ -103,7 +106,7 @@ java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example
 
 **Dockerization: 2025** - Complete containerized build and runtime environment with no host dependencies.
 
-The project includes Docker support for both the Java application and LaTeX thesis compilation. This eliminates the need to install Java 6, Ant, or LaTeX tools on the host machine.
+The project includes Docker support for both the Java application and LaTeX thesis compilation. This eliminates the need to install Java 11, Ant, or LaTeX tools on the host machine.
 
 ### Prerequisites
 
@@ -164,10 +167,10 @@ docker compose build app
 
 **Root Dockerfile (multi-stage build):**
 1. **Builder stage** - Uses Debian Buster with OpenJDK 11, Maven, and Ant
-   - Builds jDisco dependency (Maven install)
+   - Builds jDisco dependency (Maven install, Java 6 compatibility)
    - Resolves dependencies via Apache Ivy (automatic download)
-   - Compiles Java sources (Java 6 compatibility mode)
-   - Runs all tests (build fails if tests fail)
+   - Compiles Java sources (Java 11 target)
+   - Runs all tests with JUnit 5 (build fails if tests fail)
    - Creates uber JAR with all dependencies
 2. **Runner stage** - Debian Buster with OpenJDK 11 JRE and X11 libraries
    - Minimal runtime environment
@@ -251,7 +254,7 @@ Both services copy build outputs to `/artifacts` inside the container, which is 
 
 **Simulation engine:**
 - Built on jDisco library (discrete event simulation framework by Keld Helsgaun)
-- Located in `src/jDisco/` - bundled third-party library
+- Standalone Maven module in `jdisco/` (Java 6 compatible)
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
 **GUI:**
@@ -281,12 +284,15 @@ src/
 │   └── resources/cz/vutbr/fit/interlockSim/
 │       └── resource/              - XML schemas and configuration files
 └── test/
-    └── java/cz/vutbr/fit/interlockSim/test/
-        ├── TestArray2DMap.java    - Array2DMap unit tests
-        ├── TestCell.java          - Cell unit tests
-        └── TestContext.java       - Context unit tests
+    └── java/cz/vutbr/fit/interlockSim/
+        ├── util/
+        │   └── Array2DMapTest.java    - Array2DMap unit tests (JUnit 5)
+        ├── objects/cells/
+        │   └── CellTest.java          - Cell unit tests (JUnit 5)
+        └── context/
+            └── ContextTest.java       - Context unit tests (JUnit 5)
 
-jdisco/                            - Third-party discrete event simulation library (separate module)
+jdisco/                            - Third-party discrete event simulation library (Java 6, separate Maven module)
 ```
 
 ## Code Style
@@ -304,18 +310,24 @@ Follows `.editorconfig` configuration:
 1. **Do not touch Java code unless explicitly requested** - Do not refactor, optimize, or "improve" code that is working
 2. **Tests must exist before modifications** - Any Java source file being modified MUST be covered by tests first. If tests don't exist, they must be written before making any changes
 3. **Minimal changes only** - Make only the specific changes requested, nothing more
-4. **No unsolicited modernization** - Do not update Java 6 idioms to modern Java, do not add new language features, do not restructure working code
+4. **No unsolicited modernization** - While the project now uses Java 11, do not update Java idioms to modern features, do not add new language features, do not restructure working code
+5. **jDisco preservation** - The jDisco module must remain at Java 6 compatibility and should never be modified
 
 This is a working historical codebase from 2007. Stability and preservation are more important than modernization.
 
 ## Testing
 
-JUnit 3.8.2 tests located in `src/test/java/cz/vutbr/fit/interlockSim/test/`. JUnit is managed via Apache Ivy.
+JUnit 5.10.1 tests with AssertJ assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Apache Ivy.
+
+**Test framework:**
+- JUnit 5 (Jupiter API and Engine)
+- JUnit Platform for Ant integration
+- AssertJ 3.24.2 for fluent assertions
 
 **Current tests:**
-- `TestArray2DMap` - 10 tests for 2D array-based map implementation
-- `TestCell` - 2 tests for cell segment and direction logic
-- `TestContext` - 4 tests for railway network context operations
+- `Array2DMapTest` - 10 tests for 2D array-based map implementation
+- `CellTest` - 2 tests for cell segment and direction logic
+- `ContextTest` - 4 tests for railway network context operations
 
 **Run tests:**
 ```bash
@@ -324,7 +336,41 @@ ant test
 ant build
 ```
 
-Tests are automatically executed during the build process. The build will fail if any test fails (`haltonfailure="yes"`).
+Tests are automatically executed during the build process using Ant's `junitlauncher` task. The build will fail if any test fails (`haltonfailure="yes"`).
+
+**Note:** Ant 1.10.6+ is required for JUnit 5 support via the `junitlauncher` task.
+
+## Continuous Integration
+
+The project uses GitHub Actions for automated build, test, and deployment workflows.
+
+**Workflow:** `.github/workflows/ant-java11.yml`
+
+**Features:**
+- Builds jDisco library with Java 6 compatibility
+- Compiles main project with Java 11
+- Runs all tests with JUnit 5
+- Packages application JAR
+- Uploads JAR as artifact (90-day retention)
+- Smoke test execution
+- Dependency caching (Maven and Ivy) for faster builds
+
+**Triggers:**
+- Push to `main`, `develop`, `feature/**`, `fix/**` branches
+- Pull requests to `main` and `develop`
+- Manual workflow dispatch
+
+**Build environment:**
+- Ubuntu latest
+- Java 11 (Temurin distribution)
+- 15-minute timeout
+- Concurrency control (cancels outdated builds)
+
+**Performance:**
+- First build (cold cache): ~3-5 minutes
+- Subsequent builds (warm cache): ~30-60 seconds
+
+View build status and artifacts at: [GitHub Actions](https://github.com/bedavs/interlockSim/actions)
 
 ## Documentation
 

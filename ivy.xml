@@ -29,9 +29,16 @@
         <!-- Resolved from Maven local repository (~/.m2/repository) -->
         <dependency org="dk.ruc.keld" name="jdisco" rev="1.2.0" conf="compile->default"/>
 
-        <!-- JUnit 3.8.2: Testing framework -->
-        <!-- Using JUnit 3.x for backward compatibility with existing tests -->
-        <dependency org="junit" name="junit" rev="3.8.2" conf="test->default"/>
+        <!-- JUnit 5 Platform: Testing framework launcher and console -->
+        <dependency org="org.junit.platform" name="junit-platform-launcher" rev="1.10.1" conf="test->default"/>
+        <dependency org="org.junit.platform" name="junit-platform-console" rev="1.10.1" conf="test->default"/>
+
+        <!-- JUnit 5 Jupiter: API and Engine -->
+        <dependency org="org.junit.jupiter" name="junit-jupiter-api" rev="5.10.1" conf="test->default"/>
+        <dependency org="org.junit.jupiter" name="junit-jupiter-engine" rev="5.10.1" conf="test->default"/>
+
+        <!-- AssertJ: Fluent assertions library -->
+        <dependency org="org.assertj" name="assertj-core" rev="3.24.2" conf="test->default"/>
     </dependencies>
 
 </ivy-module>

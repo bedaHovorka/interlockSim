@@ -1,0 +1,81 @@
+name: Ant Build with Java 11
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**', 'fix/**' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  checks: write  # For test reporting (future)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '11'
+  MAVEN_OPTS: '-Xmx512m'
+  ANT_OPTS: '-Xmx512m'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+
+    - name: Cache Maven dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('jdisco/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Cache Ivy dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.ivy2/cache
+          .ivy2
+        key: ${{ runner.os }}-ivy-${{ hashFiles('ivy.xml', 'ivysettings.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-ivy-
+
+    - name: Build jDisco library (Java 6 compatibility)
+      working-directory: ./jdisco
+      run: mvn clean install
+
+    - name: Verify jDisco installation
+      run: |
+        test -f ~/.m2/repository/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar
+        echo "✓ jDisco artifact found"
+
+    - name: Build and test interlockSim with Ant
+      run: ant clean build
+
+    - name: Package JAR
+      run: ant pack
+
+    - name: Upload JAR artifact
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: interlockSim-jar-${{ github.sha }}
+        path: jar/interlockSim.jar
+        retention-days: 90
+
+    - name: Test JAR execution
+      run: |
+        java -jar -ea jar/interlockSim.jar example shuntingLoop 300

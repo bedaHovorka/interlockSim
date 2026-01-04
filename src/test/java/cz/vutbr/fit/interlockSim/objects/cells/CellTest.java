@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.objects.cells;
 import java.awt.Point;
 import java.util.EnumMap;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
+
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
 
@@ -20,7 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
  * This class checks cells atributes (mainly topology)
  */
 @SuppressWarnings("unchecked")
-public class CellTest extends TestCase {
+public class CellTest {
 
 	private static final Class<? extends Cell>[] TESTED_CLASSES = new Class[]{RailSemaphore.class, InOut.class};
 
@@ -28,6 +30,7 @@ public class CellTest extends TestCase {
 	 *
 	 *
 	 */
+	@Test
 	public void testSegments() {
 		final Point center = new Point(0, 0);
 		final EnumMap<Segment, Point> points = new EnumMap<Segment, Point>(Segment.class);
@@ -38,19 +41,19 @@ public class CellTest extends TestCase {
 			final float rx = s.getRx();
 			final float ry = s.getRy();
 
-			assertEquals(dx, Segment.r2d(rx));
-			assertEquals(dy, Segment.r2d(ry));
-			assertEquals(rx, Segment.d2r(dx));
-			assertEquals(ry, Segment.d2r(dy));
-			assertSame(s, Segment.segmentFor(dx, dy));
+			assertThat(Segment.r2d(rx)).isEqualTo(dx);
+			assertThat(Segment.r2d(ry)).isEqualTo(dy);
+			assertThat(Segment.d2r(dx)).isEqualTo(rx);
+			assertThat(Segment.d2r(dy)).isEqualTo(ry);
+			assertThat(Segment.segmentFor(dx, dy)).isSameAs(s);
 
-			assertSame(s, Segment.anti(Segment.anti(s)));
-			assertTrue(Segment.conflict(s, s));
+			assertThat(Segment.anti(Segment.anti(s))).isSameAs(s);
+			assertThat(Segment.conflict(s, s)).isTrue();
 
 			final Point tr = s.transform(center);
-			assertNotSame(center, tr); //nesmi zmenit a vracet predany objekt
-			assertFalse("transformed point is equal", center.equals(tr));
-			assertFalse("transformed point is genereted twice", points.values().contains(tr));
+			assertThat(tr).isNotSameAs(center); //nesmi zmenit a vracet predany objekt
+			assertThat(center.equals(tr)).as("transformed point is equal").isFalse();
+			assertThat(points.values().contains(tr)).as("transformed point is genereted twice").isFalse();
 			points.put(s, tr);
 		}
 	}
@@ -59,6 +62,7 @@ public class CellTest extends TestCase {
 	 *
 	 *
 	 */
+	@Test
 	public void testDirection() {
 		for (Class<? extends Cell> clazz : TESTED_CLASSES) {
 			testDir(clazz);
@@ -71,8 +75,9 @@ public class CellTest extends TestCase {
 				final OrientedNodeCell sem1 = newCell(clazz, true, t, objects);
 				final OrientedNodeCell sem2 = newCell(clazz, false, t, objects);
 
-				assertSame("direction for class " + clazz.getSimpleName() +  " and " + t.toString(),
-						sem1.direction(), Segment.anti(sem2.direction()));
+				assertThat(sem1.direction())
+					.as("direction for class " + clazz.getSimpleName() +  " and " + t.toString())
+					.isSameAs(Segment.anti(sem2.direction()));
 			} catch (IllegalArgumentException e) {
 				final String message = e.getMessage();
 				if (message != null && message.equals(RailSwitch.UNSUPORTED_SWITCH_TYPES_MESSAGE)) {
@@ -90,7 +95,7 @@ public class CellTest extends TestCase {
 			return new InOut("xx", o, t);
 		}
 
-		assert false : objects;
+		fail("Unexpected cell class: " + clazz + ", objects: " + java.util.Arrays.toString(objects));
 		return null;
 	}
 }

@@ -19,12 +19,13 @@ import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test compares {@link Array2DMap} with {@link TreeMap}
  */
-public class Array2DMapTest extends TestCase {
+public class Array2DMapTest {
 	private static final Random RANDOM = new Random(0);
 	private final Array2DMap<Integer> array2DMap = new Array2DMap<Integer>();
 	private final TreeMap<Point, Integer> treeMap = new TreeMap<Point, Integer>(Array2DMap.POINT_COMPARATOR);
@@ -33,33 +34,35 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#clear()}.
 	 */
+	@Test
 	public void testClear() {
 		EQ();
 		array2DMap.clear();
 		treeMap.clear();
-		assertEquals(0, array2DMap.size());
+		assertThat(array2DMap.size()).isEqualTo(0);
 		EQ();
 	}
 
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#entrySet()}.
 	 */
+	@Test
 	public void testEntrySet() {
-		assertEquals(treeMap.entrySet(), array2DMap.entrySet());
+		assertThat(array2DMap.entrySet()).isEqualTo(treeMap.entrySet());
 	}
 
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#get(int, int)}.
 	 */
+	@Test
 	public void testGetIntInt() {
 		EQ();
-		final Point referencer = new Point();
 		for (int x = 0; x < BOUND; x++) {
 			for (int y = 0; y < BOUND; y++) {
-				referencer.x = x; referencer.y = y;
-				final Integer integer1 = treeMap.get(referencer);
+				Point p = new Point(x, y);
+				final Integer integer1 = treeMap.get(p);
 				final Integer integer2 = array2DMap.get(x,y);
-				assertEquals(integer1, integer2);
+				assertThat(integer2).isEqualTo(integer1);
 			}
 		}
 	}
@@ -67,15 +70,15 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#get(java.lang.Object)}.
 	 */
+	@Test
 	public void testGetObject() {
 		EQ();
-		final Point referencer = new Point();
 		for (int x = 0; x < BOUND; x++) {
 			for (int y = 0; y < BOUND; y++) {
-				referencer.x = x; referencer.y = y;
-				final Integer integer1 = treeMap.get(referencer);
+				Point p = new Point(x, y);
+				final Integer integer1 = treeMap.get(p);
 				final Integer integer2 = array2DMap.get(x,y);
-				assertEquals(integer1, integer2);
+				assertThat(integer2).isEqualTo(integer1);
 			}
 		}
 	}
@@ -83,6 +86,7 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#put(java.awt.Point, java.lang.Object)}.
 	 */
+	@Test
 	public void testPutPointV() {
 		EQ();
 		final Point referencer = new Point();
@@ -93,7 +97,7 @@ public class Array2DMapTest extends TestCase {
 			final Point p = (Point) referencer.clone();
 			final Integer integer1 = treeMap.put(p, newInt);
 			final Integer integer2 = array2DMap.put(p, newInt);
-			assertEquals(integer1, integer2);
+			assertThat(integer2).isEqualTo(integer1);
 		}
 		testEntrySet();
 		EQ();
@@ -102,6 +106,7 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#remove(java.lang.Object)}.
 	 */
+	@Test
 	public void testRemoveObject() {
 		EQ();
 		EQ();
@@ -110,13 +115,13 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#containsKey(java.lang.Object)}.
 	 */
+	@Test
 	public void testContainsKeyObject() {
 		EQ();
-		final Point referencer = new Point();
 		for (int x = 0; x < BOUND; x++) {
 			for (int y = 0; y < BOUND; y++) {
-				referencer.x = x; referencer.y = y;
-				assertEquals(treeMap.containsKey(referencer), array2DMap.containsKey(referencer));
+				Point p = new Point(x, y);
+				assertThat(array2DMap.containsKey(p)).isEqualTo(treeMap.containsKey(p));
 			}
 		}
 	}
@@ -124,33 +129,35 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#getRow(int)}.
 	 */
+	@Test
 	public void testGetRow() {
 		testPutPointV();
-		final Point referencer = new Point();
 		for (int y = 0; y < BOUND; y++) {
 			final ArrayList<Integer> treeList = new ArrayList<Integer>();
 			for (int x = 0; x < BOUND; x++) {
-				referencer.x = x; referencer.y = y;
-				final Integer double1 = treeMap.get(referencer);
+				Point p = new Point(x, y);
+				final Integer double1 = treeMap.get(p);
 				treeList.add(double1);
 			}
 			final List<Integer> row = array2DMap.getRow(y);
 			final int tLsize = treeList.size();
-			final int aLsize = row.size(); assert tLsize >= aLsize;
-			assertEquals(treeList.subList(0, aLsize), row);
-			assertEquals(Collections.nCopies(tLsize - aLsize, null), treeList.subList(aLsize, tLsize));
+			final int aLsize = row.size();
+			assertThat(tLsize).isGreaterThanOrEqualTo(aLsize);
+			assertThat(row).isEqualTo(treeList.subList(0, aLsize));
+			assertThat(treeList.subList(aLsize, tLsize)).isEqualTo(Collections.nCopies(tLsize - aLsize, null));
 		}
 		EQ();
 	}
 
 	private void EQ() {
-		assertEquals(treeMap, array2DMap);
+		assertThat(array2DMap).isEqualTo(treeMap);
 	}
 
 	/**
 	 * Test method for {@link Array2DMap#POINT_COMPARATOR}
 	 *
 	 */
+	@Test
 	public void testComparator() {
 		for (int i = 0; i < BOUND; i++) {
 			final Point p1 = randomPoint();
@@ -176,17 +183,17 @@ public class Array2DMapTest extends TestCase {
 	private void threeTest(Point p1, Point p2, Point p3) {
 		final Comparator<Point> c = Array2DMap.POINT_COMPARATOR;
 		//		transitivity
-		if (c.compare(p1, p2) > 0 && c.compare(p2, p3) > 0) assertTrue(c.compare(p1, p3) > 0);
-		else if (c.compare(p1, p2) < 0 && c.compare(p2, p3) < 0) assertTrue(c.compare(p1, p3) < 0);
-		else if (c.compare(p1, p2) == 0 && c.compare(p2, p3) == 0) assertTrue(c.compare(p1, p3) == 0);
+		if (c.compare(p1, p2) > 0 && c.compare(p2, p3) > 0) assertThat(c.compare(p1, p3)).isGreaterThan(0);
+		else if (c.compare(p1, p2) < 0 && c.compare(p2, p3) < 0) assertThat(c.compare(p1, p3)).isLessThan(0);
+		else if (c.compare(p1, p2) == 0 && c.compare(p2, p3) == 0) assertThat(c.compare(p1, p3)).isEqualTo(0);
 	}
 
 	private void twoTest(Point p1, Point p2) {
 		final Comparator<Point> c = Array2DMap.POINT_COMPARATOR;
 		final int fc = Integer.signum(c.compare(p1, p2));
-		if (p1.equals(p2)) assertTrue(fc == 0);
+		if (p1.equals(p2)) assertThat(fc).isEqualTo(0);
 		//		asymetry
-		assertTrue(fc == -Integer.signum(c.compare(p2, p1)));
+		assertThat(fc).isEqualTo(-Integer.signum(c.compare(p2, p1)));
 	}
 
 	private Point randomPoint() {
@@ -200,7 +207,7 @@ public class Array2DMapTest extends TestCase {
 			keys.add(randomPoint);
 			map.put(randomPoint, i);
 		}
-		assert keys.size() > 0;
+		assertThat(keys.size()).isGreaterThan(0);
 
 		final ArrayList<Long> delays = new ArrayList<Long>();
 
@@ -225,12 +232,13 @@ public class Array2DMapTest extends TestCase {
 	/**
 	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap}.
 	 */
+	@Test
 	public void testSpeed() {
 		final long tst1 = tst(array2DMap);
 		final long tst2 = tst(treeMap);
 		//cil: zrychleni operace vyhledani polozky
 		System.out.println(tst1 + " "+ tst2);
-		assertTrue(tst1 < tst2);
+		assertThat(tst1).isLessThan(tst2);
 		//zaver: zrychleni neni skoro zadne
 		//vsak je aspon pri volani primo get(int,int) eliminovano vytvareni klicovacich objektu
 	}

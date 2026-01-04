@@ -22,16 +22,26 @@ RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/source
     sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
     sed -i '/buster-updates/d' /etc/apt/sources.list
 
-# Install OpenJDK 11, Maven, and Ant
+# Install OpenJDK 11, Maven, wget, and unzip
 RUN apt-get update && apt-get install -y \
     openjdk-11-jdk \
     maven \
-    ant \
+    wget \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Java 11 as default but configure compiler for Java 6 compatibility
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
+
+# Install Apache Ant 1.10.14 (required for junitlauncher task)
+RUN wget -q https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.14-bin.zip && \
+    unzip -q apache-ant-1.10.14-bin.zip && \
+    mv apache-ant-1.10.14 /opt/ant && \
+    rm apache-ant-1.10.14-bin.zip
+
+ENV ANT_HOME=/opt/ant
+ENV PATH=$ANT_HOME/bin:$PATH
 
 # Build jDisco dependency first
 WORKDIR /build/jdisco
