@@ -10,6 +10,8 @@
 */
 
 package jDisco;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /*
  * A simulation is controlled behind the scenes, so to speak, by an object called the "monitor".
@@ -60,6 +62,7 @@ package jDisco;
  * methods is left over to subclasses of class <tt>Monitor</tt>.
  */
 abstract class Monitor extends Process {
+	private static final Logger logger = LoggerFactory.getLogger(Monitor.class);
 	double dt, dtNow, dtNext, dtFull, dtLower;
 	double time, lastTime, nextTime, nextEventTime, nextReportTime;
 	boolean active;
@@ -103,6 +106,7 @@ abstract class Monitor extends Process {
 		for (WaitNotice w = firstWait; w != null; w = w.suc) {
 			if (w.cond == null || w.cond.test()) {
 				stateEvent = w.proc;
+				logger.debug("State event detected for process {} at time {}", w.proc.getClass().getSimpleName(), time);
 				return;
 			}
 		}
@@ -167,6 +171,8 @@ abstract class Monitor extends Process {
 				}
 				dt = dtFull = dtNow;
 				time = nextTime;
+			double lastTimeTemp = lastTime;
+			logger.trace("Time advanced: {} -> {} (dt={})", lastTimeTemp, time, dt);
 				stateEvent = nextStateEvent = null;
 				if (dt > dtMin || time < nextEventTime)
 					checkStateEvents();

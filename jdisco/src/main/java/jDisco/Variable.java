@@ -10,6 +10,8 @@
 */
 
 package jDisco;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class is used to represent state variables that vary between
@@ -21,6 +23,7 @@ package jDisco;
  * @see jDisco.Continuous
  */
 public class Variable extends Link {
+	private static final Logger logger = LoggerFactory.getLogger(Variable.class);
 	/**
 	 * The current value of the variable.
 	 */
@@ -84,6 +87,7 @@ public class Variable extends Link {
 				Process.monitor.firstVar.pred = this;
 				Process.monitor.firstVar = this;
 			}
+			logger.trace("Variable started with initial state {}", state);
 		}
 		return this;
 	}
@@ -105,6 +109,9 @@ public class Variable extends Link {
 		if (Process.monitor.active)
 			Process.error("Illegal call of stop (class Variable)");
 		if (pred != null) {
+			if (logger.isTraceEnabled()) {
+				logger.trace("Variable stopped with final state {}, rate {}", state, rate);
+			}
 			if (pred != this)
 				pred.suc = suc;
 			else

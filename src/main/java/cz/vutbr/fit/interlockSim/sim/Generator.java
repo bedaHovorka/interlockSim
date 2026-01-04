@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.sim;
 
 import jDisco.Random;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut;
  * Testing Generator
  */
 public class Generator extends LoopProcess {//zatim testovaci
+	private static final Logger logger = LoggerFactory.getLogger(Generator.class);
 	private Random random = new Random();
 	private final SimulationContext context;
 	private final boolean shuffleInOuts;
@@ -55,6 +58,10 @@ public class Generator extends LoopProcess {//zatim testovaci
 		if (shuffleInOuts) Collections.shuffle(inOuts, random);
 		final double timeIn = time() + random.normal(15, 5);
 		final double timeOut = timeIn + random.normal(15, 5);
+		if (logger.isDebugEnabled()) {
+			logger.debug("Generating random timetable: from {} to {}, arrival at {}, departure at {}",
+				inOuts.get(0).getName(), inOuts.get(1).getName(), timeIn, timeOut);
+		}
 
 		return new Timetable(inOuts.get(0), inOuts.get(1), new Time(timeIn), new Time(timeOut), 40);
 	}
@@ -62,6 +69,7 @@ public class Generator extends LoopProcess {//zatim testovaci
 	@Override
 	protected void iteration() {
 		final Train train = new Train(context, generateRandomTimetable());
+		logger.debug("Generator: creating and placing train (total trains: {})", trains.size() + 1);
 		placeTrain(train);
 		trains.add(train);
 	}

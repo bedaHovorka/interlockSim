@@ -13,6 +13,8 @@
 
 package jDisco;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class may be used to describe the processes of a model.
@@ -70,6 +72,7 @@ import java.util.*;
  * @see jDisco.Head
  */
 public abstract class Process extends Continuous {
+	private static final Logger logger = LoggerFactory.getLogger(Process.class);
 	private static class TerminateException extends RuntimeException {}
 	private static Set processSet = Collections.synchronizedSet(new HashSet());
 	private static boolean termination;
@@ -88,9 +91,11 @@ public abstract class Process extends Continuous {
 				MAIN = Process.this;
 			processSet.add(Process.this);
 			try {
+				logger.debug("Process {} starting actions at time {}", Process.this.getClass().getSimpleName(), time());
 				actions();
 			} catch (TerminateException e) {}
 			TERMINATED = true;
+			logger.debug("Process {} terminated at time {}", Process.this.getClass().getSimpleName(), time());
 			processSet.remove(Process.this);
 			if (Process.this == MAIN) {
 				termination = true;
@@ -439,6 +444,7 @@ public abstract class Process extends Continuous {
 		}
 		x.EVTIME = t;
 		x.scheduleAfter(P);
+		logger.debug("Process {} scheduled at time {} (current time: {})", x.getClass().getSimpleName(), x.EVTIME, NOW);
 		if (x == SQS.SUC && x.SUC != monitor && x != monitor)
 			reactivate(monitor, after, x);
 		if (SQS.SUC != CURRENT)
@@ -484,6 +490,9 @@ public abstract class Process extends Continuous {
 	 * @param <tt>p</tt> the process to be activated.
 	 */
 	public static final void activate(Process p) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Activating process: {} at time {}", p.getClass().getSimpleName(), time());
+		}
 		activat(false, p, direct_code, 0, null, false);
 	}
 
@@ -541,6 +550,9 @@ public abstract class Process extends Continuous {
 	 * @param <tt>t</tt> the delay.
 	 */
 	public static final void activate(Process p, Delay delay, double t) {
+		if (logger.isDebugEnabled()) {
+			logger.debug("Activating process: {} after delay {} at time {}", p.getClass().getSimpleName(), t, time() + t);
+		}
 		activat(false, p, delay_code, t, null, false);
 	}
 

@@ -347,14 +347,80 @@ Both services copy build outputs to `/artifacts` inside the container, which is 
 
 ---
 
+## Logging
+
+The application uses SLF4J with Logback for comprehensive logging of simulation events and operations.
+
+### Log Configuration
+
+**Main application:** `src/main/resources/logback.xml`
+**jDisco tests:** `jdisco/src/test/resources/simplelogger.properties`
+
+### Log Levels
+
+Available log levels (from most to least verbose):
+- `TRACE` - Very detailed diagnostic information
+- `DEBUG` - Detailed information for debugging
+- `INFO` - General informational messages (default)
+- `WARN` - Warning messages for potential issues
+- `ERROR` - Error messages for failures
+
+### Changing Log Levels
+
+**Method 1: Edit logback.xml (recommended for development)**
+
+Edit `src/main/resources/logback.xml`:
+
+```xml
+<!-- Change root logger level (affects all loggers) -->
+<root level="DEBUG">
+    <appender-ref ref="CONSOLE"/>
+</root>
+
+<!-- Or change specific package/class level -->
+<logger name="cz.vutbr.fit.interlockSim.sim.Train" level="TRACE"/>
+<logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="DEBUG"/>
+```
+
+**Method 2: System property (runtime override)**
+
+```bash
+java -Dlogback.level=DEBUG -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+```
+
+**Method 3: Environment variable (Docker)**
+
+```bash
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -ea -jar interlockSim.jar example shuntingLoop 60
+```
+
+### Pre-configured Loggers
+
+The following loggers are pre-configured in `logback.xml`:
+
+- `cz.vutbr.fit.interlockSim.simulation` - Simulation events (INFO)
+- `jDisco.statistics` - jDisco statistical reports (INFO)
+- `cz.vutbr.fit.interlockSim.sim.Train` - Train behavior (DEBUG)
+- `cz.vutbr.fit.interlockSim.sim.ShuntingLoop` - Shunting operations (DEBUG)
+- `cz.vutbr.fit.interlockSim.objects.paths.AbstractPath` - Path management (DEBUG)
+- `cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack` - Track operations (DEBUG)
+
+### Log Output
+
+**Console:** Real-time output with format: `HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
+
+**File:** `logs/interlockSim.log` with timestamp format: `yyyy-MM-dd HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
+
+---
+
 ## Testing
 
-JUnit 3.8.2 tests are located in `src/test/java/cz/vutbr/fit/interlockSim/test/`.
+JUnit 5.10.1 tests with AssertJ assertions are located in `src/test/java/cz/vutbr/fit/interlockSim/`.
 
 **Test coverage:**
-- `TestArray2DMap` - 10 tests for 2D array-based map implementation
-- `TestCell` - 2 tests for cell segment and direction logic
-- `TestContext` - 4 tests for railway network context operations
+- `Array2DMapTest` - 10 tests for 2D array-based map implementation
+- `CellTest` - 2 tests for cell segment and direction logic
+- `ContextTest` - 4 tests for railway network context operations
 
 Run tests:
 ```bash

@@ -121,58 +121,64 @@ public class Histogram extends Tab {
 	}
 
 	/**
-	 * Prints the histogram.
+	 * Logs the histogram.
 	 */
 	public void report() {
 		printHeading();
 		myTally.report();
-		System.out.println();
-		if (obs == 0)
-			Format.print(System.out, "%21s***no entries recorded***", "");
-		else {
-			double max = table[0];
-			for (int cell = 1; cell <= limit; cell++)
-				if (table[cell] > max)
-					max = table[cell];
-			double scale = 40 / max;
-			System.out.println("cell/lower lim/    n/   freq/  cum %");
-			Format.print(System.out, "%38s", "");
-			System.out.println("|" + minuses.substring(0, 40));
-			double sum = 0;
-			int occ = 0;
-			for (int cell = 0; cell <= limit; cell++) {
-				Format.print(System.out, "%4d", cell);
-				if (cell == 0)
-					Format.print(System.out, "%10s", "-infinity");
-				else
-					printDouble(lower + (cell - 1) * width);
-				int next = table[cell];
-				Format.print(System.out, "%6d", next);
-				double freq = (double) next / obs;
-				Format.print(System.out, "%8.2f", freq);
-				sum += freq * 100;
-				Format.print(System.out, "%8.2f", sum);
-				Format.print(System.out, "%3s", "|");
-				if (next > 0) {
-					String t = stars.substring(0, (int) Math.round(scale * next));
-					if (t == null)
-						System.out.print('.');
+
+		if (statsLogger.isInfoEnabled()) {
+			StringBuilder sb = new StringBuilder(1000);
+			sb.append('\n');
+			if (obs == 0) {
+				Format.print(sb, "%21s***no entries recorded***", "");
+			} else {
+				double max = table[0];
+				for (int cell = 1; cell <= limit; cell++)
+					if (table[cell] > max)
+						max = table[cell];
+				double scale = 40 / max;
+
+				sb.append("cell/lower lim/    n/   freq/  cum %").append('\n');
+				Format.print(sb, "%38s", "");
+				sb.append("|").append(minuses.substring(0, 40)).append('\n');
+				double sum = 0;
+				int occ = 0;
+				for (int cell = 0; cell <= limit; cell++) {
+					Format.print(sb, "%4d", cell);
+					if (cell == 0)
+						Format.print(sb, "%10s", "-infinity");
 					else
-						System.out.print(t);
+						printDouble(sb, lower + (cell - 1) * width);
+					int next = table[cell];
+					Format.print(sb, "%6d", next);
+					double freq = (double) next / obs;
+					Format.print(sb, "%8.2f", freq);
+					sum += freq * 100;
+					Format.print(sb, "%8.2f", sum);
+					Format.print(sb, "%3s", "|");
+					if (next > 0) {
+						String t = stars.substring(0, (int) Math.round(scale * next));
+						if (t == null)
+							sb.append('.');
+						else
+							sb.append(t);
+					}
+					sb.append('\n');
+					occ += next;
+					if (occ == obs && cell + 3 > limit) {
+						Format.print(sb, "%42s","");
+						sb.append("**rest of table empty**").append('\n');
+						break;
+					}
 				}
-				System.out.println();
-				occ += next;
-				if (occ == obs && cell + 3 > limit) {
-					Format.print(System.out, "%42s","");
-					System.out.print("**rest of table empty**");
-					System.out.println();
-					break;
-				}
+				Format.print(sb, "%38s", "");
+				sb.append("|").append(minuses.substring(0, 40)).append('\n');
 			}
-			Format.print(System.out, "%38s", "");
-			System.out.println("|" + minuses.substring(0, 40));
+			sb.append('\n');
+
+			statsLogger.info("\n{}", sb);
 		}
-		System.out.println("\n");
 	}
 
 	/**

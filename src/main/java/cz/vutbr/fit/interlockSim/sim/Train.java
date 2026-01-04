@@ -14,6 +14,8 @@ import jDisco.Continuous;
 import jDisco.Process;
 import jDisco.Reporter;
 import jDisco.Variable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import cz.vutbr.fit.interlockSim.context.SimulationContext;
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
 import cz.vutbr.fit.interlockSim.objects.cells.InOut;
@@ -30,6 +32,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
  *
  */
 public class Train extends Process implements TrackOccupant {
+	private static final Logger logger = LoggerFactory.getLogger(Train.class);
+
 	private final Reporter r = new Reporter() {//nesmi byt static!!!
 		private boolean started = false;
 		@Override
@@ -170,16 +174,20 @@ public class Train extends Process implements TrackOccupant {
 
 			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
 				assert getVelocity() <= maxAbsError: "prujezd na cervenou";
+				logger.debug("Train {} approaching semaphore with STOP signal, halting", number);
 				fireStop();
 				context.report(semaphore.getSignal().toString(), Train.this, ReportType.TRAIN_EVENTS);
 
 				//freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore));
+				logger.debug("Train {} received allowing signal from semaphore, resuming movement", number);
 				context.report("OK " + semaphore.getSignal(), Train.this, ReportType.TRAIN_EVENTS);
 				fireStart(semaphore, context.pathToNextSemaphore(separator, next)); // znovu najit
 			} else if (semaphore.getSignal().isAllowing() && velocity.state <= maxAbsError) {
+				logger.debug("Train {} starting movement with allowing signal", number);
 				fireStart(semaphore, path);
 			} else {
+				logger.debug("Train {} accelerating toward next semaphore", number);
 				accelerateToSignal(semaphore, path);
 			}
 			hold(1);
@@ -378,11 +386,17 @@ public class Train extends Process implements TrackOccupant {
 		protected void iteration() {
 			assert currentCondition != null;
 			accelerate = true;
+			if (logger.isTraceEnabled()) {
+				logger.trace("Train {} motor iteration: target speed {}, current velocity {}", number, targetSpeed, getVelocity());
+			}
 			start();
 			waitUntil(currentCondition);
 
 			if (accelerate && currentCondition.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0;
+				if (logger.isTraceEnabled()) {
+					logger.trace("Train {} motor: deceleration phase to half speed, new target {}", number, targetSpeed);
+				}
 				waitUntil(new AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED));
 			}
 
@@ -404,6 +418,9 @@ public class Train extends Process implements TrackOccupant {
 		 * @param speed
 		 */
 		public void accelerateTo(final double speed) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Train {} motor: accelerate to speed {}, current velocity {}", number, speed, getVelocity());
+			}
 			context.report("in on warning", Train.this, ReportType._DEBUG);
 			privateAccelerateTo(speed, speed > getVelocity() ? AccelerationStopTest.ACCELERATION_ENDED : AccelerationStopTest.DECELERATION_ENDED);
 		}
@@ -413,6 +430,9 @@ public class Train extends Process implements TrackOccupant {
 		 * @param normalSpeed
 		 */
 		public void onWarning(final double normalSpeed) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Train {} motor: warning mode, target speed {}, current velocity {}", number, normalSpeed, getVelocity());
+			}
 			context.report("in on warning " + normalSpeed, Train.this, ReportType._DEBUG);
 
 			assert getVelocity() <= maxAbsError;
@@ -480,6 +500,7 @@ public class Train extends Process implements TrackOccupant {
 		this.length = timetable.getLength();
 		number = ++count;
 		trainPrefix = "Train #"+number;
+		logger.debug("Train {} created: from {} to {}, length {}", number, timetable.getIn().getName(), timetable.getOut().getName(), length);
 	}
 
 	public double distanceToSemaphore() {
@@ -491,6 +512,7 @@ public class Train extends Process implements TrackOccupant {
 		//zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		final InOut inout = timetable.getIn();
 		final InOutWorker worker = context.getWorkerFor(inout);
+		logger.debug("Train {} approved for movement from {} to {}", number, inout.getName(), timetable.getOut().getName());
 		worker.enterTrain(this);
 		context.report("approved "+inout.getName()+"->"+timetable.getOut().getName(), this, ReportType.TRAIN_EVENTS);
 
@@ -516,6 +538,7 @@ public class Train extends Process implements TrackOccupant {
 		stop();
 		motor.terminate();
 		//ukoncovaci..
+		logger.debug("Train {} completed journey: distance traveled {}", number, front.getTotalDistance());
 		context.report("ends", this, ReportType.TRAIN_EVENTS);
 	}
 

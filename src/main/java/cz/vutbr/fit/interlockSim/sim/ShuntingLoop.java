@@ -18,6 +18,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.Map.Entry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
 import cz.vutbr.fit.interlockSim.context.SimulationContext;
@@ -43,6 +45,7 @@ import cz.vutbr.fit.interlockSim.util.Util;
  * Ovlada sest navestidel a 2 InOuty pomoci predem ulozenych cest
  */
 public class ShuntingLoop extends Interlocking {
+	private static final Logger logger = LoggerFactory.getLogger(ShuntingLoop.class);
 	private static final int MAX_TRAINS = 2; //maximalni pocet odsouhlasených vlaků v systému
 	//fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
 	private final Queue<Train> unapprowedTrains = new LinkedList<Train>();
@@ -219,24 +222,35 @@ public class ShuntingLoop extends Interlocking {
 	private boolean trySetupPath(Path path) {
 		try {
 			final PathSeparator from = path.getFirst();
-			if (!path.isFreeFrom(from)) return false;
+			if (!path.isFreeFrom(from)) {
+				logger.debug("Path not free from separator: {}", from);
+				return false;
+			}
+			logger.debug("Setting up path from separator: {}", from);
 			path.setUpPath(from);
 			return true;
 		} catch (TrackOperationException e) {
 			assert false : e;
+			logger.debug("Exception during path setup: {}", e.getMessage());
 			return false;
 		}
 	}
 
 	private boolean trySetupPaths(RailSemaphore sem) {
+		logger.debug("Attempting to setup paths from semaphore: {}", sem.getName());
 		for (Path path : paths.get(sem)) {
 			//zkusit postavit cestu
 			try {
-				if (path.isSetUpPath(sem) || trySetupPath(path)) return true;
+				if (path.isSetUpPath(sem) || trySetupPath(path)) {
+					logger.debug("Path setup successful from semaphore: {}", sem.getName());
+					return true;
+				}
 			} catch (TrackOperationException e) {
 				assert false : e;
+				logger.debug("Exception in path setup attempt: {}", e.getMessage());
 			}
 		}
+		logger.debug("All path setup attempts failed from semaphore: {}", sem.getName());
 		return false;
 	}
 
@@ -244,9 +258,11 @@ public class ShuntingLoop extends Interlocking {
 //		 je v bloku vlak?
 		if (block.getState() == State.FREE) return false;
 		if (block.getState() == State.OCCUPIED) {
+			logger.debug("Block occupied, checking if next semaphore is: {}", to.getName());
 			if (block.getTrackOccupant().nextSemaphore() != to) return false;
 			return trySetupPaths(to);
 		} else if (block.getState() == State.RESERVED) {
+			logger.debug("Block reserved, checking path setup for semaphore: {}", to.getName());
 			if (block.isSetUpPath(block.getSecondEnd(to))) {
 				return trySetupPaths(to);
 			}
@@ -257,6 +273,7 @@ public class ShuntingLoop extends Interlocking {
 	private void approveTrains() {
 		while (approwedTrains.size() < MAX_TRAINS && unapprowedTrains.size() > 0) {
 			final Train poll = unapprowedTrains.poll();
+			logger.debug("Approving train: {} (approved: {}/{} max)", poll, approwedTrains.size() + 1, MAX_TRAINS);
 			approwedTrains.add(poll);
 			activate(poll);
 		}

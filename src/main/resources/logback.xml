@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender for stdout -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36}.%M\(%F:%L\) - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File appender for simulation runs -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/interlockSim.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36}.%M\(%F:%L\) - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Separate logger for simulation events -->
+    <logger name="cz.vutbr.fit.interlockSim.simulation" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Separate logger for jDisco reports -->
+    <logger name="jDisco.statistics" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Debug logging for train simulation -->
+    <logger name="cz.vutbr.fit.interlockSim.sim.Train" level="DEBUG"/>
+    <logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="DEBUG"/>
+    <logger name="cz.vutbr.fit.interlockSim.objects.paths.AbstractPath" level="DEBUG"/>
+    <logger name="cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack" level="DEBUG"/>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

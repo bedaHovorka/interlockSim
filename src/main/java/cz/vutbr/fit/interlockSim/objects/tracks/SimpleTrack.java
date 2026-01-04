@@ -11,6 +11,10 @@ package cz.vutbr.fit.interlockSim.objects.tracks;
 
 import java.util.IdentityHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import jDisco.Process;
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
 import cz.vutbr.fit.interlockSim.sim.TrackOperationException;
@@ -21,6 +25,7 @@ import cz.vutbr.fit.interlockSim.sim.TrackOperationException;
  * Represents common track unit
  */
 public abstract class SimpleTrack extends AbstractTrack implements TrackSection, TrackFacility {
+	private static final Logger logger = LoggerFactory.getLogger(SimpleTrack.class);
 	private final IdentityHashMap<PathSeparator, Double> speeds = new IdentityHashMap<PathSeparator, Double>();
 	private final double length;
 	private final PathSeparator[] ends;
@@ -46,6 +51,8 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void enter(TrackOccupant occupant) {
+		logger.debug("Track {} ENTER: occupant={}, state transition RESERVED->OCCUPIED at t={}",
+			this, occupant, Process.time());
 		assert in == null; //tak to zavani srazkou (posuny neimplementovany)
 		assertGoodStateChange(State.RESERVED, State.OCCUPIED);
 		in = occupant;
@@ -53,30 +60,46 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void leave(TrackOccupant occupant) {
+		logger.debug("Track {} LEAVE: occupant={}, state transition OCCUPIED->FREE at t={}",
+			this, occupant, Process.time());
 		assert in == occupant;
 		assertGoodStateChange(State.OCCUPIED, State.FREE);
 		in = null;
 	}
 
 	public boolean isFreeFrom(PathSeparator seg) {
-		return state == State.FREE;
+		final boolean isFree = state == State.FREE;
+		if (logger.isDebugEnabled()) {
+			logger.debug("Track {} isFreeFrom check: from={}, state={}, result={}", this, seg, state, isFree);
+		}
+		return isFree;
 	}
 
 	public void setUpPath(PathSeparator sep) throws TrackOperationException {
+		logger.debug("Track {} RESERVE: from={}, state transition FREE->RESERVED at t={}",
+			this, sep, Process.time());
 		exeptionStateChange(State.FREE, State.RESERVED);
 		from = sep;
 	}
 
 	public boolean isSetUpPath(PathSeparator sep) {
 		assert sep != null;
+		final boolean isSetUp;
 		if (state == State.RESERVED) {
-			return sep == from;
+			isSetUp = sep == from;
+		} else {
+			assert from == null;
+			isSetUp = false;
 		}
-		assert from == null;
-		return false;
+		if (logger.isDebugEnabled()) {
+			logger.debug("Track {} isSetUpPath check: sep={}, state={}, from={}, result={}", this, sep, state, from, isSetUp);
+		}
+		return isSetUp;
 	}
 
 	public void cancelPathSetup(PathSeparator sep) throws TrackOperationException {
+		logger.debug("Track {} CANCEL: from={}, state transition RESERVED->FREE at t={}",
+			this, sep, Process.time());
 		exeptionStateChange(State.RESERVED, State.FREE);
 		if (sep != from) throw new TrackOperationException("wrong end on cancel", this);
 		from = null;

@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext;
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
@@ -34,6 +36,8 @@ import cz.vutbr.fit.interlockSim.util.Util;
  * Base implemetation of {@link Path}
  */
 public abstract class AbstractPath extends AbstractTrack implements Path {
+	private static final Logger logger = LoggerFactory.getLogger(AbstractPath.class);
+
 	private static final String IS_FREE_FROM = "isFreeFrom";
 	private static final String SET_UP_PATH = "setUpPath";
 	private static final String CANCEL_PATH_SETUP = "cancelPathSetup";
@@ -88,6 +92,9 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 				if (e instanceof Track) {
 					final Track track = (Track) e;
 					es = track.maxSpeed(prevSep);
+					if (logger.isTraceEnabled()) {
+						logger.trace("Track {} max speed: {}", track, es);
+					}
 					//prevTrack = track;
 				} else {
 					final PathSeparator ps = Util.assertInstanceOf(PathSeparator.class, e);
@@ -100,6 +107,9 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 				min = es < min ? es : min;
 			}
 		}
+		if (logger.isTraceEnabled()) {
+			logger.trace("Path max speed calculation result: {}", min);
+		}
 		return min;
 	}
 
@@ -108,8 +118,15 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 		double sum = 0;
 		for (PathElement e : this) {
 			if (e instanceof Track) {
-				sum += ((Track) e).length();
+				final double trackLength = ((Track) e).length();
+				sum += trackLength;
+				if (logger.isTraceEnabled()) {
+					logger.trace("Track {} length: {}, cumulative path length: {}", e, trackLength, sum);
+				}
 			}
+		}
+		if (logger.isTraceEnabled()) {
+			logger.trace("Total path length calculation: {}", sum);
 		}
 		return sum;
 	}
@@ -128,6 +145,7 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 
 	@Override
 	public void setUpPath(PathSeparator sep) throws TrackOperationException {
+		logger.debug("Setting up path from separator: {}", sep);
 		pathIterating(sep);
 	}
 
@@ -142,20 +160,36 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 			final String methodName = e.getMethodName();
 			final Method method = trackMethods.get(methodName);
 			Track previous = null;
+			if (logger.isDebugEnabled()) {
+				logger.debug("Path iteration starting: method={}, separator={}, pathLength={}", methodName, sep, length());
+			}
 
 			for (Iterator<PathElement> iterator = getIterator(sep); iterator.hasNext();) {
 				final PathSeparator separator = Util.assertInstanceOf(PathSeparator.class, iterator.next());
 				if (!iterator.hasNext()) break; // posledni prvek je semafor a separatorSetting ho nenastavuje
 				final Track nextTrack = Util.assertInstanceOf(Track.class, iterator.next());
 
-				if (!separatorSetting(methodName, separator, previous, nextTrack)) return false;
+				if (!separatorSetting(methodName, separator, previous, nextTrack)) {
+					if (logger.isDebugEnabled()) {
+						logger.debug("Separator setting failed for method: {}", methodName);
+					}
+					return false;
+				}
 
 				final Object invoke = method.invoke(nextTrack, new Object[]{separator});
-				if (Boolean.FALSE.equals(invoke)) return false;
+				if (Boolean.FALSE.equals(invoke)) {
+					if (logger.isDebugEnabled()) {
+						logger.debug("Method invocation returned false for method: {}", methodName);
+					}
+					return false;
+				}
 				assert invoke == null || Boolean.TRUE.equals(invoke) : invoke;
 				previous = nextTrack;
 			}
-			if (method == trackMethods.get(SET_UP_PATH)) setUpSemaphores(sep);
+			if (method == trackMethods.get(SET_UP_PATH)) {
+				logger.debug("Setting up semaphores for path");
+				setUpSemaphores(sep);
+			}
 			return true;
 		} catch (InvocationTargetException e) {
 			final Throwable cause = e.getCause();

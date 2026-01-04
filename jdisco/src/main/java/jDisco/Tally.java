@@ -38,7 +38,7 @@ package jDisco;
  * </tt></pre>
  * <p>
  * The last column reports the 95% confidence interval half-width. In the example above
- * the average number of customers in the shop is 18.379 ± 6.438 with a confidence level of 95%.
+ * the average number of customers in the shop is 18.379 ï¿½ 6.438 with a confidence level of 95%.
  *
  * @see jDisco.Tab
  */
@@ -86,21 +86,24 @@ public class Tally extends Tab {
 	}
 
 	/**
-	 * Prints on one-line  title, reset time, number of observations, minimum,
+	 * Logs statistics: title, reset time, number of observations, minimum,
 	 * maximum, mean, standard deviation, and 95% confidence value.
 	 */
 	public void report() {
-		writeTRN();
-		if (obs == 0)
-			System.out.print(minuses.substring(0,40));
-		else {
-			printDouble(mean());
-			printDouble(stdDev());
-			printDouble(min);
-			printDouble(max);
-			printDouble(confidence());
+		if (statsLogger.isInfoEnabled()) {
+			StringBuilder sb = new StringBuilder(150);
+			writeTRN(sb);
+			if (obs == 0)
+				sb.append(minuses.substring(0,40));
+			else {
+				printDouble(sb, mean());
+				printDouble(sb, stdDev());
+				printDouble(sb, min);
+				printDouble(sb, max);
+				printDouble(sb, confidence());
+			}
+			statsLogger.info("{}", sb);
 		}
-		System.out.println();
 	}
 
 	/**

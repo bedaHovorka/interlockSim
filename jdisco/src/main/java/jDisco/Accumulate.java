@@ -36,7 +36,7 @@ package jDisco;
  *     Customer.no.printHeading();
  *     Customer.no.report();</tt></pre>
  * The last column reports the 95% confidence interval half-width. In the example above
- * the average number of customers in the shop is 3.501 ± 0.193 with a confidence level of 95%.
+ * the average number of customers in the shop is 3.501 ï¿½ 0.193 with a confidence level of 95%.
  *
  * @see jDisco.Tab
  */
@@ -88,26 +88,29 @@ public class Accumulate extends Tab {
 	}
 
 	/**
-	 * Prints the following status information on one line:<br>
+	 * Logs the following status information:<br>
 	 * title, reset time, number of observations, average,
 	 * standard deviation, minimum, maximum, confidence.
 	 */
 	public void report() {
-		writeTRN();
-		if (obs == 0)
-			System.out.print(minuses.substring(0, 40));
-		else {
-			if (lastTime == resetAt)
-				System.out.print(minuses.substring(0, 20));
+		if (statsLogger.isInfoEnabled()) {
+			StringBuilder sb = new StringBuilder(150);
+			writeTRN(sb);
+			if (obs == 0)
+				sb.append(minuses.substring(0, 40));
 			else {
-				printDouble(mean());
-				printDouble(stdDev());
+				if (lastTime == resetAt)
+					sb.append(minuses.substring(0, 20));
+				else {
+					printDouble(sb, mean());
+					printDouble(sb, stdDev());
+				}
+				printDouble(sb, min);
+				printDouble(sb, max);
+				printDouble(sb, confidence());
 			}
-			printDouble(min);
-			printDouble(max);
-			printDouble(confidence());
+			statsLogger.info("{}", sb);
 		}
-		System.out.println();
 	}
 
 	/**

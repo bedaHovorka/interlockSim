@@ -11,6 +11,9 @@ package cz.vutbr.fit.interlockSim.objects.cells;
 
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
 
@@ -108,6 +111,7 @@ public class RailSemaphore extends OrientedNodeCell {
 		}
 	}
 
+	private static final Logger logger = LoggerFactory.getLogger(RailSemaphore.class);
 	private Signal signal = Signal.STOP;
 
 	/**
@@ -155,6 +159,11 @@ public class RailSemaphore extends OrientedNodeCell {
 	 * @param signal
 	 */
 	public void setSignal(Signal signal) {
+		if (logger.isDebugEnabled() && this.signal != signal) {
+			logger.debug("Semaphore {} signal change: {} -> {} at t={}",
+				getName() != null ? getName() : this.hashCode(),
+				this.signal, signal, jDisco.Process.time());
+		}
 		this.signal = signal;
 	}
 

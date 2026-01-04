@@ -30,9 +30,10 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
 import cz.vutbr.fit.interlockSim.gui.Frame;
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop;
 import cz.vutbr.fit.interlockSim.sim.SimulationException;
-import cz.vutbr.fit.interlockSim.util.Report;
 import cz.vutbr.fit.interlockSim.util.Util;
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Main class, for run program
@@ -57,6 +58,8 @@ public class Main {
 	 * Program title
 	 */
 	public static final String PROGRAM_FULL_NAME = PROGRAM_NAME + " " + PROGRAM_VERSION;
+
+	private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
 	private Frame frame;
 	private static Main instance = new Main();
@@ -129,10 +132,10 @@ public class Main {
 				out.println(cause.getMessage().concat(" cannot convert to number"));
 				return;
 			}
-			Report.e(cause);
+			logger.error("Example initialization failed", cause);
 		} catch (Exception e) {
 			out.println("Example inilialization failed");
-			Report.e(e);
+			logger.error("Example initialization failed", e);
 		}
 	}
 

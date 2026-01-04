@@ -222,9 +222,12 @@ Or use Docker:
             <!-- Include interlockSim classes -->
             <fileset dir="${build.main}"/>
 
-            <!-- Extract and include jDisco classes -->
-            <zipfileset src="${lib.compile}/jdisco-1.2.0.jar"
-                        excludes="META-INF/*.SF,META-INF/*.DSA,META-INF/*.RSA"/>
+            <!-- Extract and include all compile dependencies -->
+            <zipgroupfileset dir="${lib.compile}" includes="*.jar">
+                <exclude name="META-INF/*.SF"/>
+                <exclude name="META-INF/*.DSA"/>
+                <exclude name="META-INF/*.RSA"/>
+            </zipgroupfileset>
         </jar>
     </target>
 

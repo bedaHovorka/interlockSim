@@ -391,6 +391,89 @@ ant doc
 
 Output goes to `doc/` directory.
 
+## Logging
+
+The application uses SLF4J with Logback for logging. This provides flexible log configuration and runtime control.
+
+### Configuration Files
+
+- **Main application:** `src/main/resources/logback.xml` - Logback configuration
+- **jDisco tests:** `jdisco/src/test/resources/simplelogger.properties` - SLF4J simple logger for tests
+
+### Log Levels
+
+Standard SLF4J log levels (most to least verbose):
+- `TRACE` - Very detailed diagnostic information
+- `DEBUG` - Detailed debugging information
+- `INFO` - General informational messages (default for most loggers)
+- `WARN` - Warning messages
+- `ERROR` - Error messages
+
+### Changing Log Levels During Development
+
+**Edit logback.xml:**
+```xml
+<!-- Change root logger level (affects all classes) -->
+<root level="DEBUG">
+    <appender-ref ref="CONSOLE"/>
+</root>
+
+<!-- Or target specific packages/classes -->
+<logger name="cz.vutbr.fit.interlockSim.sim.Train" level="TRACE"/>
+<logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="DEBUG"/>
+```
+
+**Runtime system property override:**
+```bash
+java -Dlogback.level=DEBUG -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+```
+
+**Docker environment variable:**
+```bash
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -ea -jar interlockSim.jar example shuntingLoop 60
+```
+
+### Pre-configured Loggers
+
+The following loggers are configured in `logback.xml`:
+
+- `cz.vutbr.fit.interlockSim.simulation` - Simulation events (INFO, separate file output)
+- `jDisco.statistics` - jDisco statistical reports (INFO, console only)
+- `cz.vutbr.fit.interlockSim.sim.Train` - Train behavior (DEBUG)
+- `cz.vutbr.fit.interlockSim.sim.ShuntingLoop` - Shunting loop operations (DEBUG)
+- `cz.vutbr.fit.interlockSim.objects.paths.AbstractPath` - Path management (DEBUG)
+- `cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack` - Track operations (DEBUG)
+
+### Log Output Destinations
+
+**Console appender:**
+- Format: `HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
+- All loggers by default
+
+**File appender:**
+- Location: `logs/interlockSim.log`
+- Format: `yyyy-MM-dd HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
+- Append mode (accumulates across runs)
+- Captures simulation events logger output
+
+### Adding Logging to Code
+
+When modifying Java source code (following the conservative approach), use SLF4J logging:
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+private static final Logger logger = LoggerFactory.getLogger(ClassName.class);
+
+// In methods:
+logger.trace("Very detailed trace message");
+logger.debug("Debug message with context: {}", variable);
+logger.info("Informational message");
+logger.warn("Warning message");
+logger.error("Error message", exception);
+```
+
 ## Future Development Considerations
 
 The project currently uses **jDisco** (a discrete/continuous simulation library from 2004, no longer maintained). Research has been conducted on modern alternatives - see `jdisco-research.md` for comprehensive analysis by Claude Opus.

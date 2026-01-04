@@ -47,14 +47,26 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop;
 import cz.vutbr.fit.interlockSim.sim.SimulationException;
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
 import cz.vutbr.fit.interlockSim.util.HashMapGraph;
-import cz.vutbr.fit.interlockSim.util.Report;
 import cz.vutbr.fit.interlockSim.util.TreeMultiMap;
 import cz.vutbr.fit.interlockSim.util.Util;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
  */
 public abstract class DefaultContext extends Observable implements EditingContext, SimulationContext { //konecne rozdelit?
+	/**
+	 * Logger for general class operations.
+	 */
+	private static final Logger logger = LoggerFactory.getLogger(DefaultContext.class);
+
+	/**
+	 * Separate logger for simulation events to allow independent level control.
+	 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
+	 */
+	private static final Logger simulationLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.simulation");
+
 	/**
 	 * Constant - square root of 2
 	 * 1.4142135623730951
@@ -73,6 +85,7 @@ public abstract class DefaultContext extends Observable implements EditingContex
 
 	protected DefaultContext(int cols, int rows) {
 		this.railwayNetGrid = new DefaultRailWayNetGrid(cols, rows);
+		logger.debug("Initialized railway network grid: {}x{} cells", cols, rows);
 	}
 
 	public DefaultRailWayNetGrid getRailWayNetGrid() {
@@ -140,7 +153,6 @@ public abstract class DefaultContext extends Observable implements EditingContex
 			}
 		}
 
-		//System.out.println(treeMM);
 
 		for (Tranporter t : treeMM.values()) {
 			final Map<Point, TrackBlockPart> tryJoin = tryJoin(t, key1, key2, trackBlock);
@@ -303,11 +315,14 @@ public abstract class DefaultContext extends Observable implements EditingContex
 		final Map<Point, TrackBlockPart> lineParts = findTrackLineParts(key1, key2, trackBlock);
 
 		if(lineParts == null || lineParts.size() == 0) {
+			logger.debug("Join failed between ({},{}) and ({},{})", key1.x, key1.y, key2.x, key2.y);
 			setChanged();
 			notifyObservers("Join not success");
 			return;
 		}
 
+		logger.debug("Created track join ({},{})->({},{}) with {} intermediate cells",
+			key1.x, key1.y, key2.x, key2.y, lineParts.size());
 		setChanged();
 		notifyObservers("Join created");
 	}
@@ -335,6 +350,9 @@ public abstract class DefaultContext extends Observable implements EditingContex
 		if (nodeCell instanceof InOut) getInOuts().add((InOut) nodeCell);
 		setChanged();
 		notifyObservers(key);
+		if (logger.isTraceEnabled()) {
+			logger.trace("Added {} at ({},{})", nodeCell.getClass().getSimpleName(), key.x, key.y);
+		}
 	}
 
 	private DefaultRailWayNetGrid getGrid() {
@@ -441,21 +459,37 @@ public abstract class DefaultContext extends Observable implements EditingContex
 			trackBlock = current.getTrackBlock();
 			assert trackBlock != null;
 			final TrackSection nextTrackSection = trackBlock.getNextTrackSection(separator, current);
-			if (nextTrackSection != null) return nextTrackSection;
+			if (nextTrackSection != null) {
+				if (logger.isTraceEnabled()) {
+					logger.trace("getNextTrackSection: found next section within same block from {}", separator);
+				}
+				return nextTrackSection;
+			}
 		}
 
 		//z dalsi TrackBlock
 		final NodeCell nodeCell = assertNodeCell(separator);
 		final TrackBlock nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock);
-		return nextTrackBlock==null ? null : nextTrackBlock.getNextTrackSection(nodeCell, null);
+		final TrackSection result = nextTrackBlock==null ? null : nextTrackBlock.getNextTrackSection(nodeCell, null);
+		if (logger.isTraceEnabled()) {
+			logger.trace("getNextTrackSection: navigating network from {}, result: {}", separator, result != null ? "found" : "not found");
+		}
+		return result;
 	}
 
 
 	public void run() throws EmptyContextException, SimulationException {
 		if (getGraph().isEmpty() || getGrid().isEmpty() || inouts.isEmpty()) {
+			logger.warn("Cannot start simulation: graph={}, grid={}, inouts={}",
+				getGraph().isEmpty() ? "empty" : "ok",
+				getGrid().isEmpty() ? "empty" : "ok",
+				inouts.isEmpty() ? "empty" : "ok");
 			throw new EmptyContextException();
 		}
 		if (mainProcess == null) mainProcess = new Generator(this);
+
+		logger.info("Starting simulation: {} InOut points, {} track blocks, main process={}",
+			inouts.size(), getGraph().size(), mainProcess.getClass().getSimpleName());
 
 		for (InOut i : inouts) {
 			workers.put(i, new InOutWorker(this, i));
@@ -464,7 +498,7 @@ public abstract class DefaultContext extends Observable implements EditingContex
 		try {
 			Process.activate(mainProcess);
 		} catch (DiscoException e) {
-			Report.e(e);
+			logger.error("Failed to activate main simulation process", e);
 			throw new SimulationException(e);
 		}
 	}
@@ -497,12 +531,20 @@ public abstract class DefaultContext extends Observable implements EditingContex
 		if (segment == null && separator instanceof InOut) return true;
 		assert segment != null : separator;
 		final Segment direction = separator.direction(); assert direction != null;
-		return segment == direction;
+		final boolean inDirection = segment == direction;
+		if (logger.isDebugEnabled()) {
+			logger.debug("isSeparatorInDirection: separator {}, segment={}, direction={}, result={}",
+				separator, segment, direction, inDirection);
+		}
+		return inDirection;
 	}
 
 
 	public Path pathToNextSemaphore(final PathSeparator sep, final TrackSection nxt) {
 		if (sep== null || nxt == null) throw new IllegalArgumentException("wrong arguments for aPath finding");
+		if (logger.isDebugEnabled()) {
+			logger.debug("pathToNextSemaphore: searching path from {} via track section", sep);
+		}
 		PathSeparator separator = sep;
 		TrackSection previous = null;
 		TrackSection next = nxt;
@@ -515,11 +557,15 @@ public abstract class DefaultContext extends Observable implements EditingContex
 			if (separator instanceof OrientedPathSeparator) {
 				if (isSeparatorInDirection((OrientedPathSeparator) separator, next, previous)) {
 					path.add(separator);
+					if (logger.isTraceEnabled()) {
+						logger.trace("pathToNextSemaphore: found complete path with length {}", path.length());
+					}
 					return path;
 				}
 			}
 
 		} while (next != null);
+		logger.debug("pathToNextSemaphore: no path found from {}", sep);
 		return null;
 	}
 
@@ -541,6 +587,7 @@ public abstract class DefaultContext extends Observable implements EditingContex
 
 	public void report(CharSequence report, Object obj, ReportType type) {
 		if (!isReporting(type)) return;
+		if (!simulationLogger.isInfoEnabled()) return;
 
 		final StringBuilder buf = (report instanceof StringBuilder) ? (StringBuilder) report : new StringBuilder(report);
 		try {
@@ -549,11 +596,11 @@ public abstract class DefaultContext extends Observable implements EditingContex
 				buf.insert(0, obj);
 			}
 		} catch (Exception e) {
-			Report.e(e);
+			logger.error("Error generating simulation report for type {}", type, e);
 		}
 		buf.insert(0, ' ');
 		buf.insert(0, jDisco.Process.time());
-		Report.a2(buf);
+		simulationLogger.info("{}", buf);
 	}
 
 	public void addReportTypes(ReportType... types) {

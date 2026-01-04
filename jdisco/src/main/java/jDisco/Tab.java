@@ -11,6 +11,9 @@
 
 package jDisco;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * This class defines the common core of the data colllection classes
  * <tt>Accumulate</tt>, <tt>Count</tt>, <tt>Histogram</tt> and <tt>Tally</tt>.
@@ -33,6 +36,11 @@ package jDisco;
  * @see jDisco.Tally
  */
 abstract public class Tab {
+	/**
+	 * Shared logger for all statistical reporting classes
+	 */
+	protected static final Logger statsLogger = LoggerFactory.getLogger("jDisco.statistics");
+
 	/**
 	 * The constructor. An object is instantiated with a title.
 	 * The length of the title is curtailed to 12 characters
@@ -85,34 +93,36 @@ abstract public class Tab {
 	abstract void report();
 
 	/**
-	 * Prints a <tt>double</tt> in fixed format for numbers between 0.1 and
+	 * Formats a <tt>double</tt> to StringBuilder in fixed format for numbers between 0.1 and
 	 * 100000, exponential format for large numbers. Trailing zeroes are suppressed.
 	 * <p>
 	 * Field width: 10. Precision: 3 digits in fractional part for fixed format,
 	 * 2 digits in fractional part for exponential format.
 	 */
-	static void printDouble(double x) {
+	static void printDouble(StringBuilder sb, double x) {
 		if (x == 0 || (Math.abs(x) > 0.1 && Math.abs(x) < 1000000))
-			Format.print(System.out, "%10.3f", x);
+			Format.print(sb, "%10.3f", x);
 		else
-			Format.print(System.out, "%10.2e", x);
+			Format.print(sb, "%10.2e", x);
 	}
 
 	/**
-	 * Prints the following information on one line:<br>
+	 * Formats the following information to StringBuilder:<br>
 	 * title, reset time, number of observations.
 	 */
-	void writeTRN() {
-		Format.print(System.out, "%12s", title);
-		printDouble(resetAt);
-		Format.print(System.out, "%7d", obs);
+	void writeTRN(StringBuilder sb) {
+		Format.print(sb, "%12s", title);
+		printDouble(sb, resetAt);
+		Format.print(sb, "%7d", obs);
 	}
 
 	/**
-	 * Prints a heading.
+	 * Logs the statistics heading.
 	 */
 	public static void printHeading() {
-		System.out.println(heading);
+		if (statsLogger.isInfoEnabled()) {
+			statsLogger.info("{}", heading);
+		}
 	}
 
 	/**

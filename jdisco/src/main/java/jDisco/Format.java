@@ -189,6 +189,17 @@ public class Format
    }
 
   /**
+  * Formats to StringBuilder instead of PrintStream
+  * @param sb the StringBuilder to append to
+  * @param format the format string
+  * @param args the arguments
+  */
+
+   public static void print(StringBuilder sb, String format, Object... args)
+   {  sb.append(String.format(java.util.Locale.US, format, args));
+   }
+
+  /**
   * Converts a string of digits (decimal, octal or hex) to an integer
   * @param s a string
   * @return the numeric value of the prefix of s representing a base 10 integer

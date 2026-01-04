@@ -10,6 +10,8 @@
 */
 
 package jDisco;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class may be used to describe the continuous processes of a model.
@@ -50,6 +52,7 @@ package jDisco;
  * @see jDisco.Head
  */
 public abstract class Continuous extends Link {
+	private static final Logger logger = LoggerFactory.getLogger(Continuous.class);
 	/**
 	 * The differential and/or difference equations associated with this
 	 * continuous process.
@@ -102,11 +105,13 @@ public abstract class Continuous extends Link {
 				Process.monitor.lastCont = this;
 				Process.monitor.firstCont = this;
 				pred = this;
+				logger.debug("Continuous process {} started with priority {}", this.getClass().getSimpleName(), priority);
 			} else if (priority > Process.monitor.firstCont.priority) {
 				suc = Process.monitor.firstCont;
 				Process.monitor.firstCont.pred = this;
 				Process.monitor.firstCont = this;
 				pred = this;
+				logger.debug("Continuous process {} started with priority {}", this.getClass().getSimpleName(), priority);
 			} else {
 				pred = Process.monitor.lastCont;
 				while (priority > pred.priority)
@@ -117,6 +122,7 @@ public abstract class Continuous extends Link {
 					Process.monitor.lastCont = this;
 				else
 					suc.pred = this;
+			logger.debug("Continuous process {} started with priority {}", this.getClass().getSimpleName(), priority);
 			}
 		}
 		return this;

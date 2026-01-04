@@ -11,6 +11,9 @@
 
 package jDisco;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * This class facilitates table-lookup.<br>
  * <p>
@@ -29,6 +32,11 @@ package jDisco;
  * <tt>value(x)</tt> = <tt>value(xMax)</tt>.
  */
 public class Table {
+	/**
+	 * Logger for statistical reporting
+	 */
+	private static final Logger statsLogger = LoggerFactory.getLogger("jDisco.statistics");
+
 	/**
 	 * Adds the entry (<tt>x</tt>, <tt>y</tt>) to the table.
 	 *
@@ -100,26 +108,30 @@ public class Table {
 	}
 
 	/**
-	 * Prints the table with a heading.
+	 * Logs the table with a heading.
 	 *
-	 * @param <tt>heading</tt> the heading to be printed above the table.
+	 * @param <tt>heading</tt> the heading to be logged above the table.
 	 */
 	public void print(String heading) {
-		if (heading != null && heading.length() > 0)
-			System.out.println(heading);
-		if (entries.empty())
-			System.out.println("*** Table is empty ***");
-		else {
-			Format.print(System.out, "%7s", "x");
-			Format.print(System.out, "%12s\n", "y");
-			Entry e = (Entry) entries.first();
-			while (e != null) {
-				Tab.printDouble(e.x);
-				System.out.print("  ");
-				Tab.printDouble(e.y);
-				System.out.println();
-				e = (Entry) e.suc();
+		if (statsLogger.isInfoEnabled()) {
+			StringBuilder sb = new StringBuilder(500);
+			if (heading != null && heading.length() > 0)
+				sb.append(heading).append('\n');
+			if (entries.empty())
+				sb.append("*** Table is empty ***");
+			else {
+				Format.print(sb, "%7s", "x");
+				Format.print(sb, "%12s\n", "y");
+				Entry e = (Entry) entries.first();
+				while (e != null) {
+					Tab.printDouble(sb, e.x);
+					sb.append("  ");
+					Tab.printDouble(sb, e.y);
+					sb.append('\n');
+					e = (Entry) e.suc();
+				}
 			}
+			statsLogger.info("{}", sb);
 		}
 	}
 

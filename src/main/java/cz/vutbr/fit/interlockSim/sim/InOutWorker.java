@@ -13,6 +13,8 @@ import jDisco.Condition;
 import jDisco.Head;
 import jDisco.Link;
 import jDisco.Process;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import cz.vutbr.fit.interlockSim.context.SimulationContext;
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
 import cz.vutbr.fit.interlockSim.objects.cells.InOut;
@@ -24,6 +26,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
  *
  */
 public class InOutWorker extends LoopProcess {
+	private static final Logger logger = LoggerFactory.getLogger(InOutWorker.class);
+
 	private final Head queqe = new Head();
 	private final InOut inOut;
 	private boolean myIdle = true;//neobsluhuje vlak
@@ -58,25 +62,30 @@ public class InOutWorker extends LoopProcess {
 	protected void iteration() {
 		while (!queqe.empty()) {
 			myIdle = false;
+			logger.debug("InOutWorker {} queue non-empty, processing train", inOut.getName());
 			context.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS);
 			waitUntil(pathFree);
 			final Link first = queqe.first();
+			logger.debug("InOutWorker {} path is now free, reserving for train", inOut.getName());
 
 			try {
 				//zarezervovat koleje
 				path.setUpPath(inOut);
 			} catch (Exception e) {
+				logger.debug("InOutWorker {} path setup failed: {}", inOut.getName(), e.getMessage());
 				context.errorStop(e);
 				return;
 			}
 			context.report("Path reserved for " + first, inOut, ReportType.NODE_EVENTS);
 
 			//cekej na odchod vlaku z fronty (bez te anonymni tridy please)
+			logger.debug("InOutWorker {} waiting for train {} to leave queue", inOut.getName(), first);
 			waitUntil(new Condition() {
 				public boolean test() {
 					return first != queqe.first();
 				}
 			});
+			logger.debug("InOutWorker {} train left queue", inOut.getName());
 		}
 		myIdle = true;
 	}
@@ -93,12 +102,16 @@ public class InOutWorker extends LoopProcess {
 	 * @param train
 	 */
 	public void enterTrain(Train train) {
+		logger.debug("InOutWorker {} entering train {}, queue empty: {}", inOut.getName(), train, queqe.empty());
 		if (queqe.empty()) {
 			train.into(queqe);
 		} else {
 			Process.wait(queqe);
 		}
 
-		if (myIdle) Process.activate(this);
+		if (myIdle) {
+			logger.debug("InOutWorker {} was idle, activating to process train {}", inOut.getName(), train);
+			Process.activate(this);
+		}
 	}
 }
