@@ -10,7 +10,8 @@
 #      Optimized: 2026-01 (BuildKit cache mounts, layer optimization)
 #
 #      Multi-stage build for interlockSim with GUI support
-#      Dependency management: Apache Ivy
+#      Dependency management: Gradle with Kotlin DSL
+#      Migrated from Ant/Ivy: 2026
 #
 
 # syntax=docker/dockerfile:1.4
@@ -23,7 +24,7 @@
 FROM jdisco:latest AS jdisco-builder
 
 # ============================================
-# Stage 2: Build interlockSim
+# Stage 2: Build interlockSim with Gradle
 # ============================================
 FROM debian:buster-slim AS builder
 
@@ -32,57 +33,51 @@ RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/source
     sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
     sed -i '/buster-updates/d' /etc/apt/sources.list
 
-# Install build tools
+# Install Java 11 JDK (Gradle wrapper handles Gradle itself)
 RUN apt-get update && apt-get install -y \
     openjdk-11-jdk \
-    wget \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
-# Install Apache Ant 1.10.14
-RUN wget -q https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.14-bin.zip && \
-    unzip -q apache-ant-1.10.14-bin.zip && \
-    mv apache-ant-1.10.14 /opt/ant && \
-    rm apache-ant-1.10.14-bin.zip
-
-ENV ANT_HOME=/opt/ant
-ENV PATH=$ANT_HOME/bin:$PATH
-
 WORKDIR /build/interlockSim
 
-# Copy jDisco from previous stage
+# Copy jDisco from previous stage (required dependency)
 COPY --from=jdisco-builder /root/.m2/repository/ /root/.m2/repository/
 
-# Layer 1: Copy ONLY dependency metadata files
-# This layer caches unless these files change
-COPY build.xml /build/interlockSim/
-COPY ivy.xml /build/interlockSim/
-COPY ivysettings.xml /build/interlockSim/
+# Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
+# These files are checked into git and ensure consistent Gradle version
+COPY gradlew /build/interlockSim/
+COPY gradlew.bat /build/interlockSim/
+COPY gradle/ /build/interlockSim/gradle/
+RUN chmod +x gradlew
 
-# Layer 2: Resolve Ivy dependencies with BuildKit cache mount
-# This layer caches dependencies across builds
-RUN --mount=type=cache,target=/root/.ivy2 \
-    ant resolve
+# Layer 2: Copy build configuration files (cached until config changes)
+COPY settings.gradle.kts /build/interlockSim/
+COPY gradle.properties /build/interlockSim/
+COPY build.gradle.kts /build/interlockSim/
 
-# Layer 3: Copy source code
+# Layer 3: Resolve dependencies with BuildKit cache mount
+# Gradle caches: dependencies, build cache, and Gradle distributions
+RUN --mount=type=cache,target=/root/.gradle/caches \
+    --mount=type=cache,target=/root/.gradle/wrapper \
+    ./gradlew dependencies --no-daemon --warning-mode=summary
+
+# Layer 4: Copy source code
 # This is the layer that changes most frequently
 COPY src/ /build/interlockSim/src/
 
-# Layer 4: Build and test
-# Ivy cache persists, so no re-downloads
-RUN --mount=type=cache,target=/root/.ivy2 \
-    ant clean build
-
-# Create JAR with manifest
-RUN ant pack
+# Layer 5: Build and test with cache mount
+# Tests run during build (haltOnFailure), creating uber JAR with shadowJar
+RUN --mount=type=cache,target=/root/.gradle/caches \
+    --mount=type=cache,target=/root/.gradle/wrapper \
+    ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
 
 # Verify JAR was created
-RUN ls -lh /build/interlockSim/jar/interlockSim.jar && \
+RUN ls -lh /build/interlockSim/build/libs/interlockSim.jar && \
     echo "=== JAR Info ===" && \
-    jar tf /build/interlockSim/jar/interlockSim.jar | head -20
+    jar tf /build/interlockSim/build/libs/interlockSim.jar | head -20
 
 # ============================================
 # Stage 3: Runtime with JRE and X11 support
@@ -117,11 +112,11 @@ ENV PATH=$JAVA_HOME/bin:$PATH
 
 WORKDIR /app
 
-# Copy compiled JAR from builder stage
-COPY --from=builder /build/interlockSim/jar/interlockSim.jar /app/
+# Copy compiled uber JAR from builder stage (Gradle output)
+COPY --from=builder /build/interlockSim/build/libs/interlockSim.jar /app/
 
 # Copy resources if needed at runtime (XML schemas, examples)
-COPY --from=builder /build/interlockSim/build/main/cz/vutbr/fit/interlockSim/resource/ \
+COPY --from=builder /build/interlockSim/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
 # Create artifacts directory for extraction

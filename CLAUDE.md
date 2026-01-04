@@ -6,101 +6,115 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
 
-[![Ant Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml)
+[![Gradle Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml)
 
 ## Build System
 
-This project uses Apache Ant for building with Apache Ivy for dependency management. Java 11 is required (`javac 11`). The jDisco library module remains at Java 6 for compatibility.
+This project uses Gradle with Kotlin DSL for building. Java 11 bytecode compatibility is maintained (can be built with Java 11+). The jDisco library module remains at Java 6 for compatibility and uses Maven.
+
+**Migration Note**: Migrated from Apache Ant + Ivy to Gradle in January 2026. Gradle can be launched locally for development and builds. The previous Ant build system has been completely removed.
 
 ### Dependency Management
 
-Dependencies are managed via Apache Ivy:
+Dependencies are managed via Gradle:
 - **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository, Java 6)
 - **JUnit 5.10.1** - Testing framework (JUnit Jupiter API and Engine)
 - **AssertJ 3.24.2** - Fluent assertion library for better test readability
+- **Mockito 5.7.0** - Mocking framework
 
-Ivy automatically downloads dependencies during the build. Configuration files:
-- `ivy.xml` - Dependency declarations
-- `ivysettings.xml` - Repository resolver configuration
+Gradle automatically downloads dependencies during the build. Configuration files:
+- `build.gradle.kts` - Build configuration and dependency declarations
+- `settings.gradle.kts` - Project settings
+- `gradle.properties` - Version management and build properties
 
 ### Common Build Commands
 
-**Resolve dependencies:**
+**Clean and build (includes tests and uber JAR):**
 ```bash
-ant resolve
+./gradlew clean build
 ```
 
-**Clean build (includes dependency resolution and test execution):**
+**Build only (compiles, tests, creates JAR):**
 ```bash
-ant clean build
-```
-
-**Build only (compiles main code, tests, and runs tests):**
-```bash
-ant build
+./gradlew build
 ```
 
 **Run tests only:**
 ```bash
-ant test
+./gradlew test
+```
+
+**Create uber JAR (all dependencies included):**
+```bash
+./gradlew shadowJar
 ```
 
 **Run simulation (pre-configured shunting loop example):**
 ```bash
-ant start
+./gradlew runSim
 ```
 
 **Run editor GUI:**
 ```bash
-ant run
+./gradlew runEditor
+```
+
+**Run custom example:**
+```bash
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=300
 ```
 
 **Generate JavaDoc documentation:**
 ```bash
-ant doc
+./gradlew javadoc
 ```
 
-**Clean everything including Ivy cache:**
+**Clean everything:**
 ```bash
-ant clean-all
+./gradlew clean
+```
+
+**Show dependency tree:**
+```bash
+./gradlew dependencies
 ```
 
 ### Directory Structure
 
-The project follows Maven/Gradle standard directory layout:
+The project follows Gradle standard directory layout:
 - `src/main/java/` - Main source code
 - `src/test/java/` - Test source code
 - `src/main/resources/` - Resource files (XML schemas, examples)
-- `build/main/` - Compiled main classes
-- `build/test/` - Compiled test classes
-- `lib/compile/` - Compile-time dependencies (jDisco)
-- `lib/test/` - Test dependencies (JUnit)
+- `build/classes/java/main/` - Compiled main classes
+- `build/classes/java/test/` - Compiled test classes
+- `build/libs/` - JAR output directory
+- `build/test-results/` - Test results (XML and HTML)
 
 ### Running Manually
 
-After building with `ant build`, run from the project root:
+After building with `./gradlew shadowJar`, run from the project root:
 
 **Simulation mode:**
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main sim [xmlFile]
+java -ea -jar build/libs/interlockSim.jar sim [xmlFile]
 ```
 
 **Editor mode:**
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main edit [xmlFile]
+java -ea -jar build/libs/interlockSim.jar edit [xmlFile]
 ```
 
 **Built-in examples:**
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example [exampleName] [endTime]
+java -ea -jar build/libs/interlockSim.jar example [exampleName] [endTime]
 ```
 
 To list available examples, run:
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example
+java -ea -jar build/libs/interlockSim.jar example
 ```
 
-**Note:** Enable assertions with `-ea` flag. For memory-constrained environments, add `-Xmx300`.
+**Note:** Enable assertions with `-ea` flag. For memory-constrained environments, add `-Xmx300m`.
 
 ## Docker Setup (Recommended)
 

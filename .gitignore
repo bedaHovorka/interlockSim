@@ -12,6 +12,7 @@ doc/
 # Java
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 hs_err_pid*
@@ -42,12 +43,18 @@ artifacts/
 jdisco/target/
 .m2/
 
-# Ivy artifacts
+# Ivy artifacts (legacy - will be removed after migration)
 .ivy2/
 lib/
+
+# Gradle artifacts
+.gradle/
+.gradle-build-cache/
 
 # OS files
 .DS_Store
 Thumbs.db
 *~
 /out/
+/logs/interlockSim.log
+*.log
