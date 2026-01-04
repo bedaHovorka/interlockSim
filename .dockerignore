@@ -1,0 +1,76 @@
+# Build artifacts - NEVER send to Docker daemon
+build/
+jar/
+doc/
+lib/
+target/
+artifacts/
+
+# Dependency caches - managed via BuildKit cache mounts
+.ivy2/
+.m2/
+jdisco/.m2/
+jdisco/target/
+
+# Version control - 6.5MB waste
+.git/
+.gitignore
+.github/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+.Trash-*/
+
+# LaTeX artifacts
+text/*.aux
+text/*.bbl
+text/*.blg
+text/*.dvi
+text/*.log
+text/*.out
+text/*.pdf
+text/*.eps
+text/*.ps
+text/*.synctex.gz
+text/*.toc
+text/*.lof
+text/*.lot
+text/*.fdb_latexmk
+text/*.fls
+
+# Docker files that shouldn't be in context
+docker-compose.yml
+Dockerfile
+*/Dockerfile
+
+# Documentation and non-essential files
+*.md
+!CLAUDE.md
+!*/CLAUDE.md
+LICENSE
+README.md
+jdisco-research.md
+
+# Test outputs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# Plan files
+.claude/

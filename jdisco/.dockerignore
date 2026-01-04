@@ -1,0 +1,29 @@
+# jDisco-specific dockerignore
+
+# Build artifacts
+target/
+.m2/
+
+# Documentation (except CLAUDE.md)
+*.md
+!CLAUDE.md
+
+# Version control
+.git/
+.gitignore
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS files
+.DS_Store
+*~
+
+# Temporary files
+*.tmp
+*.swp
+*.swo

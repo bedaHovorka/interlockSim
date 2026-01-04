@@ -5,9 +5,12 @@
 #      Roskilde University, Denmark
 #
 #      Dockerization: 2025
+#      Optimized: 2026-01 (BuildKit cache mounts)
 #
 #      Maven build environment with JDK 6 compatibility
 #
+
+# syntax=docker/dockerfile:1.4
 
 # Use Debian Buster with OpenJDK 11 + Maven
 # Java 11 can compile to Java 6 bytecode with -source 1.6 -target 1.6
@@ -30,25 +33,24 @@ ENV PATH=$JAVA_HOME/bin:$PATH
 
 WORKDIR /build/jdisco
 
-# Copy Maven configuration
+# Layer 1: Copy ONLY dependency metadata
+# This layer caches unless pom.xml changes
 COPY pom.xml /build/jdisco/
 
-# Download dependencies (cached layer)
-RUN mvn dependency:go-offline -B || true
+# Layer 2: Download dependencies with BuildKit cache mount
+# Maven local repository persists across builds
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn dependency:go-offline -B
 
-# Copy source code
+# Layer 3: Copy source code
+# This layer invalidates ONLY if source changes
 COPY src/ /build/jdisco/src/
 
-# Build the project
-RUN mvn clean compile
+# Layer 4: Build, test, and package with BuildKit cache mount
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn clean compile test package
 
-# Run tests
-RUN mvn test
-
-# Package JAR
-RUN mvn package
-
-# Install to local repository
+# Layer 5: Install to local repository (without cache mount so it persists)
 RUN mvn install
 
 # Create artifacts directory

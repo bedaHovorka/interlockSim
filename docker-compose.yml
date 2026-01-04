@@ -7,15 +7,21 @@
 #      Railway Interlocking Simulator
 #
 #      Dockerization: 2025
+#      Optimized: 2026-01 (BuildKit cache mounts)
 #
 #      Docker Compose orchestration for interlockSim project
 #
 #      Usage:
-#        docker-compose up --build       # Build both services
-#        docker-compose build app        # Build only app service
-#        docker-compose build text       # Build only text service
-#        docker-compose up app           # Run GUI editor (requires X11)
-#        docker-compose up text          # Build thesis PDF
+#        # First build (builds jdisco, then app):
+#        docker-compose build            # Build all services
+#
+#        # Or build separately:
+#        docker-compose build jdisco     # Build jDisco library first
+#        docker-compose build app        # Build app (requires jdisco)
+#        docker-compose build text       # Build LaTeX thesis
+#
+#        # Run GUI editor (requires X11):
+#        docker-compose up app
 #
 #        # Run simulation with example:
 #        docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
@@ -25,19 +31,21 @@
 #
 
 services:
-  # Build jDisco library
+  # Build jDisco library first (required for app build)
   jdisco:
     build:
       context: ./jdisco
       dockerfile: Dockerfile
+      cache_from:
+        - jdisco:latest
+    image: jdisco:latest
     volumes:
       # Mount artifacts directory for extraction
       - ./artifacts/jdisco:/artifacts
-      # Shared Maven cache for dependencies
-      - maven-cache:/root/.m2
     container_name: jdisco-build
 
   # Build and run Java application with GUI support
+  # Depends on jdisco image being built first
   app:
     depends_on:
       - jdisco
@@ -45,6 +53,13 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+      cache_from:
+        - jdisco:latest
+        - interlocksim:latest
+      # Enable BuildKit inline cache for layer reuse
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: interlocksim:latest
     environment:
       # Pass host DISPLAY to container for X11 forwarding
       - DISPLAY=${DISPLAY:-:0}
@@ -57,10 +72,8 @@ services:
       - ${XAUTHORITY:-$HOME/.Xauthority}:/tmp/.docker.xauth:ro
       # Mount local directory to extract artifacts
       - ./artifacts/app:/artifacts
-      # Shared Maven cache for dependencies
-      - maven-cache:/root/.m2
       # Optional: mount XML files for simulation
-      # - ./src/cz/vutbr/fit/interlockSim/resource:/app/xml:ro
+      # - ./src/main/resources:/app/xml:ro
     network_mode: host
     container_name: interlocksim-app
     # Allow X11 forwarding
@@ -75,6 +88,9 @@ services:
     build:
       context: .
       dockerfile: text/Dockerfile
+      cache_from:
+        - interlocksim-text:latest
+    image: interlocksim-text:latest
     volumes:
       # Mount local directory to extract artifacts
       - ./artifacts/text:/artifacts
@@ -88,7 +104,6 @@ networks:
   default:
     name: interlocksim-network
 
-# Maven cache for jDisco dependency management
-volumes:
-  maven-cache:
-    name: interlocksim-maven-cache
+# Note: BuildKit cache mounts are managed in Dockerfiles, not here
+# Runtime volumes can be added here if needed in the future
+volumes: {}

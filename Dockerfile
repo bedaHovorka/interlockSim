@@ -7,34 +7,42 @@
 #      Railway Interlocking Simulator
 #
 #      Dockerization: 2025
+#      Optimized: 2026-01 (BuildKit cache mounts, layer optimization)
 #
 #      Multi-stage build for interlockSim with GUI support
 #      Dependency management: Apache Ivy
 #
 
+# syntax=docker/dockerfile:1.4
+
 # ============================================
-# Stage 1: Build with JDK 6 and Ant
+# Stage 1: Reference pre-built jDisco image
+# ============================================
+# Build jdisco separately: docker compose build jdisco
+# This avoids duplicating jdisco/Dockerfile logic here
+FROM jdisco:latest AS jdisco-builder
+
+# ============================================
+# Stage 2: Build interlockSim
 # ============================================
 FROM debian:buster-slim AS builder
 
-# Debian Buster is archived - update sources to use archive.debian.org
+# Debian Buster is archived - update sources
 RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
     sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
     sed -i '/buster-updates/d' /etc/apt/sources.list
 
-# Install OpenJDK 11, Maven, wget, and unzip
+# Install build tools
 RUN apt-get update && apt-get install -y \
     openjdk-11-jdk \
-    maven \
     wget \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Java 11 as default but configure compiler for Java 6 compatibility
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
-# Install Apache Ant 1.10.14 (required for junitlauncher task)
+# Install Apache Ant 1.10.14
 RUN wget -q https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.14-bin.zip && \
     unzip -q apache-ant-1.10.14-bin.zip && \
     mv apache-ant-1.10.14 /opt/ant && \
@@ -43,23 +51,30 @@ RUN wget -q https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.14-bin.
 ENV ANT_HOME=/opt/ant
 ENV PATH=$ANT_HOME/bin:$PATH
 
-# Build jDisco dependency first
-WORKDIR /build/jdisco
-COPY jdisco/ /build/jdisco/
-RUN mvn clean install
-
-# Then build interlockSim
 WORKDIR /build/interlockSim
 
-# Copy source files and build configuration
-COPY src/ /build/interlockSim/src/
+# Copy jDisco from previous stage
+COPY --from=jdisco-builder /root/.m2/repository/ /root/.m2/repository/
+
+# Layer 1: Copy ONLY dependency metadata files
+# This layer caches unless these files change
 COPY build.xml /build/interlockSim/
 COPY ivy.xml /build/interlockSim/
 COPY ivysettings.xml /build/interlockSim/
 
-# Build the project (compiles code, runs tests)
-# Ivy downloads dependencies automatically during resolve phase
-RUN ant clean build
+# Layer 2: Resolve Ivy dependencies with BuildKit cache mount
+# This layer caches dependencies across builds
+RUN --mount=type=cache,target=/root/.ivy2 \
+    ant resolve
+
+# Layer 3: Copy source code
+# This is the layer that changes most frequently
+COPY src/ /build/interlockSim/src/
+
+# Layer 4: Build and test
+# Ivy cache persists, so no re-downloads
+RUN --mount=type=cache,target=/root/.ivy2 \
+    ant clean build
 
 # Create JAR with manifest
 RUN ant pack
@@ -70,7 +85,7 @@ RUN ls -lh /build/interlockSim/jar/interlockSim.jar && \
     jar tf /build/interlockSim/jar/interlockSim.jar | head -20
 
 # ============================================
-# Stage 2: Runtime with JRE and X11 support
+# Stage 3: Runtime with JRE and X11 support
 # ============================================
 FROM debian:buster-slim AS runner
 
