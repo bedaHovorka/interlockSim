@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="100" Y="100">
+	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A1"/>
+	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B1"/>
+	<InOut X="10" Y="12" SpatialType="HORIZONTAL" orientation="false" name="A2"/>
+	<InOut X="20" Y="12" SpatialType="HORIZONTAL" orientation="true" name="B2"/>
+	<SimpleTrackBlock fromX="10" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
+	<SimpleTrackBlock fromX="10" fromY="12" toX="20" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
+</net>

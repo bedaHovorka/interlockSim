@@ -339,11 +339,28 @@ public class XMLContextFactory implements EditingContextFactory, SimulationConte
 			stringBuilder.append(">\n");
 			fileWriter.write(stringBuilder.toString());
 
-			for (Point p : xmlContext.getGraph().nodeSet()) {
+			// Save all NodeCells from the grid (including isolated nodes)
+			// Use LinkedHashSet to avoid duplicates while preserving insertion order
+			final java.util.Set<Point> allNodes = new java.util.LinkedHashSet<Point>();
+
+			// Add all nodes from the graph (nodes with connections)
+			allNodes.addAll(xmlContext.getGraph().nodeSet());
+
+			// Add any isolated NodeCells from the grid that aren't in the graph
+			for (java.util.Map.Entry<Point, Cell> entry : railWayNetGrid) {
+				if (entry.getValue() instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
+					allNodes.add(entry.getKey());
+				}
+			}
+
+			// Write all nodes to XML
+			for (Point p : allNodes) {
 				final Cell cell = railWayNetGrid.get(p);
-				StringBuilder builder = tagFor(p, cell);
-				spacing(builder, 1);
-				fileWriter.write(builder.toString());
+				if (cell instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
+					StringBuilder builder = tagFor(p, cell);
+					spacing(builder, 1);
+					fileWriter.write(builder.toString());
+				}
 			}
 
 			for (Map.Entry<Doubleton<Point, Segment>, TrackBlock> i : xmlContext.getGraph().entrySet()) {
@@ -360,10 +377,11 @@ public class XMLContextFactory implements EditingContextFactory, SimulationConte
 
 			fileWriter.write("</" + ROOT_ELEMENT_NAME + ">\n");
 			fileWriter.close();
+			return true;
 		} catch (IOException e) {
 			assert false : e;
+			return false;
 		}
-		return false;
 	}
 
 	//jednotici metoda...

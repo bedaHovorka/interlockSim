@@ -22,6 +22,8 @@ import java.util.TreeMap;
  *
  * @param <K> key
  * @param <V> value
+ *
+ * @deprecated should be replaced by some standard library implementation in Kotlin
  */
 public class TreeMultiMap<K,V> {
 	private final SortedMap<K,Set<V>> map = new TreeMap<K,Set<V>>();

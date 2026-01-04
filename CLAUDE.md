@@ -284,13 +284,28 @@ src/
 │   └── resources/cz/vutbr/fit/interlockSim/
 │       └── resource/              - XML schemas and configuration files
 └── test/
-    └── java/cz/vutbr/fit/interlockSim/
-        ├── util/
-        │   └── Array2DMapTest.java    - Array2DMap unit tests (JUnit 5)
-        ├── objects/cells/
-        │   └── CellTest.java          - Cell unit tests (JUnit 5)
-        └── context/
-            └── ContextTest.java       - Context unit tests (JUnit 5)
+    ├── java/cz/vutbr/fit/interlockSim/
+    │   ├── context/               - Context and serialization tests
+    │   │   ├── ConcurrentSaveTest.java
+    │   │   └── DefaultContextTest.java
+    │   ├── sim/                   - Simulation scenario tests
+    │   │   ├── InOutWorkerTest.java
+    │   │   ├── ShuntingLoopTest.java
+    │   │   └── TrainTest.java
+    │   ├── testutil/              - Test utilities and builders
+    │   │   ├── MockSimulationContext.java
+    │   │   ├── TestContextBuilder.java
+    │   │   ├── TestFixtures.java
+    │   │   └── TestTrackBuilder.java
+    │   ├── util/                  - Utility class tests
+    │   │   ├── DoubletonTest.java
+    │   │   ├── EnumUnorientedGraphTest.java
+    │   │   ├── HashMapGraphTest.java
+    │   │   └── TreeMultiMapTest.java
+    │   └── xml/                   - XML parsing and validation tests
+    │       └── XMLContextFactoryTest.java
+    └── resources/cz/vutbr/fit/interlockSim/xml/
+        └── fixtures/              - Test XML files (10 fixtures)
 
 jdisco/                            - Third-party discrete event simulation library (Java 6, separate Maven module)
 ```
@@ -317,17 +332,42 @@ This is a working historical codebase from 2007. Stability and preservation are 
 
 ## Testing
 
-JUnit 5.10.1 tests with AssertJ assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Apache Ivy.
+Comprehensive JUnit 5.10.1 test suite with AssertJ assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Apache Ivy.
 
 **Test framework:**
 - JUnit 5 (Jupiter API and Engine)
 - JUnit Platform for Ant integration
 - AssertJ 3.24.2 for fluent assertions
 
-**Current tests:**
+**Test coverage (237 tests across 13 test classes):**
+
+**Utility tests:**
 - `Array2DMapTest` - 10 tests for 2D array-based map implementation
-- `CellTest` - 2 tests for cell segment and direction logic
-- `ContextTest` - 4 tests for railway network context operations
+- `DoubletonTest` - 66 tests for immutable ordered pair data structure
+- `EnumUnorientedGraphTest` - 55 tests for enum-based unoriented graph
+- `HashMapGraphTest` - 48 tests for HashMap-based graph implementation
+- `TreeMultiMapTest` - 25 tests for tree-based multimap implementation
+
+**Context tests:**
+- `DefaultContextTest` - 8 tests for railway network context operations
+- `ConcurrentSaveTest` - 2 tests for thread-safe XML serialization
+
+**Simulation tests:**
+- `TrainTest` - 6 tests for train behavior and state management
+- `InOutWorkerTest` - 8 tests for entry/exit point worker operations
+- `ShuntingLoopTest` - 2 tests for shunting loop simulation scenario
+
+**XML tests:**
+- `XMLContextFactoryTest` - 7 tests for XML parsing and validation with 10 fixture files
+
+**Test utilities:**
+- `MockSimulationContext` - Mock implementation for testing
+- `TestContextBuilder` - Fluent builder for test contexts
+- `TestFixtures` - Shared test data and configurations
+- `TestTrackBuilder` - Fluent builder for test track layouts
+
+**Test resources:**
+- `src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` - 10 XML test fixtures for parser validation
 
 **Run tests:**
 ```bash

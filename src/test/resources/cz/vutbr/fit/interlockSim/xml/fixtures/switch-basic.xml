@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="100" Y="100">
+	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="IN"/>
+	<RailSwitch X="15" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
+	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="OUT_PLUS"/>
+	<InOut X="20" Y="11" SpatialType="HORIZONTAL" orientation="true" name="OUT_MINUS"/>
+	<SimpleTrackBlock fromX="10" fromY="10" toX="15" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
+	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
+	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="11" fromSegment="G" toSegment="A" length="60.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+</net>

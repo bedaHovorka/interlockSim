@@ -40,6 +40,12 @@ public class InOutWorker extends LoopProcess {
 	 * @param out
 	 */
 	public InOutWorker(SimulationContext context, InOut out) {
+		if (context == null) {
+			throw new NullPointerException("context must not be null");
+		}
+		if (out == null) {
+			throw new NullPointerException("out must not be null");
+		}
 		this.inOut = out;
 		this.context = context;
 		this.next = context.getNextTrackSection(inOut, null);

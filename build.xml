@@ -31,6 +31,7 @@ Ivy integration: 2025
     <property name="src.main.java" location="src/main/java"/>
     <property name="src.test.java" location="src/test/java"/>
     <property name="src.main.resources" location="src/main/resources"/>
+    <property name="src.test.resources" location="src/test/resources"/>
 
     <!-- Build directories -->
     <property name="build.main" location="build/main"/>
@@ -171,10 +172,16 @@ Or use Docker:
                debug="true">
             <classpath refid="test.classpath"/>
         </javac>
+
+        <!-- Copy test resources to build directory -->
+        <copy todir="${build.test}">
+            <fileset dir="${src.test.resources}"/>
+        </copy>
     </target>
 
     <target name="test" depends="compile-test" description="Run tests">
         <echo message="Running tests..."/>
+        <mkdir dir="${build.test}/test-results"/>
         <junitlauncher printsummary="yes"
                        haltonfailure="yes">
             <classpath>
@@ -182,10 +189,15 @@ Or use Docker:
                 <pathelement location="${build.test}"/>
             </classpath>
 
-            <testclasses outputdir="${build.test}">
+            <testclasses outputdir="${build.test}/test-results">
                 <fileset dir="${build.test}">
                     <include name="**/*Test.class"/>
                 </fileset>
+                <!-- Enable Java assertions for tests (requires fork) -->
+                <fork>
+                    <jvmarg value="-ea"/>
+                </fork>
+                <listener type="legacy-xml" sendSysOut="true" sendSysErr="true"/>
                 <listener type="legacy-plain" sendSysOut="true"/>
             </testclasses>
         </junitlauncher>

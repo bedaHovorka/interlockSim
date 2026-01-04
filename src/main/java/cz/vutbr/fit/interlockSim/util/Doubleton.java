@@ -18,6 +18,8 @@ import java.util.NoSuchElementException;
  * Represents combination of two elements
  * @param <T> type of elements
  * @param <V> type of additional information
+ *
+ * @deprecated should be replaced in kotlin with library thing like Pair
  */
 public class Doubleton<T,V> extends AbstractSet<T> {
 	enum IteratorState {

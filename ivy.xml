@@ -40,6 +40,10 @@
         <!-- AssertJ: Fluent assertions library -->
         <dependency org="org.assertj" name="assertj-core" rev="3.24.2" conf="test->default"/>
 
+        <!-- Mockito: Mocking framework for testing -->
+        <dependency org="org.mockito" name="mockito-core" rev="5.7.0" conf="test->default"/>
+        <dependency org="org.mockito" name="mockito-junit-jupiter" rev="5.7.0" conf="test->default"/>
+
         <!-- SLF4J API 1.7.x: Logging facade (matches jDisco dependency) -->
         <dependency org="org.slf4j" name="slf4j-api" rev="1.7.36" conf="compile->default"/>
 

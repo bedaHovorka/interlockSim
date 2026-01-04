@@ -381,17 +381,14 @@ public abstract class DefaultContext extends Observable implements EditingContex
 	}
 
 	public void moveCell(Point from, Point to) {
-		// EXTENSION
-//		final Cell fromCell = getGrid().get(from);
-//		if (!(fromCell instanceof NodeCell)) return;
-//		final Cell toCell = getGrid().get(to);
-//		if (toCell != null) {
-//			setChanged();
-//			notifyObservers("Move: Target occupied");
-//			return;
-//		}
-//		final NodeCell nodeCell = (NodeCell) fromCell;
-//		//zkusit najit
+		final Cell fromCell = getGrid().get(from);
+		if (!(fromCell instanceof NodeCell)) return;
+
+		final Cell toCell = getGrid().get(to);
+		if (toCell != null) return;
+
+		putCell(to, (NodeCell)fromCell);
+		removeCell(from);
 	}
 
 	public Segment getSegment(final PathSeparator separator, final Track track, final Track secondEndTrack) {

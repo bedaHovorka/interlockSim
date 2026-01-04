@@ -1,0 +1,202 @@
+/*
+    Brno University of Technology
+    Faculty of Information Technology
+
+    BSc Thesis       2006/2007
+    Railway Interlocking Simulator
+
+    Test Utility: Context Builder
+    Fluent API for building test contexts
+
+    Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
+    Test infrastructure: 2025
+*/
+
+package cz.vutbr.fit.interlockSim.testutil;
+
+import cz.vutbr.fit.interlockSim.context.DefaultContext;
+import cz.vutbr.fit.interlockSim.objects.cells.InOut;
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
+
+/**
+ * Test utility for building {@link DefaultContext} instances with fluent API.
+ *
+ * <p>This is a scaffold implementation created in Phase 1.
+ * Full implementation will be provided in Phase 2 by Developer 2.</p>
+ *
+ * <p>Example usage (future API):
+ * <pre>{@code
+ * Context context = new TestContextBuilder()
+ *     .withSimpleTrack("T1", 100.0)
+ *     .withSimpleTrack("T2", 150.0)
+ *     .withConnection("T1", "T2")
+ *     .withSemaphore("SEM1", "T1", Signal.GREEN)
+ *     .build();
+ * }</pre>
+ *
+ * @see DefaultContext
+ */
+public class TestContextBuilder {
+
+	private final DefaultContext context;
+
+	public TestContextBuilder() {
+		// DefaultContext is abstract, use factory to create concrete instance
+		this.context = XMLContextFactory.getInstance().createEmptyContext();
+	}
+
+	/**
+	 * Adds an InOut (entry/exit point) to the context at specified grid position.
+	 *
+	 * @param name name of the InOut point
+	 * @param x grid x coordinate
+	 * @param y grid y coordinate
+	 * @param isEntry true for entry point, false for exit point
+	 * @return this builder for chaining
+	 */
+	public TestContextBuilder withInOut(String name, int x, int y, boolean isEntry) {
+		java.awt.Point position = new java.awt.Point(x, y);
+		cz.vutbr.fit.interlockSim.objects.cells.InOut inOut =
+			new cz.vutbr.fit.interlockSim.objects.cells.InOut(
+				name,
+				!isEntry, // orientation is inverted for exit points
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			);
+		context.putCell(position, inOut);
+		return this;
+	}
+
+	/**
+	 * Adds a RailSemaphore to the context at specified grid position.
+	 *
+	 * @param x grid x coordinate
+	 * @param y grid y coordinate
+	 * @param isAllowing true for allowing signal (green), false for stop (red)
+	 * @return this builder for chaining
+	 */
+	public TestContextBuilder withSemaphore(int x, int y, boolean isAllowing) {
+		java.awt.Point position = new java.awt.Point(x, y);
+		cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore semaphore =
+			new cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
+				isAllowing,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			);
+		context.putCell(position, semaphore);
+		return this;
+	}
+
+	/**
+	 * Connects two cells with a SimpleTrackBlock.
+	 *
+	 * @param fromX source cell x coordinate
+	 * @param fromY source cell y coordinate
+	 * @param toX destination cell x coordinate
+	 * @param toY destination cell y coordinate
+	 * @param length track length in meters
+	 * @param maxSpeed maximum speed in m/s
+	 * @return this builder for chaining
+	 */
+	public TestContextBuilder withConnection(int fromX, int fromY, int toX, int toY, double length, double maxSpeed) {
+		java.awt.Point fromPoint = new java.awt.Point(fromX, fromY);
+		java.awt.Point toPoint = new java.awt.Point(toX, toY);
+
+		cz.vutbr.fit.interlockSim.objects.cells.Cell fromCell = context.getRailWayNetGrid().getCellAt(fromX, fromY);
+		cz.vutbr.fit.interlockSim.objects.cells.Cell toCell = context.getRailWayNetGrid().getCellAt(toX, toY);
+
+		if (fromCell == null || toCell == null) {
+			throw new IllegalArgumentException("Both cells must exist before connecting them");
+		}
+
+		if (!(fromCell instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell)) {
+			throw new IllegalArgumentException("From cell must be a NodeCell");
+		}
+		if (!(toCell instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell)) {
+			throw new IllegalArgumentException("To cell must be a NodeCell");
+		}
+
+		cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock trackBlock =
+			new cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock(
+				(cz.vutbr.fit.interlockSim.objects.cells.NodeCell) fromCell,
+				(cz.vutbr.fit.interlockSim.objects.cells.NodeCell) toCell,
+				length,
+				maxSpeed
+			);
+
+		context.joinCells(fromPoint, toPoint, trackBlock);
+		return this;
+	}
+
+	/**
+	 * Builds and returns the configured context.
+	 *
+	 * @return configured DefaultContext instance
+	 */
+	public DefaultContext build() {
+		return context;
+	}
+
+	// Static factory methods for common test scenarios
+
+	/**
+	 * Creates a simple linear track matching the existing ContextTest pattern.
+	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5) connected by track.
+	 *
+	 * @return configured context with linear track
+	 */
+	public static DefaultContext buildLinearTrack() {
+		DefaultContext context = XMLContextFactory.getInstance().createEmptyContext();
+		InOut inA = new cz.vutbr.fit.interlockSim.objects.cells.InOut("A", false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL);
+		InOut outB = new cz.vutbr.fit.interlockSim.objects.cells.InOut("B", true,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL);
+		cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock trackBlock =
+			new cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock(inA, outB, 1000, 80);
+
+		java.awt.Point pA = new java.awt.Point(1, 1);
+		java.awt.Point pB = new java.awt.Point(5, 5);
+		context.putCell(pA, inA);
+		context.putCell(pB, outB);
+		context.joinCells(pA, pB, trackBlock);
+		return context;
+	}
+
+	/**
+	 * Creates a linear track with a semaphore between two InOut points.
+	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5).
+	 *
+	 * @return configured context with semaphore
+	 */
+	public static DefaultContext buildLinearTrackWithSemaphore() {
+		DefaultContext context = XMLContextFactory.getInstance().createEmptyContext();
+		InOut inA = new cz.vutbr.fit.interlockSim.objects.cells.InOut("A", false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL);
+		cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore rs1 =
+			new cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1);
+		InOut outB = new cz.vutbr.fit.interlockSim.objects.cells.InOut("B", true,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL);
+		cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock trackBlock =
+			new cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock(inA, outB, 1000, 80);
+
+		java.awt.Point pA = new java.awt.Point(1, 1);
+		java.awt.Point r1 = new java.awt.Point(4, 2);
+		java.awt.Point pB = new java.awt.Point(5, 5);
+		context.putCell(pA, inA);
+		context.putCell(r1, rs1);
+		context.putCell(pB, outB);
+		context.joinCells(r1, pB, trackBlock);
+		context.joinCells(pA, r1, trackBlock);
+		return context;
+	}
+
+	/**
+	 * Creates an empty context with just one InOut for minimal testing.
+	 *
+	 * @return context with single InOut
+	 */
+	public static DefaultContext buildMinimal() {
+		return new TestContextBuilder()
+			.withInOut("A", 1, 1, false)
+			.build();
+	}
+}

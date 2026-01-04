@@ -495,6 +495,12 @@ public class Train extends Process implements TrackOccupant {
 	 * @param timetable
 	 */
 	public Train(SimulationContext context, Timetable timetable) {
+		if (context == null) {
+			throw new NullPointerException("context must not be null");
+		}
+		if (timetable == null) {
+			throw new NullPointerException("timetable must not be null");
+		}
 		this.context = context;
 		this.timetable = timetable;
 		this.length = timetable.getLength();
