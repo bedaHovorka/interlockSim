@@ -240,11 +240,11 @@ class DoubletonTest {
 			Doubleton<String, Integer> d2 = new Doubleton<>("C", "D");
 
 			// Not guaranteed to differ, but likely
-			// Just verifying it doesn't crash
+			// Just verifying it doesn't crash and returns valid hash codes
 			int h1 = d1.hashCode();
 			int h2 = d2.hashCode();
-			assertThat(h1).isNotNull();
-			assertThat(h2).isNotNull();
+			// Primitive ints are never null, so we just verify the method executes without error
+			// The fact that we got here means hashCode() didn't throw an exception
 		}
 
 		@Test

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logback-ci.xml
+
+  CI/CD-specific Logback configuration for GitHub Actions workflows.
+
+  This configuration is used during automated builds and smoke tests to:
+  - Reduce log verbosity (INFO level instead of DEBUG)
+  - Minimize console output and artifact sizes
+  - Focus on simulation results and errors
+
+  Usage in workflows:
+  - java -Dlogback.configurationFile=.github/workflows/logback-ci.xml -jar interlockSim.jar ...
+
+  NOTE: This file is NOT included in the application JAR. It is only used during CI/CD builds.
+-->
+<configuration>
+    <!-- Console appender for stdout -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36}.%M\(%F:%L\) - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- CI-specific configuration: INFO level only to reduce log noise -->
+    <!-- This configuration is used by GitHub Actions smoke tests -->
+
+    <!-- Separate logger for simulation events -->
+    <logger name="cz.vutbr.fit.interlockSim.simulation" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Separate logger for jDisco reports -->
+    <logger name="jDisco.statistics" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+
+    <!-- Override debug loggers to INFO for CI -->
+    <logger name="cz.vutbr.fit.interlockSim.sim.Train" level="INFO"/>
+    <logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="INFO"/>
+    <logger name="cz.vutbr.fit.interlockSim.objects.paths.AbstractPath" level="INFO"/>
+    <logger name="cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack" level="INFO"/>
+
+    <!-- Root logger at INFO level -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

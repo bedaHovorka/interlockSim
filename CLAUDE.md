@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
 
 [![Gradle Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml)
+[![SonarQube Analysis](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml)
 
 ## Build System
 
@@ -42,6 +43,16 @@ Gradle automatically downloads dependencies during the build. Configuration file
 **Run tests only:**
 ```bash
 ./gradlew test
+```
+
+**Run integration tests only:**
+```bash
+./gradlew integrationTest
+```
+
+**Run all tests (unit + integration):**
+```bash
+./gradlew test integrationTest
 ```
 
 **Create uber JAR (all dependencies included):**
@@ -350,8 +361,35 @@ Comprehensive JUnit 5.10.1 test suite with AssertJ assertions located in `src/te
 
 **Test framework:**
 - JUnit 5 (Jupiter API and Engine)
-- JUnit Platform for Ant integration
+- JUnit Platform for test execution
 - AssertJ 3.24.2 for fluent assertions
+
+**Test organization:**
+- **Unit tests** - Fast tests that run by default with `./gradlew test` (excludes integration tests)
+- **Integration tests** - Tests tagged with `@Tag("integration-test")` that run separately with `./gradlew integrationTest`
+
+**Tagging integration tests:**
+To mark a test as an integration test, add the `@Tag("integration-test")` annotation:
+```java
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Test
+@Tag("integration-test")
+void myIntegrationTest() {
+    // Test code
+}
+
+// Or tag an entire test class:
+@Tag("integration-test")
+class MyIntegrationTest {
+    @Test
+    void test1() { }
+
+    @Test
+    void test2() { }
+}
+```
 
 **Test coverage (237 tests across 13 test classes):**
 
@@ -385,14 +423,132 @@ Comprehensive JUnit 5.10.1 test suite with AssertJ assertions located in `src/te
 
 **Run tests:**
 ```bash
-ant test
-# Or as part of build:
-ant build
+# Run unit tests only (excludes integration tests)
+./gradlew test
+
+# Run integration tests only
+./gradlew integrationTest
+
+# Run all tests (unit + integration)
+./gradlew test integrationTest
+
+# As part of build (runs unit tests only)
+./gradlew build
 ```
 
-Tests are automatically executed during the build process using Ant's `junitlauncher` task. The build will fail if any test fails (`haltonfailure="yes"`).
+Tests are automatically executed during the build process. The build will fail if any test fails. Regular `./gradlew test` excludes integration tests for faster feedback. Integration tests should be run separately or in CI/CD pipelines.
 
-**Note:** Ant 1.10.6+ is required for JUnit 5 support via the `junitlauncher` task.
+## Code Quality Analysis
+
+### SonarQube Integration
+
+The project includes SonarQube integration for static code analysis and quality metrics. SonarQube provides comprehensive analysis including:
+- Code smells and maintainability issues
+- Security vulnerabilities
+- Code coverage (via JaCoCo)
+- Code duplication detection
+- Complexity metrics
+- Technical debt assessment
+
+**Configuration files:**
+- `build.gradle.kts` - SonarQube plugin and JaCoCo configuration (primary)
+- `sonar-project.properties` - Additional SonarQube settings (optional)
+- `.github/workflows/sonarqube.yml` - CI/CD integration for automated analysis
+
+### Running SonarQube Analysis
+
+**Prerequisites:**
+- SonarQube server running (local or cloud)
+- SonarQube authentication token
+
+#### Option 1: SonarCloud (Recommended for Open Source)
+
+SonarCloud is free for public repositories and requires no infrastructure setup.
+
+**Setup:**
+1. Sign up at https://sonarcloud.io with your GitHub account
+2. Create a new project and organization
+3. Generate a token: User Menu > My Account > Security > Generate Tokens
+4. Run analysis:
+   ```bash
+   ./gradlew clean test jacocoTestReport sonar \
+     -Dsonar.host.url=https://sonarcloud.io \
+     -Dsonar.organization=<your-org> \
+     -Dsonar.token=<your-token>
+   ```
+
+**Environment variables (alternative to command-line):**
+```bash
+export SONAR_HOST_URL=https://sonarcloud.io
+export SONAR_ORGANIZATION=<your-org>
+export SONAR_TOKEN=<your-token>
+./gradlew clean test jacocoTestReport sonar
+```
+
+#### Option 2: Local SonarQube Server
+
+Run SonarQube locally with Docker for private analysis.
+
+**Start SonarQube server:**
+```bash
+docker run -d --name sonarqube \
+  -p 9000:9000 \
+  sonarqube:lts-community
+```
+
+**Access and setup:**
+1. Open http://localhost:9000 in browser
+2. Login with default credentials: admin/admin (change password on first login)
+3. Create new project manually or use automatic setup
+4. Generate token: User Menu > My Account > Security > Generate Tokens
+
+**Run analysis:**
+```bash
+./gradlew clean test jacocoTestReport sonar \
+  -Dsonar.host.url=http://localhost:9000 \
+  -Dsonar.token=<your-token>
+```
+
+### Code Coverage with JaCoCo
+
+The project uses JaCoCo for code coverage measurement, which is integrated with SonarQube.
+
+**Generate coverage report:**
+```bash
+./gradlew test jacocoTestReport
+```
+
+**View coverage report:**
+Open `build/reports/jacoco/test/html/index.html` in a browser
+
+**Coverage report locations:**
+- HTML report: `build/reports/jacoco/test/html/index.html`
+- XML report (for SonarQube): `build/reports/jacoco/test/jacocoTestReport.xml`
+
+**Current coverage baseline:**
+- The project has 237 tests across 13 test classes
+- Coverage thresholds start at 0% and can be increased gradually
+- Configure thresholds in `build.gradle.kts` under `jacocoTestCoverageVerification`
+
+### Quality Gates
+
+SonarQube quality gates define the criteria for code quality acceptance. By default, the build does not fail if quality gates fail (suitable for legacy code). To enable strict quality gates:
+
+**In build.gradle.kts:**
+```kotlin
+property("sonar.qualitygate.wait", "true")
+```
+
+**In sonar-project.properties:**
+```properties
+sonar.qualitygate.wait=true
+```
+
+### CI/CD Integration
+
+See `.github/workflows/sonarqube.yml` for automated SonarQube analysis on every push and pull request. The workflow requires:
+- `SONAR_TOKEN` secret configured in GitHub repository settings
+- `SONAR_ORGANIZATION` secret (for SonarCloud)
 
 ## Continuous Integration
 
@@ -527,6 +683,200 @@ logger.info("Informational message");
 logger.warn("Warning message");
 logger.error("Error message", exception);
 ```
+
+## Known Bugs and Issues
+
+**Last Updated:** 2026-01-05
+
+This section documents known bugs that remain in the codebase. These have been identified through SonarQube analysis and comprehensive simulation verification. For detailed analysis, see the report files in the project root.
+
+### Critical Issues
+
+None. All critical bugs identified by SonarQube have been fixed.
+
+### Major Issues
+
+#### DEFERRED-001: Missing Assertion Predicates in XMLContextFactoryTest (9 occurrences)
+
+**Severity:** Major (SonarQube rule java:S5833)
+**Files:** `src/test/java/cz/vutbr/fit/interlockSim/xml/XMLContextFactoryTest.java`
+**Lines:** 219, 228, 237, 246, 255, 262, 271, 281, 433
+
+**Description:** Tests use `assertThatThrownBy()` without specifying expected exception types. The assertions verify that methods execute without unexpected exceptions but lack explicit exception class predicates.
+
+**Impact:** Tests function correctly but are less precise than they could be. No false positives or missed failures observed.
+
+**Workaround:** Tests work as intended; this is a test quality enhancement opportunity.
+
+**Recommendation:** Add `.isInstanceOf(ExpectedException.class)` predicates in future test improvements.
+
+### Minor Issues
+
+#### SIM-001: Potential Division by Zero in Motor Calculation
+
+**Severity:** Minor (mitigated)
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java` (Motor inner class, line ~468)
+
+**Description:** The acceleration calculation `a = ((targetSpeed - velocity)*(targetSpeed + velocity)) / (2*s)` could divide by zero if distance `s` approaches zero.
+
+**Impact:** Numerical instability in edge cases.
+
+**Workaround:** Already mitigated by `if (s <= 0) { accelerate = false; return; }` guard.
+
+**Recommendation:** No action required; current mitigation is sufficient.
+
+#### SIM-002: Static Train Counter Not Reset Between Runs
+
+**Severity:** Minor
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java` (line 487)
+
+**Description:** Static `count` variable increments across simulation runs without reset.
+
+**Impact:** Cosmetic only - train IDs continue incrementing in same JVM instance. Affects logging/toString output.
+
+**Workaround:** Restart JVM between simulation runs if sequential train numbering is required.
+
+#### SIM-003: Unused Variable Increment in Generator
+
+**Severity:** Minor (dead code)
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Generator.java` (line 87)
+
+**Description:** Variable `i` is incremented but never used.
+
+**Impact:** None - dead code with no functional effect.
+
+**Workaround:** None needed.
+
+#### DEFERRED-002: Integer Division Precision Loss (3 occurrences)
+
+**Severity:** Minor (SonarQube rule java:S2184)
+**Files:**
+- `src/main/java/cz/vutbr/fit/interlockSim/gui/gridcanvas/CellRenderer.java` (line 83, 2 occurrences)
+- `src/main/java/cz/vutbr/fit/interlockSim/objects/cells/Cell.java` (line 146)
+
+**Description:** Integer division where result is assigned to double, potentially losing fractional part.
+
+**Impact:** May affect GUI rendering precision. No visual issues observed in testing.
+
+**Workaround:** None needed for current functionality.
+
+**Recommendation:** Review with domain expert if high-precision rendering is required.
+
+#### DEFERRED-003: Doubleton Missing equals() Override
+
+**Severity:** Minor (SonarQube rule java:S1206)
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/util/Doubleton.java` (line 85)
+
+**Description:** Class overrides `hashCode()` but not `equals()`, violating the hashCode/equals contract.
+
+**Impact:** Potential incorrect behavior when Doubleton objects are used in hash-based collections.
+
+**Workaround:** Doubleton class is marked `@Deprecated`. Avoid using in new code.
+
+**Recommendation:** Replace Doubleton with modern alternatives (e.g., `Map.Entry`, records) in future modernization.
+
+### Design Limitations
+
+#### SIM-004: Hardcoded Grid Coordinates in ShuntingLoop
+
+**Severity:** Design Limitation (documented)
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.java` (lines 116-129)
+
+**Description:** ShuntingLoop uses hardcoded grid positions (x/y coordinates) that only work with `vyhybna.xml` network configuration.
+
+**Impact:** Cannot reuse ShuntingLoop with other railway network configurations without code changes.
+
+**Workaround:** Use only with the provided `vyhybna.xml` configuration file.
+
+**Recommendation:** Future enhancement - make ShuntingLoop configurable via XML or constructor parameters.
+
+#### SIM-005: Negative Train Length Allowed
+
+**Severity:** Low (validation gap)
+**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java`
+
+**Description:** Train constructor accepts negative length values without validation.
+
+**Impact:** Could cause undefined simulation behavior with invalid inputs.
+
+**Workaround:** Ensure positive train lengths when creating Train instances.
+
+**Recommendation:** Add parameter validation in future releases.
+
+#### SIM-006: Assertion-Only Validation
+
+**Severity:** Medium (production concern)
+**Files:** Multiple simulation classes
+
+**Description:** Critical validation logic uses Java `assert` statements, which are disabled without the `-ea` flag.
+
+**Impact:** Invalid states may not be detected when running without assertions enabled.
+
+**Workaround:** Always run the application with `-ea` flag: `java -ea -jar interlockSim.jar ...`
+
+**Recommendation:** Convert critical assertions to explicit validation with exceptions.
+
+### Test Suite Notes
+
+**Skipped Tests:** 5 tests (2.1% of suite) are currently disabled:
+- `ShuntingLoopTest`: 4 tests marked with `@Disabled` annotation
+- `XMLContextFactoryTest`: 1 test with conditional skip logic
+
+These skipped tests document known initialization edge cases and do not indicate failures. See test source files for specific skip reasons.
+
+### Reference Reports
+
+For comprehensive details, see:
+- `SIMULATION-VERIFICATION-REPORT.md` - Simulation engine analysis and SIM-* issues
+- `GOAL3-PHASE2-REPORT.md` - SonarQube findings and bug triage
+- `FINAL-VERIFICATION-REPORT.md` - Consolidated verification results
+- `QA_ISSUES_DETAIL.md` - QA testing findings
+
+## Deprecated Java API Usage
+
+**Analysis Last Run:** 2026-01-05
+
+The codebase has been analyzed for deprecated Java standard library APIs. This is critical for planning future Java version upgrades, especially to Java 17+.
+
+### Key Findings
+
+**CRITICAL Issue:**
+- **java.util.Observable/Observer** (6 occurrences) - Deprecated in Java 9, blocks Java 17+ migration
+  - Used in: `DefaultContext`, `Context`, `RailwayNetGridCanvas`, `StatusBar`
+  - **Must be replaced** before upgrading to Java 17+
+  - **Recommended replacement:** `java.beans.PropertyChangeSupport`
+
+**HIGH Priority:**
+- **Integer constructor** (1 occurrence in test code) - Deprecated in Java 9, marked for removal
+  - Easy fix: Use `Integer.valueOf()` or autoboxing
+
+**MEDIUM Priority:**
+- Internal project classes marked deprecated (`Doubleton`, `TreeMultiMap`) - 55 occurrences
+  - These are project-specific deprecations, not Java SE
+  - Require design review to determine replacement strategy
+
+### Monitoring
+
+Run deprecation analysis:
+```bash
+./gradlew checkDeprecations
+```
+
+Generate detailed report:
+```bash
+./gradlew clean compileJava compileTestJava 2>&1 | tee build/reports/deprecation-main.txt
+```
+
+Review comprehensive report:
+```bash
+cat docs/deprecated-api-report.md
+```
+
+### jDisco Library
+
+The jDisco library (Java 6 compatible) has **no deprecated API usage**. It should remain at Java 6 compatibility as designed.
+
+**Note:** This analysis is documentation-only. No code changes have been made. See `docs/deprecated-api-report.md` for detailed findings, migration strategies, and recommendations.
 
 ## Future Development Considerations
 

@@ -93,6 +93,7 @@ public class Train extends Process implements TrackOccupant {
 					if (where instanceof InOut) break;
 					context.stop();
 					passivate();
+					continue; // Restart loop after passivation to re-check for next track section
 				}
 				final double nextLength = next.length();
 				separatorAction(where, current, next);

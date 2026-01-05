@@ -74,6 +74,7 @@ public class ShuntingLoop extends Interlocking {
 					Thread.sleep(sleepTime);
 				} catch (InterruptedException e) {
 					assert false : e;
+					Thread.currentThread().interrupt(); // Restore interrupt status
 					terminate();
 				}
 			} else if (sleepTime < 0) {

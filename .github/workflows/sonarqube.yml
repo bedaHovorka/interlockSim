@@ -1,0 +1,154 @@
+name: SonarQube Analysis
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**', 'fix/**' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: read  # Required for PR analysis
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '11'
+  MAVEN_OPTS: '-Xmx512m'
+  GRADLE_OPTS: '-Xmx512m -XX:MaxMetaspaceSize=512m'
+
+jobs:
+  sonarqube:
+    name: SonarQube Code Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Fetch full history for better analysis (blame information, issue assignment)
+        fetch-depth: 0
+
+    - name: Set up JDK ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ env.JAVA_VERSION }}
+
+    - name: Cache Maven dependencies (for jDisco)
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('jdisco/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Cache SonarQube packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: |
+          ${{ runner.os }}-sonar
+
+    - name: Build jDisco library (Java 6 compatibility)
+      working-directory: ./jdisco
+      run: mvn clean install -q
+
+    - name: Verify jDisco installation
+      run: |
+        if [ ! -f ~/.m2/repository/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar ]; then
+          echo "ERROR: jDisco artifact not found"
+          exit 1
+        fi
+        echo "✓ jDisco 1.2.0 artifact successfully installed"
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: wrapper
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
+
+    - name: Make Gradle wrapper executable
+      run: chmod +x gradlew
+
+    - name: Build and test with coverage
+      run: ./gradlew clean build test jacocoTestReport --no-daemon --warning-mode=all --stacktrace
+
+    - name: Upload JaCoCo coverage report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: jacoco-coverage-report-${{ github.sha }}
+        path: build/reports/jacoco/
+        retention-days: 30
+        compression-level: 9
+
+    - name: Generate coverage report summary
+      if: always()
+      run: |
+        if [ -f build/reports/jacoco/test/html/index.html ]; then
+          echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "JaCoCo coverage report generated" >> $GITHUB_STEP_SUMMARY
+          echo "[View Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    # SonarCloud Analysis (for public repositories)
+    # Requires SONAR_TOKEN and SONAR_ORGANIZATION secrets configured in GitHub
+    # If secrets are not configured, this step will skip gracefully
+    - name: SonarCloud Scan
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [ -z "$SONAR_TOKEN" ]; then
+          echo "⚠️  SONAR_TOKEN not configured - skipping SonarCloud analysis"
+          echo "To enable: Add SONAR_TOKEN secret in repository settings"
+          exit 0
+        fi
+        if [ -z "$SONAR_ORGANIZATION" ]; then
+          echo "⚠️  SONAR_ORGANIZATION not configured - skipping SonarCloud analysis"
+          echo "To enable: Add SONAR_ORGANIZATION secret in repository settings"
+          exit 0
+        fi
+
+        echo "🔍 Running SonarCloud analysis..."
+        ./gradlew sonar \
+          -Dsonar.host.url=https://sonarcloud.io \
+          -Dsonar.organization=$SONAR_ORGANIZATION \
+          -Dsonar.token=$SONAR_TOKEN \
+          --no-daemon --warning-mode=all --stacktrace
+
+        echo "✓ SonarCloud analysis completed successfully"
+
+    # Alternative: Local/Enterprise SonarQube server
+    # Uncomment and configure if using self-hosted SonarQube
+    # - name: SonarQube Scan (Self-hosted)
+    #   if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
+    #   env:
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    #   run: |
+    #     ./gradlew sonar \
+    #       -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+    #       -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+    #       --no-daemon --warning-mode=all --stacktrace
+
+    - name: SonarQube Quality Gate Check
+      if: success()
+      run: |
+        echo "✓ SonarCloud analysis completed"
+        echo "Quality Gate status will be available at SonarQube dashboard"
+        echo "View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim"
+        echo ""
+        echo "Note: Quality gate waiting is disabled by default for legacy code"
+        echo "Enable in build.gradle.kts: sonar.qualitygate.wait=true"
+
+    # Optional: Comment PR with SonarQube results link
+    # Requires additional permissions and SonarCloud PR decoration enabled

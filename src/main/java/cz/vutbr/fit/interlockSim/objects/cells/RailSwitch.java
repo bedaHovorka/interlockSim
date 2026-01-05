@@ -223,7 +223,7 @@ public class RailSwitch extends NodeCell {
 	 */
 	public void changeConf() {
 		assert conf != null;
-		conf = conf==Conf.MAIN ? Conf.BRANCH : (conf==Conf.BRANCH ? Conf.MAIN : Conf.MAIN);
+		conf = conf==Conf.MAIN ? Conf.BRANCH : Conf.MAIN;
 	}
 
 	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException {

@@ -21,6 +21,13 @@ plugins {
 
     // Shadow plugin for creating uber JAR (fat JAR with all dependencies)
     id("com.github.johnrengelman.shadow") version "8.1.1"
+
+    // SonarQube plugin for code quality analysis
+    // Version 6.2.0 - Migrates from deprecated Gradle APIs
+    id("org.sonarqube") version "6.2.0.5505"
+
+    // JaCoCo plugin for code coverage (required for SonarQube)
+    jacoco
 }
 
 // Load versions from gradle.properties
@@ -84,8 +91,9 @@ tasks.compileJava {
     // CRITICAL: Use ISO-8859-1 encoding (legacy requirement from Ant build)
     options.encoding = "ISO-8859-1"
 
-    // Enable all warnings
+    // Enable all warnings including deprecation
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
+    options.isDeprecation = true
 
     // Include debug information (matching Ant configuration)
     options.isDebug = true
@@ -96,6 +104,7 @@ tasks.compileTestJava {
     // Match encoding for test sources
     options.encoding = "ISO-8859-1"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
+    options.isDeprecation = true
 }
 
 // Configure resource processing (handle duplicate files)
@@ -110,7 +119,10 @@ tasks.processTestResources {
 // Configure test execution
 tasks.test {
     // Use JUnit Platform (JUnit 5)
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Exclude integration tests from regular test runs
+        excludeTags("integration-test")
+    }
 
     // Enable assertions (matching Ant's -ea flag)
     jvmArgs("-ea")
@@ -151,6 +163,61 @@ tasks.test {
 
     // Fail fast on test failures (matching Ant's haltonfailure="yes")
     ignoreFailures = false
+}
+
+/**
+ * Task: integrationTest
+ * Run only integration tests (tests tagged with @Tag("integration-test"))
+ * This allows separation of fast unit tests from slower integration tests
+ */
+val integrationTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run integration tests (tagged with @Tag(\"integration-test\"))"
+
+    // Use JUnit Platform with integration test tag filter
+    useJUnitPlatform {
+        includeTags("integration-test")
+    }
+
+    // Enable assertions
+    jvmArgs("-ea")
+
+    // Integration tests may be slower, use serial execution by default
+    maxParallelForks = 1
+
+    // Test output configuration
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+
+        afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+            if (desc.parent == null) {
+                println("\nIntegration Test Results: ${result.resultType}")
+                println("  Tests run: ${result.testCount}")
+                println("  Passed: ${result.successfulTestCount}")
+                println("  Failed: ${result.failedTestCount}")
+                println("  Skipped: ${result.skippedTestCount}")
+            }
+        }))
+    }
+
+    // Generate separate reports for integration tests
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/integrationTest"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/integrationTest"))
+    }
+
+    ignoreFailures = false
+
+    // Set different output directory to avoid conflicts with unit tests
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
 }
 
 // Configure JAR task
@@ -429,6 +496,162 @@ tasks.register("printConfig") {
             |  ./gradlew runExample      - Run custom example
             |  ./gradlew javadoc         - Generate JavaDoc
             |  ./gradlew dependencies    - Show dependency tree
+            |
+        """.trimMargin())
+    }
+}
+
+// ===========================================
+// JaCoCo Code Coverage Configuration
+// ===========================================
+
+/**
+ * JaCoCo configuration for code coverage analysis
+ * Required for SonarQube code coverage reporting
+ */
+jacoco {
+    toolVersion = "0.8.11"  // Latest stable version
+}
+
+// Configure test task to generate JaCoCo coverage data
+tasks.test {
+    // Generate coverage data during test execution
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+// Configure JaCoCo test report generation
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+
+    reports {
+        // XML report required by SonarQube
+        xml.required.set(true)
+        xml.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/test/jacocoTestReport.xml"))
+
+        // HTML report for local viewing
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/test/html"))
+
+        // CSV report (optional)
+        csv.required.set(false)
+    }
+}
+
+// Optional: JaCoCo verification task (enforce coverage thresholds)
+tasks.jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            // Rule for overall project coverage
+            limit {
+                minimum = "0.00".toBigDecimal()  // Start with 0%, increase gradually
+            }
+        }
+
+        rule {
+            // Rule for package-level coverage
+            element = "PACKAGE"
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.00".toBigDecimal()
+            }
+        }
+    }
+}
+
+// ===========================================
+// SonarQube Configuration
+// ===========================================
+
+/**
+ * SonarQube static code analysis configuration
+ *
+ * Setup Options:
+ * 1. SonarCloud (Recommended for Open Source):
+ *    - Free for public repositories
+ *    - No infrastructure needed
+ *    - Set SONAR_TOKEN and SONAR_ORGANIZATION in environment or gradle.properties
+ *    - Run: ./gradlew sonar -Dsonar.host.url=https://sonarcloud.io
+ *
+ * 2. Local SonarQube Server:
+ *    - Start server: docker run -d -p 9000:9000 sonarqube:lts-community
+ *    - Access: http://localhost:9000 (admin/admin)
+ *    - Generate token in UI: User > My Account > Security > Generate Tokens
+ *    - Run: ./gradlew sonar -Dsonar.token=<your-token>
+ *
+ * For CI/CD integration, see .github/workflows/sonarqube.yml
+ */
+sonar {
+    properties {
+        // Project identification
+        property("sonar.projectKey", "bedaHovorka_interlockSim")
+        property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
+        property("sonar.projectVersion", version.toString())
+
+        // Source and test paths (Gradle standard layout)
+        property("sonar.sources", "src/main/java")
+        property("sonar.tests", "src/test/java")
+        property("sonar.java.binaries", "build/classes/java/main")
+        property("sonar.java.test.binaries", "build/classes/java/test")
+
+        // Java version
+        property("sonar.java.source", javaVersion)
+        property("sonar.java.target", javaVersion)
+
+        // Test results and coverage paths
+        property("sonar.junit.reportPaths", "build/test-results/test")
+        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+
+        // Encoding
+        property("sonar.sourceEncoding", "ISO-8859-1")
+
+        // Exclusions (optional - exclude generated code, test utilities, etc.)
+        // property("sonar.exclusions", "")
+        // property("sonar.test.exclusions", "")
+
+        // Quality gate configuration (fail build if quality gate fails)
+        property("sonar.qualitygate.wait", "false")  // Set to "true" to wait for quality gate result
+
+        // Optional: Links to project resources
+        // property("sonar.links.homepage", "https://github.com/bedavs/interlockSim")
+        // property("sonar.links.ci", "https://github.com/bedavs/interlockSim/actions")
+        // property("sonar.links.issue", "https://github.com/bedavs/interlockSim/issues")
+        // property("sonar.links.scm", "https://github.com/bedavs/interlockSim")
+    }
+}
+
+// Make sonar task depend on test to ensure test results are available
+tasks.named("sonar") {
+    dependsOn(tasks.test)
+}
+
+// ===========================================
+// Deprecation Analysis Tasks
+// ===========================================
+
+/**
+ * Task: checkDeprecations
+ * Analyze code for deprecated API usage and generate report
+ * Compiles both main and test sources with deprecation warnings enabled
+ */
+tasks.register("checkDeprecations") {
+    group = "verification"
+    description = "Check for deprecated API usage and generate report"
+
+    dependsOn("clean", "compileJava", "compileTestJava")
+
+    doLast {
+        println("""
+            |
+            |Deprecation Analysis Complete
+            |=============================
+            |Review compiler output above for deprecation warnings
+            |
+            |To save detailed report to file:
+            |  ./gradlew clean compileJava compileTestJava 2>&1 | tee build/reports/deprecation-report.txt
+            |
+            |For jDisco library analysis:
+            |  cd jdisco && mvn clean compile -Dmaven.compiler.showDeprecation=true 2>&1 | tee ../build/reports/deprecation-jdisco.txt
             |
         """.trimMargin())
     }

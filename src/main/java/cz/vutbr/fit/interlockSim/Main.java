@@ -164,7 +164,7 @@ public class Main {
 			}
 		}
 		Collections.sort(list, String.CASE_INSENSITIVE_ORDER);
-		out.println(list.size() > 0 ? "You must specifify valid name of example\nList of examles: "+ list :
+		out.println(list.size() > 0 ? "You must specify valid name of example\nList of examples: "+ list :
 						"No Examples in program");
 	}
 
