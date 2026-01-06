@@ -76,11 +76,7 @@ public class Train extends Process implements TrackOccupant {
 		private TrackSection current = null;
 		private boolean onNext = false;
 
-		final Condition terminated = new Condition() {
-			public boolean test() {
-				return terminated();
-			}
-		};
+		final Condition terminated = this::terminated;
 
 		@Override
 		protected final void actions() {
@@ -100,11 +96,9 @@ public class Train extends Process implements TrackOccupant {
 
 				onNext = true;
 				assert position.isActive() && pv.isActive();
-				waitUntil(new Condition() {
-					public boolean test() {
-						//dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
-						return position.state + dtMin >= nextLength;
-					}
+				waitUntil(() -> {
+					//dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
+					return position.state + dtMin >= nextLength;
 				});
 
 				position.state -= nextLength;
@@ -237,11 +231,9 @@ public class Train extends Process implements TrackOccupant {
 //		}
 
 		private Condition allowingSignal(final RailSemaphore semaphore) {
-			return new Condition() {
-				public boolean test() {
-					final boolean allowing = semaphore.getSignal().isAllowing();
-					return allowing;
-				}
+			return () -> {
+				final boolean allowing = semaphore.getSignal().isAllowing();
+				return allowing;
 			};
 		}
 
@@ -539,11 +531,7 @@ public class Train extends Process implements TrackOccupant {
 
 		activate(front);
 
-		waitUntil(new Condition() {
-			public boolean test() {
-				return front.getTotalDistance() >= getLength();
-			}
-		});
+		waitUntil(() -> front.getTotalDistance() >= getLength());
 		activate(tail);
 
 		out(); activate((Train) worker.getQueqe().first());

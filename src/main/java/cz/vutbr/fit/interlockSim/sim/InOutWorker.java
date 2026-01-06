@@ -108,11 +108,7 @@ public class InOutWorker extends LoopProcess {
 
 			//cekej na odchod vlaku z fronty (bez te anonymni tridy please)
 			logger.debug("InOutWorker {} waiting for train {} to leave queue", inOut.getName(), first);
-			waitUntil(new Condition() {
-				public boolean test() {
-					return first != queqe.first();
-				}
-			});
+			waitUntil(() -> first != queqe.first());
 			logger.debug("InOutWorker {} train left queue", inOut.getName());
 		}
 		myIdle = true;

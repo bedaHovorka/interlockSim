@@ -150,19 +150,16 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 
 	}
 
-	private static final class PointComparator implements Comparator<Point> {
-		public int compare(Point o1, Point o2) {
-			int dy = (o1.y-o2.y);
-			return dy==0 ? (o1.x-o2.x) : dy;
-		}
-	}
 	/**
 	 * Compare points in order for grid
 	 */
-	public static final Comparator<Point> POINT_COMPARATOR = new PointComparator();
+	public static final Comparator<Point> POINT_COMPARATOR = (o1, o2) -> {
+		int dy = (o1.y-o2.y);
+		return dy==0 ? (o1.x-o2.x) : dy;
+	};
 
 	private final RelocableList<RelocableList<V>> array = new RelocableList<RelocableList<V>> ();
-	private final TreeSet<Point> keys = new TreeSet<Point>(POINT_COMPARATOR);
+	private final TreeSet<Point> keys = new TreeSet<>(POINT_COMPARATOR);
 
 	/* (non-Javadoc)
 	 * @see java.util.AbstractMap#entrySet()
@@ -224,7 +221,7 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 	public List<V> getRow(int y) {
 		final RelocableList<V> list = array.get(y);
 		//EXTENSION zatim unmodifieable
-		return list==null ? Collections.<V>emptyList() : Collections.unmodifiableList(list);
+		return list==null ? Collections.emptyList() : Collections.unmodifiableList(list);
 	}
 
 	@Override
