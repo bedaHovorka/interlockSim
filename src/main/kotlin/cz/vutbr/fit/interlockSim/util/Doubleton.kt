@@ -7,11 +7,10 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.util.AbstractSet;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.util.AbstractSet
+import java.util.NoSuchElementException
 
 /**
  * Pair of nodes for implementation ADT ExtendedUnorientedGraph
@@ -21,41 +20,47 @@ import java.util.NoSuchElementException;
  *
  * @deprecated should be replaced in kotlin with library thing like Pair
  */
-public class Doubleton<T,V> extends AbstractSet<T> {
-	enum IteratorState {
+@Deprecated(
+	message = "Should be replaced in kotlin with library thing like Pair",
+	replaceWith = ReplaceWith("Pair<T, V>")
+)
+class Doubleton<T, V> : AbstractSet<T> {
+	enum class IteratorState {
 		INIT,
 		FIRST,
-		SECOND;
+		SECOND
 	}
 
-	final class DoubletonIterator implements Iterator<T> {
-		IteratorState state = IteratorState.INIT;
+	private inner class DoubletonIterator : MutableIterator<T> {
+		private var state = IteratorState.INIT
 
-		public boolean hasNext() {
-			assert state != null;
-			return state != IteratorState.SECOND;
+		override fun hasNext(): Boolean {
+			assert(state != null)
+			return state != IteratorState.SECOND
 		}
 
-		public T next() {
-			assert state != null;
-			if (state == IteratorState.INIT) {
-				state = IteratorState.FIRST;
-				return first;
-			} else if (state == IteratorState.FIRST) {
-				state = IteratorState.SECOND;
-				return second;
-			} else throw new NoSuchElementException();
+		override fun next(): T {
+			assert(state != null)
+			return when (state) {
+				IteratorState.INIT -> {
+					state = IteratorState.FIRST
+					first
+				}
+				IteratorState.FIRST -> {
+					state = IteratorState.SECOND
+					second
+				}
+				IteratorState.SECOND -> throw NoSuchElementException()
+			}
 		}
 
-		public void remove() {
-			throw new UnsupportedOperationException();
-		}
+		override fun remove(): Unit = throw UnsupportedOperationException()
 	}
 
-	private final T first;
-	private final T second;
-	private V firstValue;
-	private V secondValue;
+	private val first: T
+	private val second: T
+	private var firstValue: V? = null
+	private var secondValue: V? = null
 
 	/**
 	 * Create with additional information
@@ -64,10 +69,9 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 	 * @param firstValue
 	 * @param secondValue
 	 */
-	public Doubleton(final T first, final T second, V firstValue, V secondValue) {
-		this(first, second);
-		this.firstValue = firstValue;
-		this.secondValue = secondValue;
+	constructor(first: T, second: T, firstValue: V, secondValue: V) : this(first, second) {
+		this.firstValue = firstValue
+		this.secondValue = secondValue
 	}
 
 	/**
@@ -75,17 +79,16 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 	 * @param first
 	 * @param second
 	 */
-	public Doubleton(final T first, final T second) {
-		if (first == second || (first != null && first.equals(second))) throw new IllegalArgumentException("arguments is equal");
-		this.first = first;
-		this.second = second;
+	constructor(first: T, second: T) {
+		if (first == second || (first != null && first == second)) throw IllegalArgumentException("arguments is equal")
+		this.first = first
+		this.second = second
 	}
 
-	@Override
-	public int hashCode() {
-		int result = (first == null) ? 0 : first.hashCode();
-		result += (second == null) ? 0 : second.hashCode();//kongruentni komutativita?
-		return result;
+	override fun hashCode(): Int {
+		var result = if (first == null) 0 else first.hashCode()
+		result += if (second == null) 0 else second.hashCode() // kongruentni komutativita?
+		return result
 	}
 
 	/**
@@ -104,53 +107,49 @@ public class Doubleton<T,V> extends AbstractSet<T> {
 	 * @param obj the object to compare with
 	 * @return true if obj is a Doubleton with the same elements
 	 */
-	@Override
-	public boolean equals(Object obj) {
+	override fun equals(obj: Any?): Boolean {
 		// Delegate to AbstractSet's content-based equality implementation
 		// which correctly handles order-independent comparison
-		return super.equals(obj);
+		return super.equals(obj)
 	}
 
-	@Override
-	public Iterator<T> iterator() {
-		return new DoubletonIterator();
-	}
+	override fun iterator(): MutableIterator<T> = DoubletonIterator()
 
-	@Override
-	public int size() {
-		return 2;
-	}
+	override val size: Int = 2
 
-	@Override
-	public boolean isEmpty() {
-		return false;
-	}
+	override fun isEmpty(): Boolean = false
 
 	/**
 	 * @param key
 	 * @return value assigned to key
 	 */
-	public V getValue(T key) {
-		final boolean secondEq = nullEq(key, second);
+	fun getValue(key: T): V? {
+		val secondEq = nullEq(key, second)
 		if (nullEq(key, first)) {
-			assert !secondEq;
-			return firstValue;
+			assert(!secondEq)
+			return firstValue
 		}
-		if (secondEq) return secondValue;
-		throw new IllegalArgumentException("Key " + key + " is not contain in set");
+		if (secondEq) return secondValue
+		throw IllegalArgumentException("Key $key is not contain in set")
 	}
 
-	private boolean nullEq(final Object a, final Object b) {
-		if (a == null) return b == null;
-		return b != null && a.equals(b);
+	private fun nullEq(
+		a: Any?,
+		b: Any?
+	): Boolean {
+		if (a == null) return b == null
+		return a == b
 	}
 
 	/**
 	 * @param first
 	 * @param second
 	 */
-	public void setValues(V first, V second) {
-		this.firstValue = first;
-		this.secondValue = second;
+	fun setValues(
+		first: V,
+		second: V
+	) {
+		this.firstValue = first
+		this.secondValue = second
 	}
 }

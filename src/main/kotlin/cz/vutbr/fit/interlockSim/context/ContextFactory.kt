@@ -7,24 +7,24 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.io.File;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 
 /**
  * Context Factory Interface
  *
  */
-public interface ContextFactory {
+interface ContextFactory {
 	/**
 	 * create context from file
 	 * @param file source
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-	public Context createContext(File file) throws ContextCreationException;
+	fun createContext(file: File): Context
 
 	/**
 	 * create context from stream
@@ -32,7 +32,7 @@ public interface ContextFactory {
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-	public Context createContext(InputStream stream) throws ContextCreationException;
+	fun createContext(stream: InputStream): Context
 
 	/**
 	 * save context to file
@@ -40,7 +40,10 @@ public interface ContextFactory {
 	 * @param file
 	 * @return if save was success
 	 */
-	public boolean saveContext(Context context, File file);
+	fun saveContext(
+		context: Context,
+		file: File
+	): Boolean
 
 	/**
 	 * save context to stream
@@ -48,6 +51,8 @@ public interface ContextFactory {
 	 * @param stream
 	 * @return if save was success
 	 */
-	public boolean saveContext(Context context, OutputStream stream);
+	fun saveContext(
+		context: Context,
+		stream: OutputStream
+	): Boolean
 }
-

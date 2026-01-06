@@ -7,33 +7,35 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks;
+package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State;
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException;
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.sim.TrackOperationException
 
 /**
  * "jakykoliv (z ruznych pohledu) usek koleji mezi pathseparatory (cast cesty)"
  * "muze se tvorit rekurzivne"
  */
-public interface Track extends PathElement {
-	/**
-	 * model bound constants
-	 */
-	public static final double MIN_LENGTH = 5;//m
-	/**
-	 * model bound constants
-	 */
-	public static final double COMMON_TRACK_LENGTH = 100;//m
+interface Track : PathElement {
+	companion object {
+		/**
+		 * model bound constants
+		 */
+		const val MIN_LENGTH = 5.0 // m
+
+		/**
+		 * model bound constants
+		 */
+		const val COMMON_TRACK_LENGTH = 100.0 // m
+	}
 
 	/**
 	 * @param sep must be from ends
 	 * @return Is able to enter (set way) from direction
 	 * @throws TrackOperationException
 	 */
-	public boolean isFreeFrom(PathSeparator sep) throws TrackOperationException;
+	fun isFreeFrom(sep: PathSeparator): Boolean
 
 	/**
 	 * Reserve this track
@@ -42,14 +44,14 @@ public interface Track extends PathElement {
 	 * @param from must be from ends
 	 * @throws TrackOperationException
 	 */
-	public void setUpPath(PathSeparator from) throws TrackOperationException; //direction, null cancel
+	fun setUpPath(from: PathSeparator)
 
 	/**
 	 * @param from from
 	 * @return if way setted up
 	 * @throws TrackOperationException
 	 */
-	public boolean isSetUpPath(PathSeparator from) throws TrackOperationException;
+	fun isSetUpPath(from: PathSeparator): Boolean
 
 	/**
 	 * Frees this track
@@ -58,27 +60,27 @@ public interface Track extends PathElement {
 	 * @param from end of track
 	 * @throws TrackOperationException
 	 */
-	public void cancelPathSetup(PathSeparator from) throws TrackOperationException;
+	fun cancelPathSetup(from: PathSeparator)
 
 	/**
 	 * @param sep first end
 	 * @return second end
 	 */
-	public PathSeparator getSecondEnd(PathSeparator sep);
+	fun getSecondEnd(sep: PathSeparator): PathSeparator
 
 	/**
 	 * @return length of track in meters
 	 */
-	public double length();
+	fun length(): Double
 
 	/**
 	 * @param from
 	 * @return allowed speed from one end
 	 */
-	public double maxSpeed(PathSeparator from);
+	fun maxSpeed(from: PathSeparator?): Double
 
 	/**
 	 * @return both separators on ends of track
 	 */
-	public PathSeparator[] ends();
+	fun ends(): Array<PathSeparator>
 }

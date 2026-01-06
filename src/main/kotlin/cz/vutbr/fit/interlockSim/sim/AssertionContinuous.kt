@@ -7,43 +7,51 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Continuous;
+import jDisco.Continuous
 
 /**
  * Base of simple validation feature for continuous variables and processes
  *
  */
-public abstract class AssertionContinuous extends Continuous {
-	private static boolean assertionEnabled = false;
-	private static boolean assertionForced = true;
+abstract class AssertionContinuous : Continuous() {
+	companion object {
+		private var assertionEnabled = false
+		private var assertionForced = true
 
-	static {
-		assert assertionEnabled = true;
-		if (assertionForced && !assertionEnabled)
-			throw new RuntimeException("Please enable assertion facility.");
+		init {
+			assert(
+				run {
+					assertionEnabled = true
+					true
+				}
+			)
+			if (assertionForced && !assertionEnabled) {
+				throw RuntimeException("Please enable assertion facility.")
+			}
+		}
 	}
 
-	@Override
-	protected final void derivatives() {
-		assert check() : report(new StringBuilder(Double.toString(time())).append(" : "));
+	protected final override fun derivatives() {
+		if (!check()) {
+			val sb = StringBuilder(time().toString()).append(" : ")
+			val msg = report(sb as StringBuilder)
+			assert(false) { msg.toString() }
+		}
 	}
 
 	/**
 	 * @param reportObj
 	 * @return Must return same reportObj back
 	 */
-	public abstract StringBuilder report(final StringBuilder reportObj);
+	abstract fun report(reportObj: StringBuilder): StringBuilder
 
 	/**
-	 * This metod describe conditions, which mean valid state
+	 * This method describe conditions, which mean valid state
 	 * @return condition result
 	 */
-	public abstract boolean check();
+	abstract fun check(): Boolean
 
-	@Override
-	public AssertionContinuous start() {
-		return (assertionEnabled) ? (AssertionContinuous) super.start() : this;
-	}
+	override fun start(): AssertionContinuous = if (assertionEnabled) super.start() as AssertionContinuous else this
 }

@@ -7,33 +7,28 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim;
+package cz.vutbr.fit.interlockSim
 
-import java.io.File;
-import java.io.InputStream;
-import java.io.PrintStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collections;
-
-import cz.vutbr.fit.interlockSim.context.Context;
-import cz.vutbr.fit.interlockSim.context.ContextCreationException;
-import cz.vutbr.fit.interlockSim.context.ContextFactory;
-import cz.vutbr.fit.interlockSim.context.DefaultContext;
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory;
-import cz.vutbr.fit.interlockSim.context.EmptyContextException;
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory;
-import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
-import cz.vutbr.fit.interlockSim.gui.Frame;
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop;
-import cz.vutbr.fit.interlockSim.sim.SimulationException;
-import cz.vutbr.fit.interlockSim.util.Util;
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.ContextFactory
+import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.EmptyContextException
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.SimulationException
+import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.slf4j.LoggerFactory
+import java.io.File
+import java.io.InputStream
+import java.io.PrintStream
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Modifier
 
 /**
  * Main class, for run program
@@ -45,97 +40,74 @@ import org.slf4j.LoggerFactory;
  *
  * !!! Please check JAVA_HOME for JDK/JRE 1.6 !!!
  */
-public class Main {
-	/**
-	 * Program name
-	 */
-	public static final String PROGRAM_NAME = "InterlockSim";
-	/**
-	 * Version
-	 */
-	public static final String PROGRAM_VERSION = "0.1-bachelor";
-	/**
-	 * Program title
-	 */
-	public static final String PROGRAM_FULL_NAME = PROGRAM_NAME + " " + PROGRAM_VERSION;
+class Main private constructor() {
+	private var frame: Frame? = null
 
-	private static final Logger logger = LoggerFactory.getLogger(Main.class);
-
-	private Frame frame;
-	private static Main instance = new Main();
-
-	//kam poustet hlasky
-	private static final PrintStream out = System.err;
-
-	private Main() {
-		//?
+	private fun loadGui(args: Array<String>) {
+		frame = Frame()
+		frame!!.setContext(createContext(args))
+		frame!!.setVisible(true)
 	}
 
-	private void loadGui(String[] args) {
-		frame = new Frame();
-		frame.setContext(createContext(args));
-		frame.setVisible(true);
-	}
+	private fun createContext(args: Array<String>): Context {
+		val factory = getContextFactory() as EditingContextFactory
 
-	private final Context createContext(String[] args) {
-		final EditingContextFactory factory = (EditingContextFactory) getContextFactory();
-
-		if (args.length > 1) {
+		if (args.size > 1) {
 			try {
-				return factory.createContext(new File(args[1]));
-			} catch (ContextCreationException e) {
-				e.printStackTrace();
-				System.exit(1);
+				return factory.createContext(File(args[1]))
+			} catch (e: ContextCreationException) {
+				e.printStackTrace()
+				System.exit(1)
 			}
 		}
-		return factory.createEmptyContext();
+		return factory.createEmptyContext()
 	}
 
-	private void loadSim(String[] args) {
-		final SimulationContext context = (SimulationContext) createContext(args);
-		context.addReportTypes(ReportType.values());
+	private fun loadSim(args: Array<String>) {
+		val context = createContext(args) as SimulationContext
+		context.addReportTypes(*ReportType.values())
 		try {
-			context.run();
-		} catch (EmptyContextException e) {
-			out.println("You dont specify valid file");
-		} catch (SimulationException e) {
-			out.println("Simulation failed");
-			e.printStackTrace();
+			context.run()
+		} catch (e: EmptyContextException) {
+			out.println("You dont specify valid file")
+		} catch (e: SimulationException) {
+			out.println("Simulation failed")
+			e.printStackTrace()
 		}
 	}
 
-	private void runExample(String[] args) {
-		if (args.length == 1) {
-			printListOfExamples();
-			return;
+	private fun runExample(args: Array<String>) {
+		if (args.size == 1) {
+			printListOfExamples()
+			return
 		}
-		final String name = args[1];
+		val name = args[1]
 		try {
-			final Method method = Main.class.getMethod(name, SimulationContextFactory.class, String[].class);
-			if (!method.isAnnotationPresent(Example.class)) throw new NoSuchMethodException("Method " + name + " isn't annotated");
-			final XMLContextFactory factory = (XMLContextFactory) getContextFactory();
-			SimulationContext context = (SimulationContext) method.invoke(this, factory, args);
-			context.run();
-		} catch (NoSuchMethodException e) {
-			out.println("Example with name "+ name + " not exist");
-			printListOfExamples();
-		} catch (SimulationException e) {
-			out.println("Example simulation failed");
-		} catch (EmptyContextException e) {
-			out.println("Example simulation could not started - empty context");
-		} catch (InvocationTargetException e) {
-			final Throwable cause = e.getCause();
-			if (cause instanceof ContextCreationException) {
-				out.println(cause.getMessage());
-				return;
-			} else if (cause instanceof NumberFormatException) {
-				out.println(cause.getMessage().concat(" cannot convert to number"));
-				return;
+			val method = Main::class.java.getMethod(name, SimulationContextFactory::class.java, Array<String>::class.java)
+			if (!method.isAnnotationPresent(Example::class.java)) throw NoSuchMethodException("Method $name isn't annotated")
+			val factory = getContextFactory() as XMLContextFactory
+			val context = method.invoke(this, factory, args) as SimulationContext
+			context.run()
+		} catch (e: NoSuchMethodException) {
+			out.println("Example with name $name not exist")
+			printListOfExamples()
+		} catch (e: SimulationException) {
+			out.println("Example simulation failed")
+		} catch (e: EmptyContextException) {
+			out.println("Example simulation could not started - empty context")
+		} catch (e: InvocationTargetException) {
+			val cause = e.cause
+			if (cause is ContextCreationException) {
+				out.println(cause.message)
+				return
+			} else if (cause is NumberFormatException) {
+				out.println(cause.message + " cannot convert to number")
+				return
 			}
-			logger.error("Example initialization failed", cause);
-		} catch (Exception e) {
-			out.println("Example inilialization failed");
-			logger.error("Example initialization failed", e);
+			logger.error("Example initialization failed", cause)
+		} catch (e: Exception) {
+			out.println("Example inilialization failed")
+			logger.error("Example initialization failed", e)
 		}
 	}
 
@@ -145,63 +117,98 @@ public class Main {
 	 * @throws ContextCreationException
 	 */
 	@Example
-	public SimulationContext shuntingLoop(SimulationContextFactory factory, String[] args) throws ContextCreationException {
-		if (args.length < 3) {
-			throw new ContextCreationException("End time of simulation not inserted");
+	fun shuntingLoop(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		if (args.size < 3) {
+			throw ContextCreationException("End time of simulation not inserted")
 		}
-		final InputStream stream = MyResourceBoundle.getInstance().getFile("vyhybna.xml");
-		final DefaultContext context = Util.assertInstanceOf(DefaultContext.class, factory.createContext(stream));
-		final long time = Long.parseLong(args[2]);
-		context.setMainProcess(new ShuntingLoop(context, time));
-		return context;
+		val stream: InputStream =
+			MyResourceBoundle.getInstance().getFile("vyhybna.xml")
+				?: throw ContextCreationException("Resource file vyhybna.xml not found")
+		val context = Util.assertInstanceOf(DefaultContext::class.java, factory.createContext(stream))
+		val time = args[2].toLong()
+		context.setMainProcess(ShuntingLoop(context, time))
+		return context
 	}
 
-	private void printListOfExamples() {
-		final ArrayList<String> list = new ArrayList<String>();
-		for (Method m : Main.class.getDeclaredMethods()) {
-			if (Modifier.isPublic(m.getModifiers()) && m.isAnnotationPresent(Example.class)) {
-				list.add(m.getName());
+	private fun printListOfExamples() {
+		val list = ArrayList<String>()
+		for (m in Main::class.java.declaredMethods) {
+			if (Modifier.isPublic(m.modifiers) && m.isAnnotationPresent(Example::class.java)) {
+				list.add(m.name)
 			}
 		}
-		Collections.sort(list, String.CASE_INSENSITIVE_ORDER);
-		out.println(list.size() > 0 ? "You must specify valid name of example\nList of examples: "+ list :
-						"No Examples in program");
-	}
-
-	/**
-	 * @param args
-	 */
-	public static void main(String[] args) {
-		if (isArgs(args, "sim")) {
-			instance.loadSim(args);
-		} else if (isArgs(args, "example")) {
-			instance.runExample(args);
-		} else if (isArgs(args, "edit")) {
-			instance.loadGui(args);
-		} else {
-			out.println("usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n" +
-								"\t\t example [name]"
-							  );
-		}
-	}
-
-	private static final boolean isArgs(String[] args, String firstArg) {
-		return args.length > 0 && args[0].equals(firstArg);
-	}
-
-	/**
-	 * @return Main singleton instance
-	 */
-	public static Main getInstance() {//CAUTION pouzivat jen v nejnutnejsich pripadech
-		assert instance != null;
-		return instance;
+		list.sortWith(String.CASE_INSENSITIVE_ORDER)
+		out.println(
+			if (list.size > 0) {
+				"You must specify valid name of example\nList of examples: $list"
+			} else {
+				"No Examples in program"
+			}
+		)
 	}
 
 	/**
 	 * temporary method
 	 * @return current Context Factory
 	 */
-	public ContextFactory getContextFactory() {
-		return XMLContextFactory.getInstance();
+	fun getContextFactory(): ContextFactory = XMLContextFactory.getInstance()
+
+	companion object {
+		/**
+		 * Program name
+		 */
+		const val PROGRAM_NAME = "InterlockSim"
+
+		/**
+		 * Version
+		 */
+		const val PROGRAM_VERSION = "0.1-bachelor"
+
+		/**
+		 * Program title
+		 */
+		const val PROGRAM_FULL_NAME = "$PROGRAM_NAME $PROGRAM_VERSION"
+
+		private val logger = LoggerFactory.getLogger(Main::class.java)
+
+		private val instance = Main()
+
+		// kam poustet hlasky
+		private val out: PrintStream = System.err
+
+		/**
+		 * @param args
+		 */
+		@JvmStatic
+		fun main(args: Array<String>) {
+			if (isArgs(args, "sim")) {
+				instance.loadSim(args)
+			} else if (isArgs(args, "example")) {
+				instance.runExample(args)
+			} else if (isArgs(args, "edit")) {
+				instance.loadGui(args)
+			} else {
+				out.println(
+					"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n" +
+						"\t\t example [name]"
+				)
+			}
+		}
+
+		private fun isArgs(
+			args: Array<String>,
+			firstArg: String
+		): Boolean = args.isNotEmpty() && args[0] == firstArg
+
+		/**
+		 * @return Main singleton instance
+		 */
+		@JvmStatic
+		fun getInstance(): Main { // CAUTION pouzivat jen v nejnutnejsich pripadech
+			return instance
+		}
 	}
 }

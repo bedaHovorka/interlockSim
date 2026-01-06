@@ -1,24 +1,24 @@
 /*
-    Brno University of Technology
-    Faculty of Information Technology
+	Brno University of Technology
+	Faculty of Information Technology
 
-    BSc Thesis       2006/2007
-    Railway Interlocking Simulator
+	BSc Thesis       2006/2007
+	Railway Interlocking Simulator
 
-    Unit tests for HashMapGraph
+	Unit tests for HashMapGraph
 
-    Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
-    Test implementation: 2025 (Phase 1)
+	Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
+	Test implementation: 2025 (Phase 1)
 */
 
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import org.junit.jupiter.api.*;
-import java.util.*;
-import static org.assertj.core.api.Assertions.*;
+import org.assertj.core.api.Assertions.*
+import org.junit.jupiter.api.*
+import java.util.*
 
 /**
- * Unit tests for {@link HashMapGraph}.
+ * Unit tests for HashMapGraph.
  *
  * Coverage:
  * - Basic put/get operations
@@ -28,339 +28,323 @@ import static org.assertj.core.api.Assertions.*;
  * - Error handling and edge cases
  */
 class HashMapGraphTest {
-
-	private HashMapGraph<String, Integer, String> graph;
+	private lateinit var graph: HashMapGraph<String, Int, String>
 
 	@BeforeEach
-	void setUp() {
-		graph = new HashMapGraph<>();
+	fun setUp() {
+		graph = HashMapGraph()
 	}
 
 	@Nested
 	@DisplayName("Basic operations")
-	class BasicOperations {
-
+	inner class BasicOperations {
 		@Test
-		void put_twoNodes_storesEdge() {
-			graph.put("A", "B", 100);
+		fun put_twoNodes_storesEdge() {
+			graph.put("A", "B", 100)
 
-			assertThat(graph.get("A", "B")).isEqualTo(100);
+			assertThat(graph.get("A", "B")).isEqualTo(100)
 		}
 
 		@Test
-		void put_unorientedEdge_accessibleFromBothDirections() {
-			graph.put("A", "B", 100);
+		fun put_unorientedEdge_accessibleFromBothDirections() {
+			graph.put("A", "B", 100)
 
-			assertThat(graph.get("A", "B")).isEqualTo(100);
-			assertThat(graph.get("B", "A")).isEqualTo(100);
+			assertThat(graph.get("A", "B")).isEqualTo(100)
+			assertThat(graph.get("B", "A")).isEqualTo(100)
 		}
 
 		@Test
-		void put_multipleEdges_allStored() {
-			graph.put("A", "B", 100);
-			graph.put("B", "C", 150);
-			graph.put("C", "D", 200);
+		fun put_multipleEdges_allStored() {
+			graph.put("A", "B", 100)
+			graph.put("B", "C", 150)
+			graph.put("C", "D", 200)
 
-			assertThat(graph.get("A", "B")).isEqualTo(100);
-			assertThat(graph.get("B", "C")).isEqualTo(150);
-			assertThat(graph.get("C", "D")).isEqualTo(200);
+			assertThat(graph.get("A", "B")).isEqualTo(100)
+			assertThat(graph.get("B", "C")).isEqualTo(150)
+			assertThat(graph.get("C", "D")).isEqualTo(200)
 		}
 
 		@Test
-		void put_replacingEdge_updatesValue() {
-			graph.put("A", "B", 100);
-			graph.put("A", "B", 200);
+		fun put_replacingEdge_updatesValue() {
+			graph.put("A", "B", 100)
+			graph.put("A", "B", 200)
 
-			assertThat(graph.get("A", "B")).isEqualTo(200);
+			assertThat(graph.get("A", "B")).isEqualTo(200)
 		}
 
 		@Test
-		void get_nonExistentEdge_returnsNull() {
-			assertThat(graph.get("A", "B")).isNull();
+		fun get_nonExistentEdge_returnsNull() {
+			assertThat(graph.get("A", "B")).isNull()
 		}
 
 		@Test
-		void size_emptyGraph_returnsZero() {
-			assertThat(graph.size()).isZero();
+		fun size_emptyGraph_returnsZero() {
+			assertThat(graph.size()).isZero()
 		}
 
 		@Test
-		void size_afterAddingEdges_returnsCorrectCount() {
-			graph.put("A", "B", 100);
-			graph.put("B", "C", 150);
-			graph.put("C", "D", 200);
+		fun size_afterAddingEdges_returnsCorrectCount() {
+			graph.put("A", "B", 100)
+			graph.put("B", "C", 150)
+			graph.put("C", "D", 200)
 
-			assertThat(graph.size()).isEqualTo(3);
+			assertThat(graph.size()).isEqualTo(3)
 		}
 	}
 
 	@Nested
 	@DisplayName("Extended operations with additional information")
-	class ExtendedOperations {
-
+	inner class ExtendedOperations {
 		@Test
-		void putWithAddInfo_storesEdgeWithMetadata() {
-			graph.put("A", "infoA", "B", "infoB", 100);
+		fun putWithAddInfo_storesEdgeWithMetadata() {
+			graph.put("A", "infoA", "B", "infoB", 100)
 
-			assertThat(graph.get("A", "B")).isEqualTo(100);
+			assertThat(graph.get("A", "B")).isEqualTo(100)
 		}
 
 		@Test
-		void putIfNotExists_newEdge_addsEdge() {
-			graph.putIfNotExists("A", "infoA", "B", "infoB", 100);
+		fun putIfNotExists_newEdge_addsEdge() {
+			graph.putIfNotExists("A", "infoA", "B", "infoB", 100)
 
-			assertThat(graph.get("A", "B")).isEqualTo(100);
+			assertThat(graph.get("A", "B")).isEqualTo(100)
 		}
 
 		@Test
-		void putIfNotExists_existingEdge_doesNotReplace() {
-			graph.put("A", "infoA", "B", "infoB", 100);
-			graph.putIfNotExists("A", "infoA", "B", "infoB", 200);
+		fun putIfNotExists_existingEdge_doesNotReplace() {
+			graph.put("A", "infoA", "B", "infoB", 100)
+			graph.putIfNotExists("A", "infoA", "B", "infoB", 200)
 
-			assertThat(graph.get("A", "B"))
-				.as("Should keep original value")
-				.isEqualTo(100);
+			assertThat(graph.get("A", "B")).`as`("Should keep original value").isEqualTo(100)
 		}
 
 		@Test
-		void assignedEdges_nodeWithMultipleEdges_returnsAllEdges() {
-			graph.put("A", "info1", "B", "info2", 100);
-			graph.put("A", "info3", "C", "info4", 150);
-			graph.put("A", "info5", "D", "info6", 200);
+		fun assignedEdges_nodeWithMultipleEdges_returnsAllEdges() {
+			graph.put("A", "info1", "B", "info2", 100)
+			graph.put("A", "info3", "C", "info4", 150)
+			graph.put("A", "info5", "D", "info6", 200)
 
-			Map<String, Integer> edges = graph.assignedEdges("A");
+			val edges = graph.assignedEdges("A")
 
-			assertThat(edges)
-				.hasSize(3)
-				.containsEntry("info1", 100)
-				.containsEntry("info3", 150)
-				.containsEntry("info5", 200);
+			assertThat(edges.size()).isEqualTo(3)
+			assertThat(edges.get("info1")).isEqualTo(100)
+			assertThat(edges.get("info3")).isEqualTo(150)
+			assertThat(edges.get("info5")).isEqualTo(200)
 		}
 
 		@Test
-		void extensionalObject_existingEdge_returnsAddInfo() {
-			graph.put("A", "infoA", "B", "infoB", 100);
+		fun extensionalObject_existingEdge_returnsAddInfo() {
+			graph.put("A", "infoA", "B", "infoB", 100)
 
-			String addInfo = graph.extensionalObject("A", 100);
+			val addInfo = graph.extensionalObject("A", 100)
 
-			assertThat(addInfo).isEqualTo("infoA");
+			assertThat(addInfo).isEqualTo("infoA")
 		}
 	}
 
 	@Nested
 	@DisplayName("Node operations")
-	class NodeOperations {
-
+	inner class NodeOperations {
 		@Test
-		void nodeSet_emptyGraph_returnsEmptySet() {
-			Set<String> nodes = graph.nodeSet();
+		fun nodeSet_emptyGraph_returnsEmptySet() {
+			val nodes = graph.nodeSet()
 
-			assertThat(nodes).isEmpty();
+			assertThat(nodes).isEmpty()
 		}
 
 		@Test
-		void nodeSet_withEdges_returnsAllNodes() {
-			graph.put("A", "B", 100);
-			graph.put("B", "C", 150);
+		fun nodeSet_withEdges_returnsAllNodes() {
+			graph.put("A", "B", 100)
+			graph.put("B", "C", 150)
 
-			Set<String> nodes = graph.nodeSet();
+			val nodes = graph.nodeSet()
 
 			assertThat(nodes)
 				.hasSize(3)
-				.containsExactlyInAnyOrder("A", "B", "C");
+				.containsExactlyInAnyOrder("A", "B", "C")
 		}
 
 		@Test
-		void nodeSet_duplicateNodes_returnsUniqueSet() {
-			graph.put("A", "B", 100);
-			graph.put("A", "C", 150);
-			graph.put("B", "C", 200);
+		fun nodeSet_duplicateNodes_returnsUniqueSet() {
+			graph.put("A", "B", 100)
+			graph.put("A", "C", 150)
+			graph.put("B", "C", 200)
 
-			Set<String> nodes = graph.nodeSet();
+			val nodes = graph.nodeSet()
 
 			assertThat(nodes)
 				.hasSize(3)
-				.containsExactlyInAnyOrder("A", "B", "C");
+				.containsExactlyInAnyOrder("A", "B", "C")
 		}
 
 		@Test
-		void contains_existingEdge_returnsTrue() {
-			graph.put("A", "B", 100);
+		fun contains_existingEdge_returnsTrue() {
+			graph.put("A", "B", 100)
 
-			assertThat(graph.contains("A", "B")).isTrue();
-			assertThat(graph.contains("B", "A")).isTrue();
+			assertThat(graph.contains("A", "B")).isTrue()
+			assertThat(graph.contains("B", "A")).isTrue()
 		}
 
 		@Test
-		void contains_nonExistentEdge_returnsFalse() {
-			assertThat(graph.contains("A", "B")).isFalse();
+		fun contains_nonExistentEdge_returnsFalse() {
+			assertThat(graph.contains("A", "B")).isFalse()
 		}
 	}
 
 	@Nested
 	@DisplayName("Removal operations")
-	class RemovalOperations {
-
+	inner class RemovalOperations {
 		@Test
-		void remove_existingEdge_removesAndReturnsValue() {
-			graph.put("A", "B", 100);
+		fun remove_existingEdge_removesAndReturnsValue() {
+			graph.put("A", "B", 100)
 
-			Integer removed = graph.remove("A", "B");
+			val removed = graph.remove("A", "B")
 
-			assertThat(removed).isEqualTo(100);
-			assertThat(graph.get("A", "B")).isNull();
+			assertThat(removed).isEqualTo(100)
+			assertThat(graph.get("A", "B")).isNull()
 		}
 
 		@Test
-		void remove_nonExistentEdge_returnsNull() {
-			Integer removed = graph.remove("A", "B");
+		fun remove_nonExistentEdge_returnsNull() {
+			val removed = graph.remove("A", "B")
 
-			assertThat(removed).isNull();
+			assertThat(removed).isNull()
 		}
 
 		@Test
-		void removeAll_nodeWithMultipleEdges_removesAllConnectedEdges() {
-			graph.put("A", "B", 100);
-			graph.put("A", "C", 150);
-			graph.put("A", "D", 200);
-			graph.put("B", "C", 250);
+		fun removeAll_nodeWithMultipleEdges_removesAllConnectedEdges() {
+			graph.put("A", "B", 100)
+			graph.put("A", "C", 150)
+			graph.put("A", "D", 200)
+			graph.put("B", "C", 250)
 
-			Collection<Integer> removed = graph.removeAll("A");
+			val removed = graph.removeAll("A")
 
 			assertThat(removed)
 				.hasSize(3)
-				.containsExactlyInAnyOrder(100, 150, 200);
-			assertThat(graph.get("A", "B")).isNull();
-			assertThat(graph.get("A", "C")).isNull();
-			assertThat(graph.get("A", "D")).isNull();
-			assertThat(graph.get("B", "C"))
-				.as("Edge not connected to A should remain")
-				.isEqualTo(250);
+				.containsExactlyInAnyOrder(100, 150, 200)
+			assertThat(graph.get("A", "B")).isNull()
+			assertThat(graph.get("A", "C")).isNull()
+			assertThat(graph.get("A", "D")).isNull()
+			assertThat(graph.get("B", "C")).`as`("Edge not connected to A should remain").isEqualTo(250)
 		}
 
 		@Test
-		void removeByValue_existingValue_removesEdgeAndReturnsNodes() {
-			graph.put("A", "B", 100);
-			graph.put("C", "D", 200);
+		fun removeByValue_existingValue_removesEdgeAndReturnsNodes() {
+			graph.put("A", "B", 100)
+			graph.put("C", "D", 200)
 
-			Collection<String> nodes = graph.remove(100);
+			val nodes = graph.remove(100)
 
 			assertThat(nodes)
 				.hasSize(2)
-				.containsExactlyInAnyOrder("A", "B");
-			assertThat(graph.get("A", "B")).isNull();
-			assertThat(graph.get("C", "D"))
-				.as("Other edges should remain")
-				.isEqualTo(200);
+				.containsExactlyInAnyOrder("A", "B")
+			assertThat(graph.get("A", "B")).isNull()
+			assertThat(graph.get("C", "D")).`as`("Other edges should remain").isEqualTo(200)
 		}
 
 		@Test
-		void removeByValue_duplicateValues_removesAllMatchingEdges() {
-			graph.put("A", "B", 100);
-			graph.put("C", "D", 100);
-			graph.put("E", "F", 200);
+		fun removeByValue_duplicateValues_removesAllMatchingEdges() {
+			graph.put("A", "B", 100)
+			graph.put("C", "D", 100)
+			graph.put("E", "F", 200)
 
-			Collection<String> nodes = graph.remove(100);
+			val nodes = graph.remove(100)
 
 			assertThat(nodes)
 				.hasSize(4)
-				.containsExactlyInAnyOrder("A", "B", "C", "D");
-			assertThat(graph.get("E", "F"))
-				.as("Edge with different value should remain")
-				.isEqualTo(200);
+				.containsExactlyInAnyOrder("A", "B", "C", "D")
+			assertThat(graph.get("E", "F")).`as`("Edge with different value should remain").isEqualTo(200)
 		}
 	}
 
 	@Nested
 	@DisplayName("Graph traversal and queries")
-	class TraversalOperations {
-
+	inner class TraversalOperations {
 		@Test
-		void get_nodeInGraph_returnsAllConnectedEdges() {
-			graph.put("A", "B", 100);
-			graph.put("A", "C", 150);
-			graph.put("B", "C", 200);
+		fun get_nodeInGraph_returnsAllConnectedEdges() {
+			graph.put("A", "B", 100)
+			graph.put("A", "C", 150)
+			graph.put("B", "C", 200)
 
-			Collection<Integer> edges = graph.get("A");
+			val edges = graph.get("A")
 
 			assertThat(edges)
 				.hasSize(2)
-				.containsExactlyInAnyOrder(100, 150);
+				.containsExactlyInAnyOrder(100, 150)
 		}
 
 		@Test
-		void get_isolatedNode_returnsEmptyCollection() {
-			graph.put("A", "B", 100);
+		fun get_isolatedNode_returnsEmptyCollection() {
+			graph.put("A", "B", 100)
 
-			Collection<Integer> edges = graph.get("C");
+			val edges = graph.get("C")
 
-			assertThat(edges).isEmpty();
+			assertThat(edges).isEmpty()
 		}
 
 		@Test
-		void values_returnsAllEdgeValues() {
-			graph.put("A", "B", 100);
-			graph.put("B", "C", 150);
-			graph.put("C", "D", 200);
+		fun values_returnsAllEdgeValues() {
+			graph.put("A", "B", 100)
+			graph.put("B", "C", 150)
+			graph.put("C", "D", 200)
 
-			Collection<Integer> values = graph.values();
+			val values = graph.values()
 
 			assertThat(values)
 				.hasSize(3)
-				.containsExactlyInAnyOrder(100, 150, 200);
+				.containsExactlyInAnyOrder(100, 150, 200)
 		}
 
 		@Test
-		void entrySet_returnsAllEntries() {
-			graph.put("A", "B", 100);
-			graph.put("B", "C", 150);
+		fun entrySet_returnsAllEntries() {
+			graph.put("A", "B", 100)
+			graph.put("B", "C", 150)
 
-			Set<Map.Entry<Doubleton<String, String>, Integer>> entries = graph.entrySet();
+			val entries = graph.entrySet()
 
-			assertThat(entries).hasSize(2);
+			assertThat(entries).hasSize(2)
 		}
 	}
 
 	@Nested
 	@DisplayName("Edge cases and complex scenarios")
-	class EdgeCases {
-
+	inner class EdgeCases {
 		@Test
-		void complexGraph_starTopology_allOperationsWork() {
+		fun complexGraph_starTopology_allOperationsWork() {
 			// Create a star topology: A connected to B, C, D, E
-			graph.put("A", "B", 1);
-			graph.put("A", "C", 2);
-			graph.put("A", "D", 3);
-			graph.put("A", "E", 4);
+			graph.put("A", "B", 1)
+			graph.put("A", "C", 2)
+			graph.put("A", "D", 3)
+			graph.put("A", "E", 4)
 
-			assertThat(graph.get("A")).hasSize(4);
-			assertThat(graph.nodeSet()).containsExactlyInAnyOrder("A", "B", "C", "D", "E");
-			assertThat(graph.size()).isEqualTo(4);
+			assertThat(graph.get("A")).hasSize(4)
+			assertThat(graph.nodeSet()).containsExactlyInAnyOrder("A", "B", "C", "D", "E")
+			assertThat(graph.size()).isEqualTo(4)
 		}
 
 		@Test
-		void complexGraph_linearChain_traversable() {
+		fun complexGraph_linearChain_traversable() {
 			// Create linear chain: A-B-C-D-E
-			graph.put("A", "B", 1);
-			graph.put("B", "C", 2);
-			graph.put("C", "D", 3);
-			graph.put("D", "E", 4);
+			graph.put("A", "B", 1)
+			graph.put("B", "C", 2)
+			graph.put("C", "D", 3)
+			graph.put("D", "E", 4)
 
-			assertThat(graph.get("B")).containsExactlyInAnyOrder(1, 2);
-			assertThat(graph.get("C")).containsExactlyInAnyOrder(2, 3);
+			assertThat(graph.get("B")).containsExactlyInAnyOrder(1, 2)
+			assertThat(graph.get("C")).containsExactlyInAnyOrder(2, 3)
 		}
 
 		@Test
-		void complexGraph_cycle_detectableThroughContains() {
+		fun complexGraph_cycle_detectableThroughContains() {
 			// Create cycle: A-B-C-A
-			graph.put("A", "B", 1);
-			graph.put("B", "C", 2);
-			graph.put("C", "A", 3);
+			graph.put("A", "B", 1)
+			graph.put("B", "C", 2)
+			graph.put("C", "A", 3)
 
-			assertThat(graph.contains("A", "B")).isTrue();
-			assertThat(graph.contains("B", "C")).isTrue();
-			assertThat(graph.contains("C", "A")).isTrue();
-			assertThat(graph.size()).isEqualTo(3);
+			assertThat(graph.contains("A", "B")).isTrue()
+			assertThat(graph.contains("B", "C")).isTrue()
+			assertThat(graph.contains("C", "A")).isTrue()
+			assertThat(graph.size()).isEqualTo(3)
 		}
 	}
 }

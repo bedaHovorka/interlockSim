@@ -7,14 +7,13 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.awt.Point;
-import java.beans.PropertyChangeListener;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import java.awt.Point
+import java.beans.PropertyChangeListener
 
 /**
  * Represents the program Context - editing or simulation ...
@@ -22,18 +21,18 @@ import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
  *
  * Point is used as Pair of integers
  */
-public interface Context {
-		/**
-		 * get grid, which is graphic representation of model
-		 * @return grid
-		 */
-	public RailwayNetGrid getRailWayNetGrid();
+interface Context {
+	/**
+	 * get grid, which is graphic representation of model
+	 * @return grid
+	 */
+	fun getRailWayNetGrid(): RailwayNetGrid
 
 	/**
 	 * ...
 	 * @return graph
 	 */
-	public ExtendedUnorientedGraph<Point, TrackBlock, Segment> getGraph();
+	fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment>
 
 	/**
 	 * Add a listener for context changes.
@@ -41,7 +40,7 @@ public interface Context {
 	 *
 	 * @param listener the listener to add
 	 */
-	public void addPropertyChangeListener(PropertyChangeListener listener);
+	fun addPropertyChangeListener(listener: PropertyChangeListener)
 
 	/**
 	 * Remove a listener for context changes.
@@ -49,5 +48,5 @@ public interface Context {
 	 *
 	 * @param listener the listener to remove
 	 */
-	public void removePropertyChangeListener(PropertyChangeListener listener);
+	fun removePropertyChangeListener(listener: PropertyChangeListener)
 }

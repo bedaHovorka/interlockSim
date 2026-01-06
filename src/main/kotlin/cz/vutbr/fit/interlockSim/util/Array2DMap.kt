@@ -7,167 +7,147 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.awt.Point;
-import java.util.AbstractList;
-import java.util.AbstractMap;
-import java.util.AbstractSet;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.RandomAccess;
-import java.util.Set;
-import java.util.TreeSet;
+import java.awt.Point
+import java.util.AbstractList
+import java.util.AbstractMap
+import java.util.AbstractSet
+import java.util.Comparator
+import java.util.Iterator
+import java.util.List
+import java.util.RandomAccess
+import java.util.TreeSet
 
 /**
  * ADT for grid
  * @param <V> type of values
  *
  */
-public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements NavigableMap<Point, V> */{
-	private final class Entry implements Map.Entry<Point, V> {
-		private final Point key;
+class Array2DMap<V> : AbstractMap<Point, V>() /* EXTENSION implements NavigableMap<Point, V> */ {
+	private inner class Entry(
+		override val key: Point
+	) : MutableMap.MutableEntry<Point, V> {
 		/**
-		 * Create new entry
+		 * Create entry
 		 * @param key
 		 */
-		public Entry(final Point key) {
-			super();
-			this.key = key;
-		}
 
-		public Point getKey() {
-			return key;
-		}
+		override val value: V
+			get() = this@Array2DMap.get(key)!!
 
-		public V getValue() {
-			return Array2DMap.this.get(key);
-		}
+		override fun setValue(newValue: V): V = this@Array2DMap.put(key, newValue)!!
 
-		public V setValue(V value) {
-			return Array2DMap.this.put(key, value);
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (!(o instanceof Map.Entry)) return false;
-			Map.Entry<?, ?> e = (Map.Entry<?, ?>) o;
-			Object k1 = getKey();
-			Object k2 = e.getKey();
-			if (k1 == k2 || (k1 != null && k1.equals(k2))) {
-				Object v1 = getValue();
-				Object v2 = e.getValue();
-				if (v1 == v2 || (v1 != null && v1.equals(v2))) {
-					return true;
+		override fun equals(other: Any?): Boolean {
+			if (other !is MutableMap.MutableEntry<*, *>) return false
+			val e = other
+			val k1 = key
+			val k2 = e.key
+			if (k1 == k2 || (k1 != null && k1 == k2)) {
+				val v1 = value
+				val v2 = e.value
+				if (v1 == v2 || (v1 != null && v1 == v2)) {
+					return true
 				}
 			}
-			return false;
+			return false
 		}
 
-		@Override
-		public int hashCode() {
-			Object k = getKey();
-			Object v = getValue();
-			return (k == null ? 0 : k.hashCode()) ^ (v == null ? 0 : v.hashCode());
+		override fun hashCode(): Int {
+			val k = key
+			val v = value
+			return (k?.hashCode() ?: 0) xor (v?.hashCode() ?: 0)
 		}
-
 	}
 
-	private final class Array2DEntrySet extends AbstractSet<Map.Entry<Point, V>> {
+	private inner class Array2DEntrySet : AbstractSet<MutableMap.MutableEntry<Point, V>>() {
+		private inner class Array2DIterator : MutableIterator<MutableMap.MutableEntry<Point, V>> {
+			private val iterator: java.util.Iterator<Point> = _keys.iterator() as java.util.Iterator<Point>
+			private var current: Point? = null
 
-		private final class Array2DIterator implements Iterator<Map.Entry<Point, V>> {
-			private final Iterator<Point> iterator = keys.iterator();
-			private Point current;
+			override fun hasNext(): Boolean = iterator.hasNext()
 
-			public boolean hasNext() {
-				return iterator.hasNext();
+			override fun next(): Entry {
+				current = iterator.next()
+				return Entry(current!!)
 			}
 
-			public Entry next() {
-				current = iterator.next();
-				return new Entry(current);
-			}
-
-			public void remove() {
-				if (current == null) throw new IllegalStateException();
-				Array2DMap.this.remove(current);
-				current = null;
+			override fun remove() {
+				if (current == null) throw IllegalStateException()
+				this@Array2DMap.remove(current)
+				current = null
 			}
 		}
 
-		@Override
-		public Iterator<Map.Entry<Point, V>> iterator() {
-			return new Array2DIterator();
-		}
+		override fun iterator(): MutableIterator<MutableMap.MutableEntry<Point, V>> = Array2DIterator()
 
-		@Override
-		public int size() {
-			return keys.size();
-		}
-
-
+		override val size: Int
+			get() = _keys.size
 	}
 
-	//seznam s dirama
-	private class RelocableList<T> extends AbstractList<T> implements RandomAccess {
-		private transient T[] elements;
+	// seznam s dirama
+	private class RelocableList<T> :
+		AbstractList<T>(),
+		RandomAccess {
+		@Transient
+		private var elements: Array<T?>? = null
 
-		@Override
-		public T get(int index) {
-			if (elements == null || index >= elements.length || index < 0) return null;
-			return elements[index];
+		override fun get(index: Int): T? {
+			if (elements == null || index >= elements!!.size || index < 0) return null
+			return elements!![index]
 		}
 
-		@Override
-		public T set(int index, T element) {
-			if (index < 0) throw new IndexOutOfBoundsException();
-			boolean resize = elements==null || index>=elements.length;
-			T prev = resize ? null : elements[index];
+		override fun set(
+			index: Int,
+			element: T
+		): T? {
+			if (index < 0) throw IndexOutOfBoundsException()
+			val resize = elements == null || index >= elements!!.size
+			val prev = if (resize) null else elements!![index]
 			if (resize) {
-				Object[] p = new Object[index+1];
-				if (elements != null) System.arraycopy(elements, 0, p, 0, elements.length);
-				elements = (T[]) p;
+				@Suppress("UNCHECKED_CAST")
+				val p = arrayOfNulls<Any>(index + 1) as Array<T?>
+				if (elements != null) System.arraycopy(elements, 0, p, 0, elements!!.size)
+				elements = p
 			}
-			elements[index] = element;
-			return prev;
+			elements!![index] = element
+			return prev
 		}
 
-		@Override
-		public T remove(int index) {
-			if (elements == null || index >= elements.length || index < 0) return null;
-			T prev = elements[index];
-			elements[index] = null;
-			return prev;
+		override fun removeAt(index: Int): T? {
+			if (elements == null || index >= elements!!.size || index < 0) return null
+			val prev = elements!![index]
+			elements!![index] = null
+			return prev
 		}
 
-		@Override
-		public int size() {
-			return elements==null ? 0 : elements.length;
-		}
-
+		override val size: Int
+			get() = if (elements == null) 0 else elements!!.size
 	}
 
 	/**
 	 * Compare points in order for grid
 	 */
-	public static final Comparator<Point> POINT_COMPARATOR = (o1, o2) -> {
-		int dy = (o1.y-o2.y);
-		return dy==0 ? (o1.x-o2.x) : dy;
-	};
+	companion object {
+		@JvmField
+		val POINT_COMPARATOR: Comparator<Point> =
+			Comparator { o1, o2 ->
+				val dy = o1.y - o2.y
+				if (dy == 0) o1.x - o2.x else dy
+			}
+	}
 
-	private final RelocableList<RelocableList<V>> array = new RelocableList<RelocableList<V>> ();
-	private final TreeSet<Point> keys = new TreeSet<>(POINT_COMPARATOR);
+	private val array = RelocableList<RelocableList<V>>()
+	private val _keys: TreeSet<Point> = TreeSet(POINT_COMPARATOR)
+
+	override val keys: MutableSet<Point>
+		get() = _keys
 
 	/* (non-Javadoc)
 	 * @see java.util.AbstractMap#entrySet()
 	 */
-	@Override
-	public Set<Map.Entry<Point, V>> entrySet() {
-		return new Array2DEntrySet();
-	}
+	override val entries: MutableSet<MutableMap.MutableEntry<Point, V>>
+		get() = Array2DEntrySet()
 
 	/**
 	 *
@@ -175,58 +155,59 @@ public class Array2DMap<V> extends AbstractMap<Point, V> /* EXTENSION implements
 	 * @param y row
 	 * @return element in map or null if
 	 */
-	public V get(int x, int y) {
-		RelocableList<V> iArray = array.get(y);
-		if (iArray == null) return null;
-		return iArray.get(x);
+	fun get(
+		x: Int,
+		y: Int
+	): V? {
+		val iArray = array.get(y)
+		if (iArray == null) return null
+		return iArray.get(x)
 	}
 
-	@Override
-	public V get(Object key) {
-		if (!(key instanceof Point)) return null;
-		Point p = (Point) key;
-		return get(p.x, p.y);
-	}
+	override fun get(key: Point): V? = get(key.x, key.y)
 
-	@Override
-	public V put(Point key, V value) {
-		RelocableList<V> iArray = array.get(key.y);
+	override fun put(
+		key: Point,
+		value: V
+	): V? {
+		var iArray = array.get(key.y)
 		if (iArray == null) {
-			iArray = new RelocableList<V>();
-			array.set(key.y, iArray);
+			iArray = RelocableList()
+			array.set(key.y, iArray)
 		}
-		keys.add(key);
-		return iArray.set(key.x, value);
+		_keys.add(key)
+		return iArray.set(key.x, value)
 	}
 
-	@Override
-	public V remove(Object key) {
-		keys.remove(key);
-		if (!(key instanceof Point)) return null;
-		Point p = (Point) key;
-		RelocableList<V> iArray = array.get(p.y);
-		if (iArray == null) return null;
-		return iArray.remove(p.x);
+	override fun remove(key: Point): V? {
+		_keys.remove(key)
+		val iArray = array.get(key.y)
+		if (iArray == null) return null
+		return iArray.removeAt(key.x)
 	}
 
-	@Override
-	public boolean containsKey(Object key) {
-		return keys.contains(key);
-	}
+	override fun containsKey(key: Point): Boolean = _keys.contains(key)
 
 	/**
 	 * @param y
 	 * @return elements at row
 	 */
-	public List<V> getRow(int y) {
-		final RelocableList<V> list = array.get(y);
-		//EXTENSION zatim unmodifieable
-		return list==null ? Collections.emptyList() : Collections.unmodifiableList(list);
+	fun getRow(y: Int): List<V> {
+		val list = array.get(y)
+
+		// EXTENSION zatim unmodifieable
+		@Suppress("UNCHECKED_CAST")
+		val result: java.util.List<V> =
+			if (list == null) {
+				(java.util.ArrayList<V>() as java.util.List<V>)
+			} else {
+				(list as java.util.List<V>)
+			}
+		return result
 	}
 
-	@Override
-	public void clear() {
-		keys.clear();
-		array.clear();
+	override fun clear() {
+		_keys.clear()
+		array.clear()
 	}
 }

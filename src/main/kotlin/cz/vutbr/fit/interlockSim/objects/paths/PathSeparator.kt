@@ -7,23 +7,27 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.paths;
+package cz.vutbr.fit.interlockSim.objects.paths
 
-import java.util.Set;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import java.util.Set
 
 /**
  * "Oddelovac oddilu (i automaticky řízené prvky) uzel cesty z pohledu vlaku"
  */
-public interface PathSeparator extends PathElement, Cell {
+interface PathSeparator :
+	PathElement,
+	Cell {
 	/**
 	 * @param from
 	 * @param to
 	 * @throws PathSeparatorChangeException
 	 */
-	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException;
+	fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	)
 
 	/**
 	 * @param from
@@ -31,22 +35,26 @@ public interface PathSeparator extends PathElement, Cell {
 	 * @param allowedSpeed
 	 * @throws PathSeparatorChangeException
 	 */
-	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException;
+	fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	)
 
 	/**
 	 * @param from
 	 * @return segment reprezents element configuration (dynamic)
 	 */
-	public Segment getFollowingSegment(Segment from);
+	fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
 
 	/**
 	 * @param from
 	 * @return following segments - static
 	 */
-	public Set<Segment> possibleFollowers(Segment from);
+	fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment>
 
 	/**
 	 * @return allowed speed through separator in m/s
 	 */
-	public double allowedSpeed();
+	fun allowedSpeed(): Double
 }

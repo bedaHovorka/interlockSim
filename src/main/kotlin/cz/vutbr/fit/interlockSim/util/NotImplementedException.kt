@@ -7,31 +7,30 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
 /**
  * Debug utility
  */
-public class NotImplementedException extends RuntimeException {
-	private static final long serialVersionUID = 1;
+class NotImplementedException : RuntimeException {
+	companion object {
+		private const val serialVersionUID = 1L
+	}
+
 	/**
 	 * @see Exception#Exception()
 	 */
-	public NotImplementedException() {
-		super();
-	}
+	constructor() : super()
+
 	/**
 	 * @see Exception#Exception(String)
 	 */
-	public NotImplementedException(String message) {
-		super(message);
-	}
+	constructor(message: String) : super(message)
+
 	/**
 	 * @see Exception#Exception(String, Throwable)
 	 * @param message
 	 * @param cause
 	 */
-	public NotImplementedException(String message, Throwable cause) {
-		super(message, cause);
-	}
+	constructor(message: String, cause: Throwable) : super(message, cause)
 }

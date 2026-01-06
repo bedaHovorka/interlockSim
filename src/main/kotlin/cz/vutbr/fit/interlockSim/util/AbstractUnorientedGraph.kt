@@ -7,12 +7,11 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Collection;
-import java.util.Map;
+import java.lang.reflect.InvocationTargetException
+import java.util.Collection
+import java.util.Map
 
 /**
  * Base for Graphs
@@ -20,48 +19,45 @@ import java.util.Map;
  * @param <E> edge
  *
  */
-public abstract class AbstractUnorientedGraph<N,E> implements UnorientedGraph<N,E> {
-	protected abstract Object implementationContainer();
+abstract class AbstractUnorientedGraph<N, E> : UnorientedGraph<N, E> {
+	protected abstract fun implementationContainer(): Any?
 
-	public boolean containsEdge(E edge) {
-		return values().contains(edge);
+	override fun containsEdge(edge: E): Boolean = values().contains(edge)
+
+	override fun toString(): String {
+		val o = implementationContainer()
+		return if (o == null) super.toString() else o.toString()
 	}
 
-	@Override
-	public String toString() {
-		final Object o = implementationContainer();
-		return (o == null) ? super.toString() : o.toString();
+	override fun size(): Int {
+		val o = invokeForImplementationContainer()
+		assert(o is Int)
+		return o as Int
 	}
 
-	public int size() {
-		final Object o = invokeForImplementationContainer();
-		assert o instanceof Integer;
-		return ((Integer) o).intValue();
+	override fun clear() {
+		invokeForImplementationContainer()
 	}
 
-	public void clear() {
-		invokeForImplementationContainer();
-	}
+	private fun invokeForImplementationContainer(vararg args: Any?): Any? {
+		val o = implementationContainer()
+		if (o == null || (o !is Map<*, *> && o !is Collection<*>)) throw UnsupportedOperationException()
 
-	private Object invokeForImplementationContainer(Object... args) {
-		final Object o = implementationContainer();
-		if (o == null || (!(o instanceof Map) && !(o instanceof Collection))) throw new UnsupportedOperationException();
-
-		final StackTraceElement e = new Throwable().getStackTrace()[1];
-		final String methodName = e.getMethodName();
+		val e = Throwable().stackTrace[1]
+		val methodName = e.methodName
 		try {
-			final Method method = o.getClass().getMethod(methodName, Util.toClass(args));
-			return method.invoke(o, args);
-		}  catch (InvocationTargetException ee) {
-			final Throwable cause = ee.getCause();
-			assert cause instanceof RuntimeException;
-			throw (RuntimeException) cause;
-		}  catch (Exception ee) {
-			throw new UnsupportedOperationException(ee);
+			@Suppress("UNCHECKED_CAST")
+			val classArray = Util.toClass(args) as Array<Class<*>?>
+			val method = o.javaClass.getMethod(methodName, *classArray)
+			return method.invoke(o, *args)
+		} catch (ee: InvocationTargetException) {
+			val cause = ee.cause
+			assert(cause is RuntimeException)
+			throw cause as RuntimeException
+		} catch (ee: Exception) {
+			throw UnsupportedOperationException(ee)
 		}
 	}
 
-	public boolean isEmpty() {
-		return size() == 0;
-	}
+	override fun isEmpty(): Boolean = size() == 0
 }

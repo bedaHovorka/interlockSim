@@ -7,58 +7,64 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.util.Collection;
-import java.util.EnumSet;
-
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
-import cz.vutbr.fit.interlockSim.objects.paths.Path;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.Track;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
-import cz.vutbr.fit.interlockSim.sim.InOutWorker;
-import cz.vutbr.fit.interlockSim.sim.SimulationException;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.vutbr.fit.interlockSim.sim.SimulationException
+import java.util.Collection
+import java.util.EnumSet
 
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
  *
  */
-public interface SimulationContext extends Context {
-
+interface SimulationContext : Context {
 	/**
 	 * simulation reporting types
 	 */
-	public enum ReportType { //higest to lowest priority
+	enum class ReportType {
+		// higest to lowest priority
 		/**
 		 * control commands
 		 */
 		PATH_SETTING,
+
 		/**
 		 * inout, switch ...
 		 */
 		NODE_EVENTS,
+
 		/**
 		 * train discrete events: stop on signal, exiting system ...
 		 */
 		TRAIN_EVENTS,
+
 		/**
 		 * train position, velocity, acceleration
 		 */
 		TRAIN_CONTINUOUS,
+
 		/**
 		 * not standard
 		 */
 		_DEBUG;
 
-		/**
-		 * all standard reports (without debug)
-		 */
-		public static final ReportType[] ALL = EnumSet.complementOf(EnumSet.of(_DEBUG)).toArray(new ReportType[0]);
+		companion object {
+			/**
+			 * all standard reports (without debug)
+			 */
+			@JvmField
+			val ALL: Array<ReportType> = EnumSet.complementOf(EnumSet.of(_DEBUG)).toArray(arrayOfNulls<ReportType>(0))
+		}
 	}
 
 	/**
@@ -67,35 +73,41 @@ public interface SimulationContext extends Context {
 	 * @param current
 	 * @return next section in aPath
 	 */
-	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current);
+	fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection?
 
 	/**
 	 * Runs the simulation
 	 * @throws EmptyContextException Context must not be empty
 	 * @throws SimulationException if simulation failed
 	 */
-	public void run() throws EmptyContextException, SimulationException;
+	fun run()
 
 	/**
 	 * stops the simulation with error
 	 * @param error
 	 */
-	public void errorStop(Throwable error);
+	fun errorStop(error: Throwable)
 
 	/**
 	 * stops the simulation
 	 * @throws SimulationException if the simulation didn't stop correctly
 	 *
 	 */
-	public void stop();
+	fun stop()
 
 	/**
 	 *
 	 * @param separator start of aPath
 	 * @param next first section
-	 * @return aPath with all elements
+	 * @return a path with all elements, or null if no path found
 	 */
-	public Path pathToNextSemaphore(PathSeparator separator, TrackSection next);
+	fun pathToNextSemaphore(
+		separator: PathSeparator,
+		next: TrackSection
+	): Path?
 
 	/**
 	 * Reporting - if report type is allowed
@@ -103,39 +115,49 @@ public interface SimulationContext extends Context {
 	 * @param obj this object report message
 	 * @param type
 	 */
-	public void report(CharSequence report, Object obj, ReportType type);
+	fun report(
+		report: CharSequence,
+		obj: Any,
+		type: ReportType
+	)
 
 	/**
 	 *
 	 * @param types
 	 */
-	public void addReportTypes(ReportType... types);
+	fun addReportTypes(vararg types: ReportType)
 
 	/**
 	 * @param type
 	 * @return true if is the type now reporting
 	 */
-	public boolean isReporting(ReportType type);
+	fun isReporting(type: ReportType): Boolean
 
 	/**
 	 *
 	 * @param types
 	 */
-	public void removeReportTypes(ReportType... types);
+	fun removeReportTypes(vararg types: ReportType)
 
 	/**
 	 * @param nodeCell
 	 * @param current from, for determine direction
-	 * @return block, which follow dependly on node configuration
+	 * @return block, which follow dependly on node configuration, or null if no following block exists
 	 */
-	public TrackBlock getNextTrackBlock(NodeCell nodeCell, TrackBlock current);
+	fun getNextTrackBlock(
+		nodeCell: NodeCell,
+		current: TrackBlock?
+	): TrackBlock?
 
 	/**
 	 * @param separator
 	 * @param track
 	 * @return topology join
 	 */
-	public Segment getSegment(PathSeparator separator, Track track);
+	fun getSegment(
+		separator: PathSeparator,
+		track: Track
+	): Segment?
 
 	/**
 	 * @param separator
@@ -143,24 +165,32 @@ public interface SimulationContext extends Context {
 	 * @param previous track front of separator (if next null previous must not be null)
 	 * @return if separator direct to next!
 	 */
-	public boolean isSeparatorInDirection(OrientedPathSeparator separator, Track next, Track previous);
+	fun isSeparatorInDirection(
+		separator: OrientedPathSeparator,
+		next: Track?,
+		previous: Track?
+	): Boolean
 
 	/**
 	 * @param separator
 	 * @param track
 	 * @param secondEndTrack only if track is null is used (must be not null)
-	 * @return segment for track
+	 * @return segment for track, or null if no following segment exists
 	 */
-	public Segment getSegment(PathSeparator separator, Track track, Track secondEndTrack);
+	fun getSegment(
+		separator: PathSeparator,
+		track: Track?,
+		secondEndTrack: Track?
+	): Segment?
 
 	/**
 	 * @param inOut
 	 * @return worker
 	 */
-	public InOutWorker getWorkerFor(InOut inOut);
+	fun getWorkerFor(inOut: InOut): InOutWorker
 
 	/**
 	 * @return all inouts in model
 	 */
-	public Collection<InOut> getInOuts();
+	fun getInOuts(): Collection<InOut>
 }

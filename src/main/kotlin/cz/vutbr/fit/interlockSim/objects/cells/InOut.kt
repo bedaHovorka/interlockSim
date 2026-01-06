@@ -7,93 +7,93 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.util.EnumSet;
-import java.util.Set;
-
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import java.util.EnumSet
+import java.util.Set
 
 /**
  * predstavuje spojeni s externi zeleznicni siti
  *
  */
-public class InOut extends OrientedNodeCell {
-	private String name;
-	private final RailSemaphore inSemaphore;
-	private final RailSemaphore outSemaphore;
+class InOut(
+	name: String,
+	orientation: Boolean,
+	spatialType: Cell.SpatialType
+) : OrientedNodeCell(orientation, spatialType) {
+	private var name: String
+	private val inSemaphore: RailSemaphore
+	private val outSemaphore: RailSemaphore
 
-	/**
-	 * @param name
-	 * @param orientation
-	 * @param spatialType
-	 */
-	public InOut(String name, Boolean orientation, SpatialType spatialType) {
-		super(orientation, spatialType);
-		this.name = name;
-		this.inSemaphore = new RailSemaphore(!orientation, spatialType);
-		assert inSemaphore.direction() == Segment.anti(direction());
-		this.outSemaphore = RailSemaphore.getConstantInstance(orientation, spatialType, Signal.FREE);
-		setName(name);
+	init {
+		this.name = name
+		this.inSemaphore = RailSemaphore(!orientation, spatialType)
+		assert(inSemaphore.direction() == Cell.Segment.anti(direction()))
+		this.outSemaphore = RailSemaphore.getConstantInstance(orientation, spatialType, Signal.FREE)
+		setName(name)
 	}
 
-	public Set<Segment> joins() {
-		return EnumSet.of(direction());
-	}
+	override fun joins(): Set<Cell.Segment> = EnumSet.of(direction()) as Set<Cell.Segment>
 
-	@Override
-	public Segment getFollowingSegment(Segment from) {
-		if (from == null) return direction();
-		assert from == direction();
-		return null;
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
+		if (from == null) return direction()
+		assert(from === direction()) { "$from ${direction()}" }
+		return null
 	}
 
 	/**
 	 * @return semaphore on input
 	 */
-	public RailSemaphore getInSemaphore() {
-		return inSemaphore;
-	}
+	fun getInSemaphore(): RailSemaphore = inSemaphore
 
 	/**
 	 * @return name of place
 	 */
-	public String getName() {
-		return name;
-	}
+	override fun getName(): String = name
 
 	/**
 	 * @return semaphore on output
 	 */
-	public RailSemaphore getOutSemaphore() {
-		return outSemaphore;
+	fun getOutSemaphore(): RailSemaphore = outSemaphore
+
+	private fun getSemaphoreFor(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): RailSemaphore? {
+		if (from == null && to == direction()) return inSemaphore
+		if (to == null && from == direction()) return outSemaphore
+		return null
 	}
 
-	private RailSemaphore getSemaphoreFor(Segment from, Segment to) {
-		if (from == null && to == direction()) return inSemaphore;
-		else if (to == null && from == direction()) return outSemaphore;
-		return null;
+	@Throws(PathSeparatorChangeException::class)
+	private fun getSemaphoreForWithExeption(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): RailSemaphore {
+		val sem = getSemaphoreFor(from, to)
+		if (sem == null) throw PathSeparatorChangeException(this)
+		return sem
 	}
 
-	private RailSemaphore getSemaphoreForWithExeption(Segment from, Segment to) throws PathSeparatorChangeException {
-		final RailSemaphore sem = getSemaphoreFor(from, to);
-		if (sem == null) throw new PathSeparatorChangeException(this);
-		return sem;
+	override fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
+		val sem = getSemaphoreForWithExeption(from, to)
+		sem.setSignal(Signal.forSpeed(allowedSpeed))
 	}
 
-	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException {
-		final RailSemaphore sem = getSemaphoreForWithExeption(from, to);
-		sem.setSignal(Signal.forSpeed(allowedSpeed));
+	override fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
+		val sem = getSemaphoreForWithExeption(from, to)
+		sem.setSignal(Signal.STOP)
 	}
 
-	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException {
-		final RailSemaphore sem = getSemaphoreForWithExeption(from, to);
-		sem.setSignal(Signal.STOP);
-	}
-
-	public double allowedSpeed() {
-		return PathElement.ABSOLUTE_MAX_SPEED;
-	}
+	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
 }

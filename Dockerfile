@@ -40,6 +40,9 @@ RUN chmod +x gradlew
 COPY settings.gradle.kts /build/interlockSim/
 COPY gradle.properties /build/interlockSim/
 COPY build.gradle.kts /build/interlockSim/
+COPY detekt.yml /build/interlockSim/
+COPY detekt-strict.yml /build/interlockSim/
+COPY .editorconfig /build/interlockSim/
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
 # Gradle caches: dependencies, build cache, and Gradle distributions

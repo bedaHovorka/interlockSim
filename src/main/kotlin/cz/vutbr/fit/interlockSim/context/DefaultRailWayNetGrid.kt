@@ -7,67 +7,56 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.awt.Point;
-import java.util.AbstractSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.Map.Entry;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import java.awt.Point
+import java.util.AbstractSet
+import java.util.Iterator
+import java.util.Map
+import java.util.Map.Entry
+import java.util.Set
 
 /**
  * Grid represantation
  */
-public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
-	/**
-	 * @see AbstractRailwayNetGrid
-	 * @param cols
-	 * @param rows
-	 */
-	public DefaultRailWayNetGrid(int cols, int rows) {
-		super(cols, rows);
-	}
-
-	private class KeySet extends AbstractSet<Point> {
-		private final Set<Entry<Point, Cell>> set;
-
-		KeySet(final Set<Entry<Point, Cell>> set) {
-			this.set = set;
+class DefaultRailWayNetGrid(
+	cols: Int,
+	rows: Int
+) : AbstractRailwayNetGrid(cols, rows) {
+	private inner class KeySet(
+		private val set: Set<Entry<Point, Cell>>
+	) : AbstractSet<Point>() {
+		override fun iterator(): MutableIterator<Point> {
+			@Suppress("UNCHECKED_CAST")
+			val delegate: Iterator<Entry<Point, Cell>> = (set.iterator() as Iterator<Entry<Point, Cell>>)
+			return PointIterator(delegate)
 		}
 
-		@Override
-		public Iterator<Point> iterator() {
-			return new Iterator<Point>() {
-				private Iterator<Entry<Point, Cell>> i = set.iterator();
-				private Entry<Point, Cell> next;
+		private inner class PointIterator(
+			private val delegate: Iterator<Entry<Point, Cell>>
+		) : MutableIterator<Point> {
+			private var next: Entry<Point, Cell>? = null
 
-				public void remove() {
-					if (next == null) throw new IllegalStateException();
-					i.remove();
-					getReverseTable().remove(next.getValue());
-					getReverseTable().values().remove(next.getKey());
+			override fun next(): Point {
+				next = delegate.next()
+				return next!!.key
+			}
+
+			override fun hasNext(): Boolean = delegate.hasNext()
+
+			override fun remove() {
+				if (delegate is MutableIterator<*>) {
+					(delegate as MutableIterator<Entry<Point, Cell>>).remove()
+				} else {
+					throw UnsupportedOperationException("remove")
 				}
-
-				public Point next() {
-					next = i.next();
-					return next.getKey();
-				}
-
-				public boolean hasNext() {
-					return i.hasNext();
-				}
-
-			};
+			}
 		}
 
-		@Override
-		public int size() {
-			return set.size();
-		}
+		override val size: Int
+			get() = set.size
 	}
 
 	/**
@@ -75,21 +64,28 @@ public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
 	 * @param cell
 	 * @return previous cell in place
 	 */
-	public final Cell put(final Point key,final Cell cell) {
-		if (getCells().get(key) == cell) return cell;
-		getCells().values().remove(cell);
-		final Cell prev = getCells().put(key, cell);
-		getReverseTable().remove(prev);
-		getReverseTable().put(cell, key);
-		return prev;
+	fun put(
+		key: Point,
+		cell: Cell
+	): Cell? {
+		if (getCells().get(key) == cell) return cell
+		getCells().values.remove(cell)
+		val prev: Cell? = getCells().put(key, cell)
+		getReverseTable().remove(prev)
+		getReverseTable()[cell] = key
+		return prev
 	}
 
 	/**
 	 * @param map of point to trackblock part
 	 */
-	public void putMap(final Map<Point, TrackBlockPart> map) {
-		for (Entry<Point, TrackBlockPart> e : map.entrySet()) {
-			put(e.getKey(), e.getValue());
+	fun putMap(map: Map<Point, TrackBlockPart>) {
+		@Suppress("UNCHECKED_CAST")
+		val javaMap = map as java.util.Map<Point, TrackBlockPart>
+		val iter = javaMap.entrySet().iterator()
+		while (iter.hasNext()) {
+			val entry = iter.next()
+			put(entry.key, entry.value)
 		}
 	}
 
@@ -97,39 +93,41 @@ public class DefaultRailWayNetGrid extends AbstractRailwayNetGrid {
 	 * @param newPoint
 	 * @return true if point is present
 	 */
-	public boolean containsKey(Point newPoint) {
+	fun containsKey(newPoint: Point): Boolean {
 		if (getCells().containsKey(newPoint)) {
-			assert getReverseTable().containsValue(newPoint) : newPoint;
-			return true;
+			assert(getReverseTable().containsValue(newPoint))
+			return true
 		}
-		assert !getReverseTable().containsValue(newPoint) : newPoint;
-		return false;
+		assert(!getReverseTable().containsValue(newPoint)) { newPoint }
+		return false
 	}
 
 	/**
 	 * Remove cell from grid
 	 * @param key
 	 */
-	public void remove(final Point key) {
-		assert key!=null;
-		final Cell removed = getCells().remove(key);
-		final Point remove2 = getReverseTable().remove(removed);
-		assert key.equals(remove2);
+	fun remove(key: Point) {
+		assert(key != null)
+		val removed: Cell? = getCells().remove(key)
+		val remove2: Point? = getReverseTable().remove(removed)
+		assert(key == remove2)
 	}
 
 	/**
 	 * @return true if grid is empty
 	 */
-	public boolean isEmpty() {
-		assert getReverseTable().size() == getCells().size();
-		return getCells().size() == 0;
+	fun isEmpty(): Boolean {
+		assert(getReverseTable().isEmpty() == getCells().isEmpty())
+		return getCells().isEmpty()
 	}
 
 	/**
 	 * All cell in grid
 	 * @return set of cells
 	 */
-	public Set<Point> keySet() {
-		return new KeySet(getCells().entrySet());
+	fun keySet(): Set<Point> {
+		@Suppress("UNCHECKED_CAST")
+		val entries = getCells().entries as java.util.Set<Entry<Point, Cell>>
+		return KeySet(entries) as Set<Point>
 	}
 }

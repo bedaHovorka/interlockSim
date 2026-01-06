@@ -7,11 +7,10 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
+import java.util.Collection
+import java.util.Set
 
 /**
  * ADT Graph interface
@@ -19,15 +18,18 @@ import java.util.Set;
  * @param <N> nodes
  * @param <E> edges
  */
-public interface UnorientedGraph<N,E>{
-
+interface UnorientedGraph<N, E> {
 	/**
 	 * Put element to ExtendedUnorientedGraph
 	 * @param first
 	 * @param second
 	 * @param value
 	 */
-	public void put(N first, N second, E value);
+	fun put(
+		first: N,
+		second: N,
+		value: E
+	)
 
 	/**
 	 * get edge from graph
@@ -35,13 +37,16 @@ public interface UnorientedGraph<N,E>{
 	 * @param second
 	 * @return edge
 	 */
-	public E get(N first, N second);
+	operator fun get(
+		first: N,
+		second: N
+	): E?
 
 	/**
 	 * @param node
 	 * @return all edges, which joins with node
 	 */
-	public Collection<E> get(N node);
+	fun get(node: N): Collection<E>
 
 	/**
 	 * Remove edge from graph
@@ -49,58 +54,64 @@ public interface UnorientedGraph<N,E>{
 	 * @param second
 	 * @return edge
 	 */
-	public E remove(N first, N second);
+	fun remove(
+		first: N,
+		second: N
+	): E?
 
 	/**
 	 * Remove node and all edges, which join node with others
 	 * @param node
 	 * @return all edges which were removed
 	 */
-	public Collection<E> removeAll(N node);
+	fun removeAll(node: N): Collection<E>
 
 	/**
 	 * Remove edge from graph
 	 * @param edge
 	 * @return nodes which were joined with this edge
 	 */
-	public Collection<N> remove(E edge);
+	fun remove(edge: E): Collection<N>
 
 	/**
 	 * @return all nodes, which is in graph
 	 */
-	public Set<N> nodeSet();
+	fun nodeSet(): Set<N>
 
 	/**
 	 * @return {@link Map#isEmpty()}
 	 */
-	public boolean isEmpty();
+	fun isEmpty(): Boolean
 
 	/**
 	 * @see Map#values()
 	 * @return all edges in graph
 	 */
-	public Collection<E> values();
+	fun values(): Collection<E>
 
 	/**
 	 * @return number of edges
 	 */
-	public int size();
+	fun size(): Int
 
 	/**
 	 * Remove all edges from graph
 	 */
-	public void clear();
+	fun clear()
 
 	/**
 	 * @param node1
 	 * @param node2
 	 * @return true If graph contains edge between nodes
 	 */
-	public boolean contains(N node1, N node2);
+	fun contains(
+		node1: N,
+		node2: N
+	): Boolean
 
 	/**
 	 * @param edge
 	 * @return true If graph contains edge
 	 */
-	public boolean containsEdge(E edge);
+	fun containsEdge(edge: E): Boolean
 }

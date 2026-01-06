@@ -7,57 +7,52 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.Set;
-import java.util.Map.Entry;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
-import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph;
+import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.util.EnumMap
+import java.util.EnumSet
+import java.util.Map.Entry
+import java.util.Set
+import java.util.Set as JavaSet
 
 /**
  * Switch
  * CZ: "výhybka"
  */
-public class RailSwitch extends NodeCell {
-	private static final Logger logger = LoggerFactory.getLogger(RailSwitch.class);
-
-	private enum Kind {
+class RailSwitch : NodeCell {
+	enum class Kind(
+		confs: JavaSet<Conf>
+	) {
 		/**
 		 * switch with one branch
 		 */
-		SIMPLE(EnumSet.of(Conf.BRANCH, Conf.MAIN)),
+		SIMPLE(EnumSet.of(Conf.BRANCH, Conf.MAIN) as JavaSet<Conf>),
+
 		/**
 		 * not specified
 		 */
-		DUAL(EnumSet.noneOf(Conf.class)); //NOT IMLEMENTED YET - EXTENSION
+		DUAL(EnumSet.noneOf(Conf::class.java) as JavaSet<Conf>); // NOT IMLEMENTED YET - EXTENSION
 
-		private final Set<Conf> possibleConfs;
+		@Suppress("UNCHECKED_CAST")
+		private val possibleConfs: JavaSet<Conf> = confs
 
-		private Kind(final Set<Conf> possibleConfs) {
-			this.possibleConfs = Collections.unmodifiableSet(possibleConfs);
-		}
-
-		Set<Conf> getPossibleConfs() {
-			return possibleConfs;
-		}
+		fun getPossibleConfs(): JavaSet<Conf> = possibleConfs
 	}
 
-	protected enum Conf {
+	enum class Conf {
 		/**
 		 * main directon
 		 */
 		MAIN,
+
 		/**
 		 * branch direction
 		 */
-		BRANCH;
+		BRANCH
 	}
 
 	/**
@@ -65,234 +60,270 @@ public class RailSwitch extends NodeCell {
 	 * Type "smer odbocky"
 	 *
 	 */
-	public enum Type {
+	enum class Type(
+		mergingOrientation: Boolean
+	) {
 		/**
 		 *
 		 */
 		SIMPLE_RIGHT_FALSE(false),
+
 		/**
 		 *
 		 */
 		SIMPLE_RIGHT_TRUE(true),
+
 		/**
 		 *
 		 */
 		SIMPLE_LEFT_FALSE(false),
+
 		/**
 		 *
 		 */
 		SIMPLE_LEFT_TRUE(true);
 
-		private final boolean mergingPosition;
-		private final Kind kind;
+		private val mergingPosition: Boolean
+		private val kind: Kind
 
-		/**
-		 * merging orientation is in antidirection segment !!!
-		 * @param branchDirection
-		 * @param mergingOrientation - this means same as orientation by {@link OrientedNodeCell}
-		 */
-		Type (final boolean mergingOrientation) {
-			//cosructor only for simple kinds
-			this.mergingPosition = mergingOrientation;
-			this.kind = Kind.SIMPLE;
+		init {
+			// constructor only for simple kinds
+			this.mergingPosition = mergingOrientation
+			this.kind = Kind.SIMPLE
 		}
 
 		/**
 		 * @return merging position (by simple kind)
 		 */
-		public boolean getMergingPosition() {
-		   return mergingPosition;
-		}
+		fun getMergingPosition(): Boolean = mergingPosition
 
-		Kind getKind() {
-			return kind;
-		}
+		fun getKind(): Kind = kind
 	}
 
-	protected static class SwitchMap<V> extends EnumMap<Type, EnumMap<SpatialType, V>> {
-		protected SwitchMap() {
-			super(Type.class);
-		}
-
-		protected void put(Type t, SpatialType st, V v) {
-			EnumMap<SpatialType, V> subMap = get(t);
+	class SwitchMap<V> : EnumMap<Type, EnumMap<Cell.SpatialType, V>>(Type::class.java) {
+		fun put(
+			t: Type,
+			st: Cell.SpatialType,
+			v: V
+		) {
+			var subMap = get(t)
 			if (subMap == null) {
-				subMap = new EnumMap<SpatialType, V>(SpatialType.class);
-				put(t, subMap);
+				subMap = EnumMap<Cell.SpatialType, V>(Cell.SpatialType::class.java)
+				put(t, subMap)
 			}
-			subMap.put(st, v);
+			subMap.put(st, v)
 		}
 
-		protected V get(Type t, SpatialType st) {
-			final EnumMap<SpatialType, V> subMap = get(t);
-			if (subMap == null) return null;
-			return subMap.get(st);
+		fun get(
+			t: Type,
+			st: Cell.SpatialType
+		): V? {
+			val subMap = get(t)
+			if (subMap == null) return null
+			return subMap.get(st)
 		}
 	}
 
+	private val speeds: EnumMap<Conf, Double> = EnumMap<Conf, Double>(Conf::class.java)
+	private val confs: EnumUnorientedGraph<Cell.Segment, Conf>
+	val type: Type
+	private var conf: Conf = Conf.MAIN
+
 	/**
-	 * allowed speed
+	 * @param spatialType
+	 * @param type
+	 * @param mainSpeed
+	 * @param branchSpeed
 	 */
-	public static final int COMMON_BRANCH_SPEED = 13;
-	/**
-	 * allowed speed
-	 */
-	public static final int COMMON_MAIN_SPEED = 30;
-	/**
-	 *
-	 */
-	public static final String UNSUPORTED_SWITCH_TYPES_MESSAGE = "unsuported switch types";
-	/**
-	 *
-	 */
-	public static final SpatialType[] SUPPORTED_SIMPLE_SPATIAL_TYPES = {SpatialType.HORIZONTAL, SpatialType.VERTICAL};
-	private static final SwitchMap<Set<Segment>> branches = new SwitchMap<Set<Segment>>();
-	private static final SwitchMap<EnumUnorientedGraph<Segment, Conf>> allConfs = new SwitchMap<EnumUnorientedGraph<Segment, Conf>>();
-
-	static {
-		putBranches(Type.SIMPLE_LEFT_FALSE, SpatialType.HORIZONTAL, Segment.E);
-		putBranches(Type.SIMPLE_LEFT_FALSE, SpatialType.VERTICAL, Segment.G);
-		putBranches(Type.SIMPLE_LEFT_TRUE, SpatialType.HORIZONTAL, Segment.D);
-		putBranches(Type.SIMPLE_LEFT_TRUE, SpatialType.VERTICAL, Segment.B);
-
-		putBranches(Type.SIMPLE_RIGHT_FALSE, SpatialType.HORIZONTAL, Segment.G);
-		putBranches(Type.SIMPLE_RIGHT_FALSE, SpatialType.VERTICAL, Segment.D);
-		putBranches(Type.SIMPLE_RIGHT_TRUE, SpatialType.HORIZONTAL, Segment.B);
-		putBranches(Type.SIMPLE_RIGHT_TRUE, SpatialType.VERTICAL, Segment.E);
-
-		for (Type t : Type.values()) {
-			if (t.getKind() == Kind.SIMPLE) {
-				for (SpatialType st : SUPPORTED_SIMPLE_SPATIAL_TYPES) {
-					final EnumUnorientedGraph<Segment, Conf> confs = new EnumUnorientedGraph<Segment, Conf>(Segment.class);
-					final Segment merging = st.getSegments()[t.getMergingPosition() ? 0 : 1]; //je v proti-directionu
-					final Segment mainDir = Segment.anti(merging);
-					final Set<Segment> set = branches.get(t, st); assert set.size() == 1 : set;
-					final Segment branch = set.iterator().next();
-					confs.put(merging, branch, Conf.BRANCH);
-					confs.put(merging, mainDir, Conf.MAIN);
-					allConfs.put(t, st, confs);
-				}
-			}
-		}
-
-	}
-
-	private final EnumMap<Conf, Double> speeds = new EnumMap<Conf, Double>(Conf.class);
-	private final EnumUnorientedGraph<Segment, Conf> confs;
-	private final Type type;
-	private Conf conf = Conf.MAIN;
-
-	/**
-	  * @param spatialType
-	  * @param type
-	  * @param mainSpeed
-	  * @param branchSpeed
-	  */
-	public RailSwitch(SpatialType spatialType, Type type, double mainSpeed, double branchSpeed) {
-		super(spatialType);
-		this.confs = allConfs.get(type, spatialType);
-		if (this.confs == null) {
-			throw new IllegalArgumentException(UNSUPORTED_SWITCH_TYPES_MESSAGE);
-		}
-		this.type = type;
-		speeds.put(Conf.BRANCH, branchSpeed);
-		speeds.put(Conf.MAIN, mainSpeed);
+	constructor(spatialType: Cell.SpatialType, type: Type, mainSpeed: Double, branchSpeed: Double) : super(spatialType) {
+		this.confs = allConfs.get(type, spatialType)
+			?: throw IllegalArgumentException(UNSUPORTED_SWITCH_TYPES_MESSAGE)
+		this.type = type
+		speeds.put(Conf.BRANCH, branchSpeed)
+		speeds.put(Conf.MAIN, mainSpeed)
 	}
 
 	/**
 	 * @param spatialType
 	 * @param type
 	 */
-	public RailSwitch(SpatialType spatialType, Type type) {
-		this(spatialType, type, COMMON_MAIN_SPEED, COMMON_BRANCH_SPEED);
-	}
+	constructor(
+		spatialType: Cell.SpatialType,
+		type: Type
+	) : this(spatialType, type, COMMON_MAIN_SPEED.toDouble(), COMMON_BRANCH_SPEED.toDouble())
 
-	/**
-	 *
-	 * @return type
-	 */
-	public Type getType() {
-		return type;
-	}
+	// Note: getType() is auto-generated by the 'val type' property
 
-	protected Conf getConf() {
-		return conf;
-	}
+	protected fun getConf(): Conf = conf
 
-	protected void setConf(Conf conf) {
-		this.conf = conf;
+	protected fun setConf(conf: Conf) {
+		this.conf = conf
 	}
 
 	/**
 	 * switch to second configuration
 	 */
-	public void changeConf() {
-		assert conf != null;
-		final Conf oldConf = conf;
-		conf = conf==Conf.MAIN ? Conf.BRANCH : Conf.MAIN;
-		if (logger.isInfoEnabled()) {
-			logger.info("{} Switch {} position change: {} -> {}",
-				jDisco.Process.time(), this.hashCode(), oldConf, conf);
+	fun changeConf() {
+		assert(conf != null)
+		val oldConf = conf
+		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
+		if (logger.isInfoEnabled) {
+			logger.info(
+				"{} Switch {} position change: {} -> {}",
+				jDisco.Process.time(),
+				this.hashCode(),
+				oldConf,
+				conf
+			)
 		}
 	}
 
-	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException {
-		final Conf pathConf = getPathConfWithException(from, to);
-		if (pathConf != getConf())
-			throw new PathSeparatorChangeException("cancelPathSetup: Switch is not configured (neccesarry except?)", this);
-	}
-
-	public double allowedSpeed() {
-		final Double double1 = speeds.get(getConf());
-		assert double1 != null : speeds;
-		return double1.doubleValue();
-	}
-
-	public Set<Segment> joins() {
-		final Set<Segment> joins = joinsOnLine();
-		joins.addAll(getBranchSegments());
-		return joins;
-	}
-
-	@Override
-	public Segment getFollowingSegment(Segment from) {
-		for (Entry<Segment, Conf> e : confs.getJoinedNodesAndEdges(from).entrySet()) {
-			if (e.getValue() == getConf()) return e.getKey();
+	override fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
+		val pathConf = getPathConfWithException(from, to)
+		if (pathConf != getConf()) {
+			throw PathSeparatorChangeException("cancelPathSetup: Switch is not configured (neccesarry except?)", this)
 		}
-		return null;
 	}
 
-	protected static Set<Segment> getBranchSegments(RailSwitch rSwitch) {
-		return branches.get(rSwitch.getType(), rSwitch.getSpatialType());
+	override fun allowedSpeed(): Double {
+		val double1 = speeds.get(getConf())
+		assert(double1 != null) { speeds }
+		return double1!!.toDouble()
+	}
+
+	@Suppress("OVERRIDE_BY_SYNTHETIC")
+	override fun joins(): Set<Cell.Segment> {
+		// Parent Cell interface expects java.util.Set, and joinsOnLine() returns that
+		val joins = joinsOnLine()
+		joins.addAll(getBranchSegments())
+		return joins
+	}
+
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
+		val map = confs.getJoinedNodesAndEdges(from)
+		for (e in (map as Map<*, *>).entries) {
+			@Suppress("UNCHECKED_CAST")
+			val entry = e as Map.Entry<Cell.Segment, Conf>
+			if (entry.value == getConf()) return entry.key
+		}
+		return null
 	}
 
 	/**
 	 * @return directions of branchs
 	 */
-	public Set<Segment> getBranchSegments() {
-		return getBranchSegments(this);
-	}
+	fun getBranchSegments(): Set<Cell.Segment> = getBranchSegments(this)
 
-	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException {
-		final Conf newConf = getPathConfWithException(from, to);
-		if (logger.isInfoEnabled()) {
-			logger.info("{} Switch {} path setup: from={} to={}, conf={}, allowedSpeed={}",
-				jDisco.Process.time(), this.hashCode(), from, to, newConf, allowedSpeed);
+	override fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
+		val newConf = getPathConfWithException(from, to)
+		if (logger.isInfoEnabled) {
+			logger.info(
+				"{} Switch {} path setup: from={} to={}, conf={}, allowedSpeed={}",
+				jDisco.Process.time(),
+				this.hashCode(),
+				from,
+				to,
+				newConf,
+				allowedSpeed
+			)
 		}
-		setConf(newConf);
+		setConf(newConf)
 	}
 
-	private Conf getPathConfWithException(Segment from, Segment to) throws PathSeparatorChangeException {
-		final Conf pathConf = confs.get(from, to);
-		if (pathConf == null) throw new PathSeparatorChangeException("switch doesn't join this segments", this);
-		return pathConf;
+	@Throws(PathSeparatorChangeException::class)
+	private fun getPathConfWithException(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): Conf {
+		// Java would NPE here if from or to are null - we make it explicit
+		if (from == null || to == null) {
+			throw PathSeparatorChangeException("switch segments cannot be null", this)
+		}
+		val pathConf = confs.get(from, to)
+		if (pathConf == null) throw PathSeparatorChangeException("switch doesn't join this segments", this)
+		return pathConf
 	}
 
-	public Set<Segment> possibleFollowers(Segment from) {
-		return confs.getJoinedNodesAndEdges(from).keySet();
+	@Suppress("OVERRIDE_BY_SYNTHETIC")
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
+		val map = confs.getJoinedNodesAndEdges(from)
+		@Suppress("UNCHECKED_CAST")
+		return (map as Map<Cell.Segment, *>).keys as Set<Cell.Segment>
 	}
 
-	private static void putBranches(Type t, SpatialType st, Segment first, Segment...segments) {
-		branches.put(t, st, EnumSet.of(first, segments));
+	companion object {
+		private val logger: Logger = LoggerFactory.getLogger(RailSwitch::class.java)
+
+		/**
+		 * allowed speed
+		 */
+		const val COMMON_BRANCH_SPEED = 13
+
+		/**
+		 * allowed speed
+		 */
+		const val COMMON_MAIN_SPEED = 30
+
+		/**
+		 *
+		 */
+		const val UNSUPORTED_SWITCH_TYPES_MESSAGE = "unsuported switch types"
+
+		/**
+		 *
+		 */
+		@JvmField
+		val SUPPORTED_SIMPLE_SPATIAL_TYPES = arrayOf(Cell.SpatialType.HORIZONTAL, Cell.SpatialType.VERTICAL)
+
+		private val branches = SwitchMap<Set<Cell.Segment>>()
+		private val allConfs = SwitchMap<EnumUnorientedGraph<Cell.Segment, Conf>>()
+
+		init {
+			putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.E)
+			putBranches(Type.SIMPLE_LEFT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.G)
+			putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.D)
+			putBranches(Type.SIMPLE_LEFT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.B)
+
+			putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.HORIZONTAL, Cell.Segment.G)
+			putBranches(Type.SIMPLE_RIGHT_FALSE, Cell.SpatialType.VERTICAL, Cell.Segment.D)
+			putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.HORIZONTAL, Cell.Segment.B)
+			putBranches(Type.SIMPLE_RIGHT_TRUE, Cell.SpatialType.VERTICAL, Cell.Segment.E)
+
+			for (t in Type.values()) {
+				if (t.getKind() == Kind.SIMPLE) {
+					for (st in SUPPORTED_SIMPLE_SPATIAL_TYPES) {
+						val confs = EnumUnorientedGraph<Cell.Segment, Conf>(Cell.Segment::class.java)
+						val merging = st.segments[if (t.getMergingPosition()) 0 else 1] // je v proti-directionu
+						val mainDir = Cell.Segment.anti(merging)
+						val set = branches.get(t, st)
+						assert(set!!.size == 1) { set }
+						val branch = set.iterator().next()
+						confs.put(merging, branch, Conf.BRANCH)
+						confs.put(merging, mainDir, Conf.MAIN)
+						allConfs.put(t, st, confs)
+					}
+				}
+			}
+		}
+
+		@JvmStatic
+		protected fun getBranchSegments(rSwitch: RailSwitch): Set<Cell.Segment> =
+			branches.get(rSwitch.type, rSwitch.getSpatialType())!!
+
+		private fun putBranches(
+			t: Type,
+			st: Cell.SpatialType,
+			first: Cell.Segment,
+			vararg segments: Cell.Segment
+		) {
+			branches.put(t, st, EnumSet.of(first, *segments) as Set<Cell.Segment>)
+		}
 	}
 }

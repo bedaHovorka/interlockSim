@@ -7,30 +7,23 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Continuous;
-import jDisco.Variable;
+import jDisco.Continuous
+import jDisco.Variable
 
 /**
  * Substitute for "SIMLIB Integrator"
+ * Integrates dx.state into x.state using jDisco continuous simulation.
  *
+ * @param x integrator output (position)
+ * @param dx integrator input (velocity)
  */
-public final class SimpleIntegration extends Continuous {
-	private final Variable x;
-	private final Variable dx;
-
-	/**
-	 * @param x integrator output
-	 * @param dx integrator input
-	 */
-	public SimpleIntegration(final Variable x, final Variable dx) {
-		this.x = x;
-		this.dx = dx;
-	}
-
-	@Override
-	protected void derivatives() {
-		x.rate = dx.state;
+class SimpleIntegration(
+	private val x: Variable,
+	private val dx: Variable
+) : Continuous() {
+	override fun derivatives() {
+		x.rate = dx.state
 	}
 }

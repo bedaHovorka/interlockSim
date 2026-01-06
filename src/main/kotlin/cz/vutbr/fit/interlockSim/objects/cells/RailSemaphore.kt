@@ -7,185 +7,184 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.util.Set
 
 /**
  * "Navestidlo"
  */
-public class RailSemaphore extends OrientedNodeCell {
+open class RailSemaphore(
+	orientation: Boolean,
+	spatialType: Cell.SpatialType
+) : OrientedNodeCell(orientation, spatialType) {
 	/**
 	 * Represents ligths (command) on semaphore
 	 */
-	public enum Signal {
+	enum class Signal(
+		speed: Int?
+	) {
 		/**
 		 * red signal, stop
 		 */
 		STOP(0),
+
 		/**
 		 * allow speed max 30 km/h
 		 */
 		S30(30),
+
 		/**
 		 * allow speed max 40 km/h
 		 */
 		S40(40),
+
 		/**
 		 * allow speed max 60 km/h
 		 */
 		S60(60),
+
 		/**
 		 * allow speed max 80 km/h
 		 */
 		S80(80),
+
 		/**
 		 * allow speed max 100 km/h
 		 */
 		S100(100),
+
 		/**
 		 * allow speed maximal in track section
 		 */
-		FREE(),
+		FREE(null);
 
-//		MOVE(20), //? posun
-//		CALL(20) //? privolavacka
-		;
-		private final double allowedSpeed;
-		private static final Signal[] values = values();
+		private val allowedSpeed: Double
 
-		/**
-		 * in km/h !!!!
-		 * @param speed
-		 */
-		Signal(int speed) {
-			this.allowedSpeed = speed  / 3.6;
-		}
-
-		Signal() {
-			this.allowedSpeed = PathElement.ABSOLUTE_MAX_SPEED;
+		init {
+			this.allowedSpeed = if (speed != null) speed / 3.6 else PathElement.ABSOLUTE_MAX_SPEED
 		}
 
 		/**
 		 * @return if the signal allow next move
 		 */
-		public boolean isAllowing() {
-			return allowedSpeed > 0;
-		}
+		fun isAllowing(): Boolean = allowedSpeed > 0
 
 		/**
 		 * @return speed in in m/s !!!
 		 */
-		public double allowedSpeed() {
-			return allowedSpeed;
-		}
+		fun allowedSpeed(): Double = allowedSpeed
 
-		/**
-		 * @param speed
-		 * @return signal with allowedSpeed less then speed
-		 */
-		public static Signal forSpeed(double speed) {
-			assert speed >= S30.allowedSpeed() || speed == 0;
-			for (Signal s : values) {
-				if (s.allowedSpeed() > speed) return s.ordinal()==0 ? STOP : values[s.ordinal()-1];
+		companion object {
+			private val values = Signal.values()
+
+			/**
+			 * @param speed
+			 * @return signal with allowedSpeed less then speed
+			 */
+			@JvmStatic
+			fun forSpeed(speed: Double): Signal {
+				assert(speed >= S30.allowedSpeed() || speed == 0.0)
+				for (s in values) {
+					if (s.allowedSpeed() > speed) return if (s.ordinal == 0) STOP else values[s.ordinal - 1]
+				}
+				return FREE
 			}
-			return FREE;
 		}
 	}
 
-	private static final class ConstantSemaphore extends RailSemaphore {
-		ConstantSemaphore(boolean orientation, SpatialType spatialType, Signal signal) {
-			super(orientation, spatialType);
-			super.setSignal(signal);
+	private class ConstantSemaphore(
+		orientation: Boolean,
+		spatialType: Cell.SpatialType,
+		signal: Signal
+	) : RailSemaphore(orientation, spatialType) {
+		init {
+			super.setSignal(signal)
 		}
 
-		@Override
-		public void setSignal(Signal signal) {
-			//EMPTY
+		override fun setSignal(signal: Signal) {
+			// EMPTY
 		}
 	}
 
-	private static final Logger logger = LoggerFactory.getLogger(RailSemaphore.class);
-	private Signal signal = Signal.STOP;
+	private var signal: Signal = Signal.STOP
 
-	/**
-	 * @param orientation
-	 * @param spatialType
-	 */
-	public RailSemaphore(Boolean orientation, SpatialType spatialType) {
-		super(orientation, spatialType);
-	}
+	override fun joins(): Set<Cell.Segment> = joinsOnLine()
 
-	/**
-	 * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
-	 * @param orientation
-	 * @param spatialType
-	 * @param signal
-	 * @return constant orientented aPath separator
-	 */
-	public static RailSemaphore getConstantInstance(boolean orientation, SpatialType spatialType, Signal signal) {
-		return new ConstantSemaphore(orientation, spatialType, signal);
-	}
-
-	@Override
-	public RailSemaphore clone() throws CloneNotSupportedException {
-		return (RailSemaphore) super.clone();//CAUTION
-	}
-
-	public Set<Segment> joins() {
-		return joinsOnLine();
-	}
-
-	@Override
-	public Segment getFollowingSegment(Segment from) {
-		return secondOnLine(from);
-	}
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = secondOnLine(from)
 
 	/**
 	 * @return atribute getter {@link Signal}
 	 */
-	public Signal getSignal() {
-		return signal;
-	}
+	fun getSignal(): Signal = signal
 
 	/**
 	 * atribute setter {@link Signal}
 	 * @param signal
 	 */
-	public void setSignal(Signal signal) {
-		if (logger.isDebugEnabled() && this.signal != signal) {
-			logger.debug("Semaphore {} signal change: {} -> {} at t={}",
-				getName() != null ? getName() : this.hashCode(),
-				this.signal, signal, jDisco.Process.time());
+	open fun setSignal(signal: Signal) {
+		if (logger.isDebugEnabled && this.signal != signal) {
+			logger.debug(
+				"Semaphore {} signal change: {} -> {} at t={}",
+				if (getName() != null) getName() else this.hashCode(),
+				this.signal,
+				signal,
+				jDisco.Process.time()
+			)
 		}
-		this.signal = signal;
+		this.signal = signal
 	}
 
-	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException {
-		checkPathSegments(from, to);
-		setSignal(Signal.STOP);
+	override fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
+		checkPathSegments(from, to)
+		setSignal(Signal.STOP)
 	}
 
-	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException {
+	override fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
 		if (checkPathSegments(from, to)) {
-			setSignal(Signal.forSpeed(allowedSpeed));
+			setSignal(Signal.forSpeed(allowedSpeed))
 		}
 	}
 
-	public double allowedSpeed() {
-		return getSignal().allowedSpeed();
+	override fun allowedSpeed(): Double = getSignal().allowedSpeed()
+
+	@Throws(PathSeparatorChangeException::class)
+	private fun checkPathSegments(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): Boolean {
+		val d = direction()
+		if (to == d && from == Cell.Segment.anti(d)) return true
+		if (from == d && to == Cell.Segment.anti(d)) return false
+		throw PathSeparatorChangeException("wrong aPath segments", this)
 	}
 
-	private boolean checkPathSegments(Segment from, Segment to) throws PathSeparatorChangeException {
-		final Segment d = direction();
-		if (to == d && from == Segment.anti(d)) return true;
-		else if (from == d && to == Segment.anti(d)) return false;
-		throw new PathSeparatorChangeException("wrong aPath segments", this);
+	companion object {
+		private val logger: Logger = LoggerFactory.getLogger(RailSemaphore::class.java)
+
+		/**
+		 * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
+		 * @param orientation
+		 * @param spatialType
+		 * @param signal
+		 * @return constant orientented aPath separator
+		 */
+		@JvmStatic
+		fun getConstantInstance(
+			orientation: Boolean,
+			spatialType: Cell.SpatialType,
+			signal: Signal
+		): RailSemaphore = ConstantSemaphore(orientation, spatialType, signal)
 	}
 }

@@ -7,49 +7,48 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Process;
+import jDisco.Process
 
 /**
- * Cycle proces...
- * because desription behaviour with only while(true) in actions in Proces is bad idea
- * this class can inter iteration terminate process
+ * Cycle process...
+ * Because describing behaviour with only while(true) in actions in Process is a bad idea,
+ * this class allows inter-iteration termination of the process.
  */
-public abstract class LoopProcess extends Process {
-	private boolean terminate = false;
+abstract class LoopProcess : Process() {
+	private var terminate = false
 
-	@Override
-	protected final void actions() {
-		startAction();
+	protected final override fun actions() {
+		startAction()
 		while (true) {
-			if (terminate) break;
-			iteration();
-			if (terminate) break;
-			interLoopSleep();
+			if (terminate) break
+			iteration()
+			if (terminate) break
+			interLoopSleep()
 		}
-		byTerminateAction();
+		byTerminateAction()
 	}
 
-	protected void startAction() {
+	protected open fun startAction() {
 		// EMPTY
 	}
 
-	protected void byTerminateAction() {
-		//EMPTY
+	protected open fun byTerminateAction() {
+		// EMPTY
 	}
 
-	protected abstract void iteration();
+	protected abstract fun iteration()
 
-	protected void interLoopSleep() {
-		passivate();
+	protected open fun interLoopSleep() {
+		passivate()
 	}
 
 	/**
-	 * safe canceling of process
+	 * Safe cancellation of process
 	 */
-	public final void terminate() {
-		terminate = true;
-		if (!terminated()) Process.activate(this);
+	final fun terminate() {
+		terminate = true
+		if (!terminated()) Process.activate(this)
 	}
 }

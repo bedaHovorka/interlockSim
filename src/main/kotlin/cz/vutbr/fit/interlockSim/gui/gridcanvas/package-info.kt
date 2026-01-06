@@ -8,4 +8,4 @@
  *
  * @author Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui.gridcanvas;
+package cz.vutbr.fit.interlockSim.gui.gridcanvas

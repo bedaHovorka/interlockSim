@@ -7,34 +7,28 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.util.EnumSet;
-import java.util.Set;
-
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import java.util.EnumSet
+import java.util.Set
 
 /**
  * Base implementation of {@link OrientedPathSeparator}
  */
-public abstract class OrientedNodeCell extends NodeCell implements OrientedPathSeparator {
-	private final boolean orientation;
+abstract class OrientedNodeCell protected constructor(
+	private val orientation: Boolean,
+	spatialType: Cell.SpatialType
+) : NodeCell(spatialType),
+	OrientedPathSeparator {
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> =
+		EnumSet.of(getFollowingSegment(from)) as Set<Cell.Segment>
 
-	protected OrientedNodeCell(boolean orientation, SpatialType spatialType) {
-		super(spatialType);
-		this.orientation = orientation;
-	}
+	override fun getOrientation(): Boolean = orientation
 
-	public Set<Segment> possibleFollowers(Segment from) {
-		return EnumSet.of(getFollowingSegment(from));
-	}
-
-	public boolean getOrientation() {
-		return orientation;
-	}
-
-	public Segment direction() {
-		SpatialType st = getSpatialType(); assert st != null : this;
-		return st.getSegments()[getOrientation()? 1 : 0];
+	override fun direction(): Cell.Segment {
+		val st = getSpatialType()
+		assert(st != null) { this }
+		return st.segments[if (getOrientation()) 1 else 0]
 	}
 }

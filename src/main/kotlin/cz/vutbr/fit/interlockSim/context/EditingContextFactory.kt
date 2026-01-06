@@ -7,18 +7,17 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
-
+package cz.vutbr.fit.interlockSim.context
 
 /**
  * Factory for editing context
  */
-public interface EditingContextFactory extends ContextFactory {
+interface EditingContextFactory : ContextFactory {
 	/**
 	 * create new context
 	 * @return empty context
 	 */
-	public EditingContext createEmptyContext();
+	fun createEmptyContext(): EditingContext
 
 	/**
 	 * @param context
@@ -27,5 +26,10 @@ public interface EditingContextFactory extends ContextFactory {
 	 * @return create new object in context
 	 * @throws Exception
 	 */
-	public Object createNew(EditingContext context, Class<?> clazz, Object... arguments) throws Exception;
+	@Throws(Exception::class)
+	fun createNew(
+		context: EditingContext,
+		clazz: Class<*>,
+		vararg arguments: Any
+	): Any
 }

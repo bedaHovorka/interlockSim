@@ -7,88 +7,72 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Process;
+import jDisco.Process
 
 /**
  *
  */
-public class SimulationException extends Exception {
-	private final Object object;
-	private final double time;
+open class SimulationException : Exception {
+	private val obj: Any?
+	private val time: Double
+
 	/**
 	 *
 	 */
-	public SimulationException() {
-		this((Object)null);
-	}
+	constructor() : this(null as Any?)
 
 	/**
 	 * @param object
 	 *
 	 */
-	public SimulationException(Object object) {
-		this("", object);
-	}
+	constructor(obj: Any?) : this("", obj)
 
 	/**
 	 * @param message
 	 */
-	public SimulationException(String message) {
-		this(message, null);
-	}
+	constructor(message: String) : this(message, null as Any?)
 
 	/**
 	 * @param message
 	 * @param object
 	 */
-	public SimulationException(String message, Object object) {
-		this(message, null, object);
-	}
+	constructor(message: String, obj: Any?) : this(message, null as Throwable?, obj)
 
 	/**
 	 * @param cause
 	 */
-	public SimulationException(Throwable cause) {
-		this(cause, null);
-	}
+	constructor(cause: Throwable?) : this(cause, null as Any?)
 
 	/**
 	 * @param cause
 	 * @param object
 	 */
-	public SimulationException(Throwable cause, Object object) {
-		this("", cause, object);
-	}
+	constructor(cause: Throwable?, obj: Any?) : this("", cause, obj)
 
 	/**
 	 * @param message
 	 * @param cause
 	 * @param object
 	 */
-	public SimulationException(String message, Throwable cause, Object object) {
-		super(message, cause);
-		this.object = object;
-		this.time = Process.time();
+	constructor(message: String, cause: Throwable?, obj: Any?) : super(message, cause) {
+		this.obj = obj
+		this.time = Process.time()
 	}
 
 	/**
 	 * @return object getter
 	 */
-	public Object getObject() {
-		return object;
-	}
+	open fun getObject(): Any? = obj
 
 	/**
 	 * @return model time of exception
 	 */
-	public double getTime() {
-		return time;
-	}
+	fun getTime(): Double = time
 
-	@Override
-	public String getMessage() {
-		return getTime() + ":" + String.valueOf(getObject()) + " " + super.getMessage();
+	override fun toString(): String {
+		val msg = message?.takeIf { it.isNotEmpty() } ?: ""
+		return "${this::class.simpleName}: $msg at time $time"
 	}
 }

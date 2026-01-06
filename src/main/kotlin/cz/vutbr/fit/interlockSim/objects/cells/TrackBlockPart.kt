@@ -7,50 +7,35 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;//jinde?
+package cz.vutbr.fit.interlockSim.objects.cells // jinde?
 
-import java.util.Set;
-
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import java.util.Set
 
 /**
- * Cell as part of {@link TrackBlock} in grid
+ * Cell as part of [TrackBlock] in grid
  *
  */
-public class TrackBlockPart extends AbstractCell {
-	private final TrackBlock trackBlock;
-	private final Segment[] segments;
-
-	/**
-	 *
-	 * @param trackBlock
-	 * @param segments
-	 */
-	public TrackBlockPart(TrackBlock trackBlock, Segment... segments) {
-		assert segments.length > 0;
-		this.trackBlock = trackBlock;
-		this.segments = segments;
+class TrackBlockPart(
+	private val trackBlock: TrackBlock,
+	private val segments: Array<Cell.Segment>
+) : AbstractCell() {
+	init {
+		assert(segments.isNotEmpty())
 	}
 
 	/**
 	 * @return whole block
 	 */
-	public TrackBlock getTrackBlock() {
-		return trackBlock;
-	}
+	fun getTrackBlock(): TrackBlock = trackBlock
 
 	/**
 	 * @return topology joins
 	 */
-	public Segment[] getSegments() {
-		return segments;
-	}
+	fun getSegments(): Array<Cell.Segment> = segments
 
-	public Set<Segment> joins() {
-		return arr2set(getSegments());
-	}
+	override fun joins(): Set<Cell.Segment> = arr2set(getSegments())
 
-	public SpatialType getSpatialType() {
-		return null;
-	}
+	@Suppress("UNCHECKED_CAST")
+	override fun getSpatialType(): Cell.SpatialType = null as Cell.SpatialType
 }

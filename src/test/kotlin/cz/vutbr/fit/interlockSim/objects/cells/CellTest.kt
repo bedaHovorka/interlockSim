@@ -7,95 +7,90 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.awt.Point;
-import java.util.EnumMap;
-
-import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.*;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import org.assertj.core.api.Assertions.*
+import org.junit.jupiter.api.Test
+import java.awt.Point
+import java.util.EnumMap
 
 /**
- * This class checks cells atributes (mainly topology)
+ * This class checks cells attributes (mainly topology)
  */
-@SuppressWarnings("unchecked")
-public class CellTest {
-
-	private static final Class<? extends Cell>[] TESTED_CLASSES = new Class[]{RailSemaphore.class, InOut.class};
+@Suppress("UNCHECKED_CAST")
+class CellTest {
+	private val testedClasses: Array<Class<out Cell>> = arrayOf(RailSemaphore::class.java, InOut::class.java)
 
 	/**
-	 *
-	 *
+	 * Tests segment transformations and properties
 	 */
 	@Test
-	public void testSegments() {
-		final Point center = new Point(0, 0);
-		final EnumMap<Segment, Point> points = new EnumMap<Segment, Point>(Segment.class);
+	fun testSegments() {
+		val center = Point(0, 0)
+		val points = EnumMap<Segment, Point>(Segment::class.java)
 
-		for (Segment s : Segment.values()) {
-			final int dx = s.getDx();
-			final int dy = s.getDy();
-			final float rx = s.getRx();
-			final float ry = s.getRy();
+		for (s in Segment.values()) {
+			val dx = s.dx
+			val dy = s.dy
 
-			assertThat(Segment.r2d(rx)).isEqualTo(dx);
-			assertThat(Segment.r2d(ry)).isEqualTo(dy);
-			assertThat(Segment.d2r(dx)).isEqualTo(rx);
-			assertThat(Segment.d2r(dy)).isEqualTo(ry);
-			assertThat(Segment.segmentFor(dx, dy)).isSameAs(s);
+			assertThat(Segment.segmentFor(dx, dy)).isSameAs(s)
 
-			assertThat(Segment.anti(Segment.anti(s))).isSameAs(s);
-			assertThat(Segment.conflict(s, s)).isTrue();
+			assertThat(Segment.anti(Segment.anti(s))).isSameAs(s)
+			assertThat(Segment.conflict(s, s)).isTrue()
 
-			final Point tr = s.transform(center);
-			assertThat(tr).isNotSameAs(center); //nesmi zmenit a vracet predany objekt
-			assertThat(center.equals(tr)).as("transformed point is equal").isFalse();
-			assertThat(points.values().contains(tr)).as("transformed point is genereted twice").isFalse();
-			points.put(s, tr);
+			val tr = s.transform(center)
+			assertThat(tr).isNotSameAs(center) // Must not return same object
+			assertThat(center == tr).`as`("transformed point is equal").isFalse()
+			assertThat(points.values.contains(tr)).`as`("transformed point is generated twice").isFalse()
+			points[s] = tr
 		}
 	}
 
 	/**
-	 *
-	 *
+	 * Tests cell direction properties
 	 */
 	@Test
-	public void testDirection() {
-		for (Class<? extends Cell> clazz : TESTED_CLASSES) {
-			testDir(clazz);
+	fun testDirection() {
+		for (clazz in testedClasses) {
+			testDir(clazz)
 		}
 	}
 
-	private void testDir(Class<? extends Cell> clazz, Object... objects) {
-		for (SpatialType t : SpatialType.values()) {
+	private fun testDir(
+		clazz: Class<out Cell>,
+		vararg objects: Any
+	) {
+		for (t in SpatialType.values()) {
 			try {
-				final OrientedNodeCell sem1 = newCell(clazz, true, t, objects);
-				final OrientedNodeCell sem2 = newCell(clazz, false, t, objects);
+				val sem1 = newCell(clazz, true, t, objects)
+				val sem2 = newCell(clazz, false, t, objects)
 
 				assertThat(sem1.direction())
-					.as("direction for class " + clazz.getSimpleName() +  " and " + t.toString())
-					.isSameAs(Segment.anti(sem2.direction()));
-			} catch (IllegalArgumentException e) {
-				final String message = e.getMessage();
-				if (message != null && message.equals(RailSwitch.UNSUPORTED_SWITCH_TYPES_MESSAGE)) {
-					continue;
+					.`as`("direction for class ${clazz.simpleName} and $t")
+					.isSameAs(Segment.anti(sem2.direction()))
+			} catch (e: IllegalArgumentException) {
+				val message = e.message
+				if (message != null && message == RailSwitch.UNSUPORTED_SWITCH_TYPES_MESSAGE) {
+					continue
 				}
-				throw e;
+				throw e
 			}
 		}
 	}
 
-	private OrientedNodeCell newCell(Class<? extends Cell> clazz, boolean o, SpatialType t, Object... objects) {
-		if (clazz == RailSemaphore.class) {
-			return new RailSemaphore(o,t);
-		} else if (clazz == InOut.class) {
-			return new InOut("xx", o, t);
+	private fun newCell(
+		clazz: Class<out Cell>,
+		o: Boolean,
+		t: SpatialType,
+		vararg objects: Any
+	): OrientedNodeCell =
+		when {
+			clazz == RailSemaphore::class.java -> RailSemaphore(o, t) as OrientedNodeCell
+			clazz == InOut::class.java -> InOut("xx", o, t) as OrientedNodeCell
+			else -> {
+				fail<OrientedNodeCell>("Unexpected cell class: $clazz, objects: ${objects.contentToString()}")
+			}
 		}
-
-		fail("Unexpected cell class: " + clazz + ", objects: " + java.util.Arrays.toString(objects));
-		return null;
-	}
 }

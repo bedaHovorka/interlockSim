@@ -7,47 +7,40 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim;
+package cz.vutbr.fit.interlockSim
 
-import java.io.File;
-import java.io.InputStream;
-import java.util.ListResourceBundle;
+import java.io.File
+import java.io.InputStream
+import java.util.ListResourceBundle
 
 /**
  * Resources
  */
-public class MyResourceBoundle extends ListResourceBundle {
-	private static final MyResourceBoundle instance = new MyResourceBoundle();
-	private static final String BASE = "resource" + File.separatorChar;
-	private MyResourceBoundle() {
-		//EMPTY
+class MyResourceBoundle private constructor() : ListResourceBundle() {
+	companion object {
+		private val instance = MyResourceBoundle()
+		private val BASE = "resource" + File.separatorChar
+
+		/**
+		 * @return singleton instance
+		 */
+		@JvmStatic
+		fun getInstance(): MyResourceBoundle = instance
 	}
 
-	@Override
-	protected Object[][] getContents() {
+	override fun getContents(): Array<Array<Any>>? {
 		// TODO Auto-generated method stub
-		return null;
+		return null
 	}
 
 	/**
 	 * @return schema file for validation
 	 */
-	public InputStream getSchema() {
-		return getFile("data.xsd");
-	}
+	fun getSchema(): InputStream? = getFile("data.xsd")
 
 	/**
 	 * @param name
 	 * @return file from resource
 	 */
-	public InputStream getFile(String name) {
-		return getClass().getResourceAsStream(BASE + name);
-	}
-
-	/**
-	 * @return singleton instance
-	 */
-	public static MyResourceBoundle getInstance() {
-		return instance;
-	}
+	fun getFile(name: String): InputStream? = javaClass.getResourceAsStream(BASE + name)
 }

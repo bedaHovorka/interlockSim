@@ -7,13 +7,13 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim;
+package cz.vutbr.fit.interlockSim
 
-import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.Documented
+import java.lang.annotation.ElementType
+import java.lang.annotation.Retention
+import java.lang.annotation.RetentionPolicy
+import java.lang.annotation.Target
 
 /**
  * This annotation marks method, which inits examples
@@ -21,6 +21,4 @@ import java.lang.annotation.Target;
 @Documented
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface Example {
-   //EMPTY
-}
+annotation class Example

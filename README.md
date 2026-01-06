@@ -12,11 +12,11 @@ Author: Bedrich Hovorka
 
 ## Overview
 
-**InterlockSim** is a Java-based railway interlocking simulator that combines:
+**InterlockSim** is a Kotlin-based railway interlocking simulator that combines:
 
 - **Graphical Editor** - Design railway track layouts with switches, semaphores, and entry/exit points
 - **Discrete Event Simulation** - Simulate train movements and interlocking logic using the jDisco framework
-- **Continuous Simulation** - Model continuous of train positions and speeds
+- **Continuous Simulation** - Model continuous train positions and speeds
 - **XML Configuration** - Define and save railway networks in a structured XML format
 - **Process-Oriented Modeling** - Built-in examples demonstrate shunting yard operations
 

@@ -7,17 +7,17 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.util.AbstractCollection;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.Map.Entry;
+import java.util.AbstractCollection
+import java.util.ArrayList
+import java.util.Collection
+import java.util.HashMap
+import java.util.HashSet
+import java.util.Iterator
+import java.util.Map
+import java.util.Map.Entry
+import java.util.Set
 
 /**
  * The ADT ExtendedUnorientedGraph prototype
@@ -26,238 +26,265 @@ import java.util.Map.Entry;
  * @param <E> edges
  * @param <X> {@link ExtendedUnorientedGraph}
  */
-public class HashMapGraph<N,E,X> extends AbstractUnorientedGraph<N, E> implements ExtendedUnorientedGraph<N,E,X> {
-	final class NodeCollection extends AbstractCollection<N> {
-		private final class NodeCollectionIterator implements Iterator<N> {
-			private final Iterator<Doubleton<N,X>> keySetIterator = keySet.iterator();
-			private Iterator<N> currentPair;
-			private N current;
+class HashMapGraph<N, E, X> :
+	AbstractUnorientedGraph<N, E>(),
+	ExtendedUnorientedGraph<N, E, X> {
+	inner class NodeCollection : AbstractCollection<N>() {
+		private inner class NodeCollectionIterator : MutableIterator<N> {
+			private val keySetIterator: java.util.Iterator<Doubleton<N, X>> =
+				keySet.iterator() as java.util.Iterator<Doubleton<N, X>>
+			private var currentPair: Iterator<N>? = null
+			private var current: N? = null
 
 			/**
 			 * Construct iterator for iterating over nodes
 			 */
-			public NodeCollectionIterator() {
-				super();
+			init {
 				if (keySetIterator.hasNext()) {
-					currentPair = keySetIterator.next().iterator();
+					currentPair = keySetIterator.next().iterator() as Iterator<N>
 				}
 			}
 
-			public void remove() {
-				if (current == null) throw new IllegalStateException();
-				HashMapGraph.this.removeAll(current);
-				current = null;
+			override fun remove() {
+				if (current == null) throw IllegalStateException()
+				this@HashMapGraph.removeAll(current!!)
+				current = null
 			}
 
-			public N next() {
-				if (!currentPair.hasNext()) {
-					currentPair = keySetIterator.next().iterator();
+			override fun next(): N {
+				if (currentPair?.hasNext() != true) {
+					currentPair = keySetIterator.next().iterator() as Iterator<N>
 				}
-				current = currentPair.next();
-				return current;
+				current = currentPair!!.next()
+				return current!!
 			}
 
-			public boolean hasNext() {
-				return (currentPair != null && currentPair.hasNext()) ||
-						(keySetIterator != null && keySetIterator.hasNext());
-			}
+			override fun hasNext(): Boolean =
+				(currentPair != null && currentPair!!.hasNext()) ||
+					keySetIterator.hasNext()
 		}
 
-		private final Set<Doubleton<N,X>> keySet = map.keySet();
+		private val keySet: java.util.Set<Doubleton<N, X>> = map.keys as java.util.Set<Doubleton<N, X>>
 
-		@Override
-		public Iterator<N> iterator() {
-			return new NodeCollectionIterator();
-		}
+		override fun iterator(): MutableIterator<N> = NodeCollectionIterator()
 
-		@Override
-		public int size() {
-			return keySet.size() << 1;
-		}
+		override val size: Int
+			get() = keySet.size shl 1
 	}
 
-	private NodeCollection nodeCollection;
+	private var nodeCollection: NodeCollection? = null
 
-	private HashMap<Doubleton<N,X>, E> map = new HashMap<Doubleton<N,X>, E>();
+	private val map = HashMap<Doubleton<N, X>, E>()
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#put(N, N, I)
 	 */
-	public void put(N first, N second, E value) {
-		map.put(new Doubleton<N,X>(first, second), value);
+	override fun put(
+		first: N,
+		second: N,
+		value: E
+	) {
+		map[Doubleton<N, X>(first, second)] = value
 	}
 
-	public void put(N first, X firstAddInf, N second, X secondAddInf, E value) {
-		map.put(new Doubleton<N,X>(first, second, firstAddInf, secondAddInf), value);
+	override fun put(
+		first: N,
+		firstAddInf: X,
+		second: N,
+		secondAddInf: X,
+		value: E
+	) {
+		map[Doubleton(first, second, firstAddInf, secondAddInf)] = value
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#get(N, N)
 	 */
-	public E get(N first, N second) {
-		return map.get(getReferencer(first, second));
-	}
+	override fun get(
+		first: N,
+		second: N
+	): E? = map[getReferencer(first, second)]
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#remove(N, N)
 	 */
-	public E remove(N first, N second) {
-		return map.remove(getReferencer(first, second));
-	}
+	override fun remove(
+		first: N,
+		second: N
+	): E? = map.remove(getReferencer(first, second))
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#removeAll(N)
 	 */
-	public Collection<E> removeAll(N node) {
-		return allEdgesJoinsWith(node, true);
-	}
+	override fun removeAll(node: N): Collection<E> = allEdgesJoinsWith(node, true)
 
-	private Collection<E> allEdgesJoinsWith(N node, boolean remove) {
-		assert node != null;
-		final Collection<E> collection = new ArrayList<E>();
+	private fun allEdgesJoinsWith(
+		node: N,
+		remove: Boolean
+	): Collection<E> {
+		assert(node != null)
+		val collection = ArrayList<E>()
 
-		final Iterator<Entry<Doubleton<N,X>, E>> iterator = map.entrySet().iterator();
+		val iterator = map.entries.iterator()
 		while (iterator.hasNext()) {
-			final Entry<Doubleton<N,X>, E> next = iterator.next();
-			final Doubleton<N,X> key = next.getKey();
+			val next = iterator.next()
+			val key = next.key
 			if (key.contains(node)) {
-				collection.add(next.getValue());
-				if (remove) iterator.remove();
+				collection.add(next.value)
+				if (remove) iterator.remove()
 			}
 		}
-		return collection;
+		return collection as java.util.Collection<E>
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#remove(I)
 	 */
-	public Collection<N> remove(E h) {
-		assert h != null;
-		final Collection<N> collection = new HashSet<N>();
-		final Iterator<Entry<Doubleton<N,X>, E>> iterator = map.entrySet().iterator();
+	override fun remove(h: E): Collection<N> {
+		assert(h != null)
+		val collection = HashSet<N>()
+		val iterator = map.entries.iterator()
 		while (iterator.hasNext()) {
-			final Entry<Doubleton<N,X>, E> next = iterator.next();
-			if (h.equals(next.getValue())) {
-				collection.addAll(next.getKey());
-				iterator.remove();
+			val next = iterator.next()
+			if (h == next.value) {
+				collection.addAll(next.key)
+				iterator.remove()
 			}
 		}
-		return collection;
+		return collection as java.util.Collection<N>
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#nodeSet()
 	 */
-	public Set<N> nodeSet() {
-		if (nodeCollection == null) nodeCollection = new NodeCollection();
-		//EXTENSION pohled ne copii
-		Set<N> set = new HashSet<N>(nodeCollection);
-		//for (Doubleton<N> c: map.keySet()) {
-		//	set.addAll(c);
-		//}
-		return set;
+	override fun nodeSet(): Set<N> {
+		if (nodeCollection == null) nodeCollection = NodeCollection()
+		// EXTENSION pohled ne copii
+		val set = HashSet<N>(nodeCollection)
+		// for (Doubleton<N> c: map.keySet()) {
+		// 	set.addAll(c);
+		// }
+		return set as java.util.Set<N>
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#entrySet()
 	 */
-	public Set<Entry<Doubleton<N,X>, E>> entrySet() {
-		return map.entrySet();
+	override fun entrySet(): Set<Map.Entry<Doubleton<N, X>, E>> {
+		@Suppress("UNCHECKED_CAST")
+		return map.entries as java.util.Set<Map.Entry<Doubleton<N, X>, E>>
 	}
 
-	public void putIfNotExists(N first, X addInfFirst, N second, X addInfSecond, E edge) {
-		final Doubleton<N,X> pair = new Doubleton<N,X>(first, second, addInfFirst, addInfSecond);
+	override fun putIfNotExists(
+		first: N,
+		addInfFirst: X,
+		second: N,
+		addInfSecond: X,
+		edge: E
+	) {
+		val pair = Doubleton<N, X>(first, second, addInfFirst, addInfSecond)
 		if (!map.containsKey(pair)) {
-			map.put(pair, edge);
+			map[pair] = edge
 		}
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#values()
 	 */
-	public Collection<E> values() {
-		return map.values();
+	override fun values(): Collection<E> {
+		@Suppress("UNCHECKED_CAST")
+		return map.values as Collection<E>
 	}
 
-	public Collection<E> get(N node) {
-		return allEdgesJoinsWith(node, false);
-	}
+	override fun get(node: N): Collection<E> = allEdgesJoinsWith(node, false)
 
-	private Doubleton<N, X> getReferencer(N first, N second) {
-		return new Doubleton<N, X>(first, second);
-	}
+	private fun getReferencer(
+		first: N,
+		second: N
+	): Doubleton<N, X> = Doubleton(first, second)
 
-	public Map<X, E> assignedEdges(final N node) {
-		final HashMap<X, E> lmap = new HashMap<X, E>();
-		(new DoubletonEntrySetProcessor<X>(map) {
-			@Override
-			public void processEntryNode(Doubleton<N, X> key, E edge, N node2) {
-				if (node.equals(node2)) {
-					final X aInf = key.getValue(node);
-					assert !lmap.containsKey(aInf);
-					lmap.put(aInf, edge);
-				}
-			}
-		}).process();
-		return lmap;
-	}
-
-	public X extensionalObject(final N node, final E edge) {
-		final DoubletonEntrySetProcessor<X> p = (new DoubletonEntrySetProcessor<X>(map) {
-					@Override
-					public void processEntryNode(Doubleton<N, X> key, E edge2, N node2) {
-						if (node.equals(node2) && edge == edge2) {
-							assert getResult() == null;
-							setResult(key.getValue(node));
-						}
+	override fun assignedEdges(node: N): Map<X, E> {
+		val lmap = HashMap<X, E>()
+		(
+			object : DoubletonEntrySetProcessor<X>(map as java.util.Map<Doubleton<N, X>, E>) {
+				override fun processEntryNode(
+					key: Doubleton<N, X>,
+					edge: E,
+					node2: N
+				) {
+					if (node == node2) {
+						val aInf = key.getValue(node)
+						assert(!lmap.containsKey(aInf))
+						lmap[aInf!!] = edge
 					}
-				});
-		p.process();
-		return p.getResult();
+				}
+			}
+		).process()
+		return lmap as java.util.Map<X, E>
 	}
 
-	abstract class DoubletonEntrySetProcessor <T> {
-		private final Map<Doubleton<N, X>, E> map2;
+	override fun extensionalObject(
+		node: N,
+		edge: E
+	): X {
+		val p =
+			object : DoubletonEntrySetProcessor<X>(map as java.util.Map<Doubleton<N, X>, E>) {
+				override fun processEntryNode(
+					key: Doubleton<N, X>,
+					edge2: E,
+					node2: N
+				) {
+					if (node == node2 && edge == edge2) {
+						assert(getResult() == null)
+						setResult(key.getValue(node)!!)
+					}
+				}
+			}
+		p.process()
+		return p.getResult()!!
+	}
 
-		DoubletonEntrySetProcessor(Map<Doubleton<N, X>, E> map) {
-			map2 = map;
-		}
+	abstract inner class DoubletonEntrySetProcessor<T>(
+		private val map2: java.util.Map<Doubleton<N, X>, E>
+	) {
+		private var result: T? = null
 
-		private T result;
-
-		void process() {
-			for (Map.Entry<Doubleton<N, X>, E> e : map2.entrySet()) {
-				final Doubleton<N, X> key = e.getKey();
-				final Iterator<N> iterator = key.iterator();
+		fun process() {
+			@Suppress("UNCHECKED_CAST")
+			val entries = (map2 as java.util.HashMap<Doubleton<N, X>, E>).entries
+			for (e in entries) {
+				val key = e.key
+				val iterator = key.iterator()
 				while (iterator.hasNext()) {
-					final N next = iterator.next();
-					processEntryNode(key, e.getValue(), next);
+					val next = iterator.next()
+					processEntryNode(key, e.value, next)
 				}
 			}
 		}
 
-		abstract void processEntryNode(Doubleton<N, X> key, E edge, N node);
+		abstract fun processEntryNode(
+			key: Doubleton<N, X>,
+			edge: E,
+			node: N
+		)
 
-		T getResult() {
-			return result;
+		fun getResult(): T? = result
+
+		fun setResult(result: T) {
+			this.result = result
 		}
-
-		void setResult(T result) {
-			this.result = result;
-		}
 	}
 
-	public boolean contains(N node1, N node2) {
-		return map.containsKey(getReferencer(node1, node2));
-	}
+	override fun contains(
+		node1: N,
+		node2: N
+	): Boolean = map.containsKey(getReferencer(node1, node2))
 
-	@Override
-	protected HashMap<Doubleton<N, X>, E> implementationContainer() {
-		return map;
-	}
+	override fun implementationContainer(): HashMap<Doubleton<N, X>, E> = map
 
-	@Override
-	public int size() {
-		return map.size();
+	override fun size(): Int = map.size
+
+	override fun clear() {
+		map.clear()
 	}
 }

@@ -7,420 +7,430 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui;
+package cz.vutbr.fit.interlockSim.gui
 
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
-import java.beans.PropertyChangeEvent;
-import java.util.Map.Entry;
-
-import javax.swing.JComponent;
-import javax.swing.Scrollable;
-import javax.swing.SwingConstants;
-
-import cz.vutbr.fit.interlockSim.Main;
-import cz.vutbr.fit.interlockSim.context.Context;
-import cz.vutbr.fit.interlockSim.context.ContextChangeListener;
-import cz.vutbr.fit.interlockSim.context.EditingContext;
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory;
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer;
-import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer;
-import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu;
-import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasPopupMenu;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
+import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasPopupMenu
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import java.awt.Color
+import java.awt.Dimension
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.Point
+import java.awt.Rectangle
+import java.awt.event.MouseEvent
+import java.awt.event.MouseListener
+import java.awt.event.MouseMotionListener
+import java.beans.PropertyChangeEvent
+import java.beans.PropertyChangeListener
+import javax.swing.JComponent
+import javax.swing.Scrollable
+import javax.swing.SwingConstants
 
 /**
- * This is a main GUI component in a program. It show railway elements in a grid.
- *
+ * Main GUI component for rendering and editing railway elements in a grid.
+ * Implements both visual rendering and interaction handling (mouse events, scrolling).
  */
-public class RailwayNetGridCanvas extends JComponent implements Scrollable, MouseMotionListener, StatusProducer, ContextChangeListener {
-	private static final int maxUnitIncrement = 35;
-	private static final int cellWidth = 16;
-	private static final int cellHeight = 16;
-	private boolean showGrid = false;
-	private Context context;
-	private GridMouseEditListener editListener = new GridMouseEditListener();
-	private GridMouseSimulationControlListener simulationControlListener = new GridMouseSimulationControlListener();
+class RailwayNetGridCanvas :
+	JComponent(),
+	Scrollable,
+	MouseMotionListener,
+	StatusProducer,
+	PropertyChangeListener {
+	// Rendering modes for editing and simulation
+	private enum class State(
+		val cellRenderer: CellRenderer?,
+		val popupMenu: GridCanvasPopupMenu?
+	) {
+		EDITING(EditorCellRenderer(CELL_WIDTH, CELL_HEIGHT), GridCanvasEditingPopupMenu()),
+		SIMULATION(null, null)
 
-	private State state;
-	private Class<? extends NodeCell> toolbarCellClass;
-	private Object[] toolbarArgs;
-	private Point selectedkey;
-
-	private abstract class GridMouseAdapter implements MouseMotionListener, MouseListener {
-
-		public void mouseDragged(MouseEvent e) {
-			//EMPTY
-		}
-
-		public void mouseMoved(MouseEvent e) {
-//			EMPTY
-		}
-
-		public final void mouseClicked(MouseEvent e) {
-			switch (e.getButton()) {
-			case MouseEvent.BUTTON1:
-			leftMouseClicked(e);
-			break;
-			case MouseEvent.BUTTON2:
-			middleMouseClicked(e);
-			break;
-			case MouseEvent.BUTTON3:
-			rightMouseClicked(e);
-				break;
-			default:
-				assert(false);
-			}
-		}
-
-		public final void rightMouseClicked(MouseEvent e) {
-			state.getPopupMenu().show(RailwayNetGridCanvas.this, e, currentKey(e), cellOn(e));
-		}
-
-		public abstract void middleMouseClicked(MouseEvent e);
-		public abstract void leftMouseClicked(MouseEvent e);
-
-		public void mouseEntered(MouseEvent e) {
-//			EMPTY
-		}
-
-		public void mouseExited(MouseEvent e) {
-//			EMPTY
-		}
-
-		public void mousePressed(MouseEvent e) {
-//			EMPTY
-		}
-
-		public void mouseReleased(MouseEvent e) {
-//			EMPTY
-		}
-
+		// EXTENSION - Consider moving to separate enum
 	}
 
-	private class GridMouseEditListener extends GridMouseAdapter {
+	// Abstract base class for mouse event handling with different behaviors per mode
+	private abstract inner class GridMouseAdapter :
+		MouseMotionListener,
+		MouseListener {
+		override fun mouseDragged(e: MouseEvent) {
+			// Override in subclasses if needed
+		}
 
-		@Override
-		public void leftMouseClicked(MouseEvent e) {
-		final Cell cellOn = cellOn(e);
-		final EditingContext editingContext = getEditingContext();
-		final Point currentKey = currentKey(e);
-		if (cellOn == null) {
-			if (toolbarCellClass == null) {
-				selectedkey = null;
-				repaint();
-				return;
-			}
-			try {
-				final NodeCell clone = (NodeCell) getEditingContextFactory().createNew(editingContext, toolbarCellClass, toolbarArgs);
-				if (clone instanceof InOut) ((InOut) clone).setName(editingContext.getCurrentNameString());
-				editingContext.putCell(currentKey,clone);
-			} catch (Exception e1) {
-				assert false : e1;
-				e1.printStackTrace();
-			}
-		} else {
-			if (selectedkey != null) {
-			if (selectedkey.equals(currentKey)) return;
-				Point sk = selectedkey;
-				selectedkey = null;
+		override fun mouseMoved(e: MouseEvent) {
+			// Override in subclasses if needed
+		}
 
-				if (cellOn instanceof NodeCell) {
-					TrackBlock tl = new SimpleTrackBlock((NodeCell) cellOn(sk.x, sk.y), (NodeCell) cellOn,
-							editingContext.getCurrentTrackLength(), editingContext.getCurrentMaxSpeed());
-					editingContext.joinCells(sk, currentKey, tl);
+		final override fun mouseClicked(e: MouseEvent) {
+			when (e.button) {
+				MouseEvent.BUTTON1 -> leftMouseClicked(e)
+				MouseEvent.BUTTON2 -> middleMouseClicked(e)
+				MouseEvent.BUTTON3 -> rightMouseClicked(e)
+				else -> assert(false) { "Unknown mouse button: ${e.button}" }
+			}
+		}
+
+		private fun rightMouseClicked(e: MouseEvent) {
+			state.popupMenu?.show(this@RailwayNetGridCanvas, e, currentKey(e), cellOn(e))
+		}
+
+		protected open fun middleMouseClicked(e: MouseEvent) {}
+
+		protected open fun leftMouseClicked(e: MouseEvent) {}
+
+		override fun mouseEntered(e: MouseEvent) {}
+
+		override fun mouseExited(e: MouseEvent) {}
+
+		override fun mousePressed(e: MouseEvent) {}
+
+		override fun mouseReleased(e: MouseEvent) {}
+	}
+
+	// Mouse event handler for editing mode - allows creation and connection of elements
+	private inner class GridMouseEditListener : GridMouseAdapter() {
+		override fun leftMouseClicked(e: MouseEvent) {
+			val cellAtClick = cellOn(e)
+			val editingContext = getEditingContext()
+			val clickKey = currentKey(e)
+
+			when {
+				cellAtClick == null -> {
+					// Empty cell - create new element if one is selected in toolbar
+					if (toolbarCellClass == null) {
+						selectedKey = null
+						repaint()
+						return
+					}
+					try {
+						@Suppress("UNCHECKED_CAST")
+					val newCell = getEditingContextFactory().createNew(
+						editingContext,
+						toolbarCellClass!!,
+						*(toolbarArgs!! as Array<Any>)
+					) as NodeCell
+						if (newCell is InOut) {
+							newCell.setName(editingContext.getCurrentNameString())
+						}
+						editingContext.putCell(clickKey, newCell)
+						// Clear selection after creating a cell to prevent auto-joining
+						selectedKey = null
+					} catch (e1: Exception) {
+						assert(false) { "Failed to create cell: $e1" }
+						e1.printStackTrace()
+					}
 				}
-			} else if (cellOn instanceof NodeCell){
-				selectedkey = currentKey;
-				repaint();
+				selectedKey != null -> {
+					// Cell is selected - connect if different cell clicked
+					if (selectedKey == clickKey) return
+					val selectedPoint = selectedKey!!
+					selectedKey = null
+
+					if (cellAtClick is NodeCell) {
+						val selectedCell = context?.getRailWayNetGrid()?.get(selectedPoint) as? NodeCell
+						if (selectedCell != null) {
+							val trackBlock =
+								SimpleTrackBlock(
+									selectedCell,
+									cellAtClick,
+									editingContext.getCurrentTrackLength(),
+									editingContext.getCurrentMaxSpeed()
+								)
+							editingContext.joinCells(selectedPoint, clickKey, trackBlock)
+							repaint()
+						}
+					}
+				}
+				cellAtClick is NodeCell -> {
+					// Select cell for future connection
+					selectedKey = clickKey
+					repaint()
+				}
 			}
 		}
-		}
 
-		@Override
-		public void middleMouseClicked(MouseEvent e) {
-			final EditingContext editingContext = getEditingContext();
-			editingContext.removeCell(currentKey(e));
-		}
-
-	}
-
-	private class GridMouseSimulationControlListener extends GridMouseAdapter {
-
-		@Override
-		public void leftMouseClicked(MouseEvent e) {
-			//EMPTY
-		}
-
-		@Override
-		public void middleMouseClicked(MouseEvent e) {
-			//EMPTY
-		}
-
-	}
-
-	private enum State { //EXTENSION jinam?
-		EDITING(new EditorCellRenderer(cellWidth, cellHeight), new GridCanvasEditingPopupMenu()),
-		SIMULATION(null, null);
-
-		private final CellRenderer cellRenderer;
-		private final GridCanvasPopupMenu popupMenu;
-
-		State(CellRenderer cellRenderer, GridCanvasPopupMenu popupMenu) {
-		this.cellRenderer = cellRenderer;
-		this.popupMenu = popupMenu;
-		}
-		public CellRenderer getCellRenderer() {
-			return cellRenderer;
-		}
-		public GridCanvasPopupMenu getPopupMenu() {
-			return popupMenu;
+		override fun middleMouseClicked(e: MouseEvent) {
+			val editingContext = getEditingContext()
+			editingContext.removeCell(currentKey(e))
 		}
 	}
 
+	// Mouse event handler for simulation mode - currently no interaction
+	private inner class GridMouseSimulationControlListener : GridMouseAdapter() {
+		override fun leftMouseClicked(e: MouseEvent) {
+			// EXTENSION - Add simulation control features
+		}
 
-	/**
-	 * Create object for painting reailway Grid on screen
-	 */
-	public RailwayNetGridCanvas() {
-		state = State.EDITING;
-		setBackground(Color.BLACK);
-		setAutoscrolls(true);
-		addMouseMotionListener(this);
+		override fun middleMouseClicked(e: MouseEvent) {
+			// EXTENSION - Add simulation control features
+		}
 	}
 
-	public void setContext(Context context) {
-		if (context instanceof EditingContext) {
-				state = State.EDITING;
-				changeListeners(simulationControlListener, editListener);
-		} else if (context instanceof SimulationContext) {
-				state = State.SIMULATION;
-				changeListeners(editListener, simulationControlListener);
-		} else assert(false);
-		changeContext(context);
-	}
+	// Instance variables
+	private var showGrid: Boolean = false
+	private var context: Context? = null
+	private val editListener = GridMouseEditListener()
+	private val simulationControlListener = GridMouseSimulationControlListener()
+	private var state = State.EDITING
+	private var toolbarCellClass: Class<out NodeCell>? = null
+	private var toolbarArgs: Array<Any?>? = null
+	private var selectedKey: Point? = null
 
-	private void changeListeners(GridMouseAdapter oldListener, GridMouseAdapter newListener) {
-		removeListener(oldListener);
-		addListener(newListener);
-	}
-
-	private void addListener(GridMouseAdapter listener) {
-		addMouseMotionListener(listener);
-		addMouseListener(listener);
-	}
-
-	private void removeListener(GridMouseAdapter listener) {
-		removeMouseMotionListener(listener);
-		removeMouseListener(listener);
-	}
-
-	private void changeContext(Context cont) {
-		assert(cont != null);
-		if (context != null) context.removePropertyChangeListener(this);
-		cont.addPropertyChangeListener(this);
-			context = cont;
-		RailwayNetGrid nt = cont.getRailWayNetGrid();
-		setPreferredSize(new Dimension(cellWidth*nt.getCols(), cellHeight*nt.getRows()));
-		setSize(getPreferredSize());
-		revalidate();
-	}
-
-	@Override
-	public final void paintComponent(Graphics g) {
-		assert (g instanceof Graphics2D);
-		paint((Graphics2D) g);
+	init {
+		background = Color.BLACK
+		autoscrolls = true
+		addMouseMotionListener(this)
+		addMouseListener(editListener)
 	}
 
 	/**
-	 * @see java.awt.Component#paint(java.awt.Graphics)
-	 * @param g graphics context
+	 * Switch context and update mouse listeners for the appropriate mode
 	 */
-	public void paint(Graphics2D g) {
-		if (context == null) return;
-		cancelClip(g);
-
-		int x = 0, y = 0;
-		for (Entry<Point, Cell> cellEntry : context.getRailWayNetGrid()) {
-			Point key = cellEntry.getKey();
-			assert key != null && cellEntry.getValue() != null : cellEntry;
-
-			x = key.x*cellWidth; y = key.y*cellHeight;
-
-			g.translate(x, y);
-			g.clipRect(0, 0, cellWidth+1, cellHeight+1);
-			state.getCellRenderer().draw(g, cellEntry.getValue());
-			g.translate(-x, -y);
-			cancelClip(g);
+	fun setContext(newContext: Context) {
+		when (newContext) {
+			is EditingContext -> {
+				state = State.EDITING
+				changeListeners(simulationControlListener, editListener)
+			}
+			is SimulationContext -> {
+				state = State.SIMULATION
+				changeListeners(editListener, simulationControlListener)
+			}
+			else -> assert(false) { "Unknown context type: ${newContext.javaClass}" }
 		}
-
-		if (showGrid) paintGrid(g);
-		if (selectedkey != null) paintMarkSelected(g);
+		changeContext(newContext)
 	}
 
-	private void paintMarkSelected(Graphics2D g) {
-		final Cell cell = context.getRailWayNetGrid().get(selectedkey);
-		if (!(cell instanceof NodeCell)) {
-		selectedkey = null;
-		return;
+	// Change mouse listeners based on mode
+	private fun changeListeners(
+		oldListener: GridMouseAdapter,
+		newListener: GridMouseAdapter
+	) {
+		removeListener(oldListener)
+		addListener(newListener)
+	}
+
+	private fun addListener(listener: GridMouseAdapter) {
+		addMouseMotionListener(listener)
+		addMouseListener(listener)
+	}
+
+	private fun removeListener(listener: GridMouseAdapter) {
+		removeMouseMotionListener(listener)
+		removeMouseListener(listener)
+	}
+
+	// Update context and recalculate display
+	private fun changeContext(cont: Context) {
+		assert(cont != null) { "Context cannot be null" }
+		if (context != null) {
+			context!!.removePropertyChangeListener(this)
 		}
-		cancelClip(g);
-		g.setColor(Color.RED);
-		g.drawRect(selectedkey.x*cellWidth, selectedkey.y*cellHeight, getCellWidth(), getCellHeight());
+		cont.addPropertyChangeListener(this)
+		context = cont
+		val grid = cont.getRailWayNetGrid()
+		preferredSize = Dimension(CELL_WIDTH * grid.getCols(), CELL_HEIGHT * grid.getRows())
+		size = preferredSize
+		revalidate()
 	}
 
-	private void cancelClip(Graphics2D g) {
-		g.setClip(getVisibleRect());
-	}
-
-	private void paintGrid(Graphics2D g) {
-		RailwayNetGrid nt = context.getRailWayNetGrid();
-		g.setColor(Color.GRAY);
-		//		svisle cary
-		for (int i = 0; i <= nt.getCols(); i++) {
-			int x = i*cellWidth;
-			g.drawLine(x, 0, x, getHeight());
-		}
-
-		//vodorovne cary
-		for (int i = 0; i <= nt.getRows(); i++) {
-			int y = i*cellHeight;
-			g.drawLine(0, y, getWidth(), y);
-		}
-	}
-
-	public String getStatus(MouseEvent e) {
-		Cell cell = cellOn(e.getX(), e.getY());
-		return cell==null ? "" : cell.toString();
-	}
-
-	protected Point currentKey(MouseEvent e) {
-		return new Point(e.getX()/cellWidth, e.getY()/cellHeight);
-	}
-
-	private Cell cellOn(int x, int y) {
-		return context.getRailWayNetGrid().getCellAt(x/cellWidth, y/cellHeight);
-	}
-
-	protected Cell cellOn(MouseEvent e) {
-		return cellOn(e.getX(), e.getY());
+	// Painting methods
+	override fun paintComponent(g: Graphics) {
+		assert(g is Graphics2D) { "Graphics context must be Graphics2D" }
+		paint(g as Graphics2D)
 	}
 
 	/**
-	 * @deprecated asi jinde
-	 * @param editingContext
+	 * Paint all cells in the railway grid
 	 */
-	public void setEditing(EditingContext editingContext) {
-		setContext(editingContext);
+	private fun paint(g: Graphics2D) {
+		if (context == null) return
+		cancelClip(g)
+
+		val grid = context!!.getRailWayNetGrid()
+		for (entry in grid) {
+			val key = entry.key
+			val cell = entry.value
+			assert(key != null && cell != null) { "Grid entry has null key or value: ($key, $cell)" }
+
+			val x = key.x * CELL_WIDTH
+			val y = key.y * CELL_HEIGHT
+
+			g.translate(x, y)
+			g.clipRect(0, 0, CELL_WIDTH + 1, CELL_HEIGHT + 1)
+			state.cellRenderer?.draw(g, cell)
+			g.translate(-x, -y)
+			cancelClip(g)
+		}
+
+		if (showGrid) paintGrid(g)
+		if (selectedKey != null) paintMarkSelected(g)
 	}
 
-	/**
-	 * @deprecated asi jinde
-	 * @param editingContext
-	 */
-	public void setSimulation(SimulationContext simulationContext) {
-		setContext(simulationContext);
+	// Highlight the selected cell for connection
+	private fun paintMarkSelected(g: Graphics2D) {
+		val cell = context!!.getRailWayNetGrid().get(selectedKey!!)
+		if (cell !is NodeCell) {
+			selectedKey = null
+			return
+		}
+		cancelClip(g)
+		g.color = Color.RED
+		g.drawRect(selectedKey!!.x * CELL_WIDTH, selectedKey!!.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
 	}
 
-//	nasledujicich 8 metod osetruje spravne rolovani zobrazovani scrollbaru
-	public Dimension getPreferredScrollableViewportSize() {
-		return getPreferredSize();
-	}
-	public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-		 if (orientation == SwingConstants.HORIZONTAL) return visibleRect.width - maxUnitIncrement;
-		 return visibleRect.height - maxUnitIncrement;
+	private fun cancelClip(g: Graphics2D) {
+		g.clip = visibleRect
 	}
 
-	public boolean getScrollableTracksViewportHeight() {
-		return false;
+	// Draw grid lines for alignment
+	private fun paintGrid(g: Graphics2D) {
+		val grid = context!!.getRailWayNetGrid()
+		g.color = Color.GRAY
+		// Vertical lines
+		for (i in 0..grid.getCols()) {
+			val x = i * CELL_WIDTH
+			g.drawLine(x, 0, x, height)
+		}
+
+		// Horizontal lines
+		for (i in 0..grid.getRows()) {
+			val y = i * CELL_HEIGHT
+			g.drawLine(0, y, width, y)
+		}
 	}
 
-	public boolean getScrollableTracksViewportWidth() {
-		return false;
+	// Status bar support
+	override fun getStatus(e: MouseEvent): String {
+		val cell = cellOn(e.x, e.y)
+		return cell?.toString() ?: ""
 	}
 
-	public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-		int currentPosition = 0;
-		if (orientation == SwingConstants.HORIZONTAL) {
-			currentPosition = visibleRect.x;
+	// Mouse coordinate to grid coordinate conversion
+	private fun currentKey(e: MouseEvent): Point = Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
+
+	private fun cellOn(
+		x: Int,
+		y: Int
+	): Cell? = context?.getRailWayNetGrid()?.getCellAt(x / CELL_WIDTH, y / CELL_HEIGHT)
+
+	private fun cellOn(e: MouseEvent): Cell? = cellOn(e.x, e.y)
+
+	// Deprecated methods - kept for backwards compatibility
+	@Deprecated("Use setContext instead")
+	fun setEditing(editingContext: EditingContext) {
+		setContext(editingContext)
+	}
+
+	@Deprecated("Use setContext instead")
+	fun setSimulation(simulationContext: SimulationContext) {
+		setContext(simulationContext)
+	}
+
+	// Scrollable interface implementation
+	override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+
+	override fun getScrollableBlockIncrement(
+		visibleRect: Rectangle,
+		orientation: Int,
+		direction: Int
+	): Int =
+		when (orientation) {
+			SwingConstants.HORIZONTAL -> visibleRect.width - MAX_UNIT_INCREMENT
+			else -> visibleRect.height - MAX_UNIT_INCREMENT
+		}
+
+	override fun getScrollableTracksViewportHeight(): Boolean = false
+
+	override fun getScrollableTracksViewportWidth(): Boolean = false
+
+	override fun getScrollableUnitIncrement(
+		visibleRect: Rectangle,
+		orientation: Int,
+		direction: Int
+	): Int {
+		val currentPosition =
+			when (orientation) {
+				SwingConstants.HORIZONTAL -> visibleRect.x
+				else -> visibleRect.y
+			}
+
+		return if (direction < 0) {
+			val newPosition = currentPosition - (currentPosition / MAX_UNIT_INCREMENT) * MAX_UNIT_INCREMENT
+			if (newPosition == 0) MAX_UNIT_INCREMENT else newPosition
 		} else {
-			currentPosition = visibleRect.y;
+			((currentPosition / MAX_UNIT_INCREMENT) + 1) * MAX_UNIT_INCREMENT - currentPosition
 		}
-
-		if (direction < 0) {
-			int newPosition = currentPosition -
-							 (currentPosition / maxUnitIncrement)
-							  * maxUnitIncrement;
-			return (newPosition == 0) ? maxUnitIncrement : newPosition;
-		}
-		return ((currentPosition / maxUnitIncrement) + 1) * maxUnitIncrement- currentPosition;
 	}
 
-	public void mouseDragged(MouseEvent ev) {
-		mouseMoveScroll(ev);
+	// MouseMotionListener implementation
+	override fun mouseDragged(ev: MouseEvent) {
+		mouseMoveScroll(ev)
 	}
 
-	public void mouseMoved(MouseEvent ev) {
-		// EXTENSION v modu simulator scrollovat...
-		if (false) mouseMoveScroll(ev);
-	}
-	private void mouseMoveScroll(MouseEvent ev) {
-		Rectangle r = new Rectangle(ev.getX(), ev.getY(), 1, 1);
-		scrollRectToVisible(r);
+	override fun mouseMoved(ev: MouseEvent) {
+		// EXTENSION - In simulation mode, enable scrolling
+		if (false) mouseMoveScroll(ev)
 	}
 
-	public EditingContext getEditingContext() {//kontrolni metoda :o)
-		//assert state == State.EDITING && context instanceof EditingContext : "Getting editing context in non-editing mode";
-		return (EditingContext) context;
+	private fun mouseMoveScroll(ev: MouseEvent) {
+		val r = Rectangle(ev.x, ev.y, 1, 1)
+		scrollRectToVisible(r)
 	}
 
-	public boolean isShowGrid() {
-		return showGrid;
+	// Context access
+	fun getEditingContext(): EditingContext {
+		// assert state == State.EDITING && context is EditingContext
+		return context as EditingContext
 	}
 
-	public void setShowGrid(boolean b) {
-		this.showGrid = b;
+	// Grid display options
+	fun isShowGrid(): Boolean = showGrid
+
+	fun setShowGrid(b: Boolean) {
+		showGrid = b
 	}
 
-	public static int getCellHeight() {
-		return cellHeight;
+	// Toolbar management
+	fun setNodeOnToolbar(
+		cellClass: Class<out NodeCell>?,
+		args: Array<Any?>?
+	) {
+		toolbarArgs = args
+		toolbarCellClass = cellClass
 	}
 
-	public static int getCellWidth() {
-		return cellWidth;
-	}
-
-	@Override
-	public void propertyChange(PropertyChangeEvent evt) {
-		Object newValue = evt.getNewValue();
-		if (newValue instanceof Point) {
-			Point point = (Point) newValue;
-			repaint(10, point.x*cellWidth, point.y*cellHeight, getCellWidth(), getCellHeight());
+	// PropertyChangeListener for context updates
+	override fun propertyChange(evt: PropertyChangeEvent) {
+		val newValue = evt.newValue
+		if (newValue is Point) {
+			repaint(10, newValue.x * CELL_WIDTH, newValue.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
 		} else {
-			repaint(100);
+			repaint(100)
 		}
 	}
 
+	// Helper to get editing context factory
+	private fun getEditingContextFactory(): EditingContextFactory =
+		Main.getInstance().getContextFactory() as EditingContextFactory
 
-	public void setNodeOnToolbar(Class<? extends NodeCell> cellClass, Object[] args) {
-		this.toolbarArgs = args;
-		this.toolbarCellClass = cellClass;
-	}
+	companion object {
+		private const val MAX_UNIT_INCREMENT = 35
+		private const val CELL_WIDTH = 16
+		private const val CELL_HEIGHT = 16
 
-	private EditingContextFactory getEditingContextFactory() {
-		return (EditingContextFactory) Main.getInstance().getContextFactory();
+		// Public accessors for cell dimensions (used by other components)
+		fun getCellHeight(): Int = CELL_HEIGHT
+
+		fun getCellWidth(): Int = CELL_WIDTH
 	}
 }

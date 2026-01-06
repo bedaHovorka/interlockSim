@@ -7,63 +7,42 @@
  *
  * Bedrich Hovorka
  */
-/* Brno University of Technology
- * Faculty of Information Technology
- *
- * BSc Thesis  2006/2007
- *
- * Railway Interlocking Simulator
- *
- * Bedrich Hovorka
- */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.objects.tracks.Track;
+import cz.vutbr.fit.interlockSim.objects.tracks.Track
 
 /**
  *
  *
  */
-public class TrackOperationException extends SimulationException {
-
+class TrackOperationException : SimulationException {
 	/**
 	 * @param track
 	 *
 	 */
-	public TrackOperationException(Track track) {
-		super(track);
-	}
+	constructor(track: Track) : super(track)
 
 	/**
 	 * @param message
 	 * @param track
 	 */
-	public TrackOperationException(String message, Track track) {
-		super(message, track);
-	}
+	constructor(message: String, track: Track) : super(message, track)
 
 	/**
 	 * @param cause
 	 * @param track
 	 */
-	public TrackOperationException(Throwable cause, Track track) {
-		super(cause, track);
-	}
+	constructor(cause: Throwable, track: Track) : super(cause, track)
 
 	/**
 	 * @param message
 	 * @param cause
 	 * @param track
 	 */
-	public TrackOperationException(String message, Throwable cause, Track track) {
-		super(message, cause, track);
-	}
+	constructor(message: String, cause: Throwable, track: Track) : super(message, cause, track)
 
 	/**
 	 * @return failed track
 	 */
-	@Override
-	public Track getObject() {
-		return (Track) super.getObject();
-	}
+	override fun getObject(): Track? = super.getObject() as? Track
 }
