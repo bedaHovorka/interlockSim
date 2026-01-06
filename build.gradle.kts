@@ -444,7 +444,7 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
 sourceSets {
     main {
         java {
-            srcDir("src/main/java")
+            srcDir("src/main/kotlin")
         }
         resources {
             srcDir("src/main/resources")
@@ -452,7 +452,7 @@ sourceSets {
     }
     test {
         java {
-            srcDir("src/test/java")
+            srcDir("src/test/kotlin")
         }
         resources {
             srcDir("src/test/resources")
