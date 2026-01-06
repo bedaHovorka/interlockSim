@@ -65,3 +65,7 @@ Thumbs.db
 /out/
 /logs/interlockSim.log
 *.log
+
+# Phase 0: Baseline outputs (regenerate with ./capture-golden-outputs.sh)
+# Only track metadata (README, analysis, checksums), not 22MB of .log files
+kotlin.txt
