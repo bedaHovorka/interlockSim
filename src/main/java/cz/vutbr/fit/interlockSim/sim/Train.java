@@ -169,6 +169,12 @@ public class Train extends Process implements TrackOccupant {
 		private void semaphoreAction(final RailSemaphore semaphore, final PathSeparator separator, final TrackSection current, final TrackSection next) {
 			assert context.isSeparatorInDirection((OrientedPathSeparator)separator, next, current) : semaphore;
 			assert semaphore.getSignal() != null;
+			if (logger.isInfoEnabled()) {
+				logger.info("{} SENSOR: Train {} detected at semaphore {}, signal={}, velocity={} m/s",
+					jDisco.Process.time(), number,
+					semaphore.getName() != null ? semaphore.getName() : semaphore.hashCode(),
+					semaphore.getSignal(), getVelocity());
+			}
 			final Path path = context.pathToNextSemaphore(separator, next);
 
 			// EXTENSION stanice
@@ -273,6 +279,10 @@ public class Train extends Process implements TrackOccupant {
 
 		@Override
 		public void separatorAction(PathSeparator where, TrackSection current, TrackSection next) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("{} POSITION: Train {} front at separator {}, entering block {}, leaving block {}",
+					jDisco.Process.time(), number, where, next, current);
+			}
 
 			if (where instanceof RailSemaphore && context.isSeparatorInDirection((RailSemaphore) where, next, current)) {
 				RailSemaphore semaphore = (RailSemaphore) where;
@@ -295,6 +305,10 @@ public class Train extends Process implements TrackOccupant {
 		private boolean fromHome = false;
 		@Override
 		public void separatorAction(PathSeparator where, TrackSection current, TrackSection next) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("{} POSITION: Train {} tail at separator {}, clearing block {}",
+					jDisco.Process.time(), number, where, current);
+			}
 			if (where == timetable.getIn()) {
 				fromHome = true;
 				start();

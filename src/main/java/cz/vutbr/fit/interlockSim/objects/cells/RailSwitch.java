@@ -15,6 +15,9 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.Map.Entry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph;
 
@@ -23,6 +26,8 @@ import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph;
  * CZ: "výhybka"
  */
 public class RailSwitch extends NodeCell {
+	private static final Logger logger = LoggerFactory.getLogger(RailSwitch.class);
+
 	private enum Kind {
 		/**
 		 * switch with one branch
@@ -223,7 +228,12 @@ public class RailSwitch extends NodeCell {
 	 */
 	public void changeConf() {
 		assert conf != null;
+		final Conf oldConf = conf;
 		conf = conf==Conf.MAIN ? Conf.BRANCH : Conf.MAIN;
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Switch {} position change: {} -> {}",
+				jDisco.Process.time(), this.hashCode(), oldConf, conf);
+		}
 	}
 
 	public void cancelPathSetup(Segment from, Segment to) throws PathSeparatorChangeException {
@@ -264,7 +274,12 @@ public class RailSwitch extends NodeCell {
 	}
 
 	public void setUpPath(Segment from, Segment to, double allowedSpeed) throws PathSeparatorChangeException {
-		setConf(getPathConfWithException(from, to));
+		final Conf newConf = getPathConfWithException(from, to);
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Switch {} path setup: from={} to={}, conf={}, allowedSpeed={}",
+				jDisco.Process.time(), this.hashCode(), from, to, newConf, allowedSpeed);
+		}
+		setConf(newConf);
 	}
 
 	private Conf getPathConfWithException(Segment from, Segment to) throws PathSeparatorChangeException {

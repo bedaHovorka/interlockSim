@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack;
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack;
 import cz.vutbr.fit.interlockSim.objects.tracks.Track;
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException;
 import cz.vutbr.fit.interlockSim.sim.TrackOperationException;
@@ -170,6 +171,10 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 				final Track nextTrack = Util.assertInstanceOf(Track.class, iterator.next());
 
 				if (!separatorSetting(methodName, separator, previous, nextTrack)) {
+					if (logger.isInfoEnabled() && IS_FREE_FROM.equals(methodName)) {
+						logger.info("{} PATH_NOT_FREE: Separator {} prevents path - config cannot be set",
+							jDisco.Process.time(), separator);
+					}
 					if (logger.isDebugEnabled()) {
 						logger.debug("Separator setting failed for method: {}", methodName);
 					}
@@ -178,6 +183,11 @@ public abstract class AbstractPath extends AbstractTrack implements Path {
 
 				final Object invoke = method.invoke(nextTrack, new Object[]{separator});
 				if (Boolean.FALSE.equals(invoke)) {
+					if (logger.isInfoEnabled() && IS_FREE_FROM.equals(methodName)) {
+						logger.info("{} PATH_NOT_FREE: Track {} prevents path - state={}",
+							jDisco.Process.time(), nextTrack,
+							nextTrack instanceof SimpleTrack ? ((SimpleTrack)nextTrack).getState() : "unknown");
+					}
 					if (logger.isDebugEnabled()) {
 						logger.debug("Method invocation returned false for method: {}", methodName);
 					}

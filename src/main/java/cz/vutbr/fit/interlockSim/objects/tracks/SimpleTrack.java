@@ -51,8 +51,14 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void enter(TrackOccupant occupant) {
-		logger.debug("Track {} ENTER: occupant={}, state transition RESERVED->OCCUPIED at t={}",
-			this, occupant, Process.time());
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Block {} ENTRY: occupant={}, state={}->OCCUPIED",
+				Process.time(), this, occupant, state);
+		}
+		if (in != null) {
+			logger.error("{} CONFLICT: Block {} collision! Existing occupant={}, new occupant={}",
+				Process.time(), this, in, occupant);
+		}
 		assert in == null; //tak to zavani srazkou (posuny neimplementovany)
 		assertGoodStateChange(State.RESERVED, State.OCCUPIED);
 		in = occupant;
@@ -60,8 +66,10 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void leave(TrackOccupant occupant) {
-		logger.debug("Track {} LEAVE: occupant={}, state transition OCCUPIED->FREE at t={}",
-			this, occupant, Process.time());
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Block {} EXIT: occupant={}, state=OCCUPIED->FREE",
+				Process.time(), this, occupant);
+		}
 		assert in == occupant;
 		assertGoodStateChange(State.OCCUPIED, State.FREE);
 		in = null;
@@ -76,8 +84,14 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void setUpPath(PathSeparator sep) throws TrackOperationException {
-		logger.debug("Track {} RESERVE: from={}, state transition FREE->RESERVED at t={}",
-			this, sep, Process.time());
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Block {} RESERVE: from={}, state=FREE->RESERVED",
+				Process.time(), this, sep);
+		}
+		if (state != State.FREE) {
+			logger.warn("{} CONFLICT: Block {} reservation rejected - state={}, occupant={}, requested by={}",
+				Process.time(), this, state, in, sep);
+		}
 		exeptionStateChange(State.FREE, State.RESERVED);
 		from = sep;
 	}
@@ -98,8 +112,10 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	public void cancelPathSetup(PathSeparator sep) throws TrackOperationException {
-		logger.debug("Track {} CANCEL: from={}, state transition RESERVED->FREE at t={}",
-			this, sep, Process.time());
+		if (logger.isInfoEnabled()) {
+			logger.info("{} Block {} RELEASE: from={}, state=RESERVED->FREE",
+				Process.time(), this, sep);
+		}
 		exeptionStateChange(State.RESERVED, State.FREE);
 		if (sep != from) throw new TrackOperationException("wrong end on cancel", this);
 		from = null;
@@ -112,8 +128,11 @@ public abstract class SimpleTrack extends AbstractTrack implements TrackSection,
 	}
 
 	private void exeptionStateChange(State from, State to) throws TrackOperationException {
-		if (!stateChange(from, to))
+		if (!stateChange(from, to)) {
+			logger.error("{} CONFLICT: Block {} state violation - expected={}, actual={}, attempted={}",
+				Process.time(), this, from, state, to);
 			throw new TrackOperationException(errorStateMessage(from), this);
+		}
 	}
 
 	private String errorStateMessage(State from) {

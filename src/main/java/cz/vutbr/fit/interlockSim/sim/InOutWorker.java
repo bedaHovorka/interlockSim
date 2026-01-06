@@ -56,8 +56,22 @@ public class InOutWorker extends LoopProcess {
 			//EXTENSION az bude Interlocking: co kdyz cesta vubec neexistuje
 			path = context.pathToNextSemaphore(inOut, next);//EXTENSION lepe
 			try {
-				return path != null && path.isFreeFrom(inOut);
+				final boolean pathExists = path != null;
+				final boolean isFree = pathExists && path.isFreeFrom(inOut);
+
+				if (logger.isDebugEnabled()) {
+					if (!pathExists) {
+						logger.debug("{} APPROVAL_CHECK: InOut {} - path does not exist",
+							jDisco.Process.time(), inOut.getName());
+					} else if (!isFree) {
+						logger.debug("{} APPROVAL_CHECK: InOut {} - path not free, length={}",
+							jDisco.Process.time(), inOut.getName(), path.length());
+					}
+				}
+				return isFree;
 			} catch (TrackOperationException e) {
+				logger.error("{} APPROVAL_ERROR: InOut {} - path check failed: {}",
+					jDisco.Process.time(), inOut.getName(), e.getMessage());
 				context.errorStop(e);
 				return false;
 			}
@@ -77,7 +91,15 @@ public class InOutWorker extends LoopProcess {
 			try {
 				//zarezervovat koleje
 				path.setUpPath(inOut);
+				if (logger.isInfoEnabled()) {
+					logger.info("{} APPROVAL_GRANTED: InOut {} - path reserved for {}, length={}",
+						jDisco.Process.time(), inOut.getName(), first, path.length());
+				}
 			} catch (Exception e) {
+				if (logger.isWarnEnabled()) {
+					logger.warn("{} APPROVAL_DENIED: InOut {} - path setup failed for {}: {}",
+						jDisco.Process.time(), inOut.getName(), first, e.getMessage());
+				}
 				logger.debug("InOutWorker {} path setup failed: {}", inOut.getName(), e.getMessage());
 				context.errorStop(e);
 				return;
