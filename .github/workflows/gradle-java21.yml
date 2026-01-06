@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   checks: write  # For test reporting (future)
+  packages: read  # For GitHub Packages (jDisco dependency)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,25 +36,12 @@ jobs:
         distribution: 'temurin'
         java-version: ${{ env.JAVA_VERSION }}
 
-    - name: Cache Maven dependencies (for jDisco)
+    - name: Cache jDisco from GitHub Packages
+      id: cache-jdisco
       uses: actions/cache@v4
       with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('jdisco/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
-
-    - name: Build jDisco library (Java 6 compatibility)
-      working-directory: ./jdisco
-      run: mvn clean install -q
-
-    - name: Verify jDisco installation
-      run: |
-        if [ ! -f ~/.m2/repository/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar ]; then
-          echo "ERROR: jDisco artifact not found"
-          exit 1
-        fi
-        echo "✓ jDisco 1.2.0 artifact successfully installed"
+        path: ~/.m2/repository/dk/ruc/keld/jdisco
+        key: jdisco-1.2.0
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
@@ -68,6 +56,9 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build and test interlockSim with Gradle
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew clean build shadowJar --no-daemon --warning-mode=all --stacktrace -x integrationTest
 
     - name: Upload JAR artifact

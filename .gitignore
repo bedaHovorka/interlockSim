@@ -39,6 +39,9 @@ text/*.ps
 # Docker artifacts
 artifacts/
 
+# Environment variables (contains sensitive credentials)
+.env
+
 # Maven artifacts (jDisco)
 jdisco/target/
 .m2/

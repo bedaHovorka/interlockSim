@@ -12,12 +12,8 @@
 #      Docker Compose orchestration for interlockSim project
 #
 #      Usage:
-#        # First build (builds jdisco, then app):
-#        docker-compose build            # Build all services
-#
-#        # Or build separately:
-#        docker-compose build jdisco     # Build jDisco library first
-#        docker-compose build app        # Build app (requires jdisco)
+#        # Build services:
+#        docker-compose build app        # Build app (jDisco downloaded from GitHub Packages)
 #        docker-compose build text       # Build LaTeX thesis
 #
 #        # Run GUI editor (requires X11):
@@ -29,35 +25,25 @@
 #        # Run simulation with custom XML:
 #        docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
 #
+#        # Note: Requires GITHUB_TOKEN for GitHub Packages access
+#        # Export GITHUB_TOKEN before building or create .env file
+#
 
 services:
-  # Build jDisco library first (required for app build)
-  jdisco:
-    build:
-      context: ./jdisco
-      dockerfile: Dockerfile
-      cache_from:
-        - jdisco:latest
-    image: jdisco:latest
-    volumes:
-      # Mount artifacts directory for extraction
-      - ./artifacts/jdisco:/artifacts
-    container_name: jdisco-build
-
   # Build and run Java application with GUI support
-  # Depends on jdisco image being built first
+  # jDisco is automatically downloaded from GitHub Packages or uses local Maven cache
   app:
-    depends_on:
-      - jdisco
     build:
       context: .
       dockerfile: Dockerfile
       target: runner
       cache_from:
-        - jdisco:latest
         - interlocksim:latest
-      # Enable BuildKit inline cache for layer reuse
+      # GitHub Packages authentication for jDisco dependency
+      # Set GITHUB_ACTOR and GITHUB_TOKEN in environment or .env file
       args:
+        GITHUB_ACTOR: ${GITHUB_ACTOR}
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
         BUILDKIT_INLINE_CACHE: 1
     image: interlocksim:latest
     environment:

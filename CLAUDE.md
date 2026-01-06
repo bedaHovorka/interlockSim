@@ -11,17 +11,22 @@ Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno Univ
 
 ## Build System
 
-This project uses Gradle with Kotlin DSL for building. Java 21 LTS is the minimum required version. The jDisco library module remains at Java 6 for compatibility and uses Maven.
+This project uses Gradle with Kotlin DSL for building. Java 21 LTS is the minimum required version.
 
 **Migration Notes**:
 - Migrated from Apache Ant + Ivy to Gradle in January 2026
 - Migrated from Java 11 to Java 21 LTS in January 2026
 - Refactored deprecated Observable/Observer to PropertyChangeSupport
+- Extracted jDisco library to separate repository in January 2026
 
 ### Dependency Management
 
-Dependencies are managed via Gradle:
-- **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository, Java 6)
+Dependencies are managed via Gradle with fallback strategy:
+- **jDisco 1.2.0** - Discrete event simulation library (external Maven dependency, Java 6 compatible)
+  - Repository: https://github.com/bedaHovorka/jdisco
+  - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/jdisco`
+  - Fallback order: `mavenLocal()` (cache) → GitHub Packages → build fails
+  - Requires GitHub authentication for package download (see below)
 - **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
 - **AssertJ 3.27.6** - Fluent assertion library for better test readability
 - **Mockito 5.21.0** - Mocking framework
@@ -31,6 +36,22 @@ Gradle automatically downloads dependencies during the build. Configuration file
 - `build.gradle.kts` - Build configuration and dependency declarations
 - `settings.gradle.kts` - Project settings
 - `gradle.properties` - Version management and build properties
+
+**GitHub Packages Authentication:**
+
+To download jDisco from GitHub Packages, set these environment variables:
+```bash
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-personal-access-token
+```
+
+Or create `~/.gradle/gradle.properties`:
+```properties
+gpr.user=your-github-username
+gpr.key=your-personal-access-token
+```
+
+**Note:** In GitHub Actions CI/CD, authentication is automatic via `GITHUB_TOKEN`.
 
 ### Common Build Commands
 
@@ -152,9 +173,17 @@ The project includes Docker support for both the Java application and LaTeX thes
 
 ### Common Docker Commands
 
-**Build both services:**
+**Build services:**
 ```bash
-docker compose build
+# Set GitHub credentials for jDisco download
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-personal-access-token
+
+# Build app (jDisco downloaded from GitHub Packages or uses local cache)
+docker compose build app
+
+# Build thesis
+docker compose build text
 ```
 
 **Run editor GUI:**
@@ -196,11 +225,14 @@ docker compose build app
 
 **Root Dockerfile (multi-stage build):**
 1. **Builder stage** - Uses Eclipse Temurin 21 JDK
-   - Builds jDisco dependency (Maven install, Java 6 compatibility)
-   - Resolves dependencies via Gradle (automatic download)
+   - Accepts GITHUB_ACTOR and GITHUB_TOKEN as build args
+   - Resolves dependencies via Gradle with fallback strategy:
+     - First tries mavenLocal() cache (if jDisco was built locally)
+     - Falls back to GitHub Packages (requires authentication)
    - Compiles Java sources (Java 21 target)
    - Runs all tests with JUnit 5 (build fails if tests fail)
    - Creates uber JAR with all dependencies
+   - Uses BuildKit cache mounts for ~/.m2, ~/.gradle for faster rebuilds
 2. **Runner stage** - Eclipse Temurin 21 JRE and X11 libraries
    - Minimal runtime environment
    - X11 forwarding for GUI support
@@ -257,9 +289,11 @@ If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
 
 ### Artifacts
 
-Both services copy build outputs to `/artifacts` inside the container, which is mounted to `./artifacts/` on the host:
+Services copy build outputs to `/artifacts` inside the container, which is mounted to `./artifacts/` on the host:
 - `artifacts/app/interlockSim.jar` - Compiled application
 - `artifacts/text/bakalarka.pdf` - Compiled thesis
+
+**Note:** jDisco is now consumed as a Maven dependency from GitHub Packages, not built locally in Docker.
 
 ## Architecture
 
@@ -283,7 +317,7 @@ Both services copy build outputs to `/artifacts` inside the container, which is 
 
 **Simulation engine:**
 - Built on jDisco library (discrete event simulation framework by Keld Helsgaun)
-- Standalone Maven module in `jdisco/` (Java 6 compatible)
+- External dependency from https://github.com/bedavs/jDisco (Java 6 compatible)
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
 **GUI:**
@@ -335,9 +369,9 @@ src/
     │       └── XMLContextFactoryTest.java
     └── resources/cz/vutbr/fit/interlockSim/xml/
         └── fixtures/              - Test XML files (10 fixtures)
-
-jdisco/                            - Third-party discrete event simulation library (Java 6, separate Maven module)
 ```
+
+**Note:** The jDisco library is now maintained as a separate project at https://github.com/bedavs/jDisco
 
 ## Code Style
 
@@ -355,7 +389,7 @@ Follows `.editorconfig` configuration:
 2. **Tests must exist before modifications** - Any Java source file being modified MUST be covered by tests first. If tests don't exist, they must be written before making any changes
 3. **Minimal changes only** - Make only the specific changes requested, nothing more
 4. **No unsolicited modernization** - While the project now uses Java 21, do not update Java idioms to modern features, do not add new language features, do not restructure working code
-5. **jDisco preservation** - The jDisco module must remain at Java 6 compatibility and should never be modified
+5. **jDisco library** - jDisco is now maintained as a separate project. Do not modify jDisco code; report issues at https://github.com/bedavs/jDisco
 
 This is a working historical codebase from 2007. Stability and preservation are more important than modernization.
 
@@ -561,13 +595,13 @@ The project uses GitHub Actions for automated build, test, and deployment workfl
 **Workflow:** `.github/workflows/gradle-java21.yml`
 
 **Features:**
-- Builds jDisco library with Java 6 compatibility
 - Compiles main project with Java 21
 - Runs all tests with JUnit 5
 - Packages application JAR
 - Uploads JAR as artifact (90-day retention)
 - Smoke test execution
-- Dependency caching (Maven and Gradle) for faster builds
+- Dependency caching (Gradle) for faster builds
+- Requires jDisco 1.2.0 from Maven local repository
 
 **Triggers:**
 - Push to `main`, `develop`, `feature/**`, `fix/**` branches
@@ -878,9 +912,9 @@ cat docs/deprecated-api-report.md
 
 ### jDisco Library
 
-The jDisco library (Java 6 compatible) has **no deprecated API usage**. It should remain at Java 6 compatibility as designed.
+The jDisco library (Java 6 compatible) is now maintained as a separate project at https://github.com/bedavs/jDisco and has **no deprecated Java API usage**. It remains at Java 6 compatibility as designed.
 
-**Note:** This analysis is documentation-only. No code changes have been made. See `docs/deprecated-api-report.md` for detailed findings, migration strategies, and recommendations.
+**Note:** This analysis is documentation-only for the interlockSim codebase. See `docs/deprecated-api-report.md` for detailed findings about interlockSim. For jDisco deprecation analysis, see the jDisco repository.
 
 ## Future Development Considerations
 

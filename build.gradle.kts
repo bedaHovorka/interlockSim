@@ -54,9 +54,19 @@ java {
 }
 
 // Configure repositories
-// IMPORTANT: mavenLocal() must come first to resolve jDisco
 repositories {
-    mavenLocal()      // For jDisco (must be pre-installed via: cd jdisco && mvn install)
+    mavenLocal()      // For jDisco local development (highest priority)
+
+    // GitHub Packages Maven Registry for jDisco
+    maven {
+        name = "GitHubPackages"
+        url = uri("https://maven.pkg.github.com/bedaHovorka/jdisco")
+        credentials {
+            username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+            password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+
     mavenCentral()    // For all other dependencies
 }
 
@@ -330,21 +340,17 @@ val checkJdisco by tasks.registering {
     doLast {
         val jdiscoJar = file("${System.getProperty("user.home")}/.m2/repository/dk/ruc/keld/jdisco/$jdiscoVersion/jdisco-$jdiscoVersion.jar")
 
-        if (!jdiscoJar.exists()) {
-            throw GradleException("""
-                |
-                |jDisco library not found at: ${jdiscoJar.absolutePath}
-                |
-                |Please build and install jDisco first:
-                |  cd jdisco && mvn install
-                |
-                |Or use Docker:
-                |  cd jdisco && docker compose run jdisco mvn install
-                |
-            """.trimMargin())
+        if (jdiscoJar.exists()) {
+            println("✓ jDisco $jdiscoVersion found in mavenLocal cache: ${jdiscoJar.absolutePath}")
+        } else {
+            println("⚠ jDisco $jdiscoVersion not found in mavenLocal cache")
+            println("  Will attempt to download from GitHub Packages: https://maven.pkg.github.com/bedaHovorka/jdisco")
+            println()
+            println("  For local development, you can install jDisco to mavenLocal for faster builds:")
+            println("    cd ~/work/jdisco && mvn install")
+            println()
+            println("  For more info: https://github.com/bedaHovorka/jdisco")
         }
-
-        println("✓ jDisco $jdiscoVersion found at: ${jdiscoJar.absolutePath}")
     }
 }
 
@@ -651,8 +657,9 @@ tasks.register("checkDeprecations") {
             |To save detailed report to file:
             |  ./gradlew clean compileJava compileTestJava 2>&1 | tee build/reports/deprecation-report.txt
             |
-            |For jDisco library analysis:
-            |  cd jdisco && mvn clean compile -Dmaven.compiler.showDeprecation=true 2>&1 | tee ../build/reports/deprecation-jdisco.txt
+            |For jDisco library analysis (separate project):
+            |  cd ~/work/jdisco && mvn clean compile -Dmaven.compiler.showDeprecation=true 2>&1 | tee build/reports/deprecation-jdisco.txt
+            |  See: https://github.com/bedavs/jDisco
             |
         """.trimMargin())
     }
