@@ -13,18 +13,18 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
-import java.util.Observable;
-import java.util.Observer;
+import java.beans.PropertyChangeEvent;
 
 import javax.swing.JLabel;
 
 import cz.vutbr.fit.interlockSim.Main;
+import cz.vutbr.fit.interlockSim.context.ContextChangeListener;
 
 /**
  * Collect and show status information
  *
  */
-public class StatusBar extends JLabel implements Observer {
+public class StatusBar extends JLabel implements ContextChangeListener {
 	private class MouseL implements MouseMotionListener {
 		public void mouseDragged(MouseEvent e) {
 			// EMPTY
@@ -62,10 +62,13 @@ public class StatusBar extends JLabel implements Observer {
 		producerComponent.removeMouseMotionListener(mouseL);
 	}
 
-	public void update(Observable o, Object arg) {
-		if (arg instanceof CharSequence) {
-		CharSequence string = (CharSequence) arg;
-		setText(string.toString());
+	@Override
+	public void propertyChange(PropertyChangeEvent evt) {
+		Object newValue = evt.getNewValue();
+		if (newValue instanceof CharSequence) {
+			setText(newValue.toString());
+		} else if (newValue != null) {
+			setText(newValue.toString());
 		}
 	}
 }

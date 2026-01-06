@@ -47,11 +47,13 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 
 ### Option 2: Native Build
 
-- **Java**: JDK 6 or compatible (javac 1.6)
-- **Build Tool**: Apache Ant with Apache Ivy
-- **Dependencies**: Automatically managed via Ivy
-  - jDisco 1.2.0 (from Maven local repository)
-  - JUnit 3.8.2 (from Maven Central)
+- **Java**: JDK 21 or later (Java 21 LTS minimum)
+- **Build Tool**: Gradle (wrapper included)
+- **Dependencies**: Automatically managed via Gradle
+  - jDisco 1.2.0 (from Maven local repository, Java 6 compatible)
+  - JUnit 5.11.4 (from Maven Central)
+  - AssertJ 3.27.6 (from Maven Central)
+  - Mockito 5.21.0 (from Maven Central)
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed
@@ -101,37 +103,34 @@ For more details, see the Docker section below or `CLAUDE.md`.
 ### Quick Start
 
 ```bash
-# Resolve dependencies (automatic via Ivy)
-ant resolve
-
-# Clean and build (compiles main + tests, runs tests)
-ant clean build
+# Clean and build (compiles main + tests, runs tests, creates JAR)
+./gradlew clean build
 
 # Run simulation (shunting loop example)
-ant start
+./gradlew runSim
 
 # Run graphical editor
-ant run
+./gradlew runEditor
 
 # Generate JavaDoc
-ant doc
+./gradlew javadoc
 ```
 
-### Build Targets
+### Build Tasks
 
-| Target | Description |
-|--------|-------------|
-| `ant resolve` | Download dependencies via Apache Ivy |
-| `ant build` | Compile all sources, run tests (build fails if tests fail) |
-| `ant test` | Run JUnit tests only |
-| `ant clean` | Remove build artifacts |
-| `ant clean-all` | Clean everything including Ivy cache |
-| `ant start` | Run pre-configured shunting loop simulation |
-| `ant run` | Launch graphical editor |
-| `ant pack` | Create uber JAR file with all dependencies |
-| `ant doc` | Generate JavaDoc documentation |
+| Task | Description |
+|------|-------------|
+| `./gradlew build` | Compile all sources, run tests, create JAR (build fails if tests fail) |
+| `./gradlew test` | Run unit tests only |
+| `./gradlew integrationTest` | Run integration tests |
+| `./gradlew clean` | Remove build artifacts |
+| `./gradlew shadowJar` | Create uber JAR file with all dependencies |
+| `./gradlew runSim` | Run pre-configured shunting loop simulation |
+| `./gradlew runEditor` | Launch graphical editor |
+| `./gradlew runExample` | Run custom example with parameters |
+| `./gradlew javadoc` | Generate JavaDoc documentation |
 
-**Note:** Dependencies are automatically resolved during build. The `ant resolve` target is only needed if you want to download dependencies separately.
+**Note:** Dependencies are automatically downloaded during build via Gradle. On Windows, use `gradlew.bat` instead of `./gradlew`.
 
 ---
 
@@ -142,12 +141,12 @@ ant doc
 Open the track editor to design railway layouts:
 
 ```bash
-ant run
+./gradlew runEditor
 ```
 
 Or manually (after building):
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main edit [xmlFile]
+java -ea -jar build/libs/interlockSim.jar edit [xmlFile]
 ```
 
 ![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
@@ -159,7 +158,7 @@ java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main edit [xml
 Run a simulation from an XML configuration file:
 
 ```bash
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main sim [xmlFile]
+java -ea -jar build/libs/interlockSim.jar sim [xmlFile]
 ```
 
 ### 3. Built-in Examples
@@ -168,23 +167,23 @@ Run pre-configured simulation scenarios:
 
 ```bash
 # List all available examples
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example
+java -ea -jar build/libs/interlockSim.jar example
 
 # Run shunting loop example for 300 time units
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
 ```
 
 **Quick example:**
 ```bash
 # Build and run shunting yard simulation (5 minutes model time)
-ant clean build
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+./gradlew clean build
+java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
 ```
 
 ### Command-Line Synopsis
 
 ```
-java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main (sim|edit|example) [arguments]
+java -ea -jar build/libs/interlockSim.jar (sim|edit|example) [arguments]
 ```
 
 **Modes:**
@@ -200,9 +199,10 @@ java -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main (sim|edit
 
 ```
 interlockSim/
-├── build.xml              # Ant build configuration
-├── ivy.xml                # Ivy dependency declarations
-├── ivysettings.xml        # Ivy resolver configuration
+├── build.gradle.kts       # Gradle build configuration (Kotlin DSL)
+├── settings.gradle.kts    # Gradle settings
+├── gradle.properties      # Version management
+├── gradle/                # Gradle wrapper files
 ├── src/
 │   ├── main/
 │   │   ├── java/cz/vutbr/fit/interlockSim/
@@ -215,22 +215,24 @@ interlockSim/
 │   │   │   └── util/          # Utilities
 │   │   └── resources/cz/vutbr/fit/interlockSim/resource/
 │   │       ├── data.xsd       # XML schema
-│   │       └── vyhybna.xml    # Example configuration
+│   │       ├── vyhybna.xml    # Example configuration
+│   │       └── logback.xml    # Logging configuration
 │   └── test/
-│       └── java/cz/vutbr/fit/interlockSim/test/
-│           ├── TestArray2DMap.java
-│           ├── TestCell.java
-│           └── TestContext.java
-├── jdisco/                # jDisco library (separate Maven module)
-├── lib/                   # Downloaded dependencies (Ivy)
-│   ├── compile/           # Compile dependencies (jDisco)
-│   └── test/              # Test dependencies (JUnit)
-├── build/                 # Compiled classes
-│   ├── main/              # Main code
-│   └── test/              # Test code
+│       └── java/cz/vutbr/fit/interlockSim/
+│           ├── context/       # Context and serialization tests
+│           ├── sim/           # Simulation scenario tests
+│           ├── util/          # Utility class tests
+│           ├── testutil/      # Test utilities and builders
+│           └── xml/           # XML parsing tests
+├── jdisco/                # jDisco library (separate Maven module, Java 6)
+├── build/                 # Build output
+│   ├── classes/java/main/ # Compiled main classes
+│   ├── classes/java/test/ # Compiled test classes
+│   ├── libs/              # JAR artifacts
+│   ├── reports/           # Test and coverage reports
+│   └── test-results/      # Test results
 ├── text/                  # LaTeX thesis source
-├── doc/                   # Generated JavaDoc (ant doc)
-└── jar/                   # Packaged JAR (ant pack)
+└── .github/workflows/     # CI/CD workflows
 ```
 
 ---
@@ -270,7 +272,7 @@ Built on **jDisco** (Java framework for combined discrete and continuous simulat
 
 ## Docker Setup (Detailed)
 
-The project includes Docker support for both the Java application and LaTeX thesis compilation, eliminating the need to install Java 6, Ant, or LaTeX tools on the host machine.
+The project includes Docker support for both the Java application and LaTeX thesis compilation, eliminating the need to install Java 21, Gradle, or LaTeX tools on the host machine.
 
 ### Docker Services
 
@@ -322,13 +324,13 @@ docker compose build app
 ### Docker Architecture
 
 **Root Dockerfile (multi-stage build):**
-1. **Builder stage** - Uses Debian Buster with OpenJDK 11, Maven, and Ant
-   - Builds jDisco dependency (Maven install)
-   - Resolves dependencies via Apache Ivy (automatic download)
-   - Compiles Java sources (Java 6 compatibility mode)
+1. **Builder stage** - Uses Eclipse Temurin 21 JDK
+   - Builds jDisco dependency (Maven install, Java 6 compatibility)
+   - Resolves dependencies via Gradle (automatic download)
+   - Compiles Java sources (Java 21 target)
    - Runs all tests (build fails if tests fail)
    - Creates uber JAR with all dependencies
-2. **Runner stage** - Debian Buster with OpenJDK 11 JRE and X11 libraries
+2. **Runner stage** - Eclipse Temurin 21 JRE with X11 libraries
    - Minimal runtime environment
    - X11 forwarding for GUI support
    - No build tools in final image
@@ -415,20 +417,27 @@ The following loggers are pre-configured in `logback.xml`:
 
 ## Testing
 
-JUnit 5.10.1 tests with AssertJ assertions are located in `src/test/java/cz/vutbr/fit/interlockSim/`.
+Comprehensive JUnit 5.11.4 test suite with AssertJ 3.27.6 assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`.
 
-**Test coverage:**
-- `Array2DMapTest` - 10 tests for 2D array-based map implementation
-- `CellTest` - 2 tests for cell segment and direction logic
-- `ContextTest` - 4 tests for railway network context operations
+**Test coverage (237 tests across 13 test classes):**
+- **Utility tests**: Array2DMapTest (10), DoubletonTest (66), EnumUnorientedGraphTest (55), HashMapGraphTest (48), TreeMultiMapTest (25)
+- **Context tests**: DefaultContextTest (8), ConcurrentSaveTest (2)
+- **Simulation tests**: TrainTest (6), InOutWorkerTest (8), ShuntingLoopTest (2)
+- **XML tests**: XMLContextFactoryTest (7) with 10 fixture files
 
 Run tests:
 ```bash
-# Run tests only
-ant test
+# Run unit tests only
+./gradlew test
+
+# Run integration tests
+./gradlew integrationTest
+
+# Run all tests
+./gradlew test integrationTest
 
 # Or as part of build
-ant clean build
+./gradlew clean build
 ```
 
 Tests are automatically executed during the build process. The build will fail if any test fails.
@@ -453,10 +462,10 @@ make
 Generate JavaDoc:
 
 ```bash
-ant doc
+./gradlew javadoc
 ```
 
-Output: `doc/` directory
+Output: `build/docs/javadoc/` directory
 
 ---
 
@@ -489,11 +498,13 @@ Research use only
 This repository includes:
 
 - Complete Java source code (interlockSim + jDisco library)
-- Ant build system
-- JUnit tests
+- Gradle build system with Kotlin DSL
+- Comprehensive JUnit 5 test suite (237 tests)
 - XML schemas and example configurations
+- Docker support for containerized builds
+- GitHub Actions CI/CD workflows
 - LaTeX thesis source and images
-- Generated documentation (JavaDoc)
+- Documentation (JavaDoc, README, CLAUDE.md)
 
 ---
 

@@ -7,11 +7,12 @@
 #      Railway Interlocking Simulator
 #
 #      Dockerization: 2025
-#      Optimized: 2026-01 (BuildKit cache mounts, layer optimization)
+#      Gradle migration: 2026-01
+#      Java 21 migration: 2026-01 (Eclipse Temurin + Debian Bookworm)
 #
 #      Multi-stage build for interlockSim with GUI support
 #      Dependency management: Gradle with Kotlin DSL
-#      Migrated from Ant/Ivy: 2026
+#      Build system: Java 21 LTS with Eclipse Temurin
 #
 
 # syntax=docker/dockerfile:1.4
@@ -26,20 +27,7 @@ FROM jdisco:latest AS jdisco-builder
 # ============================================
 # Stage 2: Build interlockSim with Gradle
 # ============================================
-FROM debian:buster-slim AS builder
-
-# Debian Buster is archived - update sources
-RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i '/buster-updates/d' /etc/apt/sources.list
-
-# Install Java 11 JDK (Gradle wrapper handles Gradle itself)
-RUN apt-get update && apt-get install -y \
-    openjdk-11-jdk \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-ENV PATH=$JAVA_HOME/bin:$PATH
+FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /build/interlockSim
 
@@ -82,16 +70,11 @@ RUN ls -lh /build/interlockSim/build/libs/interlockSim.jar && \
 # ============================================
 # Stage 3: Runtime with JRE and X11 support
 # ============================================
-FROM debian:buster-slim AS runner
+FROM eclipse-temurin:21-jre AS runner
 
-# Debian Buster is archived - update sources to use archive.debian.org
-RUN sed -i 's|http://deb.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.debian.org|http://archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i '/buster-updates/d' /etc/apt/sources.list
-
-# Install OpenJDK 11 JRE and X11 libraries for GUI support
+# Install X11 libraries for GUI support
+# Eclipse Temurin already includes Java 21 JRE
 RUN apt-get update && apt-get install -y \
-    openjdk-11-jre \
     libxext6 \
     libxrender1 \
     libxtst6 \
@@ -99,16 +82,8 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     libxcursor1 \
     libxinerama1 \
-    libxfixes3 \
-    libxdamage1 \
-    libxcomposite1 \
-    libfreetype6 \
-    libfontconfig1 \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
-
-# Set Java 11 JRE as default
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-ENV PATH=$JAVA_HOME/bin:$PATH
 
 WORKDIR /app
 

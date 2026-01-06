@@ -20,7 +20,8 @@ plugins {
     application
 
     // Shadow plugin for creating uber JAR (fat JAR with all dependencies)
-    id("com.github.johnrengelman.shadow") version "8.1.1"
+    // Note: Plugin was renamed from com.github.johnrengelman.shadow to com.gradleup.shadow in v8.3.0
+    id("com.gradleup.shadow") version "8.3.8"
 
     // SonarQube plugin for code quality analysis
     // Version 6.2.0 - Migrates from deprecated Gradle APIs
@@ -44,12 +45,12 @@ val javaVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Configure Java compilation (compile to Java 11 bytecode using any Java 11+)
+// Configure Java compilation (compile to Java 21 bytecode using any Java 21+)
 // Note: We don't specify a toolchain to allow using any available Java version
 java {
-    // Ensure source and target compatibility with Java 11
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    // Ensure source and target compatibility with Java 21
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 // Configure repositories
@@ -303,7 +304,7 @@ tasks.javadoc {
         encoding = "UTF-8"  // Use UTF-8 for JavaDoc output
         charSet = "UTF-8"
         docEncoding = "UTF-8"
-        links("https://docs.oracle.com/en/java/javase/11/docs/api/")
+        links("https://docs.oracle.com/en/java/javase/21/docs/api/")
 
         // Include all packages
         addStringOption("sourcepath", "src/main/java")

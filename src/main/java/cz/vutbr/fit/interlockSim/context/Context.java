@@ -10,8 +10,7 @@
 package cz.vutbr.fit.interlockSim.context;
 
 import java.awt.Point;
-import java.util.Observable;
-import java.util.Observer;
+import java.beans.PropertyChangeListener;
 
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
@@ -37,14 +36,18 @@ public interface Context {
 	public ExtendedUnorientedGraph<Point, TrackBlock, Segment> getGraph();
 
 	/**
-	 * @see Observable#addObserver(Observer)
-	 * @param observer
+	 * Add a listener for context changes.
+	 * Replaces deprecated addObserver(Observer) method.
+	 *
+	 * @param listener the listener to add
 	 */
-	public void addObserver(Observer observer);
+	public void addPropertyChangeListener(PropertyChangeListener listener);
 
 	/**
-	 * @see Observable#deleteObserver(Observer)
-	 * @param observer
+	 * Remove a listener for context changes.
+	 * Replaces deprecated deleteObserver(Observer) method.
+	 *
+	 * @param listener the listener to remove
 	 */
-	public void deleteObserver(Observer observer);
+	public void removePropertyChangeListener(PropertyChangeListener listener);
 }

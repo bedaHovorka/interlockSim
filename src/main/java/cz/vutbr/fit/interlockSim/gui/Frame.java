@@ -57,7 +57,7 @@ public class Frame extends JFrame {
 	}
 
 	public void setContext(Context context) {
-		context.addObserver(statusBar);//EXTENSION a co se starym?
+		context.addPropertyChangeListener(statusBar);//EXTENSION a co se starym?
 		railwayNetGridCanvas.setContext(context);
 	}
 }

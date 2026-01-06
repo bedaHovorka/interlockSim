@@ -6,22 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
 
-[![Gradle Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml)
+[![Gradle Build with Java 21](https://github.com/bedavs/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/gradle-java21.yml)
 [![SonarQube Analysis](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml)
 
 ## Build System
 
-This project uses Gradle with Kotlin DSL for building. Java 11 bytecode compatibility is maintained (can be built with Java 11+). The jDisco library module remains at Java 6 for compatibility and uses Maven.
+This project uses Gradle with Kotlin DSL for building. Java 21 LTS is the minimum required version. The jDisco library module remains at Java 6 for compatibility and uses Maven.
 
-**Migration Note**: Migrated from Apache Ant + Ivy to Gradle in January 2026. Gradle can be launched locally for development and builds. The previous Ant build system has been completely removed.
+**Migration Notes**:
+- Migrated from Apache Ant + Ivy to Gradle in January 2026
+- Migrated from Java 11 to Java 21 LTS in January 2026
+- Refactored deprecated Observable/Observer to PropertyChangeSupport
 
 ### Dependency Management
 
 Dependencies are managed via Gradle:
 - **jDisco 1.2.0** - Discrete event simulation library (from Maven local repository, Java 6)
-- **JUnit 5.10.1** - Testing framework (JUnit Jupiter API and Engine)
-- **AssertJ 3.24.2** - Fluent assertion library for better test readability
-- **Mockito 5.7.0** - Mocking framework
+- **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
+- **AssertJ 3.27.6** - Fluent assertion library for better test readability
+- **Mockito 5.21.0** - Mocking framework
+- **SLF4J 2.0.17** + **Logback 1.5.23** - Logging framework
 
 Gradle automatically downloads dependencies during the build. Configuration files:
 - `build.gradle.kts` - Build configuration and dependency declarations
@@ -131,7 +135,7 @@ java -ea -jar build/libs/interlockSim.jar example
 
 **Dockerization: 2025** - Complete containerized build and runtime environment with no host dependencies.
 
-The project includes Docker support for both the Java application and LaTeX thesis compilation. This eliminates the need to install Java 11, Ant, or LaTeX tools on the host machine.
+The project includes Docker support for both the Java application and LaTeX thesis compilation. This eliminates the need to install Java 21, Gradle, or LaTeX tools on the host machine.
 
 ### Prerequisites
 
@@ -191,13 +195,13 @@ docker compose build app
 ### Docker Architecture
 
 **Root Dockerfile (multi-stage build):**
-1. **Builder stage** - Uses Debian Buster with OpenJDK 11, Maven, and Ant
+1. **Builder stage** - Uses Eclipse Temurin 21 JDK
    - Builds jDisco dependency (Maven install, Java 6 compatibility)
-   - Resolves dependencies via Apache Ivy (automatic download)
-   - Compiles Java sources (Java 11 target)
+   - Resolves dependencies via Gradle (automatic download)
+   - Compiles Java sources (Java 21 target)
    - Runs all tests with JUnit 5 (build fails if tests fail)
    - Creates uber JAR with all dependencies
-2. **Runner stage** - Debian Buster with OpenJDK 11 JRE and X11 libraries
+2. **Runner stage** - Eclipse Temurin 21 JRE and X11 libraries
    - Minimal runtime environment
    - X11 forwarding for GUI support
    - No build tools in final image
@@ -350,19 +354,19 @@ Follows `.editorconfig` configuration:
 1. **Do not touch Java code unless explicitly requested** - Do not refactor, optimize, or "improve" code that is working
 2. **Tests must exist before modifications** - Any Java source file being modified MUST be covered by tests first. If tests don't exist, they must be written before making any changes
 3. **Minimal changes only** - Make only the specific changes requested, nothing more
-4. **No unsolicited modernization** - While the project now uses Java 11, do not update Java idioms to modern features, do not add new language features, do not restructure working code
+4. **No unsolicited modernization** - While the project now uses Java 21, do not update Java idioms to modern features, do not add new language features, do not restructure working code
 5. **jDisco preservation** - The jDisco module must remain at Java 6 compatibility and should never be modified
 
 This is a working historical codebase from 2007. Stability and preservation are more important than modernization.
 
 ## Testing
 
-Comprehensive JUnit 5.10.1 test suite with AssertJ assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Apache Ivy.
+Comprehensive JUnit 5.11.4 test suite with AssertJ assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Gradle.
 
 **Test framework:**
 - JUnit 5 (Jupiter API and Engine)
 - JUnit Platform for test execution
-- AssertJ 3.24.2 for fluent assertions
+- AssertJ 3.27.6 for fluent assertions
 
 **Test organization:**
 - **Unit tests** - Fast tests that run by default with `./gradlew test` (excludes integration tests)
@@ -554,16 +558,16 @@ See `.github/workflows/sonarqube.yml` for automated SonarQube analysis on every 
 
 The project uses GitHub Actions for automated build, test, and deployment workflows.
 
-**Workflow:** `.github/workflows/ant-java11.yml`
+**Workflow:** `.github/workflows/gradle-java21.yml`
 
 **Features:**
 - Builds jDisco library with Java 6 compatibility
-- Compiles main project with Java 11
+- Compiles main project with Java 21
 - Runs all tests with JUnit 5
 - Packages application JAR
 - Uploads JAR as artifact (90-day retention)
 - Smoke test execution
-- Dependency caching (Maven and Ivy) for faster builds
+- Dependency caching (Maven and Gradle) for faster builds
 
 **Triggers:**
 - Push to `main`, `develop`, `feature/**`, `fix/**` branches
@@ -572,7 +576,7 @@ The project uses GitHub Actions for automated build, test, and deployment workfl
 
 **Build environment:**
 - Ubuntu latest
-- Java 11 (Temurin distribution)
+- Java 21 (Temurin distribution)
 - 15-minute timeout
 - Concurrency control (cancels outdated builds)
 

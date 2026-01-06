@@ -15,6 +15,7 @@ import jDisco.Process;
 import jDisco.Random;
 
 import java.awt.Point;
+import java.beans.PropertyChangeSupport;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -23,7 +24,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Observable;
 import java.util.Set;
 
 import cz.vutbr.fit.interlockSim.objects.cells.Cell;
@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
  */
-public abstract class DefaultContext extends Observable implements EditingContext, SimulationContext { //konecne rozdelit?
+public abstract class DefaultContext implements EditingContext, SimulationContext { //konecne rozdelit?
 	/**
 	 * Logger for general class operations.
 	 */
@@ -66,6 +66,12 @@ public abstract class DefaultContext extends Observable implements EditingContex
 	 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 	 */
 	private static final Logger simulationLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.simulation");
+
+	/**
+	 * PropertyChangeSupport for notifying listeners of context changes.
+	 * Replaces deprecated Observable pattern (Java 21 migration).
+	 */
+	private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
 
 	/**
 	 * Constant - square root of 2
@@ -90,6 +96,26 @@ public abstract class DefaultContext extends Observable implements EditingContex
 
 	public DefaultRailWayNetGrid getRailWayNetGrid() {
 		return railwayNetGrid;
+	}
+
+	/**
+	 * Add a listener for context changes.
+	 * Replaces deprecated addObserver(Observer) method.
+	 *
+	 * @param listener the listener to add
+	 */
+	public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+		changeSupport.addPropertyChangeListener(listener);
+	}
+
+	/**
+	 * Remove a listener for context changes.
+	 * Replaces deprecated deleteObserver(Observer) method.
+	 *
+	 * @param listener the listener to remove
+	 */
+	public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
+		changeSupport.removePropertyChangeListener(listener);
 	}
 
 	private void swapXY(Point p) {
@@ -316,15 +342,15 @@ public abstract class DefaultContext extends Observable implements EditingContex
 
 		if(lineParts == null || lineParts.size() == 0) {
 			logger.debug("Join failed between ({},{}) and ({},{})", key1.x, key1.y, key2.x, key2.y);
-			setChanged();
-			notifyObservers("Join not success");
+			changeSupport.firePropertyChange(ContextChangeListener.JOIN_FAILED, null,
+				String.format("Join not success between (%d,%d) and (%d,%d)", key1.x, key1.y, key2.x, key2.y));
 			return;
 		}
 
 		logger.debug("Created track join ({},{})->({},{}) with {} intermediate cells",
 			key1.x, key1.y, key2.x, key2.y, lineParts.size());
-		setChanged();
-		notifyObservers("Join created");
+		changeSupport.firePropertyChange(ContextChangeListener.JOIN_CREATED, null,
+			String.format("Join created between (%d,%d) and (%d,%d)", key1.x, key1.y, key2.x, key2.y));
 	}
 
 	public void putCell(Point key, NodeCell nodeCell) {
@@ -348,8 +374,7 @@ public abstract class DefaultContext extends Observable implements EditingContex
 			}
 		}
 		if (nodeCell instanceof InOut) getInOuts().add((InOut) nodeCell);
-		setChanged();
-		notifyObservers(key);
+		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key);
 		if (logger.isTraceEnabled()) {
 			logger.trace("Added {} at ({},{})", nodeCell.getClass().getSimpleName(), key.x, key.y);
 		}
@@ -367,8 +392,8 @@ public abstract class DefaultContext extends Observable implements EditingContex
 				final Collection<Point> set = linesKeys.get(tl);
 				if (set != null) getGrid().keySet().removeAll(set);
 			}
-			setChanged();
-			notifyObservers("Cell removed");
+			changeSupport.firePropertyChange(ContextChangeListener.CELL_REMOVED, null,
+				String.format("Cell removed at (%d,%d)", key.x, key.y));
 		}
 	}
 
@@ -376,8 +401,8 @@ public abstract class DefaultContext extends Observable implements EditingContex
 		assert line != null;
 		extendedUnorientedGraph.remove(line);
 		getGrid().keySet().removeAll(linesKeys.remove(line));
-		setChanged();
-		notifyObservers("TrackBlock removed");
+		changeSupport.firePropertyChange(ContextChangeListener.TRACK_BLOCK_REMOVED, null,
+			String.format("TrackBlock %s removed", line));
 	}
 
 	public void moveCell(Point from, Point to) {

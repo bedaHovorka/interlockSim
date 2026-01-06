@@ -18,8 +18,7 @@ import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
-import java.util.Observable;
-import java.util.Observer;
+import java.beans.PropertyChangeEvent;
 import java.util.Map.Entry;
 
 import javax.swing.JComponent;
@@ -28,6 +27,7 @@ import javax.swing.SwingConstants;
 
 import cz.vutbr.fit.interlockSim.Main;
 import cz.vutbr.fit.interlockSim.context.Context;
+import cz.vutbr.fit.interlockSim.context.ContextChangeListener;
 import cz.vutbr.fit.interlockSim.context.EditingContext;
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory;
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
@@ -46,7 +46,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
  * This is a main GUI component in a program. It show railway elements in a grid.
  *
  */
-public class RailwayNetGridCanvas extends JComponent implements Scrollable, MouseMotionListener, StatusProducer, Observer {
+public class RailwayNetGridCanvas extends JComponent implements Scrollable, MouseMotionListener, StatusProducer, ContextChangeListener {
 	private static final int maxUnitIncrement = 35;
 	private static final int cellWidth = 16;
 	private static final int cellHeight = 16;
@@ -230,8 +230,8 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 
 	private void changeContext(Context cont) {
 		assert(cont != null);
-		if (context != null) context.deleteObserver(this);
-		cont.addObserver(this);
+		if (context != null) context.removePropertyChangeListener(this);
+		cont.addPropertyChangeListener(this);
 			context = cont;
 		RailwayNetGrid nt = cont.getRailWayNetGrid();
 		setPreferredSize(new Dimension(cellWidth*nt.getCols(), cellHeight*nt.getRows()));
@@ -403,11 +403,15 @@ public class RailwayNetGridCanvas extends JComponent implements Scrollable, Mous
 		return cellWidth;
 	}
 
-	public void update(Observable o, Object arg) {
-		if (arg instanceof Point) {
-		Point point = (Point) arg;
-		repaint(10, point.x*cellWidth, point.y*cellHeight, getCellWidth(), getCellHeight());
-		} else repaint(100);
+	@Override
+	public void propertyChange(PropertyChangeEvent evt) {
+		Object newValue = evt.getNewValue();
+		if (newValue instanceof Point) {
+			Point point = (Point) newValue;
+			repaint(10, point.x*cellWidth, point.y*cellHeight, getCellWidth(), getCellHeight());
+		} else {
+			repaint(100);
+		}
 	}
 
 

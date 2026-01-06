@@ -1,4 +1,4 @@
-name: Gradle Build with Java 11
+name: Gradle Build with Java 21
 
 on:
   push:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '21'
   MAVEN_OPTS: '-Xmx512m'
   GRADLE_OPTS: '-Xmx512m -XX:MaxMetaspaceSize=512m'
 

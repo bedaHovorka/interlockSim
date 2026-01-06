@@ -249,13 +249,13 @@ public class MockSimulationContext implements SimulationContext {
 	}
 
 	@Override
-	public void addObserver(java.util.Observer observer) {
-		delegate.addObserver(observer);
+	public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+		delegate.addPropertyChangeListener(listener);
 	}
 
 	@Override
-	public void deleteObserver(java.util.Observer observer) {
-		delegate.deleteObserver(observer);
+	public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
+		delegate.removePropertyChangeListener(listener);
 	}
 
 	/**
