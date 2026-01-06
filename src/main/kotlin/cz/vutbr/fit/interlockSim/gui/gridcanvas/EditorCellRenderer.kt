@@ -7,51 +7,52 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui.gridcanvas;
+package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
-import java.awt.Graphics2D;
-
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart;
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import java.awt.Graphics2D
 
 /**
- *
- *
+ * Cell renderer for editing mode - renders all railway elements
  */
-public class EditorCellRenderer extends CellRenderer {
-	/**
-	 *
-	 * @param cellWidth
-	 * @param cellHeight
-	 */
-	public EditorCellRenderer(int cellWidth, int cellHeight) {
-		super(cellWidth, cellHeight);
+class EditorCellRenderer(
+	cellWidth: Int,
+	cellHeight: Int
+) : CellRenderer(cellWidth, cellHeight) {
+	override fun draw(
+		g: Graphics2D,
+		cell: RailSwitch
+	) {
+		drawLine(g, cell.getSpatialType())
+		val segments = cell.getBranchSegments().toTypedArray()
+		drawSegments(g, *segments)
 	}
 
-	@Override
-	public void draw(Graphics2D g, RailSwitch cell) {
-		drawLine(g, cell.getSpatialType());
-		drawSegments(g, cell.getBranchSegments());
+	override fun draw(
+		g: Graphics2D,
+		cell: RailSemaphore
+	) {
+		drawLine(g, cell.getSpatialType())
+		drawTriangle(g, cell)
 	}
 
-	@Override
-	public void draw(Graphics2D g, RailSemaphore cell) {
-		drawLine(g, cell.getSpatialType());
-		drawTriangle(g, cell);
+	override fun draw(
+		g: Graphics2D,
+		cell: TrackBlockPart
+	) {
+		drawSegments(g, *cell.getSegments())
 	}
 
-	@Override
-	public void draw(Graphics2D g, TrackBlockPart cell) {
-		drawSegments(g, cell.getSegments());
+	override fun draw(
+		g: Graphics2D,
+		cell: InOut
+	) {
+		drawSegments(g, cell.direction())
+		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
 	}
 
-	@Override
-	public void draw(Graphics2D g, InOut cell) {
-		drawSegments(g, cell.direction());
-		g.fillOval(getCellWidth()/4, getCellHeight()/4, getCellWidth()/2, getCellHeight()/2);
-	}
-
-	 // EXTENSION dalsi prvky
+	// EXTENSION - additional railway element renderers can be added here
 }

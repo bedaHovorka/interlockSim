@@ -7,35 +7,41 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks;
+package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
  * blok koleji rizeny dispecerem
  *
  */
-public interface TrackBlock extends Track {
+interface TrackBlock : Track {
 	/**
 	 * Move in block
 	 * @param separator for determine direction
 	 * @param current
 	 * @return section in block following current
 	 */
-	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current);
+	fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection?
 
 	/**
 	 * @param element
 	 * @return is a inner elemnent
 	 */
-	public boolean isInnerElement(PathElement element);
+	fun isInnerElement(element: PathElement): Boolean
 
 	/**
 	 * @param separator
 	 * @param current for determine direction, from
 	 * @return segment reprezents join
 	 */
-	public Segment getJoin(PathSeparator separator, TrackSection current);
+	fun getJoin(
+		separator: PathSeparator,
+		current: TrackSection
+	): Segment
 }

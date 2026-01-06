@@ -7,15 +7,11 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.Collections
+import java.util.LinkedHashSet
+import java.util.TreeMap
 
 /**
  * very simple ADT Multimap prototype
@@ -25,21 +21,28 @@ import java.util.TreeMap;
  *
  * @deprecated should be replaced by some standard library implementation in Kotlin
  */
-public class TreeMultiMap<K,V> {
-	private final SortedMap<K,Set<V>> map = new TreeMap<K,Set<V>>();
+@Deprecated(
+	message = "Should be replaced by some standard library implementation in Kotlin",
+	replaceWith = ReplaceWith("Map<K, Set<V>>")
+)
+class TreeMultiMap<K : Comparable<K>, V> {
+	private val map: TreeMap<K, MutableSet<V>> = TreeMap()
 
 	/**
 	 * put element to multimap
 	 * @param key
 	 * @param value
 	 */
-	public void put(K key, V value) {
-	Set<V> valueSet = map.get(key);
-	if (valueSet == null) {
-		valueSet = new LinkedHashSet<V>();
-		map.put(key, valueSet);
-	}
-	valueSet.add(value);
+	fun put(
+		key: K,
+		value: V
+	) {
+		var valueSet = map[key]
+		if (valueSet == null) {
+			valueSet = LinkedHashSet()
+			map[key] = valueSet
+		}
+		valueSet.add(value)
 	}
 
 	/**
@@ -47,26 +50,24 @@ public class TreeMultiMap<K,V> {
 	 * @param key
 	 * @return set of elements
 	 */
-	public Set<V> get(K key) {
-		//	EXTENSION jak to ma byt spravne...
-		return Collections.unmodifiableSet(map.get(key));
+	fun get(key: K): Set<V>? {
+		// EXTENSION jak to ma byt spravne...
+		// Maintain Java behavior: throws NPE if key not present
+		return Collections.unmodifiableSet(map[key])
 	}
 
-	@Override
-	public String toString() {
-	return map.toString();
-	}
+	override fun toString(): String = map.toString()
 
 	/**
 	 * Values in map - reading access to multimap
 	 * @return values
 	 */
-	public Collection<V> values() {
-		//	EXTENSION jak to ma byt spravne...
-		Collection<V> coll = new ArrayList<V>();
-		for (Set<V> set : map.values()) {
-			coll.addAll(set);
+	fun values(): Collection<V> {
+		// EXTENSION jak to ma byt spravne...
+		val coll = mutableListOf<V>()
+		for (set in map.values) {
+			coll.addAll(set)
 		}
-		return coll;
+		return coll
 	}
 }

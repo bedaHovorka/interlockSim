@@ -7,37 +7,31 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
 /**
  * In context be missing something
  */
-public class EmptyContextException extends Exception {
+class EmptyContextException : Exception {
 	/**
-	 * @see Exception#Exception()
+	 * @see Exception.Exception
 	 */
-	public EmptyContextException() {
-		//EMPTY
+	constructor() : super() {
+		// EMPTY
 	}
 
 	/**
-	 * @see Exception#Exception(String)
+	 * @see Exception.Exception
 	 */
-	public EmptyContextException(String message) {
-		super(message);
-	}
+	constructor(message: String) : super(message)
 
 	/**
-	 * @see Exception#Exception(Throwable)
+	 * @see Exception.Exception
 	 */
-	public EmptyContextException(Throwable cause) {
-		super(cause);
-	}
+	constructor(cause: Throwable) : super(cause)
 
 	/**
-	 * @see Exception#Exception(String, Throwable)
+	 * @see Exception.Exception
 	 */
-	public EmptyContextException(String message, Throwable cause) {
-		super(message, cause);
-	}
+	constructor(message: String, cause: Throwable) : super(message, cause)
 }

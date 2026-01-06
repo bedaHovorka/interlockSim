@@ -8,14 +8,13 @@
  * Unit tests for Train
  * Phase 4 test implementation - 2025
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import org.junit.jupiter.api.*;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext;
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import org.assertj.core.api.Assertions.*
+import org.junit.jupiter.api.*
+import org.mockito.Mockito.*
 
 /**
  * Unit tests for {@link Train}.
@@ -35,156 +34,153 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext;
  * - Semaphore interactions tested only at construction level
  */
 class TrainTest {
-
-	private MockSimulationContext mockContext;
+	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
-	void setUp() {
-		mockContext = new MockSimulationContext();
+	fun setUp() {
+		mockContext = MockSimulationContext()
 	}
 
 	@Nested
 	@DisplayName("Constructor validation")
-	class ConstructorTests {
-
+	inner class ConstructorTests {
 		@Test
-		void constructor_validArguments_createsTrainInstance() {
+		fun constructor_validArguments_createsTrainInstance() {
 			// Arrange
-			Timetable timetable = createTimetableWithLength(150.0);
+			val timetable = createTimetableWithLength(150.0)
 
 			// Act
-			Train train = new Train(mockContext, timetable);
+			val train = Train(mockContext, timetable)
 
 			// Assert
-			assertThat(train).isNotNull();
+			assertThat(train).isNotNull()
 		}
 
 		@Test
-		void constructor_nullContext_throwsException() {
+		fun constructor_nullContext_throwsException() {
 			// Arrange
-			Timetable timetable = createTimetableWithLength(150.0);
+			val timetable = createTimetableWithLength(150.0)
 
 			// Act & Assert
-			assertThatThrownBy(() -> new Train(null, timetable))
-				.isInstanceOf(NullPointerException.class);
+			assertThatThrownBy { Train(null as cz.vutbr.fit.interlockSim.context.SimulationContext?, timetable) }
+				.isInstanceOf(NullPointerException::class.java)
 		}
 
 		@Test
-		void constructor_nullTimetable_throwsException() {
+		fun constructor_nullTimetable_throwsException() {
 			// Act & Assert
-			assertThatThrownBy(() -> new Train(mockContext, null))
-				.isInstanceOf(NullPointerException.class);
+			assertThatThrownBy { Train(mockContext, null as Timetable?) }
+				.isInstanceOf(NullPointerException::class.java)
 		}
 
 		@Test
-		void constructor_zeroLengthTimetable_createsTrainWithZeroLength() {
+		fun constructor_zeroLengthTimetable_createsTrainWithZeroLength() {
 			// Arrange
-			Timetable timetable = createTimetableWithLength(0.0);
+			val timetable = createTimetableWithLength(0.0)
 
 			// Act
-			Train train = new Train(mockContext, timetable);
+			val train = Train(mockContext, timetable)
 
 			// Assert
-			assertThat(train).isNotNull();
-			assertThat(train.getLength()).isEqualTo(0.0);
+			assertThat(train).isNotNull()
+			assertThat(train.getLength()).isEqualTo(0.0)
 		}
 
 		@Test
-		void constructor_negativeLengthTimetable_createsTrainWithNegativeLength() {
+		fun constructor_negativeLengthTimetable_createsTrainWithNegativeLength() {
 			// Negative lengths document current behavior (may be invalid)
 			// Arrange
-			Timetable timetable = createTimetableWithLength(-50.0);
+			val timetable = createTimetableWithLength(-50.0)
 
 			// Act
-			Train train = new Train(mockContext, timetable);
+			val train = Train(mockContext, timetable)
 
 			// Assert
-			assertThat(train).isNotNull();
-			assertThat(train.getLength()).isEqualTo(-50.0);
+			assertThat(train).isNotNull()
+			assertThat(train.getLength()).isEqualTo(-50.0)
 		}
 	}
 
 	@Nested
 	@DisplayName("TrackOccupant interface")
-	class TrackOccupantTests {
-
+	inner class TrackOccupantTests {
 		@Test
-		void getLength_afterConstruction_returnsTrainLength() {
+		fun getLength_afterConstruction_returnsTrainLength() {
 			// Arrange
-			double expectedLength = 150.0;
-			Timetable timetable = createTimetableWithLength(expectedLength);
-			Train train = new Train(mockContext, timetable);
+			val expectedLength = 150.0
+			val timetable = createTimetableWithLength(expectedLength)
+			val train = Train(mockContext, timetable)
 
 			// Act
-			double actualLength = train.getLength();
+			val actualLength = train.getLength()
 
 			// Assert
-			assertThat(actualLength).isEqualTo(expectedLength);
+			assertThat(actualLength).isEqualTo(expectedLength)
 		}
 
 		@Test
-		void getLength_verySmallTrain_returnsCorrectLength() {
+		fun getLength_verySmallTrain_returnsCorrectLength() {
 			// Arrange
-			double expectedLength = 0.1; // Very small train
-			Timetable timetable = createTimetableWithLength(expectedLength);
-			Train train = new Train(mockContext, timetable);
+			val expectedLength = 0.1 // Very small train
+			val timetable = createTimetableWithLength(expectedLength)
+			val train = Train(mockContext, timetable)
 
 			// Act
-			double actualLength = train.getLength();
+			val actualLength = train.getLength()
 
 			// Assert
-			assertThat(actualLength).isEqualTo(expectedLength);
+			assertThat(actualLength).isEqualTo(expectedLength)
 		}
 
 		@Test
-		void getLength_veryLongTrain_returnsCorrectLength() {
+		fun getLength_veryLongTrain_returnsCorrectLength() {
 			// Arrange
-			double expectedLength = 1000.0; // Very long train
-			Timetable timetable = createTimetableWithLength(expectedLength);
-			Train train = new Train(mockContext, timetable);
+			val expectedLength = 1000.0 // Very Long train
+			val timetable = createTimetableWithLength(expectedLength)
+			val train = Train(mockContext, timetable)
 
 			// Act
-			double actualLength = train.getLength();
+			val actualLength = train.getLength()
 
 			// Assert
-			assertThat(actualLength).isEqualTo(expectedLength);
+			assertThat(actualLength).isEqualTo(expectedLength)
 		}
 	}
 
 	@Nested
 	@DisplayName("String representation")
-	class ToStringTests {
-
+	inner class ToStringTests {
 		@Test
-		void toString_returnsNonNullString() {
+		fun toString_returnsNonNullString() {
 			// Arrange
-			Timetable timetable = createTimetableWithLength(150.0);
-			Train train = new Train(mockContext, timetable);
+			val timetable = createTimetableWithLength(150.0)
+			val train = Train(mockContext, timetable)
 
 			// Act
-			String result = train.toString();
+			val result = train.toString()
 
 			// Assert
-			assertThat(result).isNotNull()
-				.as("Train toString should return a non-null string");
+			assertThat(result)
+				.isNotNull()
+				.`as`("Train toString should return a non-null string")
 		}
 
 		@Test
-		void toString_differentTrains_mayProduceDifferentStrings() {
+		fun toString_differentTrains_mayProduceDifferentStrings() {
 			// Arrange
-			Timetable timetable1 = createTimetableWithLength(100.0);
-			Timetable timetable2 = createTimetableWithLength(200.0);
-			Train train1 = new Train(mockContext, timetable1);
-			Train train2 = new Train(mockContext, timetable2);
+			val timetable1 = createTimetableWithLength(100.0)
+			val timetable2 = createTimetableWithLength(200.0)
+			val train1 = Train(mockContext, timetable1)
+			val train2 = Train(mockContext, timetable2)
 
 			// Act
-			String result1 = train1.toString();
-			String result2 = train2.toString();
+			val result1 = train1.toString()
+			val result2 = train2.toString()
 
 			// Assert - Trains should have some string representation
 			// (may or may not be different - depends on implementation)
-			assertThat(result1).isNotNull();
-			assertThat(result2).isNotNull();
+			assertThat(result1).isNotNull()
+			assertThat(result2).isNotNull()
 		}
 	}
 
@@ -197,17 +193,17 @@ class TrainTest {
 	 * @param length the train length to set in the timetable
 	 * @return a timetable configured with the given length
 	 */
-	private Timetable createTimetableWithLength(double length) {
+	private fun createTimetableWithLength(length: Double): Timetable {
 		// Mock InOut objects needed for timetable
-		InOut mockInOut = mock(InOut.class);
-		when(mockInOut.getName()).thenReturn("MOCK_IN");
-		when(mockInOut.toString()).thenReturn("InOut:MOCK_IN");
+		val mockInOut = mock(InOut::class.java)
+		`when`(mockInOut.getName()).thenReturn("MOCK_IN")
+		`when`(mockInOut.toString()).thenReturn("InOut:MOCK_IN")
 
-		InOut mockOutOut = mock(InOut.class);
-		when(mockOutOut.getName()).thenReturn("MOCK_OUT");
-		when(mockOutOut.toString()).thenReturn("InOut:MOCK_OUT");
+		val mockOutOut = mock(InOut::class.java)
+		`when`(mockOutOut.getName()).thenReturn("MOCK_OUT")
+		`when`(mockOutOut.toString()).thenReturn("InOut:MOCK_OUT")
 
 		// Create timetable with mocked InOuts and specified length
-		return new Timetable(mockInOut, mockOutOut, null, null, length);
+		return Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), length)
 	}
 }

@@ -7,21 +7,23 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.paths;
+package cz.vutbr.fit.interlockSim.objects.paths
+
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 
 /**
  * orientovany prvek
  * "ma nejaky vyznam a ten plati jen v jednom smeru jizdy"
  * muze byt zacatkem a koncem cesty
  */
-public interface OrientedPathSeparator extends PathSeparator {
+interface OrientedPathSeparator : PathSeparator {
 	/**
 	 * @return orientation atribute
 	 */
-	public boolean getOrientation();
+	fun getOrientation(): Boolean
 
 	/**
 	 * @return direction segment
 	 */
-	public Segment direction();
+	fun direction(): Cell.Segment
 }

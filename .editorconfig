@@ -18,6 +18,25 @@ indent_size = 4
 tab_width = 4
 max_line_length = 120
 
+# Kotlin source files (matching Java style for consistency)
+[*.kt]
+charset = utf-8
+indent_style = tab
+indent_size = 4
+tab_width = 4
+max_line_length = 120
+# Kotlin-specific settings
+ij_kotlin_allow_trailing_comma = false
+ij_kotlin_allow_trailing_comma_on_call_site = false
+
+# Kotlin script files (build.gradle.kts, etc.)
+[*.kts]
+charset = utf-8
+indent_style = tab
+indent_size = 4
+tab_width = 4
+max_line_length = 120
+
 # XML files (build.xml, resource files)
 [*.xml]
 charset = utf-8

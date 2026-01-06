@@ -7,452 +7,537 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.xml;
+package cz.vutbr.fit.interlockSim.xml
 
-import java.awt.Point;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.Reader;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.util.Iterator;
-import java.util.Map;
-
-import javax.xml.XMLConstants;
-import javax.xml.transform.Source;
-import javax.xml.transform.sax.SAXResult;
-import javax.xml.transform.sax.SAXSource;
-import javax.xml.transform.stream.StreamSource;
-import javax.xml.validation.Schema;
-import javax.xml.validation.SchemaFactory;
-import javax.xml.validation.Validator;
-
-import org.xml.sax.Attributes;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
-
-import cz.vutbr.fit.interlockSim.MyResourceBoundle;
-import cz.vutbr.fit.interlockSim.context.Context;
-import cz.vutbr.fit.interlockSim.context.ContextCreationException;
-import cz.vutbr.fit.interlockSim.context.DefaultContext;
-import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid;
-import cz.vutbr.fit.interlockSim.context.EditingContext;
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory;
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.util.Doubleton;
-import cz.vutbr.fit.interlockSim.util.Util;
+import cz.vutbr.fit.interlockSim.MyResourceBoundle
+import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.util.Doubleton
+import cz.vutbr.fit.interlockSim.util.Util
+import org.xml.sax.Attributes
+import org.xml.sax.InputSource
+import org.xml.sax.SAXException
+import org.xml.sax.helpers.DefaultHandler
+import java.awt.Point
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.FileReader
+import java.io.FileWriter
+import java.io.IOException
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.io.OutputStream
+import java.io.Reader
+import java.lang.reflect.InvocationTargetException
+import javax.xml.XMLConstants
+import javax.xml.transform.Source
+import javax.xml.transform.sax.SAXResult
+import javax.xml.transform.sax.SAXSource
+import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.SchemaFactory
+import javax.xml.validation.Validator
 
 /**
- * XML implemetation of {@link EditingContextFactory}
- *
+ * XML implementation of {@link EditingContextFactory}
  */
-public class XMLContextFactory implements EditingContextFactory, SimulationContextFactory {
-	//	EXTENSION co kdyz je delka koleje mezi InOuty mensi nez delka vlaku
+class XMLContextFactory :
+	EditingContextFactory,
+	SimulationContextFactory {
+	// EXTENSION co kdyz je delka koleje mezi InOuty mensi nez delka vlaku
 
-	private class XMLContext extends DefaultContext {
-		XMLContext(int cols, int rows) {
-			super(cols, rows);
-		}
+	private inner class XMLContext(
+		cols: Int,
+		rows: Int
+	) : DefaultContext(cols, rows) {
+		// No additional implementation needed
 	}
 
-	private class Handler extends DefaultHandler {
-		private XMLContext context;
-		private boolean ended = false;
-		private final Class<? extends PathElement> classes[] = (Class<? extends PathElement> []) new Class[] {
-				RailSemaphore.class,
-				RailSwitch.class,
-				InOut.class,
-				SimpleTrackBlock.class};
+	private inner class Handler : DefaultHandler() {
+		private var context: XMLContext? = null
+		private var ended: Boolean = false
 
-		@Override
-		public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
-			if (localName.equals(ROOT_ELEMENT_NAME)) {
-				final int cols = getInt(uri, attributes, X);
-				final int rows = getInt(uri, attributes, Y);
-				context = new XMLContext(cols, rows);
-				return;
+		// Array of classes to handle in XML parsing
+		private val classes: Array<Class<out PathElement>> =
+			arrayOf(
+				RailSemaphore::class.java,
+				RailSwitch::class.java,
+				InOut::class.java,
+				SimpleTrackBlock::class.java
+			)
+
+		override fun startElement(
+			uri: String?,
+			localName: String?,
+			qName: String?,
+			attributes: Attributes?
+		) {
+			if (localName == ROOT_ELEMENT_NAME) {
+				val cols = getInt(uri!!, attributes!!, X)
+				val rows = getInt(uri, attributes, Y)
+				context = XMLContext(cols, rows)
+				return
 			}
 
-			if (context == null) throw new SAXException();
-			final Class<? extends PathElement> clazz = classification(localName);
+			val ctx = context ?: throw SAXException("Context not initialized")
+			val clazz = classification(localName!!)
 
-			if (NodeCell.class.isAssignableFrom(clazz)){
-				final SpatialType spatialType = getEnum(uri, attributes, SpatialType.class);
+			if (NodeCell::class.java.isAssignableFrom(clazz)) {
+				val spatialType = getEnum(uri!!, attributes!!, SpatialType::class.java)
 
-				final Object[] args;
-				if (OrientedPathSeparator.class.isAssignableFrom(clazz)) {
-					final boolean orientation = getBoolean(uri, attributes, ATR_ORIENT_NAME);
-					if (clazz == InOut.class) {
-						final String name = attributes.getValue(uri, NAME);
-						args = new Object[]{name, orientation, spatialType};
-					} else {
-						assert clazz == RailSemaphore.class : clazz; //zatim
-						args = new Object[]{orientation, spatialType};
+				val args: Array<Any> =
+					when {
+						OrientedPathSeparator::class.java.isAssignableFrom(clazz) -> {
+							val orientation = getBoolean(uri, attributes, ATR_ORIENT_NAME)
+							when (clazz) {
+								InOut::class.java -> {
+									val name = attributes.getValue(uri, NAME)
+									arrayOf(name as Any, orientation as Any, spatialType as Any)
+								}
+								RailSemaphore::class.java -> {
+									arrayOf(orientation as Any, spatialType as Any)
+								}
+								else -> error("Unexpected OrientedPathSeparator: $clazz")
+							}
+						}
+						clazz == RailSwitch::class.java -> {
+							val type = getEnum(uri, attributes, Type::class.java)
+							arrayOf(spatialType as Any, type as Any)
+						}
+						else -> error("Unexpected PathElement class: $clazz")
 					}
-				} else {
-					assert clazz == RailSwitch.class : clazz; //zatim
-					final Type type = getEnum(uri, attributes, RailSwitch.Type.class);
-					args = new Object[]{spatialType, type};
-				}
 
-				final Point key = getPoint(uri, attributes, null);
+				val key = getPoint(uri, attributes, null)
 
 				try {
-					NodeCell node = (NodeCell) createNew(context, clazz, args);
-					context.putCell(key, node);
-				} catch (Exception e) {
-					throw new SAXException(e);
+					val node = createNew(ctx, clazz, *args) as NodeCell
+					ctx.putCell(key, node)
+				} catch (e: Exception) {
+					throw SAXException(e)
 				}
-			} else if (TrackBlock.class.isAssignableFrom(clazz)) {
-				assert clazz == SimpleTrackBlock.class : clazz; // zatim
-				//hrana obecne:
-				final Point from = getPoint(uri, attributes, FROM);
-				final Point to = getPoint(uri, attributes, TO);
-				assert !from.equals(to);
+			} else if (TrackBlock::class.java.isAssignableFrom(clazz)) {
+				check(clazz == SimpleTrackBlock::class.java) { "Expected SimpleTrackBlock, got $clazz" }
 
-				final RailwayNetGrid railWayNetGrid = context.getRailWayNetGrid();
-				final NodeCell fromNode = Util.assertNodeCell(railWayNetGrid.get(from));
-				final NodeCell toNode = Util.assertNodeCell(railWayNetGrid.get(to));
+				// Parse from/to points
+				val from = getPoint(uri!!, attributes!!, FROM)
+				val to = getPoint(uri, attributes, TO)
+				check(from != to) { "from and to points must be different" }
 
-				final Segment segmentFrom = getEnum(uri, attributes, Segment.class, FROM); assert segmentFrom != null;
-				final Segment segmentTo = getEnum(uri, attributes, Segment.class, TO); assert segmentTo != null;
+				val railwayNetGrid = ctx.getRailWayNetGrid()
+				val fromNode = Util.assertNodeCell(railwayNetGrid[from] as Any)
+				val toNode = Util.assertNodeCell(railwayNetGrid[to] as Any)
 
-				//specialne:
-				final double maxSpeed1 = getDouble(uri, attributes, ATR_MAX_SPEED+FROM);
-				final double maxSpeed2 = getDouble(uri, attributes, ATR_MAX_SPEED+TO);
-				final double length = getDouble(uri, attributes, ATR_LENGTH);
-				final SimpleTrackBlock trackBlock = new SimpleTrackBlock(fromNode, toNode, length, maxSpeed1, maxSpeed2);
+				val segmentFrom =
+					getEnum(uri, attributes, Segment::class.java, FROM)
+						?: throw SAXException("Missing segment from")
+				val segmentTo =
+					getEnum(uri, attributes, Segment::class.java, TO)
+						?: throw SAXException("Missing segment to")
 
-				//a opet obecne:
-				final Object result = context.hardJoin(segmentFrom, segmentTo, from, to, trackBlock);
-				if (result == null) throw new SAXException("track block were not inserted");
+				// Parse track block properties
+				val maxSpeed1 = getDouble(uri, attributes, ATR_MAX_SPEED + FROM)
+				val maxSpeed2 = getDouble(uri, attributes, ATR_MAX_SPEED + TO)
+				val length = getDouble(uri, attributes, ATR_LENGTH)
+				val trackBlock = SimpleTrackBlock(fromNode, toNode, length, maxSpeed1, maxSpeed2)
+
+				// Insert track block into context
+				val result = ctx.hardJoin(segmentFrom, segmentTo, from, to, trackBlock)
+				if (!result) {
+					throw SAXException("track block were not inserted")
+				}
 			} else {
-				assert false : clazz;
+				error("Unexpected class type: $clazz")
 			}
-
 		}
 
-		private Class<? extends PathElement> classification(String localName) throws SAXException {
-			for (Class<? extends PathElement> c : classes) {
-				if (localName.equals(classToString(c))) {
-					return c;
+		private fun classification(localName: String): Class<out PathElement> {
+			for (c in classes) {
+				if (localName == classToString(c)) {
+					return c
 				}
 			}
-			throw new SAXException("Wrong tag name " + localName);
+			throw SAXException("Wrong tag name: $localName")
 		}
 
-		private <E extends Enum<E>> E getEnum(String uri, Attributes attributes, Class<E> enumClass) {
-			return getEnum(uri, attributes, enumClass, "");
-		}
+		private fun <E : Enum<E>> getEnum(
+			uri: String,
+			attributes: Attributes,
+			enumClass: Class<E>
+		): E? = getEnum(uri, attributes, enumClass, "")
 
-		private <E extends Enum<E>> E getEnum(String uri, Attributes attributes, Class<E> enumClass, String name) {
-			return Enum.valueOf(enumClass, attributes.getValue(uri, name+classToString(enumClass)));
-		}
-
-		private boolean getBoolean(String uri, Attributes attributes, String name) {
-			return Boolean.parseBoolean(attributes.getValue(uri, name));
-		}
-
-		private int getInt(String uri, Attributes attributes, String name) throws SAXException {
-			assert attributes != null && name != null;
-			try {
-				final int i = Integer.parseInt((attributes.getValue(uri, name)));
-				return i;
-			} catch (NumberFormatException e) {
-				throw new SAXException("Wrong parameter " + name, e);
+		private fun <E : Enum<E>> getEnum(
+			uri: String,
+			attributes: Attributes,
+			enumClass: Class<E>,
+			name: String
+		): E? {
+			val value = attributes.getValue(uri, name + classToString(enumClass)) ?: return null
+			return try {
+				@Suppress("UNCHECKED_CAST")
+				java.lang.Enum.valueOf(enumClass as Class<E>, value)
+			} catch (e: IllegalArgumentException) {
+				null
 			}
 		}
 
-		private double getDouble(String uri, Attributes attributes, String name) throws SAXException {
-			assert attributes != null && name != null;
+		private fun getBoolean(
+			uri: String,
+			attributes: Attributes,
+			name: String
+		): Boolean = attributes.getValue(uri, name)?.toBoolean() ?: false
+
+		private fun getInt(
+			uri: String,
+			attributes: Attributes,
+			name: String
+		): Int =
 			try {
-				final double d = Double.parseDouble((attributes.getValue(uri, name)));
-				return d;
-			} catch (NumberFormatException e) {
-				throw new SAXException("Wrong parameter " + name, e);
+				attributes.getValue(uri, name).toInt()
+			} catch (e: NumberFormatException) {
+				throw SAXException("Wrong parameter: $name", e)
 			}
+
+		private fun getDouble(
+			uri: String,
+			attributes: Attributes,
+			name: String
+		): Double =
+			try {
+				attributes.getValue(uri, name).toDouble()
+			} catch (e: NumberFormatException) {
+				throw SAXException("Wrong parameter: $name", e)
+			}
+
+		private fun getPoint(
+			uri: String,
+			attributes: Attributes,
+			name: String?
+		): Point {
+			val x = getInt(uri, attributes, if (name == null) X else name + X)
+			val y = getInt(uri, attributes, if (name == null) Y else name + Y)
+			return Point(x, y)
 		}
 
-		private Point getPoint(String uri, Attributes attributes, String name) throws SAXException {
-			final int x = getInt(uri, attributes, name==null ? X : name+X);
-			final int y = getInt(uri, attributes, name==null ? Y : name+Y);
-			return new Point(x,y);
-		}
-
-		@Override
-		public void endElement(String uri, String localName, String qName) throws SAXException {
+		override fun endElement(
+			uri: String?,
+			localName: String?,
+			qName: String?
+		) {
 			// EMPTY
 		}
 
-		@Override
-		public void endDocument() throws SAXException {
-			ended = true;
+		override fun endDocument() {
+			ended = true
 		}
 
-		DefaultContext getContext() {
-			return ended ? context : null;
-		}
+		fun getContext(): DefaultContext? = if (ended) context else null
 	}
 
-	private static final String ROOT_ELEMENT_NAME = "net";
-	private static final String ATR_ORIENT_NAME = "orientation";
-	private static final String ATR_LENGTH = "length";
-	private static final String ATR_MAX_SPEED = "maxSpeed";
+	private var validator: Validator? = null
 
-	private static final String X = "X";
-	private static final String Y = "Y";
-	private static final String FROM = "from";
-	private static final String TO = "to";
-	private static final String NAME = "name";
-
-	private static final int DEFAULT_GRID_SIZE = 100;
-
-	private static final XMLContextFactory instance = new XMLContextFactory();
-	private Validator validator;
-
-	private XMLContextFactory() {
-		SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-		final InputStream schemaStream = MyResourceBoundle.getInstance().getSchema();
-		assert schemaStream != null;
-		Source schemaFile = new StreamSource(schemaStream);
-
+	init {
 		try {
-			Schema schema = factory.newSchema(schemaFile);
-			validator = schema.newValidator();
-		} catch (SAXException e) {
-			e.printStackTrace();
-		} catch (Exception e) {
-			assert false : e;
+			val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+			val schemaStream = MyResourceBoundle.getInstance().getSchema()
+			check(schemaStream != null) { "Schema stream is null" }
+			val schemaFile: Source = StreamSource(schemaStream)
+
+			val schema = schemaFactory.newSchema(schemaFile)
+			validator = schema.newValidator()
+		} catch (e: SAXException) {
+			e.printStackTrace()
+		} catch (e: Exception) {
+			check(false) { "Failed to initialize XML validator: $e" }
 		}
 	}
 
-	/**
-	 * @return Get factory for creating editing and simulation context from XML
-	 */
-	public static XMLContextFactory getInstance() {
-		assert instance != null;
-		return instance;
+	companion object {
+		private const val ROOT_ELEMENT_NAME = "net"
+		private const val ATR_ORIENT_NAME = "orientation"
+		private const val ATR_LENGTH = "length"
+		private const val ATR_MAX_SPEED = "maxSpeed"
+
+		private const val X = "X"
+		private const val Y = "Y"
+		private const val FROM = "from"
+		private const val TO = "to"
+		private const val NAME = "name"
+
+		private const val DEFAULT_GRID_SIZE = 100
+
+		private val instance = XMLContextFactory()
+
+		/**
+		 * Get factory for creating editing and simulation context from XML
+		 */
+		@JvmStatic
+		fun getInstance(): XMLContextFactory = instance
 	}
 
-	public DefaultContext createEmptyContext() {
-		return new XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE);
-	}
+	override fun createEmptyContext(): DefaultContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
-	public DefaultContext createContext(File file) throws ContextCreationException {
+	@Throws(ContextCreationException::class)
+	override fun createContext(file: File): DefaultContext =
 		try {
-			return createContext(new FileReader(file));
-		} catch (FileNotFoundException e) {
-			throw new ContextCreationException(e);
+			createContext(FileReader(file))
+		} catch (e: FileNotFoundException) {
+			throw ContextCreationException(e)
+		}
+
+	@Throws(ContextCreationException::class)
+	private fun createContext(reader: Reader): DefaultContext {
+		val validator = validator ?: throw ContextCreationException("Validator not initialized")
+		return try {
+			val inputSource = InputSource(reader)
+			val handler = Handler()
+			validator.validate(SAXSource(inputSource), SAXResult(handler))
+			handler.getContext() ?: throw ContextCreationException("Failed to parse context from XML")
+		} catch (e: Exception) {
+			if (e is ContextCreationException) throw e
+			throw ContextCreationException(e)
 		}
 	}
 
-	private DefaultContext createContext(Reader reader) throws ContextCreationException {
-		assert validator != null;
-		try {
-			final InputSource inputSource = new InputSource(reader);
-			final Handler handler = new Handler();
-			validator.validate(new SAXSource(inputSource), new SAXResult(handler));
-			return handler.getContext();
-		} catch (Exception e) {
-			throw new ContextCreationException(e);
-		}
-	}
+	@Throws(ContextCreationException::class)
+	override fun createContext(stream: InputStream): DefaultContext = createContext(InputStreamReader(stream))
 
-	public DefaultContext createContext(InputStream stream) throws ContextCreationException {
-		return createContext(new InputStreamReader(stream));
-	}
-
-	public boolean saveContext(Context context, OutputStream stream) {
+	override fun saveContext(
+		context: Context,
+		stream: OutputStream
+	): Boolean {
 		// TODO Auto-generated method stub
-		return false;
+		return false
 	}
 
-	private StringBuilder appendAtribute(final StringBuilder builder, String name, int value) {
-		return appendAtribute(builder, name, Integer.toString(value));
+	private fun appendAttribute(
+		builder: StringBuilder,
+		name: String,
+		value: Int
+	): StringBuilder = appendAttribute(builder, name, value.toString())
+
+	private fun appendAttribute(
+		builder: StringBuilder,
+		name: String,
+		value: Double
+	): StringBuilder = appendAttribute(builder, name, value.toString())
+
+	private fun appendAttribute(
+		builder: StringBuilder,
+		value: Enum<*>
+	): StringBuilder {
+		val clazz = value.javaClass
+		return builder
+			.append(classToString(clazz))
+			.append("=\"")
+			.append(value.name)
+			.append("\" ")
 	}
 
-	private StringBuilder appendAtribute(final StringBuilder builder, String name, double value) {
-		return appendAtribute(builder, name, Double.toString(value));
+	private fun appendAttribute(
+		builder: StringBuilder,
+		name: String,
+		value: Enum<*>
+	): StringBuilder {
+		builder.append(name)
+		return appendAttribute(builder, value)
 	}
 
-//	private StringBuilder appendAtribute(final StringBuilder builder, String name, Object value) {
-//		assert builder != null && name != null;
-//		appendAtribute(builder, name, String.valueOf(value));
-//		return builder;
-//	}
+	private fun appendAttribute(
+		builder: StringBuilder,
+		name: String,
+		value: String
+	): StringBuilder =
+		builder
+			.append(name)
+			.append("=\"")
+			.append(value)
+			.append("\" ")
 
-	private StringBuilder appendAtribute(final StringBuilder builder, Enum<?> value) {
-		assert value != null;
-		final Class<?> clazz = value.getClass();
-		return appendAtribute(builder, classToString(clazz), String.valueOf(value));
+	private fun appendAttribute(
+		builder: StringBuilder,
+		name: String,
+		value: Point
+	): StringBuilder {
+		builder.append(name)
+		appendAttribute(builder, X, value.x)
+		builder.append(name)
+		return appendAttribute(builder, Y, value.y)
 	}
 
-	private StringBuilder appendAtribute(final StringBuilder builder, String name, Enum<?> value) {
-		assert builder != null && name != null;
-		builder.append(name);
-		return appendAtribute(builder, value);
-	}
-
-	private StringBuilder appendAtribute(final StringBuilder builder, String name, String value) {
-		assert builder != null && name != null && value != null;
-		return builder.append(name).append("=\"").append(value).append('\"').append(' ');
-	}
-
-	private StringBuilder appendAtribute(final StringBuilder builder, String name, Point value) {
-		assert value != null;
-		builder.append(name);
-		appendAtribute(builder, X, value.x);
-		builder.append(name);
-		return appendAtribute(builder, Y, value.y);
-	}
-
-	public boolean saveContext(Context context, File file) {
-		final DefaultContext xmlContext = Util.assertInstanceOf(DefaultContext.class, context);//zatim
-		final DefaultRailWayNetGrid railWayNetGrid = xmlContext.getRailWayNetGrid();
-		try {
-			final FileWriter fileWriter = new FileWriter(file);
-			final StringBuilder stringBuilder = new StringBuilder("<?xml version=\"1.0\"?>\n<!DOCTYPE ");
-			stringBuilder.append(ROOT_ELEMENT_NAME).append(">\n");
-			stringBuilder.append('<').append(ROOT_ELEMENT_NAME).append(' ');
-			appendAtribute(stringBuilder, X, railWayNetGrid.getCols());
-			appendAtribute(stringBuilder, Y, railWayNetGrid.getRows());
-			stringBuilder.append(">\n");
-			fileWriter.write(stringBuilder.toString());
+	override fun saveContext(
+		context: Context,
+		file: File
+	): Boolean {
+		val xmlContext = Util.assertInstanceOf(DefaultContext::class.java, context) // zatim
+		val railwayNetGrid = xmlContext.getRailWayNetGrid()
+		return try {
+			val fileWriter = FileWriter(file)
+			val stringBuilder = StringBuilder("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
+			stringBuilder.append(ROOT_ELEMENT_NAME).append(">\n")
+			stringBuilder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
+			appendAttribute(stringBuilder, X, railwayNetGrid.getCols())
+			appendAttribute(stringBuilder, Y, railwayNetGrid.getRows())
+			stringBuilder.append(">\n")
+			fileWriter.write(stringBuilder.toString())
 
 			// Save all NodeCells from the grid (including isolated nodes)
 			// Use LinkedHashSet to avoid duplicates while preserving insertion order
-			final java.util.Set<Point> allNodes = new java.util.LinkedHashSet<Point>();
+			val allNodes = LinkedHashSet<Point>()
 
 			// Add all nodes from the graph (nodes with connections)
-			allNodes.addAll(xmlContext.getGraph().nodeSet());
+			allNodes.addAll(xmlContext.getGraph().nodeSet())
 
 			// Add any isolated NodeCells from the grid that aren't in the graph
-			for (java.util.Map.Entry<Point, Cell> entry : railWayNetGrid) {
-				if (entry.getValue() instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
-					allNodes.add(entry.getKey());
+			for (entry in railwayNetGrid) {
+				val point = entry.key
+				val cell = entry.value
+				if (cell is NodeCell) {
+					allNodes.add(point)
 				}
 			}
 
 			// Write all nodes to XML
-			for (Point p : allNodes) {
-				final Cell cell = railWayNetGrid.get(p);
-				if (cell instanceof cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
-					StringBuilder builder = tagFor(p, cell);
-					spacing(builder, 1);
-					fileWriter.write(builder.toString());
+			for (p in allNodes) {
+				val cell = railwayNetGrid[p]
+				if (cell is NodeCell) {
+					val builder = tagFor(p, cell)
+					spacing(builder, 1)
+					fileWriter.write(builder.toString())
 				}
 			}
 
-			for (Map.Entry<Doubleton<Point, Segment>, TrackBlock> i : xmlContext.getGraph().entrySet()) {
-				final Iterator<Point> iterator = i.getKey().iterator();
-				assert iterator.hasNext();
-				Point p1 = iterator.next();
-				assert iterator.hasNext();
-				Point p2 = iterator.next();
+			for (entry in xmlContext.getGraph().entrySet()) {
+				val key = entry.key
+				val value = entry.value
+				val keyIterator = key.iterator()
+				check(keyIterator.hasNext()) { "Doubleton should have at least one element" }
+				val p1 = keyIterator.next()
+				check(keyIterator.hasNext()) { "Doubleton should have two elements" }
+				val p2 = keyIterator.next()
 
-				StringBuilder builder = tagFor(p1, p2, i.getKey(), i.getValue());
-				spacing(builder, 1);
-				fileWriter.write(builder.toString());
+				val builder = tagFor(p1, p2, key, value)
+				spacing(builder, 1)
+				fileWriter.write(builder.toString())
 			}
 
-			fileWriter.write("</" + ROOT_ELEMENT_NAME + ">\n");
-			fileWriter.close();
-			return true;
-		} catch (IOException e) {
-			assert false : e;
-			return false;
+			fileWriter.write("</" + ROOT_ELEMENT_NAME + ">\n")
+			fileWriter.close()
+			true
+		} catch (e: IOException) {
+			check(false) { "Failed to save context: $e" }
+			false
 		}
 	}
 
-	//jednotici metoda...
-	private String classToString(Class<?> clazz) {
-		return clazz.getSimpleName();
+	// Helper method to get simple class name
+	private fun classToString(clazz: Class<*>): String = clazz.simpleName
+
+	// Helper method to add indentation
+	private fun spacing(
+		builder: StringBuilder,
+		count: Int
+	) {
+		check(count > 0) { "count must be positive" }
+		repeat(count) { builder.insert(0, '\t') }
 	}
 
-	//odsazeni
-	private void spacing(StringBuilder builder, int count) {
-		assert count > 0;
-		for (int i = 0; i < count;i++) builder.insert(0, '\t');
+	private fun tagFor(
+		p1: Point,
+		p2: Point,
+		key: Doubleton<Point, Segment>,
+		value: TrackBlock
+	): StringBuilder {
+		val builder = StringBuilder()
+		val clazz = value.javaClass
+		beginOfTag(builder, clazz)
+		appendAttribute(builder, FROM, p1)
+		appendAttribute(builder, TO, p2)
+		appendAttribute(builder, FROM, key.getValue(p1)!!)
+		appendAttribute(builder, TO, key.getValue(p2)!!)
+		appendAttribute(builder, ATR_LENGTH, value.length())
+		appendAttribute(builder, ATR_MAX_SPEED + FROM, value.maxSpeed(value.ends()[0]))
+		appendAttribute(builder, ATR_MAX_SPEED + TO, value.maxSpeed(value.ends()[1]))
+		closingEndOfTag(builder)
+		return builder
 	}
 
-	private StringBuilder tagFor(final Point p1, final Point p2, final Doubleton<Point, Segment> key, final TrackBlock value) {
-		final StringBuilder builder = new StringBuilder();
-		final Class<? extends TrackBlock> clazz = value.getClass();
-		beginOfTag(builder, clazz);
-		appendAtribute(builder, FROM, p1);
-		appendAtribute(builder, TO, p2);
-		appendAtribute(builder, FROM, key.getValue(p1));
-		appendAtribute(builder, TO, key.getValue(p2));
-		appendAtribute(builder, ATR_LENGTH, value.length());
-		appendAtribute(builder, ATR_MAX_SPEED+FROM, value.maxSpeed(value.ends()[0]));
-		appendAtribute(builder, ATR_MAX_SPEED+TO, value.maxSpeed(value.ends()[1]));
-		closingEndOfTag(builder);
-		return builder;
-	}
-
-	private StringBuilder tagFor(final Point key, final Cell cell) {
-		final StringBuilder builder = new StringBuilder();
-		final Class<? extends Cell> clazz = cell.getClass();
-		beginOfTag(builder, clazz);
-		appendAtribute(builder, "", key);
-		appendAtribute(builder, cell.getSpatialType());
-		if (cell instanceof OrientedPathSeparator) {
-			appendAtribute(builder, ATR_ORIENT_NAME,
-					Boolean.toString(((OrientedPathSeparator) cell).getOrientation()));
+	private fun tagFor(
+		key: Point,
+		cell: Cell
+	): StringBuilder {
+		val builder = StringBuilder()
+		val clazz = cell.javaClass
+		beginOfTag(builder, clazz)
+		appendAttribute(builder, "", key)
+		appendAttribute(builder, cell.getSpatialType())
+		if (cell is OrientedPathSeparator) {
+			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
 		}
-		if (clazz == RailSwitch.class) {
-			appendAtribute(builder, ((RailSwitch) cell).getType());
-		} else if (clazz == InOut.class) {
-			appendAtribute(builder, NAME, ((InOut) cell).getName());
+		when (clazz) {
+			RailSwitch::class.java -> appendAttribute(builder, (cell as RailSwitch).type)
+			InOut::class.java -> appendAttribute(builder, NAME, (cell as InOut).getName())
 		}
-		closingEndOfTag(builder);
-		return builder;
+		closingEndOfTag(builder)
+		return builder
 	}
 
-	private StringBuilder closingEndOfTag(final StringBuilder builder) {
-		return builder.append("/>\n");
+	private fun closingEndOfTag(builder: StringBuilder): StringBuilder = builder.append("/>\n")
+
+	private fun beginOfTag(
+		builder: StringBuilder,
+		clazz: Class<*>
+	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
+
+	override fun createContext(editingContext: EditingContext): DefaultContext {
+		return Util.assertInstanceOf(DefaultContext::class.java, editingContext) // zatim
 	}
 
-	private StringBuilder beginOfTag(final StringBuilder builder, final Class<?> clazz) {
-		return builder.append('<').append(classToString(clazz)).append(' ');
-	}
+	@Throws(Exception::class)
+	override fun createNew(
+		context: EditingContext,
+		clazz: Class<*>,
+		vararg arguments: Any
+	): Any {
+		check(context != null) { "Context cannot be null" }
+		check(clazz != null) { "Class cannot be null" }
 
-	public DefaultContext createContext(EditingContext editingContext) {
-		return Util.assertInstanceOf(DefaultContext.class, editingContext);//zatim
-	}
+		val argumentClasses =
+			arguments
+				.map { arg ->
+					// Convert wrapper classes to primitive types for constructor lookup
+					when (arg.javaClass) {
+						java.lang.Boolean::class.java -> Boolean::class.javaPrimitiveType
+						java.lang.Integer::class.java -> Int::class.javaPrimitiveType
+						java.lang.Double::class.java -> Double::class.javaPrimitiveType
+						java.lang.Float::class.java -> Float::class.javaPrimitiveType
+						java.lang.Long::class.java -> Long::class.javaPrimitiveType
+						java.lang.Short::class.java -> Short::class.javaPrimitiveType
+						java.lang.Byte::class.java -> Byte::class.javaPrimitiveType
+						java.lang.Character::class.java -> Char::class.javaPrimitiveType
+						else -> arg.javaClass
+					}
+				}.toTypedArray()
+		val constructor = clazz.getConstructor(*argumentClasses)
 
-	public Object createNew(EditingContext context, Class<?> clazz, Object... arguments) throws Exception {
-		assert context !=null && clazz != null;
-		final Class<?>[] toClass = Util.toClass(arguments);
-		final Constructor<?> constructor = clazz.getConstructor(toClass);
-
-		Object newInstance;
-		try {
-			newInstance = constructor.newInstance(arguments);
-		} catch (InvocationTargetException e) {
-			throw Util.assertInstanceOf(Exception.class, e.getTargetException());
+		return try {
+			constructor.newInstance(*arguments)
+		} catch (e: InvocationTargetException) {
+			throw Util.assertInstanceOf(Exception::class.java, e.targetException!!)
 		}
-		return newInstance;
 	}
-
 }

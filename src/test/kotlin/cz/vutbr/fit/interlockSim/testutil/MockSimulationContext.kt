@@ -12,31 +12,28 @@
 	Test infrastructure: 2025
 */
 
-package cz.vutbr.fit.interlockSim.testutil;
+package cz.vutbr.fit.interlockSim.testutil
 
-import java.awt.Point;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-
-import cz.vutbr.fit.interlockSim.context.DefaultContext;
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.context.EmptyContextException;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
-import cz.vutbr.fit.interlockSim.objects.paths.Path;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.Track;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
-import cz.vutbr.fit.interlockSim.sim.InOutWorker;
-import cz.vutbr.fit.interlockSim.sim.SimulationException;
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
+import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import java.awt.Point
+import java.util.ArrayList
+import java.util.Collection
+import java.util.HashMap
 
 /**
  * Mock implementation of {@link SimulationContext} for testing simulation components
@@ -48,9 +45,9 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
  *
  * <p>Example usage:
  * <pre>{@code
- * MockSimulationContext mockContext = new MockSimulationContext();
+ * MockSimulationContext mockContext = MockSimulationContext()
  * mockContext.advanceTime(1.0); // Advance simulation time by 1 second
- * double time = mockContext.time(); // Returns 1.0
+ * Double time = mockContext.time(); // Returns 1.0
  *
  * mockContext.addReportTypes(ReportType.TRAIN_EVENTS);
  * mockContext.report("Train event", train, ReportType.TRAIN_EVENTS);
@@ -59,22 +56,21 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory;
  * @see SimulationContext
  * @see TestContextBuilder
  */
-public class MockSimulationContext implements SimulationContext {
-
-	private final DefaultContext delegate;
-	private double currentTime = 0.0;
-	private final Map<InOut, InOutWorker> workers = new HashMap<>();
-	private final Collection<ReportType> enabledReports = new ArrayList<>();
-	private boolean stopped = false;
+class MockSimulationContext : SimulationContext {
+	private val delegate: DefaultContext
+	private var currentTime: Double = 0.0
+	private val workers: MutableMap<InOut, InOutWorker> = HashMap()
+	private val enabledReports: MutableCollection<ReportType> = ArrayList()
+	private var stopped: Boolean = false
 
 	/**
-	 * Creates a new mock simulation context with empty 100x100 grid.
+	 * Creates a mock simulation context with empty 100x100 grid.
 	 */
-	public MockSimulationContext() {
-		this.delegate = XMLContextFactory.getInstance().createEmptyContext();
+	constructor() {
+		this.delegate = XMLContextFactory.getInstance().createEmptyContext()
 		// Enable all standard reports by default
-		for (ReportType type : ReportType.ALL) {
-			enabledReports.add(type);
+		for (type in ReportType.ALL) {
+			enabledReports.add(type)
 		}
 	}
 
@@ -83,11 +79,11 @@ public class MockSimulationContext implements SimulationContext {
 	 *
 	 * @param context existing context to wrap
 	 */
-	public MockSimulationContext(DefaultContext context) {
-		this.delegate = context;
+	constructor(context: DefaultContext) {
+		this.delegate = context
 		// Enable all standard reports by default
-		for (ReportType type : ReportType.ALL) {
-			enabledReports.add(type);
+		for (type in ReportType.ALL) {
+			enabledReports.add(type)
 		}
 	}
 
@@ -96,17 +92,17 @@ public class MockSimulationContext implements SimulationContext {
 	 *
 	 * @param delta time increment in seconds
 	 */
-	public void advanceTime(double delta) {
-		this.currentTime += delta;
+	fun advanceTime(delta: Double) {
+		this.currentTime += delta
 	}
 
 	/**
 	 * Sets the simulation time to a specific value.
 	 *
-	 * @param time new simulation time in seconds
+	 * @param time simulation time in seconds
 	 */
-	public void setTime(double time) {
-		this.currentTime = time;
+	fun setTime(time: Double) {
+		this.currentTime = time
 	}
 
 	/**
@@ -114,9 +110,7 @@ public class MockSimulationContext implements SimulationContext {
 	 *
 	 * @return current time in seconds
 	 */
-	public double time() {
-		return currentTime;
-	}
+	fun time(): Double = currentTime
 
 	/**
 	 * Registers an InOutWorker for the specified InOut point.
@@ -124,43 +118,39 @@ public class MockSimulationContext implements SimulationContext {
 	 * @param inOut the InOut point
 	 * @param worker the worker to register
 	 */
-	public void registerWorker(InOut inOut, InOutWorker worker) {
-		workers.put(inOut, worker);
+	fun registerWorker(
+		inOut: InOut,
+		worker: InOutWorker
+	) {
+		workers[inOut] = worker
 	}
 
-	@Override
-	public InOutWorker getWorkerFor(InOut inOut) {
-		return workers.get(inOut);
-	}
+	override fun getWorkerFor(inOut: InOut): InOutWorker = workers[inOut]!!
 
-	@Override
-	public Collection<InOut> getInOuts() {
-		Collection<InOut> inOuts = new ArrayList<>();
-		RailwayNetGrid grid = delegate.getRailWayNetGrid();
-		for (Point p : delegate.getGraph().nodeSet()) {
-			Object cell = grid.get(p);
-			if (cell instanceof InOut) {
-				inOuts.add((InOut) cell);
+	override fun getInOuts(): Collection<InOut> {
+		val inOuts: ArrayList<InOut> = ArrayList()
+		val grid = delegate.getRailWayNetGrid()
+		for (p in delegate.getGraph().nodeSet()) {
+			val cell = grid[p]
+			if (cell is InOut) {
+				inOuts.add(cell)
 			}
 		}
-		return inOuts;
+		return inOuts as Collection<InOut>
 	}
 
-	@Override
-	public void run() throws EmptyContextException, SimulationException {
+	override fun run() {
 		// Mock implementation - does not actually run simulation
-		stopped = false;
+		stopped = false
 	}
 
-	@Override
-	public void stop() {
-		stopped = true;
+	override fun stop() {
+		stopped = true
 	}
 
-	@Override
-	public void errorStop(Throwable error) {
-		stopped = true;
-		throw new RuntimeException("Simulation error", error);
+	override fun errorStop(error: Throwable) {
+		stopped = true
+		throw RuntimeException("Simulation error", error)
 	}
 
 	/**
@@ -168,94 +158,104 @@ public class MockSimulationContext implements SimulationContext {
 	 *
 	 * @return true if stopped
 	 */
-	public boolean isStopped() {
-		return stopped;
-	}
+	fun isStopped(): Boolean = stopped
 
-	@Override
-	public void report(CharSequence report, Object obj, ReportType type) {
+	override fun report(
+		report: CharSequence,
+		obj: Any,
+		type: ReportType
+	) {
 		if (isReporting(type)) {
-			System.out.println(String.format("[%s] %.2f: %s", type, currentTime, report));
+			println(String.format("[%s] %.2f: %s", type, currentTime, report))
 		}
 	}
 
-	@Override
-	public void addReportTypes(ReportType... types) {
-		for (ReportType type : types) {
+	override fun addReportTypes(vararg types: ReportType) {
+		for (type in types) {
 			if (!enabledReports.contains(type)) {
-				enabledReports.add(type);
+				enabledReports.add(type)
 			}
 		}
 	}
 
-	@Override
-	public void removeReportTypes(ReportType... types) {
-		for (ReportType type : types) {
-			enabledReports.remove(type);
+	override fun removeReportTypes(vararg types: ReportType) {
+		for (type in types) {
+			enabledReports.remove(type)
 		}
 	}
 
-	@Override
-	public boolean isReporting(ReportType type) {
-		return enabledReports.contains(type);
-	}
+	override fun isReporting(type: ReportType): Boolean = enabledReports.contains(type)
 
 	// Delegate methods to wrapped DefaultContext
 
-	@Override
-	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current) {
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? {
+		// Check if node is in grid before delegating
+		if (separator is NodeCell && delegate.getRailWayNetGrid().getLocation(separator) == null) {
+			// Node not in grid - return null (graceful handling for tests)
+			return null
+		}
+		return delegate.getNextTrackSection(separator, current)
+	}
+
+	override fun pathToNextSemaphore(
+		separator: PathSeparator,
+		next: TrackSection
+	): Path? {
+		// Simplified implementation for testing - delegate to DefaultContext
+		return delegate.pathToNextSemaphore(separator, next)
+	}
+
+	override fun getNextTrackBlock(
+		nodeCell: NodeCell,
+		current: TrackBlock?
+	): TrackBlock? {
+		// Check if node is in grid before delegating
+		if (delegate.getRailWayNetGrid().getLocation(nodeCell) == null) {
+			// Node not in grid - return null (graceful handling for tests)
+			return null
+		}
+		return delegate.getNextTrackBlock(nodeCell, current)
+	}
+
+	override fun getSegment(
+		separator: PathSeparator,
+		track: Track
+	): Segment {
 		// Simplified implementation for testing
-		return null;
+		return Segment.A
 	}
 
-	@Override
-	public Path pathToNextSemaphore(PathSeparator separator, TrackSection next) {
+	override fun getSegment(
+		separator: PathSeparator,
+		track: Track?,
+		secondEndTrack: Track?
+	): Segment {
 		// Simplified implementation for testing
-		return null;
+		return Segment.A
 	}
 
-	@Override
-	public TrackBlock getNextTrackBlock(NodeCell nodeCell, TrackBlock current) {
+	override fun isSeparatorInDirection(
+		separator: OrientedPathSeparator,
+		next: Track?,
+		previous: Track?
+	): Boolean {
 		// Simplified implementation for testing
-		return null;
+		return true
 	}
 
-	@Override
-	public Segment getSegment(PathSeparator separator, Track track) {
-		// Simplified implementation for testing
-		return Segment.A;
+	override fun getRailWayNetGrid(): RailwayNetGrid = delegate.getRailWayNetGrid()
+
+	override fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment> = delegate.getGraph()
+
+	override fun addPropertyChangeListener(listener: java.beans.PropertyChangeListener) {
+		delegate.addPropertyChangeListener(listener)
 	}
 
-	@Override
-	public Segment getSegment(PathSeparator separator, Track track, Track secondEndTrack) {
-		// Simplified implementation for testing
-		return Segment.A;
-	}
-
-	@Override
-	public boolean isSeparatorInDirection(OrientedPathSeparator separator, Track next, Track previous) {
-		// Simplified implementation for testing
-		return true;
-	}
-
-	@Override
-	public RailwayNetGrid getRailWayNetGrid() {
-		return delegate.getRailWayNetGrid();
-	}
-
-	@Override
-	public ExtendedUnorientedGraph<Point, TrackBlock, Segment> getGraph() {
-		return delegate.getGraph();
-	}
-
-	@Override
-	public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
-		delegate.addPropertyChangeListener(listener);
-	}
-
-	@Override
-	public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
-		delegate.removePropertyChangeListener(listener);
+	override fun removePropertyChangeListener(listener: java.beans.PropertyChangeListener) {
+		delegate.removePropertyChangeListener(listener)
 	}
 
 	/**
@@ -263,7 +263,5 @@ public class MockSimulationContext implements SimulationContext {
 	 *
 	 * @return delegate context
 	 */
-	public DefaultContext getDelegate() {
-		return delegate;
-	}
+	fun getDelegate(): DefaultContext = delegate
 }

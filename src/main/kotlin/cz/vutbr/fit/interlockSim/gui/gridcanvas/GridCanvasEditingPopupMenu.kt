@@ -7,54 +7,47 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui.gridcanvas;
+package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
-import java.awt.Point;
-import java.awt.event.ActionEvent;
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import java.awt.Point
+import java.awt.event.ActionEvent
 
-import cz.vutbr.fit.interlockSim.context.EditingContext;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
+/**
+ * Popup menu for the editing mode - allows deleting railway elements
+ */
+class GridCanvasEditingPopupMenu : GridCanvasPopupMenu() {
+	// Delete action for both node cells and track blocks
+	private inner class DeleteAction : PopupMenuAction("Delete") {
+		override fun nodeCellAction(e: ActionEvent) {
+			val editingContext = canvas!!.getEditingContext()
+			editingContext.removeCell(key!!)
+		}
 
-public class GridCanvasEditingPopupMenu extends GridCanvasPopupMenu {
-
-	private  class DeleteAction extends PopupMenuAction {
-
-	public DeleteAction() {
-		super("Delete");
+		override fun trackLineAction(e: ActionEvent) {
+			val editingContext = canvas!!.getEditingContext()
+			editingContext.removeLine(trackBlock!!)
+		}
 	}
 
-	@Override
-	protected void nodeCellAction(ActionEvent e) {
-		final EditingContext editingContext = canvas.getEditingContext();
-		editingContext.removeCell(key);
+	private var key: Point? = null
+	private var nodeCell: NodeCell? = null
+	private var trackBlock: TrackBlock? = null
+
+	init {
+		add(DeleteAction())
 	}
 
-	@Override
-	protected void trackLineAction(ActionEvent e) {
-		final EditingContext editingContext = canvas.getEditingContext();
-		editingContext.removeLine(trackBlock);
+	override fun reorganizeMenu(line: TrackBlock) {
+		trackBlock = line
 	}
 
+	override fun reorganizeMenu(
+		key: Point,
+		cell: NodeCell
+	) {
+		this.key = key
+		this.nodeCell = cell
 	}
-
-	private Point  key;
-	private NodeCell nodeCell;
-	private TrackBlock trackBlock;
-
-	public GridCanvasEditingPopupMenu() {
-		add(new DeleteAction());
-	}
-
-	@Override
-	protected void reorganizeMenu(TrackBlock line) {
-		this.trackBlock = line;
-	}
-
-	@Override
-	protected void reorganizeMenu(Point keyx, NodeCell cell) {
-		this.key = keyx;
-		this.nodeCell = cell;
-	}
-
 }

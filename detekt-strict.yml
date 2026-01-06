@@ -1,0 +1,791 @@
+# Detekt Strict Configuration for New Kotlin Code
+#
+# This configuration applies stricter rules to NEW Kotlin code written from scratch.
+# For legacy Java→Kotlin converted code, use the standard detekt.yml
+#
+# Usage:
+#   ./gradlew detektStrict  - Run strict checks on new code
+#
+# Philosophy:
+# - New code should follow modern Kotlin best practices
+# - Enforce immutability, null safety, and idiomatic Kotlin
+# - Require documentation for public APIs
+# - Lower complexity thresholds than legacy code
+# - MAINTAIN TAB INDENTATION (consistent with legacy Java code)
+#
+# Based on: detekt.yml (legacy permissive configuration)
+
+build:
+  maxIssues: 0  # Zero tolerance for new code
+  excludeCorrectable: false
+  weights:
+    complexity: 2
+    LongParameterList: 1
+    style: 1
+    comments: 1
+
+config:
+  validation: true
+  warningsAsErrors: false
+  checkExhaustiveness: false
+
+processors:
+  active: true
+  exclude:
+    - 'DetektProgressListener'
+
+console-reports:
+  active: true
+  exclude:
+    - 'ProjectStatisticsReport'
+    - 'ComplexityReport'
+    - 'NotificationReport'
+    - 'FindingsReport'
+    - 'FileBasedFindingsReport'
+
+comments:
+  active: true
+  AbsentOrWrongFileLicense:
+    active: false  # Don't enforce file license headers
+  CommentOverPrivateFunction:
+    active: false  # Allow private functions without comments
+  CommentOverPrivateProperty:
+    active: false  # Allow private properties without comments
+  DeprecatedBlockTag:
+    active: true
+  EndOfSentenceFormat:
+    active: false  # Don't enforce comment formatting
+  OutdatedDocumentation:
+    active: false  # Don't check for outdated docs
+  UndocumentedPublicClass:
+    active: true  # STRICT: Require docs for public classes
+    excludes: ['**/*Test.kt', '**/*Spec.kt']
+  UndocumentedPublicFunction:
+    active: true  # STRICT: Require docs for public functions
+    excludes: ['**/*Test.kt', '**/*Spec.kt']
+  UndocumentedPublicProperty:
+    active: true  # STRICT: Require docs for public properties
+    excludes: ['**/*Test.kt', '**/*Spec.kt']
+
+complexity:
+  active: true
+  ComplexCondition:
+    active: true
+    threshold: 4  # Default threshold (stricter than legacy 6)
+  ComplexInterface:
+    active: true
+    threshold: 10  # Default threshold (stricter than legacy 15)
+    includeStaticDeclarations: false
+    includePrivateDeclarations: false
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 10  # STRICT: Lower than legacy (was 20)
+    ignoreSingleWhenExpression: true
+    ignoreSimpleWhenEntries: true
+    ignoreNestingFunctions: false
+  LabeledExpression:
+    active: false  # Allow labeled expressions
+  LargeClass:
+    active: true
+    threshold: 600  # STRICT: Default threshold (stricter than legacy 800)
+  LongMethod:
+    active: true
+    threshold: 60  # STRICT: Default threshold (stricter than legacy 100)
+  LongParameterList:
+    active: true
+    functionThreshold: 5  # STRICT: Lower than legacy (was 8)
+    constructorThreshold: 7  # STRICT: Default threshold (stricter than legacy 10)
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+  MethodOverloading:
+    active: false  # Allow method overloading
+  NamedArguments:
+    active: true  # STRICT: Enforce named arguments for clarity
+    threshold: 3
+    ignoreArgumentsMatchingNames: false
+  NestedBlockDepth:
+    active: true
+    threshold: 4  # STRICT: Default threshold (stricter than legacy 6)
+  NestedScopeFunctions:
+    active: true
+    threshold: 2  # Limit nested scope functions
+  ReplaceSafeCallChainWithRun:
+    active: false  # Don't enforce
+  StringLiteralDuplication:
+    active: true  # STRICT: Enforce string constant extraction
+    threshold: 3
+    ignoreAnnotation: true
+    excludeStringsWithLessThan5Characters: true
+    ignoreStringsRegex: '$^'
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 11  # STRICT: Default threshold (stricter than legacy 20)
+    thresholdInClasses: 11  # STRICT: Default threshold (stricter than legacy 20)
+    thresholdInInterfaces: 11  # STRICT: Default threshold (stricter than legacy 15)
+    thresholdInObjects: 11  # STRICT: Default threshold (stricter than legacy 15)
+    thresholdInEnums: 11  # STRICT: Default threshold (stricter than legacy 15)
+    ignoreDeprecated: true
+    ignorePrivate: true
+    ignoreOverridden: true
+
+coroutines:
+  active: true  # Enable coroutine checks for new code
+  GlobalCoroutineUsage:
+    active: true  # STRICT: No global coroutine usage
+  InjectDispatcher:
+    active: true  # STRICT: Inject dispatchers for testability
+  RedundantSuspendModifier:
+    active: true
+  SleepInsteadOfDelay:
+    active: true  # STRICT: Use delay instead of Thread.sleep
+  SuspendFunWithCoroutineScopeReceiver:
+    active: false
+  SuspendFunWithFlowReturnType:
+    active: true
+
+empty-blocks:
+  active: true
+  EmptyCatchBlock:
+    active: true
+    allowedExceptionNameRegex: '_|(ignore|expected).*'
+  EmptyClassBlock:
+    active: true  # STRICT: No empty class blocks
+  EmptyDefaultConstructor:
+    active: true
+  EmptyDoWhileBlock:
+    active: true
+  EmptyElseBlock:
+    active: true  # STRICT: No empty else blocks
+  EmptyFinallyBlock:
+    active: true
+  EmptyForBlock:
+    active: true
+  EmptyFunctionBlock:
+    active: false  # Allow empty function blocks (abstract/interface)
+  EmptyIfBlock:
+    active: true
+  EmptyInitBlock:
+    active: true
+  EmptyKtFile:
+    active: true
+  EmptySecondaryConstructor:
+    active: true  # STRICT: No empty secondary constructors
+  EmptyTryBlock:
+    active: true
+  EmptyWhenBlock:
+    active: true
+  EmptyWhileBlock:
+    active: true
+
+exceptions:
+  active: true
+  ExceptionRaisedInUnexpectedLocation:
+    active: true
+    methodNames: ['equals', 'finalize', 'hashCode', 'toString']
+  InstanceOfCheckForException:
+    active: false  # Allow instanceof checks
+  NotImplementedDeclaration:
+    active: true
+  ObjectExtendsThrowable:
+    active: true
+  PrintStackTrace:
+    active: true  # STRICT: No printStackTrace
+  RethrowCaughtException:
+    active: true  # STRICT: Don't rethrow
+  ReturnFromFinally:
+    active: true
+  SwallowedException:
+    active: true  # STRICT: Don't swallow exceptions
+  ThrowingExceptionFromFinally:
+    active: true
+  ThrowingExceptionInMain:
+    active: false  # Allow throwing from main
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true  # STRICT: Require exception messages
+  ThrowingNewInstanceOfSameException:
+    active: true
+  TooGenericExceptionCaught:
+    active: true  # STRICT: Don't catch generic exceptions
+    exceptionNames:
+      - 'ArrayIndexOutOfBoundsException'
+      - 'Error'
+      - 'Exception'
+      - 'IllegalMonitorStateException'
+      - 'IndexOutOfBoundsException'
+      - 'NullPointerException'
+      - 'RuntimeException'
+      - 'Throwable'
+    allowedExceptionNameRegex: '_|(ignore|expected).*'
+  TooGenericExceptionThrown:
+    active: true  # STRICT: Don't throw generic exceptions
+    exceptionNames:
+      - 'Error'
+      - 'Exception'
+      - 'RuntimeException'
+      - 'Throwable'
+
+naming:
+  active: true
+  BooleanPropertyNaming:
+    active: true  # STRICT: Enforce is/has prefix
+    allowedPattern: '^(is|has|are)'
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][a-zA-Z0-9]*'
+  ConstructorParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+    privateParameterPattern: '[a-z][A-Za-z0-9]*'
+    excludeClassPattern: '$^'
+  EnumNaming:
+    active: true
+    enumEntryPattern: '[A-Z][_A-Z0-9]*'
+  ForbiddenClassName:
+    active: false
+  FunctionMaxLength:
+    active: false
+  FunctionMinLength:
+    active: false
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-z][a-zA-Z0-9]*'
+    excludeClassPattern: '$^'
+    ignoreAnnotated: ['Composable']
+  FunctionParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+  InvalidPackageDeclaration:
+    active: true
+    rootPackage: 'cz.vutbr.fit.interlockSim'
+  LambdaParameterNaming:
+    active: true  # STRICT: Enforce lambda parameter naming
+    parameterPattern: '[a-z][A-Za-z0-9]*|_'
+  MatchingDeclarationName:
+    active: true
+    mustBeFirst: true
+  MemberNameEqualsClassName:
+    active: true
+  NoNameShadowing:
+    active: true  # STRICT: No name shadowing
+  NonBooleanPropertyPrefixedWithIs:
+    active: true  # STRICT: Enforce this
+  ObjectPropertyNaming:
+    active: true
+    constantPattern: '[A-Za-z][_A-Za-z0-9]*'
+    propertyPattern: '[A-Za-z][_A-Za-z0-9]*'
+    privatePropertyPattern: '(_)?[A-Za-z][_A-Za-z0-9]*'
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9]*)*'
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[A-Za-z][_A-Za-z0-9]*'
+    privatePropertyPattern: '_?[A-Za-z][_A-Za-z0-9]*'
+  VariableMaxLength:
+    active: false
+  VariableMinLength:
+    active: false
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][A-Za-z0-9]*'
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+    excludeClassPattern: '$^'
+
+performance:
+  active: true
+  ArrayPrimitive:
+    active: true  # STRICT: Use primitive arrays
+  CouldBeSequence:
+    active: true  # STRICT: Suggest sequences
+    threshold: 3
+  ForEachOnRange:
+    active: true  # STRICT: Use for loop instead of forEach on ranges
+  SpreadOperator:
+    active: true  # STRICT: Avoid spread operator with large arrays
+  UnnecessaryPartOfBinaryExpression:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+
+potential-bugs:
+  active: true
+  AvoidReferentialEquality:
+    active: true  # STRICT: Use structural equality
+    forbiddenTypePatterns:
+      - 'kotlin.String'
+  CastNullableToNonNullableType:
+    active: true
+  CastToNullableType:
+    active: false
+  Deprecation:
+    active: true  # STRICT: No deprecations in new code
+  DontDowncastCollectionTypes:
+    active: true
+  DoubleMutabilityForCollection:
+    active: true  # STRICT: Avoid mutable collections
+    mutableTypes:
+      - 'kotlin.collections.MutableList'
+      - 'kotlin.collections.MutableMap'
+      - 'kotlin.collections.MutableSet'
+      - 'java.util.ArrayList'
+      - 'java.util.LinkedHashSet'
+      - 'java.util.HashSet'
+      - 'java.util.LinkedHashMap'
+      - 'java.util.HashMap'
+  ElseCaseInsteadOfExhaustiveWhen:
+    active: true  # STRICT: Use exhaustive when
+  EqualsAlwaysReturnsTrueOrFalse:
+    active: true
+  EqualsWithHashCodeExist:
+    active: true
+  ExitOutsideMain:
+    active: true  # STRICT: No System.exit outside main
+  ExplicitGarbageCollectionCall:
+    active: true
+  HasPlatformType:
+    active: true  # STRICT: No platform types
+  IgnoredReturnValue:
+    active: true  # STRICT: Use return values
+    restrictToConfig: true
+    returnValueAnnotations:
+      - 'CheckResult'
+      - '*.CheckReturnValue'
+      - '*.CanIgnoreReturnValue'
+    ignoreReturnValueAnnotations:
+      - '*.CheckReturnValue'
+  ImplicitDefaultLocale:
+    active: true  # STRICT: Specify locale
+  ImplicitUnitReturnType:
+    active: false  # Allow implicit Unit
+  InvalidRange:
+    active: true
+  IteratorHasNextCallsNextMethod:
+    active: true
+  IteratorNotThrowingNoSuchElementException:
+    active: true
+  LateinitUsage:
+    active: true  # STRICT: Discourage lateinit
+    ignoreOnClassesPattern: ''
+  MapGetWithNotNullAssertionOperator:
+    active: true  # STRICT: No !! on map.get
+  MissingPackageDeclaration:
+    active: true
+  NullCheckOnMutableProperty:
+    active: true  # STRICT: Check this
+  NullableToStringCall:
+    active: true  # STRICT: No nullable toString
+  PropertyUsedBeforeDeclaration:
+    active: true
+  UnconditionalJumpStatementInLoop:
+    active: true
+  UnnecessaryNotNullCheck:
+    active: true  # STRICT: Remove unnecessary checks
+  UnnecessaryNotNullOperator:
+    active: true  # STRICT: Remove unnecessary !!
+  UnnecessarySafeCall:
+    active: true  # STRICT: Remove unnecessary safe calls
+  UnreachableCatchBlock:
+    active: true
+  UnreachableCode:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true  # STRICT: No unsafe calls
+  UnsafeCast:
+    active: true  # STRICT: No unsafe casts
+  UnusedUnaryOperator:
+    active: true
+  UselessPostfixExpression:
+    active: true
+  WrongEqualsTypeParameter:
+    active: true
+
+style:
+  active: true
+  AlsoCouldBeApply:
+    active: false  # Don't enforce scope function preferences
+  BracesOnIfStatements:
+    active: false  # Allow both styles
+  BracesOnWhenStatements:
+    active: false  # Allow both styles
+  CanBeNonNullable:
+    active: true  # STRICT: Use non-nullable types where possible
+  CascadingCallWrapping:
+    active: false
+  ClassOrdering:
+    active: false
+  CollapsibleIfStatements:
+    active: true  # STRICT: Simplify if statements
+  DataClassContainsFunctions:
+    active: false  # Allow functions in data classes
+  DataClassShouldBeImmutable:
+    active: true  # STRICT: Data classes should be immutable
+  DestructuringDeclarationWithTooManyEntries:
+    active: true
+    maxDestructuringEntries: 3
+  DoubleNegativeLambda:
+    active: true  # STRICT: Avoid double negatives
+  EqualsNullCall:
+    active: true
+  EqualsOnSignatureLine:
+    active: false
+  ExplicitCollectionElementAccessMethod:
+    active: false  # Allow both [] and get()
+  ExplicitItLambdaParameter:
+    active: false  # Allow implicit 'it'
+  ExpressionBodySyntax:
+    active: true  # STRICT: Prefer expression body syntax
+    includeLineWrapping: false
+  ForbiddenAnnotation:
+    active: false
+  ForbiddenComment:
+    active: false
+  ForbiddenImport:
+    active: false
+  ForbiddenMethodCall:
+    active: false
+  ForbiddenSuppress:
+    active: false
+  ForbiddenVoid:
+    active: true  # STRICT: Use Unit not Void
+  FunctionOnlyReturningConstant:
+    active: true  # STRICT: Simplify constant functions
+    ignoreOverridableFunction: true
+    ignoreActualFunction: true
+    excludedFunctions: []
+  LoopWithTooManyJumpStatements:
+    active: true
+    maxJumpCount: 1
+  MagicNumber:
+    active: true  # STRICT: Require constant extraction
+    excludes: ['**/*Test.kt', '**/*Spec.kt']
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: false
+    ignoreLocalVariableDeclaration: false
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: false
+    ignoreNamedArgument: true
+    ignoreEnums: false
+    ignoreRanges: false
+    ignoreExtensionFunctions: true
+  MandatoryBracesLoops:
+    active: false  # Don't enforce braces
+  MaxChainedCallsOnSameLine:
+    active: false
+  MaxLineLength:
+    active: true
+    maxLineLength: 120  # Match .editorconfig
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: false
+    excludeRawStrings: true
+  MayBeConst:
+    active: true  # STRICT: Use const for compile-time constants
+  ModifierOrder:
+    active: true
+  MultilineLambdaItParameter:
+    active: false
+  MultilineRawStringIndentation:
+    active: false
+  NestedClassesVisibility:
+    active: false
+  NewLineAtEndOfFile:
+    active: true
+  NoTabs:
+    active: false  # ALLOW TABS (consistent with legacy Java code)
+    # CRITICAL: This must be FALSE to allow tab indentation
+    # Maintain consistency with original Java code style from develop branch
+    # .editorconfig specifies indent_style = tab for both Java and Kotlin
+  NullableBooleanCheck:
+    active: true  # STRICT: Simplify nullable boolean checks
+  ObjectLiteralToLambda:
+    active: true  # STRICT: Convert object literals to lambdas
+  OptionalAbstractKeyword:
+    active: true  # STRICT: Remove redundant 'abstract'
+  OptionalUnit:
+    active: false  # Allow explicit ': Unit'
+  PreferToOverPairSyntax:
+    active: true  # STRICT: Prefer 'to' syntax
+  ProtectedMemberInFinalClass:
+    active: true
+  RedundantExplicitType:
+    active: false  # Allow explicit types for clarity
+  RedundantHigherOrderMapUsage:
+    active: true  # STRICT: Simplify higher-order map usage
+  RedundantVisibilityModifierRule:
+    active: false  # Allow explicit visibility
+  ReturnCount:
+    active: true  # STRICT: Limit return statements
+    max: 2
+    excludedFunctions: ['equals']
+    excludeLabeled: false
+    excludeReturnFromLambda: true
+    excludeGuardClauses: false
+  SafeCast:
+    active: true  # STRICT: Use safe casts
+  SerialVersionUIDInSerializableClass:
+    active: true
+  SpacingBetweenPackageAndImports:
+    active: false  # Formatting handled by ktlint
+  StringShouldBeRawString:
+    active: false
+  ThrowsCount:
+    active: true  # STRICT: Limit throws declarations
+    max: 2
+    excludeGuardClauses: false
+  TrailingWhitespace:
+    active: false  # Formatting handled by ktlint
+  TrimMultilineRawString:
+    active: false
+  UnderscoresInNumericLiterals:
+    active: true  # STRICT: Use underscores in large numbers
+    acceptableLength: 4
+    allowNonStandardGrouping: false
+  UnnecessaryAbstractClass:
+    active: true  # STRICT: Remove unnecessary abstract classes
+  UnnecessaryAnnotationUseSiteTarget:
+    active: false
+  UnnecessaryApply:
+    active: true  # STRICT: Remove unnecessary apply
+  UnnecessaryBackticks:
+    active: true
+  UnnecessaryBracesAroundTrailingLambda:
+    active: false
+  UnnecessaryFilter:
+    active: true  # STRICT: Simplify filter usage
+  UnnecessaryInheritance:
+    active: true  # STRICT: Remove unnecessary inheritance
+  UnnecessaryInnerClass:
+    active: true  # STRICT: Remove unnecessary inner classes
+  UnnecessaryLet:
+    active: true  # STRICT: Remove unnecessary let
+  UnnecessaryParentheses:
+    active: false  # Allow extra parentheses for clarity
+  UntilInsteadOfRangeTo:
+    active: true  # STRICT: Prefer until
+  UnusedImports:
+    active: true
+  UnusedParameter:
+    active: true  # STRICT: Remove unused parameters
+    allowedNames: 'ignored|expected|serialVersionUID'
+  UnusedPrivateClass:
+    active: true
+  UnusedPrivateMember:
+    active: true  # STRICT: Remove unused private members
+    allowedNames: '(_|ignored|expected|serialVersionUID)'
+  UnusedPrivateProperty:
+    active: true  # STRICT: Remove unused private properties
+    allowedNames: '_|ignored|expected|serialVersionUID'
+  UseAnyOrNoneInsteadOfFind:
+    active: true  # STRICT: Use any/none instead of find
+  UseArrayLiteralsInAnnotations:
+    active: true  # STRICT: Use array literals
+  UseCheckNotNull:
+    active: true  # STRICT: Use checkNotNull
+  UseCheckOrError:
+    active: true  # STRICT: Use check or error
+  UseDataClass:
+    active: true  # STRICT: Suggest data classes
+    allowVars: false
+  UseEmptyCounterpart:
+    active: true  # STRICT: Use isEmpty()/isNotEmpty()
+  UseIfEmptyOrIfBlank:
+    active: true  # STRICT: Use ifEmpty/ifBlank
+  UseIfInsteadOfWhen:
+    active: false  # Allow when with 2 branches
+  UseIsNullOrEmpty:
+    active: true  # STRICT: Use isNullOrEmpty()
+  UseOrEmpty:
+    active: true  # STRICT: Use orEmpty()
+  UseRequire:
+    active: true  # STRICT: Use require for preconditions
+  UseRequireNotNull:
+    active: true  # STRICT: Use requireNotNull
+  UseSumOfInsteadOfFlatMapSize:
+    active: true  # STRICT: Simplify sumOf usage
+  UselessCallOnNotNull:
+    active: true
+  UtilityClassWithPublicConstructor:
+    active: true  # STRICT: Utility classes should have private constructors
+  VarCouldBeVal:
+    active: true  # STRICT: Prefer val over var
+  WildcardImport:
+    active: true  # STRICT: No wildcard imports
+    excludeImports: []
+
+formatting:
+  active: true
+  android: false
+  autoCorrect: true
+  AnnotationOnSeparateLine:
+    active: false
+  AnnotationSpacing:
+    active: true
+  ArgumentListWrapping:
+    active: false
+  BlockCommentInitialStarAlignment:
+    active: false
+  ChainWrapping:
+    active: false
+  ClassName:
+    active: true
+  CommentSpacing:
+    active: true
+  CommentWrapping:
+    active: false
+  ContextReceiverMapping:
+    active: false
+  DiscouragedCommentLocation:
+    active: false
+  EnumEntryNameCase:
+    active: true
+  EnumWrapping:
+    active: false
+  Filename:
+    active: true
+  FinalNewline:
+    active: true
+  FunKeywordSpacing:
+    active: true
+  FunctionName:
+    active: true
+  FunctionReturnTypeSpacing:
+    active: false
+  FunctionSignature:
+    active: false
+  FunctionStartOfBodySpacing:
+    active: false
+  FunctionTypeReferenceSpacing:
+    active: false
+  IfElseBracing:
+    active: false
+  IfElseWrapping:
+    active: false
+  ImportOrdering:
+    active: false  # Don't enforce import ordering
+  Indentation:
+    active: false  # DISABLED - Let ktlint use .editorconfig (tabs)
+    # Note: When active, this rule enforces SPACES not tabs.
+    # Ktlint reads .editorconfig directly for indentation style.
+    # Keep disabled to respect tab indentation from .editorconfig
+  KdocWrapping:
+    active: false
+  MaximumLineLength:
+    active: true
+    maxLineLength: 120  # Match .editorconfig
+  ModifierListSpacing:
+    active: false
+  ModifierOrdering:
+    active: true
+  MultiLineIfElse:
+    active: false
+  MultilineExpressionWrapping:
+    active: false
+  MultilineLoopExpression:
+    active: false
+  NoBlankLineBeforeRbrace:
+    active: false
+  NoBlankLineInList:
+    active: false
+  NoBlankLinesInChainedMethodCalls:
+    active: false
+  NoConsecutiveBlankLines:
+    active: false
+  NoConsecutiveComments:
+    active: false
+  NoEmptyClassBody:
+    active: false
+  NoEmptyFirstLineInClassBody:
+    active: false
+  NoEmptyFirstLineInMethodBlock:
+    active: false
+  NoLineBreakAfterElse:
+    active: false
+  NoLineBreakBeforeAssignment:
+    active: false
+  NoMultipleSpaces:
+    active: false
+  NoSemicolons:
+    active: true
+  NoSingleLineBlockComment:
+    active: false
+  NoTrailingSpaces:
+    active: true
+  NoUnitReturn:
+    active: false
+  NoUnusedImports:
+    active: true
+  NoWildcardImports:
+    active: true  # STRICT: No wildcard imports
+  NullableTypeSpacing:
+    active: false
+  PackageName:
+    active: true
+  ParameterListSpacing:
+    active: false
+  ParameterListWrapping:
+    active: false
+  ParameterWrapping:
+    active: false
+  PropertyName:
+    active: true
+  PropertyWrapping:
+    active: false
+  SpacingAroundAngleBrackets:
+    active: false
+  SpacingAroundColon:
+    active: false
+  SpacingAroundComma:
+    active: true
+  SpacingAroundCurly:
+    active: false
+  SpacingAroundDot:
+    active: false
+  SpacingAroundDoubleColon:
+    active: false
+  SpacingAroundKeyword:
+    active: false
+  SpacingAroundOperators:
+    active: false
+  SpacingAroundParens:
+    active: false
+  SpacingAroundRangeOperator:
+    active: false
+  SpacingAroundUnaryOperator:
+    active: false
+  SpacingBetweenDeclarationsWithAnnotations:
+    active: false
+  SpacingBetweenDeclarationsWithComments:
+    active: false
+  SpacingBetweenFunctionNameAndOpeningParenthesis:
+    active: false
+  StatementWrapping:
+    active: false
+  StringTemplate:
+    active: false
+  StringTemplateIndent:
+    active: false
+  TrailingCommaOnCallSite:
+    active: false
+  TrailingCommaOnDeclarationSite:
+    active: false
+  TryCatchFinallySpacing:
+    active: false
+  TypeArgumentComment:
+    active: false
+  TypeArgumentListSpacing:
+    active: false
+  TypeParameterComment:
+    active: false
+  TypeParameterListSpacing:
+    active: false
+  UnnecessaryParenthesesBeforeTrailingLambda:
+    active: false
+  Wrapping:
+    active: false

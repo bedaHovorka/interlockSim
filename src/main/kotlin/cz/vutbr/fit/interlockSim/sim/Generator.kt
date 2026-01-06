@@ -7,90 +7,78 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Random;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import jDisco.Random
+import org.slf4j.LoggerFactory
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
 /**
- *
  * Testing Generator
  */
-public class Generator extends LoopProcess {//zatim testovaci
-	private static final Logger logger = LoggerFactory.getLogger(Generator.class);
-	private Random random = new Random();
-	private final SimulationContext context;
-	private final boolean shuffleInOuts;
-	final ArrayList<Train> trains = new ArrayList<Train>();
-	private int i = 0;
+open class Generator(
+	protected val context: SimulationContext,
+	protected val shuffleInOuts: Boolean = true
+) : LoopProcess() {
+	companion object {
+		private val logger = LoggerFactory.getLogger(Generator::class.java)
 
-	static {
-		dtMin = 1e-6; dtMax = 1e-3;
-		maxRelError = maxAbsError = 1e-2;
+		init {
+			dtMin = 1e-6
+			dtMax = 1e-3
+			maxRelError = 1e-2
+			maxAbsError = 1e-2
+		}
 	}
 
-	/**
-	 *
-	 * @param context
-	 */
-	public Generator(SimulationContext context) {
-		this(context, true);
-	}
+	protected var random = Random()
+	val trains = ArrayList<Train>()
+	private var i = 0
 
-	/**
-	 * @param context
-	 * @param shuffleInOuts
-	 */
-	public Generator(SimulationContext context, boolean shuffleInOuts) {
-		this.context = context;
-		this.shuffleInOuts = shuffleInOuts;
-	}
-
-	private Timetable generateRandomTimetable() {
-		List<InOut> inOuts = new ArrayList<InOut>(context.getInOuts());
-		if (shuffleInOuts) Collections.shuffle(inOuts, random);
-		final double timeIn = time() + random.normal(15, 5);
-		final double timeOut = timeIn + random.normal(15, 5);
-		if (logger.isDebugEnabled()) {
-			logger.debug("Generating random timetable: from {} to {}, arrival at {}, departure at {}",
-				inOuts.get(0).getName(), inOuts.get(1).getName(), timeIn, timeOut);
+	private fun generateRandomTimetable(): Timetable {
+		val inOutsList = context.getInOuts().toMutableList()
+		if (shuffleInOuts) {
+			inOutsList.shuffle(random)
+		}
+		val timeIn = time() + random.normal(15.0, 5.0)
+		val timeOut = timeIn + random.normal(15.0, 5.0)
+		if (logger.isDebugEnabled) {
+			logger.debug(
+				"Generating random timetable: from {} to {}, arrival at {}, departure at {}",
+				inOutsList[0].getName(),
+				inOutsList[1].getName(),
+				timeIn,
+				timeOut
+			)
 		}
 
-		return new Timetable(inOuts.get(0), inOuts.get(1), new Time(timeIn), new Time(timeOut), 40);
+		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
 	}
 
-	@Override
-	protected void iteration() {
-		final Train train = new Train(context, generateRandomTimetable());
-		logger.debug("Generator: creating and placing train (total trains: {})", trains.size() + 1);
-		placeTrain(train);
-		trains.add(train);
+	override fun iteration() {
+		val train = Train(context, generateRandomTimetable())
+		logger.debug("Generator: creating and placing train (total trains: {})", trains.size + 1)
+		placeTrain(train)
+		trains.add(train)
 	}
 
 	/**
 	 * @param train
 	 */
-	protected void placeTrain(final Train train) {
-		activate(train);
+	protected open fun placeTrain(train: Train) {
+		activate(train)
 	}
 
-	@Override
-	protected void interLoopSleep() {
-		hold(random.exp(43));
-		i++;
+	override fun interLoopSleep() {
+		hold(random.exp(43.0))
+		i++
 	}
 
-	@Override
-	protected void byTerminateAction() {
-		for (Train train : trains) {
-			while (!train.terminated()) hold(2);
+	override fun byTerminateAction() {
+		for (train in trains) {
+			while (!train.terminated()) {
+				hold(2.0)
+			}
 		}
 	}
 }

@@ -39,14 +39,16 @@
     <!-- Enhanced logging for Priority 2: Block Transition Logging -->
     <logger name="cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack" level="INFO">
         <appender-ref ref="FILE"/>
+        <appender-ref ref="CONSOLE"/>
     </logger>
 
     <!-- Enhanced logging for Priority 5: Approval Decision Logging -->
     <logger name="cz.vutbr.fit.interlockSim.sim.InOutWorker" level="INFO">
         <appender-ref ref="FILE"/>
     </logger>
-    <logger name="cz.vutbr.fit.interlockSim.objects.paths.AbstractPath" level="INFO">
+    <logger name="cz.vutbr.fit.interlockSim.objects.paths.AbstractPath" level="DEBUG">
         <appender-ref ref="FILE"/>
+        <appender-ref ref="CONSOLE"/>
     </logger>
 
     <!-- Root logger -->

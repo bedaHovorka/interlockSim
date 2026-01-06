@@ -7,49 +7,37 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
  * Node managed by dispatcher (if is in main graph)
  *
  */
-public abstract class NodeCell extends AbstractCell implements PathSeparator {
-	private final SpatialType spatialType;
-	private String toString = "";
-	private String name = "";
+abstract class NodeCell(
+	private val spatialType: Cell.SpatialType
+) : AbstractCell(),
+	PathSeparator {
+	private var toStringValue: String = ""
+	private var name: String = ""
 
-	/**
-	  * @param spatialType
-	  */
-	public NodeCell(SpatialType spatialType) {
-		this.spatialType = spatialType;
-	}
-
-	public SpatialType getSpatialType() {
-		return spatialType;
-	}
+	override fun getSpatialType(): Cell.SpatialType = spatialType
 
 	/**
 	 * setter
 	 * @param name
 	 */
-	public void setName(String name) {
-		this.name = name;
-		toString = getClass().getSimpleName() + ':' + String.valueOf(name);
+	open fun setName(name: String) {
+		this.name = name
+		toStringValue = this::class.java.simpleName + ':' + name
 	}
 
 	/**
 	 *
 	 * @return
 	 */
-	public String getName() {
-		return name;
-	}
+	open fun getName(): String = name
 
-	@Override
-	public String toString() {
-		return toString;
-	}
+	override fun toString(): String = toStringValue
 }

@@ -7,62 +7,67 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.awt.Point;
-
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import java.awt.Point
 
 /**
  * Interface to shared functions of inner data model, which is allowed by editing
  *
  */
-public interface EditingContext extends Context {
+interface EditingContext : Context {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key
 	 * @param cell
 	 */
-	public void putCell(Point key, NodeCell cell);
+	fun putCell(
+		key: Point,
+		cell: NodeCell
+	)
 
 	/**
 	 * remove cell from context
 	 * @param key
 	 */
-	public void removeCell(Point key);
+	fun removeCell(key: Point)
 
 	/**
 	 * @param from
 	 * @param to
 	 */
-	public void moveCell(Point from, Point to);
+	fun moveCell(
+		from: Point,
+		to: Point
+	)
 
 	/**
 	 * Remove {@link TrackBlock} from context
 	 * @param block
 	 */
-	public void removeLine(TrackBlock block);
+	fun removeLine(block: TrackBlock)
 
 	/**
 	 * @return current maximal speed, which is setting in elements
 	 */
-	public double getCurrentMaxSpeed();
+	fun getCurrentMaxSpeed(): Double
 
 	/**
 	 * @param speed maximal speed, which is setting in elements
 	 */
-	public void setCurrentMaxSpeed(double speed);
+	fun setCurrentMaxSpeed(speed: Double)
 
 	/**
 	 * @return current track length, which is setting in elements
 	 */
-	public double getCurrentTrackLength();
+	fun getCurrentTrackLength(): Double
 
 	/**
 	 * @param length track length, which is setting in elements
 	 */
-	public void setCurrentTrackLength(double length);
+	fun setCurrentTrackLength(length: Double)
 
 	/**
 	 * Create relation between nodes. In specified places, must be {@link NodeCell}
@@ -70,15 +75,19 @@ public interface EditingContext extends Context {
 	 * @param key2 location of second node
 	 * @param trackBlock block between nodes
 	 */
-	public void joinCells(Point key1, Point key2, TrackBlock trackBlock);
+	fun joinCells(
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	)
 
 	/**
 	 * @param name which is setting in elements
 	 */
-	public void setCurrentNameString(String name);
+	fun setCurrentNameString(name: String)
 
 	/**
 	 * @return name which is setting in elements
 	 */
-	public String getCurrentNameString();
+	fun getCurrentNameString(): String
 }

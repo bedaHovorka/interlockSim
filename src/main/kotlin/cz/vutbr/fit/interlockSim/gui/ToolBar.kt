@@ -7,104 +7,104 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui;
+package cz.vutbr.fit.interlockSim.gui
 
-import java.awt.Dimension;
-import java.awt.event.ActionEvent;
-
-import javax.swing.AbstractAction;
-import javax.swing.ButtonGroup;
-import javax.swing.JToggleButton;
-import javax.swing.JToolBar;
-
-import cz.vutbr.fit.interlockSim.Main;
-import cz.vutbr.fit.interlockSim.context.EditingContext;
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory;
-import cz.vutbr.fit.interlockSim.gui.action.NodeCellAction;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType;
+import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.gui.action.NodeCellAction
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import java.awt.Dimension
+import java.awt.event.ActionEvent
+import javax.swing.AbstractAction
+import javax.swing.ButtonGroup
+import javax.swing.JToggleButton
+import javax.swing.JToolBar
 
 /**
- *
- *
+ * Tool palette for railway editor with tools for semaphores, switches, and entry/exit points
  */
-public class ToolBar extends JToolBar {
-	private final class GridSwitch extends AbstractAction {
-	private final JToggleButton toggleButton2;
-
-	/**
-	 * @param toggleButton2
-	 */
-	public GridSwitch(final JToggleButton toggleButton2) {
-		super("Show Grid");
-		this.toggleButton2 = toggleButton2;
-		final boolean showGrid = frame.getRailwayNetGridCanvas().isShowGrid();
-		this.toggleButton2.setSelected(showGrid);
-	}
-
-	public void actionPerformed(ActionEvent e) {
-		final RailwayNetGridCanvas c = frame.getRailwayNetGridCanvas();
-		c.setShowGrid(!c.isShowGrid());
-		c.repaint(100);
-		this.toggleButton2.setSelected(c.isShowGrid());
-	}
-	}
-
-	private final ButtonGroup buttonGroup = new ButtonGroup();
-	private final Frame frame;
-	private EditingContext pseudoContext;
-
-	public ToolBar(Frame frame) {
-		this.frame = frame;
-		this.pseudoContext = ((EditingContextFactory) Main.getInstance().getContextFactory()).createEmptyContext();
-		// EXTENSION Auto-generated constructor stub
-		setPreferredSize(new Dimension(100, 30));
-		setFloatable(false);
-
-		//semafory
-
-		for (Cell.SpatialType t : Cell.SpatialType.values()) {
-			add(RailSemaphore.class, false, t);
-			add(RailSemaphore.class, true, t);
+class ToolBar(
+	private val frame: Frame
+) : JToolBar() {
+	private inner class GridSwitch(
+		private val toggleButton: JToggleButton
+	) : AbstractAction("Show Grid") {
+		init {
+			val showGrid = frame.getRailwayNetGridCanvas().isShowGrid()
+			toggleButton.isSelected = showGrid
 		}
 
-		addSeparator();
-		//Vyhybky
+		override fun actionPerformed(e: ActionEvent) {
+			val canvas = frame.getRailwayNetGridCanvas()
+			canvas.setShowGrid(!canvas.isShowGrid())
+			canvas.repaint(100)
+			toggleButton.isSelected = canvas.isShowGrid()
+		}
+	}
 
-		final SpatialType[] spatialTypes = RailSwitch.SUPPORTED_SIMPLE_SPATIAL_TYPES;
-		for (Cell.SpatialType t : spatialTypes) {
-			for (RailSwitch.Type st : RailSwitch.Type.values()) {
-				add(RailSwitch.class, t, st);
+	private val buttonGroup: ButtonGroup = ButtonGroup()
+	private val pseudoContext: EditingContext
+
+	init {
+		pseudoContext = (Main.getInstance().getContextFactory() as EditingContextFactory).createEmptyContext()
+		preferredSize = Dimension(100, 30)
+		isFloatable = false
+
+		// Add semaphore buttons for all spatial types
+		for (spatialType in Cell.SpatialType.values()) {
+			addButton(RailSemaphore::class.java, false, spatialType)
+			addButton(RailSemaphore::class.java, true, spatialType)
+		}
+
+		addSeparator()
+
+		// Add switch buttons for all supported spatial types
+		val spatialTypes = RailSwitch.SUPPORTED_SIMPLE_SPATIAL_TYPES
+		for (spatialType in spatialTypes) {
+			for (switchType in RailSwitch.Type.values()) {
+				addButton(RailSwitch::class.java, spatialType, switchType)
 			}
 		}
 
-		addSeparator();
+		addSeparator()
 
-		for (Cell.SpatialType t : spatialTypes) {
-			add(InOut.class, "", false, t);
-			add(InOut.class, "", true, t);
+		// Add entry/exit point buttons
+		for (spatialType in spatialTypes) {
+			addButton(InOut::class.java, "", false, spatialType)
+			addButton(InOut::class.java, "", true, spatialType)
 		}
 
-		addSeparator();
+		addSeparator()
 
-		final JToggleButton toggleButton2 = new JToggleButton();
-		toggleButton2.setAction(new GridSwitch(toggleButton2));
-		add(toggleButton2);
+		// Add grid toggle button
+		val gridToggleButton = JToggleButton()
+		gridToggleButton.action = GridSwitch(gridToggleButton)
+		add(gridToggleButton)
 	}
 
-	public void add(Class<? extends NodeCell> cellClass, Object... args) {
-		final JToggleButton tb = new JToggleButton(new NodeCellAction(this, cellClass, pseudoContext, args));
-		tb.setToolTipText(tb.getText());
-		tb.setText("");
-		buttonGroup.add(tb);
-		add(tb);
+	/**
+	 * Add a tool button for creating a cell of the specified type
+	 *
+	 * @param cellClass the NodeCell subclass to create
+	 * @param args construction arguments for the cell
+	 */
+	private fun addButton(
+		cellClass: Class<out NodeCell>,
+		vararg args: Any
+	) {
+		@Suppress("UNCHECKED_CAST")
+		val toggleButton = JToggleButton(NodeCellAction(this, cellClass, pseudoContext, args as Array<Any>))
+		toggleButton.toolTipText = toggleButton.text
+		toggleButton.text = ""
+		buttonGroup.add(toggleButton)
+		add(toggleButton)
 	}
 
-	public Frame getFrame() {
-		return frame;
-	}
+	fun getFrame(): Frame = frame
 }

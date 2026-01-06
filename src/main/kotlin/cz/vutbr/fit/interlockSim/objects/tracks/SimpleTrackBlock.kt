@@ -7,79 +7,76 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks;
+package cz.vutbr.fit.interlockSim.objects.tracks
 
-import java.util.Arrays;
-
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import java.util.Arrays
 
 /**
  * This is common track block with one section
  *
  */
-public class SimpleTrackBlock extends SimpleTrack implements TrackBlock {
-	private String name;
+class SimpleTrackBlock :
+	SimpleTrack,
+	TrackBlock {
+	private var name: String? = null
+
 	/**
-	 * @see SimpleTrack#SimpleTrack(PathSeparator, PathSeparator, double, double, double)
+	 * @see SimpleTrack#SimpleTrack(PathSeparator, PathSeparator, Double, Double, Double)
 	 * @param end1
 	 * @param end2
 	 * @param length
 	 * @param maxSpeed1
 	 * @param maxSpeed2
 	 */
-	public SimpleTrackBlock(PathSeparator end1, PathSeparator end2, double length, double maxSpeed1, double maxSpeed2) {
-		super(end1, end2, length, maxSpeed1, maxSpeed2);
-	}
+	constructor(end1: PathSeparator, end2: PathSeparator, length: Double, maxSpeed1: Double, maxSpeed2: Double) :
+		super(end1, end2, length, maxSpeed1, maxSpeed2)
 
 	/**
-	 * @see SimpleTrack#SimpleTrack(PathSeparator, PathSeparator, double, double, double)
+	 * @see SimpleTrack#SimpleTrack(PathSeparator, PathSeparator, Double, Double, Double)
 	 * @param end1
 	 * @param end2
 	 * @param length
 	 * @param maxSpeed (equal for both direction)
 	 */
-	public SimpleTrackBlock(NodeCell end1, NodeCell end2, double length, double maxSpeed) {
-		this(end1, end2, length, maxSpeed, maxSpeed);
+	constructor(end1: NodeCell, end2: NodeCell, length: Double, maxSpeed: Double) :
+		this(end1, end2, length, maxSpeed, maxSpeed)
+
+	override fun getTrackBlock(): TrackBlock = this
+
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? {
+		if (current == null) return this
+		if (current == this) return null
+		throw IllegalArgumentException("simpletrackblock: current must be only this or null")
 	}
 
-	public TrackBlock getTrackBlock() {
-		return this;
+	override fun isInnerElement(element: PathElement): Boolean = false
+
+	override fun getJoin(
+		separator: PathSeparator,
+		current: TrackSection
+	): Segment {
+		// SimpleTrackBlock doesn't support getJoin - should not be called
+		throw UnsupportedOperationException("SimpleTrackBlock does not support getJoin operation")
 	}
 
-	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current) {
-		if (current == null) return this;
-		if (current == this) return null;
-		throw new IllegalArgumentException("simpletrackblock: current must be only this or null");
-	}
-
-	public boolean isInnerElement(PathElement separator) {
-		return false;
-	}
-
-	public Segment getJoin(PathSeparator separator, TrackSection current) {
-		assert false;
-		return null;
-	}
-
-	@Override
-	public NodeCell[] ends() {
-		final PathSeparator[] pathSeparators = super.ends();
-		return Arrays.<NodeCell, PathSeparator>copyOf(pathSeparators, pathSeparators.length, NodeCell[].class);
-	}
+	// Note: SimpleTrack.ends() returns Array<PathSeparator> which should be Array<NodeCell>
+	// based on the constructor (it accepts NodeCell as PathSeparator), but we keep parent signature
+	// The parent ends() method returns Array<PathSeparator> which is correct
 
 	/**
-	 * Getter
+	 * Setter
 	 * @param name
 	 */
-	public void setName(String name) {
-		this.name = name;
+	fun setName(name: String) {
+		this.name = name
 	}
 
-	@Override
-	public String toString() {
-		return name==null ? Arrays.toString(ends()) : name;
-	}
+	override fun toString(): String = if (name == null) Arrays.toString(ends()) else name!!
 }

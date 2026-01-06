@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks;
+package cz.vutbr.fit.interlockSim.objects.tracks
 
 /**
  *
@@ -15,16 +15,17 @@ package cz.vutbr.fit.interlockSim.objects.tracks;
  * (v rozsireni: ve stanici je mozno do bloku pustit posun)
  *
  */
-public interface TrackFacility extends Track {
+interface TrackFacility : Track {
 	/**
 	 * facility state
 	 *
 	 */
-	public enum State {
+	enum class State {
 		/**
 		 * dispatcher can set up way
 		 */
 		FREE,
+
 		/**
 		 * train can enter, dispatcher can cancel way
 		 */
@@ -33,11 +34,11 @@ public interface TrackFacility extends Track {
 		/**
 		 * train can leave
 		 */
-		OCCUPIED;
+		OCCUPIED
 	}
 
 	/**
 	 * @return state of facility
 	 */
-	public State getState();
+	fun getState(): State
 }

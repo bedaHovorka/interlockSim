@@ -7,34 +7,38 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells;
+package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.util.EnumSet;
-import java.util.Iterator;
-import java.util.Set;
-
+import java.util.EnumSet
+import java.util.Set
 
 /**
  * Base implementation of {@link Cell}
  *
  */
-public abstract class AbstractCell implements Cell {
-
-	protected final Set<Segment> joinsOnLine() {
-		SpatialType st = getSpatialType(); assert st != null : this;
-		Set<Segment> arr2set = arr2set(st.getSegments()); assert arr2set.size() == 2;
-		return arr2set;
+abstract class AbstractCell : Cell {
+	protected fun joinsOnLine(): Set<Cell.Segment> {
+		val st = getSpatialType()
+		assert(st != null) { this }
+		val arr2set = arr2set(st!!.segments)
+		assert(arr2set.size == 2)
+		return arr2set
 	}
 
-	protected final Segment secondOnLine(Segment from) {
-		final Set<Segment> joins = joinsOnLine();
-		final boolean removed = joins.remove(from); assert removed && joins.size() == 1: from + " " + joins;
-		final Iterator<Segment> iterator = joins.iterator(); assert iterator.hasNext();
-		return iterator.next();
+	protected fun secondOnLine(from: Cell.Segment?): Cell.Segment? {
+		val joins = joinsOnLine()
+		val removed = joins.remove(from)
+		assert(removed && joins.size == 1) { "$from $joins" }
+		val iterator = joins.iterator()
+		assert(iterator.hasNext())
+		return iterator.next()
 	}
 
-	protected static final Set<Segment> arr2set(Segment[] segments) {
-		assert segments != null;
-		return EnumSet.of(segments[0], segments);
+	companion object {
+		@JvmStatic
+		protected fun arr2set(segments: Array<Cell.Segment>): Set<Cell.Segment> {
+			assert(segments.isNotEmpty())
+			return EnumSet.of(segments[0], *segments) as Set<Cell.Segment>
+		}
 	}
 }

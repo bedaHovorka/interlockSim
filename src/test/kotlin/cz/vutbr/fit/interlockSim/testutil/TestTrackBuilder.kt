@@ -12,7 +12,7 @@
     Test infrastructure: 2025
 */
 
-package cz.vutbr.fit.interlockSim.testutil;
+package cz.vutbr.fit.interlockSim.testutil
 
 /**
  * Test utility for building track facility instances.
@@ -22,21 +22,20 @@ package cz.vutbr.fit.interlockSim.testutil;
  *
  * <p>Example usage (future API):
  * <pre>{@code
- * SimpleTrack track = TestTrackBuilder.buildSimpleTrack("T1", 100.0);
- * RailSwitch sw = TestTrackBuilder.buildSwitch("SW1", plusTrack, minusTrack);
- * RailSemaphore sem = TestTrackBuilder.buildSemaphore("SEM1", Signal.GREEN);
+ * SimpleTrack track = TestTrackBuilder.buildSimpleTrack("T1", 100.0)
+ * RailSwitch sw = TestTrackBuilder.buildSwitch("SW1", plusTrack, minusTrack)
+ * RailSemaphore sem = TestTrackBuilder.buildSemaphore("SEM1", Signal.GREEN)
  * }</pre>
  */
-public class TestTrackBuilder {
-
-	private TestTrackBuilder() {
+class TestTrackBuilder private constructor() {
+	companion object {
 		// Utility class - prevent instantiation
 	}
 
 	// TODO: Add factory methods in Phase 2:
-	// - buildSimpleTrack(String id, double length)
+	// - buildSimpleTrack(String id, Double length)
 	// - buildSwitch(String id, Track plus, Track minus)
 	// - buildSemaphore(String id, Signal signal)
-	// - buildInOut(String name, boolean isEntry)
+	// - buildInOut(String name, Boolean isEntry)
 	// - buildTrackBlock(Track from, Track to)
 }

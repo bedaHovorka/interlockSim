@@ -7,35 +7,28 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
 /**
- * Is throwing by {@link ContextFactory}, when source for context is wrong
+ * Is throwing by [ContextFactory], when source for context is wrong
  *
  */
-public class ContextCreationException extends Exception {
+class ContextCreationException : Exception {
 	/**
-	 * @see Exception#Exception()
+	 * @see Exception.Exception
 	 *
 	 */
-	public ContextCreationException() {
-		super();
-	}
+	constructor() : super()
 
 	/**
-	 * @see Exception#Exception(Throwable)
+	 * @see Exception.Exception
 	 * @param cause
 	 */
-	public ContextCreationException(Throwable cause) {
-		super(cause);
-	}
+	constructor(cause: Throwable) : super(cause)
 
 	/**
-	 * @see Exception#Exception(String)
+	 * @see Exception.Exception
 	 * @param string
 	 */
-	public ContextCreationException(String string) {
-		super(string);
-	}
-
+	constructor(string: String) : super(string)
 }

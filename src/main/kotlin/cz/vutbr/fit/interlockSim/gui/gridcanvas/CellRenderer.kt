@@ -7,110 +7,155 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui.gridcanvas;
+package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
-import static java.lang.Math.round;
-
-import java.awt.BasicStroke;
-import java.awt.Graphics2D;
-import java.awt.Stroke;
-import java.awt.geom.AffineTransform;
-import java.lang.reflect.Method;
-import java.util.Collection;
-import java.util.EnumMap;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import java.awt.BasicStroke
+import java.awt.Graphics2D
+import java.lang.Math.round
+import java.util.Collection
+import java.util.EnumMap
 
 /**
- * "Zobrazovac bunek"
- *
+ * "Zobrazovac bunek" - Cell rendering component for railway grid visualization
  */
-public abstract class CellRenderer {
-	protected final static EnumMap<Cell.SpatialType, Double> angles = new EnumMap<Cell.SpatialType, Double>(Cell.SpatialType.class);
+abstract class CellRenderer(
+	cellWidth: Int,
+	cellHeight: Int
+) {
+	// Rotation angles for different track orientations
+	private var cellWidth: Int = cellWidth
+		private set
+	private var cellHeight: Int = cellHeight
+		private set
 
-	static {
-	angles.put(Cell.SpatialType.HORIZONTAL, 0.0);
-	angles.put(Cell.SpatialType.VERTICAL, Math.PI/2);
-	angles.put(Cell.SpatialType.DIAGONAL1, - Math.PI/4);
-	angles.put(Cell.SpatialType.DIAGONAL2, Math.PI/4);
+	init {
+		restart(cellWidth, cellHeight)
 	}
 
-	private int cellWidth;
-	private int cellHeight;
-
-	public CellRenderer(int cellWidth, int cellHeight) {
-		restart(cellWidth, cellHeight);
+	// Update cell dimensions
+	private fun restart(
+		cellWidth: Int,
+		cellHeight: Int
+	) {
+		this.cellWidth = cellWidth
+		this.cellHeight = cellHeight
 	}
 
-	public final void restart(int cellWidth, int cellHeight) {
-		this.cellWidth = cellWidth;
-		this.cellHeight = cellHeight;
-	}
-
-	protected void drawSegments(Graphics2D g, Segment... segments) {
-		Stroke oldStroke = g.getStroke();
-		g.setStroke(new BasicStroke(2));
-		for (Segment s : segments) {
-			g.drawLine(round(cellWidth*s.getRx()), round(cellHeight*s.getRy()), cellWidth/2, cellHeight/2);
+	// Draw line segments from center to endpoints
+	protected fun drawSegments(
+		g: Graphics2D,
+		vararg segments: Segment
+	) {
+		val oldStroke = g.stroke
+		g.stroke = BasicStroke(2f)
+		for (s in segments) {
+			g.drawLine(
+				round(cellWidth * s.getRx()).toInt(),
+				round(cellHeight * s.getRy()).toInt(),
+				cellWidth / 2,
+				cellHeight / 2
+			)
 		}
-		g.setStroke(oldStroke);
+		g.stroke = oldStroke
 	}
 
-	protected void drawSegments(Graphics2D g, Collection<Segment> segments) {
-		if (segments == null) return;
-		drawSegments(g, segments.toArray(new Segment[0]));
+	// Draw segments from a collection
+	protected fun drawSegments(
+		g: Graphics2D,
+		segments: Collection<Segment>?
+	) {
+		if (segments == null || segments.isEmpty()) return
+		val segsArray: Array<Segment> = segments.toMutableList().toTypedArray()
+		drawSegments(g, *segsArray)
 	}
 
-	protected void drawLine(Graphics2D g, Cell.SpatialType type) {
-		drawSegments(g, type.getSegments());
-	}
-
-	protected void drawTriangle(Graphics2D g, OrientedPathSeparator cell) {
-		final Double thetaObj = angles.get(cell.getSpatialType());
-		assert (thetaObj != null);
-
-		final double theta = (cell.getOrientation()) ? thetaObj.doubleValue() + Math.PI : thetaObj.doubleValue();
-		final int[] xs = new int[]{cellWidth/4,cellWidth/4,3*cellWidth/4};
-		final int[] ys = new int[]{cellHeight/4,3*cellHeight/4,cellHeight/2};
-
-		final AffineTransform transform = g.getTransform();
-		g.rotate(theta, cellWidth/2, cellHeight/2);
-		g.fillPolygon(xs, ys, 3);
-		g.drawPolygon(xs, ys, 3);
-		g.setTransform(transform);
-	}
-
-	public final void draw(Graphics2D g, Cell cell) {
-		assert cell != null;
-
-		try { //EXTENSION efektivneji s Map
-			Method method = getClass().getMethod("draw", Graphics2D.class, cell.getClass());
-			method.invoke(this, g, cell);
-		} catch (Exception e) {
-			//e.printStackTrace();
-			assert(false) : e;
+	// Draw a line based on spatial type
+	protected fun drawLine(
+		g: Graphics2D,
+		type: Cell.SpatialType
+	) {
+		val segs = type.segments
+		if (segs != null) {
+			val segsArray: Array<Segment> = segs.toMutableList().toTypedArray()
+			drawSegments(g, *segsArray)
 		}
 	}
 
-	public abstract void draw(Graphics2D g, RailSwitch cell);
+	// Draw triangle indicator for switches and semaphores
+	protected fun drawTriangle(
+		g: Graphics2D,
+		cell: OrientedPathSeparator
+	) {
+		val thetaObj = ANGLES[cell.getSpatialType()]
+		assert(thetaObj != null) { "No angle defined for spatial type: ${cell.getSpatialType()}" }
 
-	public abstract void draw(Graphics2D g, RailSemaphore cell);
+		val theta = if (cell.getOrientation()) thetaObj!! + Math.PI else thetaObj!!
+		val xs = intArrayOf(cellWidth / 4, cellWidth / 4, 3 * cellWidth / 4)
+		val ys = intArrayOf(cellHeight / 4, 3 * cellHeight / 4, cellHeight / 2)
 
-	public abstract void draw(Graphics2D g, TrackBlockPart cell);
-
-	public abstract void draw(Graphics2D g, InOut cell);
-
-	public int getCellHeight() {
-		return cellHeight;
+		val transform = g.transform
+		g.rotate(theta, (cellWidth / 2).toDouble(), (cellHeight / 2).toDouble())
+		g.fillPolygon(xs, ys, 3)
+		g.drawPolygon(xs, ys, 3)
+		g.transform = transform
 	}
 
-	public int getCellWidth() {
-		return cellWidth;
+	// Render cell using reflection to find appropriate draw method
+	fun draw(
+		g: Graphics2D,
+		cell: Cell
+	) {
+		assert(cell != null) { "Cell cannot be null" }
+
+		try {
+			// Use reflection to find and invoke the specific draw method for this cell type
+			val method = javaClass.getMethod("draw", Graphics2D::class.java, cell.javaClass)
+			method.invoke(this, g, cell)
+		} catch (e: Exception) {
+			assert(false) { "Failed to draw cell: $e" }
+		}
+	}
+
+	// Abstract draw methods for different cell types - to be implemented by subclasses
+	abstract fun draw(
+		g: Graphics2D,
+		cell: RailSwitch
+	)
+
+	abstract fun draw(
+		g: Graphics2D,
+		cell: RailSemaphore
+	)
+
+	abstract fun draw(
+		g: Graphics2D,
+		cell: TrackBlockPart
+	)
+
+	abstract fun draw(
+		g: Graphics2D,
+		cell: InOut
+	)
+
+	fun getCellHeight(): Int = cellHeight
+
+	fun getCellWidth(): Int = cellWidth
+
+	companion object {
+		// Static initialization of rotation angles for different track orientations
+		private val ANGLES =
+			EnumMap<Cell.SpatialType, Double>(Cell.SpatialType::class.java).apply {
+				put(Cell.SpatialType.HORIZONTAL, 0.0)
+				put(Cell.SpatialType.VERTICAL, Math.PI / 2)
+				put(Cell.SpatialType.DIAGONAL1, -Math.PI / 4)
+				put(Cell.SpatialType.DIAGONAL2, Math.PI / 4)
+			}
 	}
 }

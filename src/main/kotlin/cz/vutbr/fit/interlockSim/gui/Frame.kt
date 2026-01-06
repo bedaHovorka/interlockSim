@@ -7,57 +7,49 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui;
+package cz.vutbr.fit.interlockSim.gui
 
-import java.awt.BorderLayout;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-
-import javax.swing.JFrame;
-import javax.swing.JScrollPane;
-
-import cz.vutbr.fit.interlockSim.Main;
-import cz.vutbr.fit.interlockSim.context.Context;
+import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.context.Context
+import java.awt.BorderLayout
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
+import javax.swing.JFrame
+import javax.swing.JScrollPane
 
 /**
- *	Program main window
+ * Program main window
  */
-public class Frame extends JFrame {
+class Frame : JFrame(Main.PROGRAM_FULL_NAME) {
+	private val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
+	private val statusBar: StatusBar = StatusBar()
 
-	private final RailwayNetGridCanvas railwayNetGridCanvas = new RailwayNetGridCanvas();
-	private final StatusBar statusBar = new StatusBar();
+	init {
+		setSize(800, 600)
+		setDefaultCloseOperation(EXIT_ON_CLOSE)
+		setLayout(BorderLayout())
+		jMenuBar = MenuBar(this)
+		contentPane.add(JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER)
+		contentPane.add(ToolBar(this), BorderLayout.NORTH)
 
-	/**
-	 * Create program window
-	 */
-	public Frame() {
-		super(Main.PROGRAM_FULL_NAME);
-		setSize(800, 600);
-		setDefaultCloseOperation(EXIT_ON_CLOSE);
-		setLayout(new BorderLayout());
-		setJMenuBar(new MenuBar(this));
-		getContentPane().add(new JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER);
-		getContentPane().add(new ToolBar(this), BorderLayout.NORTH);
+		statusBar.registerProducer(railwayNetGridCanvas)
+		contentPane.add(statusBar, BorderLayout.SOUTH)
 
-		statusBar.registerProducer(railwayNetGridCanvas);
-		getContentPane().add(statusBar, BorderLayout.SOUTH);
-		addComponentListener(new ComponentAdapter() {
-
-			@Override
-			public void componentResized(ComponentEvent arg0) {
-				//zmeni-li se velikost okna je treba nektere komponety obnovit
-				railwayNetGridCanvas.revalidate();//mizeni a navraceni scrollbaru...
+		// Add component listener to refresh canvas when frame is resized
+		addComponentListener(
+			object : ComponentAdapter() {
+				override fun componentResized(e: ComponentEvent) {
+					// When frame is resized, refresh grid canvas to handle scrollbar appearance/disappearance
+					railwayNetGridCanvas.revalidate()
+				}
 			}
-
-		});
+		)
 	}
 
-	public RailwayNetGridCanvas getRailwayNetGridCanvas() {
-		return railwayNetGridCanvas;
-	}
+	fun getRailwayNetGridCanvas(): RailwayNetGridCanvas = railwayNetGridCanvas
 
-	public void setContext(Context context) {
-		context.addPropertyChangeListener(statusBar);//EXTENSION a co se starym?
-		railwayNetGridCanvas.setContext(context);
+	fun setContext(context: Context) {
+		context.addPropertyChangeListener(statusBar)
+		railwayNetGridCanvas.setContext(context)
 	}
 }

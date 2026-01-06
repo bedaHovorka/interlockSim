@@ -7,50 +7,25 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
+
 /**
- *
  * Time for TimeTable
  */
-public class Time implements Comparable<Time> {
-	/**
-	 * time value
-	 */
-	public final double value;
-
-	/**
-	 *
-	 * @param value
-	 */
-	public Time(final double value) {
-		super();
-		this.value = value;
+class Time(
+	val value: Double
+) : Comparable<Time> {
+	override fun equals(other: Any?): Boolean {
+		if (other == null) return false
+		if (this === other) return true
+		if (other !is Time) return false
+		return this.value == other.value
 	}
 
-	@Override
-	public boolean equals(Object obj) {
-		if (obj == null) return false;
-		if (this == obj) return true;
-		if (!(obj instanceof Time)) return false;
-		return equals((Time)obj);
+	override fun hashCode(): Int {
+		val l = value.toBits()
+		return (l xor (l ushr 32)).toInt()
 	}
 
-	/**
-	 * @param obj
-	 * @return {@link Object#equals(Object)}
-	 */
-	public boolean equals(Time obj) {
-		if (obj == null) return false;
-		return this.value == obj.value;
-	}
-
-	@Override
-	public int hashCode() {
-		long l = Double.doubleToLongBits(value);
-		return (int) (l ^ (l >>> 32));
-	}
-
-	public int compareTo(Time o) {
-		return Double.compare(this.value, o.value);
-	}
+	override fun compareTo(other: Time): Int = value.compareTo(other.value)
 }

@@ -7,109 +7,118 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Condition;
-import jDisco.Continuous;
-import jDisco.Process;
-import jDisco.Reporter;
-import jDisco.Variable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
-import cz.vutbr.fit.interlockSim.objects.paths.Path;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import jDisco.Condition
+import jDisco.Continuous
+import jDisco.Process
+import jDisco.Reporter
+import jDisco.Variable
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 /**
  * Train Process
  *
  */
-public class Train extends Process implements TrackOccupant {
-	private static final Logger logger = LoggerFactory.getLogger(Train.class);
+class Train :
+	Process,
+	TrackOccupant {
+	companion object {
+		private val logger: Logger = LoggerFactory.getLogger(Train::class.java)
+		private var count: Int = 0
+	}
 
-	private final Reporter r = new Reporter() {//nesmi byt static!!!
-		private boolean started = false;
-		@Override
-		protected void actions() {
-			if (!started || !context.isReporting(ReportType.TRAIN_CONTINUOUS)) return; //opti-hack
-			final StringBuilder builder = new StringBuilder();
-			builder.append(getAccelaration()).append(' ');
-			builder.append(getVelocity()).append(' ');
-			builder.append(front.getTotalDistance()).append(' ');
-			//builder.append(tail.getTotalDistance()).append(' ');
-			builder.append(front.getSection()).append(' ');
-			builder.append(tail.getSection()).append(' ');
-			final double distanceToSemaphore = distanceToSemaphore();
-			builder.append(distanceToSemaphore > 0 ? distanceToSemaphore : 0);
-			context.report(builder, Train.this, ReportType.TRAIN_CONTINUOUS);
-		}
+	// Motor acceleration/deceleration constants (accessible to inner classes)
+	private val MAXIMAL_ACCELERATION: Int = 4
+	private val MINIMAL_DECELERATION: Int = -3
 
-		@Override
-		public Reporter start() {
-			started = true;
-			return super.start();
-		}
+	private val r: Reporter =
+		object : Reporter() { // nesmi byt static!!!
+			private var started: Boolean = false
 
-		@Override
-		public void stop() {
-			started = false;
-			super.stop();
-		}
-	}.setFrequency(1);
-
-	//EXTENSION musi bud aspon umet prohodit zacatek a konec
-	//nebo je udalosti oba dva zrusit a dalsi udalosti obnovit, s tim ze vlak stoji na miste
-	//tj. "odpojeni" a "pripojeni" lokomotivy
-
-	private abstract class Site extends Process { //lepsi nazev?
-		private final Variable position = new Variable(0);
-		private final SimpleIntegration pv = new SimpleIntegration(position, velocity);
-		private double totalLenghtOfPreviousBlocks = 0;
-		private TrackSection next = null;
-		private TrackSection current = null;
-		private boolean onNext = false;
-
-		final Condition terminated = this::terminated;
-
-		@Override
-		protected final void actions() {
-			PathSeparator where = timetable.getIn(); assert where != null;
-			//out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
-
-			while (true) {
-				next = context.getNextTrackSection(where, current);
-				if (next == null) {
-					if (where instanceof InOut) break;
-					context.stop();
-					passivate();
-					continue; // Restart loop after passivation to re-check for next track section
-				}
-				final double nextLength = next.length();
-				separatorAction(where, current, next);
-
-				onNext = true;
-				assert position.isActive() && pv.isActive();
-				waitUntil(() -> {
-					//dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
-					return position.state + dtMin >= nextLength;
-				});
-
-				position.state -= nextLength;
-				totalLenghtOfPreviousBlocks += nextLength;
-				where = next.getSecondEnd(where); assert where != null;
-				current = next;
-				onNext = false;
+			override fun actions() {
+				if (!started || !context.isReporting(ReportType.TRAIN_CONTINUOUS)) return // opti-hack
+				val builder = StringBuilder()
+				builder.append(getAccelaration()).append(' ')
+				builder.append(getVelocity()).append(' ')
+				builder.append(front.getTotalDistance()).append(' ')
+				// builder.append(tail.getTotalDistance()).append(' ')
+				builder.append(front.getFrontSection()).append(' ')
+				builder.append(tail.getTailSection()).append(' ')
+				val distanceToSemaphore: Double = distanceToSemaphore()
+				builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
+				context.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
 			}
 
-			stop();
-			separatorAction(where, current, null);
+			override fun start(): Reporter {
+				started = true
+				return super.start()
+			}
+
+			override fun stop() {
+				started = false
+				super.stop()
+			}
+		}.setFrequency(1.0)
+
+	// EXTENSION musi bud aspon umet prohodit zacatek a konec
+	// nebo je udalosti oba dva zrusit a dalsi udalosti obnovit, s tim ze vlak stoji na miste
+	// tj. "odpojeni" a "pripojeni" lokomotivy
+
+	private abstract inner class Site : Process() { // lepsi nazev?
+		private val position: Variable = Variable(0.0)
+		private val pv: SimpleIntegration = SimpleIntegration(position, velocity)
+		private var totalLenghtOfPreviousBlocks: Double = 0.0
+		private var next: TrackSection? = null
+		private var current: TrackSection? = null
+		private var onNext: Boolean = false
+
+		val terminated: Condition = Condition { terminated() }
+
+		final override fun actions() {
+			var where: PathSeparator = timetable.getIn()
+			assert(where != null)
+			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
+
+			while (true) {
+				next = context.getNextTrackSection(where, current)
+				if (next == null) {
+					if (where is InOut) break
+					context.stop()
+					passivate()
+					continue // Restart loop after passivation to re-check for next track section
+				}
+				val nextLength: Double = next!!.length()
+				separatorAction(where, current, next)
+
+				onNext = true
+				assert(position.isActive && pv.isActive)
+				waitUntil {
+					// dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
+					position.state + dtMin >= nextLength
+				}
+
+				position.state -= nextLength
+				totalLenghtOfPreviousBlocks += nextLength
+				where = next!!.getSecondEnd(where)
+				assert(where != null)
+				current = next
+				onNext = false
+			}
+
+			stop()
+			separatorAction(where, current, null)
 		}
 
 		/**
@@ -118,484 +127,520 @@ public class Train extends Process implements TrackOccupant {
 		 * @param current
 		 * @param next
 		 */
-		public abstract void separatorAction(PathSeparator where, TrackSection current, TrackSection next);
+		abstract fun separatorAction(
+			where: PathSeparator,
+			current: TrackSection?,
+			next: TrackSection?
+		)
 
-		@Override
-		public Site start() {
-			position.start();
-			pv.start();
-			return this;
+		override fun start(): Site {
+			position.start()
+			pv.start()
+			return this
 		}
 
-		@Override
-		public void stop() {
-			position.stop();
-			pv.stop();
+		override fun stop() {
+			position.stop()
+			pv.stop()
 		}
 
 		/**
 		 * @return distance
 		 */
-		public double distanceToPathSeparator() {
-			return next==null ? 0 : next.length() - position.state;
-		}
+		fun distanceToPathSeparator(): Double = if (next == null) 0.0 else next!!.length() - position.state
 
 		/**
 		 * @return getter
 		 */
-		public double getPosition() {
-			return position.state;
-		}
+		fun getPosition(): Double = position.state
 
 		/**
 		 * @return "to co cast vlaku urazila uvnitr modelu"
 		 */
-		public double getTotalDistance() {
-			return totalLenghtOfPreviousBlocks + position.state;
-		}
+		fun getTotalDistance(): Double = totalLenghtOfPreviousBlocks + position.state
 
-		protected TrackSection getSection() {
-			return onNext ? next : current;
-		}
+		protected fun getSection(): TrackSection? = if (onNext) next else current
+
+		internal fun getFrontSection(): TrackSection? = getSection()
+
+		internal fun getTailSection(): TrackSection? = getSection()
 	}
 
-	private class Front extends Site {
-		private void semaphoreAction(final RailSemaphore semaphore, final PathSeparator separator, final TrackSection current, final TrackSection next) {
-			assert context.isSeparatorInDirection((OrientedPathSeparator)separator, next, current) : semaphore;
-			assert semaphore.getSignal() != null;
-			if (logger.isInfoEnabled()) {
-				logger.info("{} SENSOR: Train {} detected at semaphore {}, signal={}, velocity={} m/s",
-					jDisco.Process.time(), number,
-					semaphore.getName() != null ? semaphore.getName() : semaphore.hashCode(),
-					semaphore.getSignal(), getVelocity());
+	private inner class Front : Site() {
+		private fun semaphoreAction(
+			semaphore: RailSemaphore,
+			separator: PathSeparator,
+			current: TrackSection?,
+			next: TrackSection?
+		) {
+			// isSeparatorInDirection accepts nullable Track parameters
+			assert(context.isSeparatorInDirection(separator as OrientedPathSeparator, next, current)) { semaphore }
+			assert(semaphore.getSignal() != null)
+			if (logger.isInfoEnabled) {
+				logger.info(
+					"{} SENSOR: Train {} detected at semaphore {}, signal={}, velocity={} m/s",
+					jDisco.Process.time(),
+					number,
+					if (semaphore.getName() != null) semaphore.getName() else semaphore.hashCode(),
+					semaphore.getSignal(),
+					getVelocity()
+				)
 			}
-			final Path path = context.pathToNextSemaphore(separator, next);
+			val path: Path? = context.pathToNextSemaphore(separator, next!!)
 
 			// EXTENSION stanice
 
 			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
-				assert getVelocity() <= maxAbsError: "prujezd na cervenou";
-				logger.debug("Train {} approaching semaphore with STOP signal, halting", number);
-				fireStop();
-				context.report(semaphore.getSignal().toString(), Train.this, ReportType.TRAIN_EVENTS);
+				assert(getVelocity() >= 0)
+				logger.debug("Train {} approaching semaphore with STOP signal, halting", number)
+				fireStop()
+				context.report(semaphore.getSignal().toString(), this@Train, ReportType.TRAIN_EVENTS)
 
-				//freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
-				waitUntil(allowingSignal(semaphore));
-				logger.debug("Train {} received allowing signal from semaphore, resuming movement", number);
-				context.report("OK " + semaphore.getSignal(), Train.this, ReportType.TRAIN_EVENTS);
-				fireStart(semaphore, context.pathToNextSemaphore(separator, next)); // znovu najit
+				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				waitUntil(allowingSignal(semaphore))
+				logger.debug("Train {} received allowing signal from semaphore, resuming movement", number)
+				context.report("OK " + semaphore.getSignal(), this@Train, ReportType.TRAIN_EVENTS)
+				fireStart(semaphore, context.pathToNextSemaphore(separator, next!!)) // znovu najit
 			} else if (semaphore.getSignal().isAllowing() && velocity.state <= maxAbsError) {
-				logger.debug("Train {} starting movement with allowing signal", number);
-				fireStart(semaphore, path);
+				logger.debug("Train {} starting movement with allowing signal", number)
+				fireStart(semaphore, path)
 			} else {
-				logger.debug("Train {} accelerating toward next semaphore", number);
-				accelerateToSignal(semaphore, path);
+				logger.debug("Train {} accelerating toward next semaphore", number)
+				accelerateToSignal(semaphore, path)
 			}
-			hold(1);
-			semaphore.setSignal(RailSemaphore.Signal.STOP);
+			hold(1.0)
+			semaphore.setSignal(RailSemaphore.Signal.STOP)
 		}
 
-		//pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
-//		private void freePath(final PathSeparator separator, final TrackSection next) {
-//			if (separator instanceof InOut) return;
-//			try {
-//				context.pathToNextSemaphore(separator, next).setUpPath(separator);
-//			} catch (TrackOperationException e1) {
-//				context.errorStop(e1);
-//				e1.printStackTrace();
-//			}
-//			Process.activate(new Process() {
+		// pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+// 		private Unit freePath(final PathSeparator separator, final TrackSection next) {
+// 			if (separator instanceof InOut) return;
+// 			try {
+// 				context.pathToNextSemaphore(separator, next).setUpPath(separator);
+// 			} catch (TrackOperationException e1) {
+// 				context.errorStop(e1);
+// 				e1.printStackTrace();
+// 			}
+// 			Process.activate(Process() {
 //
-//				@Override
-//				protected void actions() {
-//					waitUntil(new Condition() {
-//						Path aPath;
+// 				override //				protected Unit actions() {
+// 					waitUntil(Condition() {
+// 						Path aPath;
 //
-//						public boolean test() {
-//							aPath = context.pathToNextSemaphore(separator, next);
-//							try {
-//								final boolean b = aPath != null && aPath.isFreeFrom(separator);
-//								if (b == true) aPath.setUpPath(separator);
-//								return b;
-//							} catch (TrackOperationException e) {
-//								context.errorStop(e);
-//								return false;
-//							}
-//						}
+// 						Boolean test() {
+// 							aPath = context.pathToNextSemaphore(separator, next);
+// 							try {
+// 								final Boolean b = aPath != null && aPath.isFreeFrom(separator);
+// 								if (b == true) aPath.setUpPath(separator);
+// 								return b;
+// 							} catch (TrackOperationException e) {
+// 								context.errorStop(e);
+// 								return false;
+// 							}
+// 						}
 //
-//					});
+// 					});
 //
-//				}
+// 				}
 //
-//			});
-//		}
+// 			});
+// 		}
 
-		private Condition allowingSignal(final RailSemaphore semaphore) {
-			return () -> {
-				final boolean allowing = semaphore.getSignal().isAllowing();
-				return allowing;
-			};
+		private fun allowingSignal(semaphore: RailSemaphore): Condition =
+			Condition {
+				val allowing: Boolean = semaphore.getSignal().isAllowing()
+				allowing
+			}
+
+		private fun fireStop() {
+			assert(getVelocity() >= 0)
+			front.stop()
+			tail.stop()
+			this@Train.stop()
+			velocity.state = 0.0
+			r.stop()
 		}
 
-		private void fireStop() {
-			assert getVelocity() <= maxAbsError;
-			front.stop();
-			tail.stop();
-			Train.this.stop();
-			velocity.state = 0;
-			r.stop();
+		private fun fireStart(
+			semaphore: RailSemaphore,
+			path: Path?
+		) {
+			accelerateToSignal(semaphore, path)
+			this@Train.start()
+			front.start()
+			tail.start()
+			r.start()
 		}
 
-		private void fireStart(final RailSemaphore semaphore, final Path path) {
-			accelerateToSignal(semaphore, path);
-			Train.this.start();
-			front.start();
-			tail.start();
-			r.start();
-		}
+		@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+		private fun accelerateToSignal(
+			semaphore: RailSemaphore,
+			path: Path?
+		) {
+			assert(path != null)
+			val thisSignal: Signal = semaphore.getSignal()
+			assert(thisSignal.isAllowing()) { thisSignal }
+			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+			val nextSemaphore: RailSemaphore = path!!.getLastPathSemaphore()
+			val nextSignal: Signal = nextSemaphore.getSignal()
+			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+			pathToSemaphore = path
 
-		private void accelerateToSignal(final RailSemaphore semaphore, final Path path) {
-			assert path != null;
-			final Signal thisSignal = semaphore.getSignal(); assert thisSignal.isAllowing() : thisSignal;
-			final RailSemaphore nextSemaphore = path.getLastPathSemaphore();
-			final Signal nextSignal = nextSemaphore.getSignal();
-			pathToSemaphore = path;
-
-			final double min = Math.min(path.maxSpeed(path.getFirst()), thisSignal.allowedSpeed());
+			@Suppress(
+				"RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS",
+				"NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS"
+			)
+			val min: Double = Math.min(
+				path.maxSpeed(path.getFirst()),
+				thisSignal.allowedSpeed()
+			)
 			if (nextSignal.isAllowing()) {
-				motor.accelerateTo(Math.min(nextSignal.allowedSpeed(), min));
+				motor.accelerateTo(Math.min(nextSignal.allowedSpeed(), min))
 			} else {
-				motor.onWarning(min);
+				motor.onWarning(min)
 			}
 		}
 
-		@Override
-		public void separatorAction(PathSeparator where, TrackSection current, TrackSection next) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("{} POSITION: Train {} front at separator {}, entering block {}, leaving block {}",
-					jDisco.Process.time(), number, where, next, current);
+		override fun separatorAction(
+			where: PathSeparator,
+			current: TrackSection?,
+			next: TrackSection?
+		) {
+			if (logger.isDebugEnabled) {
+				logger.debug(
+					"{} POSITION: Train {} front at separator {}, entering block {}, leaving block {}",
+					jDisco.Process.time(),
+					number,
+					where,
+					next,
+					current
+				)
 			}
 
-			if (where instanceof RailSemaphore && context.isSeparatorInDirection((RailSemaphore) where, next, current)) {
-				RailSemaphore semaphore = (RailSemaphore) where;
-				semaphoreAction(semaphore, semaphore, current, next);
-			} else if (where == timetable.getIn()) {
-				assert getAccelaration() == 0 && getVelocity() == 0; //jestli sou nastaveny poc. podminky, muzu ==
-				semaphoreAction(((InOut) where).getInSemaphore(), where, current, next);
+			if (where is RailSemaphore &&
+				next != null &&
+				context.isSeparatorInDirection(where, next, current)
+			) {
+				val semaphore: RailSemaphore = where
+				semaphoreAction(semaphore, semaphore, current, next)
+			} else if (where == timetable.getIn() && next != null) {
+				assert(getAccelaration() != null)
+				semaphoreAction((where as InOut).getInSemaphore(), where, current, next)
 			} else {
-				pathToSemaphore.removeFirst();
-				pathToSemaphore.removeFirst();
+				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+				pathToSemaphore?.removeFirst()
+				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+				pathToSemaphore?.removeFirst()
 			}
-			assert pathToSemaphore.getFirst() == where: pathToSemaphore;
-			if (next != null) next.enter(Train.this);
+			assert(pathToSemaphore?.getFirst() == where) { pathToSemaphore ?: "null" }
+			if (next != null) next.enter(this@Train)
 		}
-
-
 	}
 
-	private class Tail extends Site {
-		private boolean fromHome = false;
-		@Override
-		public void separatorAction(PathSeparator where, TrackSection current, TrackSection next) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("{} POSITION: Train {} tail at separator {}, clearing block {}",
-					jDisco.Process.time(), number, where, current);
+	private inner class Tail : Site() {
+		private var fromHome: Boolean = false
+
+		override fun separatorAction(
+			where: PathSeparator,
+			current: TrackSection?,
+			next: TrackSection?
+		) {
+			if (logger.isDebugEnabled) {
+				logger.debug(
+					"{} POSITION: Train {} tail at separator {}, clearing block {}",
+					jDisco.Process.time(),
+					number,
+					where,
+					current
+				)
 			}
 			if (where == timetable.getIn()) {
-				fromHome = true;
-				start();
+				fromHome = true
+				start()
 			}
 
-			if (current != null) current.leave(Train.this);
-			if (next == null && where != timetable.getOut()) context.report("ends in wrong out", Train.this, ReportType.TRAIN_EVENTS);
+			if (current != null) current.leave(this@Train)
+			if (next == null &&
+				where != timetable.getOut()
+			) {
+				context.report("ends in wrong out", this@Train, ReportType.TRAIN_EVENTS)
+			}
 		}
 
-		@Override
-		public Site start() {
-			return (fromHome) ? super.start() : this;
-		}
-
+		override fun start(): Site = if (fromHome) super.start() else this
 	}
 
-	private class LenghtChecker extends AssertionContinuous {
-		@Override
-		public boolean check(){
-			return Math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError;
-		}
+	private inner class LenghtChecker : AssertionContinuous() {
+		override fun check(): Boolean =
+			Math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
 
-		@Override
-		public StringBuilder report(final StringBuilder reportObj) {
-			assert reportObj != null;
-			reportObj.append(front.getTotalDistance()).append(' ').append(tail.getTotalDistance());
-			return reportObj.append(' ').append(getLength());
+		override fun report(reportObj: StringBuilder): StringBuilder {
+			assert(reportObj != null)
+			reportObj.append(front.getTotalDistance()).append(' ').append(tail.getTotalDistance())
+			return reportObj.append(' ').append(getLength())
 		}
 	}
 
-	private enum AccelerationStopTest  {
+	private enum class AccelerationStopTest(
+		private val decelarate: Boolean
+	) {
 		/**
 		 *
 		 */
 		ACCELERATION_ENDED(false),
+
 		/**
 		 *
 		 */
 		TO_HALF_SPEED(false) {
-			@Override
-			public boolean condition(double targetSpeed, double velocity) {
-				return targetSpeed <= 2*velocity;
-			}
+			override fun condition(
+				targetSpeed: Double,
+				velocity: Double
+			): Boolean = targetSpeed <= 2 * velocity
 		},
+
 		/**
 		 *
 		 */
 		DECELERATION_ENDED(true);
 
-		private final boolean decelarate;
+		fun isDecelarate(): Boolean = decelarate
 
-		protected boolean isDecelarate() {
-			return decelarate;
-		}
-
-		private AccelerationStopTest(final boolean decelarate) {
-			this.decelarate = decelarate;
-		}
-
-		boolean condition(double targetSpeed, double velocity) {
-			return (isDecelarate()) ? targetSpeed >= velocity : targetSpeed <= velocity;
-		}
+		open fun condition(
+			targetSpeed: Double,
+			velocity: Double
+		): Boolean = if (isDecelarate()) targetSpeed >= velocity else targetSpeed <= velocity
 	}
 
-	private class Motor extends LoopProcess {
-		private static final int MAXIMAL_ACCELERATION = 4;
-		private static final int MINIMAL_DECELERATION = -3;
-		private AccelerationStopCondition currentCondition;
-		private double targetSpeed;
-		private boolean accelerate = false;
+	private inner class Motor : LoopProcess() {
+		private var currentCondition: AccelerationStopCondition? = null
+		private var targetSpeed: Double = 0.0
+		private var accelerate: Boolean = false
 
-		private class AccelerationStopCondition implements Condition {
-			private final AccelerationStopTest stopTest;
+		private inner class AccelerationStopCondition(
+			private val stopTest: AccelerationStopTest
+		) : Condition {
+			override fun test(): Boolean = !accelerate || stopTest.condition(targetSpeed, getVelocity())
 
-			AccelerationStopCondition(final AccelerationStopTest stopTest) {
-				super();
-				this.stopTest = stopTest;
-			}
-
-			public boolean test() {
-				return !accelerate || stopTest.condition(targetSpeed, getVelocity());
-			}
-
-			protected AccelerationStopTest getStopTest() {
-				return stopTest;
-			}
+			fun getStopTest(): AccelerationStopTest = stopTest
 		}
 
-		@Override
-		protected void iteration() {
-			assert currentCondition != null;
-			accelerate = true;
-			if (logger.isTraceEnabled()) {
-				logger.trace("Train {} motor iteration: target speed {}, current velocity {}", number, targetSpeed, getVelocity());
+		override fun iteration() {
+			assert(currentCondition != null)
+			accelerate = true
+			if (logger.isTraceEnabled) {
+				logger.trace("Train {} motor iteration: target speed {}, current velocity {}", number, targetSpeed, getVelocity())
 			}
-			start();
-			waitUntil(currentCondition);
+			start()
+			waitUntil(currentCondition)
 
-			if (accelerate && currentCondition.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
-				targetSpeed = 0;
-				if (logger.isTraceEnabled()) {
-					logger.trace("Train {} motor: deceleration phase to half speed, new target {}", number, targetSpeed);
+			if (accelerate && currentCondition!!.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+				targetSpeed = 0.0
+				if (logger.isTraceEnabled) {
+					logger.trace("Train {} motor: deceleration phase to half speed, target {}", number, targetSpeed)
 				}
-				waitUntil(new AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED));
+				waitUntil(AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED))
 			}
 
-			accelerate = false;
-			stop();
-			accelaration.state = 0;
+			accelerate = false
+			stop()
+			accelaration.state = 0.0
 		}
 
-		private void privateAccelerateTo(double speed, AccelerationStopTest test) {
-			assert speed >= 0;
-			targetSpeed = speed;
-			currentCondition = new AccelerationStopCondition(test);
-			cancelAccelerating();
-			activate(this);
+		private fun privateAccelerateTo(
+			speed: Double,
+			test: AccelerationStopTest
+		) {
+			assert(speed >= 0)
+			targetSpeed = speed
+			currentCondition = AccelerationStopCondition(test)
+			cancelAccelerating()
+			activate(this)
 		}
 
 		/**
 		 * change speed
 		 * @param speed
 		 */
-		public void accelerateTo(final double speed) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("Train {} motor: accelerate to speed {}, current velocity {}", number, speed, getVelocity());
+		fun accelerateTo(speed: Double) {
+			if (logger.isDebugEnabled) {
+				logger.debug("Train {} motor: accelerate to speed {}, current velocity {}", number, speed, getVelocity())
 			}
-			context.report("in on warning", Train.this, ReportType._DEBUG);
-			privateAccelerateTo(speed, speed > getVelocity() ? AccelerationStopTest.ACCELERATION_ENDED : AccelerationStopTest.DECELERATION_ENDED);
+			context.report("in on warning", this@Train, ReportType._DEBUG)
+			privateAccelerateTo(
+				speed,
+				if (speed >
+					getVelocity()
+				) {
+					AccelerationStopTest.ACCELERATION_ENDED
+				} else {
+					AccelerationStopTest.DECELERATION_ENDED
+				}
+			)
 		}
 
 		/**
 		 * special behaviour
 		 * @param normalSpeed
 		 */
-		public void onWarning(final double normalSpeed) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("Train {} motor: warning mode, target speed {}, current velocity {}", number, normalSpeed, getVelocity());
+		fun onWarning(normalSpeed: Double) {
+			if (logger.isDebugEnabled) {
+				logger.debug(
+					"Train {} motor: warning mode, target speed {}, current velocity {}",
+					number,
+					normalSpeed,
+					getVelocity()
+				)
 			}
-			context.report("in on warning " + normalSpeed, Train.this, ReportType._DEBUG);
+			context.report("in on warning $normalSpeed", this@Train, ReportType._DEBUG)
 
-			assert getVelocity() <= maxAbsError;
-			privateAccelerateTo(normalSpeed, AccelerationStopTest.TO_HALF_SPEED);
+			assert(getVelocity() >= 0)
+			privateAccelerateTo(normalSpeed, AccelerationStopTest.TO_HALF_SPEED)
 		}
 
 		/**
 		 *
 		 */
-		public void cancelAccelerating() {
+		fun cancelAccelerating() {
 			if (accelerate) {
-				accelerate = false;
-				activate(this);
+				accelerate = false
+				activate(this)
 			}
 		}
 
-		@Override
-		public Continuous start() {
-			return (accelerate) ? super.start() : this;
-		}
+		override fun start(): Continuous = if (accelerate) super.start() else this
 
-		@Override
-		protected void derivatives() {
-			//minmax zpomaleni
-			final double s = distanceToSemaphore();
+		override fun derivatives() {
+			// minmax zpomaleni
+			val s: Double = distanceToSemaphore()
 			if (s <= 0) {
-				accelerate = false;
-				return;
+				accelerate = false
+				return
 			}
-			if (velocity.state <= 0) velocity.state = 0;
+			if (velocity.state <= 0) velocity.state = 0.0
 
-			final double a = ((targetSpeed - velocity.state)*(targetSpeed + velocity.state)) / (2*s);
-			accelaration.state = currentCondition.getStopTest().isDecelarate() ?
-								Math.max(a, MINIMAL_DECELERATION) :
-								Math.min(a, MAXIMAL_ACCELERATION);
+			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
+			accelaration.state =
+				if (currentCondition!!.getStopTest().isDecelarate()) {
+					Math.max(a, this@Train.MINIMAL_DECELERATION.toDouble())
+				} else {
+					Math.min(a, this@Train.MAXIMAL_ACCELERATION.toDouble())
+				}
 		}
 	}
 
+	private val accelaration: Variable = Variable(0.0)
+	private val velocity: Variable = Variable(0.0)
+	private val va: SimpleIntegration = SimpleIntegration(velocity, accelaration)
+	private val front: Front = Front()
+	private val tail: Tail = Tail()
+	private val motor: Motor = Motor()
+	private val timetable: Timetable
+	private val context: SimulationContext
+	private var pathToSemaphore: Path? = null
+	private val trainPrefix: String
 
-	private final Variable accelaration = new Variable(0);
-	private final Variable velocity = new Variable(0);
-	private final SimpleIntegration va = new SimpleIntegration(velocity, accelaration);
-	private final Front front = new Front();
-	private final Tail tail = new Tail();
-	private final Motor motor = new Motor();
-	private final Timetable timetable;
-	private final SimulationContext context;
-	private Path pathToSemaphore;
-	private final String trainPrefix;
+	private val number: Int
 
-	private static int count = 0;
-	private final int number;
-
-	private double length;
-	private AssertionContinuous ap = new LenghtChecker();
+	private var length: Double
+	private var ap: AssertionContinuous = LenghtChecker()
 
 	/**
-	 * Create new train
+	 * Create train
 	 * @param context
 	 * @param timetable
 	 */
-	public Train(SimulationContext context, Timetable timetable) {
+	constructor(context: SimulationContext?, timetable: Timetable?) {
 		if (context == null) {
-			throw new NullPointerException("context must not be null");
+			throw NullPointerException("context must not be null")
 		}
 		if (timetable == null) {
-			throw new NullPointerException("timetable must not be null");
+			throw NullPointerException("timetable must not be null")
 		}
-		this.context = context;
-		this.timetable = timetable;
-		this.length = timetable.getLength();
-		number = ++count;
-		trainPrefix = "Train #"+number;
-		logger.debug("Train {} created: from {} to {}, length {}", number, timetable.getIn().getName(), timetable.getOut().getName(), length);
+		this.context = context
+		this.timetable = timetable
+		this.length = timetable.getLength()
+		number = ++count
+		trainPrefix = "Train #$number"
+		logger.debug(
+			"Train {} created: from {} to {}, length {}",
+			number,
+			timetable.getIn().getName(),
+			timetable.getOut().getName(),
+			length
+		)
 	}
 
-	public double distanceToSemaphore() {
-		return pathToSemaphore==null ? 0 : pathToSemaphore.length() - front.getPosition();
-	}
+	override fun distanceToSemaphore(): Double =
+		if (pathToSemaphore == null) 0.0 else pathToSemaphore!!.length() - front.getPosition()
 
-	@Override
-	protected void actions() {//spusten odsouhlasenim
-		//zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
-		final InOut inout = timetable.getIn();
-		final InOutWorker worker = context.getWorkerFor(inout);
-		logger.debug("Train {} approved for movement from {} to {}", number, inout.getName(), timetable.getOut().getName());
-		worker.enterTrain(this);
-		context.report("approved "+inout.getName()+"->"+timetable.getOut().getName(), this, ReportType.TRAIN_EVENTS);
+	override fun actions() { // spusten odsouhlasenim
+		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
+		val inout: InOut = timetable.getIn()
+		val worker: InOutWorker = context.getWorkerFor(inout)
+		logger.debug("Train {} approved for movement from {} to {}", number, inout.getName(), timetable.getOut().getName())
+		worker.enterTrain(this)
+		context.report("approved ${inout.getName()}->${timetable.getOut().getName()}", this, ReportType.TRAIN_EVENTS)
 
-		activate(front);
+		activate(front)
 
-		waitUntil(() -> front.getTotalDistance() >= getLength());
-		activate(tail);
+		waitUntil { front.getTotalDistance() >= getLength() }
+		activate(tail)
 
-		out(); activate((Train) worker.getQueqe().first());
-		ap.start();
+		out()
+		activate(worker.getQueqe().first() as? Train)
+		ap.start()
 
-		waitUntil(front.terminated);
-		ap.stop();
-		//predkem v systemu sousedni stanice
+		waitUntil(front.terminated)
+		ap.stop()
+		// predkem v systemu sousedni stanice
 
-		waitUntil(tail.terminated);
-		r.setFrequency(Double.POSITIVE_INFINITY);
-		r.stop();
-		stop();
-		motor.terminate();
-		//ukoncovaci..
-		logger.debug("Train {} completed journey: distance traveled {}", number, front.getTotalDistance());
-		context.report("ends", this, ReportType.TRAIN_EVENTS);
+		waitUntil(tail.terminated)
+		r.setFrequency(Double.POSITIVE_INFINITY)
+		r.stop()
+		stop()
+		motor.terminate()
+		// ukoncovaci..
+		logger.debug("Train {} completed journey: distance traveled {}", number, front.getTotalDistance())
+		context.report("ends", this, ReportType.TRAIN_EVENTS)
 	}
 
 	/**
 	 * @return current acceleration of train
 	 */
-	public double getAccelaration() {
-		return accelaration.state;
-	}
+	fun getAccelaration(): Double = accelaration.state
 
 	/**
 	 * @return current speed of train
 	 */
-	public double getVelocity() {
-		return velocity.state;
-	}
+	fun getVelocity(): Double = velocity.state
 
 	/**
 	 * @return length of train
 	 */
-	public double getLength() {
-		return length;//pozdeji soucet vagonu
+	fun getLength(): Double {
+		return length // pozdeji soucet vagonu
 	}
 
-	public OrientedPathSeparator nextSemaphore() {
-		return pathToSemaphore.getLast();
+	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
+
+	override fun start(): Train {
+		accelaration.start()
+		velocity.start()
+		va.start()
+		return this
 	}
 
-	@Override
-	public Train start() {
-		accelaration.start();
-		velocity.start();
-		va.start();
-		return this;
+	override fun stop() {
+		accelaration.stop()
+		velocity.stop()
+		va.stop()
+		velocity.state = 0.0
+		velocity.rate = 0.0
+		accelaration.rate = 0.0
+		accelaration.state = 0.0
 	}
 
-	@Override
-	public void stop() {
-		accelaration.stop();
-		velocity.stop();
-		va.stop();
-		velocity.state = 0;
-		velocity.rate = accelaration.rate = 0;
-		accelaration.state = 0;
-	}
-
-	@Override
-	public String toString() {
-		return trainPrefix;
-	}
+	override fun toString(): String = trainPrefix
 }

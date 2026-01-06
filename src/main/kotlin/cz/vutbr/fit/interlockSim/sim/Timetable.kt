@@ -7,80 +7,55 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 
 /**
  * Timetable of Train
  *
  */
-public class Timetable {
-	private final InOut in;
-	private final InOut out;
-	private final Time inTime;
-	private final Time outTime;
-
-	//private TreeMap<Time, Station> stations; nekdy...
-	private double length;
-
-	/**
-	 * Create time table for train
-	 * @param in
-	 * @param out
-	 * @param inTime
-	 * @param outTime
-	 * @param length
-	 */
-	public Timetable(final InOut in, final InOut out, final Time inTime, final Time outTime, double length) {
-		super();
-		this.in = in;
-		this.out = out;
-		this.inTime = inTime;
-		this.outTime = outTime;
-		this.length = length;
-	}
+class Timetable(
+	private val `in`: InOut,
+	private val out: InOut,
+	private val inTime: Time,
+	private val outTime: Time,
+	private var length: Double
+) {
+	// private TreeMap<Time, Station> stations; nekdy...
 
 	/**
 	 * @return start point of train
 	 */
-	public InOut getIn() {
-		return in;
-	}
+	fun getIn(): InOut = `in`
 
 	/**
 	 * @return end point of train
 	 */
-	public InOut getOut() {
-		return out;
-	}
+	fun getOut(): InOut = out
 
-//	/**
-//	 * @return all station in net EXTENSION
-//	 */
-//	public TreeMap<Time, Station> getStations() {
-//		return stations;
-//	}
+	// 	/**
+	// 	 * @return all station in net EXTENSION
+	// 	 */
+	// 	public TreeMap<Time, Station> getStations() {
+	// 		return stations;
+	// 	}
 
 	/**
 	 * @return time of departure from In
 	 */
-	public Time getInTime() {
-		return inTime;
-	}
+	fun getInTime(): Time = inTime
 
 	/**
 	 * @return time of arrival to Out
 	 */
-	public Time getOutTime() {
-		return outTime;
-	}
+	fun getOutTime(): Time = outTime
 
 	/**
 	 * @return get length of train
 	 */
-	public double getLength() {
+	fun getLength(): Double {
 		// EXTENSION with parameter time
-		return length ;
+		return length
 	}
 }

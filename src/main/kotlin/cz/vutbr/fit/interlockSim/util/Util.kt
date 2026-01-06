@@ -7,59 +7,61 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 
 /**
  * Collection of shared static methods
  *
  */
-public final class Util {
-	private Util() {
-		//EMPTY
-	}
-
-	private static Class<?> toClass(Object o) {
-		final Class<?> class1 = o.getClass();
-		return SimulationContext.class.isAssignableFrom(class1) ? SimulationContext.class : class1;
-	}
-
-	/**
-	 * !!! THIS METHOD is designed only for interlocksim
-	 * @param objects
-	 * @return array of classes which reprezents types in objects
-	 */
-	public static Class<?>[] toClass(Object[] objects) {
-		if (objects == null) return null;
-		final Class<?>[] classes = new Class[objects.length];
-		for (int i = 0; i < objects.length; i++) {
-			assert !objects[i].getClass().isArray();
-			classes[i] = objects[i] == null ? null : toClass(objects[i]);
+class Util private constructor() {
+	companion object {
+		internal fun toClass(o: Any): Class<*> {
+			val class1 = o.javaClass
+			return if (SimulationContext::class.java.isAssignableFrom(class1)) SimulationContext::class.java else class1
 		}
-		return classes;
-	}
 
-	/**
-	 * Most used cast in program
-	 * @param obj
-	 * @return casted instance
-	 */
-	public static NodeCell assertNodeCell(Object obj) {
-		return assertInstanceOf(NodeCell.class, obj);
-	}
+		/**
+		 * !!! THIS METHOD is designed only for interlocksim
+		 * @param objects
+		 * @return array of classes which represents types in objects
+		 */
+		@JvmStatic
+		fun toClass(objects: Array<Any?>?): Array<Class<*>?>? {
+			if (objects == null) return null
+			val classes = arrayOfNulls<Class<*>>(objects.size)
+			for (i in objects.indices) {
+				assert(objects[i]?.javaClass?.isArray != true)
+				classes[i] = if (objects[i] == null) null else toClass(objects[i]!!)
+			}
+			return classes
+		}
 
-	/**
-	 * assert and cast routine
-	 * @param <T>
-	 * @param clazz
-	 * @param obj
-	 * @return casted instance
-	 */
-	public static <T> T assertInstanceOf(Class<T> clazz, Object obj) {
-		assert clazz != null;
-		assert clazz.isInstance(obj) : clazz + " " + obj;
-		return clazz.cast(obj);
+		/**
+		 * Most used cast in program
+		 * @param obj
+		 * @return casted instance
+		 */
+		@JvmStatic
+		fun assertNodeCell(obj: Any): NodeCell = assertInstanceOf(NodeCell::class.java, obj)
+
+		/**
+		 * assert and cast routine
+		 * @param <T>
+		 * @param clazz
+		 * @param obj
+		 * @return casted instance
+		 */
+		@JvmStatic
+		fun <T> assertInstanceOf(
+			clazz: Class<T>,
+			obj: Any
+		): T {
+			assert(clazz != null)
+			assert(clazz.isInstance(obj)) { "$clazz $obj" }
+			return clazz.cast(obj)
+		}
 	}
 }

@@ -7,32 +7,32 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks;
+package cz.vutbr.fit.interlockSim.objects.tracks
 
 /**
  *
  * tratovy oddil v posloupnosti prvku cesty z pohledu vlaku
  */
-public interface TrackSection extends Track {
+interface TrackSection : Track {
 	/**
 	 * Train entering
 	 * @param occupant
 	 */
-	public void enter(TrackOccupant occupant);
+	fun enter(occupant: TrackOccupant)
 
 	/**
 	 * Train leaving
 	 * @param occupant
 	 */
-	public void leave(TrackOccupant occupant);
+	fun leave(occupant: TrackOccupant)
 
 	/**
 	 * @return block, in which is this section
 	 */
-	public TrackBlock getTrackBlock();
+	fun getTrackBlock(): TrackBlock
 
 	/**
 	 * @return object in section
 	 */
-	public TrackOccupant getTrackOccupant();
+	fun getTrackOccupant(): TrackOccupant
 }

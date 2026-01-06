@@ -7,24 +7,16 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 
 /**
- * control facility
+ * Control facility
  */
-public abstract class Interlocking extends LoopProcess {
-	private final SimulationContext context;
-
-	protected Interlocking(SimulationContext context) {
-		this.context = context;
-	}
-
-	//EXTENSION hledani cest, Dikstruv algoritmus, move to control
-	//public abstract void setupWay(OrientedPathSeparator from, OrientedPathSeparator to);
-
-	protected SimulationContext getContext() {
-		return context;
-	}
+abstract class Interlocking(
+	protected val context: SimulationContext
+) : LoopProcess() {
+	// EXTENSION hledani cest, Dikstruv algoritmus, move to control
+	// abstract fun setupWay(from: OrientedPathSeparator, to: OrientedPathSeparator)
 }

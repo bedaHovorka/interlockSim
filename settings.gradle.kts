@@ -10,9 +10,9 @@ rootProject.name = "interlockSim"
 // Enable build cache for faster incremental builds
 // Cache persists between builds and speeds up no-op builds significantly
 buildCache {
-    local {
-        isEnabled = true
-        directory = File(rootDir, ".gradle/build-cache")
-        removeUnusedEntriesAfterDays = 30
-    }
+	local {
+		isEnabled = true
+		directory = File(rootDir, ".gradle/build-cache")
+		removeUnusedEntriesAfterDays = 30
+	}
 }

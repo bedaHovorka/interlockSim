@@ -7,17 +7,17 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
 /**
  * Factory for simulation context
  */
-public interface SimulationContextFactory extends ContextFactory {
+interface SimulationContextFactory : ContextFactory {
 	/**
 	 * convert editing to simulation
 	 * @param editingContext
 	 * @return simulation
 	 * @throws ContextCreationException if editing context is wrong
 	 */
-	public SimulationContext createContext(EditingContext editingContext) throws ContextCreationException;
+	fun createContext(editingContext: EditingContext): SimulationContext
 }

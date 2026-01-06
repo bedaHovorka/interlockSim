@@ -7,97 +7,90 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import java.awt.Point;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Map.Entry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid;
-import cz.vutbr.fit.interlockSim.context.SimulationContext;
-import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore;
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath;
-import cz.vutbr.fit.interlockSim.objects.paths.Path;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State;
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
-import cz.vutbr.fit.interlockSim.util.Util;
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State
+import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.util.Util
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.awt.Point
+import java.util.ArrayList
+import java.util.Collections
+import java.util.HashMap
+import java.util.LinkedList
+import java.util.Queue
 
 /**
  * Příklad fungování modelu
  * Ovlada sest navestidel a 2 InOuty pomoci predem ulozenych cest
  */
-public class ShuntingLoop extends Interlocking {
-	private static final Logger logger = LoggerFactory.getLogger(ShuntingLoop.class);
-	private static final int MAX_TRAINS = 2; //maximalni pocet odsouhlasených vlaků v systému
-	//fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
-	private final Queue<Train> unapprowedTrains = new LinkedList<Train>();
-	private final List<Train> approwedTrains = new ArrayList<Train>();
-	private final InnerGenerator generator;
-	private final HashMap<RailSemaphore, List<Path>> paths = new HashMap<RailSemaphore, List<Path>>();
-	private final ArrayList<SimpleTrackBlock> innerTrackBlocks = new ArrayList<SimpleTrackBlock>();
-	private final HashMap<SimpleTrackBlock, RailSemaphore> outerTrackblocks = new HashMap<SimpleTrackBlock, RailSemaphore>();
-	private final long endTime;
+class ShuntingLoop : Interlocking {
+	companion object {
+		private val logger: Logger = LoggerFactory.getLogger(ShuntingLoop::class.java)
+		private const val MAX_TRAINS: Int = 2 // maximalni pocet odsouhlasených vlaků v systému
+	}
 
-	private class RealTimeSynch extends LoopProcess {
-		private double presvihnuto = 0;
-		private long beginTime;
+	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
+	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
+	private val approwedTrains: MutableList<Train> = ArrayList<Train>()
+	private val generator: InnerGenerator
+	private val paths: HashMap<RailSemaphore, MutableList<Path>> = HashMap<RailSemaphore, MutableList<Path>>()
+	private val innerTrackBlocks: ArrayList<SimpleTrackBlock> = ArrayList<SimpleTrackBlock>()
+	private val outerTrackblocks: HashMap<SimpleTrackBlock, RailSemaphore> = HashMap<SimpleTrackBlock, RailSemaphore>()
+	private val endTime: Long
 
-		@Override
-		protected void startAction() {
-			interLoopSleep();
+	private inner class RealTimeSynch : LoopProcess() {
+		private var presvihnuto: Double = 0.0
+		private var beginTime: Long = 0
+
+		override fun startAction() {
+			interLoopSleep()
 		}
 
-		@Override
-		protected void iteration() {
-			long endTime = System.currentTimeMillis();
-			long sleepTime = 1000 - (endTime - beginTime);
+		override fun iteration() {
+			val endTime: Long = System.currentTimeMillis()
+			val sleepTime: Long = 1000 - (endTime - beginTime)
 			if (sleepTime > 10) {
 				try {
-					Thread.sleep(sleepTime);
-				} catch (InterruptedException e) {
-					assert false : e;
-					Thread.currentThread().interrupt(); // Restore interrupt status
-					terminate();
+					Thread.sleep(sleepTime)
+				} catch (e: InterruptedException) {
+					assert(false) { e }
+					Thread.currentThread().interrupt() // Restore interrupt status
+					terminate()
 				}
 			} else if (sleepTime < 0) {
-				presvihnuto = sleepTime / 1000.0;
+				presvihnuto = sleepTime / 1000.0
 			}
 		}
 
-		@Override
-		protected void interLoopSleep() {
-			beginTime = System.currentTimeMillis();
-			hold(1 + presvihnuto);
-			presvihnuto = 0.0;
+		override fun interLoopSleep() {
+			beginTime = System.currentTimeMillis()
+			hold(1 + presvihnuto)
+			presvihnuto = 0.0
 		}
 	}
 
-	private class InnerGenerator extends Generator {
-		private InnerGenerator(SimulationContext context) {
-			super(context);
-		}
-
-		@Override
-		protected void placeTrain(Train train) {
-			unapprowedTrains.offer(train);
+	private inner class InnerGenerator(
+		context: SimulationContext
+	) : Generator(context) {
+		override fun placeTrain(train: Train) {
+			unapprowedTrains.offer(train)
 		}
 	}
 
@@ -105,188 +98,204 @@ public class ShuntingLoop extends Interlocking {
 	 * @param context
 	 * @param endTime when simulation schould stop
 	 */
-	public ShuntingLoop(SimulationContext context, long endTime) {
-		super(context);
-		this.endTime = endTime;
-		generator = new InnerGenerator(context);
+	constructor(context: SimulationContext, endTime: Long) : super(context) {
+		this.endTime = endTime
+		generator = InnerGenerator(context)
 
-		assert context.getGraph().size() > 0;
-		//Sit jiz musi byt nactena z vyhybna.xml !!!
+		assert(context.getGraph().size() > 0)
+		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		final InOut B = elementAt(InOut.class, 30, 8);
-		final InOut A = elementAt(InOut.class, 11, 8);
-		final RailSemaphore zA = elementAt("zA", RailSemaphore.class, 14, 8);
-		final RailSemaphore doA1 = elementAt("doA1", RailSemaphore.class, 16, 8);
-		final RailSemaphore doB1 = elementAt("doB1", RailSemaphore.class, 25, 8);
-		final RailSemaphore zB = elementAt("zB",RailSemaphore.class, 27, 8);
-		final RailSemaphore doA2 = elementAt("doA2", RailSemaphore.class, 17, 9);
-		final RailSemaphore doB2 = elementAt("doB2", RailSemaphore.class, 24, 9);
-		final RailSwitch vA = elementAt("vA", RailSwitch.class, 15, 8);
-		final RailSwitch vB = elementAt("vB", RailSwitch.class, 26, 8);
+		val B: InOut = elementAt(InOut::class.java, 30, 8)
+		val A: InOut = elementAt(InOut::class.java, 11, 8)
+		val zA: RailSemaphore = elementAt("zA", RailSemaphore::class.java, 14, 8)
+		val doA1: RailSemaphore = elementAt("doA1", RailSemaphore::class.java, 16, 8)
+		val doB1: RailSemaphore = elementAt("doB1", RailSemaphore::class.java, 25, 8)
+		val zB: RailSemaphore = elementAt("zB", RailSemaphore::class.java, 27, 8)
+		val doA2: RailSemaphore = elementAt("doA2", RailSemaphore::class.java, 17, 9)
+		val doB2: RailSemaphore = elementAt("doB2", RailSemaphore::class.java, 24, 9)
+		val vA: RailSwitch = elementAt("vA", RailSwitch::class.java, 15, 8)
+		val vB: RailSwitch = elementAt("vB", RailSwitch::class.java, 26, 8)
 
-		final SimpleTrackBlock k1 = getBlock("k1", doA1, doB1);
-		final SimpleTrackBlock k2 = getBlock("k2", doA2, doB2);
-		final SimpleTrackBlock kA = getBlock("kA", A, zA);
-		final SimpleTrackBlock kB = getBlock("kB", B, zB);
+		val k1: SimpleTrackBlock = getBlock("k1", doA1, doB1)
+		val k2: SimpleTrackBlock = getBlock("k2", doA2, doB2)
+		val kA: SimpleTrackBlock = getBlock("kA", A, zA)
+		val kB: SimpleTrackBlock = getBlock("kB", B, zB)
 
-		//usporadani znalostni pro jednoduche rizeni
-		constructPath(zA, vA, doA1, k1, doB1);
-		constructPath(doA1, vA, zA, kA, A);
-		constructPath(zA, vA, doA2, k2, doB2);
-		constructPath(doA2, vA, zA, kA, A);
-		constructPath(zB, vB, doB1, k1, doA1);
-		constructPath(doB1, vB, zB, kB, B);
-		constructPath(zB, vB, doB2, k2, doA2);
-		constructPath(doB2, vB, zB, kB, B);
-		Collections.addAll(innerTrackBlocks, k1, k2);
-		outerTrackblocks.put(kB, zB);
-		outerTrackblocks.put(kA, zA);
+		// usporadani znalostni pro jednoduche rizeni
+		constructPath(zA, vA, doA1, k1, doB1)
+		constructPath(doA1, vA, zA, kA, A)
+		constructPath(zA, vA, doA2, k2, doB2)
+		constructPath(doA2, vA, zA, kA, A)
+		constructPath(zB, vB, doB1, k1, doA1)
+		constructPath(doB1, vB, zB, kB, B)
+		constructPath(zB, vB, doB2, k2, doA2)
+		constructPath(doB2, vB, zB, kB, B)
+		Collections.addAll(innerTrackBlocks, k1, k2)
+		outerTrackblocks[kB] = zB
+		outerTrackblocks[kA] = zA
 	}
 
-	private ArrayPath constructPath(PathElement...elements) {
-		final ArrayPath arrayPath = new ArrayPath(getContext());
+	private fun constructPath(vararg elements: PathElement): ArrayPath {
+		val arrayPath = ArrayPath(context)
 		try {
-			for (int i = 0; i < elements.length; i++) {
-				if (elements[i] instanceof RailSwitch) {
-					final RailSemaphore prev = Util.assertInstanceOf(RailSemaphore.class, elements[i-1]);
-					final RailSemaphore next = Util.assertInstanceOf(RailSemaphore.class, elements[i+1]);
-					arrayPath.addLast(getBlock(switchName(elements[i]), prev, (Cell) elements[i]));
-					arrayPath.addLast(elements[i]);
-					arrayPath.addLast(getBlock(switchName(elements[i]), next, (Cell) elements[i]));
+			for (i in elements.indices) {
+				if (elements[i] is RailSwitch) {
+					val prev: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i - 1])
+					val next: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i + 1])
+					arrayPath.addLast(getBlock(switchName(elements[i]), prev, elements[i] as Cell))
+					arrayPath.addLast(elements[i])
+					arrayPath.addLast(getBlock(switchName(elements[i]), next, elements[i] as Cell))
 				} else {
-					arrayPath.addLast(elements[i]);
+					arrayPath.addLast(elements[i])
 				}
 			}
-		} catch (ArrayIndexOutOfBoundsException e) {
-			assert false : e;
+		} catch (e: ArrayIndexOutOfBoundsException) {
+			assert(false) { e }
 		}
-		final RailSemaphore first = Util.assertInstanceOf(RailSemaphore.class, arrayPath.getFirst());
-		List<Path> sublist = paths.get(first);
+		val first: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, arrayPath.getFirst())
+		var sublist: MutableList<Path>? = paths[first]
 		if (sublist == null) {
-			sublist = new ArrayList<Path>(3);
-			paths.put(first, sublist);
+			sublist = ArrayList<Path>(3)
+			paths[first] = sublist
 		}
-		sublist.add(arrayPath);
-		return arrayPath;
+		sublist.add(arrayPath)
+		return arrayPath
 	}
 
-	private String switchName(PathElement el) {
-		return Util.assertInstanceOf(RailSwitch.class, el).getName()+"-around";
+	private fun switchName(el: PathElement): String =
+		Util.assertInstanceOf(RailSwitch::class.java, el).getName() + "-around"
+
+	private fun <T : Cell> elementAt(
+		clazz: Class<T>,
+		x: Int,
+		y: Int
+	): T {
+		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
+		return Util.assertInstanceOf(clazz, cell)
 	}
 
-	private <T extends Cell> T elementAt(Class<T> clazz, int x, int y) {
-		final RailwayNetGrid railWayNetGrid = getContext().getRailWayNetGrid();
-		return Util.assertInstanceOf(clazz, railWayNetGrid.getCellAt(x, y));
+	private fun <T : NodeCell> elementAt(
+		name: String,
+		clazz: Class<T>,
+		x: Int,
+		y: Int
+	): T {
+		val elementAt: T = elementAt(clazz, x, y)
+		elementAt.setName(name)
+		return elementAt
 	}
 
-	private <T extends NodeCell> T elementAt(String name, Class<T> clazz, int x, int y) {
-		final T elementAt = elementAt(clazz, x, y);
-		elementAt.setName(name);
-		return elementAt;
+	private fun getBlock(
+		name: String,
+		cell1: Cell,
+		cell2: Cell
+	): SimpleTrackBlock {
+		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = context.getGraph()
+		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
+		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
+		val block = graph.get(point1, point2) ?: throw IllegalArgumentException("Cannot get block between cells")
+		val assertInstanceOf: SimpleTrackBlock = Util.assertInstanceOf(SimpleTrackBlock::class.java, block)
+		assertInstanceOf.setName(name)
+		return assertInstanceOf
 	}
 
-	private SimpleTrackBlock getBlock(String name, Cell cell1, Cell cell2) {
-		final RailwayNetGrid railWayNetGrid = getContext().getRailWayNetGrid();
-		final ExtendedUnorientedGraph<Point, TrackBlock, Segment> graph = getContext().getGraph();
-		final SimpleTrackBlock assertInstanceOf = Util.assertInstanceOf(SimpleTrackBlock.class, graph.get(railWayNetGrid.getLocation(cell1), railWayNetGrid.getLocation(cell2)));
-		assertInstanceOf.setName(name);
-		return assertInstanceOf;
+	override fun startAction() {
+		context.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
+		// activate(RealTimeSynch())
+		activate(generator)
 	}
 
-	@Override
-	protected void startAction() {
-		getContext().addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS);
-		//activate(new RealTimeSynch());
-		activate(generator);
-	}
-
-	@Override
-	protected void iteration() {
-		//stare vlaky
-		for (Iterator<Train> iter = approwedTrains.iterator(); iter.hasNext();) {
-			Train element = iter.next();
-			if (element.terminated()) iter.remove();
+	override fun iteration() {
+		// stare vlaky
+		val iter: MutableIterator<Train> = approwedTrains.iterator()
+		while (iter.hasNext()) {
+			val element: Train = iter.next()
+			if (element.terminated()) iter.remove()
 		}
-		//nove vlaky a inouty
-		approveTrains();
-		hold(1);
-		for (SimpleTrackBlock  block : innerTrackBlocks) checkBothEnds(block);
-		for (Entry<SimpleTrackBlock, RailSemaphore> e : outerTrackblocks.entrySet()) checkOneEnd(e.getKey(), e.getValue());
+		// nove vlaky a inouty
+		approveTrains()
+		hold(1.0)
+		for (block in innerTrackBlocks) checkBothEnds(block)
+		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
 	}
 
-	private void checkBothEnds(SimpleTrackBlock block) {
-		for (NodeCell sep : block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf(RailSemaphore.class, sep))) return;
+	private fun checkBothEnds(block: SimpleTrackBlock) {
+		for (sep in block.ends()) {
+			if (checkOneEnd(block, Util.assertInstanceOf(RailSemaphore::class.java, sep))) return
 		}
 	}
 
-	private boolean trySetupPath(Path path) {
+	private fun trySetupPath(path: Path): Boolean {
 		try {
-			final PathSeparator from = path.getFirst();
+			val from: PathSeparator = path.getFirst()
 			if (!path.isFreeFrom(from)) {
-				logger.debug("Path not free from separator: {}", from);
-				return false;
+				logger.debug("Path not free from separator: {}", from)
+				return false
 			}
-			logger.debug("Setting up path from separator: {}", from);
-			path.setUpPath(from);
-			return true;
-		} catch (TrackOperationException e) {
-			assert false : e;
-			logger.debug("Exception during path setup: {}", e.getMessage());
-			return false;
+			logger.debug("Setting up path from separator: {}", from)
+			path.setUpPath(from)
+			return true
+		} catch (e: TrackOperationException) {
+			assert(false) { e }
+			logger.debug("Exception during path setup: {}", e.message)
+			return false
 		}
 	}
 
-	private boolean trySetupPaths(RailSemaphore sem) {
-		logger.debug("Attempting to setup paths from semaphore: {}", sem.getName());
-		for (Path path : paths.get(sem)) {
-			//zkusit postavit cestu
+	private fun trySetupPaths(sem: RailSemaphore): Boolean {
+		logger.debug("Attempting to setup paths from semaphore: {}", sem.getName())
+		for (path in paths[sem]!!) {
+			// zkusit postavit cestu
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) {
-					logger.debug("Path setup successful from semaphore: {}", sem.getName());
-					return true;
+					logger.debug("Path setup successful from semaphore: {}", sem.getName())
+					return true
 				}
-			} catch (TrackOperationException e) {
-				assert false : e;
-				logger.debug("Exception in path setup attempt: {}", e.getMessage());
+			} catch (e: TrackOperationException) {
+				assert(false) { e }
+				logger.debug("Exception in path setup attempt: {}", e.message)
 			}
 		}
-		logger.debug("All path setup attempts failed from semaphore: {}", sem.getName());
-		return false;
+		logger.debug("All path setup attempts failed from semaphore: {}", sem.getName())
+		return false
 	}
 
-	private boolean checkOneEnd(SimpleTrackBlock block, RailSemaphore to) {
-//		 je v bloku vlak?
-		if (block.getState() == State.FREE) return false;
+	private fun checkOneEnd(
+		block: SimpleTrackBlock,
+		to: RailSemaphore
+	): Boolean {
+// 		 je v bloku vlak?
+		if (block.getState() == State.FREE) return false
 		if (block.getState() == State.OCCUPIED) {
-			logger.debug("Block occupied, checking if next semaphore is: {}", to.getName());
-			if (block.getTrackOccupant().nextSemaphore() != to) return false;
-			return trySetupPaths(to);
+			logger.debug("Block occupied, checking if next semaphore is: {}", to.getName())
+			if (block.getTrackOccupant().nextSemaphore() != to) return false
+			return trySetupPaths(to)
 		} else if (block.getState() == State.RESERVED) {
-			logger.debug("Block reserved, checking path setup for semaphore: {}", to.getName());
+			logger.debug("Block reserved, checking path setup for semaphore: {}", to.getName())
 			if (block.isSetUpPath(block.getSecondEnd(to))) {
-				return trySetupPaths(to);
+				return trySetupPaths(to)
 			}
 		}
-		return false;
+		return false
 	}
 
-	private void approveTrains() {
-		while (approwedTrains.size() < MAX_TRAINS && unapprowedTrains.size() > 0) {
-			final Train poll = unapprowedTrains.poll();
-			logger.debug("Approving train: {} (approved: {}/{} max)", poll, approwedTrains.size() + 1, MAX_TRAINS);
-			approwedTrains.add(poll);
-			activate(poll);
+	private fun approveTrains() {
+		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.size > 0) {
+			val poll: Train = unapprowedTrains.poll()
+			logger.debug("Approving train: {} (approved: {}/{} max)", poll, approwedTrains.size + 1, MAX_TRAINS)
+			approwedTrains.add(poll)
+			activate(poll)
 		}
 	}
 
-	@Override
-	protected void interLoopSleep() {
+	override fun interLoopSleep() {
 		if (time() >= endTime) {
-			generator.terminate();
-			terminate();
-			return;
+			generator.terminate()
+			terminate()
+			return
 		}
-		hold(1);
+		hold(1.0)
 	}
 }

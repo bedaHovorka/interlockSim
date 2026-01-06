@@ -16,6 +16,9 @@ plugins {
     // Core Java support
     java
 
+    // Kotlin support (for Phase 1 migration)
+    kotlin("jvm") version "2.0.20"
+
     // Application plugin for executable JARs and run tasks
     application
 
@@ -29,6 +32,12 @@ plugins {
 
     // JaCoCo plugin for code coverage (required for SonarQube)
     jacoco
+
+    // Ktlint plugin for Kotlin code formatting and linting
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
+
+    // Detekt plugin for Kotlin static code analysis
+    id("io.gitlab.arturbosch.detekt") version "1.23.7"
 }
 
 // Load versions from gradle.properties
@@ -40,6 +49,7 @@ val junitJupiterVersion: String by project
 val assertjVersion: String by project
 val mockitoVersion: String by project
 val javaVersion: String by project
+val kotlinVersion: String by project
 
 // Project group and version
 group = "cz.vutbr.fit"
@@ -77,12 +87,17 @@ dependencies {
     implementation("org.slf4j:slf4j-api:$slf4jVersion")               // Logging facade
     implementation("ch.qos.logback:logback-classic:$logbackVersion")  // SLF4J implementation (includes logback-core)
 
+    // Kotlin dependencies (for Phase 1 migration)
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")  // Kotlin standard library
+    implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion") // Kotlin reflection
+
     // Test dependencies (from Ivy test configuration)
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")         // JUnit 5 API
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")         // JUnit 5 engine
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")     // JUnit platform launcher
     testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")      // JUnit platform console
     testImplementation("org.assertj:assertj-core:$assertjVersion")                          // Fluent assertions
+    testImplementation("com.willowtreeapps.assertk:assertk:0.28.1")                        // AssertK for Kotlin tests
     testImplementation("org.mockito:mockito-core:$mockitoVersion")                          // Mocking framework
     testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion")                 // Mockito-JUnit integration
 }
@@ -116,6 +131,24 @@ tasks.compileTestJava {
     options.encoding = "ISO-8859-1"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial"))
     options.isDeprecation = true
+}
+
+// Configure Kotlin compilation
+tasks.compileKotlin {
+    // Target Java 21 bytecode
+    kotlinOptions {
+        jvmTarget = "21"
+        // Enable all warnings
+        allWarningsAsErrors = false
+        // Suppress warnings if needed
+        suppressWarnings = false
+    }
+}
+
+tasks.compileTestKotlin {
+    kotlinOptions {
+        jvmTarget = "21"
+    }
 }
 
 // Configure resource processing (handle duplicate files)
@@ -595,15 +628,19 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (Gradle standard layout)
-        property("sonar.sources", "src/main/java")
-        property("sonar.tests", "src/test/java")
-        property("sonar.java.binaries", "build/classes/java/main")
-        property("sonar.java.test.binaries", "build/classes/java/test")
+        // Source and test paths (Kotlin migration - using kotlin directories)
+        property("sonar.sources", "src/main/kotlin")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.java.binaries", "build/classes/kotlin/main")
+        property("sonar.java.test.binaries", "build/classes/kotlin/test")
 
         // Java version
         property("sonar.java.source", javaVersion)
         property("sonar.java.target", javaVersion)
+
+        // Kotlin support
+        property("sonar.language", "java,kotlin")
+        property("sonar.kotlin.source.version", kotlinVersion)
 
         // Test results and coverage paths
         property("sonar.junit.reportPaths", "build/test-results/test")
@@ -663,4 +700,147 @@ tasks.register("checkDeprecations") {
             |
         """.trimMargin())
     }
+}
+
+// ===========================================
+// Ktlint Configuration (Code Formatting)
+// ===========================================
+
+/**
+ * Ktlint configuration for Kotlin code formatting
+ *
+ * Key principles:
+ * - Match existing Java code style (tabs, 120 char lines)
+ * - Conservative settings for legacy codebase migration
+ * - Respect .editorconfig settings
+ *
+ * Available tasks:
+ * - ./gradlew ktlintCheck      - Check code formatting
+ * - ./gradlew ktlintFormat     - Auto-format code
+ * - ./gradlew addKtlintCheckGitPreCommitHook - Add pre-commit hook
+ */
+ktlint {
+    version.set("1.5.0")  // Latest stable version
+
+    // Enable verbose output for better understanding of issues
+    verbose.set(true)
+
+    // Output results to console
+    outputToConsole.set(true)
+
+    // Enable color output
+    outputColorName.set("AUTO")
+
+    // Use .editorconfig settings (respect tabs, line length 120)
+    enableExperimentalRules.set(false)
+
+    // Configure Android-specific rules (disabled for non-Android project)
+    android.set(false)
+
+    // Ignore build directories and generated code
+    filter {
+        exclude("**/generated/**")
+        exclude("**/build/**")
+    }
+
+    // Reporters configuration
+    reporters {
+        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
+        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
+        reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.HTML)
+    }
+}
+
+// ===========================================
+// Detekt Configuration (Static Analysis)
+// ===========================================
+
+/**
+ * Detekt configuration for Kotlin static code analysis
+ *
+ * Conservative settings appropriate for:
+ * - Legacy codebase being migrated from Java
+ * - Code that preserves Java structure during conversion
+ * - Focus on critical issues, not style preferences
+ *
+ * Available tasks:
+ * - ./gradlew detekt           - Run static analysis
+ * - ./gradlew detektBaseline   - Generate baseline for existing issues
+ */
+detekt {
+    // Use the configuration file
+    config.setFrom(files("$projectDir/detekt.yml"))
+
+    // Build upon the default configuration
+    buildUponDefaultConfig = true
+
+    // Run detekt on all source sets
+    allRules = false  // Don't enable all rules (many are too strict for legacy code)
+
+    // Specify input directories
+    source.setFrom(
+        "src/main/kotlin",
+        "src/test/kotlin"
+    )
+
+    // Ignore build directories
+    ignoreFailures = false  // Fail build on issues (can be set to true during migration)
+
+    // Baseline file to ignore existing issues during gradual improvement
+    baseline = file("$projectDir/detekt-baseline.xml")
+
+    // Enable parallel execution for faster analysis
+    parallel = true
+}
+
+// Configure detekt tasks
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    // Set JVM target to match project
+    jvmTarget = "21"
+
+    // Generate reports in multiple formats
+    reports {
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.html"))
+
+        xml.required.set(true)
+        xml.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.xml"))
+
+        txt.required.set(true)
+        txt.outputLocation.set(file("${layout.buildDirectory.get()}/reports/detekt/detekt.txt"))
+
+        sarif.required.set(false)
+        md.required.set(false)
+    }
+}
+
+// Detekt baseline generation task
+tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
+    jvmTarget = "21"
+}
+
+// Add dependencies for detekt formatting rules
+dependencies {
+    // Detekt formatting rules (ktlint-based)
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+}
+
+// ===========================================
+// Ktlint Checks Disabled
+// ===========================================
+//
+// Ktlint checks are temporarily disabled during the Kotlin migration phase.
+// The migrated code uses tab indentation (matching Java style) and preserves
+// Java naming conventions, which conflicts with ktlint's default expectations.
+//
+// Re-enable ktlint after:
+// 1. Migration is complete
+// 2. Decision is made on final code style (tabs vs spaces, naming conventions)
+// 3. .editorconfig is finalized to match desired style
+//
+// To run ktlint manually: ./gradlew ktlintCheck
+// To format manually: ./gradlew ktlintFormat (use with caution)
+//
+tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
+	enabled = false
 }

@@ -7,68 +7,64 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui;
+package cz.vutbr.fit.interlockSim.gui
 
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
-import java.beans.PropertyChangeEvent;
-
-import javax.swing.JLabel;
-
-import cz.vutbr.fit.interlockSim.Main;
-import cz.vutbr.fit.interlockSim.context.ContextChangeListener;
+import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.context.ContextChangeListener
+import java.awt.Component
+import java.awt.Dimension
+import java.awt.event.MouseEvent
+import java.awt.event.MouseMotionListener
+import java.beans.PropertyChangeEvent
+import javax.swing.JLabel
 
 /**
- * Collect and show status information
- *
+ * Status bar for displaying context information and mouse motion status
  */
-public class StatusBar extends JLabel implements ContextChangeListener {
-	private class MouseL implements MouseMotionListener {
-		public void mouseDragged(MouseEvent e) {
-			// EMPTY
+class StatusBar :
+	JLabel(),
+	ContextChangeListener {
+	private val mouseListener =
+		object : MouseMotionListener {
+			override fun mouseDragged(e: MouseEvent) {
+				// Not used
+			}
+
+			override fun mouseMoved(e: MouseEvent) {
+				val source = e.source
+				assert(source is StatusProducer) { "Source must be a StatusProducer" }
+				val status = (source as StatusProducer).getStatus(e)
+				if (status != null) {
+					text = status
+				}
+			}
 		}
 
-		public void mouseMoved(MouseEvent e) {
-			Object source = e.getSource();
-			assert source instanceof StatusProducer;
-			final String status = ((StatusProducer) source).getStatus(e);
-			if (status != null) setText(status);
-		}
-
+	init {
+		preferredSize = Dimension(100, 25)
+		text = "Welcome to " + Main.PROGRAM_NAME
 	}
 
-	private final MouseL mouseL = new MouseL();
-
-	public StatusBar() {
-		setPreferredSize(new Dimension(100, 25));
-		setText("Welcome to " + Main.PROGRAM_NAME);
+	private fun checkComponent(producer: StatusProducer): Component {
+		assert(producer is Component) { "StatusProducer must be a Component" }
+		return producer as Component
 	}
 
-	private Component checkComponent(StatusProducer producer) {
-		assert producer instanceof Component : producer;
-		Component producerComponent = (Component) producer;
-		return producerComponent;
+	fun registerProducer(producer: StatusProducer) {
+		val producerComponent = checkComponent(producer)
+		producerComponent.addMouseMotionListener(mouseListener)
 	}
 
-	public void registerProducer(StatusProducer producer) {
-		Component producerComponent = checkComponent(producer);
-		producerComponent.addMouseMotionListener(mouseL);
+	fun unregisterProducer(producer: StatusProducer) {
+		val producerComponent = checkComponent(producer)
+		producerComponent.removeMouseMotionListener(mouseListener)
 	}
 
-	public void unregisterProducer(StatusProducer producer) {
-		Component producerComponent = checkComponent(producer);
-		producerComponent.removeMouseMotionListener(mouseL);
-	}
-
-	@Override
-	public void propertyChange(PropertyChangeEvent evt) {
-		Object newValue = evt.getNewValue();
-		if (newValue instanceof CharSequence) {
-			setText(newValue.toString());
-		} else if (newValue != null) {
-			setText(newValue.toString());
+	override fun propertyChange(evt: PropertyChangeEvent) {
+		val newValue = evt.newValue
+		when {
+			newValue is CharSequence -> text = newValue.toString()
+			newValue != null -> text = newValue.toString()
 		}
 	}
 }

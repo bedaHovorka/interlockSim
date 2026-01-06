@@ -7,11 +7,11 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.util;
+package cz.vutbr.fit.interlockSim.util
 
-import java.util.Map;
-import java.util.Set;
-import java.util.Map.Entry;
+import java.util.Map
+import java.util.Map.Entry
+import java.util.Set
 
 /**
  * for this program extended unoriented graph interface
@@ -20,8 +20,7 @@ import java.util.Map.Entry;
  * @param <E> edges
  * @param <X> node to edge relation extensional object
  */
-public interface ExtendedUnorientedGraph<N,E,X> extends UnorientedGraph<N, E> {
-
+interface ExtendedUnorientedGraph<N, E, X> : UnorientedGraph<N, E> {
 	/**
 	 * Put element to ExtendedUnorientedGraph with additional info
 	 * @param first
@@ -30,7 +29,13 @@ public interface ExtendedUnorientedGraph<N,E,X> extends UnorientedGraph<N, E> {
 	 * @param secondExt
 	 * @param value
 	 */
-	public void put(N first, X firstExt, N second, X secondExt, E value);
+	fun put(
+		first: N,
+		firstExt: X,
+		second: N,
+		secondExt: X,
+		value: E
+	)
 
 	/**
 	 *
@@ -38,19 +43,22 @@ public interface ExtendedUnorientedGraph<N,E,X> extends UnorientedGraph<N, E> {
 	 * @param edge
 	 * @return object mapped to relation between node and edge
 	 */
-	public X extensionalObject(N node, E edge);
+	fun extensionalObject(
+		node: N,
+		edge: E
+	): X
 
 	/**
 	 * @param node
 	 * @return extensioanal objects mapped to edge, which joins with mode
 	 */
-	public Map<X, E> assignedEdges(N node);
+	fun assignedEdges(node: N): Map<X, E>
 
 	/**
 	 * @see Map#entrySet()
 	 * @return entry set
 	 */
-	public Set<Entry<Doubleton<N,X>, E>> entrySet();
+	fun entrySet(): Set<Map.Entry<Doubleton<N, X>, E>>
 
 	/**
 	 * Put the key if not present in graph
@@ -60,5 +68,11 @@ public interface ExtendedUnorientedGraph<N,E,X> extends UnorientedGraph<N, E> {
 	 * @param secondExt
 	 * @param edge
 	 */
-	public void putIfNotExists(N first, X firstExt, N second, X secondExt, E edge);
+	fun putIfNotExists(
+		first: N,
+		firstExt: X,
+		second: N,
+		secondExt: X,
+		edge: E
+	)
 }

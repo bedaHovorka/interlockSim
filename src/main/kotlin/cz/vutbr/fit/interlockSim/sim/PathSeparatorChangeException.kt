@@ -7,49 +7,38 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim;
+package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
  * @author beda
  *
  */
-public class PathSeparatorChangeException extends SimulationException {
+class PathSeparatorChangeException : SimulationException {
 	/**
 	 * @param object
 	 */
-	public PathSeparatorChangeException(PathSeparator object) {
-		super(object);
-	}
+	constructor(obj: PathSeparator) : super(obj)
 
 	/**
 	 * @param message
 	 * @param object
 	 */
-	public PathSeparatorChangeException(String message, PathSeparator object) {
-		super(message, object);
-	}
+	constructor(message: String, obj: PathSeparator) : super(message, obj)
 
 	/**
 	 * @param cause
 	 * @param object
 	 */
-	public PathSeparatorChangeException(Throwable cause, PathSeparator object) {
-		super(cause, object);
-	}
+	constructor(cause: Throwable, obj: PathSeparator) : super(cause, obj)
 
 	/**
 	 * @param message
 	 * @param cause
 	 * @param object
 	 */
-	public PathSeparatorChangeException(String message, Throwable cause, PathSeparator object) {
-		super(message, cause, object);
-	}
+	constructor(message: String, cause: Throwable, obj: PathSeparator) : super(message, cause, obj)
 
-	@Override
-	public PathSeparator getObject() {
-		return (PathSeparator) super.getObject();
-	}
+	override fun getObject(): PathSeparator? = super.getObject() as? PathSeparator
 }

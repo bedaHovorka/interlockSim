@@ -7,20 +7,19 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui;
+package cz.vutbr.fit.interlockSim.gui
 
-import java.awt.Component;
-import java.awt.event.MouseEvent;
+import java.awt.event.MouseEvent
 
 /**
  * Caution: Class implementing this interface must be {@link Component}
  * @see StatusBar
  */
-public interface StatusProducer {
-		/**
-		 * get status of Component
-		 * @param e
-		 * @return status of Component
-		 */
-	public String getStatus(MouseEvent e);
+interface StatusProducer {
+	/**
+	 * get status of Component
+	 * @param e
+	 * @return status of Component
+	 */
+	fun getStatus(e: MouseEvent): String
 }

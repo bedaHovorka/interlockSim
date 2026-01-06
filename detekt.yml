@@ -1,0 +1,688 @@
+# Detekt Configuration for interlockSim Kotlin Migration
+#
+# This configuration is designed for a conservative Java-to-Kotlin migration
+# of a legacy 2007 codebase. Settings prioritize:
+# - Preserving existing Java structure and patterns
+# - Catching critical issues (bugs, potential crashes)
+# - Avoiding overly strict style enforcement
+# - Maintaining readability for developers familiar with Java
+#
+# Philosophy: We're converting Java syntax to Kotlin, not redesigning the system.
+#
+# See: https://detekt.dev/docs/intro
+
+build:
+  maxIssues: 0  # Fail build if any issues found (can be increased during migration)
+  excludeCorrectable: false
+  weights:
+    complexity: 2
+    LongParameterList: 1
+    style: 1
+    comments: 1
+
+config:
+  validation: true
+  warningsAsErrors: false
+  checkExhaustiveness: false
+
+processors:
+  active: true
+  exclude:
+    - 'DetektProgressListener'
+
+console-reports:
+  active: true
+  exclude:
+    - 'ProjectStatisticsReport'
+    - 'ComplexityReport'
+    - 'NotificationReport'
+    - 'FindingsReport'
+    - 'FileBasedFindingsReport'
+
+comments:
+  active: true
+  AbsentOrWrongFileLicense:
+    active: false  # Don't enforce file license headers during migration
+  CommentOverPrivateFunction:
+    active: false  # Allow private functions without comments
+  CommentOverPrivateProperty:
+    active: false  # Allow private properties without comments
+  DeprecatedBlockTag:
+    active: false  # Allow @deprecated JavaDoc tags (legacy pattern)
+  EndOfSentenceFormat:
+    active: false  # Don't enforce comment formatting
+  OutdatedDocumentation:
+    active: false  # Don't check for outdated docs during migration
+  UndocumentedPublicClass:
+    active: false  # Don't require docs for public classes (legacy code)
+  UndocumentedPublicFunction:
+    active: false  # Don't require docs for public functions (legacy code)
+  UndocumentedPublicProperty:
+    active: false  # Don't require docs for public properties (legacy code)
+
+complexity:
+  active: true
+  ComplexCondition:
+    active: true
+    threshold: 8  # Increased from default 4 (legacy code complexity)
+  ComplexInterface:
+    active: true
+    threshold: 20  # Increased from default 10 (legacy interfaces)
+    includeStaticDeclarations: false
+    includePrivateDeclarations: false
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 25  # Increased from default 15 (legacy methods)
+    ignoreSingleWhenExpression: true
+    ignoreSimpleWhenEntries: true
+    ignoreNestingFunctions: false
+  LabeledExpression:
+    active: false  # Allow labeled expressions (useful in nested loops)
+  LargeClass:
+    active: true
+    threshold: 800  # Increased from default 600 (legacy class sizes)
+  LongMethod:
+    active: true
+    threshold: 100  # Increased from default 60 (legacy method lengths)
+  LongParameterList:
+    active: true
+    functionThreshold: 8  # Increased from default 6 (legacy constructors)
+    constructorThreshold: 10  # Increased from default 7
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+  MethodOverloading:
+    active: false  # Allow method overloading (common in Java conversions)
+  NamedArguments:
+    active: false  # Don't enforce named arguments (optional during migration)
+  NestedBlockDepth:
+    active: true
+    threshold: 6  # Increased from default 4 (legacy nesting)
+  NestedScopeFunctions:
+    active: true
+    threshold: 2  # Limit nested scope functions (let, apply, etc.)
+  ReplaceSafeCallChainWithRun:
+    active: false  # Don't enforce Kotlin idioms during initial conversion
+  StringLiteralDuplication:
+    active: false  # Don't enforce string constant extraction (can do later)
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 25  # Increased from default 11
+    thresholdInClasses: 25  # Increased from default 11
+    thresholdInInterfaces: 20  # Increased from default 11
+    thresholdInObjects: 20  # Increased from default 11
+    thresholdInEnums: 20  # Increased from default 11
+    ignoreDeprecated: true
+    ignorePrivate: true
+    ignoreOverridden: true
+
+coroutines:
+  active: false  # Not using coroutines in initial migration
+  GlobalCoroutineUsage:
+    active: false
+  InjectDispatcher:
+    active: false
+  RedundantSuspendModifier:
+    active: false
+  SleepInsteadOfDelay:
+    active: false
+  SuspendFunWithCoroutineScopeReceiver:
+    active: false
+  SuspendFunWithFlowReturnType:
+    active: false
+
+empty-blocks:
+  active: true
+  EmptyCatchBlock:
+    active: true
+    allowedExceptionNameRegex: '_|(ignore|expected).*'  # Allow empty catch with clear names
+  EmptyClassBlock:
+    active: false  # Allow empty class blocks (may exist during conversion)
+  EmptyDefaultConstructor:
+    active: true
+  EmptyDoWhileBlock:
+    active: true
+  EmptyElseBlock:
+    active: false  # Allow empty else blocks
+  EmptyFinallyBlock:
+    active: true
+  EmptyForBlock:
+    active: true
+  EmptyFunctionBlock:
+    active: false  # Allow empty function blocks (abstract/interface methods)
+  EmptyIfBlock:
+    active: true
+  EmptyInitBlock:
+    active: true
+  EmptyKtFile:
+    active: true
+  EmptySecondaryConstructor:
+    active: false  # Allow empty secondary constructors
+  EmptyTryBlock:
+    active: true
+  EmptyWhenBlock:
+    active: true
+  EmptyWhileBlock:
+    active: true
+
+exceptions:
+  active: true
+  ExceptionRaisedInUnexpectedLocation:
+    active: true
+    methodNames: ['equals', 'finalize', 'hashCode', 'toString']
+  InstanceOfCheckForException:
+    active: false  # Allow instanceof checks for exceptions (Java pattern)
+  NotImplementedDeclaration:
+    active: true
+  ObjectExtendsThrowable:
+    active: true
+  PrintStackTrace:
+    active: false  # Allow printStackTrace (exists in legacy code)
+  RethrowCaughtException:
+    active: false  # Allow rethrowing (may be needed during migration)
+  ReturnFromFinally:
+    active: true
+  SwallowedException:
+    active: false  # Don't enforce exception handling changes during conversion
+  ThrowingExceptionFromFinally:
+    active: true
+  ThrowingExceptionInMain:
+    active: false  # Allow throwing from main (application entry point pattern)
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: false  # Allow exceptions without messages (legacy pattern)
+  ThrowingNewInstanceOfSameException:
+    active: true
+  TooGenericExceptionCaught:
+    active: false  # Allow catching generic exceptions (legacy pattern)
+  TooGenericExceptionThrown:
+    active: false  # Allow throwing generic exceptions (legacy APIs)
+
+naming:
+  active: true
+  BooleanPropertyNaming:
+    active: false  # Don't enforce is/has prefix during conversion
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][a-zA-Z0-9]*'  # Standard class naming
+  ConstructorParameterNaming:
+    active: false  # Don't enforce during conversion (Java may use different patterns)
+  EnumNaming:
+    active: false  # Don't enforce UPPER_CASE enums (Java uses mixed case)
+  ForbiddenClassName:
+    active: false  # Don't forbid any class names
+  FunctionMaxLength:
+    active: false  # Don't enforce max function name length
+  FunctionMinLength:
+    active: false  # Don't enforce min function name length
+  FunctionNaming:
+    active: false  # Don't enforce naming during conversion (Java may use different patterns)
+  FunctionParameterNaming:
+    active: false  # Don't enforce during conversion
+  InvalidPackageDeclaration:
+    active: true
+    rootPackage: 'cz.vutbr.fit.interlockSim'
+  LambdaParameterNaming:
+    active: false  # Don't enforce lambda parameter naming during conversion
+  MatchingDeclarationName:
+    active: false  # Don't enforce (package-info.kt files don't match)
+  MemberNameEqualsClassName:
+    active: false  # Allow during conversion (may be intentional)
+  NoNameShadowing:
+    active: false  # Allow name shadowing (may occur in conversion)
+  NonBooleanPropertyPrefixedWithIs:
+    active: false  # Don't enforce this during conversion
+  ObjectPropertyNaming:
+    active: false  # Don't enforce naming during conversion
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9]*)*'
+  TopLevelPropertyNaming:
+    active: false  # Don't enforce UPPER_CASE constants (Java uses different patterns)
+  VariableMaxLength:
+    active: false  # Don't enforce max variable name length
+  VariableMinLength:
+    active: false  # Don't enforce min variable name length (allow i, j, k, etc.)
+  VariableNaming:
+    active: false  # Don't enforce camelCase (Java may use different patterns)
+
+performance:
+  active: true
+  ArrayPrimitive:
+    active: false  # Don't enforce primitive arrays (may not be needed)
+  CouldBeSequence:
+    active: false  # Don't enforce sequence usage during conversion
+  ForEachOnRange:
+    active: false  # Allow forEach on ranges (readable)
+  SpreadOperator:
+    active: false  # Allow spread operator (may be needed)
+  UnnecessaryPartOfBinaryExpression:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+
+potential-bugs:
+  active: true
+  AvoidReferentialEquality:
+    active: false  # Allow === during conversion (may be intentional)
+  CastNullableToNonNullableType:
+    active: true
+  CastToNullableType:
+    active: false  # Allow casting to nullable types
+  Deprecation:
+    active: false  # Don't fail on deprecations (many in legacy code)
+  DontDowncastCollectionTypes:
+    active: true
+  DoubleMutabilityForCollection:
+    active: false  # Allow during conversion
+  ElseCaseInsteadOfExhaustiveWhen:
+    active: false  # Don't require exhaustive when during conversion
+  EqualsAlwaysReturnsTrueOrFalse:
+    active: true
+  EqualsWithHashCodeExist:
+    active: true
+  ExitOutsideMain:
+    active: false  # Allow System.exit outside main (legacy pattern)
+  ExplicitGarbageCollectionCall:
+    active: true
+  HasPlatformType:
+    active: false  # Platform types will exist during Java interop
+  IgnoredReturnValue:
+    active: false  # Don't enforce return value usage during conversion
+  ImplicitDefaultLocale:
+    active: false  # Don't enforce locale specification
+  ImplicitUnitReturnType:
+    active: false  # Allow implicit Unit return
+  InvalidRange:
+    active: true
+  IteratorHasNextCallsNextMethod:
+    active: true
+  IteratorNotThrowingNoSuchElementException:
+    active: true
+  LateinitUsage:
+    active: false  # Allow lateinit (useful in conversion)
+  MapGetWithNotNullAssertionOperator:
+    active: false  # Allow !! on map.get (may be needed)
+  MissingPackageDeclaration:
+    active: true
+  NullCheckOnMutableProperty:
+    active: false  # Allow during conversion
+  NullableToStringCall:
+    active: false  # Allow during conversion
+  PropertyUsedBeforeDeclaration:
+    active: true
+  UnconditionalJumpStatementInLoop:
+    active: true
+  UnnecessaryNotNullCheck:
+    active: false  # Allow during conversion
+  UnnecessaryNotNullOperator:
+    active: false  # Allow during conversion
+  UnnecessarySafeCall:
+    active: false  # Allow during conversion
+  UnreachableCatchBlock:
+    active: true
+  UnreachableCode:
+    active: true
+  UnsafeCallOnNullableType:
+    active: false  # Will be many during conversion - fix gradually
+  UnsafeCast:
+    active: false  # Allow unsafe casts during conversion
+  UnusedUnaryOperator:
+    active: true
+  UselessPostfixExpression:
+    active: true
+  WrongEqualsTypeParameter:
+    active: true
+
+style:
+  active: true
+  AlsoCouldBeApply:
+    active: false  # Don't enforce scope function preferences
+  BracesOnIfStatements:
+    active: false  # Allow both styles during conversion
+  BracesOnWhenStatements:
+    active: false  # Allow both styles during conversion
+  CanBeNonNullable:
+    active: false  # Don't enforce during conversion
+  CascadingCallWrapping:
+    active: false  # Don't enforce call wrapping style
+  ClassOrdering:
+    active: false  # Don't enforce class member ordering (matches Java)
+  CollapsibleIfStatements:
+    active: false  # Don't enforce during conversion
+  DataClassContainsFunctions:
+    active: false  # Allow functions in data classes
+  DataClassShouldBeImmutable:
+    active: false  # Don't enforce immutability during conversion
+  DestructuringDeclarationWithTooManyEntries:
+    active: false  # Allow during conversion
+  DoubleNegativeLambda:
+    active: false  # Allow during conversion
+  EqualsNullCall:
+    active: true
+  EqualsOnSignatureLine:
+    active: false  # Don't enforce formatting
+  ExplicitCollectionElementAccessMethod:
+    active: false  # Allow both [] and get()
+  ExplicitItLambdaParameter:
+    active: false  # Allow implicit 'it'
+  ExpressionBodySyntax:
+    active: false  # Don't enforce expression body during conversion
+  ForbiddenAnnotation:
+    active: false  # Don't forbid annotations
+  ForbiddenComment:
+    active: false  # Don't forbid comment patterns
+  ForbiddenImport:
+    active: false  # Don't forbid imports
+  ForbiddenMethodCall:
+    active: false  # Don't forbid method calls
+  ForbiddenSuppress:
+    active: false  # Allow @Suppress annotations
+  ForbiddenVoid:
+    active: false  # Allow Void type during conversion
+  FunctionOnlyReturningConstant:
+    active: false  # Allow during conversion
+  LoopWithTooManyJumpStatements:
+    active: false  # Allow complex loops (legacy pattern)
+  MagicNumber:
+    active: false  # Don't enforce constant extraction during conversion
+  MandatoryBracesLoops:
+    active: false  # Don't enforce braces on single-line loops
+  MaxChainedCallsOnSameLine:
+    active: false  # Don't enforce during conversion
+  MaxLineLength:
+    active: true
+    maxLineLength: 120  # Match .editorconfig
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: true  # Don't check comments (JavaDoc @link can be long)
+    excludeRawStrings: true
+  MayBeConst:
+    active: false  # Don't enforce const during conversion
+  ModifierOrder:
+    active: true
+  MultilineLambdaItParameter:
+    active: false  # Allow 'it' in multiline lambdas
+  MultilineRawStringIndentation:
+    active: false  # Don't enforce raw string indentation
+  NestedClassesVisibility:
+    active: false  # Allow nested class visibility patterns from Java
+  NewLineAtEndOfFile:
+    active: true
+  NoTabs:
+    active: false  # ALLOW TABS (matches Java style and .editorconfig)
+    # CRITICAL: This must be FALSE to allow tab indentation
+    # Java code from develop branch uses tabs with 4-space visual width
+    # .editorconfig specifies indent_style = tab for both Java and Kotlin
+  NullableBooleanCheck:
+    active: false  # Allow during conversion
+  ObjectLiteralToLambda:
+    active: false  # Allow object literals (Java SAM conversion)
+  OptionalAbstractKeyword:
+    active: false  # Allow explicit 'abstract' keyword
+  OptionalUnit:
+    active: false  # Allow explicit ': Unit'
+  PreferToOverPairSyntax:
+    active: false  # Allow both Pair() and to syntax
+  ProtectedMemberInFinalClass:
+    active: false  # Allow protected members (may be needed during conversion)
+  RedundantExplicitType:
+    active: false  # Allow explicit types during conversion
+  RedundantHigherOrderMapUsage:
+    active: false  # Don't enforce during conversion
+  RedundantVisibilityModifierRule:
+    active: false  # Allow explicit visibility modifiers
+  ReturnCount:
+    active: false  # Don't limit return statements (legacy pattern)
+  SafeCast:
+    active: false  # Don't enforce safe casts during conversion
+  SerialVersionUIDInSerializableClass:
+    active: true
+  SpacingBetweenPackageAndImports:
+    active: false  # Formatting handled by ktlint
+  StringShouldBeRawString:
+    active: false  # Don't enforce raw strings
+  ThrowsCount:
+    active: false  # Don't limit throws declarations (legacy pattern)
+  TrailingWhitespace:
+    active: false  # Formatting handled by ktlint
+  TrimMultilineRawString:
+    active: false  # Don't enforce trimming
+  UnderscoresInNumericLiterals:
+    active: false  # Don't enforce underscores in numbers
+  UnnecessaryAbstractClass:
+    active: false  # Allow abstract classes (legacy pattern)
+  UnnecessaryAnnotationUseSiteTarget:
+    active: false  # Allow during conversion
+  UnnecessaryApply:
+    active: false  # Allow during conversion
+  UnnecessaryBackticks:
+    active: true
+  UnnecessaryBracesAroundTrailingLambda:
+    active: false  # Allow during conversion
+  UnnecessaryFilter:
+    active: false  # Don't enforce during conversion
+  UnnecessaryInheritance:
+    active: false  # Allow explicit inheritance
+  UnnecessaryInnerClass:
+    active: false  # Allow inner classes (legacy pattern)
+  UnnecessaryLet:
+    active: false  # Allow during conversion
+  UnnecessaryParentheses:
+    active: false  # Allow extra parentheses for clarity
+  UntilInsteadOfRangeTo:
+    active: false  # Allow .. syntax
+  UnusedImports:
+    active: true  # Remove unused imports
+  UnusedParameter:
+    active: false  # Allow unused parameters (may be interface requirements)
+  UnusedPrivateClass:
+    active: false  # Allow during conversion (may be needed)
+  UnusedPrivateMember:
+    active: false  # Allow during conversion (may be used via reflection)
+  UnusedPrivateProperty:
+    active: false  # Allow during conversion
+  UseAnyOrNoneInsteadOfFind:
+    active: false  # Don't enforce during conversion
+  UseArrayLiteralsInAnnotations:
+    active: false  # Allow during conversion
+  UseCheckNotNull:
+    active: false  # Don't enforce Kotlin idioms during conversion
+  UseCheckOrError:
+    active: false  # Don't enforce during conversion
+  UseDataClass:
+    active: false  # Don't enforce data class conversion
+  UseEmptyCounterpart:
+    active: false  # Don't enforce isEmpty() vs size == 0
+  UseIfEmptyOrIfBlank:
+    active: false  # Don't enforce during conversion
+  UseIfInsteadOfWhen:
+    active: false  # Allow when with 2 branches
+  UseIsNullOrEmpty:
+    active: false  # Don't enforce during conversion
+  UseOrEmpty:
+    active: false  # Don't enforce during conversion
+  UseRequire:
+    active: false  # Don't enforce require() during conversion
+  UseRequireNotNull:
+    active: false  # Don't enforce during conversion
+  UseSumOfInsteadOfFlatMapSize:
+    active: false  # Don't enforce during conversion
+  UselessCallOnNotNull:
+    active: true
+  UtilityClassWithPublicConstructor:
+    active: false  # Allow utility classes with constructors (legacy pattern)
+  VarCouldBeVal:
+    active: false  # Don't enforce val during conversion (careful analysis needed)
+  WildcardImport:
+    active: false  # Allow wildcard imports (legacy pattern)
+
+formatting:
+  active: true
+  android: false
+  autoCorrect: true
+  AnnotationOnSeparateLine:
+    active: false
+  AnnotationSpacing:
+    active: true
+  ArgumentListWrapping:
+    active: false  # Don't enforce wrapping
+  BlockCommentInitialStarAlignment:
+    active: false
+  ChainWrapping:
+    active: false  # Don't enforce chain wrapping
+  ClassName:
+    active: false  # Don't enforce during conversion
+  CommentSpacing:
+    active: true
+  CommentWrapping:
+    active: false  # Don't enforce comment wrapping
+  ContextReceiverMapping:
+    active: false
+  DiscouragedCommentLocation:
+    active: false
+  EnumEntryNameCase:
+    active: false  # Don't enforce UPPER_CASE enums during conversion
+  EnumWrapping:
+    active: false
+  Filename:
+    active: false  # Don't enforce PascalCase (package-info.kt files don't match)
+  FinalNewline:
+    active: true
+  FunKeywordSpacing:
+    active: true
+  FunctionName:
+    active: false  # Don't enforce naming during conversion
+  FunctionReturnTypeSpacing:
+    active: false
+  FunctionSignature:
+    active: false
+  FunctionStartOfBodySpacing:
+    active: false
+  FunctionTypeReferenceSpacing:
+    active: false
+  IfElseBracing:
+    active: false
+  IfElseWrapping:
+    active: false
+  ImportOrdering:
+    active: false  # Don't enforce import ordering
+  Indentation:
+    active: false  # DISABLED - Let ktlint use .editorconfig (tabs)
+    # Note: When active, this rule enforces SPACES not tabs.
+    # Ktlint reads .editorconfig directly for indentation style.
+    # Keep disabled to respect tab indentation from .editorconfig
+  KdocWrapping:
+    active: false
+  MaximumLineLength:
+    active: true
+    maxLineLength: 120  # Match .editorconfig
+    ignoreComments: true  # Don't check comments (JavaDoc @link can be long)
+  ModifierListSpacing:
+    active: false
+  ModifierOrdering:
+    active: true
+  MultiLineIfElse:
+    active: false
+  MultilineExpressionWrapping:
+    active: false
+  MultilineLoopExpression:
+    active: false
+  NoBlankLineBeforeRbrace:
+    active: false
+  NoBlankLineInList:
+    active: false
+  NoBlankLinesInChainedMethodCalls:
+    active: false
+  NoConsecutiveBlankLines:
+    active: false
+  NoConsecutiveComments:
+    active: false
+  NoEmptyClassBody:
+    active: false
+  NoEmptyFirstLineInClassBody:
+    active: false
+  NoEmptyFirstLineInMethodBlock:
+    active: false
+  NoLineBreakAfterElse:
+    active: false
+  NoLineBreakBeforeAssignment:
+    active: false
+  NoMultipleSpaces:
+    active: false
+  NoSemicolons:
+    active: true  # Remove unnecessary semicolons
+  NoSingleLineBlockComment:
+    active: false
+  NoTrailingSpaces:
+    active: true
+  NoUnitReturn:
+    active: false
+  NoUnusedImports:
+    active: true
+  NoWildcardImports:
+    active: false  # Allow wildcard imports (legacy)
+  NullableTypeSpacing:
+    active: false
+  PackageName:
+    active: true
+  ParameterListSpacing:
+    active: false
+  ParameterListWrapping:
+    active: false
+  ParameterWrapping:
+    active: false
+  PropertyName:
+    active: false  # Don't enforce naming during conversion
+  PropertyWrapping:
+    active: false
+  SpacingAroundAngleBrackets:
+    active: false
+  SpacingAroundColon:
+    active: false
+  SpacingAroundComma:
+    active: true
+  SpacingAroundCurly:
+    active: false
+  SpacingAroundDot:
+    active: false
+  SpacingAroundDoubleColon:
+    active: false
+  SpacingAroundKeyword:
+    active: false
+  SpacingAroundOperators:
+    active: false
+  SpacingAroundParens:
+    active: false
+  SpacingAroundRangeOperator:
+    active: false
+  SpacingAroundUnaryOperator:
+    active: false
+  SpacingBetweenDeclarationsWithAnnotations:
+    active: false
+  SpacingBetweenDeclarationsWithComments:
+    active: false
+  SpacingBetweenFunctionNameAndOpeningParenthesis:
+    active: false
+  StatementWrapping:
+    active: false
+  StringTemplate:
+    active: false
+  StringTemplateIndent:
+    active: false
+  TrailingCommaOnCallSite:
+    active: false  # Don't enforce trailing commas
+  TrailingCommaOnDeclarationSite:
+    active: false  # Don't enforce trailing commas
+  TryCatchFinallySpacing:
+    active: false
+  TypeArgumentComment:
+    active: false
+  TypeArgumentListSpacing:
+    active: false
+  TypeParameterComment:
+    active: false
+  TypeParameterListSpacing:
+    active: false
+  UnnecessaryParenthesesBeforeTrailingLambda:
+    active: false
+  Wrapping:
+    active: false

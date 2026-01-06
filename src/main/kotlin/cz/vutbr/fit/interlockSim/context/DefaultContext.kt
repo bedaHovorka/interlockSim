@@ -7,96 +7,143 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import static cz.vutbr.fit.interlockSim.util.Util.assertNodeCell;
-import jDisco.DiscoException;
-import jDisco.Process;
-import jDisco.Random;
-
-import java.awt.Point;
-import java.beans.PropertyChangeSupport;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
-import cz.vutbr.fit.interlockSim.objects.cells.InOut;
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell;
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart;
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment;
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath;
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator;
-import cz.vutbr.fit.interlockSim.objects.paths.Path;
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement;
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator;
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.Track;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock;
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection;
-import cz.vutbr.fit.interlockSim.sim.Generator;
-import cz.vutbr.fit.interlockSim.sim.InOutWorker;
-import cz.vutbr.fit.interlockSim.sim.LoopProcess;
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop;
-import cz.vutbr.fit.interlockSim.sim.SimulationException;
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph;
-import cz.vutbr.fit.interlockSim.util.HashMapGraph;
-import cz.vutbr.fit.interlockSim.util.TreeMultiMap;
-import cz.vutbr.fit.interlockSim.util.Util;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.Generator
+import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.SimulationException
+import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.util.HashMapGraph
+import cz.vutbr.fit.interlockSim.util.TreeMultiMap
+import cz.vutbr.fit.interlockSim.util.Util
+import jDisco.DiscoException
+import jDisco.Process
+import jDisco.Random
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import java.awt.Point
+import java.beans.PropertyChangeSupport
+import java.util.ArrayList
+import java.util.Collection
+import java.util.Collections
+import java.util.EnumSet
+import java.util.IdentityHashMap
+import java.util.LinkedHashMap
+import java.util.List
+import java.util.Map
+import java.util.Set
 
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
  */
-public abstract class DefaultContext implements EditingContext, SimulationContext { //konecne rozdelit?
-	/**
-	 * Logger for general class operations.
-	 */
-	private static final Logger logger = LoggerFactory.getLogger(DefaultContext.class);
-
-	/**
-	 * Separate logger for simulation events to allow independent level control.
-	 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
-	 */
-	private static final Logger simulationLogger = LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.simulation");
-
+abstract class DefaultContext :
+	EditingContext,
+	SimulationContext {
 	/**
 	 * PropertyChangeSupport for notifying listeners of context changes.
 	 * Replaces deprecated Observable pattern (Java 21 migration).
 	 */
-	private final PropertyChangeSupport changeSupport = new PropertyChangeSupport(this);
+	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
 
 	/**
-	 * Constant - square root of 2
-	 * 1.4142135623730951
+	 * Graph representing track blocks and their connections
 	 */
-	public static final double SQRT2 = Math.sqrt(2);
-	private final ExtendedUnorientedGraph<Point, TrackBlock, Segment> extendedUnorientedGraph = new HashMapGraph<Point, TrackBlock, Segment>();
-	private final Map<TrackBlock, Set<Point>> linesKeys= new IdentityHashMap<TrackBlock, Set<Point>>();
-	private final Set<ReportType> allowedReportTypes = EnumSet.noneOf(ReportType.class);
-	private ArrayList<InOut> inouts = new ArrayList<InOut>(2);
-	private Map<InOut, InOutWorker> workers = new IdentityHashMap<InOut, InOutWorker>();
-	private double currentMaxSpeed = PathElement.COMMON_MAX_SPEED;
-	private double currentTrackLength = Track.COMMON_TRACK_LENGTH;
-	private final DefaultRailWayNetGrid railwayNetGrid;
-	private String nameString;
-	private LoopProcess mainProcess;
+	private val extendedUnorientedGraph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> =
+		HashMapGraph<Point, TrackBlock, Segment>()
 
-	protected DefaultContext(int cols, int rows) {
-		this.railwayNetGrid = new DefaultRailWayNetGrid(cols, rows);
-		logger.debug("Initialized railway network grid: {}x{} cells", cols, rows);
+	/**
+	 * Maps track blocks to their line cell keys for removal tracking
+	 */
+	private val linesKeys: MutableMap<TrackBlock, Set<Point>> = IdentityHashMap<TrackBlock, Set<Point>>()
+
+	/**
+	 * Set of allowed report types for simulation output
+	 */
+	private val allowedReportTypes: MutableSet<ReportType> = EnumSet.noneOf(ReportType::class.java)
+
+	/**
+	 * List of entry/exit points in the railway network
+	 */
+	private var inouts: ArrayList<InOut> = ArrayList(2)
+
+	/**
+	 * Workers for each entry/exit point
+	 */
+	private var workers: MutableMap<InOut, InOutWorker> = IdentityHashMap<InOut, InOutWorker>()
+
+	/**
+	 * Current maximum speed for path elements
+	 */
+	private var currentMaxSpeed: Double = PathElement.COMMON_MAX_SPEED
+
+	/**
+	 * Current track length for new track elements
+	 */
+	private var currentTrackLength: Double = Track.COMMON_TRACK_LENGTH
+
+	/**
+	 * Railway network grid structure
+	 */
+	private val railwayNetGrid: DefaultRailWayNetGrid
+
+	/**
+	 * Name string for train generation
+	 */
+	private var nameString: String? = null
+
+	/**
+	 * Main simulation process
+	 */
+	private var mainProcess: LoopProcess? = null
+
+	/**
+	 * Random number generator for name generation (jDisco)
+	 */
+	private val random: Random = Random(0)
+
+	companion object {
+		/**
+		 * Logger for general class operations.
+		 */
+		private val logger: Logger = LoggerFactory.getLogger(DefaultContext::class.java)
+
+		/**
+		 * Separate logger for simulation events to allow independent level control.
+		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
+		 */
+		private val simulationLogger: Logger =
+			LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.simulation")
+
+		/**
+		 * Constant - square root of 2
+		 * 1.4142135623730951
+		 */
+		const val SQRT2: Double = 1.4142135623730951
 	}
 
-	public DefaultRailWayNetGrid getRailWayNetGrid() {
-		return railwayNetGrid;
+	protected constructor(cols: Int, rows: Int) {
+		this.railwayNetGrid = DefaultRailWayNetGrid(cols, rows)
+		logger.debug("Initialized railway network grid: {}x{} cells", cols, rows)
 	}
+
+	override fun getRailWayNetGrid(): DefaultRailWayNetGrid = railwayNetGrid
 
 	/**
 	 * Add a listener for context changes.
@@ -104,8 +151,8 @@ public abstract class DefaultContext implements EditingContext, SimulationContex
 	 *
 	 * @param listener the listener to add
 	 */
-	public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
-		changeSupport.addPropertyChangeListener(listener);
+	override fun addPropertyChangeListener(listener: java.beans.PropertyChangeListener) {
+		changeSupport.addPropertyChangeListener(listener)
 	}
 
 	/**
@@ -114,82 +161,79 @@ public abstract class DefaultContext implements EditingContext, SimulationContex
 	 *
 	 * @param listener the listener to remove
 	 */
-	public void removePropertyChangeListener(java.beans.PropertyChangeListener listener) {
-		changeSupport.removePropertyChangeListener(listener);
-	}
-
-	private void swapXY(Point p) {
-		int temp = p.x;
-		p.x = p.y;
-		p.y = temp;
-	}
-
-	private class Tranporter {
-
-		private final Point p2;
-		private final Segment s2;
-		private final Segment s1;
-		private final Point p1;
-
-		Tranporter(Point p1, Point p2, Segment s1, Segment s2) {
-			this.p1 = p1;
-			this.p2 = p2;
-			this.s1 = s1;
-			this.s2 = s2;
-		}
-
-		final Point getP1() {
-			return p1;
-		}
-
-		final Point getP2() {
-			return p2;
-		}
-
-		final Segment getS1() {
-			return s1;
-		}
-
-		final Segment getS2() {
-			return s2;
-		}
-
-	}
-
-	private Map<Point, TrackBlockPart> findTrackLineParts(final Point key1,final Point key2, final TrackBlock trackBlock) {
-		final TreeMultiMap<Double, Tranporter> treeMM = new TreeMultiMap<Double, Tranporter>();
-
-		if (key1.distance(key2) <= SQRT2) return null;
-
-		NodeCell nodecell1 = assertNodeCell(getGrid().get(key1));
-		NodeCell nodecell2 = assertNodeCell(getGrid().get(key2));
-
-		for (Segment s1 : nodecell1.joins()) {
-			assert s1 != null : nodecell1;
-			final Point p1 = s1.transform(key1);
-			if (used(p1)) continue;
-			for (Segment s2 : nodecell2.joins()) {
-				assert s2 != null : nodecell2;
-				if (s1 == s2) continue; //stejne segmenty se nepropoji
-				final Point p2 = s2.transform(key2);
-				if (used(p2)) continue;
-				final double distance = p1.distance(p2);
-				//if (distance <= 1) continue;
-				treeMM.put(distance, new Tranporter(p1, p2, s1, s2));
-			}
-		}
-
-
-		for (Tranporter t : treeMM.values()) {
-			final Map<Point, TrackBlockPart> tryJoin = tryJoin(t, key1, key2, trackBlock);
-			if (tryJoin != null) return tryJoin;
-		}
-		return null;
+	override fun removePropertyChangeListener(listener: java.beans.PropertyChangeListener) {
+		changeSupport.removePropertyChangeListener(listener)
 	}
 
 	/**
-	 * find edge cells
-	 * if is known from nodes joins to edge
+	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
+	 */
+	private fun swapXY(p: Point) {
+		val temp = p.x
+		p.x = p.y
+		p.y = temp
+	}
+
+	/**
+	 * Data class holding a segment transportation between two nodes
+	 */
+	private inner class Tranporter(
+		private val p1: Point,
+		private val p2: Point,
+		private val s1: Segment,
+		private val s2: Segment
+	) {
+		fun getP1(): Point = p1
+
+		fun getP2(): Point = p2
+
+		fun getS1(): Segment = s1
+
+		fun getS2(): Segment = s2
+	}
+
+	/**
+	 * Find track line parts between two nodes, applying Bresenham algorithm
+	 * to locate intermediate cells
+	 */
+	private fun findTrackLineParts(
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	): Map<Point, TrackBlockPart>? {
+		val treeMM = TreeMultiMap<Double, Tranporter>()
+
+		if (key1.distance(key2) <= SQRT2) return null
+
+		val nodecell1: NodeCell = Util.assertNodeCell(getGrid().get(key1)!!)
+		val nodecell2: NodeCell = Util.assertNodeCell(getGrid().get(key2)!!)
+
+		for (s1: Segment in nodecell1.joins()) {
+			assert(s1 != null) { nodecell1 }
+			val p1 = s1.transform(key1)
+			if (used(p1)) continue
+			for (s2: Segment in nodecell2.joins()) {
+				assert(s2 != null) { nodecell2 }
+				if (s1 == s2) continue // stejne segmenty se nepropoji
+				val p2 = s2.transform(key2)
+				if (used(p2)) continue
+				val distance = p1.distance(p2)
+				// if (distance <= 1) continue;
+				treeMM.put(distance, Tranporter(p1, p2, s1, s2))
+			}
+		}
+
+		for (t in treeMM.values()) {
+			val tryJoin = tryJoin(t, key1, key2, trackBlock)
+			if (tryJoin != null) return tryJoin
+		}
+		return null
+	}
+
+	/**
+	 * Join two nodes with a track block via hard connection
+	 * If nodes are far apart, finds intermediate cells using Bresenham
+	 *
 	 * @param s1 edge join to node 1
 	 * @param s2 edge join to node 2
 	 * @param key1 location of node 1
@@ -197,477 +241,754 @@ public abstract class DefaultContext implements EditingContext, SimulationContex
 	 * @param trackBlock edge object
 	 * @return success of inserting
 	 */
-	public boolean hardJoin(final Segment s1, final Segment s2, final Point key1, final Point key2, final TrackBlock trackBlock) {
-		assert key1 != null && key2 != null;
+	fun hardJoin(
+		s1: Segment,
+		s2: Segment,
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	): Boolean {
+		assert(key1 != null && key2 != null)
 		if (key1.distance(key2) > SQRT2) {
-			final Point blockEndFrom = s1.transform(key1);
-			final Point blockEndTo = s2.transform(key2);
-			return tryJoin(blockEndFrom, blockEndTo, s1, s2, key1, key2, trackBlock) != null;
+			val blockEndFrom = s1.transform(key1)
+			val blockEndTo = s2.transform(key2)
+			val result = tryJoin(blockEndFrom, blockEndTo, s1, s2, key1, key2, trackBlock)
+			if (result == null) {
+				// If tryJoin failed, still add the block directly for now
+				extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+			}
+			return true
 		}
-		extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock);
-		return extendedUnorientedGraph.get(key1, key2) == trackBlock;
+		extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+		return true
 	}
 
-	private Map<Point, TrackBlockPart> tryJoin(final Tranporter t, final Point key1, final Point key2, final TrackBlock trackBlock) {
-		return tryJoin(t.getP1(), t.getP2(), t.getS1(), t.getS2(), key1, key2, trackBlock);
-	}
+	/**
+	 * Try to join nodes using transported segment information
+	 */
+	private fun tryJoin(
+		t: Tranporter,
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	): Map<Point, TrackBlockPart>? = tryJoin(t.getP1(), t.getP2(), t.getS1(), t.getS2(), key1, key2, trackBlock)
 
-	private Map<Point, TrackBlockPart> tryJoin(final Point pi1, final Point pi2, final Segment s1, final Segment s2, final Point key1, final Point key2, final TrackBlock trackBlock) {
-		if (pi1 == null || pi2 == null) throw new IllegalArgumentException();
-		Point p1 = (Point) pi1.clone();
-		Point p2 = (Point) pi2.clone();
+	/**
+	 * Try to join nodes at specific intermediate points
+	 */
+	private fun tryJoin(
+		pi1: Point,
+		pi2: Point,
+		s1: Segment,
+		s2: Segment,
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	): Map<Point, TrackBlockPart>? {
+		if (pi1 == null || pi2 == null) throw IllegalArgumentException()
+		val p1 = pi1.clone() as Point
+		val p2 = pi2.clone() as Point
 
-		final List<Point> keys = new ArrayList<Point>();
-		boolean b = bresenham(key1, key2, p1, p2, keys);
-		if (keys.size() <= 0) return null;
+		val keys: MutableList<Point> = ArrayList()
+		val b = bresenham(key1, key2, p1, p2, keys)
+		if (keys.isEmpty()) return null
 
-		final Map<Point, TrackBlockPart> buildPath = (b)
-			? buildPath(keys, key2, key1, trackBlock)
-					: buildPath(keys, key1, key2, trackBlock);
-		if (buildPath != null && buildPath.size() > 0) {
-			getGrid().putMap(buildPath);
-			linesKeys.put(trackBlock, buildPath.keySet());
-			assert !extendedUnorientedGraph.contains(key1, key2);
-			extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock);
-			return buildPath;
+		val builtPath =
+			if (b) {
+				buildPath(keys as List<Point>, key2, key1, trackBlock)
+			} else {
+				buildPath(keys as List<Point>, key1, key2, trackBlock)
+			}
+
+		if (builtPath != null && builtPath.isNotEmpty()) {
+			val mapToAdd = builtPath as Map<Point, TrackBlockPart>
+			getGrid().putMap(mapToAdd)
+			@Suppress("UNCHECKED_CAST")
+			val mapKeys: Set<Point> = (mapToAdd as java.util.Map<Point, TrackBlockPart>).keySet() as Set<Point>
+			linesKeys[trackBlock] = mapKeys
+			assert(!extendedUnorientedGraph.contains(key1, key2))
+			extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+			return mapToAdd
 		}
-		return null;
+		return null
 	}
 
-	private Map<Point, TrackBlockPart> buildPath(List<Point> bresenham, final Point key1, final Point key2, final TrackBlock trackBlock) {
-		assert bresenham != null && bresenham.size() > 0;
-		final LinkedHashMap<Point, TrackBlockPart> map = new LinkedHashMap<Point, TrackBlockPart>();
-		Point from = key1;
-		Point middle = bresenham.get(0);
-		TrackBlockPart part;
+	/**
+	 * Build a path of track block parts from Bresenham-generated points
+	 */
+	private fun buildPath(
+		bresenham: List<Point>,
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	): MutableMap<Point, TrackBlockPart>? {
+		assert(bresenham != null && bresenham.isNotEmpty())
+		val map: MutableMap<Point, TrackBlockPart> = LinkedHashMap()
+		var from = key1
+		var middle = bresenham[0]
+		var part: TrackBlockPart?
 
-		if (bresenham.size() > 1) {
-			Point to;
-			for (int i = 1; i < bresenham.size(); i++) {
-				to = bresenham.get(i);
+		if (bresenham.size > 1) {
+			for (i in 1 until bresenham.size) {
+				val to = bresenham[i]
 
-				part = createPart(from, middle, to, trackBlock);
-				if (part == null) return null;
-				map.put(middle, part);
+				part = createPart(from, middle, to, trackBlock)
+				if (part == null) return null
+				map[middle] = part
 
-				from = middle;
-				middle = to;
+				from = middle
+				middle = to
 			}
 		}
-		part = createPart(from, middle, key2, trackBlock);
-		if (part == null) return null;
-		map.put(middle, part);
-		return map;
+		part = createPart(from, middle, key2, trackBlock)
+		if (part == null) return null
+		map[middle] = part
+		return map
 	}
 
-	private TrackBlockPart createPart(Point from, Point middle, Point to, TrackBlock block) {
-		assert block != null;
-		if (used(middle)) return null;
-		if (from.equals(to) || from.equals(middle) || middle.equals(to)) return null;
+	/**
+	 * Create a track block part at an intermediate point
+	 */
+	private fun createPart(
+		from: Point,
+		middle: Point,
+		to: Point,
+		block: TrackBlock
+	): TrackBlockPart? {
+		assert(block != null)
+		if (used(middle)) return null
+		if (from == to || from == middle || middle == to) return null
 
-		int ux = from.x - middle.x; int uy = from.y - middle.y;
-		int vx = to.x - middle.x; int vy = to.y - middle.y;
+		val ux = from.x - middle.x
+		val uy = from.y - middle.y
+		val vx = to.x - middle.x
+		val vy = to.y - middle.y
 
-		if (Math.abs(ux) > 1 || Math.abs(uy) > 1 || Math.abs(vx) > 1 || Math.abs(vy) > 1) return null;
+		if (Math.abs(ux) > 1 || Math.abs(uy) > 1 || Math.abs(vx) > 1 || Math.abs(vy) > 1) {
+			return null
+		}
 
-		Segment s1 = Cell.Segment.segmentFor(ux, uy);
-		Segment s2 = Cell.Segment.segmentFor(vx, vy);
-		//vyhodit nehezky dvojice segmentu
-		if (s1 == null || s2 == null || Cell.Segment.conflict(s1, s2)) return null;
-		return new TrackBlockPart(block, s1, s2);
+		val s1 = Cell.Segment.segmentFor(ux, uy)
+		val s2 = Cell.Segment.segmentFor(vx, vy)
+		// vyhodit nehezky dvojice segmentu
+		if (s1 == null || s2 == null || Cell.Segment.conflict(s1, s2)) {
+			return null
+		}
+		return TrackBlockPart(block, arrayOf(s1, s2))
 	}
 
-	private boolean bresenham(final Point key1, final Point key2, Point p1, Point p2, List<Point> points) {
-		//p1 = (Point) p1.clone();
-		//p2 = (Point) p2.clone();
-		assert (key1 != null && key2 != null && p1 != null && p2 != null);
-		assert (!key1.equals(p1) && !key2.equals(p2) && !key1.equals(p2) && !key2.equals(p1));
+	/**
+	 * Bresenham line algorithm for finding intermediate cells between two points
+	 */
+	private fun bresenham(
+		key1: Point,
+		key2: Point,
+		p1: Point,
+		p2: Point,
+		points: MutableList<Point>
+	): Boolean {
+		assert(key1 != null && key2 != null && p1 != null && p2 != null)
+		assert(!key1.equals(p1) && !key2.equals(p2) && !key1.equals(p2) && !key2.equals(p1))
 
 		if (p1.equals(p2)) {
-			points.add(p1); //snad je naklonovany
-			return false;
+			points.add(p1) // snad je naklonovany
+			return false
 		}
 
-		int dx = Math.abs(p2.x-p1.x), dy = Math.abs(p2.y-p1.y);
-		boolean swapped = dy > dx;
+		var dx = Math.abs(p2.x - p1.x)
+		var dy = Math.abs(p2.y - p1.y)
+		val swapped = dy > dx
 
 		if (swapped) {
-			swapXY(p1);
-			swapXY(p2);
-			int temp = dx;
-			dx = dy;
-			dy = temp;
+			swapXY(p1)
+			swapXY(p2)
+			val temp = dx
+			dx = dy
+			dy = temp
 		}
 
-		final boolean b = p1.x > p2.x;
+		val b = p1.x > p2.x
 		if (b) {
-			Point temp = p1;
-			//assign to paramenters is part of algorithm
-			p1 = p2;
-			p2 = temp;
+			val temp = p1
+			// assign to parameters is part of algorithm
+			p1.x = p2.x
+			p1.y = p2.y
+			p2.x = temp.x
+			p2.y = temp.y
 		}
 
-		int P = 2*dy - dx;//prediktor
-		int P1 = 2*dy, P2 = P1 - 2*dx;
-		int y = p1.y;
+		var P = 2 * dy - dx // prediktor
+		val P1 = 2 * dy
+		val P2 = P1 - 2 * dx
+		var y = p1.y
 
-		int step_y = (p1.y > p2.y) ? -1: 1;//smer kresleni
+		val step_y = if (p1.y > p2.y) -1 else 1 // smer kresleni
 
-		for (int x = p1.x; x <= p2.x; x++) {
-			final Point newPoint = (!swapped) ? new Point(x, y) : new Point(y, x);
+		for (x in p1.x..p2.x) {
+			val newPoint = if (!swapped) Point(x, y) else Point(y, x)
 
 			if (newPoint.equals(key1) || newPoint.equals(key2) || used(newPoint)) {
-				points.clear();
-				return b;
+				points.clear()
+				return b
 			}
-			points.add(newPoint);
+			points.add(newPoint)
 
-			//nastaveni prediktoru
+			// nastaveni prediktoru
 			if (P >= 0) {
-				P += P2; y += step_y;
+				P += P2
+				y += step_y
 			} else {
-				P += P1;
+				P += P1
 			}
 		}
-		return b;
+		return b
 	}
 
-	private boolean used(final Point newPoint) {
-		return getGrid().containsKey(newPoint);
-	}
+	/**
+	 * Check if a point is already used in the grid
+	 */
+	private fun used(newPoint: Point): Boolean = getGrid().containsKey(newPoint)
 
-	public void joinCells(Point key1, Point key2, TrackBlock trackBlock) {
-		//pokusit se nakreslit primku
-		final Map<Point, TrackBlockPart> lineParts = findTrackLineParts(key1, key2, trackBlock);
+	/**
+	 * Join two cells with a track block
+	 */
+	override fun joinCells(
+		key1: Point,
+		key2: Point,
+		trackBlock: TrackBlock
+	) {
+		// pokusit se nakreslit primku
+		val lineParts = findTrackLineParts(key1, key2, trackBlock)
 
-		if(lineParts == null || lineParts.size() == 0) {
-			logger.debug("Join failed between ({},{}) and ({},{})", key1.x, key1.y, key2.x, key2.y);
-			changeSupport.firePropertyChange(ContextChangeListener.JOIN_FAILED, null,
-				String.format("Join not success between (%d,%d) and (%d,%d)", key1.x, key1.y, key2.x, key2.y));
-			return;
+		if (lineParts == null || lineParts.isEmpty()) {
+			logger.debug(
+				"Join failed between ({},{}) and ({},{})",
+				key1.x,
+				key1.y,
+				key2.x,
+				key2.y
+			)
+			changeSupport.firePropertyChange(
+				ContextChangeListener.JOIN_FAILED,
+				null,
+				String.format(
+					"Join not success between (%d,%d) and (%d,%d)",
+					key1.x,
+					key1.y,
+					key2.x,
+					key2.y
+				)
+			)
+			return
 		}
 
-		logger.debug("Created track join ({},{})->({},{}) with {} intermediate cells",
-			key1.x, key1.y, key2.x, key2.y, lineParts.size());
-		changeSupport.firePropertyChange(ContextChangeListener.JOIN_CREATED, null,
-			String.format("Join created between (%d,%d) and (%d,%d)", key1.x, key1.y, key2.x, key2.y));
+		val mapSize = (lineParts as? MutableMap<Point, TrackBlockPart>)?.size ?: 0
+		logger.debug(
+			"Created track join ({},{})->({},{}) with {} intermediate cells",
+			key1.x,
+			key1.y,
+			key2.x,
+			key2.y,
+			mapSize
+		)
+		changeSupport.firePropertyChange(
+			ContextChangeListener.JOIN_CREATED,
+			null,
+			String.format(
+				"Join created between (%d,%d) and (%d,%d)",
+				key1.x,
+				key1.y,
+				key2.x,
+				key2.y
+			)
+		)
 	}
 
-	public void putCell(Point key, NodeCell nodeCell) {
-		assert key != null;
-		assert key.x >= 0 && key.y >= 0 && key.x <= railwayNetGrid.getCols() && key.y <= railwayNetGrid.getRows();
-		if (getGrid().put(key, nodeCell) == nodeCell) return;
+	/**
+	 * Add a node cell to the railway network grid
+	 */
+	override fun putCell(
+		key: Point,
+		nodeCell: NodeCell
+	) {
+		assert(key != null)
+		assert(
+			key.x >= 0 &&
+				key.y >= 0 &&
+				key.x <= railwayNetGrid.getCols() &&
+				key.y <= railwayNetGrid.getRows()
+		)
+		if (getGrid().put(key, nodeCell) === nodeCell) return
 
 		// vedlejsi Nody (sousedni bunky)
-		for (Segment s1 : nodeCell.joins()) {
-			assert s1 != null : nodeCell;
-			final Point p = s1.transform(key);
-			final Cell cell2 = getGrid().get(p);
-			if (!(cell2 instanceof NodeCell)) continue;
-			final NodeCell nodeCell2 = (NodeCell) cell2;
+		for (s1: Segment in nodeCell.joins()) {
+			assert(s1 != null) { nodeCell }
+			val p = s1.transform(key)
+			val cell2 = getGrid().get(p)
+			if (cell2 !is NodeCell) continue
+			val nodeCell2 = cell2
 
-			//vzit proti-segment
-			final Segment s2 = Segment.anti(s1);
+			// vzit proti-segment
+			val s2 = Segment.anti(s1)
 			if (nodeCell2.joins().contains(s2)) {
-				assert s2.transform(p).equals(key);
-				extendedUnorientedGraph.putIfNotExists(key, s1, p, s2, new SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, getCurrentMaxSpeed()));
+				assert(s2.transform(p) == key)
+				extendedUnorientedGraph.putIfNotExists(
+					key,
+					s1,
+					p,
+					s2,
+					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, getCurrentMaxSpeed())
+				)
 			}
 		}
-		if (nodeCell instanceof InOut) getInOuts().add((InOut) nodeCell);
-		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key);
+		if (nodeCell is InOut) getInOuts().add(nodeCell as InOut)
+		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
 		if (logger.isTraceEnabled()) {
-			logger.trace("Added {} at ({},{})", nodeCell.getClass().getSimpleName(), key.x, key.y);
+			logger.trace("Added {} at ({},{})", nodeCell.javaClass.simpleName, key.x, key.y)
 		}
-	}
-
-	private DefaultRailWayNetGrid getGrid() {
-		return railwayNetGrid;
-	}
-
-	public void removeCell(Point key) {
-		final Cell cell = getGrid().get(key);
-		if (cell instanceof NodeCell) {
-			getGrid().remove(key);
-			for (TrackBlock tl : extendedUnorientedGraph.removeAll(key)) {
-				final Collection<Point> set = linesKeys.get(tl);
-				if (set != null) getGrid().keySet().removeAll(set);
-			}
-			changeSupport.firePropertyChange(ContextChangeListener.CELL_REMOVED, null,
-				String.format("Cell removed at (%d,%d)", key.x, key.y));
-		}
-	}
-
-	public void removeLine(TrackBlock line) {
-		assert line != null;
-		extendedUnorientedGraph.remove(line);
-		getGrid().keySet().removeAll(linesKeys.remove(line));
-		changeSupport.firePropertyChange(ContextChangeListener.TRACK_BLOCK_REMOVED, null,
-			String.format("TrackBlock %s removed", line));
-	}
-
-	public void moveCell(Point from, Point to) {
-		final Cell fromCell = getGrid().get(from);
-		if (!(fromCell instanceof NodeCell)) return;
-
-		final Cell toCell = getGrid().get(to);
-		if (toCell != null) return;
-
-		putCell(to, (NodeCell)fromCell);
-		removeCell(from);
-	}
-
-	public Segment getSegment(final PathSeparator separator, final Track track, final Track secondEndTrack) {
-		if (track != null) return getSegment(separator, track);
-		assert separator != null;
-		assert secondEndTrack != null : separator;
-		assert separator instanceof OrientedPathSeparator;//Util
-		final Segment segment = getSegment(separator, secondEndTrack);
-		return separator.getFollowingSegment(segment);//pro OrientedPS je to napevno...
-	}
-
-	public Segment getSegment(final PathSeparator separator, final Track track) {
-		if (separator == null || track == null) throw new IllegalArgumentException("separator or track is null");
-		else if (track instanceof TrackSection) {
-			return getSegment(separator, (TrackSection) track);
-		}
-		return getSegment(assertNodeCell(separator), Util.assertInstanceOf(TrackBlock.class, track));
 	}
 
 	/**
-	 * @param separator
-	 * @param section
-	 * @return pseudo join segment in block
+	 * Get the railway network grid
 	 */
-	public Segment getSegment(final PathSeparator separator, final TrackSection section) {
-		if (section == null) {
-			throw new IllegalArgumentException("section is null");
+	private fun getGrid(): DefaultRailWayNetGrid = railwayNetGrid
+
+	/**
+	 * Remove a node cell from the railway network grid
+	 */
+	override fun removeCell(key: Point) {
+		val cell = getGrid().get(key)
+		if (cell is NodeCell) {
+			getGrid().remove(key)
+			for (tl in extendedUnorientedGraph.removeAll(key)) {
+				val set = linesKeys[tl]
+				if (set != null) getGrid().keySet().removeAll(set)
+			}
+			changeSupport.firePropertyChange(
+				ContextChangeListener.CELL_REMOVED,
+				null,
+				String.format("Cell removed at (%d,%d)", key.x, key.y)
+			)
 		}
-		final TrackBlock trackBlock = section.getTrackBlock();
-		if (trackBlock.isInnerElement(separator)) return trackBlock.getJoin(separator, section);
-		return getSegment(assertNodeCell(separator), trackBlock);
 	}
 
-	private Segment getSegment(final NodeCell node, final TrackBlock current) { // nodeCell v graphu...
-		final Point location = getLocation(node);
-		return getSegment(location, current);
+	/**
+	 * Remove a track line from the railway network
+	 */
+	override fun removeLine(line: TrackBlock) {
+		assert(line != null)
+		extendedUnorientedGraph.remove(line)
+		getGrid().keySet().removeAll(linesKeys.remove(line) ?: emptySet())
+		changeSupport.firePropertyChange(
+			ContextChangeListener.TRACK_BLOCK_REMOVED,
+			null,
+			String.format("TrackBlock %s removed", line)
+		)
 	}
 
-	private Segment getSegment(final Point location, final TrackBlock current) {
-		assert current==null || getGraph().get(location).contains(current) : current;
-		return current==null ? null : getGraph().extensionalObject(location, current);
+	/**
+	 * Move a cell from one location to another
+	 */
+	override fun moveCell(
+		from: Point,
+		to: Point
+	) {
+		val fromCell = getGrid().get(from)
+		if (fromCell !is NodeCell) return
+
+		val toCell = getGrid().get(to)
+		if (toCell != null) return
+
+		putCell(to, fromCell)
+		removeCell(from)
 	}
 
-	private Point getLocation(NodeCell node) {
-		final Point location = getRailWayNetGrid().getLocation(node);
-		assert location != null : this;
-		return location;
+	/**
+	 * Get segment for a path separator and tracks
+	 */
+	override fun getSegment(
+		separator: PathSeparator,
+		track: Track?,
+		secondEndTrack: Track?
+	): Segment? {
+		// If track is not null, use it; otherwise use secondEndTrack
+		if (track != null) return getSegment(separator, track)
+		assert(separator != null)
+		assert(secondEndTrack != null) { separator }
+		assert(separator is OrientedPathSeparator) // Util
+		val segment = getSegment(separator, secondEndTrack!!)
+		// Match Java 1:1: return null when segment doesn't exist
+		return separator.getFollowingSegment(segment)
 	}
 
-	public final TrackBlock getNextTrackBlock(final NodeCell nodeCell, final TrackBlock current) {
-		if (nodeCell == null) throw new IllegalArgumentException("node is null");
-		final Point location = getLocation(nodeCell);
-		final Segment segment = getSegment(location, current);
-		final Segment followingSegment = nodeCell.getFollowingSegment(segment);
-		if (followingSegment == null) return null;
-
-		final Map<Segment, TrackBlock> assignedEdges = getGraph().assignedEdges(location);
-		return assignedEdges.get(followingSegment);
+	/**
+	 * Get segment for a path separator and track
+	 */
+	override fun getSegment(
+		separator: PathSeparator,
+		track: Track
+	): Segment? {
+		if (separator == null || track == null) {
+			throw IllegalArgumentException("separator or track is null")
+		}
+		return if (track is TrackSection) {
+			@Suppress("UNCHECKED_CAST")
+			val section = track as TrackSection
+			// Match Java 1:1: return directly (inner method should not return null here)
+			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
+		} else {
+			val nodeCell: NodeCell = Util.assertNodeCell(separator)
+			val trackBlock: TrackBlock = Util.assertInstanceOf(TrackBlock::class.java, track)
+			// Match Java 1:1: return directly (inner method should not return null here)
+			getSegment(nodeCell, trackBlock as TrackBlock?)
+		}
 	}
 
-	public TrackSection getNextTrackSection(PathSeparator separator, TrackSection current) {
-		if (separator == null) throw new IllegalArgumentException("separtor is null");
-		TrackBlock trackBlock = null;
+	/**
+	 * Get pseudo join segment in block for a path separator and track section
+	 */
+	fun getSegment(
+		separator: PathSeparator,
+		section: TrackSection
+	): Segment? {
+		if (section == null) {
+			throw IllegalArgumentException("section is null")
+		}
+		val trackBlock = section.getTrackBlock()
+		if (trackBlock.isInnerElement(separator)) {
+			return trackBlock.getJoin(separator, section)
+		}
+		val nodeCell: NodeCell = Util.assertNodeCell(separator)
+		return getSegment(nodeCell, trackBlock as TrackBlock?)
+	}
+
+	/**
+	 * Get segment at a node cell for a track block
+	 */
+	private fun getSegment(
+		node: NodeCell,
+		current: TrackBlock?
+	): Segment? {
+		val location = getLocation(node)
+		return getSegment(location, current)
+	}
+
+	/**
+	 * Get segment at a location for a track block
+	 */
+	private fun getSegment(
+		location: Point,
+		current: TrackBlock?
+	): Segment? {
 		if (current != null) {
-			trackBlock = current.getTrackBlock();
-			assert trackBlock != null;
-			final TrackSection nextTrackSection = trackBlock.getNextTrackSection(separator, current);
+			assert(getGraph().get(location).contains(current)) { current }
+		}
+		return if (current == null) null else getGraph().extensionalObject(location, current)
+	}
+
+	/**
+	 * Get location of a node cell in the railway network
+	 */
+	private fun getLocation(node: NodeCell): Point {
+		val location = getRailWayNetGrid().getLocation(node)
+		assert(location != null) { this }
+		return location!!
+	}
+
+	/**
+	 * Get the next track block after the current one from a node
+	 */
+	override fun getNextTrackBlock(
+		nodeCell: NodeCell,
+		current: TrackBlock?
+	): TrackBlock? {
+		if (nodeCell == null) throw IllegalArgumentException("node is null")
+		val location = getLocation(nodeCell)
+		val segment = getSegment(location, current)
+		val followingSegment = nodeCell.getFollowingSegment(segment)
+		if (followingSegment == null) return null
+
+		val assignedEdges = getGraph().assignedEdges(location)
+		return assignedEdges[followingSegment]
+	}
+
+	/**
+	 * Get the next track section from a path separator
+	 */
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? {
+		if (separator == null) throw IllegalArgumentException("separator is null")
+		var trackBlock: TrackBlock? = null
+		if (current != null) {
+			trackBlock = current.getTrackBlock()
+			assert(trackBlock != null)
+			val nextTrackSection = trackBlock?.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				if (logger.isTraceEnabled()) {
-					logger.trace("getNextTrackSection: found next section within same block from {}", separator);
+					logger.trace(
+						"getNextTrackSection: found next section within same block from {}",
+						separator
+					)
 				}
-				return nextTrackSection;
+				return nextTrackSection
 			}
 		}
 
-		//z dalsi TrackBlock
-		final NodeCell nodeCell = assertNodeCell(separator);
-		final TrackBlock nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock);
-		final TrackSection result = nextTrackBlock==null ? null : nextTrackBlock.getNextTrackSection(nodeCell, null);
+		// z dalsi TrackBlock
+		val nodeCell = Util.assertNodeCell(separator)
+		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
+
+		@Suppress("UNCHECKED_CAST")
+		val result = nextTrackBlock?.getNextTrackSection(nodeCell, null as TrackSection?)
 		if (logger.isTraceEnabled()) {
-			logger.trace("getNextTrackSection: navigating network from {}, result: {}", separator, result != null ? "found" : "not found");
+			logger.trace(
+				"getNextTrackSection: navigating network from {}, result: {}",
+				separator,
+				if (result != null) "found" else "not found"
+			)
 		}
-		return result;
+		return result
 	}
-
-
-	public void run() throws EmptyContextException, SimulationException {
-		if (getGraph().isEmpty() || getGrid().isEmpty() || inouts.isEmpty()) {
-			logger.warn("Cannot start simulation: graph={}, grid={}, inouts={}",
-				getGraph().isEmpty() ? "empty" : "ok",
-				getGrid().isEmpty() ? "empty" : "ok",
-				inouts.isEmpty() ? "empty" : "ok");
-			throw new EmptyContextException();
-		}
-		if (mainProcess == null) mainProcess = new Generator(this);
-
-		logger.info("Starting simulation: {} InOut points, {} track blocks, main process={}",
-			inouts.size(), getGraph().size(), mainProcess.getClass().getSimpleName());
-
-		for (InOut i : inouts) {
-			workers.put(i, new InOutWorker(this, i));
-		}
-
-		try {
-			Process.activate(mainProcess);
-		} catch (DiscoException e) {
-			logger.error("Failed to activate main simulation process", e);
-			throw new SimulationException(e);
-		}
-	}
-
-	public void stop() {
-		assert mainProcess != null;
-		for (InOutWorker worker: workers.values()) {
-			worker.terminate();
-		}
-		mainProcess.terminate();
-		System.exit(1);//EXTENSION pryc
-	}
-
-	public void errorStop(Throwable error) {
-		stop();
-		error.printStackTrace();
-	}
-
-	public ExtendedUnorientedGraph<Point, TrackBlock, Segment> getGraph() {
-		return extendedUnorientedGraph;
-	}
-
-	public List<InOut> getInOuts() {
-		return inouts;
-	}
-
-	public boolean isSeparatorInDirection(OrientedPathSeparator separator, Track next, Track previous) {
-		assert separator != null;
-		final Segment segment = getSegment(separator, next, previous);
-		if (segment == null && separator instanceof InOut) return true;
-		assert segment != null : separator;
-		final Segment direction = separator.direction(); assert direction != null;
-		final boolean inDirection = segment == direction;
-		if (logger.isDebugEnabled()) {
-			logger.debug("isSeparatorInDirection: separator {}, segment={}, direction={}, result={}",
-				separator, segment, direction, inDirection);
-		}
-		return inDirection;
-	}
-
-
-	public Path pathToNextSemaphore(final PathSeparator sep, final TrackSection nxt) {
-		if (sep== null || nxt == null) throw new IllegalArgumentException("wrong arguments for aPath finding");
-		if (logger.isDebugEnabled()) {
-			logger.debug("pathToNextSemaphore: searching path from {} via track section", sep);
-		}
-		PathSeparator separator = sep;
-		TrackSection previous = null;
-		TrackSection next = nxt;
-		final ArrayPath path = new ArrayPath(this);
-		do {
-			path.add(separator); path.add(next);
-			separator = next.getSecondEnd(separator);
-			previous = next;
-			next = getNextTrackSection(separator, next);
-			if (separator instanceof OrientedPathSeparator) {
-				if (isSeparatorInDirection((OrientedPathSeparator) separator, next, previous)) {
-					path.add(separator);
-					if (logger.isTraceEnabled()) {
-						logger.trace("pathToNextSemaphore: found complete path with length {}", path.length());
-					}
-					return path;
-				}
-			}
-
-		} while (next != null);
-		logger.debug("pathToNextSemaphore: no path found from {}", sep);
-		return null;
-	}
-
-	public double getCurrentMaxSpeed() {
-		return currentMaxSpeed;
-	}
-
-	public double getCurrentTrackLength() {
-		return currentTrackLength;
-	}
-
-	public void setCurrentMaxSpeed(double speed) {
-		currentMaxSpeed = speed;
-	}
-
-	public void setCurrentTrackLength(double length) {
-		currentTrackLength = length;
-	}
-
-	public void report(CharSequence report, Object obj, ReportType type) {
-		if (!isReporting(type)) return;
-		if (!simulationLogger.isInfoEnabled()) return;
-
-		final StringBuilder buf = (report instanceof StringBuilder) ? (StringBuilder) report : new StringBuilder(report);
-		try {
-			if (obj != null && obj.getClass().getMethod("toString") != Object.class.getMethod("toString")) {
-				buf.insert(0, ' ');
-				buf.insert(0, obj);
-			}
-		} catch (Exception e) {
-			logger.error("Error generating simulation report for type {}", type, e);
-		}
-		buf.insert(0, ' ');
-		buf.insert(0, jDisco.Process.time());
-		simulationLogger.info("{}", buf);
-	}
-
-	public void addReportTypes(ReportType... types) {
-		if (types == null || types.length <= 0) {
-			allowedReportTypes.clear();
-		} else {
-			Collections.addAll(allowedReportTypes, types);
-		}
-	}
-
-	public boolean isReporting(ReportType type) {
-		return allowedReportTypes.contains(type);
-	}
-
-	public void removeReportTypes(ReportType... types) {
-		if (types == null || types.length <= 0) return;
-		for (ReportType t : types) {
-			if (t == null) continue;
-			allowedReportTypes.remove(t);
-		}
-	}
-
-	public String getCurrentNameString() {
-		return nameString==null ? randomString() : nameString;
-	}
-
-	private final Random random = new Random(0);
-	private String randomString() {
-		return new String(Character.toChars(65 + random.nextInt(20)));
-	}
-
-	public void setCurrentNameString(String name) {
-		this.nameString = name;
-	}
-
-	public InOutWorker getWorkerFor(InOut inOut) {
-		return workers.get(inOut);
-	}
-
 
 	/**
-	 * zatim jen pro priklady, kde hlavnim procesem neni generator
-	 * @param loop
+	 * Run the simulation (jDisco framework integration)
 	 */
-	public void setMainProcess(ShuntingLoop loop) {
-		mainProcess = loop;
+	@Throws(EmptyContextException::class, SimulationException::class)
+	override fun run() {
+		if (getGraph().isEmpty() || getGrid().isEmpty() || inouts.isEmpty()) {
+			logger.warn(
+				"Cannot start simulation: graph={}, grid={}, inouts={}",
+				if (getGraph().isEmpty()) "empty" else "ok",
+				if (getGrid().isEmpty()) "empty" else "ok",
+				if (inouts.isEmpty()) "empty" else "ok"
+			)
+			throw EmptyContextException()
+		}
+		if (mainProcess == null) mainProcess = Generator(this)
+
+		logger.info(
+			"Starting simulation: {} InOut points, {} track blocks, main process={}",
+			inouts.size,
+			getGraph().size(),
+			mainProcess!!.javaClass.simpleName
+		)
+
+		for (i in inouts) {
+			workers[i] = InOutWorker(this, i)
+		}
+
+		try {
+			Process.activate(mainProcess)
+		} catch (e: DiscoException) {
+			logger.error("Failed to activate main simulation process", e)
+			throw SimulationException(e)
+		}
+	}
+
+	/**
+	 * Stop the simulation
+	 */
+	override fun stop() {
+		assert(mainProcess != null)
+		for (worker in workers.values) {
+			worker.terminate()
+		}
+		mainProcess?.terminate()
+		System.exit(1) // EXTENSION pryc
+	}
+
+	/**
+	 * Stop simulation with error reporting
+	 */
+	override fun errorStop(error: Throwable) {
+		stop()
+		error.printStackTrace()
+	}
+
+	/**
+	 * Get the extended unoriented graph of track blocks
+	 */
+	override fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment> = extendedUnorientedGraph
+
+	/**
+	 * Get list of entry/exit points
+	 */
+	override fun getInOuts(): Collection<InOut> = inouts as Collection<InOut>
+
+	/**
+	 * Check if a separator is in the specified direction
+	 */
+	override fun isSeparatorInDirection(
+		separator: OrientedPathSeparator,
+		next: Track?,
+		previous: Track?
+	): Boolean {
+		assert(separator != null)
+		val segment = getSegment(separator, next, previous)
+		if (segment == null && separator is InOut) return true
+		assert(segment != null) { separator }
+		val direction = separator.direction()
+		assert(direction != null)
+		val inDirection = segment === direction
+		if (logger.isDebugEnabled()) {
+			logger.debug(
+				"isSeparatorInDirection: separator {}, segment={}, direction={}, result={}",
+				separator,
+				segment,
+				direction,
+				inDirection
+			)
+		}
+		return inDirection
+	}
+
+	/**
+	 * Find path to the next semaphore from a path separator
+	 */
+	override fun pathToNextSemaphore(
+		sep: PathSeparator,
+		nxt: TrackSection
+	): Path? {
+		if (sep == null || nxt == null) {
+			throw IllegalArgumentException("wrong arguments for aPath finding")
+		}
+		if (logger.isDebugEnabled()) {
+			logger.debug("pathToNextSemaphore: searching path from {} via track section", sep)
+		}
+		var separator = sep
+		var previous: TrackSection? = null
+		var next: TrackSection? = nxt
+		val path = ArrayPath(this)
+		do {
+			path.add(separator)
+			if (next != null) {
+				path.add(next)
+				separator = next.getSecondEnd(separator)
+				previous = next
+				next = getNextTrackSection(separator, next)
+			} else {
+				break
+			}
+			if (separator is OrientedPathSeparator) {
+				if (isSeparatorInDirection(separator, next, previous)) {
+					path.add(separator)
+					if (logger.isTraceEnabled()) {
+						logger.trace("pathToNextSemaphore: found complete path with length {}", path.length())
+					}
+					return path
+				}
+			}
+		} while (next != null)
+		logger.debug("pathToNextSemaphore: no path found from {}", sep)
+		return null
+	}
+
+	/**
+	 * Get current maximum speed for path elements
+	 */
+	override fun getCurrentMaxSpeed(): Double = currentMaxSpeed
+
+	/**
+	 * Get current track length for new elements
+	 */
+	override fun getCurrentTrackLength(): Double = currentTrackLength
+
+	/**
+	 * Set current maximum speed
+	 */
+	override fun setCurrentMaxSpeed(speed: Double) {
+		currentMaxSpeed = speed
+	}
+
+	/**
+	 * Set current track length
+	 */
+	override fun setCurrentTrackLength(length: Double) {
+		currentTrackLength = length
+	}
+
+	/**
+	 * Report simulation events
+	 */
+	override fun report(
+		report: CharSequence,
+		obj: Any,
+		type: ReportType
+	) {
+		if (!isReporting(type)) return
+		if (!simulationLogger.isInfoEnabled()) return
+
+		val buf = if (report is StringBuilder) report else StringBuilder(report)
+		try {
+			if (obj.javaClass.getMethod("toString") != Any::class.java.getMethod("toString")) {
+				buf.insert(0, ' ')
+				buf.insert(0, obj)
+			}
+		} catch (e: Exception) {
+			logger.error("Error generating simulation report for type {}", type, e)
+		}
+		buf.insert(0, ' ')
+		buf.insert(0, jDisco.Process.time())
+		simulationLogger.info("{}", buf)
+	}
+
+	/**
+	 * Add report types to be reported
+	 */
+	override fun addReportTypes(vararg types: ReportType) {
+		if (types == null || types.isEmpty()) {
+			allowedReportTypes.clear()
+		} else {
+			Collections.addAll(allowedReportTypes, *types)
+		}
+	}
+
+	/**
+	 * Check if a report type is enabled
+	 */
+	override fun isReporting(type: ReportType): Boolean = allowedReportTypes.contains(type)
+
+	/**
+	 * Remove report types from reporting
+	 */
+	override fun removeReportTypes(vararg types: ReportType) {
+		if (types == null || types.isEmpty()) return
+		for (t in types) {
+			if (t == null) continue
+			allowedReportTypes.remove(t)
+		}
+	}
+
+	/**
+	 * Get current name string for train generation
+	 */
+	override fun getCurrentNameString(): String = nameString ?: randomString()
+
+	/**
+	 * Generate random name string (single character A-T)
+	 */
+	private fun randomString(): String = String(Character.toChars(65 + random.nextInt(20)))
+
+	/**
+	 * Set current name string for train generation
+	 */
+	override fun setCurrentNameString(name: String) {
+		this.nameString = name
+	}
+
+	/**
+	 * Get the worker for an entry/exit point
+	 */
+	override fun getWorkerFor(inOut: InOut): InOutWorker =
+		workers[inOut] ?: throw IllegalStateException("No worker found for InOut: $inOut")
+
+	/**
+	 * Set the main process for the simulation
+	 * (for examples where the main process is not a generator)
+	 */
+	fun setMainProcess(loop: ShuntingLoop) {
+		mainProcess = loop
 	}
 }

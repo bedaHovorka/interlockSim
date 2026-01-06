@@ -7,47 +7,49 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.context;
+package cz.vutbr.fit.interlockSim.context
 
-import java.awt.Point;
-import java.util.Iterator;
-import java.util.Map.Entry;
-
-import cz.vutbr.fit.interlockSim.objects.cells.Cell;
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import java.awt.Point
+import java.util.Iterator
+import java.util.Map.Entry
 
 /**
  * Read-only access interface to Grid...
  *
  * aby bylo rozhrani dokonale tak iterator vraceny implementaci tohoto rozhrani
- * musi u {@link Iterator#remove()} hazet {@link UnsupportedOperationException}
+ * musi u [Iterator.remove] hazet [UnsupportedOperationException]
  */
-public interface RailwayNetGrid extends Iterable<Entry<Point, Cell>> {
+interface RailwayNetGrid : Iterable<Entry<Point, Cell>> {
 	/**
 	 * @param x
 	 * @param y
 	 * @return cell
 	 */
-	public Cell getCellAt(int x, int y);
+	fun getCellAt(
+		x: Int,
+		y: Int
+	): Cell?
 
 	/**
 	 * @param point
 	 * @return cell
 	 */
-	public Cell get(Point point);
+	fun get(point: Point): Cell?
 
 	/**
 	 * @return count of colums (width)
 	 */
-	public int getCols();
+	fun getCols(): Int
 
 	/**
 	 * @return count of rows (height)
 	 */
-	public int getRows();
+	fun getRows(): Int
 
 	/**
 	 * @param out
 	 * @return location of cell
 	 */
-	public Point getLocation(Cell out);
+	fun getLocation(out: Cell): Point?
 }

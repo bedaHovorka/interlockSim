@@ -3,4 +3,4 @@
  *
  * @author Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.gui.action;
+package cz.vutbr.fit.interlockSim.gui.action
