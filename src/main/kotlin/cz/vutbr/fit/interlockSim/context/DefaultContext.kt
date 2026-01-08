@@ -168,10 +168,8 @@ abstract class DefaultContext :
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
 	 */
-	private fun swapXY(p: Point) {
-		val temp = p.x
-		p.x = p.y
-		p.y = temp
+	private fun swapXY(p: Point): Point {
+		return Point(p.y, p.x)
 	}
 
 	/**
@@ -389,42 +387,44 @@ abstract class DefaultContext :
 	): Boolean {
 		assert(key1 != null && key2 != null && p1 != null && p2 != null)
 		assert(!key1.equals(p1) && !key2.equals(p2) && !key1.equals(p2) && !key2.equals(p1))
+		
+		// Make mutable copies since we need to modify them for the algorithm
+		var p1Mut = p1
+		var p2Mut = p2
 
-		if (p1.equals(p2)) {
-			points.add(p1) // snad je naklonovany
+		if (p1Mut.equals(p2Mut)) {
+			points.add(p1Mut) // snad je naklonovany
 			return false
 		}
 
-		var dx = Math.abs(p2.x - p1.x)
-		var dy = Math.abs(p2.y - p1.y)
+		var dx = Math.abs(p2Mut.x - p1Mut.x)
+		var dy = Math.abs(p2Mut.y - p1Mut.y)
 		val swapped = dy > dx
 
 		if (swapped) {
-			swapXY(p1)
-			swapXY(p2)
+			p1Mut = swapXY(p1Mut)
+			p2Mut = swapXY(p2Mut)
 			val temp = dx
 			dx = dy
 			dy = temp
 		}
 
-		val b = p1.x > p2.x
+		val b = p1Mut.x > p2Mut.x
 		if (b) {
-			val temp = p1
-			// assign to parameters is part of algorithm
-			p1.x = p2.x
-			p1.y = p2.y
-			p2.x = temp.x
-			p2.y = temp.y
+			val temp = p1Mut
+			// swap p1 and p2
+			p1Mut = Point(p2Mut.x, p2Mut.y)
+			p2Mut = Point(temp.x, temp.y)
 		}
 
 		var P = 2 * dy - dx // prediktor
 		val P1 = 2 * dy
 		val P2 = P1 - 2 * dx
-		var y = p1.y
+		var y = p1Mut.y
 
-		val step_y = if (p1.y > p2.y) -1 else 1 // smer kresleni
+		val step_y = if (p1Mut.y > p2Mut.y) -1 else 1 // smer kresleni
 
-		for (x in p1.x..p2.x) {
+		for (x in p1Mut.x..p2Mut.x) {
 			val newPoint = if (!swapped) Point(x, y) else Point(y, x)
 
 			if (newPoint.equals(key1) || newPoint.equals(key2) || used(newPoint)) {

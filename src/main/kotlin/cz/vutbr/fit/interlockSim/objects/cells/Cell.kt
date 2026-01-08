@@ -82,9 +82,7 @@ interface Cell {
 		 */
 		fun transform(from: Point): Point {
 			assert(from != null)
-			val tr = from.clone() as Point
-			tr.x += dx
-			tr.y += dy
+			val tr = Point(from.x + dx, from.y + dy)
 			assert(!from.equals(tr)) { this }
 			return tr
 		}
