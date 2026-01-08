@@ -26,10 +26,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.awt.Point
 import java.util.ArrayList
 import java.util.Collections
 import java.util.HashMap

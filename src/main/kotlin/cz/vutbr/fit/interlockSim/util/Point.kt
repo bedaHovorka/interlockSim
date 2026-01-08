@@ -1,0 +1,48 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.util
+
+/**
+ * Simple 2D point class to replace java.awt.Point dependency in non-GUI code.
+ * This class represents a location in (x,y) coordinate space, specified in integer precision.
+ */
+data class Point(
+	/**
+	 * The X coordinate of this Point.
+	 */
+	var x: Int = 0,
+	
+	/**
+	 * The Y coordinate of this Point.
+	 */
+	var y: Int = 0
+) : Cloneable {
+	
+	/**
+	 * Constructs and initializes a point at the origin (0, 0) of the coordinate space.
+	 */
+	constructor() : this(0, 0)
+	
+	/**
+	 * Creates a copy of this point.
+	 * @return a clone of this Point object.
+	 */
+	public override fun clone(): Point {
+		return Point(x, y)
+	}
+	
+	/**
+	 * Returns a string representation of this point and its location in the (x,y) coordinate space.
+	 * @return a string representation of this point.
+	 */
+	override fun toString(): String {
+		return "Point(x=$x, y=$y)"
+	}
+}

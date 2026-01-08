@@ -16,6 +16,7 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 
 /**
@@ -59,7 +60,7 @@ class TestContextBuilder {
 		y: Int,
 		isEntry: Boolean
 	): TestContextBuilder {
-		val position = java.awt.Point(x, y)
+		val position = Point(x, y)
 		val inOut =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				name,
@@ -83,7 +84,7 @@ class TestContextBuilder {
 		y: Int,
 		isAllowing: Boolean
 	): TestContextBuilder {
-		val position = java.awt.Point(x, y)
+		val position = Point(x, y)
 		val semaphore =
 			cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
 				isAllowing,
@@ -112,8 +113,8 @@ class TestContextBuilder {
 		length: Double,
 		maxSpeed: Double
 	): TestContextBuilder {
-		val fromPoint = java.awt.Point(fromX, fromY)
-		val toPoint = java.awt.Point(toX, toY)
+		val fromPoint = Point(fromX, fromY)
+		val toPoint = Point(toX, toY)
 
 		val fromCell = context.getRailWayNetGrid().getCellAt(fromX, fromY)
 		val toCell = context.getRailWayNetGrid().getCellAt(toX, toY)
@@ -175,8 +176,8 @@ class TestContextBuilder {
 				cz.vutbr.fit.interlockSim.objects.tracks
 					.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 
-			val pA = java.awt.Point(1, 1)
-			val pB = java.awt.Point(5, 5)
+			val pA = Point(1, 1)
+			val pB = Point(5, 5)
 			context.putCell(pA, inA)
 			context.putCell(pB, outB)
 			context.joinCells(pA, pB, trackBlock)
@@ -212,9 +213,9 @@ class TestContextBuilder {
 				cz.vutbr.fit.interlockSim.objects.tracks
 					.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 
-			val pA = java.awt.Point(1, 1)
-			val r1 = java.awt.Point(4, 2)
-			val pB = java.awt.Point(5, 5)
+			val pA = Point(1, 1)
+			val r1 = Point(4, 2)
+			val pB = Point(5, 5)
 			context.putCell(pA, inA)
 			context.putCell(r1, rs1)
 			context.putCell(pB, outB)

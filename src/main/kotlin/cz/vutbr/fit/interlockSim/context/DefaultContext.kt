@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SimulationException
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.TreeMultiMap
 import cz.vutbr.fit.interlockSim.util.Util
 import jDisco.DiscoException
@@ -38,7 +39,6 @@ import jDisco.Process
 import jDisco.Random
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.awt.Point
 import java.beans.PropertyChangeSupport
 import java.util.ArrayList
 import java.util.Collection

@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.awt.Point
+import cz.vutbr.fit.interlockSim.util.Point
 import java.util.Set
 
 /**

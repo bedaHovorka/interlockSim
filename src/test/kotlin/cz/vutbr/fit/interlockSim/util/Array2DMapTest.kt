@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.util
 import org.assertj.core.api.Assertions.*
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
-import java.awt.Point
 import java.util.ArrayList
 import java.util.Collections
 import java.util.List
