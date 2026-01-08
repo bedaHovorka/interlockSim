@@ -100,7 +100,7 @@ interface SimulationContext : Context {
 
 	/**
 	 *
-	 * @param separator start of aPath
+	 * @param separator start of path
 	 * @param next first section
 	 * @return a path with all elements, or null if no path found
 	 */
@@ -142,7 +142,7 @@ interface SimulationContext : Context {
 	/**
 	 * @param nodeCell
 	 * @param current from, for determine direction
-	 * @return block, which follow dependly on node configuration, or null if no following block exists
+	 * @return block, which follow depending on node configuration, or null if no following block exists
 	 */
 	fun getNextTrackBlock(
 		nodeCell: NodeCell,
