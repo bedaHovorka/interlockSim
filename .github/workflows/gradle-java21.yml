@@ -2,7 +2,7 @@ name: Gradle Build with Kotlin 2.0 and Java 21
 
 on:
   push:
-    branches: [ main, develop, 'feature/**', 'fix/**' ]
+    branches: [ main, develop, 'feature/**', 'fix/**', 'copilot/**' ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:  # Allow manual trigger
