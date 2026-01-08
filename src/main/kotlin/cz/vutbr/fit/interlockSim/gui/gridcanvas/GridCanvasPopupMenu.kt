@@ -14,7 +14,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import java.awt.Point
 import java.awt.event.ActionEvent
 import java.awt.event.MouseEvent
 import javax.swing.AbstractAction
@@ -54,7 +53,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 	fun show(
 		canvas: RailwayNetGridCanvas,
 		e: MouseEvent,
-		key: Point?,
+		key: cz.vutbr.fit.interlockSim.util.Point?,
 		cell: Cell?
 	) {
 		assert(canvas != null && e != null) { "Canvas and event cannot be null" }
@@ -66,7 +65,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 
 	// Reorganize menu based on the clicked cell type
 	private fun reorganizeMenu(
-		key: Point,
+		key: cz.vutbr.fit.interlockSim.util.Point,
 		cell: Cell
 	) {
 		when (cell) {
@@ -86,7 +85,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 	protected abstract fun reorganizeMenu(line: TrackBlock)
 
 	protected abstract fun reorganizeMenu(
-		key: Point,
+		key: cz.vutbr.fit.interlockSim.util.Point,
 		cell: NodeCell
 	)
 

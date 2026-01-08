@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import java.awt.Point
 import java.awt.event.ActionEvent
 
 /**
@@ -31,7 +30,7 @@ class GridCanvasEditingPopupMenu : GridCanvasPopupMenu() {
 		}
 	}
 
-	private var key: Point? = null
+	private var key: cz.vutbr.fit.interlockSim.util.Point? = null
 	private var nodeCell: NodeCell? = null
 	private var trackBlock: TrackBlock? = null
 
@@ -44,7 +43,7 @@ class GridCanvasEditingPopupMenu : GridCanvasPopupMenu() {
 	}
 
 	override fun reorganizeMenu(
-		key: Point,
+		key: cz.vutbr.fit.interlockSim.util.Point,
 		cell: NodeCell
 	) {
 		this.key = key
