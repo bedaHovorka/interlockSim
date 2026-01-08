@@ -184,6 +184,31 @@ Follows `.editorconfig` configuration:
 
 See `KOTLIN-MIGRATION-STATUS.md` for details.
 
+### Nullability Guidelines
+
+**IMPORTANT:** The original Java code has been carefully tuned for null handling. Some Kotlin null-safety checks can introduce bugs if applied incorrectly.
+
+**Type conversion rules:**
+- Java type `X` (no annotation) → Kotlin `X?` (nullable)
+- Java type `@NotNull X` → Kotlin `X` (non-nullable)
+- When in doubt, prefer nullable types (`X?`) for legacy converted code
+
+**Null checks:**
+- The old Java code was designed with specific null-handling patterns
+- Adding Kotlin null-safety checks (like `requireNotNull()` or `!!`) can break existing logic
+- Use safe call operators (`?.`) and elvis operator (`?:`) instead of forcing non-nullability
+- Only use `!!` when absolutely certain the value cannot be null (with clear justification)
+
+**Example:**
+```kotlin
+// GOOD - Preserves Java null behavior
+val track: Track? = getTrack()
+val length = track?.length ?: 0.0
+
+// AVOID - May break existing logic
+val track: Track = getTrack()!!  // Could crash if Java code expects null handling
+```
+
 ## XML Configuration
 
 Railway networks defined in XML format:
