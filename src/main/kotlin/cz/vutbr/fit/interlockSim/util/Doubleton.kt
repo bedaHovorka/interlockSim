@@ -80,7 +80,7 @@ class Doubleton<T, V> : AbstractSet<T> {
 	 * @param second
 	 */
 	constructor(first: T, second: T) {
-		if (first == second || (first != null && first == second)) throw IllegalArgumentException("arguments is equal")
+		if (first == second) throw IllegalArgumentException("arguments is equal")
 		this.first = first
 		this.second = second
 	}
@@ -130,7 +130,7 @@ class Doubleton<T, V> : AbstractSet<T> {
 			return firstValue
 		}
 		if (secondEq) return secondValue
-		throw IllegalArgumentException("Key $key is not contain in set")
+		throw IllegalArgumentException("Key $key is not contained in set")
 	}
 
 	private fun nullEq(

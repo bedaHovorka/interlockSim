@@ -50,7 +50,7 @@ class Train :
 			override fun actions() {
 				if (!started || !context.isReporting(ReportType.TRAIN_CONTINUOUS)) return // opti-hack
 				val builder = StringBuilder()
-				builder.append(getAccelaration()).append(' ')
+				builder.append(getAcceleration()).append(' ')
 				builder.append(getVelocity()).append(' ')
 				builder.append(front.getTotalDistance()).append(' ')
 				// builder.append(tail.getTotalDistance()).append(' ')
@@ -324,7 +324,7 @@ class Train :
 				val semaphore: RailSemaphore = where
 				semaphoreAction(semaphore, semaphore, current, next)
 			} else if (where == timetable.getIn() && next != null) {
-				assert(getAccelaration() != null)
+				assert(getAcceleration() != null)
 				semaphoreAction((where as InOut).getInSemaphore(), where, current, next)
 			} else {
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -444,7 +444,7 @@ class Train :
 
 			accelerate = false
 			stop()
-			accelaration.state = 0.0
+			acceleration.state = 0.0
 		}
 
 		private fun privateAccelerateTo(
@@ -520,7 +520,7 @@ class Train :
 			if (velocity.state <= 0) velocity.state = 0.0
 
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
-			accelaration.state =
+			acceleration.state =
 				if (currentCondition!!.getStopTest().isDecelarate()) {
 					Math.max(a, this@Train.MINIMAL_DECELERATION.toDouble())
 				} else {
@@ -529,9 +529,9 @@ class Train :
 		}
 	}
 
-	private val accelaration: Variable = Variable(0.0)
+	private val acceleration: Variable = Variable(0.0)
 	private val velocity: Variable = Variable(0.0)
-	private val va: SimpleIntegration = SimpleIntegration(velocity, accelaration)
+	private val va: SimpleIntegration = SimpleIntegration(velocity, acceleration)
 	private val front: Front = Front()
 	private val tail: Tail = Tail()
 	private val motor: Motor = Motor()
@@ -608,7 +608,7 @@ class Train :
 	/**
 	 * @return current acceleration of train
 	 */
-	fun getAccelaration(): Double = accelaration.state
+	fun getAcceleration(): Double = acceleration.state
 
 	/**
 	 * @return current speed of train
@@ -626,20 +626,20 @@ class Train :
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
 
 	override fun start(): Train {
-		accelaration.start()
+		acceleration.start()
 		velocity.start()
 		va.start()
 		return this
 	}
 
 	override fun stop() {
-		accelaration.stop()
+		acceleration.stop()
 		velocity.stop()
 		va.stop()
 		velocity.state = 0.0
 		velocity.rate = 0.0
-		accelaration.rate = 0.0
-		accelaration.state = 0.0
+		acceleration.rate = 0.0
+		acceleration.state = 0.0
 	}
 
 	override fun toString(): String = trainPrefix
