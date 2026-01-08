@@ -12,17 +12,18 @@ package cz.vutbr.fit.interlockSim.util
 /**
  * Simple 2D point class to replace java.awt.Point dependency in non-GUI code.
  * This class represents a location in (x,y) coordinate space, specified in integer precision.
+ * This is an immutable value class.
  */
 data class Point(
 	/**
 	 * The X coordinate of this Point.
 	 */
-	var x: Int = 0,
+	val x: Int = 0,
 	
 	/**
 	 * The Y coordinate of this Point.
 	 */
-	var y: Int = 0
+	val y: Int = 0
 ) : Cloneable {
 	
 	/**
