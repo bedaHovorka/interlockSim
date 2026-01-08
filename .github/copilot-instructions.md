@@ -106,7 +106,7 @@ src/main/kotlin/cz/vutbr/fit/interlockSim/
 
 4. **No unsolicited modernization** - Do not update code to modern Kotlin/Java features unless explicitly requested.
 
-5. **jDisco library** - jDisco is maintained separately. Do not modify jDisco code; report issues at https://github.com/bedaHovorka/jDisco
+5. **jDisco library** - jDisco is maintained separately. Do not modify jDisco code; report issues at https://github.com/bedaHovorka/jdisco
 
 ### Conservative Approach Applies To
 
