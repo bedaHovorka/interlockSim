@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent Team Structure
+
+For multi-agent development workflows, see **[TEAM.md](TEAM.md)** which defines 7 specialized agent roles:
+- **traffic-simulation-expert** - Main leader, arbiter, simulation & physics expert
+- **kotlin-tech-lead** - Technical architect, code reviewer, mentor
+- **java-senior-dev** - Historical analysis expert, null safety advisor
+- **kotlin-junior-dev** - Implementation developers, learners (unlimited)
+- **agent-architect** - AI agent system designer, ML specialist, A2A protocol designer
+- **railway-civil-engineer** - Railway domain expert, visioner, requirements definer
+- **qa-engineer** - Quality assurance specialists, UX/UI experts (2-3 allowed)
+
+TEAM.md includes decision authority hierarchy, collaboration patterns, and railway-inspired Agent-to-Agent (A2A) communication protocols.
+
 ## Project Overview
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
@@ -404,18 +417,60 @@ Follows `.editorconfig` configuration:
 - XML files: 2 spaces
 - UTF-8 encoding, LF line endings
 
-## Important: Conservative Approach to Java Source Modifications
+## Code Modification Guidelines
 
-**CRITICAL:** Be extremely conservative when editing Java source files in this legacy codebase.
+**Now that the project has been migrated to Kotlin and LONG_TERM_GOALS.md is defined, the code modification approach is differentiated by component type:**
 
-**Rules:**
-1. **Do not touch Java code unless explicitly requested** - Do not refactor, optimize, or "improve" code that is working
-2. **Tests must exist before modifications** - Any Java source file being modified MUST be covered by tests first. If tests don't exist, they must be written before making any changes
-3. **Minimal changes only** - Make only the specific changes requested, nothing more
-4. **No unsolicited modernization** - While the project now uses Java 21, do not update Java idioms to modern features, do not add new language features, do not restructure working code
-5. **jDisco library** - jDisco is now maintained as a separate project. Do not modify jDisco code; report issues at https://github.com/bedavs/jDisco
+### Critical Restrictions (Until jDisco Migration)
 
-This is a working historical codebase from 2007. Stability and preservation are more important than modernization.
+**Simulation Core (`sim/` package):**
+- **Minimal changes only** - Be extremely conservative with simulation logic
+- **No refactoring** - Do not restructure working simulation code
+- **Tests required** - Any changes MUST have comprehensive test coverage first
+- **No unsolicited improvements** - Only make explicitly requested changes
+- **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
+
+**jDisco Library:**
+- **Do not modify** - jDisco is maintained as a separate project at https://github.com/bedavs/jDisco
+- Report issues at the jDisco repository
+
+### Flexible Development (Other Components)
+
+**GUI (`gui/` package), Editor, Utilities, Context System:**
+- **Modernization allowed** - Can refactor, improve, and apply Kotlin idioms
+- **Tests required** - Must have test coverage before and after changes
+- **Alignment required** - Changes must align with LONG_TERM_GOALS.md goals and architecture
+- **Code quality** - Apply detekt-strict.yml rules for new Kotlin code
+- **Rationale:** These components can be improved independently without affecting simulation correctness
+
+### General Rules for All Changes
+
+1. **Tests are mandatory** - Any modified code MUST be covered by tests (before and after)
+2. **Align with goals** - Check that changes support or enable LONG_TERM_GOALS.md objectives
+3. **No breaking changes** - Maintain backward compatibility with existing XML configurations and APIs
+4. **Document decisions** - Update relevant documentation for architectural changes
+5. **Quality gates** - All changes must pass: `./gradlew build detekt ktlintCheck test`
+
+### Examples of Appropriate Changes
+
+**ALLOWED (with tests):**
+- Refactoring GUI components for Goal 20 (Accessibility)
+- Adding new editor features for Goal 16 (Signal Explanation)
+- Improving context serialization for Goal 5 (Save/Restore State)
+- Modernizing utility classes with Kotlin idioms
+- Adding metrics collection infrastructure for Goal 6
+
+**RESTRICTED (until jDisco migration):**
+- Changing Train physics calculations
+- Modifying jDisco process scheduling
+- Restructuring simulation event handling
+- Changing core simulation algorithms
+
+**PROHIBITED:**
+- Changes that break existing XML configurations
+- Modifications that fail existing tests
+- Changes that conflict with LONG_TERM_GOALS.md
+- jDisco library modifications
 
 ## Testing
 
