@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import java.awt.Point
+import cz.vutbr.fit.interlockSim.util.Point
 import java.util.Set
 
 /**
@@ -82,9 +82,7 @@ interface Cell {
 		 */
 		fun transform(from: Point): Point {
 			assert(from != null)
-			val tr = from.clone() as Point
-			tr.x += dx
-			tr.y += dy
+			val tr = Point(from.x + dx, from.y + dy)
 			assert(!from.equals(tr)) { this }
 			return tr
 		}

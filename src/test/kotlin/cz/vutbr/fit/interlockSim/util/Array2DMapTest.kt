@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.util
 import org.assertj.core.api.Assertions.*
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
-import java.awt.Point
 import java.util.ArrayList
 import java.util.Collections
 import java.util.List
@@ -90,13 +89,10 @@ class Array2DMapTest {
 	@Test
 	fun testPutPointV() {
 		EQ()
-		val referencer = Point()
 		for (x in 0 until BOUND) {
 			val y = RANDOM.nextInt(BOUND)
 			val newInt = RANDOM.nextInt()
-			referencer.x = x
-			referencer.y = y
-			val p = Point(referencer.x, referencer.y)
+			val p = Point(x, y)
 			val integer1 = treeMap.put(p, newInt)
 			val integer2 = array2DMap.put(p, newInt)
 			assertThat(integer2).isEqualTo(integer1)

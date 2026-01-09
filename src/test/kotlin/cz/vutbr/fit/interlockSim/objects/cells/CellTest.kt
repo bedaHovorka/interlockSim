@@ -11,9 +11,9 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.util.Point
 import org.assertj.core.api.Assertions.*
 import org.junit.jupiter.api.Test
-import java.awt.Point
 import java.util.EnumMap
 
 /**

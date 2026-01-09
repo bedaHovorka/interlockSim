@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.context
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
-import java.awt.Point
+import cz.vutbr.fit.interlockSim.util.Point
 import java.beans.PropertyChangeListener
 
 /**

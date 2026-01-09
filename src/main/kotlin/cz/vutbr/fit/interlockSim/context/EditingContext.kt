@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import java.awt.Point
+import cz.vutbr.fit.interlockSim.util.Point
 
 /**
  * Interface to shared functions of inner data model, which is allowed by editing

@@ -29,8 +29,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import java.awt.Point
 import java.util.ArrayList
 import java.util.Collection
 import java.util.HashMap

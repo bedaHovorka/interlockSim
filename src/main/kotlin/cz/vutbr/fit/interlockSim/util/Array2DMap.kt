@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import java.awt.Point
 import java.util.AbstractList
 import java.util.AbstractMap
 import java.util.AbstractSet

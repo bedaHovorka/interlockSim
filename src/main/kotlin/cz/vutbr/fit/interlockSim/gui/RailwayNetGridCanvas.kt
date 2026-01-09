@@ -183,7 +183,7 @@ class RailwayNetGridCanvas :
 	private var state = State.EDITING
 	private var toolbarCellClass: Class<out NodeCell>? = null
 	private var toolbarArgs: Array<Any?>? = null
-	private var selectedKey: Point? = null
+	private var selectedKey: cz.vutbr.fit.interlockSim.util.Point? = null
 
 	init {
 		background = Color.BLACK
@@ -316,7 +316,8 @@ class RailwayNetGridCanvas :
 	}
 
 	// Mouse coordinate to grid coordinate conversion
-	private fun currentKey(e: MouseEvent): Point = Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
+	private fun currentKey(e: MouseEvent): cz.vutbr.fit.interlockSim.util.Point =
+		cz.vutbr.fit.interlockSim.util.Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
 
 	private fun cellOn(
 		x: Int,
