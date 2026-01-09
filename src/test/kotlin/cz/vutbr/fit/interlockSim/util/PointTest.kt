@@ -40,16 +40,6 @@ class PointTest {
 	}
 
 	@Test
-	fun testClone() {
-		val original = Point(15, 25)
-		val cloned = original.clone()
-		
-		assertThat(cloned).isNotSameAs(original)
-		assertThat(cloned.x).isEqualTo(original.x)
-		assertThat(cloned.y).isEqualTo(original.y)
-	}
-
-	@Test
 	fun testEquals() {
 		val point1 = Point(10, 20)
 		val point2 = Point(10, 20)

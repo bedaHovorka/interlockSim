@@ -316,7 +316,7 @@ class RailwayNetGridCanvas :
 	}
 
 	// Mouse coordinate to grid coordinate conversion
-	private fun currentKey(e: MouseEvent): cz.vutbr.fit.interlockSim.util.Point = 
+	private fun currentKey(e: MouseEvent): cz.vutbr.fit.interlockSim.util.Point =
 		cz.vutbr.fit.interlockSim.util.Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
 
 	private fun cellOn(

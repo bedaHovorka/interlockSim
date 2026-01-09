@@ -284,8 +284,8 @@ abstract class DefaultContext :
 		trackBlock: TrackBlock
 	): Map<Point, TrackBlockPart>? {
 		if (pi1 == null || pi2 == null) throw IllegalArgumentException()
-		val p1 = pi1.clone() as Point
-		val p2 = pi2.clone() as Point
+		val p1 = pi1
+		val p2 = pi2
 
 		val keys: MutableList<Point> = ArrayList()
 		val b = bresenham(key1, key2, p1, p2, keys)
