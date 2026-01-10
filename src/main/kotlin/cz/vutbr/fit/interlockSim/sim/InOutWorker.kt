@@ -18,7 +18,7 @@ import jDisco.Condition
 import jDisco.Head
 import jDisco.Link
 import jDisco.Process
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Behaviour of InOut process
@@ -29,7 +29,7 @@ class InOutWorker(
 	private val inOut: InOut
 ) : LoopProcess() {
 	companion object {
-		private val logger = LoggerFactory.getLogger(InOutWorker::class.java)
+		private val logger = KotlinLogging.logger {}
 	}
 
 	private val queqe = Head()

@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import jDisco.Random
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Testing Generator
@@ -21,7 +21,7 @@ open class Generator(
 	protected val shuffleInOuts: Boolean = true
 ) : LoopProcess() {
 	companion object {
-		private val logger = LoggerFactory.getLogger(Generator::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		init {
 			dtMin = 1e-6
@@ -42,14 +42,9 @@ open class Generator(
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
-		if (logger.isDebugEnabled) {
-			logger.debug(
-				"Generating random timetable: from {} to {}, arrival at {}, departure at {}",
-				inOutsList[0].getName(),
-				inOutsList[1].getName(),
-				timeIn,
-				timeOut
-			)
+		logger.debug {
+			"Generating random timetable: from ${inOutsList[0].getName()} to ${inOutsList[1].getName()}, " +
+				"arrival at $timeIn, departure at $timeOut"
 		}
 
 		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
@@ -57,7 +52,7 @@ open class Generator(
 
 	override fun iteration() {
 		val train = Train(context, generateRandomTimetable())
-		logger.debug("Generator: creating and placing train (total trains: {})", trains.size + 1)
+		logger.debug { "Generator: creating and placing train (total trains: ${trains.size + 1})" }
 		placeTrain(train)
 		trains.add(train)
 	}
