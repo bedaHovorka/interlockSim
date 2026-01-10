@@ -32,7 +32,7 @@ import cz.vutbr.fit.interlockSim.sim.SimulationException
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.util.TreeMultiMap
+
 import cz.vutbr.fit.interlockSim.util.Util
 import jDisco.DiscoException
 import jDisco.Process
@@ -45,9 +45,11 @@ import java.util.Collections
 import java.util.EnumSet
 import java.util.IdentityHashMap
 import java.util.LinkedHashMap
+import java.util.LinkedHashSet
 import java.util.List
 import java.util.Map
 import java.util.Set
+import java.util.TreeMap
 
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
@@ -197,7 +199,9 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): Map<Point, TrackBlockPart>? {
-		val treeMM = TreeMultiMap<Double, Tranporter>()
+		// TreeMap<K, MutableSet<V>> replaces TreeMultiMap<K, V>
+		// TreeMap maintains sorted keys, LinkedHashSet maintains insertion order per key
+		val distanceMap = TreeMap<Double, MutableSet<Tranporter>>()
 
 		if (key1.distance(key2) <= SQRT2) return null
 
@@ -215,13 +219,17 @@ abstract class DefaultContext :
 				if (used(p2)) continue
 				val distance = p1.distance(p2)
 				// if (distance <= 1) continue;
-				treeMM.put(distance, Tranporter(p1, p2, s1, s2))
+				// Get or create set for this distance, then add the Tranporter
+				distanceMap.getOrPut(distance) { LinkedHashSet() }.add(Tranporter(p1, p2, s1, s2))
 			}
 		}
 
-		for (t in treeMM.values()) {
-			val tryJoin = tryJoin(t, key1, key2, trackBlock)
-			if (tryJoin != null) return tryJoin
+		// Iterate through all values in sorted key order (TreeMap guarantees this)
+		for (transporterSet in distanceMap.values) {
+			for (t in transporterSet) {
+				val tryJoin = tryJoin(t, key1, key2, trackBlock)
+				if (tryJoin != null) return tryJoin
+			}
 		}
 		return null
 	}
