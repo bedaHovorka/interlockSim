@@ -82,10 +82,6 @@ class ShuntingLoopTest {
 		}
 
 		@Test
-		@Disabled(
-			"BUG-004: ShuntingLoop is tightly coupled to vyhybna.xml structure with hardcoded grid coordinates. " +
-				"Cannot test with arbitrary contexts. Requires refactoring to configuration-based approach."
-		)
 		fun constructor_emptyContext_throwsAssertionError() {
 			val emptyContext = MockSimulationContext()
 
@@ -97,10 +93,6 @@ class ShuntingLoopTest {
 		}
 
 		@Test
-		@Disabled(
-			"BUG-004: ShuntingLoop is tightly coupled to vyhybna.xml structure with hardcoded grid coordinates. " +
-				"Cannot test with arbitrary contexts. Requires refactoring to configuration-based approach."
-		)
 		fun constructor_minimimalContext_throwsException() {
 			// Load minimal network fixture (only 1 InOut, insufficient for ShuntingLoop)
 			val xml =
@@ -286,10 +278,6 @@ class ShuntingLoopTest {
 		}
 
 		@Test
-		@Disabled(
-			"BUG-004: ShuntingLoop is tightly coupled to vyhybna.xml structure with hardcoded grid coordinates. " +
-				"Cannot test with arbitrary contexts. Requires refactoring to configuration-based approach."
-		)
 		fun constructor_contextWithoutRequiredElements_throwsException() {
 			// Load linear-track.xml which doesn't have the vyhybna structure
 			val xml =
@@ -308,10 +296,6 @@ class ShuntingLoopTest {
 		}
 
 		@Test
-		@Disabled(
-			"BUG-004: ShuntingLoop is tightly coupled to vyhybna.xml structure with hardcoded grid coordinates. " +
-				"Cannot test with arbitrary contexts. Requires refactoring to configuration-based approach."
-		)
 		fun constructor_switchBasicNetwork_throwsException() {
 			// Load switch-basic.xml which has a switch but not the full vyhybna structure
 			val xml =
