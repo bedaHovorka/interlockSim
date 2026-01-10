@@ -395,7 +395,7 @@ src/
 
 **Key Facts:**
 - **Duration:** ~1 week intensive manual conversion (vs. estimated 3-4 weeks)
-- **Test parity:** 242/242 tests restored and passing (236 pass, 5 skipped @Disabled, 1 property change test)
+- **Test parity:** 242/242 tests restored and passing (240 pass, 1 skipped @Disabled, 1 property change test)
 - **Approach:** Conservative structure-preserving conversion - no unsolicited refactoring
 - **Automated tools:** Attempted Python regex converter - **failed** (enum syntax, inner classes, generics)
 - **Critical lesson:** Legacy codebase migration requires manual conversion with architectural understanding
@@ -1015,11 +1015,10 @@ None. All critical bugs identified by SonarQube have been fixed.
 
 ### Test Suite Notes
 
-**Skipped Tests:** 5 tests (2.1% of suite) are currently disabled:
-- `ShuntingLoopTest`: 4 tests marked with `@Disabled` annotation
-- `XMLContextFactoryTest`: 1 test with conditional skip logic
+**Skipped Tests:** 1 test (0.4% of suite) is currently disabled:
+- `Array2DMapTest.testSpeed()`: Performance benchmark marked with `@Disabled` annotation due to timing variability
 
-These skipped tests document known initialization edge cases and do not indicate failures. See test source files for specific skip reasons.
+**Note:** As of January 2026, 4 previously disabled ShuntingLoop tests were re-enabled after confirming they properly verify exception handling for invalid contexts. The tests validate that ShuntingLoop fails gracefully (throwing appropriate exceptions) when given incompatible network structures, which is correct behavior despite the design limitation documented as SIM-004.
 
 ### Reference Reports
 
