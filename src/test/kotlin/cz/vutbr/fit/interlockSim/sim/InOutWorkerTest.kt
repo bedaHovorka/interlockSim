@@ -14,8 +14,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.isNotSameAs
-import assertk.assertions.isSameAs
+import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -141,7 +141,7 @@ class InOutWorkerTest {
 
 			assertThat(queue1)
 				.withMessage("Multiple getQueqe calls should return same instance")
-				.isSameAs(queue2)
+				.isSameInstanceAs(queue2)
 		}
 	}
 
@@ -329,8 +329,8 @@ class InOutWorkerTest {
 
 			assertThat(workerA).isNotNull()
 			assertThat(workerB).isNotNull()
-			assertThat(workerA).isNotSameAs(workerB)
-			assertThat(workerA.getQueqe()).isNotSameAs(workerB.getQueqe())
+			assertThat(workerA).isNotSameInstanceAs(workerB)
+			assertThat(workerA.getQueqe()).isNotSameInstanceAs(workerB.getQueqe())
 		}
 	}
 }

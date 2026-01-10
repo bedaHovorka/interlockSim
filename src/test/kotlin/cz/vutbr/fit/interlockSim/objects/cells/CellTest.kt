@@ -11,8 +11,8 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertThat
 import assertk.assertions.isFalse
-import assertk.assertions.isNotSameAs
-import assertk.assertions.isSameAs
+import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.fail
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
@@ -41,13 +41,13 @@ class CellTest {
 			val dx = s.dx
 			val dy = s.dy
 
-			assertThat(Segment.segmentFor(dx, dy)).isSameAs(s)
+			assertThat(Segment.segmentFor(dx, dy)).isSameInstanceAs(s)
 
-			assertThat(Segment.anti(Segment.anti(s))).isSameAs(s)
+			assertThat(Segment.anti(Segment.anti(s))).isSameInstanceAs(s)
 			assertThat(Segment.conflict(s, s)).isTrue()
 
 			val tr = s.transform(center)
-			assertThat(tr).isNotSameAs(center) // Must not return same object
+			assertThat(tr).isNotSameInstanceAs(center) // Must not return same object
 			assertThat(center == tr).withMessage("transformed point is equal").isFalse()
 			assertThat(points.values.contains(tr)).withMessage("transformed point is generated twice").isFalse()
 			points[s] = tr
@@ -75,7 +75,7 @@ class CellTest {
 
 				assertThat(sem1.direction())
 					.withMessage("direction for class ${clazz.simpleName} and $t")
-					.isSameAs(Segment.anti(sem2.direction()))
+					.isSameInstanceAs(Segment.anti(sem2.direction()))
 			} catch (e: IllegalArgumentException) {
 				val message = e.message
 				if (message != null && message == RailSwitch.UNSUPORTED_SWITCH_TYPES_MESSAGE) {

@@ -224,9 +224,11 @@ class HashMapGraphTest {
 			graph.put("A", "D", 200)
 			graph.put("B", "C", 250)
 
+			@Suppress("UNCHECKED_CAST")
 			val removed = graph.removeAll("A") as Collection<Int>
 
 			assertThat(removed).hasSize(3)
+			@Suppress("UNCHECKED_CAST")
 			assertThat(removed as Iterable<Int>).containsExactlyInAnyOrder(100, 150, 200)
 			assertThat(graph.get("A", "B")).isNull()
 			assertThat(graph.get("A", "C")).isNull()
@@ -239,9 +241,11 @@ class HashMapGraphTest {
 			graph.put("A", "B", 100)
 			graph.put("C", "D", 200)
 
+			@Suppress("UNCHECKED_CAST")
 			val nodes = graph.remove(100) as Collection<String>
 
 			assertThat(nodes).hasSize(2)
+			@Suppress("UNCHECKED_CAST")
 			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B")
 			assertThat(graph.get("A", "B")).isNull()
 			assertThat(graph.get("C", "D")).withMessage("Other edges should remain").isEqualTo(200)
@@ -253,9 +257,11 @@ class HashMapGraphTest {
 			graph.put("C", "D", 100)
 			graph.put("E", "F", 200)
 
+			@Suppress("UNCHECKED_CAST")
 			val nodes = graph.remove(100) as Collection<String>
 
 			assertThat(nodes).hasSize(4)
+			@Suppress("UNCHECKED_CAST")
 			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C", "D")
 			assertThat(graph.get("E", "F")).withMessage("Edge with different value should remain").isEqualTo(200)
 		}
@@ -270,6 +276,7 @@ class HashMapGraphTest {
 			graph.put("A", "C", 150)
 			graph.put("B", "C", 200)
 
+			@Suppress("UNCHECKED_CAST")
 			val edges = graph.get("A") as Collection<Int>
 
 			assertThat(edges).hasSize(2)
@@ -291,6 +298,7 @@ class HashMapGraphTest {
 			graph.put("B", "C", 150)
 			graph.put("C", "D", 200)
 
+			@Suppress("UNCHECKED_CAST")
 			val values = graph.values() as Collection<Int>
 
 			assertThat(values).hasSize(3)
@@ -319,7 +327,9 @@ class HashMapGraphTest {
 			graph.put("A", "D", 3)
 			graph.put("A", "E", 4)
 
+			@Suppress("UNCHECKED_CAST")
 			assertThat(graph.get("A") as Collection<Int>).hasSize(4)
+			@Suppress("UNCHECKED_CAST")
 			assertThat(graph.nodeSet() as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C", "D", "E")
 			assertThat(graph.size()).isEqualTo(4)
 		}
