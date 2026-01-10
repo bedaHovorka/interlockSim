@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.github.oshai.kotlinlogging.KotlinLoggingFactory
 import java.util.EnumMap
 import java.util.EnumSet
 import java.util.Map.Entry
@@ -167,14 +166,8 @@ class RailSwitch : NodeCell {
 		assert(conf != null)
 		val oldConf = conf
 		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Switch {} position change: {} -> {}",
-				jDisco.Process.time(),
-				this.hashCode(),
-				oldConf,
-				conf
-			)
+		logger.info {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} position change: $oldConf -> $conf"
 		}
 	}
 
@@ -223,16 +216,8 @@ class RailSwitch : NodeCell {
 		allowedSpeed: Double
 	) {
 		val newConf = getPathConfWithException(from, to)
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Switch {} path setup: from={} to={}, conf={}, allowedSpeed={}",
-				jDisco.Process.time(),
-				this.hashCode(),
-				from,
-				to,
-				newConf,
-				allowedSpeed
-			)
+		logger.info {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		setConf(newConf)
 	}

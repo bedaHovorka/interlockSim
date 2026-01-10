@@ -24,8 +24,7 @@ import jDisco.Continuous
 import jDisco.Process
 import jDisco.Reporter
 import jDisco.Variable
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Train Process
@@ -35,7 +34,7 @@ class Train :
 	Process,
 	TrackOccupant {
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(Train::class.java)
+		private val logger = KotlinLogging.logger {}
 		private var count: Int = 0
 	}
 
@@ -176,15 +175,10 @@ class Train :
 			// isSeparatorInDirection accepts nullable Track parameters
 			assert(context.isSeparatorInDirection(separator as OrientedPathSeparator, next, current)) { semaphore }
 			assert(semaphore.getSignal() != null)
-			if (logger.isInfoEnabled) {
-				logger.info(
-					"{} SENSOR: Train {} detected at semaphore {}, signal={}, velocity={} m/s",
-					jDisco.Process.time(),
-					number,
-					if (semaphore.getName() != null) semaphore.getName() else semaphore.hashCode(),
-					semaphore.getSignal(),
-					getVelocity()
-				)
+			logger.info {
+				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
+					"${if (semaphore.getName() != null) semaphore.getName() else semaphore.hashCode()}, " +
+					"signal=${semaphore.getSignal()}, velocity=${getVelocity()} m/s"
 			}
 			val path: Path? = context.pathToNextSemaphore(separator, next!!)
 
@@ -192,20 +186,20 @@ class Train :
 
 			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
 				assert(getVelocity() >= 0)
-				logger.debug("Train {} approaching semaphore with STOP signal, halting", number)
+				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 				fireStop()
 				context.report(semaphore.getSignal().toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore))
-				logger.debug("Train {} received allowing signal from semaphore, resuming movement", number)
+				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				context.report("OK " + semaphore.getSignal(), this@Train, ReportType.TRAIN_EVENTS)
 				fireStart(semaphore, context.pathToNextSemaphore(separator, next!!)) // znovu najit
 			} else if (semaphore.getSignal().isAllowing() && velocity.state <= maxAbsError) {
-				logger.debug("Train {} starting movement with allowing signal", number)
+				logger.debug { "Train $number starting movement with allowing signal" }
 				fireStart(semaphore, path)
 			} else {
-				logger.debug("Train {} accelerating toward next semaphore", number)
+				logger.debug { "Train $number accelerating toward next semaphore" }
 				accelerateToSignal(semaphore, path)
 			}
 			hold(1.0)
@@ -306,15 +300,8 @@ class Train :
 			current: TrackSection?,
 			next: TrackSection?
 		) {
-			if (logger.isDebugEnabled) {
-				logger.debug(
-					"{} POSITION: Train {} front at separator {}, entering block {}, leaving block {}",
-					jDisco.Process.time(),
-					number,
-					where,
-					next,
-					current
-				)
+			logger.debug {
+				"${jDisco.Process.time()} POSITION: Train $number front at separator $where, entering block $next, leaving block $current"
 			}
 
 			if (where is RailSemaphore &&
@@ -345,14 +332,8 @@ class Train :
 			current: TrackSection?,
 			next: TrackSection?
 		) {
-			if (logger.isDebugEnabled) {
-				logger.debug(
-					"{} POSITION: Train {} tail at separator {}, clearing block {}",
-					jDisco.Process.time(),
-					number,
-					where,
-					current
-				)
+			logger.debug {
+				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
 			if (where == timetable.getIn()) {
 				fromHome = true
@@ -428,17 +409,13 @@ class Train :
 		override fun iteration() {
 			assert(currentCondition != null)
 			accelerate = true
-			if (logger.isTraceEnabled) {
-				logger.trace("Train {} motor iteration: target speed {}, current velocity {}", number, targetSpeed, getVelocity())
-			}
+			logger.trace { "Train $number motor iteration: target speed $targetSpeed, getVelocity(), current velocity ${getVelocity()}" }
 			start()
 			waitUntil(currentCondition)
 
 			if (accelerate && currentCondition!!.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0.0
-				if (logger.isTraceEnabled) {
-					logger.trace("Train {} motor: deceleration phase to half speed, target {}", number, targetSpeed)
-				}
+				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
 				waitUntil(AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED))
 			}
 
@@ -463,9 +440,7 @@ class Train :
 		 * @param speed
 		 */
 		fun accelerateTo(speed: Double) {
-			if (logger.isDebugEnabled) {
-				logger.debug("Train {} motor: accelerate to speed {}, current velocity {}", number, speed, getVelocity())
-			}
+			logger.debug { "Train $number motor: accelerate to speed $speed, current velocity ${getVelocity()}" }
 			context.report("in on warning", this@Train, ReportType._DEBUG)
 			privateAccelerateTo(
 				speed,
@@ -484,13 +459,8 @@ class Train :
 		 * @param normalSpeed
 		 */
 		fun onWarning(normalSpeed: Double) {
-			if (logger.isDebugEnabled) {
-				logger.debug(
-					"Train {} motor: warning mode, target speed {}, current velocity {}",
-					number,
-					normalSpeed,
-					getVelocity()
-				)
+			logger.debug {
+				"Train $number motor: warning mode, target speed $normalSpeed, current velocity ${getVelocity()}"
 			}
 			context.report("in on warning $normalSpeed", this@Train, ReportType._DEBUG)
 
@@ -562,13 +532,9 @@ class Train :
 		this.length = timetable.getLength()
 		number = ++count
 		trainPrefix = "Train #$number"
-		logger.debug(
-			"Train {} created: from {} to {}, length {}",
-			number,
-			timetable.getIn().getName(),
-			timetable.getOut().getName(),
-			length
-		)
+		logger.debug {
+			"Train $number created: from ${timetable.getIn().getName()} to ${timetable.getOut().getName()}, length $length"
+		}
 	}
 
 	override fun distanceToSemaphore(): Double =
@@ -578,7 +544,7 @@ class Train :
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout: InOut = timetable.getIn()
 		val worker: InOutWorker = context.getWorkerFor(inout)
-		logger.debug("Train {} approved for movement from {} to {}", number, inout.getName(), timetable.getOut().getName())
+		logger.debug { "Train $number approved for movement from ${inout.getName()} to ${timetable.getOut().getName()}" }
 		worker.enterTrain(this)
 		context.report("approved ${inout.getName()}->${timetable.getOut().getName()}", this, ReportType.TRAIN_EVENTS)
 
@@ -601,7 +567,7 @@ class Train :
 		stop()
 		motor.terminate()
 		// ukoncovaci..
-		logger.debug("Train {} completed journey: distance traveled {}", number, front.getTotalDistance())
+		logger.debug { "Train $number completed journey: distance traveled ${front.getTotalDistance()}" }
 		context.report("ends", this, ReportType.TRAIN_EVENTS)
 	}
 

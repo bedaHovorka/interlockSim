@@ -11,8 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Set
 
 /**
@@ -127,14 +126,12 @@ open class RailSemaphore(
 	 * @param signal
 	 */
 	open fun setSignal(signal: Signal) {
-		if (logger.isDebugEnabled && this.signal != signal) {
-			logger.debug(
-				"Semaphore {} signal change: {} -> {} at t={}",
-				if (getName() != null) getName() else this.hashCode(),
-				this.signal,
-				signal,
-				jDisco.Process.time()
-			)
+		logger.debug {
+			if (this.signal != signal) {
+				"Semaphore ${if (getName() != null) getName() else this.hashCode()} signal change: ${this.signal} -> $signal at t=${jDisco.Process.time()}"
+			} else {
+				""
+			}
 		}
 		this.signal = signal
 	}
@@ -171,7 +168,7 @@ open class RailSemaphore(
 	}
 
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(RailSemaphore::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		/**
 		 * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
