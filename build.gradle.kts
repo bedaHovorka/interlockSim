@@ -44,6 +44,7 @@ plugins {
 val jdiscoVersion: String by project
 val slf4jVersion: String by project
 val logbackVersion: String by project
+val kotlinLoggingVersion: String by project
 val junitPlatformVersion: String by project
 val junitJupiterVersion: String by project
 val assertkVersion: String by project
@@ -86,6 +87,7 @@ dependencies {
     implementation("dk.ruc.keld:jdisco:$jdiscoVersion")              // Discrete event simulation library
     implementation("org.slf4j:slf4j-api:$slf4jVersion")               // Logging facade
     implementation("ch.qos.logback:logback-classic:$logbackVersion")  // SLF4J implementation (includes logback-core)
+    implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion") // Kotlin logging library
 
     // Kotlin dependencies (for Phase 1 migration)
     implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")  // Kotlin standard library

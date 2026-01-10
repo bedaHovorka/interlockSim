@@ -21,8 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.sim.TrackOperationException
 import cz.vutbr.fit.interlockSim.util.Util
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.util.ArrayList
@@ -39,7 +38,7 @@ abstract class AbstractPath protected constructor(
 ) : AbstractTrack(),
 	Path {
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(AbstractPath::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		private const val IS_FREE_FROM = "isFreeFrom"
 		private const val SET_UP_PATH = "setUpPath"
@@ -95,9 +94,7 @@ abstract class AbstractPath protected constructor(
 				if (e is Track) {
 					val track = e
 					es = track.maxSpeed(prevSep)
-					if (logger.isTraceEnabled) {
-						logger.trace("Track {} max speed: {}", track, es)
-					}
+					logger.trace { "Track $track max speed: $es" }
 					// prevTrack = track;
 				} else {
 					val ps = Util.assertInstanceOf(PathSeparator::class.java, e)
@@ -110,9 +107,7 @@ abstract class AbstractPath protected constructor(
 				min = if (es < min) es else min
 			}
 		}
-		if (logger.isTraceEnabled) {
-			logger.trace("Path max speed calculation result: {}", min)
-		}
+		logger.trace { "Path max speed calculation result: $min" }
 		return min
 	}
 
@@ -122,14 +117,10 @@ abstract class AbstractPath protected constructor(
 			if (e is Track) {
 				val trackLength = e.length()
 				sum += trackLength
-				if (logger.isTraceEnabled) {
-					logger.trace("Track {} length: {}, cumulative path length: {}", e, trackLength, sum)
-				}
+				logger.trace { "Track $e length: $trackLength, cumulative path length: $sum" }
 			}
 		}
-		if (logger.isTraceEnabled) {
-			logger.trace("Total path length calculation: {}", sum)
-		}
+		logger.trace { "Total path length calculation: $sum" }
 		return sum
 	}
 
@@ -140,7 +131,7 @@ abstract class AbstractPath protected constructor(
 	override fun isSetUpPath(sep: PathSeparator): Boolean = pathIterating(sep)
 
 	override fun setUpPath(sep: PathSeparator) {
-		logger.debug("Setting up path from separator: {}", sep)
+		logger.debug { "Setting up path from separator: $sep" }
 		pathIterating(sep)
 	}
 
@@ -156,9 +147,7 @@ abstract class AbstractPath protected constructor(
 			val methodName = e.methodName
 			val method = trackMethods[methodName]
 			var previous: Track? = null
-			if (logger.isDebugEnabled) {
-				logger.debug("Path iteration starting: method={}, separator={}, pathLength={}", methodName, sep, length())
-			}
+			logger.debug { "Path iteration starting: method=$methodName, separator=$sep, pathLength=${length()}" }
 
 			val iterator = getIterator(sep)
 			while (iterator.hasNext()) {
@@ -167,39 +156,31 @@ abstract class AbstractPath protected constructor(
 				val nextTrack = Util.assertInstanceOf(Track::class.java, iterator.next())
 
 				if (!separatorSetting(methodName, separator, previous, nextTrack)) {
-					if (logger.isInfoEnabled && IS_FREE_FROM == methodName) {
-						logger.info(
-							"{} PATH_NOT_FREE: Separator {} prevents path - config cannot be set",
-							jDisco.Process.time(),
-							separator
-						)
+					if (IS_FREE_FROM == methodName) {
+						logger.info {
+							"${jDisco.Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
+						}
 					}
-					if (logger.isDebugEnabled) {
-						logger.debug("Separator setting failed for method: {}", methodName)
-					}
+					logger.debug { "Separator setting failed for method: $methodName" }
 					return false
 				}
 
 				val invoke = method!!.invoke(nextTrack, separator)
 				if (java.lang.Boolean.FALSE == invoke) {
-					if (logger.isInfoEnabled && IS_FREE_FROM == methodName) {
-						logger.info(
-							"{} PATH_NOT_FREE: Track {} prevents path - state={}",
-							jDisco.Process.time(),
-							nextTrack,
-							if (nextTrack is SimpleTrack) nextTrack.getState() else "unknown"
-						)
+					if (IS_FREE_FROM == methodName) {
+						logger.info {
+							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
+								"state=${if (nextTrack is SimpleTrack) nextTrack.getState() else "unknown"}"
+						}
 					}
-					if (logger.isDebugEnabled) {
-						logger.debug("Method invocation returned false for method: {}", methodName)
-					}
+					logger.debug { "Method invocation returned false for method: $methodName" }
 					return false
 				}
 				assert(invoke == null || java.lang.Boolean.TRUE == invoke) { invoke }
 				previous = nextTrack
 			}
 			if (method == trackMethods[SET_UP_PATH]) {
-				logger.debug("Setting up semaphores for path")
+				logger.debug { "Setting up semaphores for path" }
 				setUpSemaphores(sep)
 			}
 			return true
@@ -241,14 +222,13 @@ abstract class AbstractPath protected constructor(
 			// The segments may be null in certain network configurations
 			// Passing nulls to setUpPath is INTENTIONAL - it's up to the implementation to handle
 			if (separator !is RailSemaphore) {
-				logger.debug(
-					"SET_UP_PATH: setUpPath(from={}, to={}, speed={}) on {}",
-					from, to, separator.allowedSpeed(), separator
-				)
+				logger.debug {
+					"SET_UP_PATH: setUpPath(from=$from, to=$to, speed=${separator.allowedSpeed()}) on $separator"
+				}
 				separator.setUpPath(from, to, separator.allowedSpeed())
 			}
 			val following = separator.getFollowingSegment(from)
-			logger.debug("SET_UP_PATH: getFollowingSegment({}) returned {}, expected {}", from, following, to)
+			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
 			assert(following === to) { "Separator $separator: getFollowingSegment($from) returned $following but expected $to" }
 		} else if (methodName == IS_FREE_FROM) {
 			// Java: //EMPTY

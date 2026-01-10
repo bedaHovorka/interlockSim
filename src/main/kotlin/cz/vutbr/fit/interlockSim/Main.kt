@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SimulationException
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
 import java.io.InputStream
 import java.io.PrintStream
@@ -104,10 +104,10 @@ class Main private constructor() {
 				out.println(cause.message + " cannot convert to number")
 				return
 			}
-			logger.error("Example initialization failed", cause)
+			logger.error(cause) { "Example initialization failed" }
 		} catch (e: Exception) {
 			out.println("Example inilialization failed")
-			logger.error("Example initialization failed", e)
+			logger.error(e) { "Example initialization failed" }
 		}
 	}
 
@@ -172,7 +172,7 @@ class Main private constructor() {
 		 */
 		const val PROGRAM_FULL_NAME = "$PROGRAM_NAME $PROGRAM_VERSION"
 
-		private val logger = LoggerFactory.getLogger(Main::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		private val instance = Main()
 

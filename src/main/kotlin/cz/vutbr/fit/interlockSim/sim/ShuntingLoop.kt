@@ -28,8 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.ArrayList
 import java.util.Collections
 import java.util.HashMap
@@ -42,7 +41,7 @@ import java.util.Queue
  */
 class ShuntingLoop : Interlocking {
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(ShuntingLoop::class.java)
+		private val logger = KotlinLogging.logger {}
 		private const val MAX_TRAINS: Int = 2 // maximalni pocet odsouhlasených vlaků v systému
 	}
 
