@@ -379,8 +379,7 @@ src/
     │   ├── util/                  - Utility class tests
     │   │   ├── DoubletonTest.java
     │   │   ├── EnumUnorientedGraphTest.java
-    │   │   ├── HashMapGraphTest.java
-    │   │   └── TreeMultiMapTest.java
+    │   │   └── HashMapGraphTest.java
     │   └── xml/                   - XML parsing and validation tests
     │       └── XMLContextFactoryTest.java
     └── resources/cz/vutbr/fit/interlockSim/xml/
@@ -517,7 +516,6 @@ class MyIntegrationTest {
 - `DoubletonTest` - 66 tests for immutable ordered pair data structure
 - `EnumUnorientedGraphTest` - 55 tests for enum-based unoriented graph
 - `HashMapGraphTest` - 48 tests for HashMap-based graph implementation
-- `TreeMultiMapTest` - 25 tests for tree-based multimap implementation
 
 **Context tests:**
 - `DefaultContextTest` - 8 tests for railway network context operations
@@ -1048,9 +1046,10 @@ The codebase has been analyzed for deprecated Java standard library APIs. This i
   - Easy fix: Use `Integer.valueOf()` or autoboxing
 
 **MEDIUM Priority:**
-- Internal project classes marked deprecated (`Doubleton`, `TreeMultiMap`) - 55 occurrences
+- Internal project classes marked deprecated (`Doubleton`) - remaining occurrences
   - These are project-specific deprecations, not Java SE
-  - Require design review to determine replacement strategy
+  - `TreeMultiMap` has been removed and replaced with standard library `TreeMap<K, MutableSet<V>>` (issue resolved)
+  - Require design review to determine replacement strategy for remaining deprecated classes
 
 ### Monitoring
 
