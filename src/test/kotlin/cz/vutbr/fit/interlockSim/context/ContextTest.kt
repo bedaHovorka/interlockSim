@@ -9,6 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertThat
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -16,11 +21,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import assertk.assertThat
-import assertk.assertions.isNotNull
-import assertk.assertions.isNull
-import assertk.assertions.isSameAs
-import assertk.assertions.isTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 

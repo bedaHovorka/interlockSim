@@ -71,6 +71,7 @@ class XMLContextFactory :
 	private inner class Handler : DefaultHandler() {
 		private var context: XMLContext? = null
 		private var ended: Boolean = false
+		private var netElementDepth: Int = 0
 
 		// Array of classes to handle in XML parsing
 		private val classes: Array<Class<out PathElement>> =
@@ -88,6 +89,10 @@ class XMLContextFactory :
 			attributes: Attributes?
 		) {
 			if (localName == ROOT_ELEMENT_NAME) {
+				netElementDepth++
+				if (netElementDepth > 1) {
+					throw SAXException("Nested net elements are not allowed")
+				}
 				val cols = getInt(uri!!, attributes!!, X)
 				val rows = getInt(uri, attributes, Y)
 				context = XMLContext(cols, rows)
@@ -238,10 +243,14 @@ class XMLContextFactory :
 			localName: String?,
 			qName: String?
 		) {
-			// EMPTY
+			if (localName == ROOT_ELEMENT_NAME) {
+				netElementDepth--
+			}
 		}
 
 		override fun endDocument() {
+			// Note: InOut validation removed - contexts can be created without InOut elements
+			// for editing purposes. Simulation validation happens when run() is called.
 			ended = true
 		}
 

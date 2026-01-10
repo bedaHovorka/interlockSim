@@ -9,15 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.DefaultContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
@@ -25,10 +17,18 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameAs
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for {@link InOutWorker}.

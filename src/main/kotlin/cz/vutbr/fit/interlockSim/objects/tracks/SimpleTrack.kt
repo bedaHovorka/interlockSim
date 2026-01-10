@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.TrackOperationException
-import jDisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
+import jDisco.Process
 import java.util.IdentityHashMap
 
 /**

@@ -14,8 +14,6 @@
 package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import cz.vutbr.fit.interlockSim.testutil.*
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
@@ -25,8 +23,10 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.*
 import org.junit.jupiter.api.*
 import java.util.*
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for {@link Doubleton}.
@@ -63,7 +63,8 @@ class DoubletonTest {
 		fun constructor_sameObject_throwsException() {
 			val same = "A"
 
-			assertThatBlock { Doubleton<String, Int>(same, same) }.isFailure()
+			assertThatBlock { Doubleton<String, Int>(same, same) }
+				.isFailure()
 				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("equal")
 		}
@@ -73,7 +74,8 @@ class DoubletonTest {
 			val a = "A" // Create new string to potentially have different reference
 			val b = "A"
 
-			assertThatBlock { Doubleton<String, Int>(a, b) }.isFailure()
+			assertThatBlock { Doubleton<String, Int>(a, b) }
+				.isFailure()
 				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("equal")
 		}
@@ -151,7 +153,8 @@ class DoubletonTest {
 			it.next()
 			it.next()
 
-			assertThatBlock { it.next() }.isFailure()
+			assertThatBlock { it.next() }
+				.isFailure()
 				.isInstanceOf(NoSuchElementException::class)
 		}
 
@@ -160,7 +163,8 @@ class DoubletonTest {
 			val it = doubleton.iterator()
 			it.next()
 
-			assertThatBlock { it.remove() }.isFailure()
+			assertThatBlock { it.remove() }
+				.isFailure()
 				.isInstanceOf(UnsupportedOperationException::class)
 		}
 	}
@@ -187,7 +191,8 @@ class DoubletonTest {
 
 		@Test
 		fun getValue_nonExistentElement_throwsException() {
-			assertThatBlock { doubleton.getValue("C") }.isFailure()
+			assertThatBlock { doubleton.getValue("C") }
+				.isFailure()
 				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("not contain")
 		}

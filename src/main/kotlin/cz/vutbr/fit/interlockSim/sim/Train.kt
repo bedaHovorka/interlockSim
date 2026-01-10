@@ -19,12 +19,12 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
 import jDisco.Continuous
 import jDisco.Process
 import jDisco.Reporter
 import jDisco.Variable
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Train Process
@@ -284,10 +284,11 @@ class Train :
 				"RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS",
 				"NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS"
 			)
-			val min: Double = Math.min(
-				path.maxSpeed(path.getFirst()),
-				thisSignal.allowedSpeed()
-			)
+			val min: Double =
+				Math.min(
+					path.maxSpeed(path.getFirst()),
+					thisSignal.allowedSpeed()
+				)
 			if (nextSignal.isAllowing()) {
 				motor.accelerateTo(Math.min(nextSignal.allowedSpeed(), min))
 			} else {

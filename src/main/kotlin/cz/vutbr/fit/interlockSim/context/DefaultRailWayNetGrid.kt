@@ -64,6 +64,7 @@ class DefaultRailWayNetGrid(
 	 * @param cell
 	 * @return previous cell in place
 	 */
+	@Synchronized
 	fun put(
 		key: Point,
 		cell: Cell
@@ -79,6 +80,7 @@ class DefaultRailWayNetGrid(
 	/**
 	 * @param map of point to trackblock part
 	 */
+	@Synchronized
 	fun putMap(map: Map<Point, TrackBlockPart>) {
 		@Suppress("UNCHECKED_CAST")
 		val javaMap = map as java.util.Map<Point, TrackBlockPart>
@@ -93,6 +95,7 @@ class DefaultRailWayNetGrid(
 	 * @param newPoint
 	 * @return true if point is present
 	 */
+	@Synchronized
 	fun containsKey(newPoint: Point): Boolean {
 		if (getCells().containsKey(newPoint)) {
 			assert(getReverseTable().containsValue(newPoint))
@@ -106,6 +109,7 @@ class DefaultRailWayNetGrid(
 	 * Remove cell from grid
 	 * @param key
 	 */
+	@Synchronized
 	fun remove(key: Point) {
 		assert(key != null)
 		val removed: Cell? = getCells().remove(key)

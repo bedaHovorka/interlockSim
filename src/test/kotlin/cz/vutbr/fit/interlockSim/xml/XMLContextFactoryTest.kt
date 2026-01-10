@@ -9,16 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.xml
 
-import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import cz.vutbr.fit.interlockSim.testutil.exists
-import cz.vutbr.fit.interlockSim.testutil.isFile
-import cz.vutbr.fit.interlockSim.testutil.isSameAs
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
@@ -26,10 +17,19 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.testutil.isFile
+import cz.vutbr.fit.interlockSim.testutil.isSameAs
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for {@link XMLContextFactory}.
@@ -431,7 +431,9 @@ class XMLContextFactoryTest {
 			// Verify loaded context matches context2 (not context1)
 			val loadedContext = factory.createContext(tempFile!!)
 			val cell = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
-			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cell)
+				.isNotNull()
+				.isInstanceOf(InOut::class)
 				.withMessage("Loaded context should contain the InOut from context2, proving file was overwritten")
 		}
 	}
@@ -493,12 +495,13 @@ class XMLContextFactoryTest {
 
 		@Test
 		fun parseXML_multipleInOutsWithSameName_lastOneWins() {
-			val duplicateNameXML = "<?xml version=\"1.0\"?>\n" +
-				"<!DOCTYPE net>\n" +
-				"<net X=\"100\" Y=\"100\">\n" +
-				"  <InOut X=\"10\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"false\" name=\"A\"/>\n" +
-				"  <InOut X=\"20\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"true\" name=\"A\"/>\n" +
-				"</net>"
+			val duplicateNameXML =
+				"<?xml version=\"1.0\"?>\n" +
+					"<!DOCTYPE net>\n" +
+					"<net X=\"100\" Y=\"100\">\n" +
+					"  <InOut X=\"10\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"false\" name=\"A\"/>\n" +
+					"  <InOut X=\"20\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"true\" name=\"A\"/>\n" +
+					"</net>"
 			val stream = ByteArrayInputStream(duplicateNameXML.toByteArray())
 
 			val context = factory.createContext(stream)

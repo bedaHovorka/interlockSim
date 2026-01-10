@@ -9,16 +9,16 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for {@link ShuntingLoop}.

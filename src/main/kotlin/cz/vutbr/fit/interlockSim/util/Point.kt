@@ -19,13 +19,11 @@ data class Point(
 	 * The X coordinate of this Point.
 	 */
 	val x: Int = 0,
-
 	/**
 	 * The Y coordinate of this Point.
 	 */
 	val y: Int = 0
 ) {
-
 	/**
 	 * Constructs and initializes a point at the origin (0, 0) of the coordinate space.
 	 */
@@ -41,12 +39,10 @@ data class Point(
 		val dy = (y - pt.y).toDouble()
 		return kotlin.math.sqrt(dx * dx + dy * dy)
 	}
-	
+
 	/**
 	 * Returns a string representation of this point and its location in the (x,y) coordinate space.
 	 * @return a string representation of this point.
 	 */
-	override fun toString(): String {
-		return "Point(x=$x, y=$y)"
-	}
+	override fun toString(): String = "Point(x=$x, y=$y)"
 }

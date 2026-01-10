@@ -10,17 +10,17 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.exists
-import cz.vutbr.fit.interlockSim.testutil.isFile
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.testutil.isFile
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.MethodOrderer

@@ -10,8 +10,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import jDisco.Random
 import io.github.oshai.kotlinlogging.KotlinLogging
+import jDisco.Random
 
 /**
  * Testing Generator
