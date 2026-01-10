@@ -388,13 +388,13 @@ abstract class DefaultContext :
 		points: MutableList<Point>
 	): Boolean {
 		assert(key1 != null && key2 != null && p1 != null && p2 != null)
-		assert(!key1.equals(p1) && !key2.equals(p2) && !key1.equals(p2) && !key2.equals(p1))
+		assert(key1 != p1 && key2 != p2 && key1 != p2 && key2 != p1)
 		
 		// Make mutable copies since we need to modify them for the algorithm
 		var p1Mut = p1
 		var p2Mut = p2
 
-		if (p1Mut.equals(p2Mut)) {
+		if (p1Mut == p2Mut) {
 			points.add(p1Mut) // snad je naklonovany
 			return false
 		}
@@ -429,7 +429,7 @@ abstract class DefaultContext :
 		for (x in p1Mut.x..p2Mut.x) {
 			val newPoint = if (!swapped) Point(x, y) else Point(y, x)
 
-			if (newPoint.equals(key1) || newPoint.equals(key2) || used(newPoint)) {
+			if (newPoint == key1 || newPoint == key2 || used(newPoint)) {
 				points.clear()
 				return b
 			}
