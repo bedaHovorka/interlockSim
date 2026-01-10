@@ -12,8 +12,12 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isFailure
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import org.junit.jupiter.api.*
 
 /**
@@ -47,7 +51,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			assertThat(xml).`as`("vyhybna.xml must exist in resources").isNotNull()
+			assertThat(xml).withMessage("vyhybna.xml must exist in resources").isNotNull()
 
 			val factory = XMLContextFactory.getInstance()
 			val context = factory.createContext(xml)
@@ -86,9 +90,10 @@ class ShuntingLoopTest {
 			val emptyContext = MockSimulationContext()
 
 			// Empty context has no graph, should fail assertion
-			assertThatThrownBy { ShuntingLoop(emptyContext, 60L) }
-				.`as`("ShuntingLoop requires non-empty context with railway network")
-				.isInstanceOf(AssertionError::class.java)
+			assertThatBlock { ShuntingLoop(emptyContext, 60L) }
+				.withMessage("ShuntingLoop requires non-empty context with railway network")
+				.isFailure()
+				.isInstanceOf(AssertionError::class)
 		}
 
 		@Test
@@ -107,9 +112,10 @@ class ShuntingLoopTest {
 			val simContext = MockSimulationContext(context)
 
 			// ShuntingLoop expects specific vyhybna.xml structure with 2 InOuts, semaphores, switches
-			assertThatThrownBy { ShuntingLoop(simContext, 60L) }
-				.`as`("ShuntingLoop requires specific network structure from vyhybna.xml")
-				.isInstanceOf(Exception::class.java)
+			assertThatBlock { ShuntingLoop(simContext, 60L) }
+				.withMessage("ShuntingLoop requires specific network structure from vyhybna.xml")
+				.isFailure()
+				.isInstanceOf(Exception::class)
 		}
 	}
 
@@ -270,9 +276,13 @@ class ShuntingLoopTest {
 	class EdgeCaseTests {
 		@Test
 		fun constructor_nullContext_throwsNullPointerException() {
-			assertThatThrownBy { ShuntingLoop(null!!, 60L) }
-				.`as`("Null context should throw NullPointerException")
-				.isInstanceOf(NullPointerException::class.java)
+			val nullContext: SimulationContext? = null
+
+			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+			assertThatBlock { ShuntingLoop(nullContext!!, 60L) }
+				.withMessage("Null context should throw NullPointerException")
+				.isFailure()
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
@@ -291,9 +301,10 @@ class ShuntingLoopTest {
 			val simContext = MockSimulationContext(context)
 
 			// Should fail trying to find elements at specific coordinates
-			assertThatThrownBy { ShuntingLoop(simContext, 60L) }
-				.`as`("Context without required network structure should fail")
-				.isInstanceOf(Exception::class.java)
+			assertThatBlock { ShuntingLoop(simContext, 60L) }
+				.withMessage("Context without required network structure should fail")
+				.isFailure()
+				.isInstanceOf(Exception::class)
 		}
 
 		@Test
@@ -312,9 +323,10 @@ class ShuntingLoopTest {
 			val simContext = MockSimulationContext(context)
 
 			// Should fail trying to find elements at vyhybna-specific coordinates
-			assertThatThrownBy { ShuntingLoop(simContext, 60L) }
-				.`as`("Switch-basic network doesn't match vyhybna structure")
-				.isInstanceOf(Exception::class.java)
+			assertThatBlock { ShuntingLoop(simContext, 60L) }
+				.withMessage("Switch-basic network doesn't match vyhybna structure")
+				.isFailure()
+				.isInstanceOf(Exception::class)
 		}
 	}
 

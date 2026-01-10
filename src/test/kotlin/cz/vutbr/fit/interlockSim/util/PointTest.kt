@@ -9,7 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.isEqualTo
+import assertk.assertions.isLessThanOrEqualTo
+import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotSameAs
+import cz.vutbr.fit.interlockSim.testutil.isEqualTo
+import cz.vutbr.fit.interlockSim.testutil.isNotEqualTo
 import org.junit.jupiter.api.Test
 import kotlin.math.sqrt
 
@@ -21,22 +28,22 @@ class PointTest {
 	@Test
 	fun testDefaultConstructor() {
 		val point = Point()
-		assertThat(point.x).isEqualTo(0)
-		assertThat(point.y).isEqualTo(0)
+		assertThat(point::x).isEqualTo(0)
+		assertThat(point::y).isEqualTo(0)
 	}
 
 	@Test
 	fun testParameterizedConstructor() {
 		val point = Point(10, 20)
-		assertThat(point.x).isEqualTo(10)
-		assertThat(point.y).isEqualTo(20)
+		assertThat(point::x).isEqualTo(10)
+		assertThat(point::y).isEqualTo(20)
 	}
 
 	@Test
 	fun testNegativeCoordinates() {
 		val point = Point(-5, -10)
-		assertThat(point.x).isEqualTo(-5)
-		assertThat(point.y).isEqualTo(-10)
+		assertThat(point::x).isEqualTo(-5)
+		assertThat(point::y).isEqualTo(-10)
 	}
 
 	@Test
@@ -155,15 +162,15 @@ class PointTest {
 		
 		// Verify that x and y are val (immutable)
 		// This is a compile-time check, but we verify the values remain unchanged
-		assertThat(point.x).isEqualTo(10)
-		assertThat(point.y).isEqualTo(20)
+		assertThat(point::x).isEqualTo(10)
+		assertThat(point::y).isEqualTo(20)
 		
 		// Create a new point to verify immutability pattern
 		val point2 = Point(point.x + 5, point.y + 5)
-		assertThat(point.x).isEqualTo(10) // Original unchanged
-		assertThat(point.y).isEqualTo(20) // Original unchanged
-		assertThat(point2.x).isEqualTo(15)
-		assertThat(point2.y).isEqualTo(25)
+		assertThat(point::x).isEqualTo(10) // Original unchanged
+		assertThat(point::y).isEqualTo(20) // Original unchanged
+		assertThat(point2::x).isEqualTo(15)
+		assertThat(point2::y).isEqualTo(25)
 	}
 
 	@Test
@@ -180,9 +187,9 @@ class PointTest {
 		val original = Point(10, 20)
 		val modified = original.copy(x = 15)
 		
-		assertThat(modified.x).isEqualTo(15)
-		assertThat(modified.y).isEqualTo(20)
-		assertThat(original.x).isEqualTo(10) // Original unchanged
+		assertThat(modified::x).isEqualTo(15)
+		assertThat(modified::y).isEqualTo(20)
+		assertThat(original::x).isEqualTo(10) // Original unchanged
 	}
 
 	@Test
@@ -190,9 +197,9 @@ class PointTest {
 		val original = Point(10, 20)
 		val modified = original.copy(y = 25)
 		
-		assertThat(modified.x).isEqualTo(10)
-		assertThat(modified.y).isEqualTo(25)
-		assertThat(original.y).isEqualTo(20) // Original unchanged
+		assertThat(modified::x).isEqualTo(10)
+		assertThat(modified::y).isEqualTo(25)
+		assertThat(original::y).isEqualTo(20) // Original unchanged
 	}
 
 	@Test
@@ -200,18 +207,18 @@ class PointTest {
 		val original = Point(10, 20)
 		val modified = original.copy(x = 15, y = 25)
 		
-		assertThat(modified.x).isEqualTo(15)
-		assertThat(modified.y).isEqualTo(25)
-		assertThat(original.x).isEqualTo(10) // Original unchanged
-		assertThat(original.y).isEqualTo(20) // Original unchanged
+		assertThat(modified::x).isEqualTo(15)
+		assertThat(modified::y).isEqualTo(25)
+		assertThat(original::x).isEqualTo(10) // Original unchanged
+		assertThat(original::y).isEqualTo(20) // Original unchanged
 	}
 
 	@Test
 	fun testOriginPoint() {
 		val origin = Point(0, 0)
 		
-		assertThat(origin.x).isEqualTo(0)
-		assertThat(origin.y).isEqualTo(0)
+		assertThat(origin::x).isEqualTo(0)
+		assertThat(origin::y).isEqualTo(0)
 	}
 
 	@Test

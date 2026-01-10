@@ -46,7 +46,7 @@ val slf4jVersion: String by project
 val logbackVersion: String by project
 val junitPlatformVersion: String by project
 val junitJupiterVersion: String by project
-val assertjVersion: String by project
+val assertkVersion: String by project
 val mockitoVersion: String by project
 val javaVersion: String by project
 val kotlinVersion: String by project
@@ -96,8 +96,7 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")         // JUnit 5 engine
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")     // JUnit platform launcher
     testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")      // JUnit platform console
-    testImplementation("org.assertj:assertj-core:$assertjVersion")                          // Fluent assertions
-    testImplementation("com.willowtreeapps.assertk:assertk:0.28.1")                        // AssertK for Kotlin tests
+    testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion")                // AssertK for Kotlin tests
     testImplementation("org.mockito:mockito-core:$mockitoVersion")                          // Mocking framework
     testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion")                 // Mockito-JUnit integration
 }
@@ -517,7 +516,7 @@ tasks.register("printConfig") {
             |  SLF4J: $slf4jVersion
             |  Logback: $logbackVersion
             |  JUnit: $junitJupiterVersion
-            |  AssertJ: $assertjVersion
+            |  AssertK: $assertkVersion
             |  Mockito: $mockitoVersion
             |
             |Build Outputs:

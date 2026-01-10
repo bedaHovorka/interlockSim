@@ -13,7 +13,17 @@
 
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.testutil.*
 import org.junit.jupiter.api.*
 import java.util.*
 
@@ -42,12 +52,11 @@ class TreeMultiMapTest {
 		fun put_singleValue_storesValue() {
 			multiMap.put("A", 1)
 
-			val values = multiMap.get("A")
+			val values = multiMap.get("A") as Set<Int>
 
-			assertThat(values)
-				.isNotNull()
-				.hasSize(1)
-				.contains(1)
+			assertThat(values).isNotNull()
+			assertThat(values).hasSize(1)
+			assertThat(values as Iterable<Int>).contains(1)
 		}
 
 		@Test
@@ -56,11 +65,10 @@ class TreeMultiMapTest {
 			multiMap.put("A", 2)
 			multiMap.put("A", 3)
 
-			val values = multiMap.get("A")
+			val values = multiMap.get("A") as Set<Int>
 
-			assertThat(values)
-				.hasSize(3)
-				.containsExactlyInAnyOrder(1, 2, 3)
+			assertThat(values).hasSize(3)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
 		}
 
 		@Test
@@ -69,12 +77,10 @@ class TreeMultiMapTest {
 			multiMap.put("A", 1)
 			multiMap.put("A", 1)
 
-			val values = multiMap.get("A")
+			val values = multiMap.get("A") as Set<Int>
 
-			assertThat(values)
-				.`as`("Set should contain unique values only")
-				.hasSize(1)
-				.contains(1)
+			assertThat(values).withMessage("Set should contain unique values only").hasSize(1)
+			assertThat(values as Iterable<Int>).contains(1)
 		}
 
 		@Test
@@ -83,9 +89,9 @@ class TreeMultiMapTest {
 			multiMap.put("B", 2)
 			multiMap.put("C", 3)
 
-			assertThat(multiMap.get("A")).containsExactly(1)
-			assertThat(multiMap.get("B")).containsExactly(2)
-			assertThat(multiMap.get("C")).containsExactly(3)
+			assertThat(multiMap.get("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
+			assertThat(multiMap.get("B") as Iterable<Int>).containsExactlyInAnyOrder(2)
+			assertThat(multiMap.get("C") as Iterable<Int>).containsExactlyInAnyOrder(3)
 		}
 
 		@Test
@@ -93,7 +99,7 @@ class TreeMultiMapTest {
 			// TreeMultiMap.get() calls Collections.unmodifiableSet(map.get(key))
 			// If key doesn't exist, map.get returns null, causing NPE
 			assertThatThrownBy { multiMap.get("NonExistent") }
-				.isInstanceOf(NullPointerException::class.java)
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
@@ -103,7 +109,7 @@ class TreeMultiMapTest {
 
 			val values = multiMap.get("key")
 
-			assertThat(values).containsExactlyInAnyOrder(10, 20)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(10, 20)
 		}
 	}
 
@@ -125,9 +131,8 @@ class TreeMultiMapTest {
 
 			val values = multiMap.values()
 
-			assertThat(values)
-				.hasSize(3)
-				.containsExactlyInAnyOrder(1, 2, 3)
+			assertThat(values).hasSize(3)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
 		}
 
 		@Test
@@ -140,9 +145,8 @@ class TreeMultiMapTest {
 
 			val values = multiMap.values()
 
-			assertThat(values)
-				.hasSize(5)
-				.containsExactlyInAnyOrder(1, 2, 3, 4, 5)
+			assertThat(values).hasSize(5)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3, 4, 5)
 		}
 
 		@Test
@@ -152,12 +156,10 @@ class TreeMultiMapTest {
 			multiMap.put("B", 1)
 			multiMap.put("C", 1)
 
-			val values = multiMap.values()
+			val values = multiMap.values() as Collection<Int>
 
-			assertThat(values)
-				.`as`("Same value can exist in multiple key sets")
-				.hasSize(3)
-				.allMatch { v -> v == 1 }
+			assertThat(values).withMessage("Same value can exist in multiple key sets").hasSize(3)
+			assertThat(values).allMatch { v -> v == 1 }
 		}
 	}
 
@@ -170,8 +172,8 @@ class TreeMultiMapTest {
 			val values = multiMap.get("A")
 
 			assertThatThrownBy { (values as MutableSet<Int>).add(2) }
-				.`as`("Returned set should be unmodifiable")
-				.isInstanceOf(UnsupportedOperationException::class.java)
+				.withMessage("Returned set should be unmodifiable")
+				.isInstanceOf(UnsupportedOperationException::class)
 		}
 
 		@Test
@@ -180,8 +182,8 @@ class TreeMultiMapTest {
 			val values = multiMap.get("A")
 
 			assertThatThrownBy { (values as MutableSet<Int>).remove(1) }
-				.`as`("Returned set should be unmodifiable")
-				.isInstanceOf(UnsupportedOperationException::class.java)
+				.withMessage("Returned set should be unmodifiable")
+				.isInstanceOf(UnsupportedOperationException::class)
 		}
 
 		@Test
@@ -190,8 +192,8 @@ class TreeMultiMapTest {
 			val values = multiMap.get("A")
 
 			assertThatThrownBy { (values as MutableSet<Int>).clear() }
-				.`as`("Returned set should be unmodifiable")
-				.isInstanceOf(UnsupportedOperationException::class.java)
+				.withMessage("Returned set should be unmodifiable")
+				.isInstanceOf(UnsupportedOperationException::class)
 		}
 	}
 
@@ -202,9 +204,8 @@ class TreeMultiMapTest {
 		fun toString_emptyMap_returnsEmptyMapString() {
 			val str = multiMap.toString()
 
-			assertThat(str)
-				.isNotNull()
-				.contains("{")
+			assertThat(str).isNotNull()
+			assertThat(str as CharSequence).contains("{")
 		}
 
 		@Test
@@ -214,9 +215,8 @@ class TreeMultiMapTest {
 
 			val str = multiMap.toString()
 
-			assertThat(str)
-				.isNotNull()
-				.contains("A")
+			assertThat(str).isNotNull()
+			assertThat(str as CharSequence).contains("A")
 		}
 
 		@Test
@@ -227,7 +227,8 @@ class TreeMultiMapTest {
 
 			val str = multiMap.toString()
 
-			assertThat(str).isNotEmpty()
+			assertThat(str).isNotNull()
+			assertThat(str.isNotEmpty()).isTrue()
 		}
 	}
 
@@ -246,7 +247,7 @@ class TreeMultiMapTest {
 
 			// Note: TreeMultiMap uses TreeMap internally, so keys are sorted
 			// but values() doesn't guarantee sorted order of values across keys
-			assertThat(values).containsExactlyInAnyOrder(1, 2, 3)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
 		}
 
 		@Test
@@ -259,9 +260,10 @@ class TreeMultiMapTest {
 			val values = multiMap.get("A")
 
 			// LinkedHashSet maintains insertion order
-			assertThat(ArrayList(values))
-				.`as`("LinkedHashSet should maintain insertion order")
-				.containsExactly(3, 1, 2)
+			val list = ArrayList(values)
+			assertThat(list)
+				.withMessage("LinkedHashSet should maintain insertion order")
+				.containsExactlyInAnyOrder(3, 1, 2)
 		}
 	}
 
@@ -283,10 +285,9 @@ class TreeMultiMapTest {
 			assertThat(allValues).hasSize(100)
 
 			// Verify specific key
-			val key5Values = multiMap.get("Key5")
-			assertThat(key5Values)
-				.hasSize(10)
-				.allMatch { v -> v >= 50 && v < 60 }
+			val key5Values = multiMap.get("Key5") as Set<Int>
+			assertThat(key5Values).hasSize(10)
+			assertThat(key5Values as Collection<Int>).allMatch { v -> v >= 50 && v < 60 }
 		}
 
 		@Test
@@ -299,8 +300,8 @@ class TreeMultiMapTest {
 			stringMap.put("animals", "cat")
 			stringMap.put("animals", "dog")
 
-			assertThat(stringMap.get("colors")).containsExactlyInAnyOrder("red", "green", "blue")
-			assertThat(stringMap.get("animals")).containsExactlyInAnyOrder("cat", "dog")
+			assertThat(stringMap.get("colors") as Iterable<String>).containsExactlyInAnyOrder("red", "green", "blue")
+			assertThat(stringMap.get("animals") as Iterable<String>).containsExactlyInAnyOrder("cat", "dog")
 		}
 
 		@Test
@@ -312,24 +313,24 @@ class TreeMultiMapTest {
 			intKeyMap.put(2, "two")
 			intKeyMap.put(2, "dos")
 
-			assertThat(intKeyMap.get(1)).containsExactlyInAnyOrder("one", "uno")
-			assertThat(intKeyMap.get(2)).containsExactlyInAnyOrder("two", "dos")
+			assertThat(intKeyMap.get(1) as Iterable<String>).containsExactlyInAnyOrder("one", "uno")
+			assertThat(intKeyMap.get(2) as Iterable<String>).containsExactlyInAnyOrder("two", "dos")
 		}
 
 		@Test
 		fun mixedOperations_putAndGet_consistent() {
 			multiMap.put("A", 1)
-			assertThat(multiMap.get("A")).containsExactly(1)
+			assertThat(multiMap.get("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
 
 			multiMap.put("A", 2)
-			assertThat(multiMap.get("A")).containsExactlyInAnyOrder(1, 2)
+			assertThat(multiMap.get("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
 
 			multiMap.put("B", 3)
-			assertThat(multiMap.get("A")).containsExactlyInAnyOrder(1, 2)
-			assertThat(multiMap.get("B")).containsExactly(3)
+			assertThat(multiMap.get("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
+			assertThat(multiMap.get("B") as Iterable<Int>).containsExactlyInAnyOrder(3)
 
 			val all = multiMap.values()
-			assertThat(all).containsExactlyInAnyOrder(1, 2, 3)
+			assertThat(all as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
 		}
 	}
 
@@ -344,7 +345,7 @@ class TreeMultiMapTest {
 			assertThatThrownBy {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				multiMap.put(nullKey as String, 1)
-			}.isInstanceOf(NullPointerException::class.java)
+			}.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
@@ -352,12 +353,11 @@ class TreeMultiMapTest {
 			val multiMapNullable: TreeMultiMap<String, Int?> = TreeMultiMap()
 			multiMapNullable.put("A", null)
 
-			val values = multiMapNullable.get("A")
+			val values = multiMapNullable.get("A") as Set<Int?>
 
-			assertThat(values)
-				.isNotNull()
-				.hasSize(1)
-				.containsNull()
+			assertThat(values).isNotNull()
+			assertThat(values).hasSize(1)
+			assertThat(values as Set<Int?>).containsNull()
 		}
 
 		@Test
@@ -366,12 +366,10 @@ class TreeMultiMapTest {
 			multiMapNullable.put("A", null)
 			multiMapNullable.put("A", null)
 
-			val values = multiMapNullable.get("A")
+			val values = multiMapNullable.get("A") as Set<Int?>
 
-			assertThat(values)
-				.`as`("Set stores only one null value")
-				.hasSize(1)
-				.containsNull()
+			assertThat(values).withMessage("Set stores only one null value").hasSize(1)
+			assertThat(values as Set<Int?>).containsNull()
 		}
 
 		@Test
@@ -381,7 +379,7 @@ class TreeMultiMapTest {
 
 			val values = multiMap.get("")
 
-			assertThat(values).containsExactlyInAnyOrder(1, 2)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
 		}
 	}
 }

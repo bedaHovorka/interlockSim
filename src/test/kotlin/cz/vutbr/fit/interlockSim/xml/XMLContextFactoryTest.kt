@@ -13,7 +13,19 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
+import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.testutil.isFile
+import cz.vutbr.fit.interlockSim.testutil.isSameAs
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.*
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -56,7 +68,7 @@ class XMLContextFactoryTest {
 
 			assertThat(instance1)
 				.isNotNull()
-				.`as`("Factory instance should not be null")
+				.withMessage("Factory instance should not be null")
 				.isSameAs(instance2)
 		}
 
@@ -75,7 +87,7 @@ class XMLContextFactoryTest {
 			val context = factory.createEmptyContext()
 
 			assertThat(context.getGraph().nodeSet())
-				.`as`("Empty context should have empty graph")
+				.withMessage("Empty context should have empty graph")
 				.isEmpty()
 		}
 	}
@@ -92,7 +104,7 @@ class XMLContextFactoryTest {
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
 			val cell = grid.getCellAt(10, 10)
-			assertThat(cell).isInstanceOf(InOut::class.java)
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 			val inOut = cell as InOut
 			assertThat(inOut.getName()).isEqualTo("A")
 		}
@@ -106,8 +118,8 @@ class XMLContextFactoryTest {
 			assertThat(context).isNotNull()
 			val cellA = context.getRailWayNetGrid().getCellAt(10, 10)
 			val cellB = context.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cellA).isInstanceOf(InOut::class.java)
-			assertThat(cellB).isInstanceOf(InOut::class.java)
+			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
 			assertThat((cellA as InOut).getName()).isEqualTo("A")
 			assertThat((cellB as InOut).getName()).isEqualTo("B")
 		}
@@ -120,7 +132,7 @@ class XMLContextFactoryTest {
 
 			assertThat(context).isNotNull()
 			val switchCell = context.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(switchCell).isInstanceOf(RailSwitch::class.java)
+			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
 			val railSwitch = switchCell as RailSwitch
 			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		}
@@ -134,9 +146,9 @@ class XMLContextFactoryTest {
 			val cellIN = context.getRailWayNetGrid().getCellAt(10, 10)
 			val cellOUT_PLUS = context.getRailWayNetGrid().getCellAt(20, 10)
 			val cellOUT_MINUS = context.getRailWayNetGrid().getCellAt(20, 11)
-			assertThat(cellIN).isInstanceOf(InOut::class.java)
-			assertThat(cellOUT_PLUS).isInstanceOf(InOut::class.java)
-			assertThat(cellOUT_MINUS).isInstanceOf(InOut::class.java)
+			assertThat(cellIN).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellOUT_PLUS).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellOUT_MINUS).isNotNull().isInstanceOf(InOut::class)
 			assertThat((cellIN as InOut).getName()).isEqualTo("IN")
 			assertThat((cellOUT_PLUS as InOut).getName()).isEqualTo("OUT_PLUS")
 			assertThat((cellOUT_MINUS as InOut).getName()).isEqualTo("OUT_MINUS")
@@ -150,7 +162,7 @@ class XMLContextFactoryTest {
 
 			assertThat(context).isNotNull()
 			val semaphoreCell = context.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(semaphoreCell).isInstanceOf(RailSemaphore::class.java)
+			assertThat(semaphoreCell).isNotNull().isInstanceOf(RailSemaphore::class)
 			val semaphore = semaphoreCell as RailSemaphore
 			assertThat(semaphore.getOrientation()).isTrue()
 		}
@@ -174,7 +186,7 @@ class XMLContextFactoryTest {
 			val context = factory.createContext(xml)
 
 			assertThat(context.getGraph().nodeSet())
-				.`as`("Empty grid should have empty graph")
+				.withMessage("Empty grid should have empty graph")
 				.isEmpty()
 		}
 
@@ -189,10 +201,10 @@ class XMLContextFactoryTest {
 			val cellB1 = context.getRailWayNetGrid().getCellAt(20, 10)
 			val cellA2 = context.getRailWayNetGrid().getCellAt(10, 12)
 			val cellB2 = context.getRailWayNetGrid().getCellAt(20, 12)
-			assertThat(cellA1).isInstanceOf(InOut::class.java)
-			assertThat(cellB1).isInstanceOf(InOut::class.java)
-			assertThat(cellA2).isInstanceOf(InOut::class.java)
-			assertThat(cellB2).isInstanceOf(InOut::class.java)
+			assertThat(cellA1).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellB1).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellA2).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellB2).isNotNull().isInstanceOf(InOut::class)
 		}
 	}
 
@@ -203,62 +215,62 @@ class XMLContextFactoryTest {
 		fun parseXML_missingGridSize_throwsException() {
 			val xml = getFixtureStream("invalid-missing-grid-size.xml")
 
-			assertThatThrownBy { factory.createContext(xml) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Missing required grid size attributes should cause exception")
+			assertThatBlock { factory.createContext(xml) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
 		fun parseXML_missingSpatialType_throwsException() {
 			val xml = getFixtureStream("invalid-missing-spatial-type.xml")
 
-			assertThatThrownBy { factory.createContext(xml) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Missing required SpatialType attribute should cause exception")
+			assertThatBlock { factory.createContext(xml) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
 		fun parseXML_wrongRootElement_throwsException() {
 			val xml = getFixtureStream("invalid-wrong-root-element.xml")
 
-			assertThatThrownBy { factory.createContext(xml) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Wrong root element should cause validation exception")
+			assertThatBlock { factory.createContext(xml) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
 		fun parseXML_malformedXML_throwsException() {
 			val xml = getFixtureStream("invalid-malformed-xml.xml")
 
-			assertThatThrownBy { factory.createContext(xml) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Malformed XML should cause parsing exception")
+			assertThatBlock { factory.createContext(xml) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
 		fun createContext_nonExistentFile_throwsException() {
 			val nonExistentFile = File("non-existent-file.xml")
 
-			assertThatThrownBy { factory.createContext(nonExistentFile) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Non-existent file should cause FileNotFoundException wrapped in ContextCreationException")
+			assertThatBlock { factory.createContext(nonExistentFile) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
 		fun createContext_nullInputStream_throwsException() {
 			val nullStream: InputStream? = null
-			assertThatThrownBy { factory.createContext(nullStream!!) }
-				.isInstanceOf(Exception::class.java)
-				.`as`("Null input stream should cause exception")
+			assertThatBlock { factory.createContext(nullStream!!) }
+				.isFailure()
+				.isInstanceOf(Exception::class)
 		}
 
 		@Test
 		fun createContext_emptyInputStream_throwsException() {
 			val emptyStream = ByteArrayInputStream(ByteArray(0))
 
-			assertThatThrownBy { factory.createContext(emptyStream) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Empty input stream should cause parsing exception")
+			assertThatBlock { factory.createContext(emptyStream) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
@@ -266,9 +278,9 @@ class XMLContextFactoryTest {
 			val invalidXML = "This is not XML at all!"
 			val stream = ByteArrayInputStream(invalidXML.toByteArray())
 
-			assertThatThrownBy { factory.createContext(stream) }
-				.isInstanceOf(ContextCreationException::class.java)
-				.`as`("Invalid XML content should cause parsing exception")
+			assertThatBlock { factory.createContext(stream) }
+				.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 	}
 
@@ -300,8 +312,9 @@ class XMLContextFactoryTest {
 			val saved = factory.saveContext(context, tempFile!!)
 
 			// Verify file exists and is readable
-			assertThat(tempFile).exists().isFile().canRead()
-			assertThat(tempFile?.length()).isGreaterThan(0)
+			assertThat(tempFile!!).exists().isFile()
+			assertThat(tempFile!!.canRead()).isTrue()
+			assertThat(tempFile!!.length()).isGreaterThan(0)
 		}
 
 		@Test
@@ -332,7 +345,7 @@ class XMLContextFactoryTest {
 					}
 				}
 			}
-			assertThat(foundInOut).`as`("InOut 'A' should exist in loaded context").isTrue()
+			assertThat(foundInOut).withMessage("InOut 'A' should exist in loaded context").isTrue()
 		}
 
 		@Test
@@ -381,8 +394,8 @@ class XMLContextFactoryTest {
 			// Verify cells are preserved
 			val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
 			val cellB = loadedContext.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cellA).isInstanceOf(InOut::class.java)
-			assertThat(cellB).isInstanceOf(InOut::class.java)
+			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
 		}
 
 		@Test
@@ -399,7 +412,7 @@ class XMLContextFactoryTest {
 
 			// Verify switch is preserved
 			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(switchCell).isInstanceOf(RailSwitch::class.java)
+			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
 			val railSwitch = switchCell as RailSwitch
 			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		}
@@ -418,8 +431,8 @@ class XMLContextFactoryTest {
 			// Verify loaded context matches context2 (not context1)
 			val loadedContext = factory.createContext(tempFile!!)
 			val cell = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
-			assertThat(cell).isInstanceOf(InOut::class.java)
-				.`as`("Loaded context should contain the InOut from context2, proving file was overwritten")
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+				.withMessage("Loaded context should contain the InOut from context2, proving file was overwritten")
 		}
 	}
 
@@ -474,7 +487,7 @@ class XMLContextFactoryTest {
 
 			assertThat(context).isNotNull()
 			val cell = context.getRailWayNetGrid().getCellAt(98, 98)
-			assertThat(cell).isInstanceOf(InOut::class.java)
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 			assertThat((cell as InOut).getName()).isEqualTo("CORNER")
 		}
 
@@ -494,8 +507,8 @@ class XMLContextFactoryTest {
 			// Both cells should exist at different positions
 			val cell1 = context.getRailWayNetGrid().getCellAt(10, 10)
 			val cell2 = context.getRailWayNetGrid().getCellAt(20, 10)
-			assertThat(cell1).isInstanceOf(InOut::class.java)
-			assertThat(cell2).isInstanceOf(InOut::class.java)
+			assertThat(cell1).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cell2).isNotNull().isInstanceOf(InOut::class)
 		}
 	}
 
@@ -504,7 +517,7 @@ class XMLContextFactoryTest {
 		val resourcePath = "/cz/vutbr/fit/interlockSim/xml/fixtures/$fileName"
 		val stream = javaClass.getResourceAsStream(resourcePath)
 		assertThat(stream)
-			.`as`("Fixture file should exist: $fileName")
+			.withMessage("Fixture file should exist: $fileName")
 			.isNotNull()
 		return stream!!
 	}

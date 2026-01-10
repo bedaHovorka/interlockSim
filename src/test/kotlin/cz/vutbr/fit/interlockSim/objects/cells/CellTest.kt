@@ -12,7 +12,13 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.util.Point
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isFalse
+import assertk.assertions.isNotSameAs
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
+import assertk.fail
 import org.junit.jupiter.api.Test
 import java.util.EnumMap
 
@@ -42,8 +48,8 @@ class CellTest {
 
 			val tr = s.transform(center)
 			assertThat(tr).isNotSameAs(center) // Must not return same object
-			assertThat(center == tr).`as`("transformed point is equal").isFalse()
-			assertThat(points.values.contains(tr)).`as`("transformed point is generated twice").isFalse()
+			assertThat(center == tr).withMessage("transformed point is equal").isFalse()
+			assertThat(points.values.contains(tr)).withMessage("transformed point is generated twice").isFalse()
 			points[s] = tr
 		}
 	}
@@ -68,7 +74,7 @@ class CellTest {
 				val sem2 = newCell(clazz, false, t, objects)
 
 				assertThat(sem1.direction())
-					.`as`("direction for class ${clazz.simpleName} and $t")
+					.withMessage("direction for class ${clazz.simpleName} and $t")
 					.isSameAs(Segment.anti(sem2.direction()))
 			} catch (e: IllegalArgumentException) {
 				val message = e.message
@@ -90,7 +96,7 @@ class CellTest {
 			clazz == RailSemaphore::class.java -> RailSemaphore(o, t) as OrientedNodeCell
 			clazz == InOut::class.java -> InOut("xx", o, t) as OrientedNodeCell
 			else -> {
-				fail<OrientedNodeCell>("Unexpected cell class: $clazz, objects: ${objects.contentToString()}")
+				fail("Unexpected cell class: $clazz, objects: ${objects.contentToString()}")
 			}
 		}
 }

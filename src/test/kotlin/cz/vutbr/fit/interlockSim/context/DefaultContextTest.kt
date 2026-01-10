@@ -16,7 +16,21 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThatCode
+import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
+import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
+import cz.vutbr.fit.interlockSim.testutil.isNotSameAs
+import cz.vutbr.fit.interlockSim.testutil.isSameAs
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.contains
+import assertk.assertions.isFalse
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -119,10 +133,10 @@ class DefaultContextTest {
 
 			// Assert
 			assertThat(context.getRailWayNetGrid().getCellAt(5, 5))
-				.withFailMessage("Original position should be empty")
+				.withMessage("Original position should be empty")
 				.isNull()
 			assertThat(context.getRailWayNetGrid().getCellAt(10, 10))
-				.withFailMessage("New position should contain cell")
+				.withMessage("New position should contain cell")
 				.isSameAs(inOut)
 		}
 
@@ -202,7 +216,7 @@ class DefaultContextTest {
 				assertThat(e.message).isNotNull()
 			} catch (e: UnsupportedOperationException) {
 				// Also acceptable - SimpleTrackBlock doesn't support getNextTrackSection
-				assertThat(e.message).contains("SimpleTrackBlock does not support")
+				assertThat(e.message ?: "").contains("SimpleTrackBlock does not support")
 			}
 		}
 
@@ -391,8 +405,8 @@ class DefaultContextTest {
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isInstanceOf(InOut::class.java)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isInstanceOf(InOut::class.java)
+			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(InOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(InOut::class)
 		}
 
 		@Test
@@ -404,7 +418,7 @@ class DefaultContextTest {
 			// Assert
 			assertThat(context).isNotNull()
 			val semaphoreCell = context.getRailWayNetGrid().getCellAt(4, 2)
-			assertThat(semaphoreCell).isInstanceOf(RailSemaphore::class.java)
+			assertThat(semaphoreCell).isNotNull().isInstanceOf(RailSemaphore::class)
 		}
 
 		@Test
@@ -415,7 +429,7 @@ class DefaultContextTest {
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isInstanceOf(InOut::class.java)
+			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(InOut::class)
 		}
 
 		@Test
@@ -431,9 +445,9 @@ class DefaultContextTest {
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isInstanceOf(InOut::class.java)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isInstanceOf(RailSemaphore::class.java)
-			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isInstanceOf(InOut::class.java)
+			assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(InOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(RailSemaphore::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(InOut::class)
 		}
 	}
 }

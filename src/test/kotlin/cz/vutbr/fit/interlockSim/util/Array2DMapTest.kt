@@ -9,7 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThan
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.util.ArrayList

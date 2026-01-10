@@ -13,7 +13,16 @@
 
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.containsExactlyInAnyOrder
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
+import assertk.assertions.isZero
 import org.junit.jupiter.api.*
 import java.util.*
 
@@ -114,7 +123,7 @@ class HashMapGraphTest {
 			graph.put("A", "infoA", "B", "infoB", 100)
 			graph.putIfNotExists("A", "infoA", "B", "infoB", 200)
 
-			assertThat(graph.get("A", "B")).`as`("Should keep original value").isEqualTo(100)
+			assertThat(graph.get("A", "B")).withMessage("Should keep original value").isEqualTo(100)
 		}
 
 		@Test
@@ -158,9 +167,8 @@ class HashMapGraphTest {
 
 			val nodes = graph.nodeSet()
 
-			assertThat(nodes)
-				.hasSize(3)
-				.containsExactlyInAnyOrder("A", "B", "C")
+			assertThat(nodes).hasSize(3)
+			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C")
 		}
 
 		@Test
@@ -171,9 +179,8 @@ class HashMapGraphTest {
 
 			val nodes = graph.nodeSet()
 
-			assertThat(nodes)
-				.hasSize(3)
-				.containsExactlyInAnyOrder("A", "B", "C")
+			assertThat(nodes).hasSize(3)
+			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C")
 		}
 
 		@Test
@@ -217,15 +224,14 @@ class HashMapGraphTest {
 			graph.put("A", "D", 200)
 			graph.put("B", "C", 250)
 
-			val removed = graph.removeAll("A")
+			val removed = graph.removeAll("A") as Collection<Int>
 
-			assertThat(removed)
-				.hasSize(3)
-				.containsExactlyInAnyOrder(100, 150, 200)
+			assertThat(removed).hasSize(3)
+			assertThat(removed as Iterable<Int>).containsExactlyInAnyOrder(100, 150, 200)
 			assertThat(graph.get("A", "B")).isNull()
 			assertThat(graph.get("A", "C")).isNull()
 			assertThat(graph.get("A", "D")).isNull()
-			assertThat(graph.get("B", "C")).`as`("Edge not connected to A should remain").isEqualTo(250)
+			assertThat(graph.get("B", "C")).withMessage("Edge not connected to A should remain").isEqualTo(250)
 		}
 
 		@Test
@@ -233,13 +239,12 @@ class HashMapGraphTest {
 			graph.put("A", "B", 100)
 			graph.put("C", "D", 200)
 
-			val nodes = graph.remove(100)
+			val nodes = graph.remove(100) as Collection<String>
 
-			assertThat(nodes)
-				.hasSize(2)
-				.containsExactlyInAnyOrder("A", "B")
+			assertThat(nodes).hasSize(2)
+			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B")
 			assertThat(graph.get("A", "B")).isNull()
-			assertThat(graph.get("C", "D")).`as`("Other edges should remain").isEqualTo(200)
+			assertThat(graph.get("C", "D")).withMessage("Other edges should remain").isEqualTo(200)
 		}
 
 		@Test
@@ -248,12 +253,11 @@ class HashMapGraphTest {
 			graph.put("C", "D", 100)
 			graph.put("E", "F", 200)
 
-			val nodes = graph.remove(100)
+			val nodes = graph.remove(100) as Collection<String>
 
-			assertThat(nodes)
-				.hasSize(4)
-				.containsExactlyInAnyOrder("A", "B", "C", "D")
-			assertThat(graph.get("E", "F")).`as`("Edge with different value should remain").isEqualTo(200)
+			assertThat(nodes).hasSize(4)
+			assertThat(nodes as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C", "D")
+			assertThat(graph.get("E", "F")).withMessage("Edge with different value should remain").isEqualTo(200)
 		}
 	}
 
@@ -266,11 +270,10 @@ class HashMapGraphTest {
 			graph.put("A", "C", 150)
 			graph.put("B", "C", 200)
 
-			val edges = graph.get("A")
+			val edges = graph.get("A") as Collection<Int>
 
-			assertThat(edges)
-				.hasSize(2)
-				.containsExactlyInAnyOrder(100, 150)
+			assertThat(edges).hasSize(2)
+			assertThat(edges as Iterable<Int>).containsExactlyInAnyOrder(100, 150)
 		}
 
 		@Test
@@ -288,11 +291,10 @@ class HashMapGraphTest {
 			graph.put("B", "C", 150)
 			graph.put("C", "D", 200)
 
-			val values = graph.values()
+			val values = graph.values() as Collection<Int>
 
-			assertThat(values)
-				.hasSize(3)
-				.containsExactlyInAnyOrder(100, 150, 200)
+			assertThat(values).hasSize(3)
+			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(100, 150, 200)
 		}
 
 		@Test
@@ -317,8 +319,8 @@ class HashMapGraphTest {
 			graph.put("A", "D", 3)
 			graph.put("A", "E", 4)
 
-			assertThat(graph.get("A")).hasSize(4)
-			assertThat(graph.nodeSet()).containsExactlyInAnyOrder("A", "B", "C", "D", "E")
+			assertThat(graph.get("A") as Collection<Int>).hasSize(4)
+			assertThat(graph.nodeSet() as Iterable<String>).containsExactlyInAnyOrder("A", "B", "C", "D", "E")
 			assertThat(graph.size()).isEqualTo(4)
 		}
 
@@ -330,8 +332,8 @@ class HashMapGraphTest {
 			graph.put("C", "D", 3)
 			graph.put("D", "E", 4)
 
-			assertThat(graph.get("B")).containsExactlyInAnyOrder(1, 2)
-			assertThat(graph.get("C")).containsExactlyInAnyOrder(2, 3)
+			assertThat(graph.get("B") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
+			assertThat(graph.get("C") as Iterable<Int>).containsExactlyInAnyOrder(2, 3)
 		}
 
 		@Test

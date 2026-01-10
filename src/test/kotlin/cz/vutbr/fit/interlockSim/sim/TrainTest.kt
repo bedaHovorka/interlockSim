@@ -12,7 +12,12 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import org.junit.jupiter.api.*
 import org.mockito.Mockito.*
 
@@ -63,14 +68,14 @@ class TrainTest {
 
 			// Act & Assert
 			assertThatThrownBy { Train(null as cz.vutbr.fit.interlockSim.context.SimulationContext?, timetable) }
-				.isInstanceOf(NullPointerException::class.java)
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
 		fun constructor_nullTimetable_throwsException() {
 			// Act & Assert
 			assertThatThrownBy { Train(mockContext, null as Timetable?) }
-				.isInstanceOf(NullPointerException::class.java)
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
@@ -162,7 +167,7 @@ class TrainTest {
 			// Assert
 			assertThat(result)
 				.isNotNull()
-				.`as`("Train toString should return a non-null string")
+				.withMessage("Train toString should return a non-null string")
 		}
 
 		@Test

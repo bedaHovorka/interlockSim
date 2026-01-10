@@ -14,7 +14,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
+import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -87,8 +93,7 @@ class PropertyChangeTest {
 
 		// Verify that joinCells operation triggered at least one PropertyChange event
 		assertThat(listener.events).hasSizeGreaterThanOrEqualTo(1)
-		assertThat(listener.events)
-			.extracting<String> { it.propertyName }
+		assertThat(listener.events.map { it.propertyName })
 			.containsAnyOf(ContextChangeListener.JOIN_CREATED, ContextChangeListener.JOIN_FAILED)
 	}
 
@@ -108,8 +113,7 @@ class PropertyChangeTest {
 		context.joinCells(key1, key2, trackBlock)
 
 		assertThat(listener.events).hasSizeGreaterThanOrEqualTo(1)
-		assertThat(listener.events)
-			.extracting<String> { it.propertyName }
+		assertThat(listener.events.map { it.propertyName })
 			.contains(ContextChangeListener.JOIN_FAILED)
 	}
 
