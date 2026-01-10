@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -398,7 +399,8 @@ class ContextInitializationTest {
 				.isNotNull()
 
 			// Railway context: Default settings should be applicable
-			assertThat(emptyContext.currentMaxSpeed)
+			assertThat(emptyContext)
+				.prop(EditingContext::currentMaxSpeed)
 				.withMessage("Empty context should have max speed setting")
 				.isGreaterThan(0.0)
 		}
@@ -473,10 +475,12 @@ class ContextInitializationTest {
 			context1.currentNameString = "Network A"
 
 			// Assert
-			assertThat(context1.currentNameString)
+			assertThat(context1)
+				.prop(EditingContext::currentNameString)
 				.withMessage("First context should have modified name")
 				.isEqualTo("Network A")
-			assertThat(context2.currentNameString)
+			assertThat(context2)
+				.prop(EditingContext::currentNameString)
 				.withMessage("Second context should have different name (independent)")
 				.isNotNull()
 		}
