@@ -38,7 +38,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
    - Interlocking systems and safety constraints
    - Signaling and track occupancy rules
    - Train routing and path management
-   - Railway network topology
+   - Dynamic parts of railway
 
 3. **Physics Modeling**
    - Continuous simulation of train movement
@@ -446,6 +446,9 @@ Designs agent communication inspired by railway operations and safety rules:
    - Operational procedures
 
 3. **Track Geometry Standards**
+   - Static parts of railway
+   - Station layouts
+   - Railway network topology
    - Curve radius limits and superelevation
    - Gradient restrictions
    - Clearance envelopes
