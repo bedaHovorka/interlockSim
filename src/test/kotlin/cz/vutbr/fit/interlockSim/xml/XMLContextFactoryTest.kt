@@ -19,10 +19,13 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
@@ -206,6 +209,121 @@ class XMLContextFactoryTest {
 			assertThat(cellA2).isNotNull().isInstanceOf(InOut::class)
 			assertThat(cellB2).isNotNull().isInstanceOf(InOut::class)
 		}
+
+		@Test
+		fun parseXML_rudyUjezd_createsValidContext() {
+			val xml = getFixtureStream("rudyUjezd.xml")
+
+			val context = factory.createContext(xml)
+
+			assertThat(context).isNotNull()
+			val grid = context.getRailWayNetGrid()
+			// Check grid size (from rudyUjezd.xml: X=100, Y=100)
+			assertThat(grid.getCols()).isEqualTo(100)
+			assertThat(grid.getRows()).isEqualTo(100)
+			// Check presence of at least one InOut, RailSwitch, and RailSemaphore
+			var hasInOut = false
+			var hasSwitch = false
+			var hasSemaphore = false
+			for (entry in grid) {
+				when (entry.value) {
+					is InOut -> hasInOut = true
+					is RailSwitch -> hasSwitch = true
+					is RailSemaphore -> hasSemaphore = true
+				}
+			}
+
+			// in-outs on first end:
+			// <InOut X="37" Y="32" SpatialType="HORIZONTAL" orientation="true" name="" />
+			val f1 = context.getRailWayNetGrid().getCellAt(37, 32)
+			// <InOut X="37" Y="31" SpatialType="HORIZONTAL" orientation="true" name="" />
+			val f2 = context.getRailWayNetGrid().getCellAt(37, 31)
+
+			// in-outs on second end:
+			// <InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="" />
+			val s1 = context.getRailWayNetGrid().getCellAt(5, 31)
+			// <InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="" />
+			val s2 = context.getRailWayNetGrid().getCellAt(5, 32)
+
+			assertThat(f1).isNotNull().isInstanceOf(InOut::class)
+			assertThat(f2).isNotNull().isInstanceOf(InOut::class)
+			assertThat(s1).isNotNull().isInstanceOf(InOut::class)
+			assertThat(s2).isNotNull().isInstanceOf(InOut::class)
+
+			// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
+			assertThat(existPath(f1 as InOut, s1 as InOut, context)).isTrue()
+			assertThat(existPath(f1, s2 as InOut, context)).isTrue()
+			assertThat(existPath(f2 as InOut, s1, context)).isTrue()
+			assertThat(existPath(f2, s2, context)).isTrue()
+			// and back
+			assertThat(existPath(s1, f1, context)).isTrue()
+			assertThat(existPath(s1, f2, context)).isTrue()
+			assertThat(existPath(s2, f1, context)).isTrue()
+			assertThat(existPath(s2, f2, context)).isTrue()
+
+
+			assertThat(hasInOut).withMessage("Should contain at least one InOut").isTrue()
+			assertThat(hasSwitch).withMessage("Should contain at least one RailSwitch").isTrue()
+			assertThat(hasSemaphore).withMessage("Should contain at least one RailSemaphore").isTrue()
+		}
+
+		/**
+		 * Checks if a path exists (or can be created) between two InOuts in the railway network.
+		 * Uses BFS to traverse the track graph and verify connectivity.
+		 */
+		private fun existPath(
+			from: InOut,
+			to: InOut,
+			context: DefaultContext
+		) : Boolean {
+			// Get grid locations for both InOuts
+			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
+			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
+
+			// If they're the same location, path exists trivially
+			if (fromLoc == toLoc) return true
+
+			// BFS on the track graph
+			val graph = context.getGraph()
+			val visited = mutableSetOf<Point>()
+			val queue = mutableListOf(fromLoc)
+
+			while (queue.isNotEmpty()) {
+				val current = queue.removeFirst()
+
+				// Skip if already visited
+				if (current in visited) continue
+				visited.add(current)
+
+				// Check if we reached the destination
+				if (current == toLoc) return true
+
+				// Get all track blocks connected to this location
+				val edges = graph.assignedEdges(current)
+
+				// For each track block, find the other end and add it to the queue
+				for (entry in edges.entrySet()) {
+					val trackBlock = entry.value
+
+					// TrackBlocks should be TrackSections which have ends()
+					if (trackBlock is TrackSection) {
+						val ends = trackBlock.ends()
+						// Get grid locations of both ends
+						for (pathSeparator in ends) {
+							val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator)
+							// Add the other end (not current) to the queue
+							if (endLocation != null && endLocation != current && endLocation !in visited) {
+								queue.add(endLocation)
+							}
+						}
+					}
+				}
+			}
+
+			// No path found
+			return false
+		}
+
 	}
 
 	@Nested
