@@ -959,18 +959,16 @@ None. All critical bugs identified by SonarQube have been fixed.
 
 **Recommendation:** Review with domain expert if high-precision rendering is required.
 
-#### DEFERRED-003: Doubleton Missing equals() Override
+#### RESOLVED: Doubleton equals() Override
 
-**Severity:** Minor (SonarQube rule java:S1206)
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/util/Doubleton.java` (line 85)
+**Status:** RESOLVED (equals() override added during Kotlin migration)
+**File:** `src/main/kotlin/cz/vutbr/fit/interlockSim/util/Doubleton.kt` (line 110)
 
-**Description:** Class overrides `hashCode()` but not `equals()`, violating the hashCode/equals contract.
+**Description:** Class now properly overrides both `hashCode()` and `equals()`, satisfying the contract.
 
-**Impact:** Potential incorrect behavior when Doubleton objects are used in hash-based collections.
+**Resolution:** The equals() method was added during Kotlin migration. Additionally, the incorrect `@Deprecated` annotation was removed after analysis showed that Doubleton has no equivalent in Kotlin's standard library. Kotlin's `Pair` is ordered (A,B ≠ B,A), while Doubleton is unordered (A,B = B,A) and supports associated values, making it essential for representing bidirectional graph edges.
 
-**Workaround:** Doubleton class is marked `@Deprecated`. Avoid using in new code.
-
-**Recommendation:** Replace Doubleton with modern alternatives (e.g., `Map.Entry`, records) in future modernization.
+**Documentation:** Updated KDoc explains why Doubleton cannot be replaced with Kotlin's Pair.
 
 ### Design Limitations
 
@@ -1048,8 +1046,9 @@ The codebase has been analyzed for deprecated Java standard library APIs. This i
   - Easy fix: Use `Integer.valueOf()` or autoboxing
 
 **MEDIUM Priority:**
-- Internal project classes marked deprecated (`Doubleton`, `TreeMultiMap`) - 55 occurrences
+- Internal project classes marked deprecated (`TreeMultiMap`) - ~27 occurrences
   - These are project-specific deprecations, not Java SE
+  - Note: `Doubleton` deprecation was removed after analysis showed no Kotlin stdlib equivalent
   - Require design review to determine replacement strategy
 
 ### Monitoring
