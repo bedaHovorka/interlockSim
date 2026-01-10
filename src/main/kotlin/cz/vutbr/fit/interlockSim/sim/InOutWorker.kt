@@ -14,11 +14,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
 import jDisco.Head
 import jDisco.Link
 import jDisco.Process
-import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Behaviour of InOut process

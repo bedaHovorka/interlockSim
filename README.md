@@ -417,13 +417,26 @@ The following loggers are pre-configured in `logback.xml`:
 
 ## Testing
 
-Comprehensive JUnit 5.11.4 test suite with AssertJ 3.27.6 assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`.
+Comprehensive JUnit 5.11.4 test suite with AssertK 0.28.1 assertions located in `src/test/kotlin/cz/vutbr/fit/interlockSim/`.
 
-**Test coverage (237 tests across 13 test classes):**
-- **Utility tests**: Array2DMapTest (10), DoubletonTest (66), EnumUnorientedGraphTest (55), HashMapGraphTest (48), TreeMultiMapTest (25)
-- **Context tests**: DefaultContextTest (8), ConcurrentSaveTest (2)
-- **Simulation tests**: TrainTest (6), InOutWorkerTest (8), ShuntingLoopTest (2)
-- **XML tests**: XMLContextFactoryTest (7) with 10 fixture files
+**Test coverage statistics (January 2026):**
+- **662 tests total** (628 passing, 34 skipped, 0 failing)
+- **51% code coverage** (8,824/17,070 instructions covered)
+- **36 test classes** across 6 expansion phases
+- **+420 tests added** in test coverage expansion initiative (baseline: 242 tests → 662 tests)
+
+**Coverage by package:**
+- objects.tracks/ - 85% (excellent), xml/ - 85% (excellent)
+- util/ - 75% (good), objects.cells/ - 72% (good), context/ - 70% (good)
+- objects.paths/ - 52% (medium), sim/ - 33% (limited by jDisco framework)
+
+**Test expansion phases completed (2026-01-10):**
+1. Safety-critical components (Train physics, Track state, RailSwitch, RailSemaphore)
+2. Simulation engine core (Train state transitions, path interaction, InOutWorker)
+3. Path and track integration (AbstractPath, path/track coordination)
+4. Main entry points and cell edge cases (CLI parsing, example loading, NodeCell)
+5. Generator and advanced simulations (Generator, shunting operations, timetables)
+6. Exception handling and edge cases (SimulationException, validation, deadlock detection)
 
 Run tests:
 ```bash

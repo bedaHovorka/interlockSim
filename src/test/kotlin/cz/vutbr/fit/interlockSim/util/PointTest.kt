@@ -24,7 +24,6 @@ import kotlin.math.sqrt
  * Test class for Point
  */
 class PointTest {
-
 	@Test
 	fun testDefaultConstructor() {
 		val point = Point()

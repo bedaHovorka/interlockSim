@@ -10,14 +10,14 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
 import org.mockito.Mockito.*
 

@@ -9,16 +9,16 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.util.Point
 import assertk.assertThat
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.isFalse
 import assertk.assertions.isNotSameAs
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import assertk.fail
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
 import java.util.EnumMap
 

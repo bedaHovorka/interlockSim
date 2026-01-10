@@ -36,6 +36,7 @@ abstract class AbstractRailwayNetGrid(
 
 	protected fun getReverseTable(): MutableMap<Cell, Point> = reverseTable
 
+	@Synchronized
 	override fun getCellAt(
 		x: Int,
 		y: Int

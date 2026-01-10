@@ -73,7 +73,7 @@ repositories {
     // This prevents build failures when running outside CI environment
     val githubUsername = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
     val githubToken = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
-    
+
     if (!githubUsername.isNullOrEmpty() && !githubToken.isNullOrEmpty()) {
         maven {
             name = "GitHubPackages"

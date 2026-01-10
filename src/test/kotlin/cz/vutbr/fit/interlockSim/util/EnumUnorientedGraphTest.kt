@@ -15,7 +15,6 @@ package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
 import assertk.assertions.contains
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -27,6 +26,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.containsEntry
 import cz.vutbr.fit.interlockSim.testutil.doesNotContainValue
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
 import java.util.*
 

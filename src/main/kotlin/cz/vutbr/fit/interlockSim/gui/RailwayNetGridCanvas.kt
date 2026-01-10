@@ -113,11 +113,12 @@ class RailwayNetGridCanvas :
 					}
 					try {
 						@Suppress("UNCHECKED_CAST")
-					val newCell = getEditingContextFactory().createNew(
-						editingContext,
-						toolbarCellClass!!,
-						*(toolbarArgs!! as Array<Any>)
-					) as NodeCell
+						val newCell =
+							getEditingContextFactory().createNew(
+								editingContext,
+								toolbarCellClass!!,
+								*(toolbarArgs!! as Array<Any>)
+							) as NodeCell
 						if (newCell is InOut) {
 							newCell.setName(editingContext.getCurrentNameString())
 						}
@@ -317,7 +318,8 @@ class RailwayNetGridCanvas :
 
 	// Mouse coordinate to grid coordinate conversion
 	private fun currentKey(e: MouseEvent): cz.vutbr.fit.interlockSim.util.Point =
-		cz.vutbr.fit.interlockSim.util.Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
+		cz.vutbr.fit.interlockSim.util
+			.Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
 
 	private fun cellOn(
 		x: Int,

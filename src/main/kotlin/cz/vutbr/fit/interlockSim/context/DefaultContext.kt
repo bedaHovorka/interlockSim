@@ -35,10 +35,10 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
 import cz.vutbr.fit.interlockSim.util.Util
+import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.DiscoException
 import jDisco.Process
 import jDisco.Random
-import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeSupport
 import java.util.ArrayList
 import java.util.Collection
@@ -140,7 +140,7 @@ abstract class DefaultContext :
 
 	protected constructor(cols: Int, rows: Int) {
 		this.railwayNetGrid = DefaultRailWayNetGrid(cols, rows)
-		logger.debug { "Initialized railway network grid: ${cols}x${rows} cells" }
+		logger.debug { "Initialized railway network grid: ${cols}x$rows cells" }
 	}
 
 	override fun getRailWayNetGrid(): DefaultRailWayNetGrid = railwayNetGrid
@@ -151,6 +151,7 @@ abstract class DefaultContext :
 	 *
 	 * @param listener the listener to add
 	 */
+	@Synchronized
 	override fun addPropertyChangeListener(listener: java.beans.PropertyChangeListener) {
 		changeSupport.addPropertyChangeListener(listener)
 	}
@@ -161,6 +162,7 @@ abstract class DefaultContext :
 	 *
 	 * @param listener the listener to remove
 	 */
+	@Synchronized
 	override fun removePropertyChangeListener(listener: java.beans.PropertyChangeListener) {
 		changeSupport.removePropertyChangeListener(listener)
 	}
@@ -168,9 +170,7 @@ abstract class DefaultContext :
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
 	 */
-	private fun swapXY(p: Point): Point {
-		return Point(p.y, p.x)
-	}
+	private fun swapXY(p: Point): Point = Point(p.y, p.x)
 
 	/**
 	 * Data class holding a segment transportation between two nodes
@@ -500,23 +500,29 @@ abstract class DefaultContext :
 	/**
 	 * Add a node cell to the railway network grid
 	 */
+	@Synchronized
 	override fun putCell(
 		key: Point,
 		nodeCell: NodeCell
 	) {
 		assert(key != null)
-		assert(
-			key.x >= 0 &&
-				key.y >= 0 &&
-				key.x <= railwayNetGrid.getCols() &&
-				key.y <= railwayNetGrid.getRows()
-		)
+		// Validate coordinates are within grid bounds
+		if (key.x < 0 || key.y < 0 || key.x >= railwayNetGrid.getCols() || key.y >= railwayNetGrid.getRows()) {
+			throw ContextCreationException(
+				"Cell coordinates (${key.x},${key.y}) are outside grid bounds " +
+					"(${railwayNetGrid.getCols()}x${railwayNetGrid.getRows()})"
+			)
+		}
 		if (getGrid().put(key, nodeCell) === nodeCell) return
 
 		// vedlejsi Nody (sousedni bunky)
 		for (s1: Segment in nodeCell.joins()) {
 			assert(s1 != null) { nodeCell }
 			val p = s1.transform(key)
+			// Skip neighbor if it's outside grid bounds (boundary cells)
+			if (p.x < 0 || p.y < 0 || p.x >= railwayNetGrid.getCols() || p.y >= railwayNetGrid.getRows()) {
+				continue
+			}
 			val cell2 = getGrid().get(p)
 			if (cell2 !is NodeCell) continue
 			val nodeCell2 = cell2
@@ -547,6 +553,7 @@ abstract class DefaultContext :
 	/**
 	 * Remove a node cell from the railway network grid
 	 */
+	@Synchronized
 	override fun removeCell(key: Point) {
 		val cell = getGrid().get(key)
 		if (cell is NodeCell) {

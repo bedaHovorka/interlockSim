@@ -377,10 +377,12 @@ src/
     │   │   ├── TestFixtures.java
     │   │   └── TestTrackBuilder.java
     │   ├── util/                  - Utility class tests
-    │   │   ├── DoubletonTest.java
-    │   │   ├── EnumUnorientedGraphTest.java
-    │   │   ├── HashMapGraphTest.java
-    │   │   └── TreeMultiMapTest.java
+    │   │   ├── Array2DMapTest.kt
+    │   │   ├── DoubletonTest.kt
+    │   │   ├── EnumUnorientedGraphTest.kt
+    │   │   ├── HashMapGraphTest.kt
+    │   │   ├── MultimapExtensionsTest.kt
+    │   │   └── PointTest.kt
     │   └── xml/                   - XML parsing and validation tests
     │       └── XMLContextFactoryTest.java
     └── resources/cz/vutbr/fit/interlockSim/xml/
@@ -476,12 +478,12 @@ Follows `.editorconfig` configuration:
 
 ## Testing
 
-Comprehensive JUnit 5.11.4 test suite with AssertJ assertions located in `src/test/kotlin/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Gradle.
+Comprehensive JUnit 5.11.4 test suite with AssertK assertions located in `src/test/kotlin/cz/vutbr/fit/interlockSim/`. All dependencies are managed via Gradle.
 
 **Test framework:**
 - JUnit 5 (Jupiter API and Engine)
 - JUnit Platform for test execution
-- AssertJ 3.27.6 for fluent assertions
+- AssertK 0.28.1 for fluent Kotlin assertions (migrated from AssertJ January 2026)
 
 **Test organization:**
 - **Unit tests** - Fast tests that run by default with `./gradlew test` (excludes integration tests)
@@ -489,13 +491,13 @@ Comprehensive JUnit 5.11.4 test suite with AssertJ assertions located in `src/te
 
 **Tagging integration tests:**
 To mark a test as an integration test, add the `@Tag("integration-test")` annotation:
-```java
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+```kotlin
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
 
 @Test
 @Tag("integration-test")
-void myIntegrationTest() {
+fun myIntegrationTest() {
     // Test code
 }
 
@@ -503,39 +505,61 @@ void myIntegrationTest() {
 @Tag("integration-test")
 class MyIntegrationTest {
     @Test
-    void test1() { }
+    fun test1() { }
 
     @Test
-    void test2() { }
+    fun test2() { }
 }
 ```
 
-**Test coverage (242 tests across 14 test classes):**
+**Test coverage statistics (January 2026):**
+- **662 tests total** (628 passing, 34 skipped, 0 failing)
+- **51% code coverage** (8,824/17,070 instructions covered)
+- **36 test classes** across 6 expansion phases
+- **+420 tests added** in test coverage expansion initiative (baseline: 242 tests)
 
-**Utility tests:**
-- `Array2DMapTest` - 10 tests for 2D array-based map implementation
-- `DoubletonTest` - 66 tests for immutable ordered pair data structure
-- `EnumUnorientedGraphTest` - 55 tests for enum-based unoriented graph
-- `HashMapGraphTest` - 48 tests for HashMap-based graph implementation
-- `TreeMultiMapTest` - 25 tests for tree-based multimap implementation
+**Coverage by package:**
+- `objects.tracks/` - 85% coverage (excellent)
+- `xml/` - 85% coverage (excellent)
+- `util/` - 75% coverage (good)
+- `objects.cells/` - 72% coverage (good)
+- `context/` - 70% coverage (good)
+- `objects.paths/` - 52% coverage (medium)
+- `sim/` - 33% coverage (limited by jDisco framework restrictions)
+- `Main` - 22% coverage (CLI entry point, some tests disabled)
+- `gui/` - 0% coverage (deferred per QA assessment)
 
-**Context tests:**
-- `DefaultContextTest` - 8 tests for railway network context operations
-- `ConcurrentSaveTest` - 2 tests for thread-safe XML serialization
+**Test expansion phases (2026-01-10):**
+- **Phase 1:** Safety-critical components (Train physics, Track state, RailSwitch, RailSemaphore)
+- **Phase 2:** Simulation engine core (Train state transitions, path interaction, InOutWorker)
+- **Phase 3:** Path and track integration (AbstractPath, path/track coordination)
+- **Phase 4:** Main entry points and cell edge cases (CLI parsing, example loading, NodeCell, context initialization)
+- **Phase 5:** Generator and advanced simulations (Generator, shunting operations, timetables, Time utilities)
+- **Phase 6:** Exception handling and edge cases (SimulationException, path validation, deadlock detection, race conditions, invalid networks)
 
-**Simulation tests:**
-- `TrainTest` - 6 tests for train behavior and state management
-- `InOutWorkerTest` - 8 tests for entry/exit point worker operations
-- `ShuntingLoopTest` - 2 tests for shunting loop simulation scenario
+**Key test classes (36 total):**
 
-**XML tests:**
-- `XMLContextFactoryTest` - 7 tests for XML parsing and validation with 10 fixture files
+Utility tests (6): `Array2DMapTest`, `DoubletonTest`, `EnumUnorientedGraphTest`, `HashMapGraphTest`, `MultimapExtensionsTest`, `PointTest`
+
+Context tests (5): `DefaultContextTest`, `ConcurrentSaveTest`, `ContextTest`, `ContextInitializationTest`, `BresenhamJoinTest`, `PropertyChangeTest`
+
+Simulation tests (13): `TrainTest`, `TrainPhysicsTest`, `TrainStateTransitionTest`, `TrainPathInteractionTest`, `InOutWorkerTest`, `InOutWorkerPathHandlingTest`, `ShuntingLoopTest`, `ShuntingLoopOperationalTest`, `SimpleIntegrationTest`, `GeneratorTest`, `TimeTest`, `TimetableTest`, `DeadlockDetectionTest`, `SimulationExceptionTest`
+
+Path/Track tests (7): `AbstractPathTest`, `PathTrackIntegrationTest`, `PathValidationTest`, `SimpleTrackStateTest`, `SimpleTrackEnterLeaveTest`
+
+Cell tests (4): `CellTest`, `CellConnectionTest`, `NodeCellTest`, `RailSwitchTest`, `RailSemaphoreTest`
+
+Entry point tests (3): `MainArgumentParsingTest` (28 tests currently disabled - see Known Issues), `ExampleLoadingTest`, `InvalidNetworkTest`, `RaceConditionTest`
+
+XML tests (1): `XMLContextFactoryTest`
 
 **Test utilities:**
-- `MockSimulationContext` - Mock implementation for testing
+- `MockSimulationContext` - Mock implementation for time-controlled testing
 - `TestContextBuilder` - Fluent builder for test contexts
 - `TestFixtures` - Shared test data and configurations
 - `TestTrackBuilder` - Fluent builder for test track layouts
+- `TrackTestMocks` - Mock infrastructure for track testing
+- `AssertKExtensions` - Custom AssertK assertions for railway domain
 
 **Test resources:**
 - `src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` - 10 XML test fixtures for parser validation
