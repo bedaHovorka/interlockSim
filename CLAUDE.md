@@ -32,6 +32,7 @@ This project uses Gradle with Kotlin DSL for building. Java 21 LTS is the minimu
 - Refactored deprecated Observable/Observer to PropertyChangeSupport
 - Extracted jDisco library to separate repository in January 2026
 - **Migrated from Java to Kotlin in January 2026** - See "Kotlin Migration History" section below
+- **Migrated from SLF4J to kotlin-logging in January 2026** - Eliminates verbose guard checks with lambda-based lazy evaluation
 
 ### Dependency Management
 
@@ -44,7 +45,8 @@ Dependencies are managed via Gradle with fallback strategy:
 - **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
 - **AssertJ 3.27.6** - Fluent assertion library for better test readability
 - **Mockito 5.21.0** - Mocking framework
-- **SLF4J 2.0.17** + **Logback 1.5.23** - Logging framework
+- **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
+- **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
 
 Gradle automatically downloads dependencies during the build. Configuration files:
 - `build.gradle.kts` - Build configuration and dependency declarations
@@ -777,7 +779,9 @@ Output goes to `doc/` directory.
 
 ## Logging
 
-The application uses SLF4J with Logback for logging. This provides flexible log configuration and runtime control.
+The application uses **kotlin-logging** (a Kotlin wrapper for SLF4J) with Logback as the backend. This provides flexible log configuration, runtime control, and lambda-based lazy evaluation to eliminate verbose guard checks.
+
+**Migration Status (January 2026):** Migrated from SLF4J to kotlin-logging. All logger declarations now use `KotlinLogging.logger {}` for automatic lazy evaluation and cleaner syntax.
 
 ### Configuration Files
 
@@ -786,7 +790,7 @@ The application uses SLF4J with Logback for logging. This provides flexible log 
 
 ### Log Levels
 
-Standard SLF4J log levels (most to least verbose):
+Standard log levels (most to least verbose):
 - `TRACE` - Very detailed diagnostic information
 - `DEBUG` - Detailed debugging information
 - `INFO` - General informational messages (default for most loggers)
@@ -842,20 +846,39 @@ The following loggers are configured in `logback.xml`:
 
 ### Adding Logging to Code
 
-When modifying Java source code (following the conservative approach), use SLF4J logging:
+When adding logging to Kotlin code, use kotlin-logging for automatic lazy evaluation:
 
-```java
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+```kotlin
+import io.github.oshai.kotlinlogging.KotlinLogging
 
-private static final Logger logger = LoggerFactory.getLogger(ClassName.class);
+private val logger = KotlinLogging.logger {}
 
-// In methods:
-logger.trace("Very detailed trace message");
-logger.debug("Debug message with context: {}", variable);
-logger.info("Informational message");
-logger.warn("Warning message");
-logger.error("Error message", exception);
+// In methods - lambda-based lazy evaluation (no manual guard checks needed):
+logger.trace { "Very detailed trace message" }
+logger.debug { "Debug message with context: $variable" }
+logger.info { "Informational message" }
+logger.warn { "Warning message" }
+logger.error(exception) { "Error message" }
+```
+
+**Benefits of kotlin-logging:**
+- **No manual guard checks** - Eliminates verbose `if (logger.isDebugEnabled)` patterns
+- **Lazy evaluation** - Lambda content only evaluated if log level is enabled
+- **String interpolation** - Use Kotlin string templates (`$variable`) instead of SLF4J placeholders
+- **Cleaner syntax** - Idiomatic Kotlin logger initialization
+
+**Legacy SLF4J syntax (deprecated, use only for compatibility):**
+
+```kotlin
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+
+private val logger: Logger = LoggerFactory.getLogger(ClassName::class.java)
+
+// Old pattern with manual guard checks (avoid in new code):
+if (logger.isDebugEnabled) {
+    logger.debug("Debug message with context: {}", variable)
+}
 ```
 
 ## Known Bugs and Issues
