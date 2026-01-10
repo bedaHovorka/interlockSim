@@ -20,6 +20,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isTrue
+import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -319,10 +320,12 @@ class DefaultContextTest {
 			val newSpeed = 120.0
 
 			// Act
-			context.setCurrentMaxSpeed(newSpeed)
+			context.currentMaxSpeed = newSpeed
 
 			// Assert
-			assertThat(context.getCurrentMaxSpeed()).isEqualTo(newSpeed)
+			assertThat(context)
+				.prop(EditingContext::currentMaxSpeed)
+				.isEqualTo(newSpeed)
 		}
 
 		@Test
@@ -332,10 +335,12 @@ class DefaultContextTest {
 			val newLength = 500.0
 
 			// Act
-			context.setCurrentTrackLength(newLength)
+			context.currentTrackLength = newLength
 
 			// Assert
-			assertThat(context.getCurrentTrackLength()).isEqualTo(newLength)
+			assertThat(context)
+				.prop(EditingContext::currentTrackLength)
+				.isEqualTo(newLength)
 		}
 
 		@Test
@@ -345,10 +350,12 @@ class DefaultContextTest {
 			val name = "Test Network"
 
 			// Act
-			context.setCurrentNameString(name)
+			context.currentNameString = name
 
 			// Assert
-			assertThat(context.getCurrentNameString()).isEqualTo(name)
+			assertThat(context)
+				.prop(EditingContext::currentNameString)
+				.isEqualTo(name)
 		}
 	}
 
