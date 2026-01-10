@@ -16,7 +16,11 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 

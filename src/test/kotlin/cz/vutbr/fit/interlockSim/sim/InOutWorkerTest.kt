@@ -10,12 +10,21 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isNotSameAs
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -52,19 +61,23 @@ class InOutWorkerTest {
 		@Test
 		fun constructor_nullContext_throwsNullPointerException() {
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val nullContext: SimulationContext? = null
 
-			assertThatThrownBy { InOutWorker(null!!, inOut) }
-				.`as`("Null context should throw NullPointerException")
-				.isInstanceOf(NullPointerException::class.java)
+			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+			assertThatBlock { InOutWorker(nullContext!!, inOut) }
+				.isFailure()
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
 		fun constructor_nullInOut_throwsNullPointerException() {
 			val context = MockSimulationContext()
+			val nullInOut: InOut? = null
 
-			assertThatThrownBy { InOutWorker(context, null!!) }
-				.`as`("Null InOut should throw NullPointerException")
-				.isInstanceOf(NullPointerException::class.java)
+			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+			assertThatBlock { InOutWorker(context, nullInOut!!) }
+				.isFailure()
+				.isInstanceOf(NullPointerException::class)
 		}
 
 		@Test
@@ -100,7 +113,7 @@ class InOutWorkerTest {
 			val queue = worker.getQueqe()
 
 			assertThat(queue)
-				.`as`("Queue should not be null after construction")
+				.withMessage("Queue should not be null after construction")
 				.isNotNull()
 		}
 
@@ -113,7 +126,7 @@ class InOutWorkerTest {
 			val queue = worker.getQueqe()
 
 			assertThat(queue.empty())
-				.`as`("Queue should be empty after construction")
+				.withMessage("Queue should be empty after construction")
 				.isTrue()
 		}
 
@@ -127,7 +140,7 @@ class InOutWorkerTest {
 			val queue2 = worker.getQueqe()
 
 			assertThat(queue1)
-				.`as`("Multiple getQueqe calls should return same instance")
+				.withMessage("Multiple getQueqe calls should return same instance")
 				.isSameAs(queue2)
 		}
 	}
@@ -144,7 +157,7 @@ class InOutWorkerTest {
 			val isEmpty = worker.getQueqe().empty()
 
 			assertThat(isEmpty)
-				.`as`("Queue should be empty after construction")
+				.withMessage("Queue should be empty after construction")
 				.isTrue()
 		}
 
@@ -159,7 +172,7 @@ class InOutWorkerTest {
 
 			// Verify it's consistently empty
 			assertThat(worker.getQueqe().empty())
-				.`as`("Queue should remain empty")
+				.withMessage("Queue should remain empty")
 				.isTrue()
 		}
 	}

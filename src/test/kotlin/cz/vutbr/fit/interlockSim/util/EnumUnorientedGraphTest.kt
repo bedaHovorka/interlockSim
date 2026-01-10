@@ -13,7 +13,20 @@
 
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.contains
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
+import cz.vutbr.fit.interlockSim.testutil.containsEntry
+import cz.vutbr.fit.interlockSim.testutil.doesNotContainValue
 import org.junit.jupiter.api.*
 import java.util.*
 
@@ -80,7 +93,7 @@ class EnumUnorientedGraphTest {
 
 			assertThat(graph.get(Direction.NORTH, Direction.SOUTH)).isEqualTo(100)
 			assertThat(graph.get(Direction.SOUTH, Direction.NORTH))
-				.`as`("Unoriented graph: edge accessible from both directions")
+				.withMessage("Unoriented graph: edge accessible from both directions")
 				.isEqualTo(100)
 		}
 
@@ -133,7 +146,7 @@ class EnumUnorientedGraphTest {
 			graph.put(Direction.NORTH, Direction.SOUTH, 100)
 
 			assertThat(graph.contains(Direction.SOUTH, Direction.NORTH))
-				.`as`("Unoriented graph: contains check symmetric")
+				.withMessage("Unoriented graph: contains check symmetric")
 				.isTrue()
 		}
 
@@ -161,9 +174,9 @@ class EnumUnorientedGraphTest {
 			val joined: JMap<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
 			@Suppress("UNCHECKED_CAST")
-			assertThat(joined as Map<Direction, Int>)
-				.hasSize(1)
-				.containsEntry(Direction.SOUTH, 100)
+			val joinedMap = joined as Map<Direction, Int>
+			assertThat(joinedMap).hasSize(1)
+			assertThat(joinedMap).containsEntry(Direction.SOUTH, 100)
 		}
 
 		@Test
@@ -175,8 +188,9 @@ class EnumUnorientedGraphTest {
 			val joined: JMap<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
 			@Suppress("UNCHECKED_CAST")
-			assertThat(joined as Map<Direction, Int>)
-				.hasSize(3)
+			val joinedMap = joined as Map<Direction, Int>
+			assertThat(joinedMap).hasSize(3)
+			assertThat(joinedMap)
 				.containsEntry(Direction.SOUTH, 100)
 				.containsEntry(Direction.EAST, 150)
 				.containsEntry(Direction.WEST, 200)
@@ -217,8 +231,9 @@ class EnumUnorientedGraphTest {
 			val joined: JMap<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
 			@Suppress("UNCHECKED_CAST")
-			assertThat(joined as Map<Direction, Int>)
-				.hasSize(3)
+			val joinedMap = joined as Map<Direction, Int>
+			assertThat(joinedMap).hasSize(3)
+			assertThat(joinedMap)
 				.containsEntry(Direction.SOUTH, 1)
 				.containsEntry(Direction.EAST, 2)
 				.containsEntry(Direction.WEST, 3)

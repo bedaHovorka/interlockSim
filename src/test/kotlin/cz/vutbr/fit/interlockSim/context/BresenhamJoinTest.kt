@@ -12,9 +12,14 @@ package cz.vutbr.fit.interlockSim.context
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotNull
+import assertk.assertions.isSameAs
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -56,7 +61,7 @@ class BresenhamJoinTest {
 		for (x in 2..9) {
 			val cell = context.getRailWayNetGrid().getCellAt(x, 5)
 			assertThat(cell)
-				.withFailMessage("Expected cell at ($x, 5) from horizontal Bresenham line")
+				.withMessage("Expected cell at ($x, 5) from horizontal Bresenham line")
 				.isNotNull()
 		}
 	}
@@ -82,7 +87,7 @@ class BresenhamJoinTest {
 		for (y in 2..9) {
 			val cell = context.getRailWayNetGrid().getCellAt(5, y)
 			assertThat(cell)
-				.withFailMessage("Expected cell at (5, $y) from vertical Bresenham line")
+				.withMessage("Expected cell at (5, $y) from vertical Bresenham line")
 				.isNotNull()
 		}
 	}
@@ -116,7 +121,7 @@ class BresenhamJoinTest {
 		}
 		// Bresenham for 45-degree line should create at least 1 of the intermediate diagonal positions
 		assertThat(diagonalCellCount)
-			.withFailMessage("Expected Bresenham to create cells along 45-degree diagonal from (5,5) to (12,12)")
+			.withMessage("Expected Bresenham to create cells along 45-degree diagonal from (5,5) to (12,12)")
 			.isGreaterThan(0)
 	}
 
@@ -147,7 +152,6 @@ class BresenhamJoinTest {
 			}
 		}
 		assertThat(cellCount)
-			.withFailMessage("Expected Bresenham to create multiple intermediate cells for shallow slope")
 			.isGreaterThan(0)
 	}
 
@@ -177,7 +181,6 @@ class BresenhamJoinTest {
 			}
 		}
 		assertThat(cellCount)
-			.withFailMessage("Expected Bresenham to create multiple intermediate cells for steep slope")
 			.isGreaterThan(0)
 	}
 
@@ -229,7 +232,7 @@ class BresenhamJoinTest {
 			}
 		}
 		assertThat(cellCount)
-			.withFailMessage("Expected Bresenham to create cells along diagonal from (10,10) to (15,15)")
+			.withMessage("Expected Bresenham to create cells along diagonal from (10,10) to (15,15)")
 			.isGreaterThan(0)
 	}
 
@@ -271,10 +274,10 @@ class BresenhamJoinTest {
 		}
 
 		assertThat(count1)
-			.withFailMessage("Expected cells in forward direction")
+			.withMessage("Expected cells in forward direction")
 			.isGreaterThan(0)
 		assertThat(count2)
-			.withFailMessage("Expected cells in reverse direction")
+			.withMessage("Expected cells in reverse direction")
 			.isGreaterThan(0)
 	}
 

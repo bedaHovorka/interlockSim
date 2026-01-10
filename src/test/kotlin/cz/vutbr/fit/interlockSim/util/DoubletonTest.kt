@@ -13,7 +13,18 @@
 
 package cz.vutbr.fit.interlockSim.util
 
-import org.assertj.core.api.Assertions.*
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
+import cz.vutbr.fit.interlockSim.testutil.*
+import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
+import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.*
 import java.util.*
 
@@ -52,8 +63,8 @@ class DoubletonTest {
 		fun constructor_sameObject_throwsException() {
 			val same = "A"
 
-			assertThatThrownBy { Doubleton<String, Int>(same, same) }
-				.isInstanceOf(IllegalArgumentException::class.java)
+			assertThatBlock { Doubleton<String, Int>(same, same) }.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("equal")
 		}
 
@@ -62,8 +73,8 @@ class DoubletonTest {
 			val a = "A" // Create new string to potentially have different reference
 			val b = "A"
 
-			assertThatThrownBy { Doubleton<String, Int>(a, b) }
-				.isInstanceOf(IllegalArgumentException::class.java)
+			assertThatBlock { Doubleton<String, Int>(a, b) }.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("equal")
 		}
 
@@ -130,8 +141,7 @@ class DoubletonTest {
 			val second = it.next()
 			assertThat(it.hasNext()).isFalse()
 
-			assertThat(setOf(first, second))
-				.`as`("Iterator should return both elements in some order")
+			assertThat(setOf(first, second), "Iterator should return both elements in some order")
 				.containsExactlyInAnyOrder("A", "B")
 		}
 
@@ -141,8 +151,8 @@ class DoubletonTest {
 			it.next()
 			it.next()
 
-			assertThatThrownBy { it.next() }
-				.isInstanceOf(NoSuchElementException::class.java)
+			assertThatBlock { it.next() }.isFailure()
+				.isInstanceOf(NoSuchElementException::class)
 		}
 
 		@Test
@@ -150,8 +160,8 @@ class DoubletonTest {
 			val it = doubleton.iterator()
 			it.next()
 
-			assertThatThrownBy { it.remove() }
-				.isInstanceOf(UnsupportedOperationException::class.java)
+			assertThatBlock { it.remove() }.isFailure()
+				.isInstanceOf(UnsupportedOperationException::class)
 		}
 	}
 
@@ -177,8 +187,8 @@ class DoubletonTest {
 
 		@Test
 		fun getValue_nonExistentElement_throwsException() {
-			assertThatThrownBy { doubleton.getValue("C") }
-				.isInstanceOf(IllegalArgumentException::class.java)
+			assertThatBlock { doubleton.getValue("C") }.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("not contain")
 		}
 
@@ -225,8 +235,7 @@ class DoubletonTest {
 			val d1: Doubleton<String, Int> = Doubleton("A", "B")
 			val d2: Doubleton<String, Int> = Doubleton("B", "A")
 
-			assertThat(d1.hashCode())
-				.`as`("Hash code should be commutative")
+			assertThat(d1.hashCode(), "Hash code should be commutative")
 				.isEqualTo(d2.hashCode())
 		}
 
@@ -244,8 +253,7 @@ class DoubletonTest {
 			val d1: Doubleton<String, Int> = Doubleton("A", "B")
 			val d2: Doubleton<String, Int> = Doubleton("B", "A")
 
-			assertThat(d1)
-				.`as`("Doubleton should be order-independent")
+			assertThat(d1, "Doubleton should be order-independent")
 				.isEqualTo(d2)
 		}
 
@@ -271,8 +279,7 @@ class DoubletonTest {
 
 			// Both keys should access the same value due to commutative hashCode/equals
 			assertThat(map[key1]).isEqualTo("value")
-			assertThat(map[key2])
-				.`as`("Reversed key should access same entry")
+			assertThat(map[key2], "Reversed key should access same entry")
 				.isEqualTo("value")
 		}
 
@@ -292,9 +299,8 @@ class DoubletonTest {
 
 			val list = ArrayList(doubleton)
 
-			assertThat(list)
-				.hasSize(2)
-				.containsExactlyInAnyOrder("A", "B")
+			assertThat(list).hasSize(2)
+			assertThat(list as Iterable<String>).containsExactlyInAnyOrder("A", "B")
 		}
 
 		@Test

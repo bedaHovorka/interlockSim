@@ -12,7 +12,15 @@ package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.assertj.core.api.Assertions.assertThat
+import assertk.assertThat
+import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.testutil.isFile
+import cz.vutbr.fit.interlockSim.testutil.withMessage
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.MethodOrderer
@@ -119,10 +127,10 @@ class ConcurrentSaveTest {
 		val completed = doneLatch.await(DEFAULT_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
 
 		// Assert
-		assertThat(completed).`as`("All threads should complete within timeout").isTrue()
-		assertThat(exceptions).`as`("No exceptions should occur").isEmpty()
+		assertThat(completed).withMessage("All threads should complete within timeout").isTrue()
+		assertThat(exceptions).withMessage("No exceptions should occur").isEmpty()
 		assertThat(successCount.get())
-			.`as`("All saves should succeed")
+			.withMessage("All saves should succeed")
 			.isEqualTo(threadCount)
 
 		// Verify all files were created and are valid
@@ -174,9 +182,9 @@ class ConcurrentSaveTest {
 		val completed = doneLatch.await(DEFAULT_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
 
 		// Assert - Either all succeeded (with proper locking) or some failed gracefully
-		assertThat(completed).`as`("All threads should complete").isTrue()
+		assertThat(completed).withMessage("All threads should complete").isTrue()
 		assertThat(successCount.get() + exceptions.size)
-			.`as`("All threads should either succeed or fail")
+			.withMessage("All threads should either succeed or fail")
 			.isEqualTo(threadCount)
 		assertThat(targetFile).exists().isFile()
 
@@ -184,7 +192,7 @@ class ConcurrentSaveTest {
 		val loaded = XMLContextFactory.getInstance().createContext(targetFile)
 		assertThat(loaded).isNotNull()
 		assertThat(loaded.getRailWayNetGrid())
-			.`as`("File should contain valid context data")
+			.withMessage("File should contain valid context data")
 			.isNotNull()
 	}
 
@@ -243,11 +251,11 @@ class ConcurrentSaveTest {
 		val completed = doneLatch.await(DEFAULT_TIMEOUT_SECONDS.toLong(), TimeUnit.SECONDS)
 
 		// Assert
-		assertThat(completed).`as`("Both threads should complete").isTrue()
+		assertThat(completed).withMessage("Both threads should complete").isTrue()
 
 		// At least one operation should succeed (even if they interfere)
 		assertThat(saveSuccess.get() + modifySuccess.get())
-			.`as`("At least one operation should succeed")
+			.withMessage("At least one operation should succeed")
 			.isGreaterThan(0)
 
 		// If save succeeded, verify file is valid XML (not corrupted)
@@ -256,7 +264,7 @@ class ConcurrentSaveTest {
 			assertThat(loaded).isNotNull()
 			// Should have a valid grid
 			assertThat(loaded.getRailWayNetGrid())
-				.`as`("File should contain valid context")
+				.withMessage("File should contain valid context")
 				.isNotNull()
 		}
 	}
@@ -304,7 +312,7 @@ class ConcurrentSaveTest {
 
 		// Checksum might differ due to formatting, but structure should be intact
 		val finalChecksum = calculateChecksum(targetFile)
-		assertThat(finalChecksum).`as`("File should still be readable").isNotNull()
+		assertThat(finalChecksum).withMessage("File should still be readable").isNotNull()
 	}
 
 	// ==================== Helper Methods ====================
