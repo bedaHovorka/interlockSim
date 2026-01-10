@@ -128,7 +128,8 @@ open class RailSemaphore(
 	open fun setSignal(signal: Signal) {
 		logger.debug {
 			if (this.signal != signal) {
-				"Semaphore ${if (getName() != null) getName() else this.hashCode()} signal change: ${this.signal} -> $signal at t=${jDisco.Process.time()}"
+				"Semaphore ${if (getName() != null) getName() else this.hashCode()} " +
+					"signal change: ${this.signal} -> $signal at t=${jDisco.Process.time()}"
 			} else {
 				""
 			}

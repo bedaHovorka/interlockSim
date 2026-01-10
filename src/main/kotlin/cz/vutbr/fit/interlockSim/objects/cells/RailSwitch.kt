@@ -217,7 +217,8 @@ class RailSwitch : NodeCell {
 	) {
 		val newConf = getPathConfWithException(from, to)
 		logger.info {
-			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, conf=$newConf, allowedSpeed=$allowedSpeed"
+			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
+				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		setConf(newConf)
 	}

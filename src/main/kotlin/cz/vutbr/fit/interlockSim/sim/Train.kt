@@ -301,7 +301,8 @@ class Train :
 			next: TrackSection?
 		) {
 			logger.debug {
-				"${jDisco.Process.time()} POSITION: Train $number front at separator $where, entering block $next, leaving block $current"
+				"${jDisco.Process.time()} POSITION: Train $number front at separator $where, " +
+					"entering block $next, leaving block $current"
 			}
 
 			if (where is RailSemaphore &&
@@ -409,7 +410,10 @@ class Train :
 		override fun iteration() {
 			assert(currentCondition != null)
 			accelerate = true
-			logger.trace { "Train $number motor iteration: target speed $targetSpeed, getVelocity(), current velocity ${getVelocity()}" }
+			logger.trace {
+				"Train $number motor iteration: target speed $targetSpeed, " +
+					"current velocity ${getVelocity()}"
+			}
 			start()
 			waitUntil(currentCondition)
 
