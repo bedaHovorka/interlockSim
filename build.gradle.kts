@@ -56,26 +56,37 @@ val kotlinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Configure Java compilation (compile to Java 21 bytecode using any Java 21+)
-// Note: We don't specify a toolchain to allow using any available Java version
+// Configure Java compilation (compile to Java 21 bytecode using Java 21)
 java {
-    // Ensure source and target compatibility with Java 21
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    // Specify Java 21 toolchain to ensure consistent compilation and runtime
+    // This ensures both compilation and test execution use Java 21
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
 }
 
 // Configure repositories
 repositories {
     mavenLocal()      // For jDisco local development (highest priority)
 
-    // GitHub Packages Maven Registry for jDisco
-    maven {
-        name = "GitHubPackages"
-        url = uri("https://maven.pkg.github.com/bedaHovorka/jdisco")
-        credentials {
-            username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
-            password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+    // GitHub Packages Maven Registry for jDisco (conditional - only when credentials available)
+    // This prevents build failures when running outside CI environment
+    val githubUsername = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+    val githubToken = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+    
+    if (!githubUsername.isNullOrEmpty() && !githubToken.isNullOrEmpty()) {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/bedaHovorka/jdisco")
+            credentials {
+                username = githubUsername
+                password = githubToken
+            }
         }
+    } else {
+        logger.warn("GitHub Packages credentials not available. Skipping GitHub Packages repository.")
+        logger.warn("jDisco must be available in mavenLocal() for build to succeed.")
+        logger.warn("To install jDisco locally: cd ~/work/jdisco && mvn install")
     }
 
     mavenCentral()    // For all other dependencies
