@@ -13,17 +13,31 @@ import java.util.AbstractSet
 import java.util.NoSuchElementException
 
 /**
- * Pair of nodes for implementation ADT ExtendedUnorientedGraph
- * Represents combination of two elements
- * @param <T> type of elements
- * @param <V> type of additional information
+ * Unordered pair of nodes for implementation ADT ExtendedUnorientedGraph.
  *
- * @deprecated should be replaced in kotlin with library thing like Pair
+ * Represents an unordered combination of two distinct elements with associated values.
+ * Unlike Kotlin's [Pair], this class provides **order-independent equality**:
+ * `Doubleton(A, B) == Doubleton(B, A)`.
+ *
+ * **Key Features:**
+ * - Extends [AbstractSet] providing set semantics
+ * - Enforces element distinctness (first != second)
+ * - Order-independent equality and commutative hashCode
+ * - Associated values for each element accessible via [getValue]
+ * - Mutable values via [setValues]
+ * - Suitable as HashMap key with proper hash-based collection behavior
+ *
+ * **Why not use Kotlin's Pair?**
+ * - [Pair] is ordered: `Pair(A, B) != Pair(B, A)`
+ * - [Pair] has no associated values mechanism
+ * - [Pair] is not a Set and doesn't enforce distinctness
+ *
+ * This class is essential for representing unordered edges in graph structures where
+ * the relationship between nodes is bidirectional and order-independent.
+ *
+ * @param T type of elements (the two nodes)
+ * @param V type of additional information associated with each element
  */
-@Deprecated(
-	message = "Should be replaced in kotlin with library thing like Pair",
-	replaceWith = ReplaceWith("Pair<T, V>")
-)
 class Doubleton<T, V> : AbstractSet<T> {
 	enum class IteratorState {
 		INIT,
@@ -63,11 +77,13 @@ class Doubleton<T, V> : AbstractSet<T> {
 	private var secondValue: V? = null
 
 	/**
-	 * Create with additional information
-	 * @param first
-	 * @param second
-	 * @param firstValue
-	 * @param secondValue
+	 * Creates a Doubleton with associated values for each element.
+	 *
+	 * @param first the first element
+	 * @param second the second element (must be distinct from first)
+	 * @param firstValue the value associated with the first element
+	 * @param secondValue the value associated with the second element
+	 * @throws IllegalArgumentException if first equals second
 	 */
 	constructor(first: T, second: T, firstValue: V, secondValue: V) : this(first, second) {
 		this.firstValue = firstValue
@@ -75,9 +91,11 @@ class Doubleton<T, V> : AbstractSet<T> {
 	}
 
 	/**
-	 * Create without additional information
-	 * @param first
-	 * @param second
+	 * Creates a Doubleton without initial associated values.
+	 *
+	 * @param first the first element
+	 * @param second the second element (must be distinct from first)
+	 * @throws IllegalArgumentException if first equals second
 	 */
 	constructor(first: T, second: T) {
 		if (first == second) throw IllegalArgumentException("arguments is equal")
@@ -120,8 +138,11 @@ class Doubleton<T, V> : AbstractSet<T> {
 	override fun isEmpty(): Boolean = false
 
 	/**
-	 * @param key
-	 * @return value assigned to key
+	 * Retrieves the value associated with the specified element.
+	 *
+	 * @param key the element whose associated value is to be returned
+	 * @return the value associated with the key, or null if no value has been set
+	 * @throws IllegalArgumentException if the key is not contained in this Doubleton
 	 */
 	fun getValue(key: T): V? {
 		val secondEq = nullEq(key, second)
@@ -142,8 +163,10 @@ class Doubleton<T, V> : AbstractSet<T> {
 	}
 
 	/**
-	 * @param first
-	 * @param second
+	 * Sets the associated values for both elements.
+	 *
+	 * @param first the value to associate with the first element
+	 * @param second the value to associate with the second element
 	 */
 	fun setValues(
 		first: V,
