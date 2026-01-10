@@ -345,7 +345,7 @@ class ContextInitializationTest {
 		@DisplayName("context preserves name from XML initialization")
 		fun context_preservesName() {
 			// Arrange & Act
-			val contextName = linearTrackContext.getCurrentNameString()
+			val contextName = linearTrackContext.currentNameString
 
 			// Assert
 			assertThat(contextName)
@@ -363,8 +363,8 @@ class ContextInitializationTest {
 		@DisplayName("context initialized with valid configuration settings")
 		fun context_hasValidSettings() {
 			// Arrange & Act
-			val maxSpeed = linearTrackContext.getCurrentMaxSpeed()
-			val trackLength = linearTrackContext.getCurrentTrackLength()
+			val maxSpeed = linearTrackContext.currentMaxSpeed
+			val trackLength = linearTrackContext.currentTrackLength
 
 			// Assert
 			assertThat(maxSpeed)
@@ -398,7 +398,7 @@ class ContextInitializationTest {
 				.isNotNull()
 
 			// Railway context: Default settings should be applicable
-			assertThat(emptyContext.getCurrentMaxSpeed())
+			assertThat(emptyContext.currentMaxSpeed)
 				.withMessage("Empty context should have max speed setting")
 				.isGreaterThan(0.0)
 		}
@@ -470,13 +470,13 @@ class ContextInitializationTest {
 			val context2 = factory.createEmptyContext()
 
 			// Modify first context
-			context1.setCurrentNameString("Network A")
+			context1.currentNameString = "Network A"
 
 			// Assert
-			assertThat(context1.getCurrentNameString())
+			assertThat(context1.currentNameString)
 				.withMessage("First context should have modified name")
 				.isEqualTo("Network A")
-			assertThat(context2.getCurrentNameString())
+			assertThat(context2.currentNameString)
 				.withMessage("Second context should have different name (independent)")
 				.isNotNull()
 		}

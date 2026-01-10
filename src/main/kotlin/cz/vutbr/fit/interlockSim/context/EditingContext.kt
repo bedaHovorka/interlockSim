@@ -50,24 +50,14 @@ interface EditingContext : Context {
 	fun removeLine(block: TrackBlock)
 
 	/**
-	 * @return current maximal speed, which is setting in elements
+	 * Current maximal speed, which is setting in elements
 	 */
-	fun getCurrentMaxSpeed(): Double
+	var currentMaxSpeed: Double
 
 	/**
-	 * @param speed maximal speed, which is setting in elements
+	 * Current track length, which is setting in elements
 	 */
-	fun setCurrentMaxSpeed(speed: Double)
-
-	/**
-	 * @return current track length, which is setting in elements
-	 */
-	fun getCurrentTrackLength(): Double
-
-	/**
-	 * @param length track length, which is setting in elements
-	 */
-	fun setCurrentTrackLength(length: Double)
+	var currentTrackLength: Double
 
 	/**
 	 * Create relation between nodes. In specified places, must be {@link NodeCell}
@@ -82,12 +72,7 @@ interface EditingContext : Context {
 	)
 
 	/**
-	 * @param name which is setting in elements
+	 * Name which is setting in elements
 	 */
-	fun setCurrentNameString(name: String)
-
-	/**
-	 * @return name which is setting in elements
-	 */
-	fun getCurrentNameString(): String
+	var currentNameString: String
 }

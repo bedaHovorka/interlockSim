@@ -92,12 +92,12 @@ abstract class DefaultContext :
 	/**
 	 * Current maximum speed for path elements
 	 */
-	private var currentMaxSpeed: Double = PathElement.COMMON_MAX_SPEED
+	override var currentMaxSpeed: Double = PathElement.COMMON_MAX_SPEED
 
 	/**
 	 * Current track length for new track elements
 	 */
-	private var currentTrackLength: Double = Track.COMMON_TRACK_LENGTH
+	override var currentTrackLength: Double = Track.COMMON_TRACK_LENGTH
 
 	/**
 	 * Railway network grid structure
@@ -105,7 +105,7 @@ abstract class DefaultContext :
 	private val railwayNetGrid: DefaultRailWayNetGrid
 
 	/**
-	 * Name string for train generation
+	 * Name string for train generation (backing field for currentNameString)
 	 */
 	private var nameString: String? = null
 
@@ -536,7 +536,7 @@ abstract class DefaultContext :
 					s1,
 					p,
 					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, getCurrentMaxSpeed())
+					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, currentMaxSpeed)
 				)
 			}
 		}
@@ -873,30 +873,6 @@ abstract class DefaultContext :
 	}
 
 	/**
-	 * Get current maximum speed for path elements
-	 */
-	override fun getCurrentMaxSpeed(): Double = currentMaxSpeed
-
-	/**
-	 * Get current track length for new elements
-	 */
-	override fun getCurrentTrackLength(): Double = currentTrackLength
-
-	/**
-	 * Set current maximum speed
-	 */
-	override fun setCurrentMaxSpeed(speed: Double) {
-		currentMaxSpeed = speed
-	}
-
-	/**
-	 * Set current track length
-	 */
-	override fun setCurrentTrackLength(length: Double) {
-		currentTrackLength = length
-	}
-
-	/**
 	 * Report simulation events
 	 */
 	override fun report(
@@ -948,21 +924,18 @@ abstract class DefaultContext :
 	}
 
 	/**
-	 * Get current name string for train generation
+	 * Current name string for train generation
 	 */
-	override fun getCurrentNameString(): String = nameString ?: randomString()
+	override var currentNameString: String
+		get() = nameString ?: randomString()
+		set(value) {
+			nameString = value
+		}
 
 	/**
 	 * Generate random name string (single character A-T)
 	 */
 	private fun randomString(): String = String(Character.toChars(65 + random.nextInt(20)))
-
-	/**
-	 * Set current name string for train generation
-	 */
-	override fun setCurrentNameString(name: String) {
-		this.nameString = name
-	}
 
 	/**
 	 * Get the worker for an entry/exit point

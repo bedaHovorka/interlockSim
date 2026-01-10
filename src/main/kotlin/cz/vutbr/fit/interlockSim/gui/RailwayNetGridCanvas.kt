@@ -120,7 +120,7 @@ class RailwayNetGridCanvas :
 								*(toolbarArgs!! as Array<Any>)
 							) as NodeCell
 						if (newCell is InOut) {
-							newCell.setName(editingContext.getCurrentNameString())
+							newCell.setName(editingContext.currentNameString)
 						}
 						editingContext.putCell(clickKey, newCell)
 						// Clear selection after creating a cell to prevent auto-joining
@@ -143,8 +143,8 @@ class RailwayNetGridCanvas :
 								SimpleTrackBlock(
 									selectedCell,
 									cellAtClick,
-									editingContext.getCurrentTrackLength(),
-									editingContext.getCurrentMaxSpeed()
+									editingContext.currentTrackLength,
+									editingContext.currentMaxSpeed
 								)
 							editingContext.joinCells(selectedPoint, clickKey, trackBlock)
 							repaint()

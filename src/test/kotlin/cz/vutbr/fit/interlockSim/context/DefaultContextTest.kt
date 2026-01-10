@@ -319,10 +319,10 @@ class DefaultContextTest {
 			val newSpeed = 120.0
 
 			// Act
-			context.setCurrentMaxSpeed(newSpeed)
+			context.currentMaxSpeed = newSpeed
 
 			// Assert
-			assertThat(context.getCurrentMaxSpeed()).isEqualTo(newSpeed)
+			assertThat(context.currentMaxSpeed).isEqualTo(newSpeed)
 		}
 
 		@Test
@@ -332,10 +332,10 @@ class DefaultContextTest {
 			val newLength = 500.0
 
 			// Act
-			context.setCurrentTrackLength(newLength)
+			context.currentTrackLength = newLength
 
 			// Assert
-			assertThat(context.getCurrentTrackLength()).isEqualTo(newLength)
+			assertThat(context.currentTrackLength).isEqualTo(newLength)
 		}
 
 		@Test
@@ -345,10 +345,10 @@ class DefaultContextTest {
 			val name = "Test Network"
 
 			// Act
-			context.setCurrentNameString(name)
+			context.currentNameString = name
 
 			// Assert
-			assertThat(context.getCurrentNameString()).isEqualTo(name)
+			assertThat(context.currentNameString).isEqualTo(name)
 		}
 	}
 
