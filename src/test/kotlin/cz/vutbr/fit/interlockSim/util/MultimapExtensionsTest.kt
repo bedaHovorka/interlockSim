@@ -162,7 +162,7 @@ multiMap.putMulti("C", 1)
 val values = multiMap.valuesMulti() as Collection<Int>
 
 assertThat(values).withMessage("Same value can exist in multiple key sets").hasSize(3)
-assertThat(values).allMatch { v -> v == 1 }
+assertThat(values).allMatch { v: Int -> v == 1 }
 }
 }
 
@@ -255,7 +255,7 @@ assertThat(allValues).hasSize(100)
 // Verify specific key
 val key5Values = multiMap.getMulti("Key5")
 assertThat(key5Values).hasSize(10)
-assertThat(key5Values as Collection<Int>).allMatch { v -> v >= 50 && v < 60 }
+assertThat(key5Values as Collection<Int>).allMatch { v: Int -> v >= 50 && v < 60 }
 }
 
 @Test
