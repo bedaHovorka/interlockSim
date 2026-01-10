@@ -107,7 +107,7 @@ class ShuntingLoopTest {
 			assertThatBlock { ShuntingLoop(simContext, 60L) }
 				.withMessage("ShuntingLoop requires specific network structure from vyhybna.xml")
 				.isFailure()
-				.isInstanceOf(Exception::class)
+				.isInstanceOf(AssertionError::class)
 		}
 	}
 
