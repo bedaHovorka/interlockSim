@@ -17,6 +17,8 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import assertk.assertions.isSameInstanceAs
+import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -26,8 +28,6 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
-import cz.vutbr.fit.interlockSim.testutil.isNotSameAs
-import cz.vutbr.fit.interlockSim.testutil.isSameAs
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -72,7 +72,7 @@ class DefaultContextTest {
 
 			// Assert
 			val retrievedCell = context.getRailWayNetGrid().getCellAt(5, 5)
-			assertThat(retrievedCell).isSameAs(inOut)
+			assertThat(retrievedCell).isSameInstanceAs(inOut)
 		}
 
 		@Test
@@ -89,7 +89,8 @@ class DefaultContextTest {
 
 			// Assert
 			val retrievedCell = context.getRailWayNetGrid().getCellAt(5, 5)
-			assertThat(retrievedCell).isSameAs(second).isNotSameAs(first)
+			assertThat(retrievedCell).isSameInstanceAs(second)
+			assertThat(retrievedCell).isNotSameInstanceAs(first)
 		}
 
 		@Test
@@ -137,7 +138,7 @@ class DefaultContextTest {
 				.isNull()
 			assertThat(context.getRailWayNetGrid().getCellAt(10, 10))
 				.withMessage("New position should contain cell")
-				.isSameAs(inOut)
+				.isSameInstanceAs(inOut)
 		}
 
 		@Test
@@ -190,8 +191,8 @@ class DefaultContextTest {
 		@Test
 		@DisplayName("getNextTrackBlock from InOut with null returns block")
 		fun getNextTrackBlock_fromInOutWithNull_returnsTrackBlock() {
-			assertThat(context.getNextTrackBlock(inA, null)).isSameAs(tl1)
-			assertThat(context.getNextTrackBlock(outB, null)).isSameAs(tl2)
+			assertThat(context.getNextTrackBlock(inA, null)).isSameInstanceAs(tl1)
+			assertThat(context.getNextTrackBlock(outB, null)).isSameInstanceAs(tl2)
 		}
 
 		@Test

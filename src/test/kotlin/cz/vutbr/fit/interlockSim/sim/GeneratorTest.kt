@@ -14,7 +14,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
-import assertk.assertions.isNotSameAs
+import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import org.junit.jupiter.api.BeforeEach
@@ -267,7 +267,7 @@ class GeneratorTest {
 			assertThat(random1).isNotNull()
 			assertThat(random2).isNotNull()
 			// Different instances (not same object reference)
-			assertThat(random1).isNotSameAs(random2)
+			assertThat(random1).isNotSameInstanceAs(random2)
 		}
 	}
 

@@ -13,7 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
@@ -202,8 +202,8 @@ class BresenhamJoinTest {
 
 		// Assert - No intermediate cells should be created (direct join)
 		// The grid should only contain the two endpoint cells
-		assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isSameAs(inA)
-		assertThat(context.getRailWayNetGrid().getCellAt(6, 5)).isSameAs(inB)
+		assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isSameInstanceAs(inA)
+		assertThat(context.getRailWayNetGrid().getCellAt(6, 5)).isSameInstanceAs(inB)
 	}
 
 	@Test

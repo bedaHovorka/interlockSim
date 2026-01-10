@@ -16,6 +16,7 @@ import assertk.assertions.isFailure
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -23,7 +24,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
-import cz.vutbr.fit.interlockSim.testutil.isSameAs
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
 import java.io.ByteArrayInputStream
@@ -69,7 +69,7 @@ class XMLContextFactoryTest {
 			assertThat(instance1)
 				.isNotNull()
 				.withMessage("Factory instance should not be null")
-				.isSameAs(instance2)
+				.isSameInstanceAs(instance2)
 		}
 
 		@Test

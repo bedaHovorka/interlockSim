@@ -108,32 +108,6 @@ fun <T> Assert<Collection<T>>.containsAnyOf(vararg elements: T) =
 	}
 
 /**
- * Extension function to assert that two objects are the same instance.
- *
- * Usage: assertThat(obj1).isSameAs(obj2)
- */
-fun <T> Assert<T>.isSameAs(expected: T): Assert<T> =
-	apply {
-		given { actual ->
-			if (actual === expected) return@given
-			expected("to be the same instance as:${show(expected)} but was:${show(actual)}")
-		}
-	}
-
-/**
- * Extension function to assert that two objects are not the same instance.
- *
- * Usage: assertThat(obj1).isNotSameAs(obj2)
- */
-fun <T> Assert<T>.isNotSameAs(expected: T): Assert<T> =
-	apply {
-		given { actual ->
-			if (actual !== expected) return@given
-			expected("to not be the same instance as:${show(expected)}")
-		}
-	}
-
-/**
  * Extension function to assert that a block of code executes without throwing an exception.
  *
  * Usage: assertThatCode { /* code */ }.doesNotThrowAnyException()
