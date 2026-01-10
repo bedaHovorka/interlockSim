@@ -37,8 +37,7 @@ import cz.vutbr.fit.interlockSim.util.Util
 import jDisco.DiscoException
 import jDisco.Process
 import jDisco.Random
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeSupport
 import java.util.ArrayList
 import java.util.Collection
@@ -122,14 +121,13 @@ abstract class DefaultContext :
 		/**
 		 * Logger for general class operations.
 		 */
-		private val logger: Logger = LoggerFactory.getLogger(DefaultContext::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		/**
 		 * Separate logger for simulation events to allow independent level control.
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
-		private val simulationLogger: Logger =
-			LoggerFactory.getLogger("cz.vutbr.fit.interlockSim.simulation")
+		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
 
 		/**
 		 * Constant - square root of 2
@@ -140,7 +138,7 @@ abstract class DefaultContext :
 
 	protected constructor(cols: Int, rows: Int) {
 		this.railwayNetGrid = DefaultRailWayNetGrid(cols, rows)
-		logger.debug("Initialized railway network grid: {}x{} cells", cols, rows)
+		logger.debug { "Initialized railway network grid: ${cols}x${rows} cells" }
 	}
 
 	override fun getRailWayNetGrid(): DefaultRailWayNetGrid = railwayNetGrid
@@ -461,13 +459,9 @@ abstract class DefaultContext :
 		val lineParts = findTrackLineParts(key1, key2, trackBlock)
 
 		if (lineParts == null || lineParts.isEmpty()) {
-			logger.debug(
-				"Join failed between ({},{}) and ({},{})",
-				key1.x,
-				key1.y,
-				key2.x,
-				key2.y
-			)
+			logger.debug {
+				"Join failed between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
+			}
 			changeSupport.firePropertyChange(
 				ContextChangeListener.JOIN_FAILED,
 				null,
@@ -483,14 +477,9 @@ abstract class DefaultContext :
 		}
 
 		val mapSize = (lineParts as? MutableMap<Point, TrackBlockPart>)?.size ?: 0
-		logger.debug(
-			"Created track join ({},{})->({},{}) with {} intermediate cells",
-			key1.x,
-			key1.y,
-			key2.x,
-			key2.y,
-			mapSize
-		)
+		logger.debug {
+			"Created track join (${key1.x},${key1.y})->(${key2.x},${key2.y}) with $mapSize intermediate cells"
+		}
 		changeSupport.firePropertyChange(
 			ContextChangeListener.JOIN_CREATED,
 			null,
@@ -543,9 +532,7 @@ abstract class DefaultContext :
 		}
 		if (nodeCell is InOut) getInOuts().add(nodeCell as InOut)
 		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
-		if (logger.isTraceEnabled()) {
-			logger.trace("Added {} at ({},{})", nodeCell.javaClass.simpleName, key.x, key.y)
-		}
+		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
 	}
 
 	/**
@@ -742,12 +729,8 @@ abstract class DefaultContext :
 
 		@Suppress("UNCHECKED_CAST")
 		val result = nextTrackBlock?.getNextTrackSection(nodeCell, null as TrackSection?)
-		if (logger.isTraceEnabled()) {
-			logger.trace(
-				"getNextTrackSection: navigating network from {}, result: {}",
-				separator,
-				if (result != null) "found" else "not found"
-			)
+		logger.trace {
+			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}
 		return result
 	}
@@ -758,22 +741,19 @@ abstract class DefaultContext :
 	@Throws(EmptyContextException::class, SimulationException::class)
 	override fun run() {
 		if (getGraph().isEmpty() || getGrid().isEmpty() || inouts.isEmpty()) {
-			logger.warn(
-				"Cannot start simulation: graph={}, grid={}, inouts={}",
-				if (getGraph().isEmpty()) "empty" else "ok",
-				if (getGrid().isEmpty()) "empty" else "ok",
-				if (inouts.isEmpty()) "empty" else "ok"
-			)
+			logger.warn {
+				"Cannot start simulation: graph=${if (getGraph().isEmpty()) "empty" else "ok"}, " +
+					"grid=${if (getGrid().isEmpty()) "empty" else "ok"}, " +
+					"inouts=${if (inouts.isEmpty()) "empty" else "ok"}"
+			}
 			throw EmptyContextException()
 		}
 		if (mainProcess == null) mainProcess = Generator(this)
 
-		logger.info(
-			"Starting simulation: {} InOut points, {} track blocks, main process={}",
-			inouts.size,
-			getGraph().size(),
-			mainProcess!!.javaClass.simpleName
-		)
+		logger.info {
+			"Starting simulation: ${inouts.size} InOut points, ${getGraph().size()} track blocks, " +
+				"main process=${mainProcess!!.javaClass.simpleName}"
+		}
 
 		for (i in inouts) {
 			workers[i] = InOutWorker(this, i)
@@ -782,7 +762,7 @@ abstract class DefaultContext :
 		try {
 			Process.activate(mainProcess)
 		} catch (e: DiscoException) {
-			logger.error("Failed to activate main simulation process", e)
+			logger.error(e) { "Failed to activate main simulation process" }
 			throw SimulationException(e)
 		}
 	}
@@ -854,9 +834,7 @@ abstract class DefaultContext :
 		if (sep == null || nxt == null) {
 			throw IllegalArgumentException("wrong arguments for aPath finding")
 		}
-		if (logger.isDebugEnabled()) {
-			logger.debug("pathToNextSemaphore: searching path from {} via track section", sep)
-		}
+		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
 		var separator = sep
 		var previous: TrackSection? = null
 		var next: TrackSection? = nxt
@@ -874,14 +852,12 @@ abstract class DefaultContext :
 			if (separator is OrientedPathSeparator) {
 				if (isSeparatorInDirection(separator, next, previous)) {
 					path.add(separator)
-					if (logger.isTraceEnabled()) {
-						logger.trace("pathToNextSemaphore: found complete path with length {}", path.length())
-					}
+					logger.trace { "pathToNextSemaphore: found complete path with length ${path.length()}" }
 					return path
 				}
 			}
 		} while (next != null)
-		logger.debug("pathToNextSemaphore: no path found from {}", sep)
+		logger.debug { "pathToNextSemaphore: no path found from $sep" }
 		return null
 	}
 
@@ -918,7 +894,6 @@ abstract class DefaultContext :
 		type: ReportType
 	) {
 		if (!isReporting(type)) return
-		if (!simulationLogger.isInfoEnabled()) return
 
 		val buf = if (report is StringBuilder) report else StringBuilder(report)
 		try {
@@ -927,11 +902,11 @@ abstract class DefaultContext :
 				buf.insert(0, obj)
 			}
 		} catch (e: Exception) {
-			logger.error("Error generating simulation report for type {}", type, e)
+			logger.error(e) { "Error generating simulation report for type $type" }
 		}
 		buf.insert(0, ' ')
 		buf.insert(0, jDisco.Process.time())
-		simulationLogger.info("{}", buf)
+		simulationLogger.info { buf }
 	}
 
 	/**

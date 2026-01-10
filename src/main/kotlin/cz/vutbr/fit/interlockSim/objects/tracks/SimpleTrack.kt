@@ -13,8 +13,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.TrackOperationException
 import jDisco.Process
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.IdentityHashMap
 
 /**
@@ -32,7 +31,7 @@ abstract class SimpleTrack(
 	TrackSection,
 	TrackFacility {
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(SimpleTrack::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		// Track minimum length constant
 		private const val MIN_LENGTH = Track.MIN_LENGTH
@@ -54,23 +53,13 @@ abstract class SimpleTrack(
 	}
 
 	override fun enter(occupant: TrackOccupant) {
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Block {} ENTRY: occupant={}, state={}->OCCUPIED",
-				Process.time(),
-				this,
-				occupant,
-				state
-			)
+		logger.info {
+			"${Process.time()} Block $this ENTRY: occupant=$occupant, state=$state->OCCUPIED"
 		}
 		if (`in` != null) {
-			logger.error(
-				"{} CONFLICT: Block {} collision! Existing occupant={}, occupant={}",
-				Process.time(),
-				this,
-				`in`,
-				occupant
-			)
+			logger.error {
+				"${Process.time()} CONFLICT: Block $this collision! Existing occupant=${`in`}, occupant=$occupant"
+			}
 		}
 		assert(`in` == null) // tak to zavani srazkou (posuny neimplementovany)
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
@@ -79,13 +68,8 @@ abstract class SimpleTrack(
 	}
 
 	override fun leave(occupant: TrackOccupant) {
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Block {} EXIT: occupant={}, state=OCCUPIED->FREE",
-				Process.time(),
-				this,
-				occupant
-			)
+		logger.info {
+			"${Process.time()} Block $this EXIT: occupant=$occupant, state=OCCUPIED->FREE"
 		}
 		assert(`in` === occupant)
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
@@ -94,30 +78,18 @@ abstract class SimpleTrack(
 
 	override fun isFreeFrom(seg: PathSeparator): Boolean {
 		val isFree = state == TrackFacility.State.FREE
-		if (logger.isDebugEnabled) {
-			logger.debug("Track {} isFreeFrom check: from={}, state={}, result={}", this, seg, state, isFree)
-		}
+		logger.debug { "Track $this isFreeFrom check: from=$seg, state=$state, result=$isFree" }
 		return isFree
 	}
 
 	override fun setUpPath(sep: PathSeparator) {
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Block {} RESERVE: from={}, state=FREE->RESERVED",
-				Process.time(),
-				this,
-				sep
-			)
+		logger.info {
+			"${Process.time()} Block $this RESERVE: from=$sep, state=FREE->RESERVED"
 		}
 		if (state != TrackFacility.State.FREE) {
-			logger.warn(
-				"{} CONFLICT: Block {} reservation rejected - state={}, occupant={}, requested by={}",
-				Process.time(),
-				this,
-				state,
-				`in`,
-				sep
-			)
+			logger.warn {
+				"${Process.time()} CONFLICT: Block $this reservation rejected - state=$state, occupant=${`in`}, requested by=$sep"
+			}
 		}
 		exeptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		from = sep
@@ -132,20 +104,13 @@ abstract class SimpleTrack(
 			assert(from == null)
 			isSetUp = false
 		}
-		if (logger.isDebugEnabled) {
-			logger.debug("Track {} isSetUpPath check: sep={}, state={}, from={}, result={}", this, sep, state, from, isSetUp)
-		}
+		logger.debug { "Track $this isSetUpPath check: sep=$sep, state=$state, from=$from, result=$isSetUp" }
 		return isSetUp
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
-		if (logger.isInfoEnabled) {
-			logger.info(
-				"{} Block {} RELEASE: from={}, state=RESERVED->FREE",
-				Process.time(),
-				this,
-				sep
-			)
+		logger.info {
+			"${Process.time()} Block $this RELEASE: from=$sep, state=RESERVED->FREE"
 		}
 		exeptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
 		if (sep !== from) throw TrackOperationException("wrong end on cancel", this)
@@ -167,14 +132,9 @@ abstract class SimpleTrack(
 		to: TrackFacility.State
 	) {
 		if (!stateChange(from, to)) {
-			logger.error(
-				"{} CONFLICT: Block {} state violation - expected={}, actual={}, attempted={}",
-				Process.time(),
-				this,
-				from,
-				state,
-				to
-			)
+			logger.error {
+				"${Process.time()} CONFLICT: Block $this state violation - expected=$from, actual=$state, attempted=$to"
+			}
 			throw TrackOperationException(errorStateMessage(from), this)
 		}
 	}

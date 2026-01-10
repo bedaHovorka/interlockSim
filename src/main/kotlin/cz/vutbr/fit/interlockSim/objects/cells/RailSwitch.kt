@@ -11,8 +11,8 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLoggingFactory
 import java.util.EnumMap
 import java.util.EnumSet
 import java.util.Map.Entry
@@ -259,7 +259,7 @@ class RailSwitch : NodeCell {
 	}
 
 	companion object {
-		private val logger: Logger = LoggerFactory.getLogger(RailSwitch::class.java)
+		private val logger = KotlinLogging.logger {}
 
 		/**
 		 * allowed speed
