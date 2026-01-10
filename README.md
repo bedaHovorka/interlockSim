@@ -419,8 +419,8 @@ The following loggers are pre-configured in `logback.xml`:
 
 Comprehensive JUnit 5.11.4 test suite with AssertJ 3.27.6 assertions located in `src/test/java/cz/vutbr/fit/interlockSim/`.
 
-**Test coverage (212 tests across 12 test classes):**
-- **Utility tests**: Array2DMapTest (10), DoubletonTest (66), EnumUnorientedGraphTest (55), HashMapGraphTest (48)
+**Test coverage (237 tests across 13 test classes):**
+- **Utility tests**: Array2DMapTest (10), DoubletonTest (66), EnumUnorientedGraphTest (55), HashMapGraphTest (48), TreeMultiMapTest (25)
 - **Context tests**: DefaultContextTest (8), ConcurrentSaveTest (2)
 - **Simulation tests**: TrainTest (6), InOutWorkerTest (8), ShuntingLoopTest (2)
 - **XML tests**: XMLContextFactoryTest (7) with 10 fixture files

@@ -285,6 +285,7 @@ env:
 | DoubletonTest | 66 | ✅ | Immutable ordered pairs |
 | EnumUnorientedGraphTest | 55 | ✅ | Enum-based graph |
 | HashMapGraphTest | 48 | ✅ | HashMap-based graph |
+| TreeMultiMapTest | 25 | ✅ | Tree-based multimap |
 | DefaultContextTest | 8 | ✅ | Railway network context |
 | ConcurrentSaveTest | 2 | ✅ | Thread-safe XML serialization |
 | PropertyChangeTest | 6 | ✅ | **NEW** - Property change events |
