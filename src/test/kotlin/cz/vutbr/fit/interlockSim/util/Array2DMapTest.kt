@@ -245,9 +245,20 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap}.
+	 * Performance benchmark for {@link cz.vutbr.fit.interlockSim.util.Array2DMap}.
+	 *
+	 * This test is disabled because:
+	 * 1. It's a performance benchmark, not a functional test
+	 * 2. It has inherent timing variability that causes flaky failures
+	 * 3. Historical results show minimal performance difference (see comments below)
+	 *
+	 * Original conclusion: "The speedup is almost none, but at least when calling
+	 * get(Int,Int) directly, the creation of key objects is eliminated."
+	 *
+	 * If you need to run performance benchmarks, consider using JMH (Java Microbenchmark Harness)
+	 * instead of JUnit assertions.
 	 */
-	@Disabled("Performance test that often fails due to timing variability")
+	@Disabled("Performance benchmark with timing variability - not a functional test")
 	@Test
 	fun testSpeed() {
 		@Suppress("UNCHECKED_CAST")
@@ -256,7 +267,7 @@ class Array2DMapTest {
 		@Suppress("UNCHECKED_CAST")
 		val tst2 = tst(treeMap as Map<Point, Int>)
 		// cil: zrychleni operace vyhledani polozky
-		println("$tst1 $tst2")
+		println("Array2DMap: $tst1 ns, TreeMap: $tst2 ns")
 		assertThat(tst1).isLessThan(tst2)
 		// zaver: zrychleni neni skoro zadne
 		// vsak je aspon pri volani primo get(Int,Int) eliminovano vytvareni klicovacich objektu
