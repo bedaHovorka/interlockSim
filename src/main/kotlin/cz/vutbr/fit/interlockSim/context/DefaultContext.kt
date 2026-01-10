@@ -32,7 +32,8 @@ import cz.vutbr.fit.interlockSim.sim.SimulationException
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.util.TreeMultiMap
+import cz.vutbr.fit.interlockSim.util.putMulti
+import cz.vutbr.fit.interlockSim.util.valuesMulti
 import cz.vutbr.fit.interlockSim.util.Util
 import jDisco.DiscoException
 import jDisco.Process
@@ -48,6 +49,7 @@ import java.util.LinkedHashMap
 import java.util.List
 import java.util.Map
 import java.util.Set
+import java.util.TreeMap
 
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
@@ -197,7 +199,9 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): Map<Point, TrackBlockPart>? {
-		val treeMM = TreeMultiMap<Double, Tranporter>()
+		// Using Kotlin-idiomatic TreeMap with extension functions
+		// Replaces TreeMultiMap with standard library + extensions
+		val distanceMap = TreeMap<Double, MutableSet<Tranporter>>()
 
 		if (key1.distance(key2) <= SQRT2) return null
 
@@ -215,11 +219,11 @@ abstract class DefaultContext :
 				if (used(p2)) continue
 				val distance = p1.distance(p2)
 				// if (distance <= 1) continue;
-				treeMM.put(distance, Tranporter(p1, p2, s1, s2))
+				distanceMap.putMulti(distance, Tranporter(p1, p2, s1, s2))
 			}
 		}
 
-		for (t in treeMM.values()) {
+		for (t in distanceMap.valuesMulti()) {
 			val tryJoin = tryJoin(t, key1, key2, trackBlock)
 			if (tryJoin != null) return tryJoin
 		}
