@@ -68,8 +68,10 @@ import java.io.PrintStream
  *
  * To re-enable this test class, Main.createContext() must be refactored to NOT call System.exit()
  * or use a configurable exit handler for testing.
+ *
+ * GitHub Issue: #56
  */
-@Disabled("BUG-001: Main.createContext() calls System.exit(1), killing test JVM. See class javadoc for details.")
+@Disabled("BUG-001: Main.createContext() calls System.exit(1), killing test JVM. See GitHub issue #56")
 class MainArgumentParsingTest {
 	private lateinit var systemErr: PrintStream
 	private lateinit var capturedErr: ByteArrayOutputStream
@@ -328,7 +330,7 @@ class MainArgumentParsingTest {
 		}
 
 		@Test
-		@Disabled("BUG-001: Main.createContext() calls System.exit(1) on ContextCreationException, killing test JVM")
+		@Disabled("BUG-001: Main.createContext() calls System.exit(1) on ContextCreationException. See GitHub issue #56")
 		fun `invalid file path shows error`() {
 			// Arrange
 			val args = arrayOf("sim", "/nonexistent/path/to/file.xml")
