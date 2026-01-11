@@ -12,20 +12,20 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.testutil.assertFailure
-import cz.vutbr.fit.interlockSim.testutil.cause
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Comprehensive tests for example loading and execution via reflection.
@@ -267,12 +267,13 @@ class ExampleLoadingTest {
 
 			// Act & Assert
 			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
-			assertFailure {
+			assertThatBlock {
 				method.invoke(main, factory, invalidArgs)
-			}.isInstanceOf<InvocationTargetException>()
-				.cause()
+			}.isFailure()
+				.isInstanceOf(InvocationTargetException::class)
+				.transform { it.cause }
 				.isNotNull()
-				.isInstanceOf<NumberFormatException>()
+				.isInstanceOf(NumberFormatException::class)
 		}
 
 		/**
