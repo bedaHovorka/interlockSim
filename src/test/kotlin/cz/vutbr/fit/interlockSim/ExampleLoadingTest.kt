@@ -15,7 +15,6 @@ import assertk.assertions.cause
 import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFailure
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -29,7 +28,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Comprehensive tests for example loading and execution via reflection.
@@ -268,13 +266,12 @@ class ExampleLoadingTest {
 
 			// Act & Assert
 			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
-			assertThatBlock {
+			assertFailure {
 				method.invoke(main, factory, invalidArgs)
-			}.isFailure()
-				.isInstanceOf(InvocationTargetException::class)
-				.transform { it.cause }
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
 				.isNotNull()
-				.isInstanceOf(NumberFormatException::class)
+				.isInstanceOf<NumberFormatException>()
 		}
 
 		/**
