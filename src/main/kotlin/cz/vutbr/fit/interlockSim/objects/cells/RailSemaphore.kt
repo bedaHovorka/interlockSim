@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -87,7 +88,9 @@ open class RailSemaphore(
 			 */
 			@JvmStatic
 			fun forSpeed(speed: Double): Signal {
-				assert(speed >= S30.allowedSpeed() || speed == 0.0)
+				requireSimulation(speed >= S30.allowedSpeed() || speed == 0.0) {
+					"Speed must be at least S30 allowed speed or 0.0: $speed"
+				}
 				for (s in values) {
 					if (s.allowedSpeed() > speed) return if (s.ordinal == 0) STOP else values[s.ordinal - 1]
 				}
