@@ -854,5 +854,5 @@ dependencies {
 // To format manually: ./gradlew ktlintFormat (use with caution)
 //
 tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
-	enabled = false
+    enabled = false
 }
