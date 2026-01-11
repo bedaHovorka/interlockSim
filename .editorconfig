@@ -32,9 +32,8 @@ ij_kotlin_allow_trailing_comma_on_call_site = false
 # Kotlin script files (build.gradle.kts, etc.)
 [*.kts]
 charset = utf-8
-indent_style = tab
+indent_style = space
 indent_size = 4
-tab_width = 4
 max_line_length = 120
 
 # XML files (build.xml, resource files)
