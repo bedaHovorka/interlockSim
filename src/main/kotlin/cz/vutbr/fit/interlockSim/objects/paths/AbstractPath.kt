@@ -21,9 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.sim.SimulationException
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.InvocationTargetException

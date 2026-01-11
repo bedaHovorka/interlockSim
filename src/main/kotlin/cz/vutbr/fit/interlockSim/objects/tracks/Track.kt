@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 
 /**
  * "jakykoliv (z ruznych pohledu) usek koleji mezi pathseparatory (cast cesty)"

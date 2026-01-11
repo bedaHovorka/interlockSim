@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import java.util.Set
 
 /**

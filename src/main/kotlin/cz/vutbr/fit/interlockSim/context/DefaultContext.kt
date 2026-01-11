@@ -28,7 +28,7 @@ import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point

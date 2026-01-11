@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Set
 

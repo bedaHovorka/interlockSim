@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import org.junit.jupiter.api.BeforeEach

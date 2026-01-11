@@ -13,7 +13,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
 import java.util.IdentityHashMap

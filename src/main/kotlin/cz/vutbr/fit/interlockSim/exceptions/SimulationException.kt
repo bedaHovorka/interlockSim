@@ -7,9 +7,8 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim
+package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.vutbr.fit.interlockSim.exceptions.Severity
 import jDisco.Process
 
 /**

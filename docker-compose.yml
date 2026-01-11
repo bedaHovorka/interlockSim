@@ -20,10 +20,10 @@
 #        docker-compose up app
 #
 #        # Run simulation with example:
-#        docker-compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+#        docker-compose run app java -jar interlockSim.jar example shuntingLoop 60
 #
 #        # Run simulation with custom XML:
-#        docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+#        docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 #
 #        # Note: Requires GITHUB_TOKEN for GitHub Packages access
 #        # Export GITHUB_TOKEN before building or create .env file

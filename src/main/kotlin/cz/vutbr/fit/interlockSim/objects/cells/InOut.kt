@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import java.util.EnumSet
 import java.util.Set
 

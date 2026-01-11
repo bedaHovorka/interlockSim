@@ -21,11 +21,11 @@ package cz.vutbr.fit.interlockSim.exceptions
  *
  * @param value The boolean value to check
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
- * @throws cz.vutbr.fit.interlockSim.sim.SimulationException if value is false
+ * @throws SimulationException if value is false
  */
 inline fun requireSimulation(value: Boolean, lazyMessage: () -> String = { "Simulation requirement failed" }) {
 	if (!value) {
-		throw cz.vutbr.fit.interlockSim.sim.SimulationException(lazyMessage())
+		throw SimulationException(lazyMessage())
 	}
 }
 
@@ -36,7 +36,7 @@ inline fun requireSimulation(value: Boolean, lazyMessage: () -> String = { "Simu
  * @param value The boolean value to check
  * @param severity Severity level of the exception
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
- * @throws cz.vutbr.fit.interlockSim.sim.SimulationException if value is false
+ * @throws SimulationException if value is false
  */
 inline fun requireSimulation(
 	value: Boolean,
@@ -44,7 +44,7 @@ inline fun requireSimulation(
 	lazyMessage: () -> String = { "Simulation requirement failed" }
 ) {
 	if (!value) {
-		throw cz.vutbr.fit.interlockSim.sim.SimulationException(severity, lazyMessage(), null, null)
+		throw SimulationException(severity, lazyMessage(), null, null)
 	}
 }
 
@@ -55,14 +55,14 @@ inline fun requireSimulation(
  * @param value The value to check
  * @param lazyMessage A function producing the error message (only evaluated if value is null)
  * @return The non-null value
- * @throws cz.vutbr.fit.interlockSim.sim.SimulationException if value is null
+ * @throws SimulationException if value is null
  */
 inline fun <T : Any> requireSimulationNotNull(
 	value: T?,
 	lazyMessage: () -> String = { "Required value was null" }
 ): T {
 	if (value == null) {
-		throw cz.vutbr.fit.interlockSim.sim.SimulationException(lazyMessage())
+		throw SimulationException(lazyMessage())
 	}
 	return value
 }
@@ -73,11 +73,11 @@ inline fun <T : Any> requireSimulationNotNull(
  *
  * @param value The boolean value to check
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
- * @throws cz.vutbr.fit.interlockSim.sim.SimulationException if value is false
+ * @throws SimulationException if value is false
  */
 inline fun requireSimulationState(value: Boolean, lazyMessage: () -> String = { "Invalid simulation state" }) {
 	if (!value) {
-		throw cz.vutbr.fit.interlockSim.sim.SimulationException(lazyMessage())
+		throw SimulationException(lazyMessage())
 	}
 }
 
