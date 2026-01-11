@@ -341,13 +341,12 @@ class ExampleLoadingTest {
 			val mainClass = Main::class.java
 
 			// Act & Assert
-			try {
+			assertFailure {
 				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
-				throw AssertionError("Should have thrown NoSuchMethodException")
-			} catch (e: NoSuchMethodException) {
-				assertThat(e.message).isNotNull()
-				assertThat((e.message ?: "").contains("invalidExample")).isTrue()
-			}
+			}.isInstanceOf<NoSuchMethodException>()
+				.message()
+				.isNotNull()
+				.contains("invalidExample")
 		}
 
 		/**
