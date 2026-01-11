@@ -18,6 +18,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -204,12 +205,11 @@ class ExampleLoadingTest {
 			val unknownExampleName = "nonExistentExample"
 
 			// Act & Assert
-			try {
+			assertFailure {
 				mainClass.getMethod(unknownExampleName, SimulationContextFactory::class.java, Array<String>::class.java)
-				throw AssertionError("Should have thrown NoSuchMethodException for unknown example")
-			} catch (e: NoSuchMethodException) {
-				assertThat(e.message).isNotNull()
-			}
+			}.isInstanceOf<NoSuchMethodException>()
+				.message()
+				.isNotNull()
 		}
 
 		/**
