@@ -449,3 +449,31 @@ fun <T> Assert<Collection<T?>>.containsNull(): Assert<Collection<T?>> =
 			expected("to contain null but was:${show(actual)}")
 		}
 	}
+
+/**
+ * Helper function to assert that a block of code throws an exception.
+ *
+ * This is a convenience alias for assertThat { block }.isFailure() pattern.
+ * It provides a more expressive API for exception testing.
+ *
+ * Usage: assertFailure { /* code that throws */ }.isInstanceOf<ExceptionType>()
+ */
+inline fun <R> assertFailure(crossinline block: () -> R): Assert<Throwable> {
+	val result = runCatching { block() }
+	val exception = result.exceptionOrNull()
+	if (exception == null) {
+		throw AssertionError("Expected block to throw an exception, but it completed successfully")
+	}
+	return assertk.assertThat(exception)
+}
+
+/**
+ * Extension function to access the cause of an exception for further assertions.
+ *
+ * This allows chaining assertions on the exception cause.
+ *
+ * Usage: assertFailure { /* code */ }.isInstanceOf<WrapperException>().cause().isNotNull().isInstanceOf<CauseException>()
+ */
+fun Assert<Throwable>.cause(): Assert<Throwable?> {
+	return transform { it.cause }
+}

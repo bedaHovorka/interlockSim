@@ -13,10 +13,13 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.testutil.assertFailure
+import cz.vutbr.fit.interlockSim.testutil.cause
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -263,15 +266,13 @@ class ExampleLoadingTest {
 			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, invalidArgs)
-				throw AssertionError("Should have thrown NumberFormatException for non-numeric end time")
-			} catch (e: InvocationTargetException) {
-				val cause = e.cause
-				assertThat(cause).isNotNull()
-				assertThat(cause is NumberFormatException).isTrue()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
+				.isInstanceOf<NumberFormatException>()
 		}
 
 		/**
