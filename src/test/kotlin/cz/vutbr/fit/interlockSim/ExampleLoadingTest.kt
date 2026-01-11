@@ -9,10 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.cause
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
@@ -240,16 +243,13 @@ class ExampleLoadingTest {
 			val insufficientArgs = arrayOf("example") // Missing end time
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/45
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, insufficientArgs)
-				throw AssertionError("Should have thrown ContextCreationException for missing end time")
-			} catch (e: InvocationTargetException) {
-				val cause = e.cause
-				assertThat(cause).isNotNull()
-				assertThat(cause is ContextCreationException).isTrue()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
+				.isInstanceOf<ContextCreationException>()
 		}
 
 		/**
