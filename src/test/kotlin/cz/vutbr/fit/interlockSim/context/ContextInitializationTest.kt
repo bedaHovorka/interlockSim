@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -209,17 +210,9 @@ class ContextInitializationTest {
 			val xmlFile = File("nonexistent/path/does-not-exist.xml")
 
 			// Act & Assert
-			val exception =
-				try {
-					XMLContextFactory.getInstance().createContext(xmlFile)
-					null
-				} catch (e: Exception) {
-					e
-				}
-
-			assertThat(exception)
-				.withMessage("Should throw exception for nonexistent file")
-				.isNotNull()
+			assertk.assertFailure {
+				XMLContextFactory.getInstance().createContext(xmlFile)
+			}.isInstanceOf(Exception::class)
 		}
 
 		/**
@@ -235,17 +228,9 @@ class ContextInitializationTest {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/invalid-malformed-xml.xml")
 
 			// Act & Assert
-			val exception =
-				try {
-					XMLContextFactory.getInstance().createContext(xmlFile)
-					null
-				} catch (e: Exception) {
-					e
-				}
-
-			assertThat(exception)
-				.withMessage("Should throw exception for malformed XML")
-				.isNotNull()
+			assertk.assertFailure {
+				XMLContextFactory.getInstance().createContext(xmlFile)
+			}.isInstanceOf(Exception::class)
 		}
 	}
 

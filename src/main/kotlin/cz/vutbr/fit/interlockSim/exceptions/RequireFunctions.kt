@@ -104,7 +104,11 @@ inline fun requireEditor(value: Boolean, lazyMessage: () -> String = { "Editor r
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws EditorException if value is false
  */
-inline fun requireEditor(value: Boolean, severity: Severity, lazyMessage: () -> String = { "Editor requirement failed" }) {
+inline fun requireEditor(
+	value: Boolean,
+	severity: Severity,
+	lazyMessage: () -> String = { "Editor requirement failed" }
+) {
 	if (!value) {
 		throw EditorException(severity, lazyMessage())
 	}

@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut

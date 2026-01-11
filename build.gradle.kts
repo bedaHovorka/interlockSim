@@ -119,8 +119,6 @@ application {
     mainClass.set("cz.vutbr.fit.interlockSim.Main")
 }
 
-}
-
 // Configure compilation tasks
 tasks.compileJava {
     // CRITICAL: Use ISO-8859-1 encoding (legacy requirement from Ant build)

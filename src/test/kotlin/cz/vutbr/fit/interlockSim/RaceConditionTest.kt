@@ -449,6 +449,8 @@ class RaceConditionTest {
 							successCount.incrementAndGet()
 						} catch (e: AssertionError) {
 							// Expected - only one should succeed in entering
+						} catch (e: cz.vutbr.fit.interlockSim.exceptions.SimulationException) {
+							// Expected - collision detection throws SimulationException
 						} catch (e: Exception) {
 							exceptions.add(e)
 						} finally {

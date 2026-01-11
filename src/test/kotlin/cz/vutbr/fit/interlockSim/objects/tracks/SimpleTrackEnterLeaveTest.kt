@@ -9,8 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -207,13 +209,9 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: Occupancy is cleared (getTrackOccupant fails on FREE track)
-			try {
+			assertk.assertFailure {
 				track.getTrackOccupant()
-				throw AssertionError("Should have thrown AssertionError - track is FREE, not OCCUPIED")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as designed (occupant should be null when FREE)
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
@@ -312,15 +310,11 @@ class SimpleTrackEnterLeaveTest {
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act & Assert: Attempt to enter with second train should fail
-			// SimpleTrack.enter() has assertion: assert(`in` == null)
+			// SimpleTrack.enter() throws exception: `in` == null
 			// This is safety property SI-1 (collision prevention)
-			try {
+			assertk.assertFailure {
 				track.enter(train2)
-				throw AssertionError("Should have thrown AssertionError - collision prevention failed")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as designed (prevent multiple occupants)
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify first train still occupies track
 			assertThat(track.getTrackOccupant())
@@ -339,14 +333,10 @@ class SimpleTrackEnterLeaveTest {
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act & Assert: Only the occupying train can leave
-			// SimpleTrack.leave() has assertion: assert(`in` === occupant)
-			try {
+			// SimpleTrack.leave() throws exception: `in` === occupant
+			assertk.assertFailure {
 				track.leave(train2) // Wrong train attempts to leave
-				throw AssertionError("Should have thrown AssertionError - identity check failed")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as designed (only occupant can leave)
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify track still occupied with train1
 			assertThat(track.getState())

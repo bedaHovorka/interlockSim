@@ -9,8 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -152,12 +154,9 @@ class SimpleTrackStateTest {
 			track.setUpPath(end1)
 
 			// Act & Assert - should throw TrackOperationException
-			try {
+			assertk.assertFailure {
 				track.setUpPath(end2) // Try to reserve from different end
-				throw AssertionError("Should have thrown TrackOperationException")
-			} catch (e: TrackOperationException) {
-				// Expected
-			}
+			}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
@@ -168,12 +167,9 @@ class SimpleTrackStateTest {
 			track.enter(mockOccupant)
 
 			// Act & Assert - should throw TrackOperationException
-			try {
+			assertk.assertFailure {
 				track.setUpPath(end2) // Try to reserve occupied track
-				throw AssertionError("Should have thrown TrackOperationException")
-			} catch (e: TrackOperationException) {
-				// Expected
-			}
+			}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
@@ -182,14 +178,10 @@ class SimpleTrackStateTest {
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			// Track is still in FREE state - never reserved
 
-			// Act & Assert - should throw AssertionError due to assert in enter()
-			try {
+			// Act & Assert - should throw SimulationException due to validation in enter()
+			assertk.assertFailure {
 				track.enter(mockOccupant) // Try to enter without reservation
-				throw AssertionError("Should have thrown AssertionError")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as desired
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
@@ -198,14 +190,10 @@ class SimpleTrackStateTest {
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			// Track is FREE
 
-			// Act & Assert - should throw AssertionError due to assert in leave()
-			try {
+			// Act & Assert - should throw SimulationException due to validation in leave()
+			assertk.assertFailure {
 				track.leave(mockOccupant) // Try to leave when not occupied
-				throw AssertionError("Should have thrown AssertionError")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as desired
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 	}
 
@@ -271,15 +259,11 @@ class SimpleTrackStateTest {
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 
 			// Act & Assert - Track is FREE, occupant should be null
-			// Note: getTrackOccupant() asserts that track must be OCCUPIED
+			// Note: getTrackOccupant() throws exception that track must be OCCUPIED
 			// This test verifies that calling it on FREE track fails
-			try {
+			assertk.assertFailure {
 				track.getTrackOccupant()
-				throw AssertionError("Should have thrown AssertionError")
-			} catch (e: AssertionError) {
-				if (e.message?.startsWith("Should have thrown") == true) throw e
-				// Expected - assertion failed as desired
-			}
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test

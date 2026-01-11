@@ -16,40 +16,43 @@ import jDisco.Process
  *
  * @property severity Severity level of the exception
  */
-open class SimulationException : Exception {
-	val severity: Severity
+open class SimulationException(
+	val severity: Severity,
+	message: String,
+	cause: Throwable?,
 	private val obj: Any?
-	private val time: Double
+) : Exception(message, cause) {
+	private val time: Double = Process.time()
 
 	/**
 	 * Create SimulationException with default FATAL severity
 	 */
-	constructor() : this(Severity.FATAL, null as Any?)
+	constructor() : this(Severity.FATAL, "", null, null)
 
 	/**
 	 * Create SimulationException with default FATAL severity
 	 * @param obj Object associated with the exception
 	 */
-	constructor(obj: Any?) : this(Severity.FATAL, "", obj)
+	constructor(obj: Any?) : this(Severity.FATAL, "", null, obj)
 
 	/**
 	 * Create SimulationException with default FATAL severity
 	 * @param message Error message
 	 */
-	constructor(message: String) : this(Severity.FATAL, message, null as Any?)
+	constructor(message: String) : this(Severity.FATAL, message, null, null)
 
 	/**
 	 * Create SimulationException with default FATAL severity
 	 * @param message Error message
 	 * @param obj Object associated with the exception
 	 */
-	constructor(message: String, obj: Any?) : this(Severity.FATAL, message, null as Throwable?, obj)
+	constructor(message: String, obj: Any?) : this(Severity.FATAL, message, null, obj)
 
 	/**
 	 * Create SimulationException with default FATAL severity
 	 * @param cause Underlying cause
 	 */
-	constructor(cause: Throwable?) : this(Severity.FATAL, cause, null as Any?)
+	constructor(cause: Throwable?) : this(Severity.FATAL, "", cause, null)
 
 	/**
 	 * Create SimulationException with default FATAL severity
@@ -59,17 +62,12 @@ open class SimulationException : Exception {
 	constructor(cause: Throwable?, obj: Any?) : this(Severity.FATAL, "", cause, obj)
 
 	/**
-	 * Create SimulationException with specified severity
-	 * @param severity Severity level
+	 * Create SimulationException with default FATAL severity
 	 * @param message Error message
 	 * @param cause Underlying cause
 	 * @param obj Object associated with the exception
 	 */
-	constructor(severity: Severity, message: String, cause: Throwable?, obj: Any?) : super(message, cause) {
-		this.severity = severity
-		this.obj = obj
-		this.time = Process.time()
-	}
+	constructor(message: String, cause: Throwable?, obj: Any?) : this(Severity.FATAL, message, cause, obj)
 
 	/**
 	 * @return object getter

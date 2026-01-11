@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection

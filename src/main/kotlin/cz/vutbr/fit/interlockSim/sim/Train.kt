@@ -535,13 +535,14 @@ class Train :
 	 */
 	constructor(context: SimulationContext?, timetable: Timetable?) {
 		this.context = requireSimulationNotNull(context) { "context must not be null" }
-		this.timetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
-		this.length = timetable.getLength()
+		val validatedTimetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
+		this.timetable = validatedTimetable
+		this.length = validatedTimetable.getLength()
 		number = ++count
 		trainPrefix = "Train #$number"
-		logger.debug {
-			"Train $number created: from ${timetable.getIn().getName()} to ${timetable.getOut().getName()}, length $length"
-		}
+		val inName = validatedTimetable.getIn().getName()
+		val outName = validatedTimetable.getOut().getName()
+		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
 	override fun distanceToSemaphore(): Double =

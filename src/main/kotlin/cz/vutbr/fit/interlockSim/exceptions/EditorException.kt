@@ -16,33 +16,36 @@ package cz.vutbr.fit.interlockSim.exceptions
  * @property severity Severity level of the exception
  * @property obj Optional object associated with the exception
  */
-class EditorException : Exception {
-	val severity: Severity
+class EditorException(
+	val severity: Severity,
+	message: String,
+	cause: Throwable?,
 	private val obj: Any?
+) : Exception(message, cause) {
 
 	/**
 	 * Create EditorException with default FATAL severity
 	 */
-	constructor() : this(Severity.FATAL, null as Any?)
+	constructor() : this(Severity.FATAL, "", null, null)
 
 	/**
 	 * Create EditorException with default FATAL severity
 	 * @param obj Object associated with the exception
 	 */
-	constructor(obj: Any?) : this(Severity.FATAL, "", obj)
+	constructor(obj: Any?) : this(Severity.FATAL, "", null, obj)
 
 	/**
 	 * Create EditorException with default FATAL severity
 	 * @param message Error message
 	 */
-	constructor(message: String) : this(Severity.FATAL, message, null as Any?)
+	constructor(message: String) : this(Severity.FATAL, message, null, null)
 
 	/**
 	 * Create EditorException with specified severity
 	 * @param severity Severity level
 	 * @param message Error message
 	 */
-	constructor(severity: Severity, message: String) : this(severity, message, null as Any?)
+	constructor(severity: Severity, message: String) : this(severity, message, null, null)
 
 	/**
 	 * Create EditorException with specified severity and object
@@ -50,16 +53,13 @@ class EditorException : Exception {
 	 * @param message Error message
 	 * @param obj Object associated with the exception
 	 */
-	constructor(severity: Severity, message: String, obj: Any?) : super(message) {
-		this.severity = severity
-		this.obj = obj
-	}
+	constructor(severity: Severity, message: String, obj: Any?) : this(severity, message, null, obj)
 
 	/**
 	 * Create EditorException with default FATAL severity and cause
 	 * @param cause Underlying cause
 	 */
-	constructor(cause: Throwable?) : this(Severity.FATAL, cause, null as Any?)
+	constructor(cause: Throwable?) : this(Severity.FATAL, "", cause, null)
 
 	/**
 	 * Create EditorException with specified severity and cause
@@ -68,18 +68,6 @@ class EditorException : Exception {
 	 * @param obj Object associated with the exception
 	 */
 	constructor(severity: Severity, cause: Throwable?, obj: Any?) : this(severity, "", cause, obj)
-
-	/**
-	 * Create EditorException with all parameters
-	 * @param severity Severity level
-	 * @param message Error message
-	 * @param cause Underlying cause
-	 * @param obj Object associated with the exception
-	 */
-	constructor(severity: Severity, message: String, cause: Throwable?, obj: Any?) : super(message, cause) {
-		this.severity = severity
-		this.obj = obj
-	}
 
 	/**
 	 * @return object getter
