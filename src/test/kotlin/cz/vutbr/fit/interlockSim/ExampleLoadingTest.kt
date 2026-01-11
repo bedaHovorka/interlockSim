@@ -14,6 +14,7 @@ import assertk.assertThat
 import assertk.assertions.cause
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Comprehensive tests for example loading and execution via reflection.
@@ -264,16 +266,14 @@ class ExampleLoadingTest {
 			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/46
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertThatBlock {
 				method.invoke(main, factory, invalidArgs)
-				throw AssertionError("Should have thrown NumberFormatException for non-numeric end time")
-			} catch (e: InvocationTargetException) {
-				val cause = e.cause
-				assertThat(cause).isNotNull()
-				assertThat(cause is NumberFormatException).isTrue()
-			}
+			}.isFailure()
+				.isInstanceOf(InvocationTargetException::class)
+				.transform { it.cause }
+				.isNotNull()
+				.isInstanceOf(NumberFormatException::class)
 		}
 
 		/**
