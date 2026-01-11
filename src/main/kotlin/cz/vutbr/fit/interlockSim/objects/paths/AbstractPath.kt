@@ -11,6 +11,9 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -18,8 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.InvocationTargetException
@@ -54,8 +58,8 @@ abstract class AbstractPath protected constructor(
 				Collections.addAll(nameList, CANCEL_PATH_SETUP, SET_UP_PATH, IS_FREE_FROM, IS_SET_UP_PATH)
 				fillMethodMap(trackMethods, Track::class.java, nameList as List<String>)
 			} catch (e: Exception) {
-				assert(false) { e }
-				e.printStackTrace()
+				// Unexpected error during method map initialization
+				throw SimulationException("Failed to initialize track methods", e, null)
 			}
 		}
 
@@ -176,7 +180,9 @@ abstract class AbstractPath protected constructor(
 					logger.debug { "Method invocation returned false for method: $methodName" }
 					return false
 				}
-				assert(invoke == null || java.lang.Boolean.TRUE == invoke) { invoke }
+				requireSimulation(invoke == null || java.lang.Boolean.TRUE == invoke) {
+					"Track method invocation returned unexpected result: $invoke"
+				}
 				previous = nextTrack
 			}
 			if (method == trackMethods[SET_UP_PATH]) {
@@ -199,10 +205,10 @@ abstract class AbstractPath protected constructor(
 		previous: Track?,
 		next: Track
 	): Boolean {
-		assert(methodName != null && next != null)
+		requireValidArgument(methodName != null && next != null) { "Method name and next track must not be null" }
 		val from = context.getSegment(separator, previous, next)
 		val to = context.getSegment(separator, next, previous)
-		assert(!Segment.conflict(from, to)) { "$from $to" }
+		requireSimulation(!Segment.conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
 
 		// NOTE: from and to CAN be null - this is intentional and matches Java behavior
 		// getSegment() returns null when no segment exists (e.g., InOut.getFollowingSegment)
@@ -229,7 +235,9 @@ abstract class AbstractPath protected constructor(
 			}
 			val following = separator.getFollowingSegment(from)
 			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
-			assert(following === to) { "Separator $separator: getFollowingSegment($from) returned $following but expected $to" }
+			requireSimulation(following === to) {
+				"Separator $separator: getFollowingSegment($from) returned $following but expected $to"
+			}
 		} else if (methodName == IS_FREE_FROM) {
 			// Java: //EMPTY
 			// Intentionally empty - segments can be null, no action needed
@@ -264,14 +272,16 @@ abstract class AbstractPath protected constructor(
 			}
 		}
 		context.report("", this, ReportType.PATH_SETTING)
-		assert(maxSpeed(sep) >= PathElement.MINIMAL_MAX_SPEED) { maxSpeed(sep) }
+		requireSimulation(maxSpeed(sep) >= PathElement.MINIMAL_MAX_SPEED) {
+			"Max speed must be at least MINIMAL_MAX_SPEED, got: ${maxSpeed(sep)}"
+		}
 	}
 
 	@Suppress("RETURN_TYPE_MISMATCH_ON_OVERRIDE", "UNCHECKED_CAST")
 	protected fun getIterator(sep: PathSeparator): Iterator<PathElement> {
 		if (!isEnd(sep)) throw IllegalArgumentException("Is not end of abstrPath")
 		if (sep == getFirst()) return iterator() as Iterator<PathElement>
-		assert(sep == getLast())
+		requireSimulation(sep == getLast()) { "Separator must be either first or last" }
 		return (descendingIterator() as Iterator<PathElement>?)!!
 	}
 
@@ -284,10 +294,10 @@ abstract class AbstractPath protected constructor(
 		val pathIt = path.iterator()
 
 		while (thisIt.hasNext()) {
-			assert(pathIt.hasNext())
+			requireSimulation(pathIt.hasNext()) { "Path iterator ended prematurely" }
 			val thisNext = thisIt.next()
 			val pathNext = pathIt.next()
-			assert(thisNext != null)
+			requireSimulationNotNull(thisNext) { "Path element must not be null" }
 			if (thisNext != pathNext) return false
 		}
 

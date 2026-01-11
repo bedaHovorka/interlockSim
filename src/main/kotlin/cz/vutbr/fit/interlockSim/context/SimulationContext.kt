@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.sim.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import java.util.Collection
 import java.util.EnumSet
 

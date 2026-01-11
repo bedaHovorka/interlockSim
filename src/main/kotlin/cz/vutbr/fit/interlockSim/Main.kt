@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.sim.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging

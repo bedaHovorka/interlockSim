@@ -9,9 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
 import java.util.IdentityHashMap
@@ -61,7 +63,7 @@ abstract class SimpleTrack(
 				"${Process.time()} CONFLICT: Block $this collision! Existing occupant=${`in`}, occupant=$occupant"
 			}
 		}
-		assert(`in` == null) // tak to zavani srazkou (posuny neimplementovany)
+		requireSimulation(`in` == null) { "Track occupant collision - must be null on entry (shunting not implemented)" }
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		`in` = occupant
 		from = null
@@ -71,7 +73,7 @@ abstract class SimpleTrack(
 		logger.info {
 			"${Process.time()} Block $this EXIT: occupant=$occupant, state=OCCUPIED->FREE"
 		}
-		assert(`in` === occupant)
+		requireSimulation(`in` === occupant) { "Track occupant mismatch on leave" }
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		`in` = null
 	}
@@ -96,12 +98,12 @@ abstract class SimpleTrack(
 	}
 
 	override fun isSetUpPath(sep: PathSeparator): Boolean {
-		assert(sep != null)
+		requireSimulationNotNull(sep) { "Path separator must not be null" }
 		val isSetUp: Boolean
 		if (state == TrackFacility.State.RESERVED) {
 			isSetUp = sep === from
 		} else {
-			assert(from == null)
+			requireSimulation(from == null) { "From separator must be null when state is not RESERVED" }
 			isSetUp = false
 		}
 		logger.debug { "Track $this isSetUpPath check: sep=$sep, state=$state, from=$from, result=$isSetUp" }
@@ -147,7 +149,7 @@ abstract class SimpleTrack(
 	) {
 		// mozna nekdy jina vyjimka...
 		val stateChange = stateChange(from, to)
-		assert(stateChange) { errorStateMessage(from) }
+		requireSimulation(stateChange) { errorStateMessage(from) }
 	}
 
 	override fun length(): Double = length
@@ -158,13 +160,13 @@ abstract class SimpleTrack(
 
 	override fun getTrackOccupant(): TrackOccupant {
 		// Note: Track must be occupied when this method is called, but field is nullable for initialization
-		// This violates the interface contract if called when track is free - assert checks this
-		assert(`in` != null) { "Track occupant should not be null - must call when track is OCCUPIED" }
+		// This violates the interface contract if called when track is free - requireSimulation checks this
+		requireSimulationNotNull(`in`) { "Track occupant should not be null - must call when track is OCCUPIED" }
 		return `in`!!
 	}
 
 	override fun maxSpeed(from: PathSeparator?): Double {
-		assert(isEnd(from!!))
+		requireSimulation(isEnd(from!!)) { "Path separator must be an end of this track" }
 		return speeds[from]!!
 	}
 }

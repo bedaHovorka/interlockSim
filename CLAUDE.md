@@ -148,25 +148,24 @@ After building with `./gradlew shadowJar`, run from the project root:
 
 **Simulation mode:**
 ```bash
-java -ea -jar build/libs/interlockSim.jar sim [xmlFile]
+java -jar build/libs/interlockSim.jar sim [xmlFile]
 ```
 
 **Editor mode:**
 ```bash
-java -ea -jar build/libs/interlockSim.jar edit [xmlFile]
+java -jar build/libs/interlockSim.jar edit [xmlFile]
 ```
 
 **Built-in examples:**
 ```bash
-java -ea -jar build/libs/interlockSim.jar example [exampleName] [endTime]
+java -jar build/libs/interlockSim.jar example [exampleName] [endTime]
 ```
 
 To list available examples, run:
 ```bash
-java -ea -jar build/libs/interlockSim.jar example
+java -jar build/libs/interlockSim.jar example
 ```
 
-**Note:** Enable assertions with `-ea` flag. For memory-constrained environments, add `-Xmx300m`.
 
 ## Docker Setup (Recommended)
 
@@ -217,12 +216,12 @@ xhost -local:docker
 
 **Run simulation example:**
 ```bash
-docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 ```
 
 **Run simulation with custom XML:**
 ```bash
-docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 ```
 
 **Build thesis PDF:**
@@ -837,12 +836,12 @@ Standard log levels (most to least verbose):
 
 **Runtime system property override:**
 ```bash
-java -Dlogback.level=DEBUG -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
 ```
 
 **Docker environment variable:**
 ```bash
-docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar example shuntingLoop 60
 ```
 
 ### Pre-configured Loggers
@@ -1027,11 +1026,9 @@ None. All critical bugs identified by SonarQube have been fixed.
 **Severity:** Medium (production concern)
 **Files:** Multiple simulation classes
 
-**Description:** Critical validation logic uses Java `assert` statements, which are disabled without the `-ea` flag.
 
 **Impact:** Invalid states may not be detected when running without assertions enabled.
 
-**Workaround:** Always run the application with `-ea` flag: `java -ea -jar interlockSim.jar ...`
 
 **Recommendation:** Convert critical assertions to explicit validation with exceptions.
 

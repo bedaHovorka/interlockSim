@@ -77,6 +77,8 @@ class CellTest {
 					.withMessage("direction for class ${clazz.simpleName} and $t")
 					.isSameInstanceAs(Segment.anti(sem2.direction()))
 			} catch (e: IllegalArgumentException) {
+				// This try-catch is intentional - it handles valid cases where certain
+				// switch types are unsupported. This is not an assertion test.
 				val message = e.message
 				if (message != null && message == RailSwitch.UNSUPORTED_SWITCH_TYPES_MESSAGE) {
 					continue

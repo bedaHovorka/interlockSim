@@ -68,14 +68,14 @@ class TrainTest {
 
 			// Act & Assert
 			assertThatThrownBy { Train(null as cz.vutbr.fit.interlockSim.context.SimulationContext?, timetable) }
-				.isInstanceOf(NullPointerException::class)
+				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
 		fun constructor_nullTimetable_throwsException() {
 			// Act & Assert
 			assertThatThrownBy { Train(mockContext, null as Timetable?) }
-				.isInstanceOf(NullPointerException::class)
+				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test

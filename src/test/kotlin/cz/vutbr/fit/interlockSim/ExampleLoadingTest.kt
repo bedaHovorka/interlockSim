@@ -201,6 +201,7 @@ class ExampleLoadingTest {
 			val unknownExampleName = "nonExistentExample"
 
 			// Act & Assert
+			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/44
 			try {
 				mainClass.getMethod(unknownExampleName, SimulationContextFactory::class.java, Array<String>::class.java)
 				throw AssertionError("Should have thrown NoSuchMethodException for unknown example")
@@ -239,6 +240,7 @@ class ExampleLoadingTest {
 			val insufficientArgs = arrayOf("example") // Missing end time
 
 			// Act & Assert
+			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/45
 			try {
 				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
 				method.invoke(main, factory, insufficientArgs)
@@ -263,6 +265,7 @@ class ExampleLoadingTest {
 			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
+			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/46
 			try {
 				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
 				method.invoke(main, factory, invalidArgs)
@@ -320,6 +323,7 @@ class ExampleLoadingTest {
 			val args = arrayOf("example") // Insufficient args will cause ContextCreationException
 
 			// Act & Assert
+			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/47
 			try {
 				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
 				method.invoke(main, factory, args)
@@ -339,6 +343,7 @@ class ExampleLoadingTest {
 			val mainClass = Main::class.java
 
 			// Act & Assert
+			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/48
 			try {
 				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
 				throw AssertionError("Should have thrown NoSuchMethodException")

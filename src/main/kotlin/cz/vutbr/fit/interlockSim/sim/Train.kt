@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
@@ -87,7 +89,7 @@ class Train :
 
 		final override fun actions() {
 			var where: PathSeparator = timetable.getIn()
-			assert(where != null)
+			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
@@ -102,7 +104,9 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				assert(position.isActive && pv.isActive)
+				requireSimulation(position.isActive && pv.isActive) {
+					"Position and velocity integration must be active"
+				}
 				waitUntil {
 					// dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
 					position.state + dtMin >= nextLength
@@ -111,7 +115,7 @@ class Train :
 				position.state -= nextLength
 				totalLenghtOfPreviousBlocks += nextLength
 				where = next!!.getSecondEnd(where)
-				assert(where != null)
+				requireSimulationNotNull(where) { "PathSeparator from getSecondEnd() must not be null" }
 				current = next
 				onNext = false
 			}
@@ -173,8 +177,10 @@ class Train :
 			next: TrackSection?
 		) {
 			// isSeparatorInDirection accepts nullable Track parameters
-			assert(context.isSeparatorInDirection(separator as OrientedPathSeparator, next, current)) { semaphore }
-			assert(semaphore.getSignal() != null)
+			requireSimulation(context.isSeparatorInDirection(separator as OrientedPathSeparator, next, current)) {
+				"Separator must be in direction, semaphore: $semaphore"
+			}
+			requireSimulationNotNull(semaphore.getSignal()) { "Semaphore signal must not be null" }
 			logger.info {
 				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
 					"${if (semaphore.getName() != null) semaphore.getName() else semaphore.hashCode()}, " +
@@ -185,7 +191,7 @@ class Train :
 			// EXTENSION stanice
 
 			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
-				assert(getVelocity() >= 0)
+				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
 				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 				fireStop()
 				context.report(semaphore.getSignal().toString(), this@Train, ReportType.TRAIN_EVENTS)
@@ -247,7 +253,7 @@ class Train :
 			}
 
 		private fun fireStop() {
-			assert(getVelocity() >= 0)
+			requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when stopping" }
 			front.stop()
 			tail.stop()
 			this@Train.stop()
@@ -271,9 +277,9 @@ class Train :
 			semaphore: RailSemaphore,
 			path: Path?
 		) {
-			assert(path != null)
+			requireSimulationNotNull(path) { "Path must not be null in accelerate method" }
 			val thisSignal: Signal = semaphore.getSignal()
-			assert(thisSignal.isAllowing()) { thisSignal }
+			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			val nextSemaphore: RailSemaphore = path!!.getLastPathSemaphore()
 			val nextSignal: Signal = nextSemaphore.getSignal()
@@ -313,7 +319,7 @@ class Train :
 				val semaphore: RailSemaphore = where
 				semaphoreAction(semaphore, semaphore, current, next)
 			} else if (where == timetable.getIn() && next != null) {
-				assert(getAcceleration() != null)
+				requireSimulationNotNull(getAcceleration()) { "Acceleration must not be null at timetable entry" }
 				semaphoreAction((where as InOut).getInSemaphore(), where, current, next)
 			} else {
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -321,7 +327,9 @@ class Train :
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				pathToSemaphore?.removeFirst()
 			}
-			assert(pathToSemaphore?.getFirst() == where) { pathToSemaphore ?: "null" }
+			requireSimulation(pathToSemaphore?.getFirst() == where) {
+				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
+			}
 			if (next != null) next.enter(this@Train)
 		}
 	}
@@ -358,7 +366,7 @@ class Train :
 			Math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
 
 		override fun report(reportObj: StringBuilder): StringBuilder {
-			assert(reportObj != null)
+			requireSimulationNotNull(reportObj) { "Report object must not be null" }
 			reportObj.append(front.getTotalDistance()).append(' ').append(tail.getTotalDistance())
 			return reportObj.append(' ').append(getLength())
 		}
@@ -409,7 +417,7 @@ class Train :
 		}
 
 		override fun iteration() {
-			assert(currentCondition != null)
+			requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
 			accelerate = true
 			logger.trace {
 				"Train $number motor iteration: target speed $targetSpeed, " +
@@ -433,7 +441,7 @@ class Train :
 			speed: Double,
 			test: AccelerationStopTest
 		) {
-			assert(speed >= 0)
+			requireSimulation(speed >= 0) { "Speed must be non-negative: $speed" }
 			targetSpeed = speed
 			currentCondition = AccelerationStopCondition(test)
 			cancelAccelerating()
@@ -469,7 +477,7 @@ class Train :
 			}
 			context.report("in on warning $normalSpeed", this@Train, ReportType._DEBUG)
 
-			assert(getVelocity() >= 0)
+			requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative in onWarning" }
 			privateAccelerateTo(normalSpeed, AccelerationStopTest.TO_HALF_SPEED)
 		}
 
@@ -526,20 +534,15 @@ class Train :
 	 * @param timetable
 	 */
 	constructor(context: SimulationContext?, timetable: Timetable?) {
-		if (context == null) {
-			throw NullPointerException("context must not be null")
-		}
-		if (timetable == null) {
-			throw NullPointerException("timetable must not be null")
-		}
-		this.context = context
-		this.timetable = timetable
-		this.length = timetable.getLength()
+		this.context = requireSimulationNotNull(context) { "context must not be null" }
+		val validatedTimetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
+		this.timetable = validatedTimetable
+		this.length = validatedTimetable.getLength()
 		number = ++count
 		trainPrefix = "Train #$number"
-		logger.debug {
-			"Train $number created: from ${timetable.getIn().getName()} to ${timetable.getOut().getName()}, length $length"
-		}
+		val inName = validatedTimetable.getIn().getName()
+		val outName = validatedTimetable.getOut().getName()
+		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
 	override fun distanceToSemaphore(): Double =

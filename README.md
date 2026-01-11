@@ -74,7 +74,7 @@ docker compose build
 docker compose up app
 
 # Run simulation example
-docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 
 # Build thesis PDF
 docker compose up text
@@ -146,7 +146,7 @@ Open the track editor to design railway layouts:
 
 Or manually (after building):
 ```bash
-java -ea -jar build/libs/interlockSim.jar edit [xmlFile]
+java -jar build/libs/interlockSim.jar edit [xmlFile]
 ```
 
 ![InterlockSim Editor](text/img/Screenshot%20at%202026-01-03%2009-09-58.png)
@@ -158,7 +158,7 @@ java -ea -jar build/libs/interlockSim.jar edit [xmlFile]
 Run a simulation from an XML configuration file:
 
 ```bash
-java -ea -jar build/libs/interlockSim.jar sim [xmlFile]
+java -jar build/libs/interlockSim.jar sim [xmlFile]
 ```
 
 ### 3. Built-in Examples
@@ -167,23 +167,23 @@ Run pre-configured simulation scenarios:
 
 ```bash
 # List all available examples
-java -ea -jar build/libs/interlockSim.jar example
+java -jar build/libs/interlockSim.jar example
 
 # Run shunting loop example for 300 time units
-java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar build/libs/interlockSim.jar example shuntingLoop 300
 ```
 
 **Quick example:**
 ```bash
 # Build and run shunting yard simulation (5 minutes model time)
 ./gradlew clean build
-java -ea -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar build/libs/interlockSim.jar example shuntingLoop 300
 ```
 
 ### Command-Line Synopsis
 
 ```
-java -ea -jar build/libs/interlockSim.jar (sim|edit|example) [arguments]
+java -jar build/libs/interlockSim.jar (sim|edit|example) [arguments]
 ```
 
 **Modes:**
@@ -191,7 +191,7 @@ java -ea -jar build/libs/interlockSim.jar (sim|edit|example) [arguments]
 - `edit [file.xml]` - Open editor (optionally load file)
 - `example [name] [endTime]` - Run built-in example
 
-**Note:** Always use `-ea` to enable assertions. For memory-constrained environments, add `-Xmx300`.
+**Note:** For memory-constrained environments, add `-Xmx300`.
 
 ---
 
@@ -301,12 +301,12 @@ xhost -local:docker
 
 **Run simulation example:**
 ```bash
-docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 ```
 
 **Run simulation with custom XML:**
 ```bash
-docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -ea -jar interlockSim.jar sim myfile.xml
+docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 ```
 
 **Build thesis PDF:**
@@ -387,13 +387,13 @@ Edit `src/main/resources/logback.xml`:
 **Method 2: System property (runtime override)**
 
 ```bash
-java -Dlogback.level=DEBUG -ea -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
 ```
 
 **Method 3: Environment variable (Docker)**
 
 ```bash
-docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -ea -jar interlockSim.jar example shuntingLoop 60
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar example shuntingLoop 60
 ```
 
 ### Pre-configured Loggers

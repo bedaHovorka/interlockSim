@@ -16,6 +16,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.startsWith
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
@@ -168,7 +171,9 @@ class SimulationExceptionTest {
 			val result = exception.toString()
 
 			// Assert
-			assertThat(result).startsWith("SimulationException:")
+			assertThat(result).startsWith("SimulationException[FATAL]:")
+			assertThat(result).contains(testMessage)
+			assertThat(result).contains("at time")
 		}
 
 		@Test
@@ -708,8 +713,8 @@ class SimulationExceptionTest {
 			val trackException: SimulationException = TrackOperationException(mockTrack)
 
 			// Act & Assert
-			assertThat(simException.javaClass.simpleName).isEqualTo("SimulationException")
-			assertThat(trackException.javaClass.simpleName).isEqualTo("TrackOperationException")
+			assertThat(simException::class.java.simpleName).isEqualTo("SimulationException")
+			assertThat(trackException::class.java.simpleName).isEqualTo("TrackOperationException")
 		}
 	}
 }

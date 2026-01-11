@@ -119,11 +119,6 @@ application {
     mainClass.set("cz.vutbr.fit.interlockSim.Main")
 }
 
-// Enable assertions for all run tasks (including default 'run' task)
-tasks.withType<JavaExec> {
-    jvmArgs("-ea")
-}
-
 // Configure compilation tasks
 tasks.compileJava {
     // CRITICAL: Use ISO-8859-1 encoding (legacy requirement from Ant build)
@@ -180,8 +175,6 @@ tasks.test {
         excludeTags("integration-test")
     }
 
-    // Enable assertions (matching Ant's -ea flag)
-    jvmArgs("-ea")
 
     // PARALLEL EXECUTION ENABLED (per user preference)
     // Tests run concurrently for faster execution (~30-60 sec vs 1-2 min sequential)
@@ -235,8 +228,6 @@ val integrationTest by tasks.registering(Test::class) {
         includeTags("integration-test")
     }
 
-    // Enable assertions
-    jvmArgs("-ea")
 
     // Integration tests may be slower, use serial execution by default
     maxParallelForks = 1
@@ -417,8 +408,6 @@ val runSim by tasks.registering(JavaExec::class) {
     mainClass.set(application.mainClass.get())
     args = listOf("example", "shuntingLoop", "60")
 
-    // Enable assertions (matching Ant)
-    jvmArgs("-ea")
 }
 
 /**
@@ -434,8 +423,6 @@ val runEditor by tasks.registering(JavaExec::class) {
     mainClass.set(application.mainClass.get())
     args = listOf("edit")
 
-    // Enable assertions
-    jvmArgs("-ea")
 }
 
 /**
@@ -455,7 +442,6 @@ val runExample by tasks.registering(JavaExec::class) {
     val endTime = project.findProperty("endTime") as String? ?: "60"
 
     args = listOf("example", exampleName, endTime)
-    jvmArgs("-ea")
 }
 
 /**
@@ -470,8 +456,6 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
 
-    // Enable assertions
-    jvmArgs("-ea")
 
     // Validate and set XML file path at execution time (not configuration time)
     doFirst {

@@ -9,7 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
@@ -177,7 +179,7 @@ class RailSwitch : NodeCell {
 					"(safety SI-5: switch cannot toggle during train movement)"
 			)
 		}
-		assert(conf != null)
+		requireSimulationNotNull(conf) { "Switch configuration must not be null" }
 		val oldConf = conf
 		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
 		logger.info {
@@ -197,7 +199,7 @@ class RailSwitch : NodeCell {
 
 	override fun allowedSpeed(): Double {
 		val double1 = speeds.get(getConf())
-		assert(double1 != null) { speeds }
+		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=$speeds" }
 		return double1!!.toDouble()
 	}
 
@@ -366,7 +368,7 @@ class RailSwitch : NodeCell {
 						val merging = st.segments[if (t.getMergingPosition()) 0 else 1] // je v proti-directionu
 						val mainDir = Cell.Segment.anti(merging)
 						val set = branches.get(t, st)
-						assert(set!!.size == 1) { set }
+						requireSimulation(set!!.size == 1) { "Branch set must have exactly 1 element: $set" }
 						val branch = set.iterator().next()
 						confs.put(merging, branch, Conf.BRANCH)
 						confs.put(merging, mainDir, Conf.MAIN)

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells // jinde?
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import java.util.Set
 
@@ -21,7 +22,7 @@ class TrackBlockPart(
 	private val segments: Array<Cell.Segment>
 ) : AbstractCell() {
 	init {
-		assert(segments.isNotEmpty())
+		requireValidArgument(segments.isNotEmpty()) { "Segments array must not be empty" }
 	}
 
 	/**

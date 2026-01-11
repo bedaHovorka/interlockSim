@@ -17,7 +17,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.sim.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
@@ -449,6 +449,8 @@ class RaceConditionTest {
 							successCount.incrementAndGet()
 						} catch (e: AssertionError) {
 							// Expected - only one should succeed in entering
+						} catch (e: cz.vutbr.fit.interlockSim.exceptions.SimulationException) {
+							// Expected - collision detection throws SimulationException
 						} catch (e: Exception) {
 							exceptions.add(e)
 						} finally {

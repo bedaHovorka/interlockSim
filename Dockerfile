@@ -107,5 +107,5 @@ RUN cp /app/interlockSim.jar /artifacts/
 ENV DISPLAY=:0
 
 # Default command: run editor GUI
-# Users can override with: docker compose run app java -ea -jar interlockSim.jar sim file.xml
+# Users can override with: docker compose run app java -jar interlockSim.jar sim file.xml
 CMD ["java", "-ea", "-jar", "interlockSim.jar", "edit"]
