@@ -29,7 +29,7 @@ class MyResourceBoundle private constructor() : ListResourceBundle() {
 	}
 
 	override fun getContents(): Array<Array<Any>>? {
-		// TODO Auto-generated method stub
+		// Returns null as resources are loaded via getFile() and getSchema() methods instead
 		return null
 	}
 

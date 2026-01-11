@@ -59,7 +59,7 @@ import javax.xml.validation.Validator
 class XMLContextFactory :
 	EditingContextFactory,
 	SimulationContextFactory {
-	// EXTENSION co kdyz je delka koleje mezi InOuty mensi nez delka vlaku
+	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
 	private inner class XMLContext(
 		cols: Int,
@@ -329,7 +329,7 @@ class XMLContextFactory :
 		context: Context,
 		stream: OutputStream
 	): Boolean {
-		// TODO Auto-generated method stub
+		// TODO: Implement XML serialization - see issue #61 (relates to Goal 5)
 		return false
 	}
 

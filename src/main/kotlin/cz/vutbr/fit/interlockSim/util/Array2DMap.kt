@@ -23,7 +23,7 @@ import java.util.TreeSet
  * @param <V> type of values
  *
  */
-class Array2DMap<V> : AbstractMap<Point, V>() /* EXTENSION implements NavigableMap<Point, V> */ {
+class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap<Point, V> - see issue #57 */ {
 	private inner class Entry(
 		override val key: Point
 	) : MutableMap.MutableEntry<Point, V> {
@@ -194,7 +194,7 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* EXTENSION implements NavigableM
 	fun getRow(y: Int): List<V> {
 		val list = array.get(y)
 
-		// EXTENSION zatim unmodifieable
+		// TODO: Make modifiable EntrySet - see issue #58
 		@Suppress("UNCHECKED_CAST")
 		val result: java.util.List<V> =
 			if (list == null) {

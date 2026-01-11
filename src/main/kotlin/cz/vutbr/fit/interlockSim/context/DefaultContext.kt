@@ -788,7 +788,7 @@ abstract class DefaultContext :
 			worker.terminate()
 		}
 		mainProcess?.terminate()
-		System.exit(1) // EXTENSION pryc
+		System.exit(1) // TODO: Remove System.exit - see GitHub issue #56
 	}
 
 	/**

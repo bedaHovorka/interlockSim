@@ -41,7 +41,9 @@ class InOutWorker(
 	private val pathFree: Condition =
 		object : Condition {
 			override fun test(): Boolean {
-				// EXTENSION az bude Interlocking: co kdyz cesta vubec neexistuje
+				// GOAL 2 & GOAL 4: Path finding and interlocking validation
+				// When automatic pathfinding is implemented (Goal 2), handle case where no valid path exists
+				// Related to interlocking validation (Goal 4) - see LONG_TERM_GOALS.md
 				// Local variable for smart cast since next is mutable property
 				val nextLocal = next
 				path = if (nextLocal != null) context.pathToNextSemaphore(inOut, nextLocal) else null

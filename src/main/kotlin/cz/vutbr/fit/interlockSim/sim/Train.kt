@@ -73,9 +73,10 @@ class Train :
 			}
 		}.setFrequency(1.0)
 
-	// EXTENSION musi bud aspon umet prohodit zacatek a konec
-	// nebo je udalosti oba dva zrusit a dalsi udalosti obnovit, s tim ze vlak stoji na miste
-	// tj. "odpojeni" a "pripojeni" lokomotivy
+	// GitHub #62: Support bidirectional train operation (reverse direction)
+	// Allow train engineer to move to opposite end and drive in reverse direction.
+	// This is a simulation simplification of locomotive coupling/uncoupling operations.
+	// Implementation: Either swap start/end positions OR cancel/restore events with train stationary.
 
 	private abstract inner class Site : Process() { // lepsi nazev?
 		private val position: Variable = Variable(0.0)
@@ -188,7 +189,7 @@ class Train :
 			}
 			val path: Path? = context.pathToNextSemaphore(separator, next!!)
 
-			// EXTENSION stanice
+			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
 			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }

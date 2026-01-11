@@ -159,7 +159,7 @@ class HashMapGraph<N, E, X> :
 	 */
 	override fun nodeSet(): Set<N> {
 		if (nodeCollection == null) nodeCollection = NodeCollection()
-		// EXTENSION pohled ne copii
+		// TODO: Return unmodifiable view instead of copy - see issue #59
 		val set = HashSet<N>(nodeCollection)
 		// for (Doubleton<N> c: map.keySet()) {
 		// 	set.addAll(c);
