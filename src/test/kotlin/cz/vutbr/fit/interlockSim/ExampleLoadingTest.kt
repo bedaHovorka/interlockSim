@@ -9,12 +9,17 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.cause
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -201,13 +206,11 @@ class ExampleLoadingTest {
 			val unknownExampleName = "nonExistentExample"
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/44
-			try {
+			assertFailure {
 				mainClass.getMethod(unknownExampleName, SimulationContextFactory::class.java, Array<String>::class.java)
-				throw AssertionError("Should have thrown NoSuchMethodException for unknown example")
-			} catch (e: NoSuchMethodException) {
-				assertThat(e.message).isNotNull()
-			}
+			}.isInstanceOf<NoSuchMethodException>()
+				.message()
+				.isNotNull()
 		}
 
 		/**
@@ -240,16 +243,13 @@ class ExampleLoadingTest {
 			val insufficientArgs = arrayOf("example") // Missing end time
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/45
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, insufficientArgs)
-				throw AssertionError("Should have thrown ContextCreationException for missing end time")
-			} catch (e: InvocationTargetException) {
-				val cause = e.cause
-				assertThat(cause).isNotNull()
-				assertThat(cause is ContextCreationException).isTrue()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
+				.isInstanceOf<ContextCreationException>()
 		}
 
 		/**
@@ -265,16 +265,13 @@ class ExampleLoadingTest {
 			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/46
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, invalidArgs)
-				throw AssertionError("Should have thrown NumberFormatException for non-numeric end time")
-			} catch (e: InvocationTargetException) {
-				val cause = e.cause
-				assertThat(cause).isNotNull()
-				assertThat(cause is NumberFormatException).isTrue()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
+				.isInstanceOf<NumberFormatException>()
 		}
 
 		/**
@@ -323,14 +320,12 @@ class ExampleLoadingTest {
 			val args = arrayOf("example") // Insufficient args will cause ContextCreationException
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/47
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, args)
-				throw AssertionError("Should have thrown InvocationTargetException")
-			} catch (e: InvocationTargetException) {
-				assertThat(e.cause).isNotNull()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
 		}
 
 		/**
@@ -343,14 +338,11 @@ class ExampleLoadingTest {
 			val mainClass = Main::class.java
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/48
-			try {
+			assertFailure {
 				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
-				throw AssertionError("Should have thrown NoSuchMethodException")
-			} catch (e: NoSuchMethodException) {
-				assertThat(e.message).isNotNull()
-				assertThat((e.message ?: "").contains("invalidExample")).isTrue()
-			}
+			}.isInstanceOf<NoSuchMethodException>()
+				.transform { it.message ?: "" }
+				.contains("invalidExample")
 		}
 
 		/**
