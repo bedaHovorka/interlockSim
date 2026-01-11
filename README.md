@@ -528,5 +528,3 @@ This repository includes:
 **Year:** 2006/2007
 
 For development guidance, see `CLAUDE.md`.
-
-# Test change
