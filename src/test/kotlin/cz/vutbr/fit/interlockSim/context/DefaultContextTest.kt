@@ -458,4 +458,196 @@ class DefaultContextTest {
 			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(InOut::class)
 		}
 	}
+
+	@Nested
+	@DisplayName("Grid Consistency - Issue #38")
+	class GridConsistencyTests {
+		private lateinit var context: DefaultContext
+
+		@BeforeEach
+		fun setUp() {
+			context = XMLContextFactory.getInstance().createEmptyContext()
+		}
+
+		@Test
+		@DisplayName("joinCells maintains reverse table consistency")
+		fun joinCells_maintainsReverseTableConsistency() {
+			// Arrange - create two nodes far apart that require intermediate cells
+			val inA = InOut("A", false, SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, SpatialType.HORIZONTAL)
+			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
+			val pointA = Point(1, 1)
+			val pointB = Point(10, 10)
+			
+			context.putCell(pointA, inA)
+			context.putCell(pointB, inB)
+
+			// Act - join cells (creates intermediate TrackBlockPart cells)
+			context.joinCells(pointA, pointB, trackBlock)
+
+			// Assert - all intermediate points should pass containsKey check without assertion error
+			// This is the scenario described in issue #38
+			assertThatCode {
+				for (x in 0 until context.getRailWayNetGrid().getCols()) {
+					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+						val point = Point(x, y)
+						context.getRailWayNetGrid().containsKey(point)
+					}
+				}
+			}.doesNotThrowAnyException()
+		}
+
+		@Test
+		@DisplayName("removeLine after joinCells maintains reverse table consistency")
+		fun removeLine_afterJoinCells_maintainsReverseTableConsistency() {
+			// Arrange - create joined cells
+			val inA = InOut("A", false, SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, SpatialType.HORIZONTAL)
+			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
+			val pointA = Point(1, 1)
+			val pointB = Point(10, 10)
+			
+			context.putCell(pointA, inA)
+			context.putCell(pointB, inB)
+			
+			// Capture intermediate cells before removal
+			val cellsBeforeRemoval = mutableListOf<Point>()
+			for (x in 0 until context.getRailWayNetGrid().getCols()) {
+				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+					val point = Point(x, y)
+					if (context.getRailWayNetGrid().getCellAt(x, y) != null) {
+						cellsBeforeRemoval.add(point)
+					}
+				}
+			}
+			
+			context.joinCells(pointA, pointB, trackBlock)
+
+			// Act - remove the track line (should clean up intermediate cells)
+			context.removeLine(trackBlock)
+
+			// Assert - intermediate cells should be removed (only original nodes remain)
+			for (x in 0 until context.getRailWayNetGrid().getCols()) {
+				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+					val point = Point(x, y)
+					val cell = context.getRailWayNetGrid().getCellAt(x, y)
+					if (point != pointA && point != pointB) {
+						// Intermediate cells should be removed
+						if (!cellsBeforeRemoval.contains(point)) {
+							assertThat(cell).withMessage("Intermediate cell at ($x,$y) should be removed").isNull()
+						}
+					}
+				}
+			}
+			
+			// Assert - all points should pass containsKey check without assertion error
+			assertThatCode {
+				for (x in 0 until context.getRailWayNetGrid().getCols()) {
+					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+						val point = Point(x, y)
+						context.getRailWayNetGrid().containsKey(point)
+					}
+				}
+			}.doesNotThrowAnyException()
+		}
+
+		@Test
+		@DisplayName("removeCell on node with tracks maintains reverse table consistency")
+		fun removeCell_nodeWithTracks_maintainsReverseTableConsistency() {
+			// Arrange - create connected nodes
+			val inA = InOut("A", false, SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, SpatialType.HORIZONTAL)
+			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
+			val pointA = Point(1, 1)
+			val pointB = Point(10, 10)
+			
+			context.putCell(pointA, inA)
+			context.putCell(pointB, inB)
+			context.joinCells(pointA, pointB, trackBlock)
+
+			// Act - remove one of the nodes (should cascade remove track and intermediate cells)
+			context.removeCell(pointA)
+
+			// Assert - removed node should not be present
+			assertThat(context.getRailWayNetGrid().getCellAt(pointA.x, pointA.y))
+				.withMessage("Removed node at pointA should be null")
+				.isNull()
+			assertThat(context.getRailWayNetGrid().getLocation(inA))
+				.withMessage("Removed node inA should not be in reverse table")
+				.isNull()
+			
+			// Assert - all points should pass containsKey check without assertion error
+			assertThatCode {
+				for (x in 0 until context.getRailWayNetGrid().getCols()) {
+					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+						val point = Point(x, y)
+						context.getRailWayNetGrid().containsKey(point)
+					}
+				}
+			}.doesNotThrowAnyException()
+		}
+
+		@Test
+		@DisplayName("multiple joinCells and removals maintain consistency")
+		fun multipleJoinsAndRemovals_maintainConsistency() {
+			// Arrange - create a small network
+			val inA = InOut("A", false, SpatialType.HORIZONTAL)
+			val rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
+			val inB = InOut("B", true, SpatialType.HORIZONTAL)
+			val track1 = SimpleTrackBlock(inA, rs1, 500.0, 80.0)
+			val track2 = SimpleTrackBlock(rs1, inB, 500.0, 80.0)
+			
+			val pointA = Point(1, 1)
+			val pointS = Point(5, 5)
+			val pointB = Point(10, 10)
+			
+			context.putCell(pointA, inA)
+			context.putCell(pointS, rs1)
+			context.putCell(pointB, inB)
+
+			// Act - join, remove, join again
+			context.joinCells(pointA, pointS, track1)
+			context.joinCells(pointS, pointB, track2)
+			context.removeLine(track1)
+			context.removeLine(track2)
+
+			// Assert - only the original nodes should remain
+			assertThat(context.getRailWayNetGrid().getCellAt(pointA.x, pointA.y))
+				.withMessage("Node inA should still be present")
+				.isSameInstanceAs(inA)
+			assertThat(context.getRailWayNetGrid().getCellAt(pointS.x, pointS.y))
+				.withMessage("Node rs1 should still be present")
+				.isSameInstanceAs(rs1)
+			assertThat(context.getRailWayNetGrid().getCellAt(pointB.x, pointB.y))
+				.withMessage("Node inB should still be present")
+				.isSameInstanceAs(inB)
+			
+			// Verify intermediate cells between nodes are removed
+			var intermediateCount = 0
+			for (x in 0 until context.getRailWayNetGrid().getCols()) {
+				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+					val point = Point(x, y)
+					if (point != pointA && point != pointS && point != pointB) {
+						val cell = context.getRailWayNetGrid().getCellAt(x, y)
+						if (cell != null) {
+							intermediateCount++
+						}
+					}
+				}
+			}
+			assertThat(intermediateCount)
+				.withMessage("Intermediate cells should be removed after removeLine")
+				.isEqualTo(0)
+			
+			// Assert - grid should be consistent after all operations
+			assertThatCode {
+				for (x in 0 until context.getRailWayNetGrid().getCols()) {
+					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+						val point = Point(x, y)
+						context.getRailWayNetGrid().containsKey(point)
+					}
+				}
+			}.doesNotThrowAnyException()
+		}
+	}
 }

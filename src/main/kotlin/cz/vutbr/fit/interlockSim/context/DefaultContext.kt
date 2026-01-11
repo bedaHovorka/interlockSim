@@ -301,10 +301,11 @@ abstract class DefaultContext :
 			}
 
 		if (builtPath != null && builtPath.isNotEmpty()) {
-			val mapToAdd = builtPath as Map<Point, TrackBlockPart>
+			@Suppress("UNCHECKED_CAST")
+			val mapToAdd = builtPath as java.util.Map<Point, TrackBlockPart>
 			getGrid().putMap(mapToAdd)
 			@Suppress("UNCHECKED_CAST")
-			val mapKeys: Set<Point> = (mapToAdd as java.util.Map<Point, TrackBlockPart>).keySet() as Set<Point>
+			val mapKeys: Set<Point> = mapToAdd.keySet() as Set<Point>
 			linesKeys[trackBlock] = mapKeys
 			assert(!extendedUnorientedGraph.contains(key1, key2))
 			extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)

@@ -48,11 +48,46 @@ class DefaultRailWayNetGrid(
 
 			override fun remove() {
 				if (delegate is MutableIterator<*>) {
+					// Save the cell BEFORE removing from cells map
+					// (Entry.getValue() will fail after removal since it looks up the key)
+					val cell = next?.value
+					// Remove from cells map via delegate
 					(delegate as MutableIterator<Entry<Point, Cell>>).remove()
+					// Also remove from reverse table to maintain invariant
+					if (cell != null) {
+						getReverseTable().remove(cell)
+					}
 				} else {
 					throw UnsupportedOperationException("remove")
 				}
 			}
+		}
+
+		override fun removeAll(elements: Collection<Point>): Boolean {
+			// Collect cells to remove before modifying the map
+			// to avoid ConcurrentModificationException
+			val cellsToRemove = mutableListOf<Cell>()
+			val pointsToRemove = mutableSetOf<Point>()
+
+			for (point in elements) {
+				val cell = getCells()[point]
+				if (cell != null) {
+					cellsToRemove.add(cell)
+					pointsToRemove.add(point)
+				}
+			}
+
+			// Remove all points from cells map
+			for (point in pointsToRemove) {
+				getCells().remove(point)
+			}
+
+			// Remove all cells from reverse table
+			for (cell in cellsToRemove) {
+				getReverseTable().remove(cell)
+			}
+
+			return pointsToRemove.isNotEmpty()
 		}
 
 		override val size: Int
@@ -81,10 +116,8 @@ class DefaultRailWayNetGrid(
 	 * @param map of point to trackblock part
 	 */
 	@Synchronized
-	fun putMap(map: Map<Point, TrackBlockPart>) {
-		@Suppress("UNCHECKED_CAST")
-		val javaMap = map as java.util.Map<Point, TrackBlockPart>
-		val iter = javaMap.entrySet().iterator()
+	fun putMap(map: java.util.Map<Point, TrackBlockPart>) {
+		val iter = map.entrySet().iterator()
 		while (iter.hasNext()) {
 			val entry = iter.next()
 			put(entry.key, entry.value)
