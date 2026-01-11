@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import java.util.EnumSet
 import java.util.Set
@@ -28,7 +29,7 @@ abstract class OrientedNodeCell protected constructor(
 
 	override fun direction(): Cell.Segment {
 		val st = getSpatialType()
-		assert(st != null) { this }
+		requireSimulationNotNull(st) { "Spatial type must not be null for: $this" }
 		return st.segments[if (getOrientation()) 1 else 0]
 	}
 }

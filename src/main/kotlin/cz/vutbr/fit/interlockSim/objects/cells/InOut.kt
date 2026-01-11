@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.sim.PathSeparatorChangeException
@@ -31,7 +32,9 @@ class InOut(
 	init {
 		this.name = name
 		this.inSemaphore = RailSemaphore(!orientation, spatialType)
-		assert(inSemaphore.direction() == Cell.Segment.anti(direction()))
+		requireSimulation(inSemaphore.direction() == Cell.Segment.anti(direction())) {
+			"In semaphore direction must be anti-parallel to InOut direction"
+		}
 		this.outSemaphore = RailSemaphore.getConstantInstance(orientation, spatialType, Signal.FREE)
 		setName(name)
 	}
@@ -40,7 +43,7 @@ class InOut(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		if (from == null) return direction()
-		assert(from === direction()) { "$from ${direction()}" }
+		requireSimulation(from === direction()) { "Invalid segment: $from, expected: ${direction()}" }
 		return null
 	}
 
