@@ -323,14 +323,12 @@ class ExampleLoadingTest {
 			val args = arrayOf("example") // Insufficient args will cause ContextCreationException
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/47
-			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertFailure {
 				method.invoke(main, factory, args)
-				throw AssertionError("Should have thrown InvocationTargetException")
-			} catch (e: InvocationTargetException) {
-				assertThat(e.cause).isNotNull()
-			}
+			}.isInstanceOf<InvocationTargetException>()
+				.cause()
+				.isNotNull()
 		}
 
 		/**
