@@ -67,7 +67,7 @@ java {
 
 // Configure repositories
 repositories {
-    mavenLocal()      // For jDisco local development (highest priority)
+    mavenLocal() // For jDisco local development (highest priority)
 
     // GitHub Packages Maven Registry for jDisco (conditional - only when credentials available)
     // This prevents build failures when running outside CI environment
@@ -89,29 +89,29 @@ repositories {
         logger.warn("To install jDisco locally: cd ~/work/jdisco && mvn install")
     }
 
-    mavenCentral()    // For all other dependencies
+    mavenCentral() // For all other dependencies
 }
 
 // Dependencies (matching Ivy configuration exactly)
 dependencies {
     // Compile dependencies (from Ivy compile configuration)
-    implementation("dk.ruc.keld:jdisco:$jdiscoVersion")              // Discrete event simulation library
-    implementation("org.slf4j:slf4j-api:$slf4jVersion")               // Logging facade
-    implementation("ch.qos.logback:logback-classic:$logbackVersion")  // SLF4J implementation (includes logback-core)
+    implementation("dk.ruc.keld:jdisco:$jdiscoVersion") // Discrete event simulation library
+    implementation("org.slf4j:slf4j-api:$slf4jVersion") // Logging facade
+    implementation("ch.qos.logback:logback-classic:$logbackVersion") // SLF4J implementation (includes logback-core)
     implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion") // Kotlin logging library
 
     // Kotlin dependencies (for Phase 1 migration)
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")  // Kotlin standard library
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion") // Kotlin standard library
     implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion") // Kotlin reflection
 
     // Test dependencies (from Ivy test configuration)
-    testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")         // JUnit 5 API
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")         // JUnit 5 engine
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")     // JUnit platform launcher
-    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")      // JUnit platform console
-    testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion")                // AssertK for Kotlin tests
-    testImplementation("org.mockito:mockito-core:$mockitoVersion")                          // Mocking framework
-    testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion")                 // Mockito-JUnit integration
+    testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion") // JUnit 5 API
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion") // JUnit 5 engine
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion") // JUnit platform launcher
+    testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion") // JUnit platform console
+    testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion") // AssertK for Kotlin tests
+    testImplementation("org.mockito:mockito-core:$mockitoVersion") // Mocking framework
+    testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion") // Mockito-JUnit integration
 }
 
 // Configure application main class
@@ -200,15 +200,17 @@ tasks.test {
         showStandardStreams = false
 
         // Show test summary after execution
-        afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-            if (desc.parent == null) {
-                println("\nTest Results: ${result.resultType}")
-                println("  Tests run: ${result.testCount}")
-                println("  Passed: ${result.successfulTestCount}")
-                println("  Failed: ${result.failedTestCount}")
-                println("  Skipped: ${result.skippedTestCount}")
-            }
-        }))
+        afterSuite(
+            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                if (desc.parent == null) {
+                    println("\nTest Results: ${result.resultType}")
+                    println("  Tests run: ${result.testCount}")
+                    println("  Passed: ${result.successfulTestCount}")
+                    println("  Failed: ${result.failedTestCount}")
+                    println("  Skipped: ${result.skippedTestCount}")
+                }
+            }),
+        )
     }
 
     // Generate XML reports for CI/CD (matching Ant's test output)
@@ -250,15 +252,17 @@ val integrationTest by tasks.registering(Test::class) {
         showStackTraces = true
         showStandardStreams = false
 
-        afterSuite(KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-            if (desc.parent == null) {
-                println("\nIntegration Test Results: ${result.resultType}")
-                println("  Tests run: ${result.testCount}")
-                println("  Passed: ${result.successfulTestCount}")
-                println("  Failed: ${result.failedTestCount}")
-                println("  Skipped: ${result.skippedTestCount}")
-            }
-        }))
+        afterSuite(
+            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                if (desc.parent == null) {
+                    println("\nIntegration Test Results: ${result.resultType}")
+                    println("  Tests run: ${result.testCount}")
+                    println("  Passed: ${result.successfulTestCount}")
+                    println("  Failed: ${result.failedTestCount}")
+                    println("  Skipped: ${result.skippedTestCount}")
+                }
+            }),
+        )
     }
 
     // Generate separate reports for integration tests
@@ -272,7 +276,10 @@ val integrationTest by tasks.registering(Test::class) {
     ignoreFailures = false
 
     // Set different output directory to avoid conflicts with unit tests
-    testClassesDirs = sourceSets.test.get().output.classesDirs
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
 }
 
@@ -290,7 +297,7 @@ tasks.jar {
             "Implementation-Vendor" to "Brno University of Technology",
             "Built-By" to System.getProperty("user.name"),
             "Built-JDK" to System.getProperty("java.version"),
-            "Built-Gradle" to gradle.gradleVersion
+            "Built-Gradle" to gradle.gradleVersion,
         )
     }
 }
@@ -309,7 +316,7 @@ tasks.shadowJar {
             "Implementation-Vendor" to "Brno University of Technology",
             "Built-By" to System.getProperty("user.name"),
             "Built-JDK" to System.getProperty("java.version"),
-            "Built-Gradle" to gradle.gradleVersion
+            "Built-Gradle" to gradle.gradleVersion,
         )
     }
 
@@ -356,7 +363,7 @@ tasks.javadoc {
     // Configure options
     options {
         this as StandardJavadocDocletOptions
-        encoding = "UTF-8"  // Use UTF-8 for JavaDoc output
+        encoding = "UTF-8" // Use UTF-8 for JavaDoc output
         charSet = "UTF-8"
         docEncoding = "UTF-8"
         links("https://docs.oracle.com/en/java/javase/21/docs/api/")
@@ -383,7 +390,12 @@ val checkJdisco by tasks.registering {
     description = "Verify jDisco library is installed in Maven local repository"
 
     doLast {
-        val jdiscoJar = file("${System.getProperty("user.home")}/.m2/repository/dk/ruc/keld/jdisco/$jdiscoVersion/jdisco-$jdiscoVersion.jar")
+        val jdiscoJar =
+            file(
+                "${System.getProperty(
+                    "user.home",
+                )}/.m2/repository/dk/ruc/keld/jdisco/$jdiscoVersion/jdisco-$jdiscoVersion.jar",
+            )
 
         if (jdiscoJar.exists()) {
             println("✓ jDisco $jdiscoVersion found in mavenLocal cache: ${jdiscoJar.absolutePath}")
@@ -475,8 +487,9 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
 
     // Validate and set XML file path at execution time (not configuration time)
     doFirst {
-        val xmlFile = project.findProperty("xmlFile") as String?
-            ?: throw GradleException("Please specify XML file with -PxmlFile=path/to/file.xml")
+        val xmlFile =
+            project.findProperty("xmlFile") as String?
+                ?: throw GradleException("Please specify XML file with -PxmlFile=path/to/file.xml")
         args = listOf("sim", xmlFile)
     }
 }
@@ -511,7 +524,8 @@ tasks.register("printConfig") {
     description = "Print build configuration summary"
 
     doLast {
-        println("""
+        println(
+            """
             |
             |interlockSim Build Configuration
             |================================
@@ -549,7 +563,8 @@ tasks.register("printConfig") {
             |  ./gradlew javadoc         - Generate JavaDoc
             |  ./gradlew dependencies    - Show dependency tree
             |
-        """.trimMargin())
+            """.trimMargin(),
+        )
     }
 }
 
@@ -562,7 +577,7 @@ tasks.register("printConfig") {
  * Required for SonarQube code coverage reporting
  */
 jacoco {
-    toolVersion = "0.8.11"  // Latest stable version
+    toolVersion = "0.8.11" // Latest stable version
 }
 
 // Configure test task to generate JaCoCo coverage data
@@ -595,7 +610,7 @@ tasks.jacocoTestCoverageVerification {
         rule {
             // Rule for overall project coverage
             limit {
-                minimum = "0.00".toBigDecimal()  // Start with 0%, increase gradually
+                minimum = "0.00".toBigDecimal() // Start with 0%, increase gradually
             }
         }
 
@@ -666,7 +681,7 @@ sonar {
         // property("sonar.test.exclusions", "")
 
         // Quality gate configuration (fail build if quality gate fails)
-        property("sonar.qualitygate.wait", "false")  // Set to "true" to wait for quality gate result
+        property("sonar.qualitygate.wait", "false") // Set to "true" to wait for quality gate result
 
         // Optional: Links to project resources
         // property("sonar.links.homepage", "https://github.com/bedavs/interlockSim")
@@ -697,7 +712,8 @@ tasks.register("checkDeprecations") {
     dependsOn("clean", "compileJava", "compileTestJava")
 
     doLast {
-        println("""
+        println(
+            """
             |
             |Deprecation Analysis Complete
             |=============================
@@ -710,7 +726,8 @@ tasks.register("checkDeprecations") {
             |  cd ~/work/jdisco && mvn clean compile -Dmaven.compiler.showDeprecation=true 2>&1 | tee build/reports/deprecation-jdisco.txt
             |  See: https://github.com/bedavs/jDisco
             |
-        """.trimMargin())
+            """.trimMargin(),
+        )
     }
 }
 
@@ -732,7 +749,7 @@ tasks.register("checkDeprecations") {
  * - ./gradlew addKtlintCheckGitPreCommitHook - Add pre-commit hook
  */
 ktlint {
-    version.set("1.5.0")  // Latest stable version
+    version.set("1.5.0") // Latest stable version
 
     // Enable verbose output for better understanding of issues
     verbose.set(true)
@@ -787,16 +804,16 @@ detekt {
     buildUponDefaultConfig = true
 
     // Run detekt on all source sets
-    allRules = false  // Don't enable all rules (many are too strict for legacy code)
+    allRules = false // Don't enable all rules (many are too strict for legacy code)
 
     // Specify input directories
     source.setFrom(
         "src/main/kotlin",
-        "src/test/kotlin"
+        "src/test/kotlin",
     )
 
     // Ignore build directories
-    ignoreFailures = false  // Fail build on issues (can be set to true during migration)
+    ignoreFailures = false // Fail build on issues (can be set to true during migration)
 
     // Baseline file to ignore existing issues during gradual improvement
     baseline = file("$projectDir/detekt-baseline.xml")

@@ -32,9 +32,9 @@ import cz.vutbr.fit.interlockSim.sim.SimulationException
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.DiscoException
 import jDisco.Process
