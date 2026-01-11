@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.cause
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
@@ -342,14 +343,11 @@ class ExampleLoadingTest {
 			val mainClass = Main::class.java
 
 			// Act & Assert
-			// TODO: Replace try-catch with assertFailure - https://github.com/bedaHovorka/interlockSim/issues/48
-			try {
+			assertFailure {
 				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
-				throw AssertionError("Should have thrown NoSuchMethodException")
-			} catch (e: NoSuchMethodException) {
-				assertThat(e.message).isNotNull()
-				assertThat((e.message ?: "").contains("invalidExample")).isTrue()
-			}
+			}.isInstanceOf<NoSuchMethodException>()
+				.transform { it.message ?: "" }
+				.contains("invalidExample")
 		}
 
 		/**
