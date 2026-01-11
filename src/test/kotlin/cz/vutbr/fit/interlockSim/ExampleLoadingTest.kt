@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.cause
+import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
@@ -344,8 +345,7 @@ class ExampleLoadingTest {
 			assertFailure {
 				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
 			}.isInstanceOf<NoSuchMethodException>()
-				.message()
-				.isNotNull()
+				.transform { it.message ?: "" }
 				.contains("invalidExample")
 		}
 
