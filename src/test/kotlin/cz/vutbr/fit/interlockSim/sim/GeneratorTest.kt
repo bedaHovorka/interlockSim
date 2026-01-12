@@ -17,10 +17,17 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Unit tests for {@link Generator}.
@@ -58,18 +65,27 @@ import org.junit.jupiter.api.Test
  */
 
 @DisplayName("Generator Tests")
-class GeneratorTest {
+class GeneratorTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
+		startKoin {
+			modules(interlockSimModule)
+		}
 		// Create a context with at least 2 InOuts for Generator to use
 		val contextBuilder =
-			TestContextBuilder()
+			TestContextBuilder(factory)
 				.withInOut("IN1", 0, 0, isEntry = true)
 				.withInOut("OUT1", 1, 0, isEntry = false)
 		val delegateContext = contextBuilder.build()
 		mockContext = MockSimulationContext(delegateContext)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested

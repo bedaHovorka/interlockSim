@@ -19,10 +19,17 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import jDisco.Head
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Unit tests for path and semaphore coordination in InOutWorker.
@@ -40,7 +47,8 @@ import org.junit.jupiter.api.Test
  * Note: Full simulation execution tests (waitUntil, actual path reservation)
  * require jDisco framework and are beyond scope of unit testing.
  */
-class InOutWorkerPathHandlingTest {
+class InOutWorkerPathHandlingTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
 	private lateinit var entryInOut: InOut
 	private lateinit var worker: InOutWorker
@@ -48,7 +56,10 @@ class InOutWorkerPathHandlingTest {
 
 	@BeforeEach
 	fun setUp() {
-		context = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		context = MockSimulationContext(factory)
 		entryInOut = InOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()
@@ -57,6 +68,11 @@ class InOutWorkerPathHandlingTest {
 		assertThat(queue.empty())
 			.withMessage("Queue should be empty after worker construction")
 			.isTrue()
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested

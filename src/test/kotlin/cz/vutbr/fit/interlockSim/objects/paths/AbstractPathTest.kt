@@ -23,12 +23,20 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Comprehensive unit tests for AbstractPath class.
@@ -58,7 +66,8 @@ import org.junit.jupiter.api.Test
  * @since 2026-01 (Phase 3.1 test expansion)
  */
 @DisplayName("AbstractPath Tests")
-class AbstractPathTest {
+class AbstractPathTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 	private lateinit var end1: MockNodeCell
 	private lateinit var end2: MockNodeCell
@@ -66,10 +75,18 @@ class AbstractPathTest {
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
 		end1 = MockNodeCell("End1")
 		end2 = MockNodeCell("End2")
 		end3 = MockNodeCell("End3")
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	/**

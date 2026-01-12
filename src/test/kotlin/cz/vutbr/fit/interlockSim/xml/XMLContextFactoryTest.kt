@@ -28,7 +28,16 @@ import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
@@ -53,21 +62,29 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - empty-grid.xml - Empty railway network (no cells)
  * - invalid-*.xml - Various malformed/invalid XML files
  */
-class XMLContextFactoryTest {
-	private lateinit var factory: XMLContextFactory
+class XMLContextFactoryTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 
 	@BeforeEach
 	fun setUp() {
-		factory = XMLContextFactory.getInstance()
+		startKoin {
+			modules(interlockSimModule)
+		}
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested
 	@DisplayName("Factory instance and initialization")
 	inner class FactoryInstanceTests {
 		@Test
-		fun getInstance_always_returnsSameInstance() {
-			val instance1 = XMLContextFactory.getInstance()
-			val instance2 = XMLContextFactory.getInstance()
+		fun factoryInjection_always_returnsSameInstance() {
+			// Access factory multiple times through Koin injection
+			val instance1 = factory
+			val instance2 = factory
 
 			assertThat(instance1)
 				.isNotNull()

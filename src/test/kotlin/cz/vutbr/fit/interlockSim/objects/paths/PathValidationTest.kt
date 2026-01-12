@@ -24,10 +24,17 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Comprehensive tests for Path validation and edge case handling.
@@ -50,14 +57,23 @@ import org.junit.jupiter.api.Test
  * @since 2026-01 (Phase 6.2 - Exception Classes and Edge Cases)
  */
 @DisplayName("Path Validation Tests")
-class PathValidationTest {
+class PathValidationTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 	private lateinit var contextBuilder: TestContextBuilder
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
-		contextBuilder = TestContextBuilder()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
+		contextBuilder = TestContextBuilder(factory)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested
@@ -150,7 +166,7 @@ class PathValidationTest {
 		@Test
 		fun `invalid path throws TrackOperationException on setup`() {
 			// Arrange - create a context and path
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val path = ArrayPath(context)
 
 			// Act - attempt to set up path with no elements
@@ -211,7 +227,7 @@ class PathValidationTest {
 		@Test
 		fun `path exception includes context information`() {
 			// Arrange
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val path = ArrayPath(context)
 
 			// Act - create path
@@ -383,7 +399,7 @@ class PathValidationTest {
 		@Test
 		fun `path validates entry and exit points are connected`() {
 			// Arrange
-			val mockContext = MockSimulationContext()
+			val mockContext = MockSimulationContext(factory)
 
 			// Create InOut (entry/exit) points
 			val entryPoint = InOut("ENTRY", false, Cell.SpatialType.HORIZONTAL)

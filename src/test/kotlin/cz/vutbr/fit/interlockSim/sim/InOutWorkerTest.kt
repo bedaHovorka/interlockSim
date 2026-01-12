@@ -21,12 +21,14 @@ import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 import java.io.InputStream
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
@@ -43,14 +45,15 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * Full simulation execution tests (waitUntil, path reservation) require
  * jDisco framework and are beyond the scope of unit testing.
  */
-class InOutWorkerTest {
+class InOutWorkerTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	@Nested
 	@DisplayName("InOutWorker initialization")
-	class InitializationTests {
+	inner class InitializationTests {
 		@Test
 		fun constructor_validInOut_succeeds() {
 			// Create mock context with a single InOut
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -71,7 +74,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_nullInOut_throwsNullPointerException() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val nullInOut: InOut? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -82,7 +85,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_entryInOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val entryInOut = InOut("IN", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, entryInOut)
@@ -92,7 +95,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_exitInOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val exitInOut = InOut("OUT", true, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, exitInOut)
@@ -103,10 +106,10 @@ class InOutWorkerTest {
 
 	@Nested
 	@DisplayName("Queue management")
-	class QueueManagementTests {
+	inner class QueueManagementTests {
 		@Test
 		fun getQueqe_afterConstruction_returnsNonNullQueue() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -119,7 +122,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun getQueqe_afterConstruction_queueIsEmpty() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -132,7 +135,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun getQueqe_calledMultipleTimes_returnsSameInstance() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -147,10 +150,10 @@ class InOutWorkerTest {
 
 	@Nested
 	@DisplayName("Queue state tracking")
-	class QueueStateTests {
+	inner class QueueStateTests {
 		@Test
 		fun queueEmpty_afterConstruction_returnsTrue() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -163,7 +166,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun queueEmpty_afterConstruction_isConsistent() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -179,10 +182,10 @@ class InOutWorkerTest {
 
 	@Nested
 	@DisplayName("InOutWorker with different InOut configurations")
-	class InOutConfigurationTests {
+	inner class InOutConfigurationTests {
 		@Test
 		fun constructor_horizontalInOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val horizontalInOut = InOut("H", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, horizontalInOut)
@@ -192,7 +195,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_verticalInOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val verticalInOut = InOut("V", false, SpatialType.VERTICAL)
 
 			val worker = InOutWorker(context, verticalInOut)
@@ -202,7 +205,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_diagonal1InOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val diagonalInOut = InOut("D1", false, SpatialType.DIAGONAL1)
 
 			val worker = InOutWorker(context, diagonalInOut)
@@ -212,7 +215,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_diagonal2InOut_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val diagonalInOut = InOut("D2", false, SpatialType.DIAGONAL2)
 
 			val worker = InOutWorker(context, diagonalInOut)
@@ -222,7 +225,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_inOutWithLongName_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -232,7 +235,7 @@ class InOutWorkerTest {
 
 		@Test
 		fun constructor_inOutWithSingleCharName_succeeds() {
-			val context = MockSimulationContext()
+			val context = MockSimulationContext(factory)
 			val inOut = InOut("X", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -243,7 +246,7 @@ class InOutWorkerTest {
 
 	@Nested
 	@DisplayName("InOutWorker with realistic railway contexts")
-	class RealisticContextTests {
+	inner class RealisticContextTests {
 		@Test
 		fun constructor_linearTrackContext_succeeds() {
 			// Load linear track fixture
@@ -251,7 +254,7 @@ class InOutWorkerTest {
 				InOutWorkerTest::class.java.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml"
 				)!!
-			val context: DefaultContext = XMLContextFactory.getInstance().createContext(xml)
+			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Get InOut A from context
@@ -272,7 +275,7 @@ class InOutWorkerTest {
 				InOutWorkerTest::class.java.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml"
 				)!!
-			val context: DefaultContext = XMLContextFactory.getInstance().createContext(xml)
+			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Get InOut IN from context
@@ -292,7 +295,7 @@ class InOutWorkerTest {
 				InOutWorkerTest::class.java.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)!!
-			val context: DefaultContext = XMLContextFactory.getInstance().createContext(xml)
+			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Get InOut A from vyhybna.xml (at position 11, 8)
@@ -314,7 +317,7 @@ class InOutWorkerTest {
 				InOutWorkerTest::class.java.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)!!
-			val context: DefaultContext = XMLContextFactory.getInstance().createContext(xml)
+			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Get both InOuts from vyhybna.xml

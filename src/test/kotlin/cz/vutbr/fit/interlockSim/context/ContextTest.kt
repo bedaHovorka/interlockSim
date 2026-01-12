@@ -21,15 +21,22 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Context testing
  *
  */
-class ContextTest {
-	private val context: DefaultContext = XMLContextFactory.getInstance().createEmptyContext()
+class ContextTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
+	private val context: DefaultContext by lazy { factory.createEmptyContext() }
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
 	private val tl: SimpleTrackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -37,6 +44,9 @@ class ContextTest {
 
 	@BeforeEach
 	fun setUp() {
+		startKoin {
+			modules(interlockSimModule)
+		}
 		val pA = Point(1, 1)
 		val r1 = Point(4, 2)
 		val pB = Point(5, 5)
@@ -45,6 +55,11 @@ class ContextTest {
 		context.putCell(r1, rs1)
 		context.joinCells(r1, pB, tl)
 		context.joinCells(pA, r1, tl)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	/**

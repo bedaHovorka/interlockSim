@@ -19,7 +19,17 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.*
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.mockito.Mockito.*
 
 /**
@@ -44,16 +54,25 @@ import org.mockito.Mockito.*
  *
  * Coverage target: ~150 instructions
  */
-class TrainPathInteractionTest {
+class TrainPathInteractionTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 	private lateinit var mockInOut: InOut
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
 		mockInOut = mock(InOut::class.java)
 		`when`(mockInOut.getName()).thenReturn("ENTRY")
 		`when`(mockInOut.toString()).thenReturn("InOut:ENTRY")
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested

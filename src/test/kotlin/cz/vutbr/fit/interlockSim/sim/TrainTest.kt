@@ -18,7 +18,17 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.*
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.mockito.Mockito.*
 
 /**
@@ -38,12 +48,21 @@ import org.mockito.Mockito.*
  * - Complex movement and acceleration logic requires integration testing
  * - Semaphore interactions tested only at construction level
  */
-class TrainTest {
+class TrainTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested

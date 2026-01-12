@@ -17,6 +17,7 @@ import org.junit.jupiter.api.assertDoesNotThrow
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.java.KoinJavaComponent.get
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 
@@ -49,25 +50,22 @@ class KoinInitializationOrderTest {
 	}
 
 	/**
-	 * Verify that Main.getInstance() can be called before Koin is initialized
+	 * Verify that Main can only be accessed after Koin is initialized
 	 *
-	 * This test ensures that creating the Main singleton instance doesn't
-	 * trigger Koin injection. The lazy property should not access Koin
-	 * until it's actually used.
+	 * This test ensures that Main is properly managed by Koin DI container
+	 * and cannot be accessed before Koin initialization.
 	 */
 	@Test
-	fun `Main instance can be created before Koin initialization`() {
+	fun `Main instance requires Koin initialization`() {
 		// Ensure Koin is NOT initialized - expect IllegalStateException (Koin 3.5.6)
 		assertFailsWith<IllegalStateException> {
 			// This should fail if Koin is not initialized
 			org.koin.java.KoinJavaComponent.get(EditingContextFactory::class.java)
 		}
 
-		// Getting Main instance should not throw, even though Koin is not initialized
-		// This works because editingContextFactory is lazy
-		assertDoesNotThrow {
-			val mainInstance = Main.getInstance()
-			assertNotNull(mainInstance)
+		// Attempting to get Main should also fail since Koin is not initialized
+		assertFailsWith<IllegalStateException> {
+			get<Main>(Main::class.java)
 		}
 	}
 
@@ -87,12 +85,12 @@ class KoinInitializationOrderTest {
 		}
 
 		// Get Main instance
-		val mainInstance = Main.getInstance()
+		val mainInstance = get<Main>(Main::class.java)
 		assertNotNull(mainInstance)
 
 		// Access the context factory (which triggers lazy initialization)
 		assertDoesNotThrow {
-			val factory = mainInstance.getContextFactory()
+			val factory = mainInstance.contextFactory
 			assertNotNull(factory)
 		}
 	}
@@ -122,8 +120,8 @@ class KoinInitializationOrderTest {
 
 		// Step 3: Access a method that uses editingContextFactory
 		assertDoesNotThrow {
-			val mainInstance = Main.getInstance()
-			val factory = mainInstance.getContextFactory()
+			val mainInstance = get<Main>(Main::class.java)
+			val factory = mainInstance.contextFactory
 			assertNotNull(factory)
 		}
 	}

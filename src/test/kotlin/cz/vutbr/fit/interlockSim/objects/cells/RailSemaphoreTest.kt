@@ -16,10 +16,17 @@ import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.concurrent.atomic.AtomicInteger
@@ -40,17 +47,26 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Track association and direction control
  */
 @DisplayName("RailSemaphore")
-class RailSemaphoreTest {
+class RailSemaphoreTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var semaphore: RailSemaphore
 
 	@BeforeEach
 	fun setUp() {
+		startKoin {
+			modules(interlockSimModule)
+		}
 		// Create a basic horizontal semaphore with STOP aspect
 		semaphore =
 			RailSemaphore(
 				orientation = false,
 				spatialType = Cell.SpatialType.HORIZONTAL
 			)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested
@@ -132,7 +148,7 @@ class RailSemaphoreTest {
 				}
 
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("IN", 0, 0, true)
 					.withSemaphore(1, 0, false)
 					.withInOut("OUT", 2, 0, false)
@@ -184,7 +200,7 @@ class RailSemaphoreTest {
 		fun `semaphore associated with track`() {
 			// Arrange
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("IN", 0, 0, true)
 					.withSemaphore(1, 0, false)
 					.withInOut("OUT", 2, 0, false)
@@ -212,7 +228,7 @@ class RailSemaphoreTest {
 		fun `semaphore controls traffic in direction`() {
 			// Arrange
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("IN", 0, 0, true)
 					.withSemaphore(1, 0, false)
 					.withInOut("OUT", 2, 0, false)

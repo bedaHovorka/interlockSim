@@ -21,10 +21,16 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import java.io.File
 
 /**
@@ -48,7 +54,21 @@ import java.io.File
  * - ContextState: Tests that initialized contexts contain expected railway elements
  */
 @DisplayName("Context Initialization")
-class ContextInitializationTest {
+class ContextInitializationTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
+
+	@BeforeEach
+	fun setUp() {
+		startKoin {
+			modules(interlockSimModule)
+		}
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
+	}
+
 	@Nested
 	@DisplayName("Factory Selection")
 	inner class FactorySelectionTests {
@@ -61,8 +81,7 @@ class ContextInitializationTest {
 		@Test
 		@DisplayName("editing context created for edit mode")
 		fun editingFactory_createsEmptyContext() {
-			// Arrange
-			val factory = XMLContextFactory.getInstance()
+			// Arrange (factory injected via Koin)
 
 			// Act
 			val context = factory.createEmptyContext()
@@ -88,7 +107,7 @@ class ContextInitializationTest {
 		@DisplayName("empty editing context has valid empty grid")
 		fun editingContext_emptyGrid_isValid() {
 			// Arrange
-			val factory = XMLContextFactory.getInstance()
+			val factory = this@ContextInitializationTest.factory
 			val context = factory.createEmptyContext()
 
 			// Act
@@ -117,7 +136,7 @@ class ContextInitializationTest {
 		@DisplayName("simulation context created for sim mode from editing context")
 		fun simulationFactory_createsFromEditingContext() {
 			// Arrange
-			val factory = XMLContextFactory.getInstance()
+			val factory = this@ContextInitializationTest.factory
 			val editingContext = factory.createEmptyContext()
 
 			// Act
@@ -150,7 +169,7 @@ class ContextInitializationTest {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml")
 
 			// Act
-			val context = XMLContextFactory.getInstance().createContext(xmlFile)
+			val context = this@ContextInitializationTest.factory.createContext(xmlFile)
 
 			// Assert
 			assertThat(context)
@@ -174,7 +193,7 @@ class ContextInitializationTest {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
 
 			// Act
-			val context = XMLContextFactory.getInstance().createContext(xmlFile)
+			val context = this@ContextInitializationTest.factory.createContext(xmlFile)
 
 			// Assert
 			assertThat(context)
@@ -211,7 +230,7 @@ class ContextInitializationTest {
 
 			// Act & Assert
 			assertk.assertFailure {
-				XMLContextFactory.getInstance().createContext(xmlFile)
+				this@ContextInitializationTest.factory.createContext(xmlFile)
 			}.isInstanceOf(Exception::class)
 		}
 
@@ -229,7 +248,7 @@ class ContextInitializationTest {
 
 			// Act & Assert
 			assertk.assertFailure {
-				XMLContextFactory.getInstance().createContext(xmlFile)
+				this@ContextInitializationTest.factory.createContext(xmlFile)
 			}.isInstanceOf(Exception::class)
 		}
 	}
@@ -243,7 +262,7 @@ class ContextInitializationTest {
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			linearTrackContext = XMLContextFactory.getInstance().createContext(xmlFile)
+			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile)
 		}
 
 		/**
@@ -403,8 +422,8 @@ class ContextInitializationTest {
 		@DisplayName("XMLContextFactory uses singleton pattern")
 		fun xmlContextFactory_isSingleton() {
 			// Arrange & Act
-			val factory1 = XMLContextFactory.getInstance()
-			val factory2 = XMLContextFactory.getInstance()
+			val factory1 = this@ContextInitializationTest.factory
+			val factory2 = this@ContextInitializationTest.factory
 
 			// Assert
 			assertThat(factory1)
@@ -423,7 +442,7 @@ class ContextInitializationTest {
 		@DisplayName("factory creates appropriate context for mode")
 		fun factory_createsContextForMode() {
 			// Arrange
-			val factory = XMLContextFactory.getInstance()
+			val factory = this@ContextInitializationTest.factory
 
 			// Act - Create editing context
 			val editingContext = factory.createEmptyContext()
@@ -450,7 +469,7 @@ class ContextInitializationTest {
 		@DisplayName("factory creates independent context instances")
 		fun factory_createsIndependentInstances() {
 			// Arrange
-			val factory = XMLContextFactory.getInstance()
+			val factory = this@ContextInitializationTest.factory
 
 			// Act
 			val context1 = factory.createEmptyContext()

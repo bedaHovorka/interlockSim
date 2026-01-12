@@ -17,7 +17,16 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
@@ -33,17 +42,24 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * Full simulation execution tests require jDisco framework and are beyond
  * the scope of unit testing (would be integration/system tests).
  */
-class ShuntingLoopTest {
-	private lateinit var factory: XMLContextFactory
+class ShuntingLoopTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 
 	@BeforeEach
 	fun setUp() {
-		factory = XMLContextFactory.getInstance()
+		startKoin {
+			modules(interlockSimModule)
+		}
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested
 	@DisplayName("ShuntingLoop initialization")
-	class InitializationTests {
+	inner class InitializationTests {
 		@Test
 		fun constructor_validVyhybnaContext_succeeds() {
 			// Load vyhybna.xml fixture
@@ -53,8 +69,7 @@ class ShuntingLoopTest {
 				)
 			assertThat(xml).withMessage("vyhybna.xml must exist in resources").isNotNull()
 
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Create ShuntingLoop with end time of 60 seconds
@@ -70,8 +85,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			val expectedEndTime = 120L
@@ -83,7 +97,7 @@ class ShuntingLoopTest {
 
 		@Test
 		fun constructor_emptyContext_throwsAssertionError() {
-			val emptyContext = MockSimulationContext()
+			val emptyContext = MockSimulationContext(factory)
 
 			// Empty context has no graph, should fail assertion
 			assertThatBlock { ShuntingLoop(emptyContext, 60L) }
@@ -99,8 +113,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// ShuntingLoop expects specific vyhybna.xml structure with 2 InOuts, semaphores, switches
@@ -113,7 +126,7 @@ class ShuntingLoopTest {
 
 	@Nested
 	@DisplayName("ShuntingLoop configuration validation")
-	class ConfigurationTests {
+	inner class ConfigurationTests {
 		private lateinit var validContext: SimulationContext
 
 		@BeforeEach
@@ -123,8 +136,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			validContext = MockSimulationContext(context)
 		}
 
@@ -158,7 +170,7 @@ class ShuntingLoopTest {
 
 	@Nested
 	@DisplayName("ShuntingLoop with different end times")
-	class EndTimeTests {
+	inner class EndTimeTests {
 		private lateinit var validContext: SimulationContext
 
 		@BeforeEach
@@ -167,8 +179,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			validContext = MockSimulationContext(context)
 		}
 
@@ -200,7 +211,7 @@ class ShuntingLoopTest {
 
 	@Nested
 	@DisplayName("ShuntingLoop railway network structure requirements")
-	class NetworkStructureTests {
+	inner class NetworkStructureTests {
 		@Test
 		fun constructor_requiresTwoInOuts() {
 			// vyhybna.xml has InOut A and InOut B
@@ -208,8 +219,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Should find InOut A at (11, 8) and InOut B at (30, 8)
@@ -224,8 +234,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
@@ -239,8 +248,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
@@ -254,8 +262,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
@@ -265,7 +272,7 @@ class ShuntingLoopTest {
 
 	@Nested
 	@DisplayName("Edge cases and error conditions")
-	class EdgeCaseTests {
+	inner class EdgeCaseTests {
 		@Test
 		fun constructor_nullContext_throwsNullPointerException() {
 			val nullContext: SimulationContext? = null
@@ -284,8 +291,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Should fail trying to find elements at specific coordinates
@@ -302,8 +308,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			// Should fail trying to find elements at vyhybna-specific coordinates
@@ -316,7 +321,7 @@ class ShuntingLoopTest {
 
 	@Nested
 	@DisplayName("MAX_TRAINS constant validation")
-	class MaxTrainsTests {
+	inner class MaxTrainsTests {
 		@Test
 		fun maxTrains_constantValue_isTwo() {
 			// MAX_TRAINS is defined as 2 in ShuntingLoop
@@ -325,8 +330,7 @@ class ShuntingLoopTest {
 				javaClass.getResourceAsStream(
 					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 				)
-			val factory = XMLContextFactory.getInstance()
-			val context = factory.createContext(xml)
+			val context = this@ShuntingLoopTest.factory.createContext(xml)
 			val simContext = MockSimulationContext(context)
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)

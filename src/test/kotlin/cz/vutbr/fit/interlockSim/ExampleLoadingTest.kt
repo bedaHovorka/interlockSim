@@ -22,10 +22,11 @@ import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.get
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
 
@@ -37,7 +38,8 @@ import java.lang.reflect.Modifier
  * simulation scenarios like shuntingLoop.
  */
 @DisplayName("Example Loading Tests")
-class ExampleLoadingTest {
+class ExampleLoadingTest : KoinTestBase() {
+
 	@Nested
 	@DisplayName("Example Discovery")
 	inner class ExampleDiscoveryTests {
@@ -221,7 +223,7 @@ class ExampleLoadingTest {
 		fun `non-annotated method fails example invocation`() {
 			// Arrange
 			val mainClass = Main::class.java
-			val method = mainClass.getMethod("getInstance")
+			val method = mainClass.getMethod("getContextFactory")
 
 			// Act
 			val hasExampleAnnotation = method.isAnnotationPresent(Example::class.java)
@@ -238,8 +240,8 @@ class ExampleLoadingTest {
 		fun `example invocation without required end time throws ContextCreationException`() {
 			// Arrange
 			val mainClass = Main::class.java
-			val main = Main.getInstance()
-			val factory = XMLContextFactory.getInstance()
+			val main = get<Main>()
+			val factory = get<SimulationContextFactory>()
 			val insufficientArgs = arrayOf("example") // Missing end time
 
 			// Act & Assert
@@ -260,8 +262,8 @@ class ExampleLoadingTest {
 		fun `example invocation with non-numeric end time throws NumberFormatException`() {
 			// Arrange
 			val mainClass = Main::class.java
-			val main = Main.getInstance()
-			val factory = XMLContextFactory.getInstance()
+			val main = get<Main>()
+			val factory = get<SimulationContextFactory>()
 			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
@@ -282,8 +284,8 @@ class ExampleLoadingTest {
 		fun `example method invocation with valid arguments returns context`() {
 			// Arrange
 			val mainClass = Main::class.java
-			val main = Main.getInstance()
-			val factory = XMLContextFactory.getInstance()
+			val main = get<Main>()
+			val factory = get<SimulationContextFactory>()
 			val validArgs = arrayOf("example", "shuntingLoop", "100")
 
 			// Act & Assert
@@ -315,8 +317,8 @@ class ExampleLoadingTest {
 		fun `reflection invocation wraps exceptions in InvocationTargetException`() {
 			// Arrange
 			val mainClass = Main::class.java
-			val main = Main.getInstance()
-			val factory = XMLContextFactory.getInstance()
+			val main = get<Main>()
+			val factory = get<SimulationContextFactory>()
 			val args = arrayOf("example") // Insufficient args will cause ContextCreationException
 
 			// Act & Assert

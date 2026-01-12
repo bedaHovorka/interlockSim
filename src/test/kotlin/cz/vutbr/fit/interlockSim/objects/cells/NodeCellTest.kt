@@ -19,10 +19,17 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Unit tests for {@link NodeCell}.
@@ -45,16 +52,20 @@ import org.junit.jupiter.api.Test
  * @since 2026-01 (Phase 4.4 test expansion)
  */
 @DisplayName("NodeCell Tests")
-class NodeCellTest {
+class NodeCellTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: DefaultContext
 	private lateinit var nodeA: MockNodeCell
 	private lateinit var nodeB: MockNodeCell
 
 	@BeforeEach
 	fun setUp() {
+		startKoin {
+			modules(interlockSimModule)
+		}
 		// Create a test context with two adjacent nodes
 		context =
-			TestContextBuilder()
+			TestContextBuilder(factory)
 				.withInOut("InA", 0, 0, true)
 				.withInOut("InB", 1, 0, false)
 				.build()
@@ -66,6 +77,11 @@ class NodeCellTest {
 		// Cast to NodeCell for testing (InOut is a NodeCell subclass)
 		nodeA = cellA as? MockNodeCell ?: MockNodeCell("TestNodeA")
 		nodeB = cellB as? MockNodeCell ?: MockNodeCell("TestNodeB")
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	/**
@@ -85,7 +101,7 @@ class NodeCellTest {
 			// Act
 			// Simulate adding nodes to adjacent grid positions
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("Left", 0, 0, true)
 					.withInOut("Right", 1, 0, false)
 					.build()
@@ -144,7 +160,7 @@ class NodeCellTest {
 		fun `node disconnects cells correctly`() {
 			// Arrange
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("A", 0, 0, true)
 					.withInOut("B", 1, 0, false)
 					.withInOut("C", 2, 0, true)
@@ -184,7 +200,7 @@ class NodeCellTest {
 			// Arrange
 			// Create a simple grid context with connected nodes
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("Start", 0, 0, true)
 					.withInOut("Next", 1, 0, false)
 					.build()
@@ -227,7 +243,7 @@ class NodeCellTest {
 			// Arrange
 			// Create a grid with one central node and multiple neighbors
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("A", 0, 1, true) // Top
 					.withInOut("B", 1, 0, true) // Right
 					.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
@@ -260,7 +276,7 @@ class NodeCellTest {
 			// Arrange
 			val testPoint = Point(5, 10)
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("TestNode", 5, 10, true)
 					.build()
 
@@ -284,7 +300,7 @@ class NodeCellTest {
 		fun `node coordinates are immutable`() {
 			// Arrange
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("FixedNode", 3, 7, true)
 					.build()
 

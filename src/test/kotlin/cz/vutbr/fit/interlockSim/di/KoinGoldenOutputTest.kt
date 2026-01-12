@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.get
+import org.koin.test.KoinTest
 
 /**
  * Golden output baseline tests for Koin DI adoption validation
@@ -39,7 +40,7 @@ import org.koin.java.KoinJavaComponent.get
  * @see <a href="https://github.com/bedavs/interlockSim">KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
  */
 @Tag("integration-test")
-class KoinGoldenOutputTest {
+class KoinGoldenOutputTest : KoinTest {
 
 	@AfterEach
 	fun tearDown() {

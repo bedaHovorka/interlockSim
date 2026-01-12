@@ -14,11 +14,17 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 
 /**
  * Integration tests for ShuntingLoop operational scenarios.
@@ -61,14 +67,15 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 @DisplayName("ShuntingLoop Operational Tests")
-class ShuntingLoopOperationalTest {
-	private lateinit var factory: XMLContextFactory
+class ShuntingLoopOperationalTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var validContext: SimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		factory = XMLContextFactory.getInstance()
-
+		startKoin {
+			modules(interlockSimModule)
+		}
 		// Load vyhybna.xml - the ONLY configuration where ShuntingLoop can operate (SIM-004)
 		val xml =
 			javaClass.getResourceAsStream(
@@ -76,6 +83,11 @@ class ShuntingLoopOperationalTest {
 			)
 		val context = factory.createContext(xml)
 		validContext = MockSimulationContext(context)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	/**

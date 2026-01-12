@@ -17,10 +17,17 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 
@@ -56,12 +63,21 @@ import org.mockito.Mockito.`when`
  * a complete stop within required distances. Critical for railway safety and scheduling.
  */
 @DisplayName("Train Physics Tests")
-class TrainPhysicsTest {
+class TrainPhysicsTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Nested

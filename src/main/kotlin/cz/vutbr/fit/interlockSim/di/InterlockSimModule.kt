@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.di
 
+import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -56,10 +57,7 @@ val utilModule: Module = module {
  * Primary target for initial Koin migration implementation
  */
 val xmlModule: Module = module {
-	// XMLContextFactory implements EditingContextFactory and SimulationContextFactory
-	// Use the existing singleton instance to maintain backward compatibility
-	// (Factory interfaces bound in contextModule)
-	single<XMLContextFactory> { XMLContextFactory.getInstance() }
+	single<XMLContextFactory> { XMLContextFactory() }
 }
 
 /**
@@ -84,12 +82,14 @@ val contextModule: Module = module {
 }
 
 /**
- * GUI module (DEFERRED)
+ * GUI module
  *
- * Manages Swing components, editor, and UI elements
+ * Manages Swing components, editor, UI elements, and Main application coordinator
  */
 val guiModule: Module = module {
-	// To be implemented when needed
+	// Main application coordinator as singleton
+	// Main orchestrates the application flow and delegates to context factories
+	single<Main> { Main() }
 }
 
 /**
@@ -155,10 +155,8 @@ val objectsModule: Module = module {
  * - utilModule (✅ Complete - Ready for expansion)
  * - xmlModule (✅ Complete)
  * - contextModule (✅ Complete)
+ * - guiModule (✅ Complete - Main coordinator added)
  * - objectsModule (✅ Complete - Minimal by design)
- *
- * Deferred modules:
- * - guiModule (⏳ Deferred - To be implemented when needed)
  *
  * Excluded:
  * - sim/ package (❌ Excluded): Deferred until jDisco → DSOL/Kalasim migration
@@ -169,7 +167,7 @@ val interlockSimModule: Module = module {
 		utilModule,
 		xmlModule,
 		contextModule,    // Context lifecycle management
+		guiModule,        // GUI components and Main coordinator
 		objectsModule     // Domain objects (minimal - see design decision)
-		// guiModule,     // To be implemented when needed
 	)
 }

@@ -288,14 +288,6 @@ class XMLContextFactory :
 		private const val NAME = "name"
 
 		private const val DEFAULT_GRID_SIZE = 100
-
-		private val instance = XMLContextFactory()
-
-		/**
-		 * Get factory for creating editing and simulation context from XML
-		 */
-		@JvmStatic
-		fun getInstance(): XMLContextFactory = instance
 	}
 
 	override fun createEmptyContext(): DefaultContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)

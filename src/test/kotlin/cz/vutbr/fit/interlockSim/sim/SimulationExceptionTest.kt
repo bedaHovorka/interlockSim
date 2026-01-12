@@ -23,7 +23,17 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
-import org.junit.jupiter.api.*
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.mockito.Mockito.mock
 
 /**
@@ -40,7 +50,8 @@ import org.mockito.Mockito.mock
  *
  * Coverage target: ~150 instructions (Phase 6.1)
  */
-class SimulationExceptionTest {
+class SimulationExceptionTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 	private lateinit var mockTrack: SimpleTrack
 	private lateinit var mockSeparator: PathSeparator
@@ -49,9 +60,17 @@ class SimulationExceptionTest {
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
 		mockTrack = mock(SimpleTrack::class.java)
 		mockSeparator = mock(PathSeparator::class.java)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	// ==================== SimulationException Tests ====================

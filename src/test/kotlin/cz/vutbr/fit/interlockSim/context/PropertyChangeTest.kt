@@ -21,9 +21,15 @@ import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 
@@ -34,15 +40,24 @@ import java.beans.PropertyChangeListener
  * @since 2026-01 (Java 21 migration)
  */
 @DisplayName("PropertyChange Notification Tests")
-class PropertyChangeTest {
+class PropertyChangeTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: DefaultContext
 	private lateinit var listener: TestPropertyChangeListener
 
 	@BeforeEach
 	fun setUp() {
-		context = XMLContextFactory.getInstance().createEmptyContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		context = factory.createEmptyContext()
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	@Test

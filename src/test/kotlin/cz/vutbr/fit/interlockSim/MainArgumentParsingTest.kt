@@ -9,14 +9,21 @@
 	Phase 4.1 test implementation - 2026
 */
 
+@file:Suppress("UnusedImports", "unused") // Detekt false positive - constants used in nested inner class
+
 package cz.vutbr.fit.interlockSim
 
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.io.TempDir
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.java.KoinJavaComponent.get
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -123,7 +130,7 @@ class MainArgumentParsingTest {
 			// If 'sim' is first arg, it should call loadSim()
 			// We verify this by checking that System.err is NOT updated with the usage message
 			// (which would be printed for unknown modes)
-			Main.main(args)
+			main(args)
 			val afterErr = getCapturedError()
 
 			// If sim mode was selected, either:
@@ -142,7 +149,7 @@ class MainArgumentParsingTest {
 			// Edit mode would instantiate Frame, which we can't do without X11
 			// So we verify the mode is recognized by checking usage is NOT printed
 			try {
-				Main.main(args)
+				main(args)
 			} catch (e: Exception) {
 				// Frame initialization may fail - that's OK, we're just checking mode selection
 			}
@@ -159,7 +166,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("example")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			// Example mode with no example name should print list of examples, not usage
@@ -174,7 +181,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("unknown")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -191,7 +198,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("sim")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			// Sim mode without file should print "You dont specify valid file" or similar
@@ -210,7 +217,7 @@ class MainArgumentParsingTest {
 
 			// Act
 			try {
-				Main.main(args)
+				main(args)
 			} catch (e: Exception) {
 				// Frame initialization may fail without X11
 			}
@@ -228,7 +235,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("example")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			// Example with no name should show available examples
@@ -248,7 +255,7 @@ class MainArgumentParsingTest {
 
 			// Act
 			try {
-				Main.main(args)
+				main(args)
 			} catch (e: Exception) {
 				// Simulation execution might fail - we're just testing argument parsing
 			}
@@ -267,7 +274,7 @@ class MainArgumentParsingTest {
 			val args = emptyArray<String>()
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -285,7 +292,7 @@ class MainArgumentParsingTest {
 			val args = emptyArray<String>()
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -298,7 +305,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("sim", "extra", "arguments", "here")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -320,7 +327,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("sim", fileWithSpaces.absolutePath)
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -336,7 +343,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("sim", "/nonexistent/path/to/file.xml")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -356,7 +363,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("SIM") // uppercase instead of lowercase
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -370,7 +377,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("-")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -384,7 +391,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("--help")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -403,7 +410,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("sim", xmlFile.absolutePath)
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -422,7 +429,7 @@ class MainArgumentParsingTest {
 
 			// Act & Assert
 			try {
-				Main.main(args)
+				main(args)
 			} catch (e: Exception) {
 				// Frame initialization will fail without X11 - expected behavior
 				// Just verify the mode was recognized before failure
@@ -443,7 +450,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("example", "nonexistentExample")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -457,7 +464,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("example", "shuntingLoop", "notanumber")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -476,7 +483,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("invalid")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -492,7 +499,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("unknown")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			val output = getCapturedError()
@@ -502,8 +509,8 @@ class MainArgumentParsingTest {
 		@Test
 		fun `program name and version constants defined`() {
 			// Arrange & Act
-			val programName = Main.PROGRAM_NAME
-			val programVersion = Main.PROGRAM_VERSION
+			val programName = PROGRAM_NAME
+			val programVersion = PROGRAM_VERSION
 
 			// Assert
 			assertThat(programName).isEqualTo("InterlockSim")
@@ -520,7 +527,7 @@ class MainArgumentParsingTest {
 			val args = arrayOf("unknown")
 
 			// Act
-			Main.main(args)
+			main(args)
 
 			// Assert
 			// All messages should be on System.err (not System.out)
@@ -529,13 +536,22 @@ class MainArgumentParsingTest {
 		}
 
 		@Test
-		fun `singleton pattern enforced`() {
-			// Arrange & Act
-			val instance1 = Main.getInstance()
-			val instance2 = Main.getInstance()
+		fun `singleton pattern enforced via Koin`() {
+			// Arrange
+			startKoin {
+				modules(interlockSimModule)
+			}
 
-			// Assert
-			assertThat(instance1).isEqualTo(instance2)
+			try {
+				// Act - Get Main instance twice from Koin
+				val instance1 = get<Main>(Main::class.java)
+				val instance2 = get<Main>(Main::class.java)
+
+				// Assert - Koin should provide same singleton instance
+				assertThat(instance1).isSameInstanceAs(instance2)
+			} finally {
+				stopKoin()
+			}
 		}
 
 		@Test
@@ -559,18 +575,18 @@ class MainArgumentParsingTest {
 	inner class ConstantsTests {
 		@Test
 		fun `PROGRAM_NAME is defined`() {
-			assertThat(Main.PROGRAM_NAME).isEqualTo("InterlockSim")
+			assertThat(PROGRAM_NAME).isEqualTo("InterlockSim")
 		}
 
 		@Test
 		fun `PROGRAM_VERSION is defined`() {
-			assertThat(Main.PROGRAM_VERSION).isEqualTo("0.1-bachelor")
+			assertThat(PROGRAM_VERSION).isEqualTo("0.1-bachelor")
 		}
 
 		@Test
 		fun `PROGRAM_FULL_NAME combines name and version`() {
-			val expectedFullName = "${Main.PROGRAM_NAME} ${Main.PROGRAM_VERSION}"
-			assertThat(Main.PROGRAM_FULL_NAME).isEqualTo(expectedFullName)
+			val expectedFullName = "${PROGRAM_NAME} ${PROGRAM_VERSION}"
+			assertThat(PROGRAM_FULL_NAME).isEqualTo(expectedFullName)
 		}
 	}
 }

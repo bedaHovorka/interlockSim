@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
+import org.koin.test.inject
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
@@ -59,7 +61,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Graceful error handling under contention
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-class ConcurrentSaveTest {
+class ConcurrentSaveTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	companion object {
 		private const val TEST_FILE_PREFIX = "concurrent-test-network"
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
@@ -107,7 +110,7 @@ class ConcurrentSaveTest {
 
 						// Save to unique file
 						val file = File("$TEST_FILE_PREFIX-$threadId.xml")
-						XMLContextFactory.getInstance().saveContext(context, file)
+						factory.saveContext(context, file)
 
 						successCount.incrementAndGet()
 					} catch (e: Exception) {
@@ -139,7 +142,7 @@ class ConcurrentSaveTest {
 			assertThat(file).exists().isFile()
 
 			// Verify file is valid XML by loading it
-			val loaded = XMLContextFactory.getInstance().createContext(file)
+			val loaded = factory.createContext(file)
 			assertThat(loaded).isNotNull()
 			assertThat(loaded.getRailWayNetGrid()).isNotNull()
 		}
@@ -166,7 +169,7 @@ class ConcurrentSaveTest {
 				Thread {
 					try {
 						startLatch.await()
-						XMLContextFactory.getInstance().saveContext(context, targetFile)
+						factory.saveContext(context, targetFile)
 						successCount.incrementAndGet()
 					} catch (e: Exception) {
 						exceptions.add(e)
@@ -189,7 +192,7 @@ class ConcurrentSaveTest {
 		assertThat(targetFile).exists().isFile()
 
 		// Most importantly: verify file integrity - should be valid XML
-		val loaded = XMLContextFactory.getInstance().createContext(targetFile)
+		val loaded = factory.createContext(targetFile)
 		assertThat(loaded).isNotNull()
 		assertThat(loaded.getRailWayNetGrid())
 			.withMessage("File should contain valid context data")
@@ -216,7 +219,7 @@ class ConcurrentSaveTest {
 			Thread {
 				try {
 					startLatch.await()
-					XMLContextFactory.getInstance().saveContext(context, file)
+					factory.saveContext(context, file)
 					saveSuccess.incrementAndGet()
 				} catch (e: Exception) {
 					exceptions.add(e)
@@ -260,7 +263,7 @@ class ConcurrentSaveTest {
 
 		// If save succeeded, verify file is valid XML (not corrupted)
 		if (saveSuccess.get() > 0 && file.exists()) {
-			val loaded = XMLContextFactory.getInstance().createContext(file)
+			val loaded = factory.createContext(file)
 			assertThat(loaded).isNotNull()
 			// Should have a valid grid
 			assertThat(loaded.getRailWayNetGrid())
@@ -278,7 +281,7 @@ class ConcurrentSaveTest {
 		val context = TestContextBuilder.buildMinimal()
 
 		// Save initial file
-		XMLContextFactory.getInstance().saveContext(context, targetFile)
+		factory.saveContext(context, targetFile)
 		val initialChecksum = calculateChecksum(targetFile)
 
 		// Act - Perform multiple concurrent save rounds
@@ -291,7 +294,7 @@ class ConcurrentSaveTest {
 				Thread {
 					try {
 						startLatch.await()
-						XMLContextFactory.getInstance().saveContext(context, targetFile)
+						factory.saveContext(context, targetFile)
 					} catch (e: Exception) {
 						// Ignore for this test
 					} finally {
@@ -306,7 +309,7 @@ class ConcurrentSaveTest {
 
 		// Assert - File should still be valid and consistent
 		assertThat(targetFile).exists().isFile()
-		val loaded = XMLContextFactory.getInstance().createContext(targetFile)
+		val loaded = factory.createContext(targetFile)
 		assertThat(loaded).isNotNull()
 		assertThat(loaded.getRailWayNetGrid()).isNotNull()
 

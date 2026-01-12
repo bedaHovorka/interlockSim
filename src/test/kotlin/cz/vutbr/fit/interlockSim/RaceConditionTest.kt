@@ -23,11 +23,18 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.test.KoinTest
+import org.koin.test.inject
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import java.util.ArrayList
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -74,7 +81,8 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @Tag("integration-test")
 @DisplayName("Race Condition and Concurrent Access Tests")
-class RaceConditionTest {
+class RaceConditionTest : KoinTest {
+	private val factory: XMLContextFactory by inject()
 	companion object {
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
 		private const val THREAD_COUNT = 5
@@ -89,11 +97,19 @@ class RaceConditionTest {
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		startKoin {
+			modules(interlockSimModule)
+		}
+		mockContext = MockSimulationContext(factory)
 		end1 = MockNodeCell("End1")
 		end2 = MockNodeCell("End2")
 		end3 = MockNodeCell("End3")
 		end4 = MockNodeCell("End4")
+	}
+
+	@AfterEach
+	fun tearDown() {
+		stopKoin()
 	}
 
 	/**
