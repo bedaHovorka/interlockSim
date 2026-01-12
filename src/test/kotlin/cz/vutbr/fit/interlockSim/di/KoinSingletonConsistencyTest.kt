@@ -59,7 +59,6 @@ class KoinSingletonConsistencyTest {
 	 * is the exact same instance as XMLContextFactory.getInstance().
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `Koin XMLContextFactory is same instance as singleton getInstance()`() {
 		// Initialize Koin with interlockSimModule
 		startKoin {
@@ -85,7 +84,6 @@ class KoinSingletonConsistencyTest {
 	 * it receives the XMLContextFactory singleton instance.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `Koin EditingContextFactory is same instance as XMLContextFactory singleton`() {
 		// Initialize Koin with interlockSimModule
 		startKoin {
@@ -111,7 +109,6 @@ class KoinSingletonConsistencyTest {
 	 * it receives the XMLContextFactory singleton instance.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `Koin SimulationContextFactory is same instance as XMLContextFactory singleton`() {
 		// Initialize Koin with interlockSimModule
 		startKoin {
@@ -138,7 +135,6 @@ class KoinSingletonConsistencyTest {
 	 * code using XMLContextFactory.getInstance() directly.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `Main getContextFactory returns same instance as XMLContextFactory singleton`() {
 		// Initialize Koin with interlockSimModule
 		startKoin {
@@ -165,7 +161,6 @@ class KoinSingletonConsistencyTest {
 	 * return the same singleton instance.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `all factory access patterns return same XMLContextFactory singleton instance`() {
 		// Initialize Koin with interlockSimModule
 		startKoin {
