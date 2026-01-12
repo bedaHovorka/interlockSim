@@ -399,7 +399,7 @@ See `KOTLIN-MIGRATION-STATUS.md` for detailed migration report.
 
 **Status:** Migration complete (2026-01-12)
 **Framework:** Koin 3.5.6 (Kotlin-native, lightweight ~1MB)
-**Documentation:** See `KOIN_MIGRATION_SUMMARY.md` for complete guide, `KOTLIN_STYLE_GUIDE.md` for coding patterns
+**Documentation:** See `KOTLIN-MIGRATION-STATUS.md` for migration overview and DI notes, `KOTLIN_STYLE_GUIDE.md` for coding patterns
 
 ### Quick Start
 
