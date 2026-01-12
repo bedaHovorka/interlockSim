@@ -10,8 +10,9 @@
 package cz.vutbr.fit.interlockSim.di
 
 import assertk.assertThat
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
@@ -78,9 +79,10 @@ class KoinGoldenOutputTest {
 
 		val context = factory.createContext(xml)
 		assertThat(context).isNotNull()
+		assertThat(context).isInstanceOf(DefaultContext::class)
 
 		// Wrap in MockSimulationContext to avoid running actual simulation
-		val simContext = MockSimulationContext(context as cz.vutbr.fit.interlockSim.context.DefaultContext)
+		val simContext = MockSimulationContext(context as DefaultContext)
 
 		// Create ShuntingLoop with Koin-managed context
 		val shuntingLoop = ShuntingLoop(simContext, 60L)
