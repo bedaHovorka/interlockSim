@@ -91,8 +91,8 @@ class Main private constructor() {
 			val method = Main::class.java.getMethod(name, SimulationContextFactory::class.java, Array<String>::class.java)
 			if (!method.isAnnotationPresent(Example::class.java)) throw NoSuchMethodException("Method $name isn't annotated")
 			// Get injected SimulationContextFactory from Koin DI container
-			val factory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
-			val context = method.invoke(this, factory, args) as SimulationContext
+			val simulationContextFactory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
+			val context = method.invoke(this, simulationContextFactory, args) as SimulationContext
 			context.run()
 		} catch (e: NoSuchMethodException) {
 			out.println("Example with name $name not exist")
