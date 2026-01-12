@@ -1,4 +1,5 @@
-/* Brno University of Technology
+/*
+ * Brno University of Technology
  * Faculty of Information Technology
  *
  * BSc Thesis  2006/2007
@@ -9,7 +10,6 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
-import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import java.awt.event.ActionEvent
 import javax.swing.AbstractAction
@@ -17,6 +17,7 @@ import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
 import javax.swing.JOptionPane
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Application menu bar with File and Help menus
@@ -34,8 +35,7 @@ class MenuBar(
 				if (returnValue == JFileChooser.CANCEL_OPTION) return
 			}
 
-			// EXTENSION: temporary hack to get factory
-			val editingContextFactory = Main.getInstance().getContextFactory() as EditingContextFactory
+			val editingContextFactory = getKoin().get<EditingContextFactory>()
 			val editingContext = frame.getRailwayNetGridCanvas().getEditingContext()
 			editingContextFactory.saveContext(editingContext, fileChooser.selectedFile)
 		}

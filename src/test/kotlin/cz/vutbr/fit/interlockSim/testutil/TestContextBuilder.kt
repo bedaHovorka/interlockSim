@@ -15,9 +15,9 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultContext
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Test utility for building {@link DefaultContext} instances with fluent API.
@@ -40,9 +40,9 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 class TestContextBuilder {
 	private val context: DefaultContext
 
-	constructor() {
+	constructor(factory: XMLContextFactory) {
 		// DefaultContext is abstract, use factory to create concrete instance
-		this.context = XMLContextFactory.getInstance().createEmptyContext()
+		this.context = factory.createEmptyContext()
 	}
 
 	/**
@@ -159,7 +159,7 @@ class TestContextBuilder {
 		 * @return configured context with linear track
 		 */
 		fun buildLinearTrack(): DefaultContext {
-			val context = XMLContextFactory.getInstance().createEmptyContext()
+			val context = getKoin().get<XMLContextFactory>().createEmptyContext()
 			val inA =
 				cz.vutbr.fit.interlockSim.objects.cells.InOut(
 					"A",
@@ -191,7 +191,7 @@ class TestContextBuilder {
 		 * @return configured context with semaphore
 		 */
 		fun buildLinearTrackWithSemaphore(): DefaultContext {
-			val context = XMLContextFactory.getInstance().createEmptyContext()
+			val context = getKoin().get<XMLContextFactory>().createEmptyContext()
 			val inA =
 				cz.vutbr.fit.interlockSim.objects.cells.InOut(
 					"A",
@@ -229,9 +229,11 @@ class TestContextBuilder {
 		 *
 		 * @return context with single InOut
 		 */
-		fun buildMinimal(): DefaultContext =
-			TestContextBuilder()
+		fun buildMinimal(): DefaultContext {
+			val factory = getKoin().get<XMLContextFactory>()
+			return TestContextBuilder(factory)
 				.withInOut("A", 1, 1, false)
 				.build()
+		}
 	}
 }

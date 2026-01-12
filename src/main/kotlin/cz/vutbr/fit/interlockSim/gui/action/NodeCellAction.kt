@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.gui.action
 
-import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
@@ -26,6 +25,7 @@ import java.util.HashMap
 import javax.swing.AbstractAction
 import javax.swing.Icon
 import javax.swing.ImageIcon
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  *
@@ -58,22 +58,18 @@ class NodeCellAction(
 		): Icon {
 			var cell: Cell? = null
 			try {
-				val f = Main.getInstance().getContextFactory() as EditingContextFactory
-				// Call createNew directly with spread operator instead of using reflection
+				val f = getKoin().get<EditingContextFactory>()
 				cell = f.createNew(context, cellClass, *args) as Cell
 			} catch (e: Exception) {
 				assert(false) { e }
 				e.printStackTrace()
 			}
-
 			val img = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_RGB)
 			val g = img.createGraphics()
 			g.setRenderingHints(renderingHints)
 			g.color = Color.WHITE
 			g.fillRect(0, 0, iconSize, iconSize)
 			g.color = Color.BLACK
-
-			// Draw cell if successfully created
 			if (cell != null) {
 				editorCellRenderer.draw(g, cell)
 			}

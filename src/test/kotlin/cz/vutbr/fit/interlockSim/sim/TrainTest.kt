@@ -15,10 +15,16 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.*
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Test
+import org.koin.test.inject
 import org.mockito.Mockito.*
 
 /**
@@ -38,12 +44,13 @@ import org.mockito.Mockito.*
  * - Complex movement and acceleration logic requires integration testing
  * - Semaphore interactions tested only at construction level
  */
-class TrainTest {
+class TrainTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		mockContext = MockSimulationContext(factory)
 	}
 
 	@Nested

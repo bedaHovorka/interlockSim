@@ -23,6 +23,8 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Tests for Bresenham line algorithm used in cell joining.
@@ -32,12 +34,13 @@ import org.junit.jupiter.api.Test
  * These tests verify correct behavior through the public joinCells API.
  */
 @DisplayName("Bresenham Line Algorithm (via joinCells)")
-class BresenhamJoinTest {
+class BresenhamJoinTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: DefaultContext
 
 	@BeforeEach
 	fun setUp() {
-		context = XMLContextFactory.getInstance().createEmptyContext()
+		context = factory.createEmptyContext()
 	}
 
 	@Test
@@ -250,8 +253,8 @@ class BresenhamJoinTest {
 		val block2 = SimpleTrackBlock(inA2, inB2, 1000.0, 80.0)
 
 		// Create two separate contexts to test both directions independently
-		val context1 = XMLContextFactory.getInstance().createEmptyContext()
-		val context2 = XMLContextFactory.getInstance().createEmptyContext()
+		val context1 = factory.createEmptyContext()
+		val context2 = factory.createEmptyContext()
 
 		context1.putCell(p1, inA1)
 		context1.putCell(p2, inB1)

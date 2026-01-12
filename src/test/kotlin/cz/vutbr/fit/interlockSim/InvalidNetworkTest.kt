@@ -14,8 +14,10 @@ import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
+import org.koin.test.inject
 import java.io.ByteArrayInputStream
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
@@ -44,13 +46,8 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @Tag("integration-test")
 @DisplayName("Invalid Network Configuration Tests")
-class InvalidNetworkTest {
-	private lateinit var factory: XMLContextFactory
-
-	@BeforeEach
-	fun setUp() {
-		factory = XMLContextFactory.getInstance()
-	}
+class InvalidNetworkTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 
 	@Nested
 	@DisplayName("Missing Required Elements")

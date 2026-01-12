@@ -36,6 +36,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Comprehensive unit tests for {@link DefaultContext}.
@@ -50,15 +52,17 @@ import org.junit.jupiter.api.Test
  * </ul>
  */
 @DisplayName("DefaultContext")
-class DefaultContextTest {
+class DefaultContextTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
+
 	@Nested
 	@DisplayName("Grid Operations")
-	class GridOperationsTests {
+	inner class GridOperationsTests {
 		private lateinit var context: DefaultContext
 
 		@BeforeEach
 		fun setUp() {
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = factory.createEmptyContext()
 		}
 
 		@Test
@@ -155,7 +159,7 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("Track Navigation")
-	class TrackNavigationTests {
+	inner class TrackNavigationTests {
 		private lateinit var context: DefaultContext
 		private lateinit var inA: InOut
 		private lateinit var rs1: RailSemaphore
@@ -168,7 +172,7 @@ class DefaultContextTest {
 		fun setUp() {
 			// Create a multi-block track: InOut-A -> RS1 -> RS2 -> InOut-B
 			// This allows testing navigation between blocks
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext()
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			rs2 = RailSemaphore(false, SpatialType.HORIZONTAL)
@@ -239,7 +243,7 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("Path Operations")
-	class PathOperationsTests {
+	inner class PathOperationsTests {
 		private lateinit var context: DefaultContext
 		private lateinit var inA: InOut
 		private lateinit var rs1: RailSemaphore
@@ -249,7 +253,7 @@ class DefaultContextTest {
 		@BeforeEach
 		fun setUp() {
 			// Create a simple track: InOut-A -> Semaphore -> InOut-B
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext()
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			outB = InOut("B", true, SpatialType.HORIZONTAL)
@@ -305,12 +309,12 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("Configuration Management")
-	class ConfigurationTests {
+	inner class ConfigurationTests {
 		private lateinit var context: DefaultContext
 
 		@BeforeEach
 		fun setUp() {
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext()
 		}
 
 		@Test
@@ -361,12 +365,12 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("Report Management")
-	class ReportManagementTests {
+	inner class ReportManagementTests {
 		private lateinit var context: DefaultContext
 
 		@BeforeEach
 		fun setUp() {
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext()
 		}
 
 		@Test
@@ -404,7 +408,7 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("TestContextBuilder Integration")
-	class TestContextBuilderIntegrationTests {
+	inner class TestContextBuilderIntegrationTests {
 		@Test
 		@DisplayName("buildLinearTrack creates valid context")
 		fun buildLinearTrack_createsValidContext() {
@@ -445,7 +449,7 @@ class DefaultContextTest {
 		fun fluentAPI_customContext_works() {
 			// Act
 			val context =
-				TestContextBuilder()
+				TestContextBuilder(factory)
 					.withInOut("Entry", 2, 2, false)
 					.withSemaphore(5, 5, true)
 					.withInOut("Exit", 8, 8, true)
@@ -461,12 +465,12 @@ class DefaultContextTest {
 
 	@Nested
 	@DisplayName("Grid Consistency - Issue #38")
-	class GridConsistencyTests {
+	inner class GridConsistencyTests {
 		private lateinit var context: DefaultContext
 
 		@BeforeEach
 		fun setUp() {
-			context = XMLContextFactory.getInstance().createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext()
 		}
 
 		@Test

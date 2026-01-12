@@ -26,64 +26,71 @@ import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
 import java.io.InputStream
-import java.io.PrintStream
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.java.KoinJavaComponent.get
+import org.koin.mp.KoinPlatform.getKoin
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Main class, for run program
  *
- * usage: java -ea cz.vutbr.fit.interlockSim.Main (sim|edit) [file]
- *        java -ea cz.vutbr.fit.interlockSim.Main example name
+ * usage: java cz.vutbr.fit.interlockSim.Main (sim|edit) [file]
+ *        java cz.vutbr.fit.interlockSim.Main example name
  *
  * or: ant start
  *
- * !!! Please check JAVA_HOME for JDK/JRE 1.6 !!!
  */
-class Main private constructor() {
+class Main {
 	private var frame: Frame? = null
 
 	// Lazy injection of EditingContextFactory from Koin DI container
 	// Using lazy to defer Koin access until after startKoin() is called in main()
 	private val editingContextFactory: EditingContextFactory by lazy {
-		get(EditingContextFactory::class.java)
+		getKoin().get<EditingContextFactory>()
 	}
 
-	private fun loadGui(args: Array<String>) {
+	fun loadGui(args: Array<String>) {
 		frame = Frame()
 		frame!!.setContext(createContext(args))
 		frame!!.setVisible(true)
 	}
 
-	private fun createContext(args: Array<String>): Context {
+	fun createContext(args: Array<String>): Context {
 		if (args.size > 1) {
 			try {
-				return editingContextFactory.createContext(File(args[1]))
+				val userDir = File(".").canonicalFile
+				val file = File(args[1]).canonicalFile
+				if (!file.startsWith(userDir)) {
+					logger.error {
+						"Refusing to open file outside user directory. Requested: '${file.path}', allowed base: '${userDir.path}'"
+					}
+					System.exit(1)
+				}
+				return editingContextFactory.createContext(file)
 			} catch (e: ContextCreationException) {
-				e.printStackTrace()
+				logger.error(e) { "Context creation failed" }
 				System.exit(1)
 			}
 		}
 		return editingContextFactory.createEmptyContext()
 	}
 
-	private fun loadSim(args: Array<String>) {
+	fun loadSim(args: Array<String>) {
 		val context = createContext(args) as SimulationContext
 		context.addReportTypes(*ReportType.values())
 		try {
 			context.run()
 		} catch (e: EmptyContextException) {
-			out.println("You dont specify valid file")
+			logger.error(e) { "User hasn't specified valid file" }
 		} catch (e: SimulationException) {
-			out.println("Simulation failed")
-			e.printStackTrace()
+			logger.error(e) { "Simulation failed" }
 		}
 	}
 
-	private fun runExample(args: Array<String>) {
+	fun runExample(args: Array<String>) {
 		if (args.size == 1) {
 			printListOfExamples()
 			return
@@ -93,28 +100,20 @@ class Main private constructor() {
 			val method = Main::class.java.getMethod(name, SimulationContextFactory::class.java, Array<String>::class.java)
 			if (!method.isAnnotationPresent(Example::class.java)) throw NoSuchMethodException("Method $name isn't annotated")
 			// Get injected SimulationContextFactory from Koin DI container
-			val simulationContextFactory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
+			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
 			val context = method.invoke(this, simulationContextFactory, args) as SimulationContext
 			context.run()
 		} catch (e: NoSuchMethodException) {
-			out.println("Example with name $name not exist")
+			logger.error(e) { "Example with name $name not exist" }
 			printListOfExamples()
 		} catch (e: SimulationException) {
-			out.println("Example simulation failed")
+			logger.error(e) { "Example simulation failed" }
 		} catch (e: EmptyContextException) {
-			out.println("Example simulation could not started - empty context")
+			logger.error(e) { "Example simulation could not started - empty context" }
 		} catch (e: InvocationTargetException) {
 			val cause = e.cause
-			if (cause is ContextCreationException) {
-				out.println(cause.message)
-				return
-			} else if (cause is NumberFormatException) {
-				out.println(cause.message + " cannot convert to number")
-				return
-			}
 			logger.error(cause) { "Example initialization failed" }
 		} catch (e: Exception) {
-			out.println("Example inilialization failed")
 			logger.error(e) { "Example initialization failed" }
 		}
 	}
@@ -149,13 +148,13 @@ class Main private constructor() {
 			}
 		}
 		list.sortWith(String.CASE_INSENSITIVE_ORDER)
-		out.println(
+		logger.warn {
 			if (list.size > 0) {
 				"You must specify valid name of example\nList of examples: $list"
 			} else {
 				"No Examples in program"
 			}
-		)
+		}
 	}
 
 	/**
@@ -164,71 +163,47 @@ class Main private constructor() {
 	 *
 	 * @return current Context Factory from Koin container
 	 */
-	fun getContextFactory(): ContextFactory = editingContextFactory
+	val contextFactory: ContextFactory
+		get() = editingContextFactory
+}
 
-	companion object {
-		/**
-		 * Program name
-		 */
-		const val PROGRAM_NAME = "InterlockSim"
+const val PROGRAM_NAME = "InterlockSim"
 
-		/**
-		 * Version
-		 */
-		const val PROGRAM_VERSION = "0.1-bachelor"
+/**
+ * Version
+ */
+const val PROGRAM_VERSION = "0.1-bachelor"
 
-		/**
-		 * Program title
-		 */
-		const val PROGRAM_FULL_NAME = "$PROGRAM_NAME $PROGRAM_VERSION"
+/**
+ * Program title
+ */
+const val PROGRAM_FULL_NAME = "$PROGRAM_NAME $PROGRAM_VERSION"
 
-		private val logger = KotlinLogging.logger {}
+/**
+ * @param args
+ */
+fun main(args: Array<String>) {
+	// Initialize Koin dependency injection framework with interlockSim module
+	startKoin {
+		modules(interlockSimModule)
+	}
 
-		private val instance = Main()
-
-		// kam poustet hlasky
-		private val out: PrintStream = System.err
-
-		/**
-		 * @param args
-		 */
-		@JvmStatic
-		fun main(args: Array<String>) {
-			// Initialize Koin dependency injection framework with interlockSim module
-			startKoin {
-				modules(interlockSimModule)
-			}
-
-			try {
-				if (isArgs(args, "sim")) {
-					instance.loadSim(args)
-				} else if (isArgs(args, "example")) {
-					instance.runExample(args)
-				} else if (isArgs(args, "edit")) {
-					instance.loadGui(args)
-				} else {
-					out.println(
-						"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n" +
-							"\t\t example [name]"
-					)
-				}
-			} finally {
-				// Clean up Koin context on exit
-				stopKoin()
-			}
+	// Add shutdown hook to clean up Koin when JVM exits
+	Runtime.getRuntime().addShutdownHook(Thread {
+		try {
+			stopKoin()
+		} catch (e: Exception) {
+			logger.debug(e) { "Koin shutdown failed" }
 		}
+	})
 
-		private fun isArgs(
-			args: Array<String>,
-			firstArg: String
-		): Boolean = args.isNotEmpty() && args[0] == firstArg
-
-		/**
-		 * @return Main singleton instance
-		 */
-		@JvmStatic
-		fun getInstance(): Main { // CAUTION pouzivat jen v nejnutnejsich pripadech
-			return instance
+	val main = getKoin().get<Main>()
+	when {
+		args.isNotEmpty() && args[0] == "sim" -> main.loadSim(args)
+		args.isNotEmpty() && args[0] == "example" -> main.runExample(args)
+		args.isNotEmpty() && args[0] == "edit" -> main.loadGui(args)
+		else -> logger.error {
+			"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n\t\t example [name]"
 		}
 	}
 }

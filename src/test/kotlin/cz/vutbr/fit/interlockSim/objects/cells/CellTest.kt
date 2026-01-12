@@ -37,7 +37,7 @@ class CellTest {
 		val center = Point(0, 0)
 		val points = EnumMap<Segment, Point>(Segment::class.java)
 
-		for (s in Segment.values()) {
+		for (s in Segment.values()) { // TODO parametrized test
 			val dx = s.dx
 			val dy = s.dy
 

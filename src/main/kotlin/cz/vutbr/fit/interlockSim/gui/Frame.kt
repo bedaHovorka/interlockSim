@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
-import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
 import java.awt.BorderLayout
 import java.awt.event.ComponentAdapter
@@ -20,7 +20,7 @@ import javax.swing.JScrollPane
 /**
  * Program main window
  */
-class Frame : JFrame(Main.PROGRAM_FULL_NAME) {
+class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	private val statusBar: StatusBar = StatusBar()
 

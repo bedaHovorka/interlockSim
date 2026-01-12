@@ -16,13 +16,16 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import jDisco.Head
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 
 /**
  * Unit tests for path and semaphore coordination in InOutWorker.
@@ -40,7 +43,8 @@ import org.junit.jupiter.api.Test
  * Note: Full simulation execution tests (waitUntil, actual path reservation)
  * require jDisco framework and are beyond scope of unit testing.
  */
-class InOutWorkerPathHandlingTest {
+class InOutWorkerPathHandlingTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
 	private lateinit var entryInOut: InOut
 	private lateinit var worker: InOutWorker
@@ -48,7 +52,7 @@ class InOutWorkerPathHandlingTest {
 
 	@BeforeEach
 	fun setUp() {
-		context = MockSimulationContext()
+		context = MockSimulationContext(factory)
 		entryInOut = InOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()

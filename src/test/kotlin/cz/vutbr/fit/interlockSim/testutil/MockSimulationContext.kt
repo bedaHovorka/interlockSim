@@ -66,8 +66,8 @@ class MockSimulationContext : SimulationContext {
 	/**
 	 * Creates a mock simulation context with empty 100x100 grid.
 	 */
-	constructor() {
-		this.delegate = XMLContextFactory.getInstance().createEmptyContext()
+	constructor(factory: XMLContextFactory) {
+		this.delegate = factory.createEmptyContext()
 		// Enable all standard reports by default
 		for (type in ReportType.ALL) {
 			enabledReports.add(type)
