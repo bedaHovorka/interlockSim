@@ -4,6 +4,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import org.junit.jupiter.api.Test
