@@ -9,11 +9,19 @@
  */
 package cz.vutbr.fit.interlockSim.di
 
+import assertk.assertThat
+import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.java.KoinJavaComponent.get
 
 /**
  * Golden output baseline tests for Koin DI adoption validation
@@ -36,6 +44,50 @@ class KoinGoldenOutputTest {
 	fun tearDown() {
 		// Clean up Koin context after each test
 		stopKoin()
+	}
+
+	/**
+	 * Basic Koin initialization and simulation execution test
+	 *
+	 * This test validates that:
+	 * 1. Koin can be initialized with interlockSimModule
+	 * 2. SimulationContextFactory can be retrieved from Koin
+	 * 3. A simulation context can be created using the factory
+	 * 4. ShuntingLoop simulation can be constructed with Koin-managed dependencies
+	 *
+	 * This is the minimal test required to verify Koin integration doesn't break
+	 * the core simulation functionality.
+	 */
+	@Test
+	@Tag("integration-test")
+	fun `basic Koin initialization and simulation setup succeeds`() {
+		// Initialize Koin with interlockSimModule
+		startKoin {
+			modules(interlockSimModule)
+		}
+
+		// Get SimulationContextFactory from Koin DI container
+		val factory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
+		assertThat(factory).isNotNull()
+
+		// Load vyhybna.xml and create simulation context
+		val xml = javaClass.getResourceAsStream(
+			"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+		)
+		assertThat(xml).isNotNull()
+
+		val context = factory.createContext(xml)
+		assertThat(context).isNotNull()
+
+		// Wrap in MockSimulationContext to avoid running actual simulation
+		val simContext = MockSimulationContext(context as cz.vutbr.fit.interlockSim.context.DefaultContext)
+
+		// Create ShuntingLoop with Koin-managed context
+		val shuntingLoop = ShuntingLoop(simContext, 60L)
+		assertThat(shuntingLoop).isNotNull()
+
+		// Success: Koin initialization, factory injection, context creation, and
+		// ShuntingLoop construction all work correctly with DI
 	}
 
 	/**
