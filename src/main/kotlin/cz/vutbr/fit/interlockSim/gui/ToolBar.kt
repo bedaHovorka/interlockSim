@@ -9,12 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
-import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.action.NodeCellAction
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -25,6 +23,7 @@ import javax.swing.AbstractAction
 import javax.swing.ButtonGroup
 import javax.swing.JToggleButton
 import javax.swing.JToolBar
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Tool palette for railway editor with tools for semaphores, switches, and entry/exit points
@@ -49,10 +48,10 @@ class ToolBar(
 	}
 
 	private val buttonGroup: ButtonGroup = ButtonGroup()
-	private val pseudoContext: EditingContext
+	private val pseudoContext: EditingContext =
+		getKoin().get<EditingContextFactory>().createEmptyContext()
 
 	init {
-		pseudoContext = (Main.getInstance().getContextFactory() as EditingContextFactory).createEmptyContext()
 		preferredSize = Dimension(100, 30)
 		isFloatable = false
 

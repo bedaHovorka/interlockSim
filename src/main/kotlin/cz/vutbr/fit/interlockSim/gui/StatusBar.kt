@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
-import cz.vutbr.fit.interlockSim.Main
+import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import java.awt.Component
 import java.awt.Dimension
@@ -42,7 +42,7 @@ class StatusBar :
 
 	init {
 		preferredSize = Dimension(100, 25)
-		text = "Welcome to " + Main.PROGRAM_NAME
+		text = "Welcome to " + PROGRAM_NAME
 	}
 
 	private fun checkComponent(producer: StatusProducer): Component {

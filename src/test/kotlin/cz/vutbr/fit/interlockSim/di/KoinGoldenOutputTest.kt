@@ -16,13 +16,11 @@ import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.get
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Golden output baseline tests for Koin DI adoption validation
@@ -39,13 +37,7 @@ import org.koin.java.KoinJavaComponent.get
  * @see <a href="https://github.com/bedavs/interlockSim">KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
  */
 @Tag("integration-test")
-class KoinGoldenOutputTest {
-
-	@AfterEach
-	fun tearDown() {
-		// Clean up Koin context after each test
-		stopKoin()
-	}
+class KoinGoldenOutputTest : KoinTestBase() {
 
 	/**
 	 * Basic Koin initialization and simulation execution test
@@ -62,10 +54,7 @@ class KoinGoldenOutputTest {
 	@Test
 	@Tag("integration-test")
 	fun `basic Koin initialization and simulation setup succeeds`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
+		// Koin is already initialized by KoinTestBase.setUpKoin()
 
 		// Get SimulationContextFactory from Koin DI container
 		val factory = get<SimulationContextFactory>(SimulationContextFactory::class.java)

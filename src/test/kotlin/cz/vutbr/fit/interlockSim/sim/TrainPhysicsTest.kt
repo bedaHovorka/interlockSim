@@ -20,7 +20,10 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 
@@ -56,12 +59,13 @@ import org.mockito.Mockito.`when`
  * a complete stop within required distances. Critical for railway safety and scheduling.
  */
 @DisplayName("Train Physics Tests")
-class TrainPhysicsTest {
+class TrainPhysicsTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		mockContext = MockSimulationContext(factory)
 	}
 
 	@Nested

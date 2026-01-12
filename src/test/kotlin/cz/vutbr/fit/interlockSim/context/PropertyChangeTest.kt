@@ -24,6 +24,8 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 
@@ -34,13 +36,14 @@ import java.beans.PropertyChangeListener
  * @since 2026-01 (Java 21 migration)
  */
 @DisplayName("PropertyChange Notification Tests")
-class PropertyChangeTest {
+class PropertyChangeTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: DefaultContext
 	private lateinit var listener: TestPropertyChangeListener
 
 	@BeforeEach
 	fun setUp() {
-		context = XMLContextFactory.getInstance().createEmptyContext()
+		context = factory.createEmptyContext()
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

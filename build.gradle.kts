@@ -122,7 +122,9 @@ dependencies {
 
 // Configure application main class
 application {
-    mainClass.set("cz.vutbr.fit.interlockSim.Main")
+    // Main function is now a top-level Kotlin function in Main.kt
+    // Kotlin compiles this to MainKt class
+    mainClass.set("cz.vutbr.fit.interlockSim.MainKt")
 }
 
 // Configure compilation tasks

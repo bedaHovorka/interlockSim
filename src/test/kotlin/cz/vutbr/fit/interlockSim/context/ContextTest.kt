@@ -23,13 +23,16 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Context testing
  *
  */
-class ContextTest {
-	private val context: DefaultContext = XMLContextFactory.getInstance().createEmptyContext()
+class ContextTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
+	private val context: DefaultContext by lazy { factory.createEmptyContext() }
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
 	private val tl: SimpleTrackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)

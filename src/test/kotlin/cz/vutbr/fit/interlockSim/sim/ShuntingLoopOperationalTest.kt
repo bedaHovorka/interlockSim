@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 
 /**
  * Integration tests for ShuntingLoop operational scenarios.
@@ -61,14 +63,12 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 @DisplayName("ShuntingLoop Operational Tests")
-class ShuntingLoopOperationalTest {
-	private lateinit var factory: XMLContextFactory
+class ShuntingLoopOperationalTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var validContext: SimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		factory = XMLContextFactory.getInstance()
-
 		// Load vyhybna.xml - the ONLY configuration where ShuntingLoop can operate (SIM-004)
 		val xml =
 			javaClass.getResourceAsStream(

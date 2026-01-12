@@ -28,6 +28,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import java.io.File
 
 /**
@@ -50,7 +52,8 @@ import java.io.File
  */
 @Tag("integration-test")
 @DisplayName("Path-Track Integration Tests")
-class PathTrackIntegrationTest {
+class PathTrackIntegrationTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
 	private lateinit var linearContext: DefaultContext
 	private lateinit var switchContext: DefaultContext
@@ -58,7 +61,6 @@ class PathTrackIntegrationTest {
 	@BeforeEach
 	fun setUp() {
 		// Load XML fixtures for testing
-		val factory = XMLContextFactory.getInstance()
 		val linearFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
 		val switchFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
 

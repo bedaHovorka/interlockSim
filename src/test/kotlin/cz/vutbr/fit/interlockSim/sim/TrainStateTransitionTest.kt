@@ -16,8 +16,11 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
+import org.koin.test.inject
 import org.mockito.Mockito.*
 
 /**
@@ -43,12 +46,13 @@ import org.mockito.Mockito.*
  * - Motor acceleration physics tested in TrainPhysicsTest
  * - Full path reservation tested in AbstractPathTest
  */
-class TrainStateTransitionTest {
+class TrainStateTransitionTest : KoinTestBase() {
+	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext()
+		mockContext = MockSimulationContext(factory)
 	}
 
 	@Nested
