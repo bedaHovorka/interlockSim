@@ -67,10 +67,9 @@ class Main {
 			val userDir = File(".").canonicalFile
 			val file = File(args[1]).canonicalFile
 			if (!file.startsWith(userDir)) {
-				val errorMsg = """
-					Refusing to open file outside user directory.
-					Requested: '${file.path}', allowed base: '${userDir.path}'
-				""".trimIndent().replace("\n", " ")
+				val errorMsg =
+					"Refusing to open file outside user directory. " +
+					"Requested: '${file.path}', allowed base: '${userDir.path}'"
 				logger.error { errorMsg }
 				throw ContextCreationException(errorMsg)
 			}
