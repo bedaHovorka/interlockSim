@@ -31,7 +31,6 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.java.KoinJavaComponent.inject
 import org.koin.java.KoinJavaComponent.get
 
 /**
@@ -47,8 +46,11 @@ import org.koin.java.KoinJavaComponent.get
 class Main private constructor() {
 	private var frame: Frame? = null
 
-	// Inject EditingContextFactory from Koin DI container
-	private val editingContextFactory: EditingContextFactory by inject(EditingContextFactory::class.java)
+	// Lazy injection of EditingContextFactory from Koin DI container
+	// Using lazy to defer Koin access until after startKoin() is called in main()
+	private val editingContextFactory: EditingContextFactory by lazy {
+		get(EditingContextFactory::class.java)
+	}
 
 	private fun loadGui(args: Array<String>) {
 		frame = Frame()
