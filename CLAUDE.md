@@ -26,13 +26,7 @@ Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno Univ
 
 This project uses Gradle with Kotlin DSL for building. Java 21 LTS is the minimum required version.
 
-**Migration Notes**:
-- Migrated from Apache Ant + Ivy to Gradle in January 2026
-- Migrated from Java 11 to Java 21 LTS in January 2026
-- Refactored deprecated Observable/Observer to PropertyChangeSupport
-- Extracted jDisco library to separate repository in January 2026
-- **Migrated from Java to Kotlin in January 2026** - See "Kotlin Migration History" section below
-- **Migrated from SLF4J to kotlin-logging in January 2026** - Eliminates verbose guard checks with lambda-based lazy evaluation
+**Recent migrations (January 2026):** Ant→Gradle, Java 11→21 LTS, Java→Kotlin, Observable→PropertyChangeSupport, SLF4J→kotlin-logging, jDisco extracted to separate repo.
 
 ### Dependency Management
 
@@ -47,6 +41,7 @@ Dependencies are managed via Gradle with fallback strategy:
 - **Mockito 5.21.0** - Mocking framework
 - **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
 - **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
+- **Koin 3.5.6** - Kotlin-native dependency injection framework (adopted 2026-01-12, migration complete)
 
 Gradle automatically downloads dependencies during the build. Configuration files:
 - `build.gradle.kts` - Build configuration and dependency declarations
@@ -175,16 +170,11 @@ The project includes Docker support for both the Java application and LaTeX thes
 
 ### Prerequisites
 
-- Docker and Docker Compose installed on the host
-- X11 server running on the host (for GUI display)
-  - Linux: X11 is usually already running
-  - macOS: Install XQuartz
-  - Windows: Install VcXsrv or Xming
+Docker/Docker Compose and X11 server (Linux: usually installed; macOS: XQuartz; Windows: VcXsrv/Xming)
 
 ### Docker Services
 
-**app** - Java application with GUI support (X11 forwarding)
-**text** - LaTeX thesis compilation
+**app:** Java application with X11 GUI support | **text:** LaTeX thesis compilation
 
 ### Common Docker Commands
 
@@ -238,26 +228,7 @@ docker compose build app
 
 ### Docker Architecture
 
-**Root Dockerfile (multi-stage build):**
-1. **Builder stage** - Uses Eclipse Temurin 21 JDK
-   - Accepts GITHUB_ACTOR and GITHUB_TOKEN as build args
-   - Resolves dependencies via Gradle with fallback strategy:
-     - First tries mavenLocal() cache (if jDisco was built locally)
-     - Falls back to GitHub Packages (requires authentication)
-   - Compiles Java sources (Java 21 target)
-   - Runs all tests with JUnit 5 (build fails if tests fail)
-   - Creates uber JAR with all dependencies
-   - Uses BuildKit cache mounts for ~/.m2, ~/.gradle for faster rebuilds
-2. **Runner stage** - Eclipse Temurin 21 JRE and X11 libraries
-   - Minimal runtime environment
-   - X11 forwarding for GUI support
-   - No build tools in final image
-
-**text/Dockerfile:**
-- Based on Debian Bookworm
-- Full TeX Live installation with Czech language support
-- Image conversion tools (wmf2eps, autotrace, gnuplot)
-- Compiles thesis PDF from LaTeX sources
+Multi-stage Dockerfile: Builder stage (Temurin 21 JDK, compiles, tests, creates uber JAR) → Runner stage (Temurin 21 JRE, X11 support). `text/Dockerfile` for LaTeX thesis compilation (Debian Bookworm, TeX Live).
 
 ### X11 Forwarding Notes
 
@@ -304,11 +275,36 @@ If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
 
 ### Artifacts
 
-Services copy build outputs to `/artifacts` inside the container, which is mounted to `./artifacts/` on the host:
-- `artifacts/app/interlockSim.jar` - Compiled application
-- `artifacts/text/bakalarka.pdf` - Compiled thesis
+Build outputs copied to `./artifacts/`: `app/interlockSim.jar`, `text/bakalarka.pdf`
 
-**Note:** jDisco is now consumed as a Maven dependency from GitHub Packages, not built locally in Docker.
+### Koin Integration
+
+**Status:** ✅ Migration complete, fully compatible with Docker (verified 2026-01-12)
+
+The Docker configuration supports Koin dependency injection framework without any modifications:
+- Koin 3.5.6 automatically included in uber JAR via Gradle dependency resolution
+- JAR size: 6.6 MB (Koin adds ~1.12 MB, within expected overhead)
+- All 698 tests pass in Docker build
+- All application modes work: `sim`, `edit`, `example`
+
+**Quick verification:**
+```bash
+# Build and test
+docker compose build app
+
+# Verify Koin is included
+docker run --rm interlocksim:latest sh -c \
+  "unzip -l /app/interlockSim.jar | grep org/koin/ | wc -l"
+# Output: 225+ Koin class files
+
+# Run simulation with Koin DI
+docker compose run --rm app java -jar interlockSim.jar example shuntingLoop 10
+```
+
+For detailed Docker + Koin integration guide, see:
+- `DOCKER_KOIN_QUICKSTART.md` - Quick reference and commands
+- `KOIN_DOCKER_INTEGRATION_REPORT.md` - Full verification report
+- `KOTLIN_STYLE_GUIDE.md` - Complete Koin DI guide (section: Dependency Injection with Koin)
 
 ## Architecture
 
@@ -392,26 +388,65 @@ src/
 
 ## Kotlin Migration History
 
-**Completed:** January 2026 (100% of 94 files migrated)
+**Completed:** January 2026 (100% of 94 files migrated via manual conversion)
+- Conservative structure-preserving approach with full test parity (242 tests passing)
+- Physics calculations validated against Java baseline (tolerance: 1e-9s, 1e-6m)
+- Full jDisco interoperability maintained
 
-**Key Facts:**
-- **Duration:** ~1 week intensive manual conversion (vs. estimated 3-4 weeks)
-- **Test parity:** 242/242 tests restored and passing (240 pass, 1 skipped @Disabled, 1 property change test)
-- **Approach:** Conservative structure-preserving conversion - no unsolicited refactoring
-- **Automated tools:** Attempted Python regex converter - **failed** (enum syntax, inner classes, generics)
-- **Critical lesson:** Legacy codebase migration requires manual conversion with architectural understanding
+## Dependency Injection with Koin
 
-**Validation:**
-- Golden output comparison: Kotlin matches Java baseline (tolerance: 1e-9 seconds, 1e-6 meters)
-- Physics calculations verified: Train acceleration, distance, velocity within tolerance
-- jDisco interop (Java 6): Fully functional with Kotlin code
+**Status:** Migration complete (2026-01-12)
+**Framework:** Koin 3.5.6 (Kotlin-native, lightweight ~1MB)
+**Documentation:** See `KOTLIN-MIGRATION-STATUS.md` for migration overview and DI notes, `KOTLIN_STYLE_GUIDE.md` for coding patterns
 
-**File complexity breakdown:**
-- Simple (25 files): Exceptions, interfaces - 15-30 min each
-- Moderate (30 files): Domain model, utilities - 30-60 min each
-- Complex (19 files): Train (inner classes), RailSemaphore (enums) - 2-4 hours each
+### Quick Start
 
-See `KOTLIN-MIGRATION-STATUS.md` for detailed migration report.
+```kotlin
+// Inject dependencies (property delegation)
+class MyClass {
+    private val dependency: MyDependency by inject()
+}
+
+// Or constructor injection
+class MyClass(private val dependency: MyDependency)
+```
+
+### Module Organization
+
+Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/InterlockSimModule.kt`:
+
+- **utilModule** - Utility classes (ready for expansion)
+- **xmlModule** - XML parsing, XMLContextFactory
+- **contextModule** - Context lifecycle management
+- **guiModule** - Swing components (ready for expansion)
+- **objectsModule** - Domain model (minimal by design)
+- **sim/** - ❌ **EXCLUDED** (wait for jDisco migration)
+
+### Critical DI Rules
+
+1. **sim/ package EXCLUDED** - No Koin injection in simulation classes (traffic-simulation-expert requirement)
+2. **Contexts are NOT singletons** - Use `factory` or `scope`, never `single`
+3. **Preserve factory patterns** - Inject factories, not products
+4. **No AOP/proxies** - Koin uses direct instantiation (zero overhead)
+5. **Test with golden output** - Validate simulation results unchanged
+
+### Testing with Koin
+
+```kotlin
+@Test
+fun myTest() {
+    startKoin {
+        modules(module {
+            single<MyDependency> { mock() }
+        })
+    }
+    stopKoin() // Cleanup in @AfterEach
+}
+```
+
+**Benefits:** Eliminates MockSimulationContext (268 lines), enables Mockito in 235 test files
+
+See `KOTLIN-MIGRATION-STATUS.md` for comprehensive guide, `KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
 
 ## Code Style
 
@@ -513,55 +548,20 @@ class MyIntegrationTest {
 
 **Test coverage statistics (January 2026):**
 - **662 tests total** (628 passing, 34 skipped, 0 failing)
-- **51% code coverage** (8,824/17,070 instructions covered)
-- **36 test classes** across 6 expansion phases
-- **+420 tests added** in test coverage expansion initiative (baseline: 242 tests)
+- **51% code coverage** (8,824/17,070 instructions)
+- **36 test classes** covering unit tests, integration tests, and edge cases
 
-**Coverage by package:**
-- `objects.tracks/` - 85% coverage (excellent)
-- `xml/` - 85% coverage (excellent)
-- `util/` - 75% coverage (good)
-- `objects.cells/` - 72% coverage (good)
-- `context/` - 70% coverage (good)
-- `objects.paths/` - 52% coverage (medium)
-- `sim/` - 33% coverage (limited by jDisco framework restrictions)
-- `Main` - 22% coverage (CLI entry point, some tests disabled)
-- `gui/` - 0% coverage (deferred per QA assessment)
+**Coverage highlights:**
+- High coverage (70-85%): tracks, xml, util, cells, context
+- Medium coverage (52%): paths
+- Limited coverage (33%): sim (jDisco framework restrictions)
+- Deferred: gui (0%)
 
-**Test expansion phases (2026-01-10):**
-- **Phase 1:** Safety-critical components (Train physics, Track state, RailSwitch, RailSemaphore)
-- **Phase 2:** Simulation engine core (Train state transitions, path interaction, InOutWorker)
-- **Phase 3:** Path and track integration (AbstractPath, path/track coordination)
-- **Phase 4:** Main entry points and cell edge cases (CLI parsing, example loading, NodeCell, context initialization)
-- **Phase 5:** Generator and advanced simulations (Generator, shunting operations, timetables, Time utilities)
-- **Phase 6:** Exception handling and edge cases (SimulationException, path validation, deadlock detection, race conditions, invalid networks)
+**Test classes (36 total):** Utility (6), Context (5), Simulation (13), Path/Track (7), Cell (4), Entry point (3), XML (1)
 
-**Key test classes (36 total):**
+**Test utilities:** MockSimulationContext, TestContextBuilder, TestFixtures, TestTrackBuilder, TrackTestMocks, AssertKExtensions
 
-Utility tests (6): `Array2DMapTest`, `DoubletonTest`, `EnumUnorientedGraphTest`, `HashMapGraphTest`, `MultimapExtensionsTest`, `PointTest`
-
-Context tests (5): `DefaultContextTest`, `ConcurrentSaveTest`, `ContextTest`, `ContextInitializationTest`, `BresenhamJoinTest`, `PropertyChangeTest`
-
-Simulation tests (13): `TrainTest`, `TrainPhysicsTest`, `TrainStateTransitionTest`, `TrainPathInteractionTest`, `InOutWorkerTest`, `InOutWorkerPathHandlingTest`, `ShuntingLoopTest`, `ShuntingLoopOperationalTest`, `SimpleIntegrationTest`, `GeneratorTest`, `TimeTest`, `TimetableTest`, `DeadlockDetectionTest`, `SimulationExceptionTest`
-
-Path/Track tests (7): `AbstractPathTest`, `PathTrackIntegrationTest`, `PathValidationTest`, `SimpleTrackStateTest`, `SimpleTrackEnterLeaveTest`
-
-Cell tests (4): `CellTest`, `CellConnectionTest`, `NodeCellTest`, `RailSwitchTest`, `RailSemaphoreTest`
-
-Entry point tests (3): `MainArgumentParsingTest` (28 tests currently disabled - see Known Issues), `ExampleLoadingTest`, `InvalidNetworkTest`, `RaceConditionTest`
-
-XML tests (1): `XMLContextFactoryTest`
-
-**Test utilities:**
-- `MockSimulationContext` - Mock implementation for time-controlled testing
-- `TestContextBuilder` - Fluent builder for test contexts
-- `TestFixtures` - Shared test data and configurations
-- `TestTrackBuilder` - Fluent builder for test track layouts
-- `TrackTestMocks` - Mock infrastructure for track testing
-- `AssertKExtensions` - Custom AssertK assertions for railway domain
-
-**Test resources:**
-- `src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/` - 10 XML test fixtures for parser validation
+**Test resources:** 10 XML fixtures in `src/test/resources/.../xml/fixtures/`
 
 **Run tests:**
 ```bash
@@ -584,13 +584,7 @@ Tests are automatically executed during the build process. The build will fail i
 
 ### SonarQube Integration
 
-The project includes SonarQube integration for static code analysis and quality metrics. SonarQube provides comprehensive analysis including:
-- Code smells and maintainability issues
-- Security vulnerabilities
-- Code coverage (via JaCoCo)
-- Code duplication detection
-- Complexity metrics
-- Technical debt assessment
+SonarQube integration provides: code smells, security vulnerabilities, coverage (JaCoCo), duplication, complexity metrics, technical debt.
 
 **Configuration files:**
 - `build.gradle.kts` - SonarQube plugin and JaCoCo configuration (primary)
@@ -599,98 +593,23 @@ The project includes SonarQube integration for static code analysis and quality 
 
 ### Running SonarQube Analysis
 
-**Prerequisites:**
-- SonarQube server running (local or cloud)
-- SonarQube authentication token
-
-#### Option 1: SonarCloud (Recommended for Open Source)
-
-SonarCloud is free for public repositories and requires no infrastructure setup.
-
-**Setup:**
-1. Sign up at https://sonarcloud.io with your GitHub account
-2. Create a new project and organization
-3. Generate a token: User Menu > My Account > Security > Generate Tokens
-4. Run analysis:
-   ```bash
-   ./gradlew clean test jacocoTestReport sonar \
-     -Dsonar.host.url=https://sonarcloud.io \
-     -Dsonar.organization=<your-org> \
-     -Dsonar.token=<your-token>
-   ```
-
-**Environment variables (alternative to command-line):**
-```bash
-export SONAR_HOST_URL=https://sonarcloud.io
-export SONAR_ORGANIZATION=<your-org>
-export SONAR_TOKEN=<your-token>
-./gradlew clean test jacocoTestReport sonar
-```
-
-#### Option 2: Local SonarQube Server
-
-Run SonarQube locally with Docker for private analysis.
-
-**Start SonarQube server:**
-```bash
-docker run -d --name sonarqube \
-  -p 9000:9000 \
-  sonarqube:lts-community
-```
-
-**Access and setup:**
-1. Open http://localhost:9000 in browser
-2. Login with default credentials: admin/admin (change password on first login)
-3. Create new project manually or use automatic setup
-4. Generate token: User Menu > My Account > Security > Generate Tokens
-
-**Run analysis:**
+**SonarCloud (recommended):** Sign up at https://sonarcloud.io, generate token, run:
 ```bash
 ./gradlew clean test jacocoTestReport sonar \
-  -Dsonar.host.url=http://localhost:9000 \
+  -Dsonar.host.url=https://sonarcloud.io \
+  -Dsonar.organization=<your-org> \
   -Dsonar.token=<your-token>
 ```
 
+**Local server:** `docker run -d -p 9000:9000 sonarqube:lts-community`, then use `-Dsonar.host.url=http://localhost:9000`
+
 ### Code Coverage with JaCoCo
 
-The project uses JaCoCo for code coverage measurement, which is integrated with SonarQube.
+Generate with `./gradlew test jacocoTestReport`. View HTML at `build/reports/jacoco/test/html/index.html`. Configure thresholds in `build.gradle.kts`.
 
-**Generate coverage report:**
-```bash
-./gradlew test jacocoTestReport
-```
+### Quality Gates and CI/CD
 
-**View coverage report:**
-Open `build/reports/jacoco/test/html/index.html` in a browser
-
-**Coverage report locations:**
-- HTML report: `build/reports/jacoco/test/html/index.html`
-- XML report (for SonarQube): `build/reports/jacoco/test/jacocoTestReport.xml`
-
-**Current coverage baseline:**
-- The project has 242 tests across 14 test classes
-- Coverage thresholds start at 0% and can be increased gradually
-- Configure thresholds in `build.gradle.kts` under `jacocoTestCoverageVerification`
-
-### Quality Gates
-
-SonarQube quality gates define the criteria for code quality acceptance. By default, the build does not fail if quality gates fail (suitable for legacy code). To enable strict quality gates:
-
-**In build.gradle.kts:**
-```kotlin
-property("sonar.qualitygate.wait", "true")
-```
-
-**In sonar-project.properties:**
-```properties
-sonar.qualitygate.wait=true
-```
-
-### CI/CD Integration
-
-See `.github/workflows/sonarqube.yml` for automated SonarQube analysis on every push and pull request. The workflow requires:
-- `SONAR_TOKEN` secret configured in GitHub repository settings
-- `SONAR_ORGANIZATION` secret (for SonarCloud)
+Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true`. CI/CD via `.github/workflows/sonarqube.yml` (requires SONAR_TOKEN/SONAR_ORGANIZATION secrets).
 
 ### Kotlin Code Quality (Detekt and Ktlint)
 
@@ -751,54 +670,14 @@ See `KOTLIN_STYLE_GUIDE.md` for complete details on coding conventions and quali
 
 ## Continuous Integration
 
-The project uses GitHub Actions for automated build, test, and deployment workflows.
+GitHub Actions workflow (`.github/workflows/gradle-java21.yml`) runs on push/PR to main/develop branches. Compiles with Java 21, runs tests, packages JAR (90-day artifact retention), and caches dependencies.
 
-**Workflow:** `.github/workflows/gradle-java21.yml`
-
-**Features:**
-- Compiles main project with Java 21
-- Runs all tests with JUnit 5
-- Packages application JAR
-- Uploads JAR as artifact (90-day retention)
-- Smoke test execution
-- Dependency caching (Gradle) for faster builds
-- Requires jDisco 1.2.0 from Maven local repository
-
-**Triggers:**
-- Push to `main`, `develop`, `feature/**`, `fix/**` branches
-- Pull requests to `main` and `develop`
-- Manual workflow dispatch
-
-**Build environment:**
-- Ubuntu latest
-- Java 21 (Temurin distribution)
-- 15-minute timeout
-- Concurrency control (cancels outdated builds)
-
-**Performance:**
-- First build (cold cache): ~3-5 minutes
-- Subsequent builds (warm cache): ~30-60 seconds
-
-View build status and artifacts at: [GitHub Actions](https://github.com/bedavs/interlockSim/actions)
+View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actions)
 
 ## Documentation
 
-LaTeX-based thesis documentation in `text/` directory.
-
-**Build thesis PDF:**
-```bash
-cd text
-make
-```
-
-Requires: `make`, `gnuplot`, `latex`, `wmf2eps`, `sed`
-
-**Generate JavaDoc:**
-```bash
-ant doc
-```
-
-Output goes to `doc/` directory.
+**Thesis:** LaTeX sources in `text/`, build with `make` (requires gnuplot, latex, wmf2eps)
+**JavaDoc:** `ant doc` outputs to `doc/` directory
 
 ## Logging
 

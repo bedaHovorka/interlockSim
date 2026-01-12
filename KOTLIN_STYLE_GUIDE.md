@@ -8,8 +8,9 @@ This document defines the code style and conventions for the interlockSim Java-t
 2. [Code Style Rules](#code-style-rules)
 3. [Kotlin Conversion Conventions](#kotlin-conversion-conventions)
 4. [Tooling](#tooling)
-5. [Common Patterns](#common-patterns)
-6. [Examples](#examples)
+5. [Dependency Injection with Koin](#dependency-injection-with-koin)
+6. [Common Patterns](#common-patterns)
+7. [Examples](#examples)
 
 ## Philosophy
 
@@ -492,6 +493,258 @@ Detekt performs static code analysis configured in `detekt.yml`.
 - **Comments**: No documentation requirements during migration
 
 See `detekt.yml` for complete configuration with detailed comments.
+
+## Dependency Injection with Koin
+
+### Overview
+
+InterlockSim uses **Koin 3.5.6** for dependency injection - a lightweight (~1MB), Kotlin-native DI framework. Koin provides clean dependency management without static fields, code generation, or AOP/proxies.
+
+**Key Benefits:**
+- ✅ Eliminates companion object proliferation
+- ✅ Simplifies testing with Mockito integration
+- ✅ Zero overhead (direct instantiation)
+- ✅ Future-proof (compatible with DSOL/Kalasim migration)
+
+### Quick Reference
+
+```kotlin
+// Define dependencies in module
+val myModule = module {
+	single<XMLContextFactory> { XMLContextFactory() }  // Singleton
+	factory<SimulationContext> { DefaultContext(100, 100) }  // New instance each time
+}
+
+// Start Koin in Main.kt
+fun main(args: Array<String>) {
+	startKoin {
+		modules(interlockSimModule)
+	}
+	// ... existing main logic
+}
+
+// Inject dependencies - Property delegation (preferred)
+class MyClass {
+	private val factory: XMLContextFactory by inject()
+}
+
+// Or constructor injection
+class MyClass(private val factory: XMLContextFactory)
+
+// Testing with Koin
+@Test
+fun myTest() {
+	startKoin {
+		modules(module {
+			single<MyDependency> { mock() }
+		})
+	}
+	// Test code
+}
+
+@AfterEach
+fun tearDown() {
+	stopKoin()  // CRITICAL: Always cleanup in tests
+}
+```
+
+### Critical DI Rules
+
+#### 1. sim/ Package EXCLUDED
+
+**Rule:** No Koin injection in simulation classes (`sim/` package) until jDisco→DSOL/Kalasim migration.
+
+**Rationale:** Simulation correctness depends on jDisco process lifecycle. Physics calculations must remain untouched.
+
+```kotlin
+// WRONG - Do not inject into simulation classes
+class Train {
+	private val context: SimulationContext by inject()  // ❌ Don't do this
+}
+
+// CORRECT - Pass dependencies explicitly
+class Train(private val context: SimulationContext)  // ✅ Constructor parameter
+```
+
+#### 2. Contexts are NOT Singletons
+
+**Rule:** Always inject factories, never contexts directly.
+
+**Rationale:** Contexts must be fresh instances to prevent state bleeding between simulation runs.
+
+```kotlin
+// WRONG - Context as singleton
+val contextModule = module {
+	single<SimulationContext> { DefaultContext(100, 100) }  // ❌ Don't do this
+}
+
+// CORRECT - Factory pattern preserved
+val contextModule = module {
+	single<SimulationContextFactory> { XMLContextFactory() }  // ✅ Factory is singleton
+}
+
+// Usage
+private val factory: SimulationContextFactory by inject()
+val context = factory.createContext(file)  // Fresh instance each time
+```
+
+#### 3. Preserve Factory Patterns
+
+**Rule:** Inject factories for objects that need parameterized construction.
+
+```kotlin
+// Module definition
+val contextModule = module {
+	// XMLContextFactory as singleton (stateless)
+	single<XMLContextFactory> { XMLContextFactory() }
+
+	// Interface bindings to XMLContextFactory
+	single<EditingContextFactory> { get<XMLContextFactory>() }
+	single<SimulationContextFactory> { get<XMLContextFactory>() }
+}
+```
+
+### Common Koin Patterns
+
+#### Singleton Pattern
+
+```kotlin
+// Define in module
+val myModule = module {
+	single<XMLContextFactory> { XMLContextFactory() }
+}
+
+// Use in code - Property delegation
+class MyClass {
+	private val factory: XMLContextFactory by inject()
+}
+
+// Or constructor injection
+class MyClass(private val factory: XMLContextFactory)
+```
+
+#### Factory Pattern (Non-Singleton)
+
+```kotlin
+// Define in module
+val myModule = module {
+	factory<SimulationContext> { (editingContext: EditingContext) ->
+		DefaultContext(editingContext)
+	}
+}
+
+// Use in code with parameters
+val context: SimulationContext = get { parametersOf(editingContext) }
+```
+
+#### Scoped Instances
+
+```kotlin
+// Define scope
+val myModule = module {
+	scope<SimulationScope> {
+		scoped<SimulationContext> { DefaultContext(100, 100) }
+	}
+}
+
+// Use scope
+val scope = getKoin().createScope<SimulationScope>()
+val context = scope.get<SimulationContext>()
+// ... use context
+scope.close()  // Close scope when done
+```
+
+### Testing with Koin
+
+#### Before: Hand-Written Mock (268 lines)
+
+```kotlin
+class MockSimulationContext : SimulationContext {
+	private val delegate: DefaultContext
+	// ... 260+ lines of manual delegation
+}
+
+@Test
+fun testShuntingLoop() {
+	val mock = MockSimulationContext()
+	val loop = ShuntingLoop(mock)
+}
+```
+
+#### After: Koin + Mockito (10 lines)
+
+```kotlin
+@Test
+fun testShuntingLoop() {
+	startKoin {
+		modules(module {
+			single<SimulationContext> { mock() }
+		})
+	}
+
+	val context: SimulationContext = get()
+	whenever(context.time()).thenReturn(10.0)
+
+	val loop: ShuntingLoop = get()
+	verify(context, times(1)).run()
+}
+
+@AfterEach
+fun tearDown() {
+	stopKoin()  // CRITICAL: Always cleanup
+}
+```
+
+### Common Koin Issues and Solutions
+
+#### Issue: Koin not started
+
+```
+org.koin.core.error.NoBeanDefFoundException: No definition found
+```
+
+**Solution:** Ensure `startKoin { modules(...) }` is called in Main.kt before any `inject()` usage.
+
+#### Issue: Multiple Koin instances
+
+```
+org.koin.core.error.KoinAppAlreadyStartedException
+```
+
+**Solution:** Stop Koin in test teardown: `stopKoin()` in `@AfterEach`.
+
+#### Issue: Circular dependency
+
+```
+org.koin.core.error.InstanceCreationException: Could not create instance
+```
+
+**Solution:** Refactor to break circular dependency or use `lazy<T>()` instead of `get<T>()`.
+
+#### Issue: Context state bleeding
+
+**Symptoms:** Tests fail intermittently, context data persists between tests.
+
+**Solution:** Always inject factories, not contexts. Verify `stopKoin()` in `@AfterEach`.
+
+### Module Structure
+
+InterlockSim DI modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/InterlockSimModule.kt`:
+
+- **utilModule** - Utility classes (ready for expansion)
+- **xmlModule** - XML parsing, XMLContextFactory
+- **contextModule** - Context lifecycle management
+- **objectsModule** - Domain model (minimal by design)
+- **guiModule** - Swing components (ready for expansion)
+- **sim/** - ❌ **EXCLUDED** (deferred until jDisco migration)
+
+**Note:** Objects module is intentionally minimal. Domain objects (RailSwitch, RailSemaphore, tracks) are created optimally via XML reflection. Only extend when runtime construction is needed (e.g., Goal 16: Signal Explanation UI).
+
+### Resources
+
+- **Koin Documentation:** https://insert-koin.io/docs/reference/koin-core/
+- **Koin GitHub:** https://github.com/InsertKoinIO/koin
+- **Project Status:** See CLAUDE.md "Dependency Injection with Koin" section
 
 ## Common Patterns
 
@@ -1043,4 +1296,4 @@ cat -A <file>.kt | grep '^	'  # Should show leading tabs
 
 This style guide should be updated as the migration progresses and patterns emerge. After Phase 3 conversion is complete, we may gradually introduce more Kotlin idioms in Phase 4+.
 
-**Last Updated**: 2026-01-07 (Phase 3 preparation)
+**Last Updated**: 2026-01-12 (Added Koin DI section, consolidated from KOIN-ADOPTION.md)

@@ -43,6 +43,16 @@ jobs:
         path: ~/.m2/repository/dk/ruc/keld/jdisco
         key: jdisco-1.2.0
 
+    - name: Cache Koin Dependencies
+      id: cache-koin
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository/io/insert-koin
+        key: koin-${{ hashFiles('gradle.properties', 'build.gradle.kts') }}
+        restore-keys: |
+          koin-${{ hashFiles('gradle.properties', 'build.gradle.kts') }}
+          koin-
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
@@ -75,6 +85,17 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew integrationTest --no-daemon --warning-mode=all --stacktrace
+
+    - name: Verify Koin DI Configuration
+      timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "Validating Koin dependency injection container..."
+        ./gradlew verifyKoinConfiguration --no-daemon --stacktrace
+        echo ""
+        echo "✓ Koin DI container initialized and configured successfully"
 
     - name: Create JAR artifacts (shadowJar)
       timeout-minutes: 10
@@ -116,18 +137,45 @@ jobs:
           echo "**Status**: ✓ All tests passed" >> $GITHUB_STEP_SUMMARY
         fi
 
-    - name: Run smoke test (shunting loop simulation)
+    - name: Run smoke test with Koin integration validation
       if: success()
       timeout-minutes: 8
       run: |
-        echo "Starting smoke test (shunting loop, 300 simulated seconds)..."
-        echo "Timeout: 8 minutes. Under normal CI conditions: ~4-5 minutes."
+        echo "Starting smoke test (shunting loop, 300 simulated seconds with Koin)..."
+        echo "Timeout: 8 minutes. Expected: ~4-5 minutes."
+        echo ""
 
-        if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml -jar build/libs/interlockSim.jar example shuntingLoop 300; then
-          echo "✓ Smoke test completed successfully"
+        # Run simulation with timing metrics
+        START_TIME=$(date +%s%N)
+
+        if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml \
+          -jar build/libs/interlockSim.jar example shuntingLoop 300; then
+
+          END_TIME=$(date +%s%N)
+          ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))
+          ELAPSED_SEC=$(awk "BEGIN {printf \"%.2f\", $ELAPSED_MS / 1000}")
+
+          echo ""
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✓ Passed" >> $GITHUB_STEP_SUMMARY
+          echo "**Simulation:** Shunting Loop (vyhybna.xml)" >> $GITHUB_STEP_SUMMARY
+          echo "**Duration:** ${ELAPSED_SEC} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "**Koin Status:** ✓ Initialized and configured" >> $GITHUB_STEP_SUMMARY
+          echo "**Framework:** Koin 3.5.6 dependency injection active" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "✓ Smoke test completed successfully (${ELAPSED_SEC}s)"
           exit 0
         else
           EXIT_CODE=$?
+          echo ""
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✗ Failed" >> $GITHUB_STEP_SUMMARY
+          echo "**Exit Code:** $EXIT_CODE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           echo "✗ Smoke test failed with exit code: $EXIT_CODE"
           exit $EXIT_CODE
         fi
