@@ -18,17 +18,21 @@ import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.util.Util
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
 import java.io.InputStream
 import java.io.PrintStream
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.java.KoinJavaComponent.inject
+import org.koin.java.KoinJavaComponent.get
 
 /**
  * Main class, for run program
@@ -43,6 +47,9 @@ import java.lang.reflect.Modifier
 class Main private constructor() {
 	private var frame: Frame? = null
 
+	// Inject EditingContextFactory from Koin DI container
+	private val editingContextFactory: EditingContextFactory by inject(EditingContextFactory::class.java)
+
 	private fun loadGui(args: Array<String>) {
 		frame = Frame()
 		frame!!.setContext(createContext(args))
@@ -50,17 +57,15 @@ class Main private constructor() {
 	}
 
 	private fun createContext(args: Array<String>): Context {
-		val factory = getContextFactory() as EditingContextFactory
-
 		if (args.size > 1) {
 			try {
-				return factory.createContext(File(args[1]))
+				return editingContextFactory.createContext(File(args[1]))
 			} catch (e: ContextCreationException) {
 				e.printStackTrace()
 				System.exit(1)
 			}
 		}
-		return factory.createEmptyContext()
+		return editingContextFactory.createEmptyContext()
 	}
 
 	private fun loadSim(args: Array<String>) {
@@ -85,7 +90,8 @@ class Main private constructor() {
 		try {
 			val method = Main::class.java.getMethod(name, SimulationContextFactory::class.java, Array<String>::class.java)
 			if (!method.isAnnotationPresent(Example::class.java)) throw NoSuchMethodException("Method $name isn't annotated")
-			val factory = getContextFactory() as XMLContextFactory
+			// Get injected SimulationContextFactory from Koin DI container
+			val factory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
 			val context = method.invoke(this, factory, args) as SimulationContext
 			context.run()
 		} catch (e: NoSuchMethodException) {
@@ -151,10 +157,12 @@ class Main private constructor() {
 	}
 
 	/**
-	 * temporary method
-	 * @return current Context Factory
+	 * Get context factory from Koin DI container.
+	 * This preserves backward compatibility while using dependency injection.
+	 *
+	 * @return current Context Factory from Koin container
 	 */
-	fun getContextFactory(): ContextFactory = XMLContextFactory.getInstance()
+	fun getContextFactory(): ContextFactory = editingContextFactory
 
 	companion object {
 		/**
@@ -184,17 +192,27 @@ class Main private constructor() {
 		 */
 		@JvmStatic
 		fun main(args: Array<String>) {
-			if (isArgs(args, "sim")) {
-				instance.loadSim(args)
-			} else if (isArgs(args, "example")) {
-				instance.runExample(args)
-			} else if (isArgs(args, "edit")) {
-				instance.loadGui(args)
-			} else {
-				out.println(
-					"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n" +
-						"\t\t example [name]"
-				)
+			// Initialize Koin dependency injection framework with interlockSim module
+			startKoin {
+				modules(interlockSimModule)
+			}
+
+			try {
+				if (isArgs(args, "sim")) {
+					instance.loadSim(args)
+				} else if (isArgs(args, "example")) {
+					instance.runExample(args)
+				} else if (isArgs(args, "edit")) {
+					instance.loadGui(args)
+				} else {
+					out.println(
+						"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n" +
+							"\t\t example [name]"
+					)
+				}
+			} finally {
+				// Clean up Koin context on exit
+				stopKoin()
 			}
 		}
 
