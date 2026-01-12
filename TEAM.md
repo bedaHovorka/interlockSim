@@ -219,7 +219,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 **Tools & Resources:**
 - Git tags: `java` (marks pre-Kotlin migration state)
 - Git history: Compare commits before/after migration
-- Documentation: KOTLIN-MIGRATION-STATUS.md, SIMULATION-VERIFICATION-REPORT.md
+- Documentation: SIMULATION-VERIFICATION-REPORT.md
 - Baseline outputs: Golden test results from Java version
 
 ---
@@ -674,9 +674,58 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 
 **Who enforces:** java-senior-dev (analysis), kotlin-tech-lead (code review), kotlin-junior-dev (asks when unsure)
 
-See also: KOTLIN-MIGRATION-STATUS.md for migration details
+---
+
+## Dependency Injection with Koin
+
+**Adopted:** 2026-01-12 (Phase 1)
+**Framework:** Koin 3.5.6
+**Documentation:** KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin section), CLAUDE.md
+
+### DI Collaboration Guidelines
+
+**kotlin-tech-lead responsibilities:**
+- Design Koin modules and DI architecture
+- Review DI patterns in code reviews
+- Guide team on proper injection techniques
+- Approve phase implementations
+
+**traffic-simulation-expert responsibilities:**
+- ENFORCE sim/ package exclusion from DI
+- Validate simulation correctness after DI changes
+- Approve golden output test results
+- Monitor performance benchmarks
+
+**kotlin-junior-dev guidelines:**
+- Use `by inject()` for property injection
+- Use constructor injection when possible
+- Never inject into sim/ package classes
+- Ask kotlin-tech-lead for DI pattern guidance
+
+**java-senior-dev perspective:**
+- Original 2007 code had no DI framework
+- This is first major architectural change
+- Provide historical context when reviewing DI changes
+
+**agent-architect focus:**
+- DI enables Goal 10 (AI Dispatcher) implementation
+- Module-based organization supports multi-agent systems
+- Injectable ML models and decision engines
+
+**QA perspective (desktop-qa-engineer):**
+- Test scenarios benefit significantly from DI
+- GUI testing improvements modest but valuable
+- Focus validation on context factories and test utilities
+
+### Critical DI Rules (All Team Members)
+
+1. ❌ **NEVER inject into sim/ package** - Wait for jDisco migration
+2. ✅ **Contexts are NOT singletons** - Use factory/scope patterns
+3. ✅ **Preserve factory patterns** - Inject factories, not products
+4. ✅ **Golden output validation required** - Simulation must be unchanged
+5. ✅ **stopKoin() in test teardown** - Prevent test pollution
 
 ---
 
-*Last updated: 2026-01-09*
-*Complete: All 7 agent roles defined*
+*Last updated: 2026-01-12*
+*Complete: All 7 agent roles defined + Koin DI guidelines*

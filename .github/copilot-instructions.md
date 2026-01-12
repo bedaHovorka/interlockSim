@@ -182,8 +182,6 @@ Follows `.editorconfig` configuration:
 - No unsolicited refactoring during migration
 - jDisco interop (Java 6) fully functional
 
-See `KOTLIN-MIGRATION-STATUS.md` for details.
-
 ### Nullability Guidelines
 
 **IMPORTANT:** The original Java code has been carefully tuned for null handling. Some Kotlin null-safety checks can introduce bugs if applied incorrectly.
@@ -327,7 +325,6 @@ GitHub Actions workflows in `.github/workflows/`:
 ## Additional Resources
 
 - **Comprehensive documentation:** See `CLAUDE.md` for detailed information
-- **Kotlin migration:** See `KOTLIN-MIGRATION-STATUS.md`
 - **Code style guide:** See `KOTLIN_STYLE_GUIDE.md`
 - **CI/CD workflows:** See `CICD_WORKFLOW_QUICK_START.md`
 
