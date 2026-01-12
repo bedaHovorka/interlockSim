@@ -54,35 +54,37 @@ class Main {
 
 	fun loadGui(args: Array<String>) {
 		frame = Frame()
-		frame!!.setContext(createContext(args))
-		frame!!.setVisible(true)
+		try {
+			frame!!.setContext(createContext(args))
+			frame!!.setVisible(true)
+		} catch (e: ContextCreationException) {
+			logger.error(e) { "Context creation failed" }
+		}
 	}
 
 	fun createContext(args: Array<String>): Context {
 		if (args.size > 1) {
-			try {
-				val userDir = File(".").canonicalFile
-				val file = File(args[1]).canonicalFile
-				if (!file.startsWith(userDir)) {
-					logger.error {
-						"Refusing to open file outside user directory. Requested: '${file.path}', allowed base: '${userDir.path}'"
-					}
-					System.exit(1)
-				}
-				return editingContextFactory.createContext(file)
-			} catch (e: ContextCreationException) {
-				logger.error(e) { "Context creation failed" }
-				System.exit(1)
+			val userDir = File(".").canonicalFile
+			val file = File(args[1]).canonicalFile
+			if (!file.startsWith(userDir)) {
+				val errorMsg =
+					"Refusing to open file outside user directory. " +
+					"Requested: '${file.path}', allowed base: '${userDir.path}'"
+				logger.error { errorMsg }
+				throw ContextCreationException(errorMsg)
 			}
+			return editingContextFactory.createContext(file)
 		}
 		return editingContextFactory.createEmptyContext()
 	}
 
 	fun loadSim(args: Array<String>) {
-		val context = createContext(args) as SimulationContext
-		context.addReportTypes(*ReportType.values())
 		try {
+			val context = createContext(args) as SimulationContext
+			context.addReportTypes(*ReportType.values())
 			context.run()
+		} catch (e: ContextCreationException) {
+			logger.error(e) { "Context creation failed" }
 		} catch (e: EmptyContextException) {
 			logger.error(e) { "User hasn't specified valid file" }
 		} catch (e: SimulationException) {
