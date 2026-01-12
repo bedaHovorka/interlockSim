@@ -219,7 +219,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 **Tools & Resources:**
 - Git tags: `java` (marks pre-Kotlin migration state)
 - Git history: Compare commits before/after migration
-- Documentation: KOTLIN-MIGRATION-STATUS.md, SIMULATION-VERIFICATION-REPORT.md
+- Documentation: SIMULATION-VERIFICATION-REPORT.md
 - Baseline outputs: Golden test results from Java version
 
 ---
@@ -673,8 +673,6 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 4. **Simplification:** Remove defensive if/else branches added during migration that weren't in original Java
 
 **Who enforces:** java-senior-dev (analysis), kotlin-tech-lead (code review), kotlin-junior-dev (asks when unsure)
-
-See also: KOTLIN-MIGRATION-STATUS.md for migration details
 
 ---
 

@@ -393,8 +393,6 @@ src/
 - Physics calculations validated against Java baseline (tolerance: 1e-9s, 1e-6m)
 - Full jDisco interoperability maintained
 
-See `KOTLIN-MIGRATION-STATUS.md` for detailed migration report.
-
 ## Dependency Injection with Koin
 
 **Status:** Migration complete (2026-01-12)
