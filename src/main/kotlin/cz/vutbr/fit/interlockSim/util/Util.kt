@@ -17,9 +17,26 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
  *
  */
 object Util {
-	internal fun toClass(o: Any): Class<*> {
+	private fun toClass(o: Any): Class<*> {
 		val class1 = o.javaClass
 		return if (SimulationContext::class.java.isAssignableFrom(class1)) SimulationContext::class.java else class1
+	}
+
+	/**
+	 * !!! THIS METHOD is designed only for interlocksim
+	 * @param objects array of objects
+	 * @return array of classes which represents types in objects
+	 */
+	fun toClass(objects: Array<out Any?>): Array<Class<*>?> {
+		val classes = arrayOfNulls<Class<*>>(objects.size)
+		for (i in objects.indices) {
+			val obj = objects[i]
+			if (obj != null) {
+				assert(!obj.javaClass.isArray)
+				classes[i] = toClass(obj)
+			}
+		}
+		return classes
 	}
 
 	/**
