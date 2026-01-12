@@ -552,7 +552,8 @@ class MainArgumentParsingTest {
 		@Test
 		fun `main method is static`() {
 			// Arrange
-			val mainClass = Main::class.java
+			// In Kotlin, top-level functions are compiled to static methods in a class named <FileName>Kt
+			val mainClass = Class.forName("cz.vutbr.fit.interlockSim.MainKt")
 
 			// Act
 			val mainMethod = mainClass.getDeclaredMethod("main", Array<String>::class.java)
