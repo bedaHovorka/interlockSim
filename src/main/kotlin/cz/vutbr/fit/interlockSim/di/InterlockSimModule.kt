@@ -56,7 +56,9 @@ val utilModule: Module = module {
  * Primary target for initial Koin migration implementation
  */
 val xmlModule: Module = module {
-	// XMLContextFactory is the singleton factory for both editing and simulation contexts
+	// XMLContextFactory implements EditingContextFactory and SimulationContextFactory
+	// Use the existing singleton instance to maintain backward compatibility
+	// (Factory interfaces bound in contextModule)
 	single<XMLContextFactory> { XMLContextFactory.getInstance() }
 }
 
