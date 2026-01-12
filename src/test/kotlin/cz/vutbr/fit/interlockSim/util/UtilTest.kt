@@ -43,7 +43,7 @@ class UtilTest {
 		
 		assertThat(result.size).isEqualTo(3)
 		assertThat(result[0]).isEqualTo(RailSemaphore::class.java)
-		assertThat(result[1]).isEqualTo(null)
+		assertThat(result[1]).isNull()
 		assertThat(result[2]).isEqualTo(String::class.java)
 	}
 

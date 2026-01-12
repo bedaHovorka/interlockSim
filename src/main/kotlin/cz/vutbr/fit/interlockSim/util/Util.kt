@@ -25,14 +25,14 @@ object Util {
 	/**
 	 * This method is designed specifically for InterlockSim
 	 * @param objects array of objects
-	 * @return array of classes which represent types in objects
+	 * @return array of classes which represent types of objects
 	 */
 	fun toClass(objects: Array<out Any?>): Array<Class<*>?> {
 		val classes = arrayOfNulls<Class<*>>(objects.size)
 		for (i in objects.indices) {
 			val obj = objects[i]
 			if (obj != null) {
-				assert(!obj.javaClass.isArray)
+				assert(!obj.javaClass.isArray) { "Arrays are not supported as input objects" }
 				classes[i] = toClass(obj)
 			}
 		}
