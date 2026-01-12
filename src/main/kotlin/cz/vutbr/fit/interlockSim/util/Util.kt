@@ -23,9 +23,9 @@ object Util {
 	}
 
 	/**
-	 * !!! THIS METHOD is designed only for interlocksim
+	 * This method is designed specifically for InterlockSim
 	 * @param objects array of objects
-	 * @return array of classes which represents types in objects
+	 * @return array of classes which represent types in objects
 	 */
 	fun toClass(objects: Array<out Any?>): Array<Class<*>?> {
 		val classes = arrayOfNulls<Class<*>>(objects.size)
