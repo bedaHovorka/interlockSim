@@ -62,23 +62,12 @@ import java.io.PrintStream
  * - Cannot directly call private isArgs() method; test through public API
  * - ContextFactory not mocked (tests verify System.err output instead)
  *
- * BUG-001 WORKAROUND:
- * This entire test class is disabled because Main.createContext() calls System.exit(1)
- * when encountering ContextCreationException (line 60 in Main.kt). This kills the test JVM
- * process mid-execution, causing Gradle test executor to fail with non-zero exit value 1.
+ * BUG-001 FIXED:
+ * Main.createContext() now throws ContextCreationException instead of calling System.exit(1).
+ * This allows tests to run without killing the test JVM process.
  *
- * Multiple tests in this class trigger this code path by passing file arguments to Main.main():
- * - invalid file path shows error() - explicitly disabled
- * - arguments with spaces handled correctly() - triggers XML parsing failure → System.exit(1)
- * - sim mode with valid file path() - minimal XML fails validation → System.exit(1)
- * - And potentially others
- *
- * To re-enable this test class, Main.createContext() must be refactored to NOT call System.exit()
- * or use a configurable exit handler for testing.
- *
- * GitHub Issue: #56
+ * GitHub Issue: #56 (fixed)
  */
-@Disabled("BUG-001: Main.createContext() calls System.exit(1), killing test JVM. See GitHub issue #56")
 class MainArgumentParsingTest {
 	private lateinit var systemErr: PrintStream
 	private lateinit var capturedErr: ByteArrayOutputStream
@@ -98,6 +87,13 @@ class MainArgumentParsingTest {
 	fun tearDown() {
 		// Restore original System.err
 		System.setErr(systemErr)
+		
+		// Clean up Koin context if it was started by main()
+		try {
+			stopKoin()
+		} catch (e: Exception) {
+			// Koin might not be started, that's okay
+		}
 	}
 
 	private fun getCapturedError(): String {
@@ -337,7 +333,6 @@ class MainArgumentParsingTest {
 		}
 
 		@Test
-		@Disabled("BUG-001: Main.createContext() calls System.exit(1) on ContextCreationException. See GitHub issue #56")
 		fun `invalid file path shows error`() {
 			// Arrange
 			val args = arrayOf("sim", "/nonexistent/path/to/file.xml")
