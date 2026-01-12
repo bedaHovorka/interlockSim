@@ -82,7 +82,10 @@ class KoinGoldenOutputTest {
 		assertThat(context).isInstanceOf(DefaultContext::class)
 
 		// Wrap in MockSimulationContext to avoid running actual simulation
-		val simContext = MockSimulationContext(context as DefaultContext)
+		// Safe cast after type validation above
+		val defaultContext = context as? DefaultContext
+			?: throw AssertionError("Context should be DefaultContext")
+		val simContext = MockSimulationContext(defaultContext)
 
 		// Create ShuntingLoop with Koin-managed context
 		val shuntingLoop = ShuntingLoop(simContext, 60L)
