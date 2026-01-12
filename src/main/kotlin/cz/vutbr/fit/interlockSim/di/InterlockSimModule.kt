@@ -57,7 +57,7 @@ val utilModule: Module = module {
  */
 val xmlModule: Module = module {
 	// XMLContextFactory is the singleton factory for both editing and simulation contexts
-	single<XMLContextFactory> { XMLContextFactory() }
+	single<XMLContextFactory> { XMLContextFactory.getInstance() }
 }
 
 /**
