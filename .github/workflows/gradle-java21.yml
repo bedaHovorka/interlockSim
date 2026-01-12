@@ -153,7 +153,7 @@ jobs:
 
           END_TIME=$(date +%s%N)
           ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))
-          ELAPSED_SEC=$(echo "scale=2; $ELAPSED_MS / 1000" | bc)
+          ELAPSED_SEC=$(awk "BEGIN {printf \"%.2f\", $ELAPSED_MS / 1000}")
 
           echo ""
           echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
