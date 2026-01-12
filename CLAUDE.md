@@ -448,7 +448,7 @@ fun myTest() {
 
 **Benefits:** Eliminates MockSimulationContext (268 lines), enables Mockito in 235 test files
 
-See `KOIN_MIGRATION_SUMMARY.md` for comprehensive guide, `KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
+See `KOTLIN-MIGRATION-STATUS.md` for comprehensive guide, `KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
 
 ## Code Style
 
