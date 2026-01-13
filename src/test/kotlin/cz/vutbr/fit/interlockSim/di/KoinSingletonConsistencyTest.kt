@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.di
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -98,25 +97,6 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 	}
 
 	/**
-	 * Verify Main.contextFactory returns the XMLContextFactory singleton
-	 *
-	 * This ensures that code using Main.contextFactory gets the same instance
-	 * as code requesting XMLContextFactory from Koin directly.
-	 */
-	@Test
-	fun `Main contextFactory returns same instance as XMLContextFactory from Koin`() {
-		val xmlFactory = get<XMLContextFactory>()
-		assertThat(xmlFactory).isNotNull()
-
-		val mainInstance = get<Main>()
-		val contextFactoryFromMain = mainInstance.contextFactory
-		assertThat(contextFactoryFromMain).isNotNull()
-
-		// Verify they are the exact same instance
-		assertThat(contextFactoryFromMain).isSameInstanceAs(xmlFactory)
-	}
-
-	/**
 	 * Verify all factory access patterns return the same instance
 	 *
 	 * Comprehensive test that checks all different ways to access the factory
@@ -127,17 +107,14 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 		val koinXmlFactory = get<XMLContextFactory>()
 		val koinEditingFactory = get<EditingContextFactory>()
 		val koinSimulationFactory = get<SimulationContextFactory>()
-		val mainFactory = get<Main>().contextFactory
 
 		// Verify all are non-null
 		assertThat(koinXmlFactory).isNotNull()
 		assertThat(koinEditingFactory).isNotNull()
 		assertThat(koinSimulationFactory).isNotNull()
-		assertThat(mainFactory).isNotNull()
 
 		// Verify all are the exact same instance
 		assertThat(koinEditingFactory).isSameInstanceAs(koinXmlFactory)
 		assertThat(koinSimulationFactory).isSameInstanceAs(koinXmlFactory)
-		assertThat(mainFactory).isSameInstanceAs(koinXmlFactory)
 	}
 }

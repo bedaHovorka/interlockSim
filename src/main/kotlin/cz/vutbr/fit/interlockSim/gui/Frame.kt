@@ -21,16 +21,16 @@ import javax.swing.JScrollPane
  * Program main window
  */
 class Frame : JFrame(PROGRAM_FULL_NAME) {
-	private val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
+	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	private val statusBar: StatusBar = StatusBar()
 
 	init {
 		setSize(800, 600)
 		setDefaultCloseOperation(EXIT_ON_CLOSE)
 		setLayout(BorderLayout())
-		jMenuBar = MenuBar(this)
+		jMenuBar = MenuBar()
 		contentPane.add(JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER)
-		contentPane.add(ToolBar(this), BorderLayout.NORTH)
+		contentPane.add(ToolBar(), BorderLayout.NORTH)
 
 		statusBar.registerProducer(railwayNetGridCanvas)
 		contentPane.add(statusBar, BorderLayout.SOUTH)
@@ -45,8 +45,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 		)
 	}
-
-	fun getRailwayNetGridCanvas(): RailwayNetGridCanvas = railwayNetGridCanvas
 
 	fun setContext(context: Context) {
 		context.addPropertyChangeListener(statusBar)

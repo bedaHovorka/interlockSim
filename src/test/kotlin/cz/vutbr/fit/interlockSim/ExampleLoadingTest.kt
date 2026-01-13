@@ -216,23 +216,6 @@ class ExampleLoadingTest : KoinTestBase() {
 		}
 
 		/**
-		 * Test that non-annotated method throws error when invoked as example.
-		 * Validates that @Example annotation requirement is enforced.
-		 */
-		@Test
-		fun `non-annotated method fails example invocation`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val method = mainClass.getMethod("getContextFactory")
-
-			// Act
-			val hasExampleAnnotation = method.isAnnotationPresent(Example::class.java)
-
-			// Assert
-			assertThat(hasExampleAnnotation).isFalse()
-		}
-
-		/**
 		 * Test that example method with insufficient arguments throws ContextCreationException.
 		 * Validates that end time parameter is required.
 		 */

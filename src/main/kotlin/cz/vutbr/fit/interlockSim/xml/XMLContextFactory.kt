@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.xml
 
-import cz.vutbr.fit.interlockSim.MyResourceBoundle
+import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultContext
@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import org.koin.mp.KoinPlatform.getKoin
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
@@ -52,6 +53,7 @@ import javax.xml.transform.sax.SAXSource
 import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.SchemaFactory
 import javax.xml.validation.Validator
+import kotlin.getValue
 
 /**
  * XML implementation of {@link EditingContextFactory}
@@ -59,6 +61,9 @@ import javax.xml.validation.Validator
 class XMLContextFactory :
 	EditingContextFactory,
 	SimulationContextFactory {
+
+	private val myResourceBundle: MyResourceBundle by getKoin().inject()
+
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
 	private inner class XMLContext(
@@ -262,7 +267,7 @@ class XMLContextFactory :
 	init {
 		try {
 			val schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
-			val schemaStream = MyResourceBoundle.getInstance().getSchema()
+			val schemaStream = myResourceBundle.getSchema()
 			check(schemaStream != null) { "Schema stream is null" }
 			val schemaFile: Source = StreamSource(schemaStream)
 

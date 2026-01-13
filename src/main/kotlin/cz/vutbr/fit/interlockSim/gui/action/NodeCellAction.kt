@@ -11,13 +11,12 @@ package cz.vutbr.fit.interlockSim.gui.action
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
-import cz.vutbr.fit.interlockSim.gui.ToolBar
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import java.awt.Color
-import java.awt.Component
 import java.awt.RenderingHints
 import java.awt.event.ActionEvent
 import java.awt.image.BufferedImage
@@ -31,7 +30,6 @@ import org.koin.mp.KoinPlatform.getKoin
  *
  */
 class NodeCellAction(
-	private val component: Component,
 	private val cellClass: Class<out NodeCell>,
 	context: EditingContext,
 	private val args: Array<Any>
@@ -39,7 +37,7 @@ class NodeCellAction(
 	override fun actionPerformed(e: ActionEvent) {
 		// Cast args to nullable array as expected by setNodeOnToolbar
 		@Suppress("UNCHECKED_CAST")
-		getRailwayNetGridCanvas(component).setNodeOnToolbar(cellClass, args as Array<Any?>?)
+		getRailwayNetGridCanvas().setNodeOnToolbar(cellClass, args as Array<Any?>?)
 	}
 
 	companion object {
@@ -76,9 +74,7 @@ class NodeCellAction(
 			return ImageIcon(img)
 		}
 
-		private fun getRailwayNetGridCanvas(component: Component): RailwayNetGridCanvas {
-			assert(component is ToolBar) { component }
-			return (component as ToolBar).getFrame().getRailwayNetGridCanvas()
-		}
+		private fun getRailwayNetGridCanvas(): RailwayNetGridCanvas = getKoin().get<Frame>().railwayNetGridCanvas
+
 	}
 }

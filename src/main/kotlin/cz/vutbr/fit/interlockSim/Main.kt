@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.ContextFactory
 import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
@@ -44,19 +43,14 @@ private val logger = KotlinLogging.logger {}
  *
  */
 class Main {
-	private var frame: Frame? = null
-
-	// Lazy injection of EditingContextFactory from Koin DI container
-	// Using lazy to defer Koin access until after startKoin() is called in main()
-	private val editingContextFactory: EditingContextFactory by lazy {
-		getKoin().get<EditingContextFactory>()
-	}
+	private val myResourceBundle: MyResourceBundle by getKoin().inject()
+	private val editingContextFactory: EditingContextFactory by getKoin().inject()
+	private val frame: Frame by lazy {  getKoin().get<Frame>()  }
 
 	fun loadGui(args: Array<String>) {
-		frame = Frame()
 		try {
-			frame!!.setContext(createContext(args))
-			frame!!.setVisible(true)
+			frame.setContext(createContext(args))
+			frame.setVisible(true)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Context creation failed" }
 		}
@@ -134,7 +128,7 @@ class Main {
 			throw ContextCreationException("End time of simulation not inserted")
 		}
 		val stream: InputStream =
-			MyResourceBoundle.getInstance().getFile("vyhybna.xml")
+			myResourceBundle.getFile("vyhybna.xml")
 				?: throw ContextCreationException("Resource file vyhybna.xml not found")
 		val context = Util.assertInstanceOf(DefaultContext::class.java, factory.createContext(stream))
 		val time = args[2].toLong()
@@ -158,15 +152,6 @@ class Main {
 			}
 		}
 	}
-
-	/**
-	 * Get context factory from Koin DI container.
-	 * This preserves backward compatibility while using dependency injection.
-	 *
-	 * @return current Context Factory from Koin container
-	 */
-	val contextFactory: ContextFactory
-		get() = editingContextFactory
 }
 
 const val PROGRAM_NAME = "InterlockSim"

@@ -19,6 +19,7 @@ import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.get
+import org.koin.java.KoinJavaComponent.getKoin
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 
@@ -86,14 +87,8 @@ class KoinInitializationOrderTest {
 		}
 
 		// Get Main instance
-		val mainInstance = get<Main>(Main::class.java)
-		assertNotNull(mainInstance)
-
-		// Access the context factory (which triggers lazy initialization)
-		assertDoesNotThrow {
-			val factory = mainInstance.contextFactory
-			assertNotNull(factory)
-		}
+		val contextFactory = getKoin().get<EditingContextFactory>()
+		assertNotNull(contextFactory)
 	}
 
 	/**
@@ -121,8 +116,7 @@ class KoinInitializationOrderTest {
 
 		// Step 3: Access a method that uses editingContextFactory
 		assertDoesNotThrow {
-			val mainInstance = get<Main>(Main::class.java)
-			val factory = mainInstance.contextFactory
+			val factory =  getKoin().get<EditingContextFactory>()
 			assertNotNull(factory)
 		}
 	}

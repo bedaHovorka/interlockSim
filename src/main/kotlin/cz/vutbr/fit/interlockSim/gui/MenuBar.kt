@@ -22,9 +22,7 @@ import org.koin.mp.KoinPlatform.getKoin
 /**
  * Application menu bar with File and Help menus
  */
-class MenuBar(
-	private val frame: Frame
-) : JMenuBar() {
+class MenuBar : JMenuBar() {
 	private inner class SaveAction : AbstractAction("Save as...") {
 		override fun actionPerformed(e: ActionEvent) {
 			val fileChooser = JFileChooser(System.getProperty("user.dir"))
@@ -36,7 +34,7 @@ class MenuBar(
 			}
 
 			val editingContextFactory = getKoin().get<EditingContextFactory>()
-			val editingContext = frame.getRailwayNetGridCanvas().getEditingContext()
+			val editingContext = getKoin().get<Frame>().railwayNetGridCanvas.getEditingContext()
 			editingContextFactory.saveContext(editingContext, fileChooser.selectedFile)
 		}
 	}

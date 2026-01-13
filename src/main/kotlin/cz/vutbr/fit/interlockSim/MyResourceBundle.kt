@@ -13,20 +13,12 @@ import java.io.File
 import java.io.InputStream
 import java.util.ListResourceBundle
 
+private val BASE = "resource" + File.separatorChar
+
 /**
  * Resources
  */
-class MyResourceBoundle private constructor() : ListResourceBundle() {
-	companion object {
-		private val instance = MyResourceBoundle()
-		private val BASE = "resource" + File.separatorChar
-
-		/**
-		 * @return singleton instance
-		 */
-		@JvmStatic
-		fun getInstance(): MyResourceBoundle = instance
-	}
+class MyResourceBundle : ListResourceBundle() {
 
 	override fun getContents(): Array<Array<Any>>? {
 		// Returns null as resources are loaded via getFile() and getSchema() methods instead

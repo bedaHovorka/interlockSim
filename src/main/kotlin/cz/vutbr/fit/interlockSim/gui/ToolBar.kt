@@ -28,19 +28,23 @@ import org.koin.mp.KoinPlatform.getKoin
 /**
  * Tool palette for railway editor with tools for semaphores, switches, and entry/exit points
  */
-class ToolBar(
-	private val frame: Frame
-) : JToolBar() {
+class ToolBar : JToolBar() {
 	private inner class GridSwitch(
 		private val toggleButton: JToggleButton
 	) : AbstractAction("Show Grid") {
 		init {
-			val showGrid = frame.getRailwayNetGridCanvas().isShowGrid()
-			toggleButton.isSelected = showGrid
+			toggleButton.isSelected = false
+
+			toggleButton.addHierarchyListener {
+				if (toggleButton.isShowing) {
+					val canvas = getKoin().get<Frame>().railwayNetGridCanvas
+					toggleButton.isSelected = canvas.isShowGrid()
+				}
+			}
 		}
 
 		override fun actionPerformed(e: ActionEvent) {
-			val canvas = frame.getRailwayNetGridCanvas()
+			val canvas = getKoin().get<Frame>().railwayNetGridCanvas
 			canvas.setShowGrid(!canvas.isShowGrid())
 			canvas.repaint(100)
 			toggleButton.isSelected = canvas.isShowGrid()
@@ -98,12 +102,10 @@ class ToolBar(
 		vararg args: Any
 	) {
 		@Suppress("UNCHECKED_CAST")
-		val toggleButton = JToggleButton(NodeCellAction(this, cellClass, pseudoContext, args as Array<Any>))
+		val toggleButton = JToggleButton(NodeCellAction(cellClass, pseudoContext, args as Array<Any>))
 		toggleButton.toolTipText = toggleButton.text
 		toggleButton.text = ""
 		buttonGroup.add(toggleButton)
 		add(toggleButton)
 	}
-
-	fun getFrame(): Frame = frame
 }
