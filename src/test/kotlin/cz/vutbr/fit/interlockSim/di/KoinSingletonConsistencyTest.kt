@@ -15,13 +15,11 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
-import org.koin.java.KoinJavaComponent.get
+import org.koin.test.get
 
 /**
  * Test XMLContextFactory singleton consistency in Koin DI
@@ -39,13 +37,7 @@ import org.koin.java.KoinJavaComponent.get
  * These tests ensure singleton consistency is maintained in the Koin DI container.
  */
 @Tag("integration-test")
-class KoinSingletonConsistencyTest {
-
-	@AfterEach
-	fun tearDown() {
-		// Clean up Koin context after each test
-		stopKoin()
-	}
+class KoinSingletonConsistencyTest : KoinTestBase() {
 
 	/**
 	 * Verify XMLContextFactory singleton consistency
@@ -55,19 +47,13 @@ class KoinSingletonConsistencyTest {
 	 */
 	@Test
 	fun `Koin XMLContextFactory always returns same singleton instance`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
-
-		// Get XMLContextFactory from Koin DI container multiple times
-		val instance1 = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val instance1 = get<XMLContextFactory>()
 		assertThat(instance1).isNotNull()
 
-		val instance2 = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val instance2 = get<XMLContextFactory>()
 		assertThat(instance2).isNotNull()
 
-		val instance3 = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val instance3 = get<XMLContextFactory>()
 		assertThat(instance3).isNotNull()
 
 		// Verify they are all the exact same instance (same reference)
@@ -83,17 +69,10 @@ class KoinSingletonConsistencyTest {
 	 */
 	@Test
 	fun `Koin EditingContextFactory is same instance as XMLContextFactory`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
-
-		// Get XMLContextFactory from Koin DI container
-		val xmlFactory = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val xmlFactory = get<XMLContextFactory>()
 		assertThat(xmlFactory).isNotNull()
 
-		// Get EditingContextFactory from Koin DI container
-		val editingFactory = get<EditingContextFactory>(EditingContextFactory::class.java)
+		val editingFactory = get<EditingContextFactory>()
 		assertThat(editingFactory).isNotNull()
 
 		// Verify they are the exact same instance
@@ -108,17 +87,10 @@ class KoinSingletonConsistencyTest {
 	 */
 	@Test
 	fun `Koin SimulationContextFactory is same instance as XMLContextFactory`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
-
-		// Get XMLContextFactory from Koin DI container
-		val xmlFactory = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val xmlFactory = get<XMLContextFactory>()
 		assertThat(xmlFactory).isNotNull()
 
-		// Get SimulationContextFactory from Koin DI container
-		val simulationFactory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
+		val simulationFactory = get<SimulationContextFactory>()
 		assertThat(simulationFactory).isNotNull()
 
 		// Verify they are the exact same instance
@@ -133,17 +105,10 @@ class KoinSingletonConsistencyTest {
 	 */
 	@Test
 	fun `Main contextFactory returns same instance as XMLContextFactory from Koin`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
-
-		// Get XMLContextFactory from Koin DI container
-		val xmlFactory = get<XMLContextFactory>(XMLContextFactory::class.java)
+		val xmlFactory = get<XMLContextFactory>()
 		assertThat(xmlFactory).isNotNull()
 
-		// Get Main instance and access contextFactory property
-		val mainInstance = get<Main>(Main::class.java)
+		val mainInstance = get<Main>()
 		val contextFactoryFromMain = mainInstance.contextFactory
 		assertThat(contextFactoryFromMain).isNotNull()
 
@@ -159,16 +124,10 @@ class KoinSingletonConsistencyTest {
 	 */
 	@Test
 	fun `all factory access patterns return same XMLContextFactory singleton instance`() {
-		// Initialize Koin with interlockSimModule
-		startKoin {
-			modules(interlockSimModule)
-		}
-
-		// Get instance through all different Koin access patterns
-		val koinXmlFactory = get<XMLContextFactory>(XMLContextFactory::class.java)
-		val koinEditingFactory = get<EditingContextFactory>(EditingContextFactory::class.java)
-		val koinSimulationFactory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
-		val mainFactory = get<Main>(Main::class.java).contextFactory
+		val koinXmlFactory = get<XMLContextFactory>()
+		val koinEditingFactory = get<EditingContextFactory>()
+		val koinSimulationFactory = get<SimulationContextFactory>()
+		val mainFactory = get<Main>().contextFactory
 
 		// Verify all are non-null
 		assertThat(koinXmlFactory).isNotNull()

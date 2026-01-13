@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 
 /**
@@ -70,7 +71,7 @@ class MockTrackOccupant(
 ) : TrackOccupant {
 	override fun distanceToSemaphore(): Double = 100.0
 
-	override fun nextSemaphore(): cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator? = null
+	override fun nextSemaphore(): OrientedPathSeparator? = null
 
 	override fun toString(): String = name
 }

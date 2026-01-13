@@ -34,11 +34,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
+import org.koin.test.inject
 
 /**
  * Unit tests for {@link XMLContextFactory}.
@@ -60,6 +60,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - invalid-*.xml - Various malformed/invalid XML files
  */
 class XMLContextFactoryTest : KoinTestBase() {
+
 	private val factory: XMLContextFactory by inject()
 
 	@Nested

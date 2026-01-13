@@ -15,22 +15,20 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultContext
-import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
-import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.koin.java.KoinJavaComponent.getKoin
+import java.io.InputStream
 import java.util.ArrayList
 import java.util.Collection
 import java.util.HashMap
@@ -56,31 +54,13 @@ import java.util.HashMap
  * @see SimulationContext
  * @see TestContextBuilder
  */
-class MockSimulationContext : SimulationContext {
-	private val delegate: DefaultContext
+class MockSimulationContext(private val delegate: DefaultContext) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
 	private val workers: MutableMap<InOut, InOutWorker> = HashMap()
 	private val enabledReports: MutableCollection<ReportType> = ArrayList()
 	private var stopped: Boolean = false
 
-	/**
-	 * Creates a mock simulation context with empty 100x100 grid.
-	 */
-	constructor(factory: XMLContextFactory) {
-		this.delegate = factory.createEmptyContext()
-		// Enable all standard reports by default
-		for (type in ReportType.ALL) {
-			enabledReports.add(type)
-		}
-	}
-
-	/**
-	 * Creates a mock simulation context wrapping an existing DefaultContext.
-	 *
-	 * @param context existing context to wrap
-	 */
-	constructor(context: DefaultContext) {
-		this.delegate = context
+	init {
 		// Enable all standard reports by default
 		for (type in ReportType.ALL) {
 			enabledReports.add(type)
@@ -112,19 +92,6 @@ class MockSimulationContext : SimulationContext {
 	 */
 	fun time(): Double = currentTime
 
-	/**
-	 * Registers an InOutWorker for the specified InOut point.
-	 *
-	 * @param inOut the InOut point
-	 * @param worker the worker to register
-	 */
-	fun registerWorker(
-		inOut: InOut,
-		worker: InOutWorker
-	) {
-		workers[inOut] = worker
-	}
-
 	override fun getWorkerFor(inOut: InOut): InOutWorker = workers[inOut]!!
 
 	override fun getInOuts(): Collection<InOut> {
@@ -152,13 +119,6 @@ class MockSimulationContext : SimulationContext {
 		stopped = true
 		throw RuntimeException("Simulation error", error)
 	}
-
-	/**
-	 * Returns whether the simulation has been stopped.
-	 *
-	 * @return true if stopped
-	 */
-	fun isStopped(): Boolean = stopped
 
 	override fun report(
 		report: CharSequence,
@@ -200,14 +160,6 @@ class MockSimulationContext : SimulationContext {
 		return delegate.getNextTrackSection(separator, current)
 	}
 
-	override fun pathToNextSemaphore(
-		separator: PathSeparator,
-		next: TrackSection
-	): Path? {
-		// Simplified implementation for testing - delegate to DefaultContext
-		return delegate.pathToNextSemaphore(separator, next)
-	}
-
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,
 		current: TrackBlock?
@@ -246,22 +198,18 @@ class MockSimulationContext : SimulationContext {
 		return true
 	}
 
-	override fun getRailWayNetGrid(): RailwayNetGrid = delegate.getRailWayNetGrid()
-
-	override fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment> = delegate.getGraph()
-
-	override fun addPropertyChangeListener(listener: java.beans.PropertyChangeListener) {
-		delegate.addPropertyChangeListener(listener)
-	}
-
-	override fun removePropertyChangeListener(listener: java.beans.PropertyChangeListener) {
-		delegate.removePropertyChangeListener(listener)
-	}
-
-	/**
-	 * Returns the underlying DefaultContext for advanced operations.
-	 *
-	 * @return delegate context
-	 */
-	fun getDelegate(): DefaultContext = delegate
 }
+
+fun createMockSimulationContext(): MockSimulationContext {
+	val defaultContext = contextFactory().createEmptyContext()
+	return MockSimulationContext(defaultContext)
+}
+
+fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
+	val defaultContext = contextFactory().createContext(xml)
+	return MockSimulationContext(defaultContext)
+}
+
+private fun contextFactory(): XMLContextFactory = getKoin().get<XMLContextFactory>()
+
+

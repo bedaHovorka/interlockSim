@@ -38,6 +38,10 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
+import cz.vutbr.fit.interlockSim.testutil.buildLinearTrackWithSemaphore
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import org.koin.test.get
 
 /**
  * Comprehensive unit tests for {@link DefaultContext}.
@@ -413,7 +417,7 @@ class DefaultContextTest : KoinTestBase() {
 		@DisplayName("buildLinearTrack creates valid context")
 		fun buildLinearTrack_createsValidContext() {
 			// Act
-			val context = TestContextBuilder.buildLinearTrack()
+			val context = buildLinearTrack()
 
 			// Assert
 			assertThat(context).isNotNull()
@@ -425,7 +429,7 @@ class DefaultContextTest : KoinTestBase() {
 		@DisplayName("buildLinearTrackWithSemaphore includes semaphore")
 		fun buildLinearTrackWithSemaphore_includesSemaphore() {
 			// Act
-			val context = TestContextBuilder.buildLinearTrackWithSemaphore()
+			val context = buildLinearTrackWithSemaphore()
 
 			// Assert
 			assertThat(context).isNotNull()
@@ -437,7 +441,7 @@ class DefaultContextTest : KoinTestBase() {
 		@DisplayName("buildMinimal creates single InOut context")
 		fun buildMinimal_createsSingleInOut() {
 			// Act
-			val context = TestContextBuilder.buildMinimal()
+			val context = buildMinimal()
 
 			// Assert
 			assertThat(context).isNotNull()
@@ -449,7 +453,7 @@ class DefaultContextTest : KoinTestBase() {
 		fun fluentAPI_customContext_works() {
 			// Act
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("Entry", 2, 2, false)
 					.withSemaphore(5, 5, true)
 					.withInOut("Exit", 8, 8, true)
@@ -482,7 +486,7 @@ class DefaultContextTest : KoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
 			val pointA = Point(1, 1)
 			val pointB = Point(10, 10)
-			
+
 			context.putCell(pointA, inA)
 			context.putCell(pointB, inB)
 
@@ -510,10 +514,10 @@ class DefaultContextTest : KoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
 			val pointA = Point(1, 1)
 			val pointB = Point(10, 10)
-			
+
 			context.putCell(pointA, inA)
 			context.putCell(pointB, inB)
-			
+
 			// Capture intermediate cells before removal
 			val cellsBeforeRemoval = mutableListOf<Point>()
 			for (x in 0 until context.getRailWayNetGrid().getCols()) {
@@ -524,7 +528,7 @@ class DefaultContextTest : KoinTestBase() {
 					}
 				}
 			}
-			
+
 			context.joinCells(pointA, pointB, trackBlock)
 
 			// Act - remove the track line (should clean up intermediate cells)
@@ -543,7 +547,7 @@ class DefaultContextTest : KoinTestBase() {
 					}
 				}
 			}
-			
+
 			// Assert - all points should pass containsKey check without assertion error
 			assertThatCode {
 				for (x in 0 until context.getRailWayNetGrid().getCols()) {
@@ -564,7 +568,7 @@ class DefaultContextTest : KoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, inB, 1000.0, 80.0)
 			val pointA = Point(1, 1)
 			val pointB = Point(10, 10)
-			
+
 			context.putCell(pointA, inA)
 			context.putCell(pointB, inB)
 			context.joinCells(pointA, pointB, trackBlock)
@@ -579,7 +583,7 @@ class DefaultContextTest : KoinTestBase() {
 			assertThat(context.getRailWayNetGrid().getLocation(inA))
 				.withMessage("Removed node inA should not be in reverse table")
 				.isNull()
-			
+
 			// Assert - all points should pass containsKey check without assertion error
 			assertThatCode {
 				for (x in 0 until context.getRailWayNetGrid().getCols()) {
@@ -600,11 +604,11 @@ class DefaultContextTest : KoinTestBase() {
 			val inB = InOut("B", true, SpatialType.HORIZONTAL)
 			val track1 = SimpleTrackBlock(inA, rs1, 500.0, 80.0)
 			val track2 = SimpleTrackBlock(rs1, inB, 500.0, 80.0)
-			
+
 			val pointA = Point(1, 1)
 			val pointS = Point(5, 5)
 			val pointB = Point(10, 10)
-			
+
 			context.putCell(pointA, inA)
 			context.putCell(pointS, rs1)
 			context.putCell(pointB, inB)
@@ -625,7 +629,7 @@ class DefaultContextTest : KoinTestBase() {
 			assertThat(context.getRailWayNetGrid().getCellAt(pointB.x, pointB.y))
 				.withMessage("Node inB should still be present")
 				.isSameInstanceAs(inB)
-			
+
 			// Verify intermediate cells between nodes are removed
 			var intermediateCount = 0
 			for (x in 0 until context.getRailWayNetGrid().getCols()) {
@@ -642,7 +646,7 @@ class DefaultContextTest : KoinTestBase() {
 			assertThat(intermediateCount)
 				.withMessage("Intermediate cells should be removed after removeLine")
 				.isEqualTo(0)
-			
+
 			// Assert - grid should be consistent after all operations
 			assertThatCode {
 				for (x in 0 until context.getRailWayNetGrid().getCols()) {

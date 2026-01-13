@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.objects.paths
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
@@ -22,15 +21,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import org.junit.jupiter.api.BeforeEach
 
 /**
  * Comprehensive tests for Path validation and edge case handling.
@@ -54,14 +51,11 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
  */
 @DisplayName("Path Validation Tests")
 class PathValidationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
-	private lateinit var contextBuilder: TestContextBuilder
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext(factory)
-		contextBuilder = TestContextBuilder(factory)
+		mockContext = createMockSimulationContext()
 	}
 
 	@Nested
@@ -154,7 +148,7 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `invalid path throws TrackOperationException on setup`() {
 			// Arrange - create a context and path
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val path = ArrayPath(context)
 
 			// Act - attempt to set up path with no elements
@@ -215,7 +209,7 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `path exception includes context information`() {
 			// Arrange
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val path = ArrayPath(context)
 
 			// Act - create path
@@ -387,8 +381,6 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `path validates entry and exit points are connected`() {
 			// Arrange
-			val mockContext = MockSimulationContext(factory)
-
 			// Create InOut (entry/exit) points
 			val entryPoint = InOut("ENTRY", false, Cell.SpatialType.HORIZONTAL)
 			val exitPoint = InOut("EXIT", true, Cell.SpatialType.HORIZONTAL)

@@ -17,7 +17,8 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -106,7 +107,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 						startLatch.await()
 
 						// Create unique context for this thread
-						val context = TestContextBuilder.buildMinimal()
+						val context = buildMinimal()
 
 						// Save to unique file
 						val file = File("$TEST_FILE_PREFIX-$threadId.xml")
@@ -154,7 +155,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	fun concurrentSave_sameFile_handlesGracefully() {
 		// Arrange
 		val targetFile = File("$TEST_FILE_PREFIX-same.xml")
-		val context = TestContextBuilder.buildMinimal()
+		val context = buildMinimal()
 
 		val threadCount = 5
 		val startLatch = CountDownLatch(1)
@@ -204,7 +205,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	@DisplayName("Context modification during save should not cause data corruption")
 	fun saveContext_whileModifying_noDataCorruption() {
 		// Arrange
-		val context = TestContextBuilder.buildLinearTrack()
+		val context = buildLinearTrack()
 
 		val file = File("$TEST_FILE_PREFIX-modify.xml")
 
@@ -278,7 +279,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	fun repeatedConcurrentSaves_maintainsConsistency() {
 		// Arrange
 		val targetFile = File("$TEST_FILE_PREFIX-repeated.xml")
-		val context = TestContextBuilder.buildMinimal()
+		val context = buildMinimal()
 
 		// Save initial file
 		factory.saveContext(context, targetFile)

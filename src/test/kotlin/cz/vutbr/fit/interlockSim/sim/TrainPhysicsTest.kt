@@ -17,12 +17,11 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
@@ -60,12 +59,11 @@ import org.mockito.Mockito.`when`
  */
 @DisplayName("Train Physics Tests")
 class TrainPhysicsTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext(factory)
+		mockContext = createMockSimulationContext()
 	}
 
 	@Nested

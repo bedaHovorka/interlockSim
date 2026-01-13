@@ -19,13 +19,12 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import org.koin.test.get
 
 /**
  * Unit tests for {@link NodeCell}.
@@ -49,7 +48,6 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
  */
 @DisplayName("NodeCell Tests")
 class NodeCellTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var context: DefaultContext
 	private lateinit var nodeA: MockNodeCell
 	private lateinit var nodeB: MockNodeCell
@@ -58,7 +56,7 @@ class NodeCellTest : KoinTestBase() {
 	fun setUp() {
 		// Create a test context with two adjacent nodes
 		context =
-			TestContextBuilder(factory)
+			get<TestContextBuilder>()
 				.withInOut("InA", 0, 0, true)
 				.withInOut("InB", 1, 0, false)
 				.build()
@@ -89,7 +87,7 @@ class NodeCellTest : KoinTestBase() {
 			// Act
 			// Simulate adding nodes to adjacent grid positions
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("Left", 0, 0, true)
 					.withInOut("Right", 1, 0, false)
 					.build()
@@ -148,7 +146,7 @@ class NodeCellTest : KoinTestBase() {
 		fun `node disconnects cells correctly`() {
 			// Arrange
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("A", 0, 0, true)
 					.withInOut("B", 1, 0, false)
 					.withInOut("C", 2, 0, true)
@@ -188,7 +186,7 @@ class NodeCellTest : KoinTestBase() {
 			// Arrange
 			// Create a simple grid context with connected nodes
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("Start", 0, 0, true)
 					.withInOut("Next", 1, 0, false)
 					.build()
@@ -231,7 +229,7 @@ class NodeCellTest : KoinTestBase() {
 			// Arrange
 			// Create a grid with one central node and multiple neighbors
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("A", 0, 1, true) // Top
 					.withInOut("B", 1, 0, true) // Right
 					.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
@@ -264,7 +262,7 @@ class NodeCellTest : KoinTestBase() {
 			// Arrange
 			val testPoint = Point(5, 10)
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("TestNode", 5, 10, true)
 					.build()
 
@@ -288,7 +286,7 @@ class NodeCellTest : KoinTestBase() {
 		fun `node coordinates are immutable`() {
 			// Arrange
 			val context =
-				TestContextBuilder(factory)
+				get<TestContextBuilder>()
 					.withInOut("FixedNode", 3, 7, true)
 					.build()
 

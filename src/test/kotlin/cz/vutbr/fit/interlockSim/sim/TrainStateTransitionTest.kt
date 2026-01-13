@@ -18,9 +18,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.*
-import org.koin.test.inject
 import org.mockito.Mockito.*
 
 /**
@@ -47,12 +46,11 @@ import org.mockito.Mockito.*
  * - Full path reservation tested in AbstractPathTest
  */
 class TrainStateTransitionTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext(factory)
+		mockContext = createMockSimulationContext()
 	}
 
 	@Nested

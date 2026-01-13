@@ -18,13 +18,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import org.mockito.Mockito.*
 
 /**
@@ -45,12 +44,11 @@ import org.mockito.Mockito.*
  * - Semaphore interactions tested only at construction level
  */
 class TrainTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		mockContext = MockSimulationContext(factory)
+		mockContext = createMockSimulationContext()
 	}
 
 	@Nested

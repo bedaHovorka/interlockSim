@@ -19,18 +19,15 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.BeforeEach
+import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import java.util.ArrayList
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -78,27 +75,16 @@ import java.util.concurrent.atomic.AtomicReference
 @Tag("integration-test")
 @DisplayName("Race Condition and Concurrent Access Tests")
 class RaceConditionTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	companion object {
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
 		private const val THREAD_COUNT = 5
 		private const val STRESS_TEST_ITERATIONS = 10
 	}
 
-	private lateinit var mockContext: MockSimulationContext
-	private lateinit var end1: MockNodeCell
-	private lateinit var end2: MockNodeCell
-	private lateinit var end3: MockNodeCell
-	private lateinit var end4: MockNodeCell
-
-	@BeforeEach
-	fun setUp() {
-		mockContext = MockSimulationContext(factory)
-		end1 = MockNodeCell("End1")
-		end2 = MockNodeCell("End2")
-		end3 = MockNodeCell("End3")
-		end4 = MockNodeCell("End4")
-	}
+	private val end1 = MockNodeCell("End1")
+	private val end2 = MockNodeCell("End2")
+	private val end3 = MockNodeCell("End3")
+	private val end4 = MockNodeCell("End4")
 
 	/**
 	 * Nested tests for concurrent path reservation attempts.
@@ -651,7 +637,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent cell operations on context grid are thread-safe")
 		fun concurrentCellOperations_contextGrid_threadSafe() {
 			// Arrange
-			val context = TestContextBuilder.buildMinimal()
+			val context = buildMinimal()
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(THREAD_COUNT)
 			val exceptions = CopyOnWriteArrayList<Exception>()
@@ -711,7 +697,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent context modifications maintain grid consistency")
 		fun concurrentContextMod_maintainsGridConsistency() {
 			// Arrange
-			val context = TestContextBuilder.buildLinearTrack()
+			val context = buildLinearTrack()
 			val grid = context.getRailWayNetGrid()
 
 			val threadCount = 3
@@ -777,7 +763,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent listener registration/removal is thread-safe")
 		fun concurrentListenerOps_threadSafe() {
 			// Arrange
-			val context = TestContextBuilder.buildMinimal()
+			val context = buildMinimal()
 			val threadCount = 4
 			val iterations = 5
 			val startLatch = CountDownLatch(1)
@@ -969,7 +955,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Listeners and grid modifications work correctly concurrently")
 		fun listenersAndGridMods_workConcurrently() {
 			// Arrange
-			val context = TestContextBuilder.buildMinimal()
+			val context = buildMinimal()
 			val threadCount = 3
 			val listenerOps = ArrayList<java.beans.PropertyChangeListener>()
 			val startLatch = CountDownLatch(1)

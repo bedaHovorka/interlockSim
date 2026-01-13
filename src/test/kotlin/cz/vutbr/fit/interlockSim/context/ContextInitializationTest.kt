@@ -10,7 +10,6 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
@@ -18,7 +17,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
@@ -27,6 +25,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import java.io.File
 
 /**
@@ -373,7 +372,7 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("empty context has valid initial state")
 		fun emptyContext_hasValidState() {
 			// Arrange & Act
-			val emptyContext = TestContextBuilder.buildMinimal()
+			val emptyContext = buildMinimal()
 
 			// Assert - Verify basic structure
 			assertThat(emptyContext)

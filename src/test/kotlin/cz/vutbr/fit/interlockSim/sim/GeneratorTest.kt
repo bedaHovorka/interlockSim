@@ -21,9 +21,8 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import org.koin.test.get
 
 /**
  * Unit tests for {@link Generator}.
@@ -62,14 +61,13 @@ import org.koin.test.inject
 
 @DisplayName("Generator Tests")
 class GeneratorTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
 	private lateinit var mockContext: MockSimulationContext
 
 	@BeforeEach
 	fun setUp() {
 		// Create a context with at least 2 InOuts for Generator to use
 		val contextBuilder =
-			TestContextBuilder(factory)
+			get<TestContextBuilder>()
 				.withInOut("IN1", 0, 0, isEntry = true)
 				.withInOut("OUT1", 1, 0, isEntry = false)
 		val delegateContext = contextBuilder.build()

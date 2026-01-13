@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.java.KoinJavaComponent.get
+import org.koin.test.get
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
@@ -57,7 +57,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		// Koin is already initialized by KoinTestBase.setUpKoin()
 
 		// Get SimulationContextFactory from Koin DI container
-		val factory = get<SimulationContextFactory>(SimulationContextFactory::class.java)
+		val factory = get<SimulationContextFactory>()
 		assertThat(factory).isNotNull()
 
 		// Load vyhybna.xml and create simulation context

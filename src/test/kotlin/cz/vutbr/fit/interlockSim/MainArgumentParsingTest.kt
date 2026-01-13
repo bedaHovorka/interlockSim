@@ -18,7 +18,7 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.testutil.testModule
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.io.TempDir
 import org.koin.core.context.startKoin
@@ -87,7 +87,7 @@ class MainArgumentParsingTest {
 	fun tearDown() {
 		// Restore original System.err
 		System.setErr(systemErr)
-		
+
 		// Clean up Koin context if it was started by main()
 		try {
 			stopKoin()
@@ -534,7 +534,7 @@ class MainArgumentParsingTest {
 		fun `singleton pattern enforced via Koin`() {
 			// Arrange
 			startKoin {
-				modules(interlockSimModule)
+				modules(testModule)
 			}
 
 			try {

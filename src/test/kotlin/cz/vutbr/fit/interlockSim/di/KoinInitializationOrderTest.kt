@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.di
 
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.testutil.testModule
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
@@ -81,7 +82,7 @@ class KoinInitializationOrderTest {
 	fun `context factory accessible after Koin initialization`() {
 		// Initialize Koin as done in Main.main()
 		startKoin {
-			modules(interlockSimModule)
+			modules(testModule)
 		}
 
 		// Get Main instance
@@ -115,7 +116,7 @@ class KoinInitializationOrderTest {
 
 		// Step 2: Koin is initialized (as in main())
 		startKoin {
-			modules(interlockSimModule)
+			modules(testModule)
 		}
 
 		// Step 3: Access a method that uses editingContextFactory

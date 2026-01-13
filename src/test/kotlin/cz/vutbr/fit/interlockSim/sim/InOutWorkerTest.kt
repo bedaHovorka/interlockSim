@@ -17,18 +17,15 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import java.io.InputStream
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
@@ -46,14 +43,14 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * jDisco framework and are beyond the scope of unit testing.
  */
 class InOutWorkerTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+
 	@Nested
 	@DisplayName("InOutWorker initialization")
 	inner class InitializationTests {
 		@Test
 		fun constructor_validInOut_succeeds() {
 			// Create mock context with a single InOut
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -74,7 +71,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_nullInOut_throwsNullPointerException() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val nullInOut: InOut? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -85,7 +82,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_entryInOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val entryInOut = InOut("IN", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, entryInOut)
@@ -95,7 +92,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_exitInOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val exitInOut = InOut("OUT", true, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, exitInOut)
@@ -109,7 +106,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class QueueManagementTests {
 		@Test
 		fun getQueqe_afterConstruction_returnsNonNullQueue() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -122,7 +119,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun getQueqe_afterConstruction_queueIsEmpty() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -135,7 +132,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun getQueqe_calledMultipleTimes_returnsSameInstance() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -153,7 +150,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class QueueStateTests {
 		@Test
 		fun queueEmpty_afterConstruction_returnsTrue() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -166,7 +163,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun queueEmpty_afterConstruction_isConsistent() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
@@ -185,7 +182,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class InOutConfigurationTests {
 		@Test
 		fun constructor_horizontalInOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val horizontalInOut = InOut("H", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, horizontalInOut)
@@ -195,7 +192,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_verticalInOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val verticalInOut = InOut("V", false, SpatialType.VERTICAL)
 
 			val worker = InOutWorker(context, verticalInOut)
@@ -205,7 +202,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_diagonal1InOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val diagonalInOut = InOut("D1", false, SpatialType.DIAGONAL1)
 
 			val worker = InOutWorker(context, diagonalInOut)
@@ -215,7 +212,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_diagonal2InOut_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val diagonalInOut = InOut("D2", false, SpatialType.DIAGONAL2)
 
 			val worker = InOutWorker(context, diagonalInOut)
@@ -225,7 +222,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_inOutWithLongName_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -235,7 +232,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_inOutWithSingleCharName_succeeds() {
-			val context = MockSimulationContext(factory)
+			val context = createMockSimulationContext()
 			val inOut = InOut("X", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
@@ -250,15 +247,11 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_linearTrackContext_succeeds() {
 			// Load linear track fixture
-			val xml: InputStream =
-				InOutWorkerTest::class.java.getResourceAsStream(
-					"/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml"
-				)!!
-			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
-			val simContext = MockSimulationContext(context)
+			val xml = xml("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+			val simContext = createMockSimulationContext(xml)
 
 			// Get InOut A from context
-			val inOutA = context.getRailWayNetGrid().getCellAt(10, 10) as InOut
+			val inOutA = simContext.getRailWayNetGrid().getCellAt(10, 10) as InOut
 			assertThat(inOutA).isNotNull()
 
 			val worker = InOutWorker(simContext, inOutA)
@@ -271,15 +264,11 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_switchBasicContext_succeeds() {
 			// Load switch-basic fixture
-			val xml: InputStream =
-				InOutWorkerTest::class.java.getResourceAsStream(
-					"/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml"
-				)!!
-			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
-			val simContext = MockSimulationContext(context)
+			val xml: InputStream = xml("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
+			val simContext = createMockSimulationContext(xml)
 
 			// Get InOut IN from context
-			val inOutIN = context.getRailWayNetGrid().getCellAt(10, 10) as InOut
+			val inOutIN = simContext.getRailWayNetGrid().getCellAt(10, 10) as InOut
 			assertThat(inOutIN).isNotNull()
 
 			val worker = InOutWorker(simContext, inOutIN)
@@ -291,15 +280,10 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_vyhybnaContext_succeeds() {
 			// Load vyhybna.xml fixture
-			val xml: InputStream =
-				InOutWorkerTest::class.java.getResourceAsStream(
-					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-				)!!
-			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
-			val simContext = MockSimulationContext(context)
+			val simContext = createMockSimulationContext(shuntingXml())
 
 			// Get InOut A from vyhybna.xml (at position 11, 8)
-			val inOutA = context.getRailWayNetGrid().getCellAt(11, 8) as InOut
+			val inOutA = simContext.getRailWayNetGrid().getCellAt(11, 8) as InOut
 			assertThat(inOutA).isNotNull()
 			assertThat(inOutA.getName()).isEqualTo("A")
 
@@ -313,16 +297,11 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_multipleWorkersForSameContext_succeed() {
 			// Load vyhybna.xml fixture
-			val xml: InputStream =
-				InOutWorkerTest::class.java.getResourceAsStream(
-					"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-				)!!
-			val context: DefaultContext = this@InOutWorkerTest.factory.createContext(xml)
-			val simContext = MockSimulationContext(context)
+			val simContext = createMockSimulationContext(shuntingXml())
 
 			// Get both InOuts from vyhybna.xml
-			val inOutA = context.getRailWayNetGrid().getCellAt(11, 8) as InOut
-			val inOutB = context.getRailWayNetGrid().getCellAt(30, 8) as InOut
+			val inOutA = simContext.getRailWayNetGrid().getCellAt(11, 8) as InOut
+			val inOutB = simContext.getRailWayNetGrid().getCellAt(30, 8) as InOut
 			assertThat(inOutA).isNotNull()
 			assertThat(inOutB).isNotNull()
 
@@ -335,5 +314,15 @@ class InOutWorkerTest : KoinTestBase() {
 			assertThat(workerA).isNotSameInstanceAs(workerB)
 			assertThat(workerA.getQueqe()).isNotSameInstanceAs(workerB.getQueqe())
 		}
+	}
+
+	private fun shuntingXml(): InputStream {
+		return xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+	}
+
+	private fun xml(name: String): InputStream {
+		val xml = javaClass.getResourceAsStream(name)
+		requireNotNull(xml) { "$name must exist in resources" }
+		return xml
 	}
 }

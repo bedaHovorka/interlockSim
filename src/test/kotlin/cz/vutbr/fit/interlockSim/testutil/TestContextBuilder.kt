@@ -17,7 +17,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.koin.mp.KoinPlatform.getKoin
+import org.koin.java.KoinJavaComponent.getKoin
 
 /**
  * Test utility for building {@link DefaultContext} instances with fluent API.
@@ -27,7 +27,7 @@ import org.koin.mp.KoinPlatform.getKoin
  *
  * <p>Example usage (future API):
  * <pre>{@code
- * Context context = TestContextBuilder()
+ * Context context = get<TestContextBuilder>()
  *     .withSimpleTrack("T1", 100.0)
  *     .withSimpleTrack("T2", 150.0)
  *     .withConnection("T1", "T2")
@@ -38,12 +38,8 @@ import org.koin.mp.KoinPlatform.getKoin
  * @see DefaultContext
  */
 class TestContextBuilder {
-	private val context: DefaultContext
-
-	constructor(factory: XMLContextFactory) {
-		// DefaultContext is abstract, use factory to create concrete instance
-		this.context = factory.createEmptyContext()
-	}
+	private val factory: XMLContextFactory by getKoin().inject()
+	private val context = factory.createEmptyContext()
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -148,92 +144,87 @@ class TestContextBuilder {
 	 * @return configured DefaultContext instance
 	 */
 	fun build(): DefaultContext = context
-
-	// Static factory methods for common test scenarios
-
-	companion object {
-		/**
-		 * Creates a simple linear track matching the existing ContextTest pattern.
-		 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5) connected by track.
-		 *
-		 * @return configured context with linear track
-		 */
-		fun buildLinearTrack(): DefaultContext {
-			val context = getKoin().get<XMLContextFactory>().createEmptyContext()
-			val inA =
-				cz.vutbr.fit.interlockSim.objects.cells.InOut(
-					"A",
-					false,
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-				)
-			val outB =
-				cz.vutbr.fit.interlockSim.objects.cells.InOut(
-					"B",
-					true,
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-				)
-			val trackBlock =
-				cz.vutbr.fit.interlockSim.objects.tracks
-					.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-
-			val pA = Point(1, 1)
-			val pB = Point(5, 5)
-			context.putCell(pA, inA)
-			context.putCell(pB, outB)
-			context.joinCells(pA, pB, trackBlock)
-			return context
-		}
-
-		/**
-		 * Creates a linear track with a semaphore between two InOut points.
-		 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5).
-		 *
-		 * @return configured context with semaphore
-		 */
-		fun buildLinearTrackWithSemaphore(): DefaultContext {
-			val context = getKoin().get<XMLContextFactory>().createEmptyContext()
-			val inA =
-				cz.vutbr.fit.interlockSim.objects.cells.InOut(
-					"A",
-					false,
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-				)
-			val rs1 =
-				cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
-					false,
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1
-				)
-			val outB =
-				cz.vutbr.fit.interlockSim.objects.cells.InOut(
-					"B",
-					true,
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-				)
-			val trackBlock =
-				cz.vutbr.fit.interlockSim.objects.tracks
-					.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-
-			val pA = Point(1, 1)
-			val r1 = Point(4, 2)
-			val pB = Point(5, 5)
-			context.putCell(pA, inA)
-			context.putCell(r1, rs1)
-			context.putCell(pB, outB)
-			context.joinCells(r1, pB, trackBlock)
-			context.joinCells(pA, r1, trackBlock)
-			return context
-		}
-
-		/**
-		 * Creates an empty context with just one InOut for minimal testing.
-		 *
-		 * @return context with single InOut
-		 */
-		fun buildMinimal(): DefaultContext {
-			val factory = getKoin().get<XMLContextFactory>()
-			return TestContextBuilder(factory)
-				.withInOut("A", 1, 1, false)
-				.build()
-		}
-	}
 }
+
+	/**
+	 * Creates a simple linear track matching the existing ContextTest pattern.
+	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5) connected by track.
+	 *
+	 * @return configured context with linear track
+	 */
+	fun buildLinearTrack(): DefaultContext {
+		val context =getKoin().get<XMLContextFactory>().createEmptyContext()
+		val inA =
+			cz.vutbr.fit.interlockSim.objects.cells.InOut(
+				"A",
+				false,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			)
+		val outB =
+			cz.vutbr.fit.interlockSim.objects.cells.InOut(
+				"B",
+				true,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			)
+		val trackBlock =
+			cz.vutbr.fit.interlockSim.objects.tracks
+				.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+
+		val pA = Point(1, 1)
+		val pB = Point(5, 5)
+		context.putCell(pA, inA)
+		context.putCell(pB, outB)
+		context.joinCells(pA, pB, trackBlock)
+		return context
+	}
+
+	/**
+	 * Creates a linear track with a semaphore between two InOut points.
+	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5).
+	 *
+	 * @return configured context with semaphore
+	 */
+	fun buildLinearTrackWithSemaphore(): DefaultContext {
+		val context = getKoin().get<XMLContextFactory>().createEmptyContext()
+		val inA =
+			cz.vutbr.fit.interlockSim.objects.cells.InOut(
+				"A",
+				false,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			)
+		val rs1 =
+			cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
+				false,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1
+			)
+		val outB =
+			cz.vutbr.fit.interlockSim.objects.cells.InOut(
+				"B",
+				true,
+				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			)
+		val trackBlock =
+			cz.vutbr.fit.interlockSim.objects.tracks
+				.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+
+		val pA = Point(1, 1)
+		val r1 = Point(4, 2)
+		val pB = Point(5, 5)
+		context.putCell(pA, inA)
+		context.putCell(r1, rs1)
+		context.putCell(pB, outB)
+		context.joinCells(r1, pB, trackBlock)
+		context.joinCells(pA, r1, trackBlock)
+		return context
+	}
+
+	/**
+	 * Creates an empty context with just one InOut for minimal testing.
+	 *
+	 * @return context with single InOut
+	 */
+	fun buildMinimal(): DefaultContext {
+		return getKoin().get<TestContextBuilder>()
+			.withInOut("A", 1, 1, false)
+			.build()
+	}

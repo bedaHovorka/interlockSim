@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.koin.core.context.startKoin
@@ -45,7 +44,7 @@ abstract class KoinTestBase : KoinTest {
 	@BeforeEach
 	fun setUpKoin() {
 		startKoin {
-			modules(interlockSimModule)
+			modules(testModule)
 		}
 	}
 
