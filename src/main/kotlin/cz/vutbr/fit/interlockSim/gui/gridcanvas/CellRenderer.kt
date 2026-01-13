@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -94,7 +95,7 @@ abstract class CellRenderer(
 		cell: OrientedPathSeparator
 	) {
 		val thetaObj = ANGLES[cell.getSpatialType()]
-		assert(thetaObj != null) { "No angle defined for spatial type: ${cell.getSpatialType()}" }
+		requireValidState(thetaObj != null) { "No angle defined for spatial type: ${cell.getSpatialType()}" }
 
 		val theta = if (cell.getOrientation()) thetaObj!! + Math.PI else thetaObj!!
 		val xs = intArrayOf(cellWidth / 4, cellWidth / 4, 3 * cellWidth / 4)
@@ -112,14 +113,14 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		cell: Cell
 	) {
-		assert(cell != null) { "Cell cannot be null" }
+		requireValidState(cell != null) { "Cell cannot be null" }
 
 		try {
 			// Use reflection to find and invoke the specific draw method for this cell type
 			val method = javaClass.getMethod("draw", Graphics2D::class.java, cell.javaClass)
 			method.invoke(this, g, cell)
 		} catch (e: Exception) {
-			assert(false) { "Failed to draw cell: $e" }
+			error("Failed to draw cell: $e")
 		}
 	}
 

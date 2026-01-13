@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.AbstractSet
 import java.util.NoSuchElementException
 
@@ -49,12 +50,12 @@ class Doubleton<T, V> : AbstractSet<T> {
 		private var state = IteratorState.INIT
 
 		override fun hasNext(): Boolean {
-			assert(state != null)
+			requireValidState(state != null) { "Iterator state cannot be null" }
 			return state != IteratorState.SECOND
 		}
 
 		override fun next(): T {
-			assert(state != null)
+			requireValidState(state != null) { "Iterator state cannot be null" }
 			return when (state) {
 				IteratorState.INIT -> {
 					state = IteratorState.FIRST
@@ -147,7 +148,7 @@ class Doubleton<T, V> : AbstractSet<T> {
 	fun getValue(key: T): V? {
 		val secondEq = nullEq(key, second)
 		if (nullEq(key, first)) {
-			assert(!secondEq)
+			requireValidState(!secondEq) { "Key matches both first and second elements: $key" }
 			return firstValue
 		}
 		if (secondEq) return secondValue

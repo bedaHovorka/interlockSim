@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -70,7 +71,7 @@ class ShuntingLoop : Interlocking {
 				try {
 					Thread.sleep(sleepTime)
 				} catch (e: InterruptedException) {
-					assert(false) { e }
+					requireSimulation(false) { "Unexpected thread interruption during real-time synchronization: $e" }
 					Thread.currentThread().interrupt() // Restore interrupt status
 					terminate()
 				}
@@ -102,7 +103,9 @@ class ShuntingLoop : Interlocking {
 		this.endTime = endTime
 		generator = InnerGenerator(context)
 
-		assert(context.getGraph().size() > 0)
+		requireSimulation(context.getGraph().size() > 0) {
+			"Railway network graph is empty - must be loaded from vyhybna.xml first"
+		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
 		val B: InOut = elementAt(InOut::class.java, 30, 8)
@@ -150,7 +153,7 @@ class ShuntingLoop : Interlocking {
 				}
 			}
 		} catch (e: ArrayIndexOutOfBoundsException) {
-			assert(false) { e }
+			requireSimulation(false) { "Invalid path element access during path construction: $e" }
 		}
 		val first: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, arrayPath.getFirst())
 		var sublist: MutableList<Path>? = paths[first]
@@ -238,7 +241,7 @@ class ShuntingLoop : Interlocking {
 			path.setUpPath(from)
 			return true
 		} catch (e: TrackOperationException) {
-			assert(false) { e }
+			requireSimulation(false) { "Unexpected track operation exception during path setup: $e" }
 			logger.debug("Exception during path setup: {}", e.message)
 			return false
 		}
@@ -254,7 +257,7 @@ class ShuntingLoop : Interlocking {
 					return true
 				}
 			} catch (e: TrackOperationException) {
-				assert(false) { e }
+				requireSimulation(false) { "Unexpected track operation exception during path setup attempt: $e" }
 				logger.debug("Exception in path setup attempt: {}", e.message)
 			}
 		}

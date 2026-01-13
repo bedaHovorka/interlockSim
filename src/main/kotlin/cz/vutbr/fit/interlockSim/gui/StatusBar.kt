@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.MouseEvent
@@ -32,7 +33,7 @@ class StatusBar :
 
 			override fun mouseMoved(e: MouseEvent) {
 				val source = e.source
-				assert(source is StatusProducer) { "Source must be a StatusProducer" }
+				requireValidState(source is StatusProducer) { "Source must be a StatusProducer" }
 				val status = (source as StatusProducer).getStatus(e)
 				if (status != null) {
 					text = status
@@ -46,7 +47,7 @@ class StatusBar :
 	}
 
 	private fun checkComponent(producer: StatusProducer): Component {
-		assert(producer is Component) { "StatusProducer must be a Component" }
+		requireValidState(producer is Component) { "StatusProducer must be a Component" }
 		return producer as Component
 	}
 

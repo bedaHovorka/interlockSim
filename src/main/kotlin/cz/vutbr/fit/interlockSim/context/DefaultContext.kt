@@ -28,6 +28,12 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.exceptions.requireEditor
+import cz.vutbr.fit.interlockSim.exceptions.requireEditorNotNull
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.anti
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.cells.segmentFor
@@ -211,11 +217,11 @@ abstract class DefaultContext :
 		val nodecell2: NodeCell = Util.assertNodeCell(getGrid().get(key2)!!)
 
 		for (s1: Segment in nodecell1.joins()) {
-			assert(s1 != null) { nodecell1 }
+			requireEditorNotNull(s1) { "Segment s1 cannot be null for nodecell $nodecell1" }
 			val p1 = s1.transform(key1)
 			if (used(p1)) continue
 			for (s2: Segment in nodecell2.joins()) {
-				assert(s2 != null) { nodecell2 }
+				requireEditorNotNull(s2) { "Segment s2 cannot be null for nodecell $nodecell2" }
 				if (s1 == s2) continue // stejne segmenty se nepropoji
 				val p2 = s2.transform(key2)
 				if (used(p2)) continue
@@ -250,7 +256,7 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): Boolean {
-		assert(key1 != null && key2 != null)
+		requireEditor(key1 != null && key2 != null) { "Keys cannot be null in hardJoin" }
 		if (key1.distance(key2) > SQRT2) {
 			val blockEndFrom = s1.transform(key1)
 			val blockEndTo = s2.transform(key2)
@@ -309,7 +315,9 @@ abstract class DefaultContext :
 			@Suppress("UNCHECKED_CAST")
 			val mapKeys: Set<Point> = mapToAdd.keySet() as Set<Point>
 			linesKeys[trackBlock] = mapKeys
-			assert(!extendedUnorientedGraph.contains(key1, key2))
+			requireValidState(!extendedUnorientedGraph.contains(key1, key2)) {
+				"Graph already contains edge between ($key1, $key2)"
+			}
 			extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
 			return mapToAdd
 		}
@@ -325,7 +333,9 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): MutableMap<Point, TrackBlockPart>? {
-		assert(bresenham != null && bresenham.isNotEmpty())
+		requireValidArgument(bresenham != null && bresenham.isNotEmpty()) {
+			"Bresenham path list cannot be null or empty"
+		}
 		val map: MutableMap<Point, TrackBlockPart> = LinkedHashMap()
 		var from = key1
 		var middle = bresenham[0]
@@ -358,7 +368,7 @@ abstract class DefaultContext :
 		to: Point,
 		block: TrackBlock
 	): TrackBlockPart? {
-		assert(block != null)
+		requireEditorNotNull(block) { "TrackBlock cannot be null in createPart" }
 		if (used(middle)) return null
 		if (from == to || from == middle || middle == to) return null
 
@@ -390,8 +400,12 @@ abstract class DefaultContext :
 		p2: Point,
 		points: MutableList<Point>
 	): Boolean {
-		assert(key1 != null && key2 != null && p1 != null && p2 != null)
-		assert(key1 != p1 && key2 != p2 && key1 != p2 && key2 != p1)
+		requireValidArgument(key1 != null && key2 != null && p1 != null && p2 != null) {
+			"All points must be non-null in bresenham algorithm"
+		}
+		requireValidArgument(key1 != p1 && key2 != p2 && key1 != p2 && key2 != p1) {
+			"Keys and intermediate points must be distinct in bresenham algorithm"
+		}
 
 		// Make mutable copies since we need to modify them for the algorithm
 		var p1Mut = p1
@@ -508,7 +522,7 @@ abstract class DefaultContext :
 		key: Point,
 		nodeCell: NodeCell
 	) {
-		assert(key != null)
+		requireEditorNotNull(key) { "Cell key cannot be null in putCell" }
 		// Validate coordinates are within grid bounds
 		if (key.x < 0 || key.y < 0 || key.x >= railwayNetGrid.getCols() || key.y >= railwayNetGrid.getRows()) {
 			throw ContextCreationException(
@@ -520,7 +534,7 @@ abstract class DefaultContext :
 
 		// vedlejsi Nody (sousedni bunky)
 		for (s1: Segment in nodeCell.joins()) {
-			assert(s1 != null) { nodeCell }
+			requireEditorNotNull(s1) { "Segment s1 cannot be null for nodeCell $nodeCell" }
 			val p = s1.transform(key)
 			// Skip neighbor if it's outside grid bounds (boundary cells)
 			if (p.x < 0 || p.y < 0 || p.x >= railwayNetGrid.getCols() || p.y >= railwayNetGrid.getRows()) {
@@ -533,7 +547,9 @@ abstract class DefaultContext :
 			// vzit proti-segment
 			val s2 = anti(s1)
 			if (nodeCell2.joins().contains(s2)) {
-				assert(s2.transform(p) == key)
+				requireValidState(s2.transform(p) == key) {
+					"Segment transformation inconsistency: s2.transform($p) != $key"
+				}
 				extendedUnorientedGraph.putIfNotExists(
 					key,
 					s1,
@@ -577,7 +593,7 @@ abstract class DefaultContext :
 	 * Remove a track line from the railway network
 	 */
 	override fun removeLine(line: TrackBlock) {
-		assert(line != null)
+		requireEditorNotNull(line) { "TrackBlock line cannot be null in removeLine" }
 		extendedUnorientedGraph.remove(line)
 		getGrid().keySet().removeAll(linesKeys.remove(line) ?: emptySet())
 		changeSupport.firePropertyChange(
@@ -614,9 +630,11 @@ abstract class DefaultContext :
 	): Segment? {
 		// If track is not null, use it; otherwise use secondEndTrack
 		if (track != null) return getSegment(separator, track)
-		assert(separator != null)
-		assert(secondEndTrack != null) { separator }
-		assert(separator is OrientedPathSeparator) // Util
+		requireValidArgument(separator != null) { "PathSeparator cannot be null" }
+		requireValidArgument(secondEndTrack != null) { "secondEndTrack cannot be null for separator $separator" }
+		requireValidArgument(separator is OrientedPathSeparator) {
+			"PathSeparator must be OrientedPathSeparator, got ${separator.javaClass.simpleName}"
+		}
 		val segment = getSegment(separator, secondEndTrack!!)
 		// Match Java 1:1: return null when segment doesn't exist
 		return separator.getFollowingSegment(segment)
@@ -682,7 +700,9 @@ abstract class DefaultContext :
 		current: TrackBlock?
 	): Segment? {
 		if (current != null) {
-			assert(getGraph().get(location).contains(current)) { current }
+			requireValidState(getGraph().get(location).contains(current)) {
+				"Current track block $current not found in graph at location $location"
+			}
 		}
 		return if (current == null) null else getGraph().extensionalObject(location, current)
 	}
@@ -692,7 +712,7 @@ abstract class DefaultContext :
 	 */
 	private fun getLocation(node: NodeCell): Point {
 		val location = getRailWayNetGrid().getLocation(node)
-		assert(location != null) { this }
+		requireValidState(location != null) { "Location not found for nodeCell $node in grid" }
 		return location!!
 	}
 
@@ -724,7 +744,7 @@ abstract class DefaultContext :
 		var trackBlock: TrackBlock? = null
 		if (current != null) {
 			trackBlock = current.getTrackBlock()
-			assert(trackBlock != null)
+			requireValidState(trackBlock != null) { "TrackBlock cannot be null for current track section" }
 			val nextTrackSection = trackBlock?.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				if (logger.isTraceEnabled()) {
@@ -785,7 +805,7 @@ abstract class DefaultContext :
 	 * Stop the simulation
 	 */
 	override fun stop() {
-		assert(mainProcess != null)
+		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
 		for (worker in workers.values) {
 			worker.terminate()
 		}
@@ -819,12 +839,12 @@ abstract class DefaultContext :
 		next: Track?,
 		previous: Track?
 	): Boolean {
-		assert(separator != null)
+		requireSimulation(separator != null) { "Separator cannot be null in isSeparatorInDirection" }
 		val segment = getSegment(separator, next, previous)
 		if (segment == null && separator is InOut) return true
-		assert(segment != null) { separator }
+		requireSimulation(segment != null) { "Segment cannot be null for separator $separator" }
 		val direction = separator.direction()
-		assert(direction != null)
+		requireSimulation(direction != null) { "Direction cannot be null for oriented separator" }
 		val inDirection = segment === direction
 		if (logger.isDebugEnabled()) {
 			logger.debug(

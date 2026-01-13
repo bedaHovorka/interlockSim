@@ -59,8 +59,7 @@ class NodeCellAction(
 				val f = getKoin().get<EditingContextFactory>()
 				cell = f.createNew(context, cellClass, *args) as Cell
 			} catch (e: Exception) {
-				assert(false) { e }
-				e.printStackTrace()
+				error("Failed to create cell icon: $e")
 			}
 			val img = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_RGB)
 			val g = img.createGraphics()

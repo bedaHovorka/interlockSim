@@ -14,6 +14,7 @@ import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -72,7 +73,7 @@ class ShuntingLoopTest : KoinTestBase() {
 			assertThatBlock { ShuntingLoop(emptyContext, 60L) }
 				.withMessage("ShuntingLoop requires non-empty context with railway network")
 				.isFailure()
-				.isInstanceOf(AssertionError::class)
+				.isInstanceOf(SimulationException::class)
 		}
 
 		@Test
@@ -85,7 +86,7 @@ class ShuntingLoopTest : KoinTestBase() {
 			assertThatBlock { ShuntingLoop(simContext, 60L) }
 				.withMessage("ShuntingLoop requires specific network structure from vyhybna.xml")
 				.isFailure()
-				.isInstanceOf(AssertionError::class)
+				.isInstanceOf(SimulationException::class)
 		}
 	}
 

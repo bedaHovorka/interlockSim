@@ -65,7 +65,7 @@ class UtilTest {
 	@Test
 	fun `assertNodeCell throws AssertionError for wrong type`() {
 		val dummy = "String"
-		assertThrows<AssertionError> { Util.assertNodeCell(dummy) }
+		assertThrows<IllegalStateException> { Util.assertNodeCell(dummy) }
 	}
 
 	@Test
@@ -77,6 +77,6 @@ class UtilTest {
 
 	@Test
 	fun `assertInstanceOf throws AssertionError for wrong type`() {
-		assertThrows<AssertionError> { Util.assertInstanceOf(NodeCell::class.java, "not a node cell") }
+		assertThrows<IllegalStateException> { Util.assertInstanceOf(NodeCell::class.java, "not a node cell") }
 	}
 }

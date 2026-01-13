@@ -13,6 +13,9 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.exceptions.requireEditor
+import cz.vutbr.fit.interlockSim.exceptions.requireEditorNotNull
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
@@ -75,7 +78,7 @@ class RailwayNetGridCanvas :
 				MouseEvent.BUTTON1 -> leftMouseClicked(e)
 				MouseEvent.BUTTON2 -> middleMouseClicked(e)
 				MouseEvent.BUTTON3 -> rightMouseClicked(e)
-				else -> assert(false) { "Unknown mouse button: ${e.button}" }
+				else -> error("Unknown mouse button: ${e.button}")
 			}
 		}
 
@@ -126,8 +129,7 @@ class RailwayNetGridCanvas :
 						// Clear selection after creating a cell to prevent auto-joining
 						selectedKey = null
 					} catch (e1: Exception) {
-						assert(false) { "Failed to create cell: $e1" }
-						e1.printStackTrace()
+						error("Failed to create cell: $e1")
 					}
 				}
 				selectedKey != null -> {
@@ -206,7 +208,7 @@ class RailwayNetGridCanvas :
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
-		 else -> assert(false) { "Unknown context type: ${newContext.javaClass}" }
+		 else -> error("Unknown context type: ${newContext.javaClass}")
 		}
 		changeContext(newContext)
 	}
@@ -232,7 +234,7 @@ class RailwayNetGridCanvas :
 
 	// Update context and recalculate display
 	private fun changeContext(cont: Context) {
-		assert(cont != null) { "Context cannot be null" }
+		requireEditorNotNull(cont) { "Context cannot be null" }
 		if (context != null) {
 			context!!.removePropertyChangeListener(this)
 		}
@@ -246,7 +248,7 @@ class RailwayNetGridCanvas :
 
 	// Painting methods
 	override fun paintComponent(g: Graphics) {
-		assert(g is Graphics2D) { "Graphics context must be Graphics2D" }
+		requireEditor(g is Graphics2D) { "Graphics context must be Graphics2D" }
 		paint(g as Graphics2D)
 	}
 
@@ -261,7 +263,7 @@ class RailwayNetGridCanvas :
 		for (entry in grid) {
 			val key = entry.key
 			val cell = entry.value
-			assert(key != null && cell != null) { "Grid entry has null key or value: ($key, $cell)" }
+			requireValidState(key != null && cell != null) { "Grid entry has null key or value: ($key, $cell)" }
 
 			val x = key.x * CELL_WIDTH
 			val y = key.y * CELL_HEIGHT

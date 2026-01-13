@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.AbstractCollection
 import java.util.ArrayList
 import java.util.Collection
@@ -122,7 +123,7 @@ class HashMapGraph<N, E, X> :
 		node: N,
 		remove: Boolean
 	): Collection<E> {
-		assert(node != null)
+		requireValidState(node != null) { "Node cannot be null" }
 		val collection = ArrayList<E>()
 
 		val iterator = map.entries.iterator()
@@ -141,7 +142,7 @@ class HashMapGraph<N, E, X> :
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#remove(I)
 	 */
 	override fun remove(h: E): Collection<N> {
-		assert(h != null)
+		requireValidState(h != null) { "Edge cannot be null" }
 		val collection = HashSet<N>()
 		val iterator = map.entries.iterator()
 		while (iterator.hasNext()) {
@@ -214,7 +215,7 @@ class HashMapGraph<N, E, X> :
 				) {
 					if (node == node2) {
 						val aInf = key.getValue(node)
-						assert(!lmap.containsKey(aInf))
+						requireValidState(!lmap.containsKey(aInf)) { "Duplicate additional info key $aInf for node $node" }
 						lmap[aInf!!] = edge
 					}
 				}
@@ -235,7 +236,7 @@ class HashMapGraph<N, E, X> :
 					node2: N
 				) {
 					if (node == node2 && edge == edge2) {
-						assert(getResult() == null)
+						requireValidState(getResult() == null) { "Multiple extensional objects found for node $node and edge $edge" }
 						setResult(key.getValue(node)!!)
 					}
 				}

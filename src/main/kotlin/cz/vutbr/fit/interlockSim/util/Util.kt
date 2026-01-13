@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 
 /**
@@ -32,7 +33,7 @@ object Util {
 		for (i in objects.indices) {
 			val obj = objects[i]
 			if (obj != null) {
-				assert(!obj.javaClass.isArray) { "Arrays are not supported as input objects" }
+				requireValidState(!obj.javaClass.isArray) { "Arrays are not supported as input objects" }
 				classes[i] = toClass(obj)
 			}
 		}
@@ -57,7 +58,7 @@ object Util {
 		clazz: Class<T>,
 		obj: Any
 	): T {
-		assert(clazz.isInstance(obj)) { "${'$'}clazz ${'$'}obj" }
+		requireValidState(clazz.isInstance(obj)) { "Expected instance of ${clazz.name} but got ${obj.javaClass.name}: $obj" }
 		return clazz.cast(obj)
 	}
 }

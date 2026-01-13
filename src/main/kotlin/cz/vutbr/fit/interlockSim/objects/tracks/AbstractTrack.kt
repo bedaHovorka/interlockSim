@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
@@ -18,14 +19,14 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 abstract class AbstractTrack : Track {
 	final override fun getSecondEnd(sep: PathSeparator): PathSeparator {
 		val ends = ends()
-		assert(ends.size == 2)
-		assert(ends[0] !== ends[1])
+		requireValidState(ends.size == 2) { "Track must have exactly 2 ends, but has ${ends.size}" }
+		requireValidState(ends[0] !== ends[1]) { "Track ends must be different" }
 
 		if (ends[0] !== sep) {
-			assert(sep === ends[1]) { sep }
+			requireValidState(sep === ends[1]) { "Separator $sep is not an end of this track" }
 			return ends[0]
 		}
-		assert(sep === ends[0])
+		requireValidState(sep === ends[0]) { "Separator $sep should be first end" }
 		return ends[1]
 	}
 

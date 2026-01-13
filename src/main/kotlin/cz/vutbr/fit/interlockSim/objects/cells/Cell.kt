@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point
 import java.util.Set
 
@@ -81,9 +82,9 @@ interface Cell {
 		 * @return neighbour Point
 		 */
 		fun transform(from: Point): Point {
-			assert(from != null)
+			requireValidState(from != null) { "Point cannot be null" }
 			val tr = Point(from.x + dx, from.y + dy)
-			assert(from != tr) { this }
+			requireValidState(from != tr) { "Transformed point must be different from original: segment=$this" }
 			return tr
 		}
 
@@ -205,6 +206,6 @@ fun conflict(
  */
 fun anti(segment: Cell.Segment): Cell.Segment {
 	val anti = segmentFor(-segment.dx, -segment.dy)
-	assert(anti != null)
+	requireValidState(anti != null) { "Could not find anti-segment for $segment" }
 	return anti!!
 }

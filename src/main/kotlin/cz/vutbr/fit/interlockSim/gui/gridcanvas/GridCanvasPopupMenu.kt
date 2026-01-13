@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -37,7 +38,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 			when (state) {
 				State.NODECELL -> nodeCellAction(e)
 				State.TRACKLINE -> trackLineAction(e)
-				else -> assert(false) { "Unknown state: $state" }
+				else -> error("Unknown state: $state")
 			}
 		}
 
@@ -56,7 +57,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 		key: cz.vutbr.fit.interlockSim.util.Point?,
 		cell: Cell?
 	) {
-		assert(canvas != null && e != null) { "Canvas and event cannot be null" }
+		requireValidState(canvas != null && e != null) { "Canvas and event cannot be null" }
 		if (key == null || cell == null) return
 		this.canvas = canvas
 		reorganizeMenu(key, cell)
@@ -77,7 +78,7 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 				state = State.TRACKLINE
 				reorganizeMenu(cell.getTrackBlock())
 			}
-			else -> assert(false) { "Unknown cell type: $cell" }
+			else -> error("Unknown cell type: $cell")
 		}
 	}
 

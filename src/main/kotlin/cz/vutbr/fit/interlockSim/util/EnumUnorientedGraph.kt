@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.Arrays
 import java.util.Collection
 import java.util.EnumMap
@@ -62,7 +63,9 @@ class EnumUnorientedGraph<N, E>(
 		for (e in map.entries) {
 			val key = e.key
 			val value = e.value
-			assert(!value.containsKey(key)) { value }
+			requireValidState(!value.containsKey(key)) {
+				"Invalid graph state: self-loop detected for key $key in submap $value"
+			}
 
 			if (key == node) {
 				enumMap.putAll(value)
@@ -70,7 +73,7 @@ class EnumUnorientedGraph<N, E>(
 				for (e2 in value.entries) {
 					val key2 = e2.key
 					if (key2 == node) {
-						assert(!enumMap.containsKey(key)) { enumMap }
+						requireValidState(!enumMap.containsKey(key)) { "Duplicate edge detected for key $key in result map $enumMap" }
 						enumMap[key] = e2.value
 					}
 				}
@@ -120,7 +123,7 @@ class EnumUnorientedGraph<N, E>(
 		n1: N,
 		n2: N
 	): Array<N> {
-		assert(n1 != n2)
+		requireValidState(n1 != n2) { "Cannot create edge between same node: $n1" }
 		@Suppress("UNCHECKED_CAST")
 		val nodes =
 			java.lang.reflect.Array

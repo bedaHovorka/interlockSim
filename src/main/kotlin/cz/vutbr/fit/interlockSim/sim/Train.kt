@@ -362,7 +362,7 @@ class Train :
 		override fun start(): Site = if (fromHome) super.start() else this
 	}
 
-	private inner class LenghtChecker : AssertionContinuous() {
+	private inner class LengthChecker : ContinuousInvariantChecker() {
 		override fun check(): Boolean =
 			Math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
 
@@ -527,7 +527,7 @@ class Train :
 	private val number: Int
 
 	private var length: Double
-	private var ap: AssertionContinuous = LenghtChecker()
+	private var ap: ContinuousInvariantChecker = LengthChecker()
 
 	/**
 	 * Create train

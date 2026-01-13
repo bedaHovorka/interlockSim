@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.util.Point
@@ -131,10 +132,14 @@ class DefaultRailWayNetGrid(
 	@Synchronized
 	fun containsKey(newPoint: Point): Boolean {
 		if (getCells().containsKey(newPoint)) {
-			assert(getReverseTable().containsValue(newPoint))
+			requireValidState(getReverseTable().containsValue(newPoint)) {
+				"Inconsistent grid state: point $newPoint in cells but not in reverse table"
+			}
 			return true
 		}
-		assert(!getReverseTable().containsValue(newPoint)) { newPoint }
+		requireValidState(!getReverseTable().containsValue(newPoint)) {
+			"Inconsistent grid state: point $newPoint in reverse table but not in cells: $newPoint"
+		}
 		return false
 	}
 
@@ -144,17 +149,21 @@ class DefaultRailWayNetGrid(
 	 */
 	@Synchronized
 	fun remove(key: Point) {
-		assert(key != null)
+		requireValidState(key != null) { "Key cannot be null" }
 		val removed: Cell? = getCells().remove(key)
 		val remove2: Point? = getReverseTable().remove(removed)
-		assert(key == remove2)
+		requireValidState(key == remove2) {
+			"Inconsistent grid state: expected key $key but got $remove2 from reverse table"
+		}
 	}
 
 	/**
 	 * @return true if grid is empty
 	 */
 	fun isEmpty(): Boolean {
-		assert(getReverseTable().isEmpty() == getCells().isEmpty())
+		requireValidState(getReverseTable().isEmpty() == getCells().isEmpty()) {
+			"Inconsistent grid state: reverse table and cells have different empty states"
+		}
 		return getCells().isEmpty()
 	}
 

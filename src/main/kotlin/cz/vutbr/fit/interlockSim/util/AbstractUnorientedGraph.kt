@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.lang.reflect.InvocationTargetException
 import java.util.Collection
 import java.util.Map
@@ -31,7 +32,7 @@ abstract class AbstractUnorientedGraph<N, E> : UnorientedGraph<N, E> {
 
 	override fun size(): Int {
 		val o = invokeForImplementationContainer()
-		assert(o is Int)
+		requireValidState(o is Int) { "Expected Int from size() but got ${o?.javaClass?.name}" }
 		return o as Int
 	}
 
@@ -52,7 +53,7 @@ abstract class AbstractUnorientedGraph<N, E> : UnorientedGraph<N, E> {
 			return method.invoke(o, *args)
 		} catch (ee: InvocationTargetException) {
 			val cause = ee.cause
-			assert(cause is RuntimeException)
+			requireValidState(cause is RuntimeException) { "Expected RuntimeException but got ${cause?.javaClass?.name}" }
 			throw cause as RuntimeException
 		} catch (ee: Exception) {
 			throw UnsupportedOperationException(ee)
