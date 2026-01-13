@@ -87,92 +87,6 @@ interface Cell {
 			return tr
 		}
 
-		companion object {
-			/**
-			 * conversion
-			 * @param d
-			 * @return converted number
-			 */
-			@JvmStatic
-			fun d2r(d: Int): Float = (d + 1) * 0.5f
-
-			/**
-			 * conversion
-			 * @param r
-			 * @return converted number
-			 */
-			@JvmStatic
-			fun r2d(r: Float): Int = (2 * r - 1).toInt()
-
-			/**
-			 * This is from d-coordinates conversion
-			 * @param dx
-			 * @param dy
-			 * @return segment
-			 */
-			@JvmStatic
-			fun segmentFor(
-				dx: Int,
-				dy: Int
-			): Segment? =
-				if (dx < 0) {
-					if (dy < 0) {
-						B
-					} else if (dy > 0) {
-						D
-					} else {
-						A
-					}
-				} else if (dx == 0) {
-					if (dy < 0) {
-						C
-					} else if (dy > 0) {
-						H
-					} else {
-						null
-					}
-				} else if (dx > 0) {
-					if (dy < 0) {
-						E
-					} else if (dy > 0) {
-						G
-					} else {
-						F
-					}
-				} else {
-					null
-				}
-
-			/**
-			 * if segments can consist in regular cell
-			 * @param a
-			 * @param b
-			 * @return if segments is good pair
-			 */
-			@JvmStatic
-			fun conflict(
-				a: Segment?,
-				b: Segment?
-			): Boolean {
-				if (a == b) return true
-				if (a == null || b == null) return false
-				val dx = a.dx - b.dx
-				val dy = a.dy - b.dy
-				if (Math.sqrt((dx * dx + dy * dy).toDouble()) <= 0.5) return true
-				return false
-			}
-
-			/**
-			 * @param segment
-			 * @return segment in reverse direction
-			 */
-			@JvmStatic
-			fun anti(segment: Segment): Segment {
-				val anti = segmentFor(-segment.dx, -segment.dy)
-				assert(anti != null)
-				return anti!!
-			}
-		}
 	}
 
 	/**
@@ -213,4 +127,84 @@ interface Cell {
 	 * @return Possible joins
 	 */
 	fun joins(): Set<Segment>
+}
+
+/**
+ * conversion
+ * @param d
+ * @return converted number
+ */
+fun d2r(d: Int): Float = (d + 1) * 0.5f
+
+/**
+ * conversion
+ * @param r
+ * @return converted number
+ */
+fun r2d(r: Float): Int = (2 * r - 1).toInt()
+
+/**
+ * This is from d-coordinates conversion
+ * @param dx
+ * @param dy
+ * @return segment
+ */
+fun segmentFor(
+	dx: Int,
+	dy: Int
+): Cell.Segment? =
+	if (dx < 0) {
+		if (dy < 0) {
+			Cell.Segment.B
+		} else if (dy > 0) {
+			Cell.Segment.D
+		} else {
+			Cell.Segment.A
+		}
+	} else if (dx == 0) {
+		if (dy < 0) {
+			Cell.Segment.C
+		} else if (dy > 0) {
+			Cell.Segment.H
+		} else {
+			null
+		}
+	} else if (dx > 0) {
+		if (dy < 0) {
+			Cell.Segment.E
+		} else if (dy > 0) {
+			Cell.Segment.G
+		} else {
+			Cell.Segment.F
+		}
+	} else {
+		null
+	}
+
+/**
+ * if segments can consist in regular cell
+ * @param a
+ * @param b
+ * @return if segments is good pair
+ */
+fun conflict(
+	a: Cell.Segment?,
+	b: Cell.Segment?
+): Boolean {
+	if (a == b) return true
+	if (a == null || b == null) return false
+	val dx = a.dx - b.dx
+	val dy = a.dy - b.dy
+	if (Math.sqrt((dx * dx + dy * dy).toDouble()) <= 0.5) return true
+	return false
+}
+
+/**
+ * @param segment
+ * @return segment in reverse direction
+ */
+fun anti(segment: Cell.Segment): Cell.Segment {
+	val anti = segmentFor(-segment.dx, -segment.dy)
+	assert(anti != null)
+	return anti!!
 }

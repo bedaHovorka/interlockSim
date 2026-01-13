@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.SUPPORTED_SIMPLE_SPATIAL_TYPES
 import java.awt.Dimension
 import java.awt.event.ActionEvent
 import javax.swing.AbstractAction
@@ -68,7 +69,7 @@ class ToolBar : JToolBar() {
 		addSeparator()
 
 		// Add switch buttons for all supported spatial types
-		val spatialTypes = RailSwitch.SUPPORTED_SIMPLE_SPATIAL_TYPES
+		val spatialTypes = SUPPORTED_SIMPLE_SPATIAL_TYPES
 		for (spatialType in spatialTypes) {
 			for (switchType in RailSwitch.Type.values()) {
 				addButton(RailSwitch::class.java, spatialType, switchType)

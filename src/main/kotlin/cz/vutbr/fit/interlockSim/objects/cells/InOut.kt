@@ -32,10 +32,10 @@ class InOut(
 	init {
 		this.name = name
 		this.inSemaphore = RailSemaphore(!orientation, spatialType)
-		requireSimulation(inSemaphore.direction() == Cell.Segment.anti(direction())) {
+		requireSimulation(inSemaphore.direction() == anti(direction())) {
 			"In semaphore direction must be anti-parallel to InOut direction"
 		}
-		this.outSemaphore = RailSemaphore.getConstantInstance(orientation, spatialType, Signal.FREE)
+		this.outSemaphore = getConstantInstance(orientation, spatialType, Signal.FREE)
 		setName(name)
 	}
 
@@ -87,7 +87,7 @@ class InOut(
 		allowedSpeed: Double
 	) {
 		val sem = getSemaphoreForWithExeption(from, to)
-		sem.setSignal(Signal.forSpeed(allowedSpeed))
+		sem.setSignal(forSpeed(allowedSpeed))
 	}
 
 	override fun cancelPathSetup(

@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -29,6 +28,9 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.objects.cells.anti
+import cz.vutbr.fit.interlockSim.objects.cells.conflict
+import cz.vutbr.fit.interlockSim.objects.cells.segmentFor
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -369,10 +371,10 @@ abstract class DefaultContext :
 			return null
 		}
 
-		val s1 = Cell.Segment.segmentFor(ux, uy)
-		val s2 = Cell.Segment.segmentFor(vx, vy)
+		val s1 = segmentFor(ux, uy)
+		val s2 = segmentFor(vx, vy)
 		// vyhodit nehezky dvojice segmentu
-		if (s1 == null || s2 == null || Cell.Segment.conflict(s1, s2)) {
+		if (s1 == null || s2 == null || conflict(s1, s2)) {
 			return null
 		}
 		return TrackBlockPart(block, arrayOf(s1, s2))
@@ -390,7 +392,7 @@ abstract class DefaultContext :
 	): Boolean {
 		assert(key1 != null && key2 != null && p1 != null && p2 != null)
 		assert(key1 != p1 && key2 != p2 && key1 != p2 && key2 != p1)
-		
+
 		// Make mutable copies since we need to modify them for the algorithm
 		var p1Mut = p1
 		var p2Mut = p2
@@ -529,7 +531,7 @@ abstract class DefaultContext :
 			val nodeCell2 = cell2
 
 			// vzit proti-segment
-			val s2 = Segment.anti(s1)
+			val s2 = anti(s1)
 			if (nodeCell2.joins().contains(s2)) {
 				assert(s2.transform(p) == key)
 				extendedUnorientedGraph.putIfNotExists(

@@ -425,19 +425,19 @@ class NodeCellTest : KoinTestBase() {
 		fun `segment anti returns opposite direction`() {
 			// Arrange & Act & Assert
 			// Verify that anti() returns the opposite segment
-			assertThat(Cell.Segment.anti(Cell.Segment.A))
+			assertThat(anti(Cell.Segment.A))
 				.withMessage("Anti of A (left) should be F (right)")
 				.isEqualTo(Cell.Segment.F)
 
-			assertThat(Cell.Segment.anti(Cell.Segment.F))
+			assertThat(anti(Cell.Segment.F))
 				.withMessage("Anti of F (right) should be A (left)")
 				.isEqualTo(Cell.Segment.A)
 
-			assertThat(Cell.Segment.anti(Cell.Segment.C))
+			assertThat(anti(Cell.Segment.C))
 				.withMessage("Anti of C (top) should be H (bottom)")
 				.isEqualTo(Cell.Segment.H)
 
-			assertThat(Cell.Segment.anti(Cell.Segment.H))
+			assertThat(anti(Cell.Segment.H))
 				.withMessage("Anti of H (bottom) should be C (top)")
 				.isEqualTo(Cell.Segment.C)
 		}

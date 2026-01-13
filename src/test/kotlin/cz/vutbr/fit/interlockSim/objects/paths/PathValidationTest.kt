@@ -14,6 +14,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.cells.COMMON_BRANCH_SPEED
+import cz.vutbr.fit.interlockSim.objects.cells.COMMON_MAIN_SPEED
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -98,8 +100,8 @@ class PathValidationTest : KoinTestBase() {
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-					RailSwitch.COMMON_MAIN_SPEED.toDouble(),
-					RailSwitch.COMMON_BRANCH_SPEED.toDouble()
+					COMMON_MAIN_SPEED.toDouble(),
+					COMMON_BRANCH_SPEED.toDouble()
 				)
 
 			// Act - record initial position

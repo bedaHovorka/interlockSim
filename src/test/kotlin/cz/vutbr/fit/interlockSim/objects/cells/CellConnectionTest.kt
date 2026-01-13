@@ -103,7 +103,7 @@ class CellConnectionTest {
 			// Two adjacent cells: cell A at (0,0) and cell B at (1,0)
 			// If A connects to B through segment F (right), then B should connect to A through segment A (left)
 			val segmentForward = Segment.F // Right direction: dx=1, dy=0
-			val segmentReverse = Segment.anti(segmentForward)
+			val segmentReverse = anti(segmentForward)
 
 			// Act & Assert
 			// Anti-segment of F should be A (left direction)
@@ -257,7 +257,7 @@ class CellConnectionTest {
 			val segmentAtoB = Segment.F
 
 			// The reverse connection from B to A would use anti-segment
-			val segmentBtoA = Segment.anti(segmentAtoB)
+			val segmentBtoA = anti(segmentAtoB)
 
 			// Act & Assert
 			// Verify the segments are correct opposites
@@ -271,7 +271,7 @@ class CellConnectionTest {
 
 			// When A-B connection is removed, both directions must be cleared
 			// This test validates the bidirectional requirement
-			val isSymmetric = (Segment.anti(segmentAtoB) == segmentBtoA)
+			val isSymmetric = (anti(segmentAtoB) == segmentBtoA)
 			assertThat(isSymmetric)
 				.withMessage("Disconnection must be symmetric (anti-segments must match)")
 				.isTrue()

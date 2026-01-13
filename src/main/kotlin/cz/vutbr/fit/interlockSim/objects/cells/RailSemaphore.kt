@@ -9,11 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Set
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * "Navestidlo"
@@ -78,39 +80,6 @@ open class RailSemaphore(
 		 * @return speed in in m/s !!!
 		 */
 		fun allowedSpeed(): Double = allowedSpeed
-
-		companion object {
-			private val values = Signal.values()
-
-			/**
-			 * @param speed
-			 * @return signal with allowedSpeed less then speed
-			 */
-			@JvmStatic
-			fun forSpeed(speed: Double): Signal {
-				requireSimulation(speed >= S30.allowedSpeed() || speed == 0.0) {
-					"Speed must be at least S30 allowed speed or 0.0: $speed"
-				}
-				for (s in values) {
-					if (s.allowedSpeed() > speed) return if (s.ordinal == 0) STOP else values[s.ordinal - 1]
-				}
-				return FREE
-			}
-		}
-	}
-
-	private class ConstantSemaphore(
-		orientation: Boolean,
-		spatialType: Cell.SpatialType,
-		signal: Signal
-	) : RailSemaphore(orientation, spatialType) {
-		init {
-			super.setSignal(signal)
-		}
-
-		override fun setSignal(signal: Signal) {
-			// EMPTY
-		}
 	}
 
 	private var signal: Signal = Signal.STOP
@@ -154,7 +123,7 @@ open class RailSemaphore(
 		allowedSpeed: Double
 	) {
 		if (checkPathSegments(from, to)) {
-			setSignal(Signal.forSpeed(allowedSpeed))
+			setSignal(forSpeed(allowedSpeed))
 		}
 	}
 
@@ -166,26 +135,50 @@ open class RailSemaphore(
 		to: Cell.Segment?
 	): Boolean {
 		val d = direction()
-		if (to == d && from == Cell.Segment.anti(d)) return true
-		if (from == d && to == Cell.Segment.anti(d)) return false
+		if (to == d && from == anti(d)) return true
+		if (from == d && to == anti(d)) return false
 		throw PathSeparatorChangeException("wrong aPath segments", this)
 	}
+}
 
-	companion object {
-		private val logger = KotlinLogging.logger {}
+private class ConstantSemaphore(
+	orientation: Boolean,
+	spatialType: Cell.SpatialType,
+	signal: Signal
+) : RailSemaphore(orientation, spatialType) {
+	init {
+		super.setSignal(signal)
+	}
 
-		/**
-		 * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
-		 * @param orientation
-		 * @param spatialType
-		 * @param signal
-		 * @return constant orientented aPath separator
-		 */
-		@JvmStatic
-		fun getConstantInstance(
-			orientation: Boolean,
-			spatialType: Cell.SpatialType,
-			signal: Signal
-		): RailSemaphore = ConstantSemaphore(orientation, spatialType, signal)
+	override fun setSignal(signal: Signal) {
+		// EMPTY
 	}
 }
+
+/**
+ * @param speed
+ * @return signal with allowedSpeed less than speed
+ */
+fun forSpeed(speed: Double): RailSemaphore.Signal {
+	requireSimulation(speed >= RailSemaphore.Signal.S30.allowedSpeed() || speed == 0.0) {
+		"Speed must be at least S30 allowed speed or 0.0: $speed"
+	}
+	val entries = RailSemaphore.Signal.entries
+	for (s in entries) {
+		if (s.allowedSpeed() > speed) return if (s.ordinal == 0) RailSemaphore.Signal.STOP else entries[s.ordinal - 1]
+	}
+	return RailSemaphore.Signal.FREE
+}
+
+/**
+ * create semaphore, which don't change signal - like: "predzvest", impasse end "naraznik", "rychlostnik"
+ * @param orientation
+ * @param spatialType
+ * @param signal
+ * @return constant orientented aPath separator
+ */
+fun getConstantInstance(
+	orientation: Boolean,
+	spatialType: Cell.SpatialType,
+	signal: RailSemaphore.Signal
+): RailSemaphore = ConstantSemaphore(orientation, spatialType, signal)

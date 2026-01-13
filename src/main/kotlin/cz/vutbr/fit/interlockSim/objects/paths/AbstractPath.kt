@@ -14,7 +14,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -24,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.lang.reflect.InvocationTargetException
@@ -208,7 +208,7 @@ abstract class AbstractPath protected constructor(
 		requireValidArgument(methodName != null && next != null) { "Method name and next track must not be null" }
 		val from = context.getSegment(separator, previous, next)
 		val to = context.getSegment(separator, next, previous)
-		requireSimulation(!Segment.conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
+		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
 
 		// NOTE: from and to CAN be null - this is intentional and matches Java behavior
 		// getSegment() returns null when no segment exists (e.g., InOut.getFollowingSegment)

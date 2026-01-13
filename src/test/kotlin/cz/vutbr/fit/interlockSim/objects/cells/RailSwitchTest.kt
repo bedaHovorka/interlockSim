@@ -50,8 +50,8 @@ class RailSwitchTest {
 			RailSwitch(
 				Cell.SpatialType.HORIZONTAL,
 				Type.SIMPLE_RIGHT_FALSE,
-				RailSwitch.COMMON_MAIN_SPEED.toDouble(),
-				RailSwitch.COMMON_BRANCH_SPEED.toDouble()
+				COMMON_MAIN_SPEED.toDouble(),
+				COMMON_BRANCH_SPEED.toDouble()
 			)
 		propertyListener = TestPropertyChangeListener()
 		switch.addPropertyChangeListener(propertyListener)

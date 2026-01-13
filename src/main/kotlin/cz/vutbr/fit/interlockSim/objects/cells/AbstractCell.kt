@@ -34,11 +34,9 @@ abstract class AbstractCell : Cell {
 		return iterator.next()
 	}
 
-	companion object {
-		@JvmStatic
-		protected fun arr2set(segments: Array<Cell.Segment>): Set<Cell.Segment> {
-			assert(segments.isNotEmpty())
-			return EnumSet.of(segments[0], *segments) as Set<Cell.Segment>
-		}
-	}
+}
+
+fun arr2set(segments: Array<Cell.Segment>): Set<Cell.Segment> {
+	assert(segments.isNotEmpty())
+	return EnumSet.of(segments[0], *segments) as Set<Cell.Segment>
 }
