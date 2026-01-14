@@ -20,6 +20,7 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -479,6 +480,10 @@ class XMLContextFactoryTest : KoinTestBase() {
 			// Create empty context
 			val emptyContext = factory.createEmptyContext()
 
+			// Add minimum required InOut elements to satisfy validation
+			emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
+			emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
+
 			// Save to file
 			factory.saveContext(emptyContext, tempFile!!)
 
@@ -573,6 +578,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 				"<?xml version=\"1.0\"?>\n" +
 					"<!DOCTYPE net>\n" +
 					"<net X=\"500\" Y=\"500\">\n" +
+					"  <InOut X=\"10\" Y=\"10\" SpatialType=\"HORIZONTAL\" orientation=\"true\" name=\"ENTRY\"/>\n" +
+					"  <InOut X=\"490\" Y=\"490\" SpatialType=\"HORIZONTAL\" orientation=\"false\" name=\"EXIT\"/>\n" +
 					"</net>"
 			val stream = ByteArrayInputStream(largeGridXML.toByteArray())
 
@@ -589,7 +596,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val minimalGridXML =
 				"<?xml version=\"1.0\"?>\n" +
 					"<!DOCTYPE net>\n" +
-					"<net X=\"1\" Y=\"1\">\n" +
+					"<net X=\"10\" Y=\"10\">\n" +
+					"  <InOut X=\"1\" Y=\"1\" SpatialType=\"HORIZONTAL\" orientation=\"true\" name=\"ENTRY\"/>\n" +
+					"  <InOut X=\"2\" Y=\"1\" SpatialType=\"HORIZONTAL\" orientation=\"false\" name=\"EXIT\"/>\n" +
 					"</net>"
 			val stream = ByteArrayInputStream(minimalGridXML.toByteArray())
 
@@ -597,8 +606,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(1)
-			assertThat(grid.getRows()).isEqualTo(1)
+			assertThat(grid.getCols()).isEqualTo(10)
+			assertThat(grid.getRows()).isEqualTo(10)
 		}
 
 		@Test
@@ -607,6 +616,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 				"<?xml version=\"1.0\"?>\n" +
 					"<!DOCTYPE net>\n" +
 					"<net X=\"100\" Y=\"100\">\n" +
+					"  <InOut X=\"1\" Y=\"1\" SpatialType=\"HORIZONTAL\" orientation=\"true\" name=\"ENTRY\"/>\n" +
 					"  <InOut X=\"98\" Y=\"98\" SpatialType=\"HORIZONTAL\" orientation=\"false\" name=\"CORNER\"/>\n" +
 					"</net>"
 			val stream = ByteArrayInputStream(boundaryXML.toByteArray())

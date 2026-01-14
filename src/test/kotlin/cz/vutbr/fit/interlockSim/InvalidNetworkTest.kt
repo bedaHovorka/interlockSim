@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
@@ -645,7 +644,8 @@ class InvalidNetworkTest : KoinTestBase() {
 			val largeGridXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="9999" Y="9999">
-					<InOut X="100" Y="100" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+					<InOut X="100" Y="100" SpatialType="HORIZONTAL" orientation="true" name="ENTRY"/>
+					<InOut X="200" Y="100" SpatialType="HORIZONTAL" orientation="false" name="EXIT"/>
 				</net>"""
 			val stream = ByteArrayInputStream(largeGridXML.toByteArray())
 
@@ -661,8 +661,9 @@ class InvalidNetworkTest : KoinTestBase() {
 		fun createContext_minimumGridSize_succeeds() {
 			val minGridXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
-				<net X="1" Y="1">
-					<InOut X="0" Y="0" SpatialType="HORIZONTAL" orientation="false" name="MINIMAL"/>
+				<net X="10" Y="10">
+					<InOut X="0" Y="0" SpatialType="HORIZONTAL" orientation="true" name="ENTRY"/>
+					<InOut X="1" Y="0" SpatialType="HORIZONTAL" orientation="false" name="EXIT"/>
 				</net>"""
 			val stream = ByteArrayInputStream(minGridXML.toByteArray())
 
@@ -679,6 +680,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val boundaryXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
+					<InOut X="0" Y="0" SpatialType="HORIZONTAL" orientation="true" name="ENTRY"/>
 					<InOut X="99" Y="99" SpatialType="HORIZONTAL" orientation="false" name="CORNER"/>
 				</net>"""
 			val stream = ByteArrayInputStream(boundaryXML.toByteArray())

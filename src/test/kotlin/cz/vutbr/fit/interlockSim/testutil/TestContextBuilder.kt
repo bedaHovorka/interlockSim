@@ -219,12 +219,14 @@ class TestContextBuilder {
 	}
 
 	/**
-	 * Creates an empty context with just one InOut for minimal testing.
+	 * Creates a minimal context with two InOut elements (entry and exit).
+	 * Updated to comply with strict validation requiring minimum 2 InOut elements.
 	 *
-	 * @return context with single InOut
+	 * @return context with two InOut elements
 	 */
 	fun buildMinimal(): DefaultContext {
 		return getKoin().get<TestContextBuilder>()
-			.withInOut("A", 1, 1, false)
+			.withInOut("A", 1, 1, true)  // entry point
+			.withInOut("B", 2, 1, false)  // exit point
 			.build()
 	}

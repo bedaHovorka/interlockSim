@@ -258,7 +258,10 @@ class XMLContextFactory :
 			val ctx = context ?: throw SAXException("Context not initialized")
 			val inOuts = ctx.getInOuts()
 			if (inOuts.size < 2) {
-				throw SAXException("Railway network must have at least 2 InOut elements (entry and exit points). Found: ${inOuts.size}")
+				throw SAXException(
+					"Railway network must have at least 2 InOut elements (entry and exit points). " +
+						"Found: ${inOuts.size}"
+				)
 			}
 			ended = true
 		}
