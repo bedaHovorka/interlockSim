@@ -23,10 +23,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -89,7 +87,13 @@ import java.util.TreeMap
  * @see SimulationContext
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-abstract class DefaultContext :
+abstract class DefaultContext(
+	/**
+	 * Factory for creating simulation processes.
+	 * Decouples context from concrete simulation class implementations.
+	 */
+	private val processFactory: SimulationProcessFactory
+) :
 	EditingContext,
 	SimulationContext {
 	/**
@@ -173,7 +177,11 @@ abstract class DefaultContext :
 		const val SQRT2: Double = 1.4142135623730951
 	}
 
-	protected constructor(cols: Int, rows: Int) {
+	protected constructor(
+		cols: Int,
+		rows: Int,
+		processFactory: SimulationProcessFactory
+	) : this(processFactory) {
 		this.railwayNetGrid = DefaultRailWayNetGrid(cols, rows)
 		logger.debug { "Initialized railway network grid: ${cols}x$rows cells" }
 	}
@@ -784,20 +792,28 @@ abstract class DefaultContext :
 			}
 			throw EmptyContextException()
 		}
-		if (mainProcess == null) mainProcess = Generator(this)
+		// Use factory to create main process if not already set
+		if (mainProcess == null) {
+			mainProcess = processFactory.createMainProcess(this)
+		}
 
 		logger.info {
 			"Starting simulation: ${inouts.size} InOut points, ${getGraph().size()} track blocks, " +
 				"main process=${mainProcess!!.javaClass.simpleName}"
 		}
 
+		// Use factory to create worker for each InOut
 		for (i in inouts) {
-			workers[i] = InOutWorker(this, i)
+			workers[i] = processFactory.createInOutWorker(this, i)
 		}
 
 		try {
 			Process.activate(mainProcess)
 		} catch (e: DiscoException) {
+			logger.error(e) { "Failed to activate main simulation process" }
+			throw SimulationException(e)
+		}
+	}
 			logger.error(e) { "Failed to activate main simulation process" }
 			throw SimulationException(e)
 		}
@@ -959,8 +975,10 @@ abstract class DefaultContext :
 	/**
 	 * Set the main process for the simulation
 	 * (for examples where the main process is not a generator)
+	 *
+	 * @param process The custom main process (e.g., ShuntingLoop)
 	 */
-	fun setMainProcess(loop: ShuntingLoop) {
-		mainProcess = loop
+	fun setMainProcess(process: LoopProcess) {
+		mainProcess = process
 	}
 }

@@ -14,7 +14,9 @@ import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -76,11 +78,20 @@ val editingModule: Module = module {
 /**
  * Simulation module
  *
+ * Provides simulation-related dependencies:
+ * - SimulationProcessFactory for creating simulation processes
+ * - SimulationContextFactory for creating simulation contexts
+ * - ExampleRegistry for managing simulation examples
  *
  * @see SimulationContextFactory
+ * @see SimulationProcessFactory
  * @see XMLContextFactory
  */
 val simulationModule: Module = module {
+	// Factory for creating simulation processes (Generator, InOutWorker)
+	// Singleton as factory is stateless
+	single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+
 	// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
 	// Bind factory interfaces to the singleton XMLContextFactory instance
 	single<SimulationContextFactory> { get<XMLContextFactory>() }
