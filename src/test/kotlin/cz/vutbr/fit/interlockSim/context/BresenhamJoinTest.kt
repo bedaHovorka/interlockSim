@@ -17,6 +17,7 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -24,7 +25,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Tests for Bresenham line algorithm used in cell joining.

@@ -43,7 +43,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * jDisco framework and are beyond the scope of unit testing.
  */
 class InOutWorkerTest : KoinTestBase() {
-
 	@Nested
 	@DisplayName("InOutWorker initialization")
 	inner class InitializationTests {
@@ -316,9 +315,7 @@ class InOutWorkerTest : KoinTestBase() {
 		}
 	}
 
-	private fun shuntingXml(): InputStream {
-		return xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
+	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {
 		val xml = javaClass.getResourceAsStream(name)

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -19,7 +20,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import java.util.EnumSet
 
 /**

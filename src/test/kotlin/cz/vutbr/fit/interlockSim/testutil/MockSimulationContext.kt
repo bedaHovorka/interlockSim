@@ -51,7 +51,9 @@ import java.io.InputStream
  * @see SimulationContext
  * @see TestContextBuilder
  */
-class MockSimulationContext(private val delegate: DefaultContext) : SimulationContext by delegate {
+class MockSimulationContext(
+	private val delegate: DefaultContext
+) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
 	private val workers: MutableMap<InOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
@@ -194,7 +196,6 @@ class MockSimulationContext(private val delegate: DefaultContext) : SimulationCo
 		// Simplified implementation for testing
 		return true
 	}
-
 }
 
 fun createMockSimulationContext(): MockSimulationContext {
@@ -208,5 +209,3 @@ fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
 }
 
 private fun contextFactory(): XMLContextFactory = getKoin().get<XMLContextFactory>()
-
-

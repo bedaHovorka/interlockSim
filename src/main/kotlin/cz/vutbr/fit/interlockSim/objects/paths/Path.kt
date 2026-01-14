@@ -23,7 +23,9 @@ import cz.vutbr.fit.interlockSim.objects.tracks.Track
  * This interface provides a minimal set of operations for path construction and traversal,
  * designed to be multiplatform-compatible using Kotlin collections.
  */
-interface Path : Track, MutableCollection<PathElement> {
+interface Path :
+	Track,
+	MutableCollection<PathElement> {
 	/**
 	 * Returns the last semaphore in this path.
 	 * The last element must be a [RailSemaphore] or [InOut] (which contains an output semaphore).
@@ -90,5 +92,4 @@ interface Path : Track, MutableCollection<PathElement> {
 	 * Overridden to specify mutable iterator for MutableCollection contract.
 	 */
 	override fun iterator(): MutableIterator<PathElement>
-
 }

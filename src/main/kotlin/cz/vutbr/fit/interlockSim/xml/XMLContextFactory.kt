@@ -61,7 +61,6 @@ import kotlin.getValue
 class XMLContextFactory :
 	EditingContextFactory,
 	SimulationContextFactory {
-
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)

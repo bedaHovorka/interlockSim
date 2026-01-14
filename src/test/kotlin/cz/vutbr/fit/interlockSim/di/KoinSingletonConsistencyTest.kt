@@ -37,7 +37,6 @@ import org.koin.test.get
  */
 @Tag("integration-test")
 class KoinSingletonConsistencyTest : KoinTestBase() {
-
 	/**
 	 * Verify XMLContextFactory singleton consistency
 	 *

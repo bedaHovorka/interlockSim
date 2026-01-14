@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.event.ActionEvent
@@ -23,7 +24,6 @@ import java.awt.image.BufferedImage
 import javax.swing.AbstractAction
 import javax.swing.Icon
 import javax.swing.ImageIcon
-import org.koin.mp.KoinPlatform.getKoin
 
 /**
  *
@@ -73,6 +73,5 @@ class NodeCellAction(
 		}
 
 		private fun getRailwayNetGridCanvas(): RailwayNetGridCanvas = getKoin().get<Frame>().railwayNetGridCanvas
-
 	}
 }
