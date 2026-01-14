@@ -323,8 +323,12 @@ For detailed Docker + Koin integration guide, see:
 
 **Object model:**
 - `objects/tracks/` - Track facilities, blocks, occupants
-- `objects/cells/` - Grid-based spatial representation
+- `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`)
 - `objects/paths/` - Route management
+
+**Utilities:**
+- `util/Array2DMap` - Grid data structure with pathfinding extensions
+- `util/Array2DMapExtensions.kt` - Kotlin-idiomatic navigation and spatial query operations (multiplatform-compatible)
 
 **Simulation engine:**
 - Built on jDisco library (discrete event simulation framework by Keld Helsgaun)

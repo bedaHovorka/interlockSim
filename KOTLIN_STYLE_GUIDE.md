@@ -320,6 +320,102 @@ fun List<Track>.findById(id: Int): Track? {
 val track = tracks.findById(5)
 ```
 
+#### Multiplatform-First Extension Patterns
+
+When adding extension functions to existing data structures, prefer pure Kotlin stdlib over JVM-specific types to ensure compatibility with Kotlin Multiplatform (JS/Native targets).
+
+**Example: Array2DMap Pathfinding Extensions** (`Array2DMapExtensions.kt`)
+
+The `Array2DMap` class provides grid-based spatial representation for railway tracks. Extension functions were added for pathfinding and grid navigation using multiplatform-compatible approaches:
+
+**Key Design Principles:**
+
+1. **Avoid JVM-specific types**: Use `filter()`, `minWithOrNull()`, `maxWithOrNull()` instead of `NavigableSet`, `SortedSet`
+2. **Lazy evaluation**: Use `asSequence()` for efficient spatial queries (neighbors, regions)
+3. **Pure Kotlin types**: All function signatures use stdlib types only
+
+**Navigation Extensions:**
+```kotlin
+// Grid boundary queries
+fun <V> Array2DMap<V>.firstPoint(): Point?     // Smallest point in grid order
+fun <V> Array2DMap<V>.lastPoint(): Point?      // Largest point in grid order
+
+// Relative navigation (ordered by row first, then column)
+fun <V> Array2DMap<V>.higherPoint(point: Point): Point?   // Next point after
+fun <V> Array2DMap<V>.lowerPoint(point: Point): Point?    // Previous point before
+fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point?  // Point >= reference
+fun <V> Array2DMap<V>.floorPoint(point: Point): Point?    // Point <= reference
+```
+
+**Range Query Extensions:**
+```kotlin
+// Submap views (efficient filtering without copying)
+fun <V> Array2DMap<V>.subMap(fromPoint: Point, toPoint: Point): Map<Point, V>
+fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V>
+fun <V> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V>
+```
+
+**Pathfinding Extensions:**
+```kotlin
+// Neighbor queries (lazy sequences for efficiency)
+fun <V> Array2DMap<V>.neighbors4(point: Point): Sequence<Point>     // 4-connected
+fun <V> Array2DMap<V>.neighbors8(point: Point): Sequence<Point>     // 8-connected
+fun <V> Array2DMap<V>.neighborEntries4(point: Point): Sequence<Pair<Point, V>>
+fun <V> Array2DMap<V>.neighborEntries8(point: Point): Sequence<Pair<Point, V>>
+
+// Spatial queries
+fun <V> Array2DMap<V>.pointsWithinManhattan(point: Point, distance: Int): Sequence<Point>
+fun <V> Array2DMap<V>.pointsInRegion(minX: Int, minY: Int, maxX: Int, maxY: Int): Sequence<Point>
+```
+
+**Multiplatform Implementation Example:**
+```kotlin
+// GOOD - Multiplatform-compatible (pure Kotlin)
+fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
+	val comparator = Array2DMap.POINT_COMPARATOR
+	return keys.filter { comparator.compare(it, point) > 0 }
+		.minWithOrNull(comparator)  // Pure Kotlin stdlib
+}
+
+// AVOID - JVM-only (breaks JS/Native compatibility)
+fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
+	val sorted = keys.toSortedSet()  // NavigableSet - JVM-specific
+	return sorted.higher(point)      // Not available in Kotlin/JS
+}
+```
+
+**Lazy Evaluation for Performance:**
+```kotlin
+// Returns Sequence (lazy) not List (eager)
+fun <V> Array2DMap<V>.neighbors4(point: Point): Sequence<Point> =
+	sequence {
+		val candidates = listOf(
+			Point(point.x, point.y - 1),  // up
+			Point(point.x, point.y + 1),  // down
+			Point(point.x - 1, point.y),  // left
+			Point(point.x + 1, point.y)   // right
+		)
+		for (candidate in candidates) {
+			if (containsKey(candidate)) {
+				yield(candidate)  // Lazy generation
+			}
+		}
+	}
+
+// Usage in pathfinding (only evaluates needed neighbors)
+val adjacentCells = grid.neighbors4(currentPoint)
+	.filter { !visited.contains(it) }
+	.take(1)  // Stops after first match
+```
+
+**Use Cases:**
+- A* pathfinding algorithm (see PR #74 context)
+- Dijkstra's shortest path
+- Grid traversal and region queries
+- Railway track connectivity analysis
+
+For complete API reference, see `src/main/kotlin/cz/vutbr/fit/interlockSim/util/Array2DMapExtensions.kt`.
+
 ### Scope Functions
 
 **Use scope functions judiciously** - Don't overuse:
