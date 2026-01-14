@@ -263,12 +263,11 @@ abstract class AbstractPath protected constructor(
 		}
 	}
 
-	@Suppress("RETURN_TYPE_MISMATCH_ON_OVERRIDE", "UNCHECKED_CAST")
 	protected fun getIterator(sep: PathSeparator): Iterator<PathElement> {
 		if (!isEnd(sep)) throw IllegalArgumentException("Is not end of abstrPath")
-		if (sep == getFirst()) return iterator() as Iterator<PathElement>
+		if (sep == getFirst()) return iterator()
 		requireSimulation(sep == getLast()) { "Separator must be either first or last" }
-		return (descendingIterator() as Iterator<PathElement>?)!!
+		return descendingIterator()
 	}
 
 	override fun equalsWithElements(path: Path): Boolean {
