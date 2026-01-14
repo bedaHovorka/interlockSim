@@ -153,7 +153,7 @@ class TestContextBuilder {
 	 * @return configured context with linear track
 	 */
 	fun buildLinearTrack(): DefaultSimulationContext {
-		val context =getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
+		val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
 		val inA =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				"A",

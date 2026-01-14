@@ -181,7 +181,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_emptyGrid_createsContextWithMinimalElements() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -224,7 +224,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_rudyUjezd_createsValidContext() {
 			val xml = getFixtureStream("rudyUjezd.xml")
 
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -882,7 +882,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPrahaPlatformConnectivity() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			// Find entry and exit InOuts by orientation
 			val entries = mutableListOf<InOut>()  // orientation=false (entries from west/north)
@@ -919,7 +919,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPrahaSignalPlacement() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Find signals in north throat area (X=1-20)
