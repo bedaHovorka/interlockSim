@@ -14,8 +14,6 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
-import cz.vutbr.fit.interlockSim.exceptions.requireEditorNotNull
-import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
@@ -234,7 +232,6 @@ class RailwayNetGridCanvas :
 
 	// Update context and recalculate display
 	private fun changeContext(cont: Context) {
-		requireEditorNotNull(cont) { "Context cannot be null" }
 		if (context != null) {
 			context!!.removePropertyChangeListener(this)
 		}
@@ -263,7 +260,6 @@ class RailwayNetGridCanvas :
 		for (entry in grid) {
 			val key = entry.key
 			val cell = entry.value
-			requireValidState(key != null && cell != null) { "Grid entry has null key or value: ($key, $cell)" }
 
 			val x = key.x * CELL_WIDTH
 			val y = key.y * CELL_HEIGHT

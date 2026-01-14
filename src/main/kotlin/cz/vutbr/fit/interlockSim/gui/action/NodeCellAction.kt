@@ -66,9 +66,7 @@ class NodeCellAction(
 			g.color = Color.WHITE
 			g.fillRect(0, 0, iconSize, iconSize)
 			g.color = Color.BLACK
-			if (cell != null) {
-				editorCellRenderer.draw(g, cell)
-			}
+			editorCellRenderer.draw(g, cell)
 			return ImageIcon(img)
 		}
 

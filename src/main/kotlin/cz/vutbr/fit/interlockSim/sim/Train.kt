@@ -184,7 +184,7 @@ class Train :
 			requireSimulationNotNull(semaphore.getSignal()) { "Semaphore signal must not be null" }
 			logger.info {
 				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
-					"${if (semaphore.getName() != null) semaphore.getName() else semaphore.hashCode()}, " +
+					"${semaphore.getName()}, " +
 					"signal=${semaphore.getSignal()}, velocity=${getVelocity()} m/s"
 			}
 			val path: Path? = context.pathToNextSemaphore(separator, next!!)

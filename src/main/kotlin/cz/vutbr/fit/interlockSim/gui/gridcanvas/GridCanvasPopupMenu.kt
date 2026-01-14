@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
-import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -57,7 +56,6 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 		key: cz.vutbr.fit.interlockSim.util.Point?,
 		cell: Cell?
 	) {
-		requireValidState(canvas != null && e != null) { "Canvas and event cannot be null" }
 		if (key == null || cell == null) return
 		this.canvas = canvas
 		reorganizeMenu(key, cell)
