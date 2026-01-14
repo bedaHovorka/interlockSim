@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
@@ -64,13 +65,14 @@ class XMLContextFactory :
 	SimulationContextFactory {
 
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
+	private val processFactory: SimulationProcessFactory by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
 	private inner class XMLContext(
 		cols: Int,
 		rows: Int
-	) : DefaultContext(cols, rows) {
+	) : DefaultContext(cols, rows, processFactory) {
 		// No additional implementation needed
 	}
 
