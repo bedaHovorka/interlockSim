@@ -154,10 +154,9 @@ class SimpleTrackStateTest {
 			track.setUpPath(end1)
 
 			// Act & Assert - should throw TrackOperationException
-			assertk
-				.assertFailure {
-					track.setUpPath(end2) // Try to reserve from different end
-				}.isInstanceOf(TrackOperationException::class)
+			assertk.assertFailure {
+				track.setUpPath(end2) // Try to reserve from different end
+			}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
@@ -168,10 +167,9 @@ class SimpleTrackStateTest {
 			track.enter(mockOccupant)
 
 			// Act & Assert - should throw TrackOperationException
-			assertk
-				.assertFailure {
-					track.setUpPath(end2) // Try to reserve occupied track
-				}.isInstanceOf(TrackOperationException::class)
+			assertk.assertFailure {
+				track.setUpPath(end2) // Try to reserve occupied track
+			}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
@@ -181,10 +179,9 @@ class SimpleTrackStateTest {
 			// Track is still in FREE state - never reserved
 
 			// Act & Assert - should throw SimulationException due to validation in enter()
-			assertk
-				.assertFailure {
-					track.enter(mockOccupant) // Try to enter without reservation
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.enter(mockOccupant) // Try to enter without reservation
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
@@ -194,10 +191,9 @@ class SimpleTrackStateTest {
 			// Track is FREE
 
 			// Act & Assert - should throw SimulationException due to validation in leave()
-			assertk
-				.assertFailure {
-					track.leave(mockOccupant) // Try to leave when not occupied
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.leave(mockOccupant) // Try to leave when not occupied
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 	}
 
@@ -265,10 +261,9 @@ class SimpleTrackStateTest {
 			// Act & Assert - Track is FREE, occupant should be null
 			// Note: getTrackOccupant() throws exception that track must be OCCUPIED
 			// This test verifies that calling it on FREE track fails
-			assertk
-				.assertFailure {
-					track.getTrackOccupant()
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.getTrackOccupant()
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test

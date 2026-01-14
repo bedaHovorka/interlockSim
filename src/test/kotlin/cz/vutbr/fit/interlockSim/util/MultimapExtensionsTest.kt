@@ -41,302 +41,302 @@ import java.util.*
  * - Edge cases
  */
 class MultimapExtensionsTest {
-	private lateinit var multiMap: TreeMap<String, MutableSet<Int>>
+private lateinit var multiMap: TreeMap<String, MutableSet<Int>>
 
-	@BeforeEach
-	fun setUp() {
-		multiMap = TreeMap()
-	}
+@BeforeEach
+fun setUp() {
+multiMap = TreeMap()
+}
 
-	@Nested
-	@DisplayName("Basic operations")
-	inner class BasicOperations {
-		@Test
-		fun putMulti_singleValue_storesValue() {
-			multiMap.putMulti("A", 1)
+@Nested
+@DisplayName("Basic operations")
+inner class BasicOperations {
+@Test
+fun putMulti_singleValue_storesValue() {
+multiMap.putMulti("A", 1)
 
-			val values = multiMap.getMulti("A")
+val values = multiMap.getMulti("A")
 
-			assertThat(values).isNotNull()
-			assertThat(values).hasSize(1)
-			assertThat(values as Iterable<Int>).contains(1)
-		}
+assertThat(values).isNotNull()
+assertThat(values).hasSize(1)
+assertThat(values as Iterable<Int>).contains(1)
+}
 
-		@Test
-		fun putMulti_multipleValuesForSameKey_storesAllValues() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 2)
-			multiMap.putMulti("A", 3)
+@Test
+fun putMulti_multipleValuesForSameKey_storesAllValues() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 2)
+multiMap.putMulti("A", 3)
 
-			val values = multiMap.getMulti("A")
+val values = multiMap.getMulti("A")
 
-			assertThat(values).hasSize(3)
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
-		}
+assertThat(values).hasSize(3)
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
+}
 
-		@Test
-		fun putMulti_duplicateValue_storesOnlyOnce() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 1)
+@Test
+fun putMulti_duplicateValue_storesOnlyOnce() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 1)
 
-			val values = multiMap.getMulti("A")
+val values = multiMap.getMulti("A")
 
-			assertThat(values).withMessage("Set should contain unique values only").hasSize(1)
-			assertThat(values as Iterable<Int>).contains(1)
-		}
+assertThat(values).withMessage("Set should contain unique values only").hasSize(1)
+assertThat(values as Iterable<Int>).contains(1)
+}
 
-		@Test
-		fun putMulti_multipleDifferentKeys_storesSeparately() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("B", 2)
-			multiMap.putMulti("C", 3)
+@Test
+fun putMulti_multipleDifferentKeys_storesSeparately() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("B", 2)
+multiMap.putMulti("C", 3)
 
-			assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
-			assertThat(multiMap.getMulti("B") as Iterable<Int>).containsExactlyInAnyOrder(2)
-			assertThat(multiMap.getMulti("C") as Iterable<Int>).containsExactlyInAnyOrder(3)
-		}
+assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
+assertThat(multiMap.getMulti("B") as Iterable<Int>).containsExactlyInAnyOrder(2)
+assertThat(multiMap.getMulti("C") as Iterable<Int>).containsExactlyInAnyOrder(3)
+}
 
-		@Test
-		fun getMulti_nonExistentKey_returnsEmptySet() {
+@Test
+fun getMulti_nonExistentKey_returnsEmptySet() {
 // Extension function returns empty set instead of throwing NPE
-			val values = multiMap.getMulti("NonExistent")
+val values = multiMap.getMulti("NonExistent")
 
-			assertThat(values).isEmpty()
-		}
+assertThat(values).isEmpty()
+}
 
-		@Test
-		fun getMulti_afterPutMulti_returnsCorrectValues() {
-			multiMap.putMulti("key", 10)
-			multiMap.putMulti("key", 20)
+@Test
+fun getMulti_afterPutMulti_returnsCorrectValues() {
+multiMap.putMulti("key", 10)
+multiMap.putMulti("key", 20)
 
-			val values = multiMap.getMulti("key")
+val values = multiMap.getMulti("key")
 
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(10, 20)
-		}
-	}
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(10, 20)
+}
+}
 
-	@Nested
-	@DisplayName("Value collection operations")
-	inner class ValueCollectionOperations {
-		@Test
-		fun valuesMulti_emptyMap_returnsEmptyCollection() {
-			val values = multiMap.valuesMulti()
+@Nested
+@DisplayName("Value collection operations")
+inner class ValueCollectionOperations {
+@Test
+fun valuesMulti_emptyMap_returnsEmptyCollection() {
+val values = multiMap.valuesMulti()
 
-			assertThat(values).isEmpty()
-		}
+assertThat(values).isEmpty()
+}
 
-		@Test
-		fun valuesMulti_singleKey_returnsAllValuesForKey() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 2)
-			multiMap.putMulti("A", 3)
+@Test
+fun valuesMulti_singleKey_returnsAllValuesForKey() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 2)
+multiMap.putMulti("A", 3)
 
-			val values = multiMap.valuesMulti()
+val values = multiMap.valuesMulti()
 
-			assertThat(values).hasSize(3)
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
-		}
+assertThat(values).hasSize(3)
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
+}
 
-		@Test
-		fun valuesMulti_multipleKeys_returnsAllValues() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 2)
-			multiMap.putMulti("B", 3)
-			multiMap.putMulti("B", 4)
-			multiMap.putMulti("C", 5)
+@Test
+fun valuesMulti_multipleKeys_returnsAllValues() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 2)
+multiMap.putMulti("B", 3)
+multiMap.putMulti("B", 4)
+multiMap.putMulti("C", 5)
 
-			val values = multiMap.valuesMulti()
+val values = multiMap.valuesMulti()
 
-			assertThat(values).hasSize(5)
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3, 4, 5)
-		}
+assertThat(values).hasSize(5)
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3, 4, 5)
+}
 
-		@Test
-		fun valuesMulti_withDuplicateAcrossKeys_returnsAllInstances() {
+@Test
+fun valuesMulti_withDuplicateAcrossKeys_returnsAllInstances() {
 // Different keys can have same value
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("B", 1)
-			multiMap.putMulti("C", 1)
+multiMap.putMulti("A", 1)
+multiMap.putMulti("B", 1)
+multiMap.putMulti("C", 1)
 
-			val values = multiMap.valuesMulti() as Collection<Int>
+val values = multiMap.valuesMulti() as Collection<Int>
 
-			assertThat(values).withMessage("Same value can exist in multiple key sets").hasSize(3)
-			assertThat(values).allMatch { v: Int -> v == 1 }
-		}
-	}
+assertThat(values).withMessage("Same value can exist in multiple key sets").hasSize(3)
+assertThat(values).allMatch { v: Int -> v == 1 }
+}
+}
 
-	@Nested
-	@DisplayName("String representation")
-	inner class StringRepresentation {
-		@Test
-		fun toString_emptyMap_returnsEmptyMapString() {
-			val str = multiMap.toString()
+@Nested
+@DisplayName("String representation")
+inner class StringRepresentation {
+@Test
+fun toString_emptyMap_returnsEmptyMapString() {
+val str = multiMap.toString()
 
-			assertThat(str).isNotNull()
-			assertThat(str as CharSequence).contains("{")
-		}
+assertThat(str).isNotNull()
+assertThat(str as CharSequence).contains("{")
+}
 
-		@Test
-		fun toString_withValues_containsKeysAndValues() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 2)
+@Test
+fun toString_withValues_containsKeysAndValues() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 2)
 
-			val str = multiMap.toString()
+val str = multiMap.toString()
 
-			assertThat(str).isNotNull()
-			assertThat(str as CharSequence).contains("A")
-		}
+assertThat(str).isNotNull()
+assertThat(str as CharSequence).contains("A")
+}
 
-		@Test
-		fun toString_multipleKeys_representable() {
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("B", 2)
-			multiMap.putMulti("C", 3)
+@Test
+fun toString_multipleKeys_representable() {
+multiMap.putMulti("A", 1)
+multiMap.putMulti("B", 2)
+multiMap.putMulti("C", 3)
 
-			val str = multiMap.toString()
+val str = multiMap.toString()
 
-			assertThat(str).isNotNull()
-			assertThat(str.isNotEmpty()).isTrue()
-		}
-	}
+assertThat(str).isNotNull()
+assertThat(str.isNotEmpty()).isTrue()
+}
+}
 
-	@Nested
-	@DisplayName("Ordering and sorting")
-	inner class OrderingTests {
-		@Test
-		fun keys_sortedByNaturalOrder() {
+@Nested
+@DisplayName("Ordering and sorting")
+inner class OrderingTests {
+@Test
+fun keys_sortedByNaturalOrder() {
 // TreeMap maintains sorted order
-			multiMap.putMulti("C", 3)
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("B", 2)
+multiMap.putMulti("C", 3)
+multiMap.putMulti("A", 1)
+multiMap.putMulti("B", 2)
 
 // Get values in key order by traversing
-			val values = multiMap.valuesMulti()
+val values = multiMap.valuesMulti()
 
 // TreeMap keys are sorted, valuesMulti returns in key order
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
-		}
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
+}
 
-		@Test
-		fun valuesForKey_maintainInsertionOrder() {
+@Test
+fun valuesForKey_maintainInsertionOrder() {
 // LinkedHashSet maintains insertion order
-			multiMap.putMulti("A", 3)
-			multiMap.putMulti("A", 1)
-			multiMap.putMulti("A", 2)
+multiMap.putMulti("A", 3)
+multiMap.putMulti("A", 1)
+multiMap.putMulti("A", 2)
 
-			val values = multiMap.getMulti("A")
+val values = multiMap.getMulti("A")
 
 // LinkedHashSet maintains insertion order
-			val list = ArrayList(values)
-			assertThat(list)
-				.withMessage("LinkedHashSet should maintain insertion order")
-				.containsExactlyInAnyOrder(3, 1, 2)
-		}
-	}
+val list = ArrayList(values)
+assertThat(list)
+.withMessage("LinkedHashSet should maintain insertion order")
+.containsExactlyInAnyOrder(3, 1, 2)
+}
+}
 
-	@Nested
-	@DisplayName("Complex scenarios")
-	inner class ComplexScenarios {
-		@Test
-		fun largeMultiMap_manyKeysAndValues_worksCorrectly() {
+@Nested
+@DisplayName("Complex scenarios")
+inner class ComplexScenarios {
+@Test
+fun largeMultiMap_manyKeysAndValues_worksCorrectly() {
 // Add 10 keys with 10 values each
-			for (i in 0 until 10) {
-				val key = "Key$i"
-				for (j in 0 until 10) {
-					multiMap.putMulti(key, i * 10 + j)
-				}
-			}
+for (i in 0 until 10) {
+val key = "Key$i"
+for (j in 0 until 10) {
+multiMap.putMulti(key, i * 10 + j)
+}
+}
 
 // Verify all values present
-			val allValues = multiMap.valuesMulti()
-			assertThat(allValues).hasSize(100)
+val allValues = multiMap.valuesMulti()
+assertThat(allValues).hasSize(100)
 
 // Verify specific key
-			val key5Values = multiMap.getMulti("Key5")
-			assertThat(key5Values).hasSize(10)
-			assertThat(key5Values as Collection<Int>).allMatch { v: Int -> v >= 50 && v < 60 }
-		}
+val key5Values = multiMap.getMulti("Key5")
+assertThat(key5Values).hasSize(10)
+assertThat(key5Values as Collection<Int>).allMatch { v: Int -> v >= 50 && v < 60 }
+}
 
-		@Test
-		fun differentValueTypes_strings_worksCorrectly() {
-			val stringMap = TreeMap<String, MutableSet<String>>()
+@Test
+fun differentValueTypes_strings_worksCorrectly() {
+val stringMap = TreeMap<String, MutableSet<String>>()
 
-			stringMap.putMulti("colors", "red")
-			stringMap.putMulti("colors", "green")
-			stringMap.putMulti("colors", "blue")
-			stringMap.putMulti("animals", "cat")
-			stringMap.putMulti("animals", "dog")
+stringMap.putMulti("colors", "red")
+stringMap.putMulti("colors", "green")
+stringMap.putMulti("colors", "blue")
+stringMap.putMulti("animals", "cat")
+stringMap.putMulti("animals", "dog")
 
-			assertThat(stringMap.getMulti("colors") as Iterable<String>).containsExactlyInAnyOrder("red", "green", "blue")
-			assertThat(stringMap.getMulti("animals") as Iterable<String>).containsExactlyInAnyOrder("cat", "dog")
-		}
+assertThat(stringMap.getMulti("colors") as Iterable<String>).containsExactlyInAnyOrder("red", "green", "blue")
+assertThat(stringMap.getMulti("animals") as Iterable<String>).containsExactlyInAnyOrder("cat", "dog")
+}
 
-		@Test
-		fun differentKeyTypes_integers_worksCorrectly() {
-			val intKeyMap = TreeMap<Int, MutableSet<String>>()
+@Test
+fun differentKeyTypes_integers_worksCorrectly() {
+val intKeyMap = TreeMap<Int, MutableSet<String>>()
 
-			intKeyMap.putMulti(1, "one")
-			intKeyMap.putMulti(1, "uno")
-			intKeyMap.putMulti(2, "two")
-			intKeyMap.putMulti(2, "dos")
+intKeyMap.putMulti(1, "one")
+intKeyMap.putMulti(1, "uno")
+intKeyMap.putMulti(2, "two")
+intKeyMap.putMulti(2, "dos")
 
-			assertThat(intKeyMap.getMulti(1) as Iterable<String>).containsExactlyInAnyOrder("one", "uno")
-			assertThat(intKeyMap.getMulti(2) as Iterable<String>).containsExactlyInAnyOrder("two", "dos")
-		}
+assertThat(intKeyMap.getMulti(1) as Iterable<String>).containsExactlyInAnyOrder("one", "uno")
+assertThat(intKeyMap.getMulti(2) as Iterable<String>).containsExactlyInAnyOrder("two", "dos")
+}
 
-		@Test
-		fun mixedOperations_putMultiAndGetMulti_consistent() {
-			multiMap.putMulti("A", 1)
-			assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
+@Test
+fun mixedOperations_putMultiAndGetMulti_consistent() {
+multiMap.putMulti("A", 1)
+assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1)
 
-			multiMap.putMulti("A", 2)
-			assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
+multiMap.putMulti("A", 2)
+assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
 
-			multiMap.putMulti("B", 3)
-			assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
-			assertThat(multiMap.getMulti("B") as Iterable<Int>).containsExactlyInAnyOrder(3)
+multiMap.putMulti("B", 3)
+assertThat(multiMap.getMulti("A") as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
+assertThat(multiMap.getMulti("B") as Iterable<Int>).containsExactlyInAnyOrder(3)
 
-			val all = multiMap.valuesMulti()
-			assertThat(all as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
-		}
-	}
+val all = multiMap.valuesMulti()
+assertThat(all as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
+}
+}
 
-	@Nested
-	@DisplayName("Edge cases")
-	inner class EdgeCases {
-		@Test
-		fun putMulti_nullValue_storesNull() {
-			val multiMapNullable: TreeMap<String, MutableSet<Int?>> = TreeMap()
-			multiMapNullable.putMulti("A", null)
+@Nested
+@DisplayName("Edge cases")
+inner class EdgeCases {
+@Test
+fun putMulti_nullValue_storesNull() {
+val multiMapNullable: TreeMap<String, MutableSet<Int?>> = TreeMap()
+multiMapNullable.putMulti("A", null)
 
-			val values = multiMapNullable.getMulti("A")
+val values = multiMapNullable.getMulti("A")
 
-			assertThat(values).isNotNull()
-			assertThat(values).hasSize(1)
-			assertThat(values as Set<Int?>).containsNull()
-		}
+assertThat(values).isNotNull()
+assertThat(values).hasSize(1)
+assertThat(values as Set<Int?>).containsNull()
+}
 
-		@Test
-		fun putMulti_multipleNullValues_storesOnce() {
-			val multiMapNullable: TreeMap<String, MutableSet<Int?>> = TreeMap()
-			multiMapNullable.putMulti("A", null)
-			multiMapNullable.putMulti("A", null)
+@Test
+fun putMulti_multipleNullValues_storesOnce() {
+val multiMapNullable: TreeMap<String, MutableSet<Int?>> = TreeMap()
+multiMapNullable.putMulti("A", null)
+multiMapNullable.putMulti("A", null)
 
-			val values = multiMapNullable.getMulti("A")
+val values = multiMapNullable.getMulti("A")
 
-			assertThat(values).withMessage("Set stores only one null value").hasSize(1)
-			assertThat(values as Set<Int?>).containsNull()
-		}
+assertThat(values).withMessage("Set stores only one null value").hasSize(1)
+assertThat(values as Set<Int?>).containsNull()
+}
 
-		@Test
-		fun emptyKey_worksCorrectly() {
-			multiMap.putMulti("", 1)
-			multiMap.putMulti("", 2)
+@Test
+fun emptyKey_worksCorrectly() {
+multiMap.putMulti("", 1)
+multiMap.putMulti("", 2)
 
-			val values = multiMap.getMulti("")
+val values = multiMap.getMulti("")
 
-			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
-		}
-	}
+assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2)
+}
+}
 }

@@ -27,7 +27,7 @@ import jDisco.Continuous
  */
 abstract class ContinuousInvariantChecker : Continuous() {
 	protected final override fun derivatives() {
-		requireSimulation(check()) {
+		requireSimulation (check()) {
 			val sb = StringBuilder(time().toString()).append(" : ")
 			val msg = report(sb as StringBuilder)
 			msg.toString()

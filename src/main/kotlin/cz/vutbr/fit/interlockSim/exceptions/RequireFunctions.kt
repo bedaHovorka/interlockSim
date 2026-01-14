@@ -23,10 +23,7 @@ package cz.vutbr.fit.interlockSim.exceptions
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws SimulationException if value is false
  */
-inline fun requireSimulation(
-	value: Boolean,
-	lazyMessage: () -> String = { "Simulation requirement failed" }
-) {
+inline fun requireSimulation(value: Boolean, lazyMessage: () -> String = { "Simulation requirement failed" }) {
 	if (!value) {
 		throw SimulationException(lazyMessage())
 	}
@@ -78,10 +75,7 @@ inline fun <T : Any> requireSimulationNotNull(
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws SimulationException if value is false
  */
-inline fun requireSimulationState(
-	value: Boolean,
-	lazyMessage: () -> String = { "Invalid simulation state" }
-) {
+inline fun requireSimulationState(value: Boolean, lazyMessage: () -> String = { "Invalid simulation state" }) {
 	if (!value) {
 		throw SimulationException(lazyMessage())
 	}
@@ -95,10 +89,7 @@ inline fun requireSimulationState(
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws EditorException if value is false
  */
-inline fun requireEditor(
-	value: Boolean,
-	lazyMessage: () -> String = { "Editor requirement failed" }
-) {
+inline fun requireEditor(value: Boolean, lazyMessage: () -> String = { "Editor requirement failed" }) {
 	if (!value) {
 		throw EditorException(lazyMessage())
 	}
@@ -132,10 +123,7 @@ inline fun requireEditor(
  * @return The non-null value
  * @throws EditorException if value is null
  */
-inline fun <T : Any> requireEditorNotNull(
-	value: T?,
-	lazyMessage: () -> String = { "Required value was null" }
-): T {
+inline fun <T : Any> requireEditorNotNull(value: T?, lazyMessage: () -> String = { "Required value was null" }): T {
 	if (value == null) {
 		throw EditorException(lazyMessage())
 	}
@@ -150,10 +138,7 @@ inline fun <T : Any> requireEditorNotNull(
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws IllegalArgumentException if value is false
  */
-inline fun requireValidArgument(
-	value: Boolean,
-	lazyMessage: () -> String = { "Invalid argument" }
-) {
+inline fun requireValidArgument(value: Boolean, lazyMessage: () -> String = { "Invalid argument" }) {
 	if (!value) {
 		throw IllegalArgumentException(lazyMessage())
 	}
@@ -167,10 +152,7 @@ inline fun requireValidArgument(
  * @param lazyMessage A function producing the error message (only evaluated if value is false)
  * @throws IllegalStateException if value is false
  */
-inline fun requireValidState(
-	value: Boolean,
-	lazyMessage: () -> String = { "Invalid state" }
-) {
+inline fun requireValidState(value: Boolean, lazyMessage: () -> String = { "Invalid state" }) {
 	if (!value) {
 		throw IllegalStateException(lazyMessage())
 	}

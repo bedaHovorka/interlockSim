@@ -36,10 +36,9 @@ class ExampleRegistry {
 	/**
 	 * Registry of available examples. Maps example name to factory function.
 	 */
-	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
-		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample
-		)
+	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> = mapOf(
+		"shuntingLoop" to ::createShuntingLoopExample
+	)
 
 	/**
 	 * Returns a sorted list of available example names.

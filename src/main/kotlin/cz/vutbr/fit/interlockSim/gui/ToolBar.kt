@@ -18,13 +18,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.SUPPORTED_SIMPLE_SPATIAL_TYPES
-import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Dimension
 import java.awt.event.ActionEvent
 import javax.swing.AbstractAction
 import javax.swing.ButtonGroup
 import javax.swing.JToggleButton
 import javax.swing.JToolBar
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Tool palette for railway editor with tools for semaphores, switches, and entry/exit points

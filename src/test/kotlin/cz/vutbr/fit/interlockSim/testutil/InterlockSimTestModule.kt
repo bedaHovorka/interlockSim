@@ -12,10 +12,9 @@ import org.koin.dsl.module
  *
  * Place for test utilities and test-specific overrides if needed.
  */
-val testModule: Module =
-	module {
-		// Include all app - main module
-		includes(interlockSimModule)
-		// Provide a new instance of TestContextBuilder for each injection
-		factory { TestContextBuilder() }
-	}
+val testModule: Module = module {
+	// Include all app - main module
+	includes(interlockSimModule)
+	// Provide a new instance of TestContextBuilder for each injection
+	factory { TestContextBuilder() }
+}

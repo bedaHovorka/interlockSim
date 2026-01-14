@@ -22,6 +22,7 @@ class EditorException(
 	cause: Throwable?,
 	private val obj: Any?
 ) : Exception(message, cause) {
+
 	/**
 	 * Create EditorException with default FATAL severity
 	 */

@@ -209,10 +209,9 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: Occupancy is cleared (getTrackOccupant fails on FREE track)
-			assertk
-				.assertFailure {
-					track.getTrackOccupant()
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.getTrackOccupant()
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
@@ -313,10 +312,9 @@ class SimpleTrackEnterLeaveTest {
 			// Act & Assert: Attempt to enter with second train should fail
 			// SimpleTrack.enter() throws exception: `in` == null
 			// This is safety property SI-1 (collision prevention)
-			assertk
-				.assertFailure {
-					track.enter(train2)
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.enter(train2)
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify first train still occupies track
 			assertThat(track.getTrackOccupant())
@@ -336,10 +334,9 @@ class SimpleTrackEnterLeaveTest {
 
 			// Act & Assert: Only the occupying train can leave
 			// SimpleTrack.leave() throws exception: `in` === occupant
-			assertk
-				.assertFailure {
-					track.leave(train2) // Wrong train attempts to leave
-				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk.assertFailure {
+				track.leave(train2) // Wrong train attempts to leave
+			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify track still occupied with train1
 			assertThat(track.getState())

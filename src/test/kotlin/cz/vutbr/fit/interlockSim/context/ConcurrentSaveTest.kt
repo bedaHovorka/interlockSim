@@ -63,7 +63,6 @@ import java.util.concurrent.atomic.AtomicInteger
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class ConcurrentSaveTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-
 	companion object {
 		private const val TEST_FILE_PREFIX = "concurrent-test-network"
 		private const val DEFAULT_TIMEOUT_SECONDS = 10

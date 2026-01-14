@@ -9,9 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -397,3 +397,4 @@ private fun putBranches(
 ) {
 	branches.put(t, st, EnumSet.of(first, *segments) as Set<Cell.Segment>)
 }
+

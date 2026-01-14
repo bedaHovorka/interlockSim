@@ -24,7 +24,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.Graphics
@@ -39,6 +38,7 @@ import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
+import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Main GUI component for rendering and editing railway elements in a grid.
@@ -204,11 +204,11 @@ class RailwayNetGridCanvas :
 				state = State.EDITING
 				changeListeners(simulationControlListener, editListener)
 			}
-			is SimulationContext -> {
+		 is SimulationContext -> {
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
-			else -> error("Unknown context type: ${newContext.javaClass}")
+		 else -> error("Unknown context type: ${newContext.javaClass}")
 		}
 		changeContext(newContext)
 	}
@@ -425,7 +425,8 @@ class RailwayNetGridCanvas :
 	}
 
 	// Helper to get editing context factory
-	private fun getEditingContextFactory(): EditingContextFactory = getKoin().get<EditingContextFactory>()
+	private fun getEditingContextFactory(): EditingContextFactory =
+		getKoin().get<EditingContextFactory>()
 
 	companion object {
 		private const val MAX_UNIT_INCREMENT = 35

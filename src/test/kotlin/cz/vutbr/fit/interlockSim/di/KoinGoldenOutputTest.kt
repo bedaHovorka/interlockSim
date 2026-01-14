@@ -15,12 +15,12 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.get
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Golden output baseline tests for Koin DI adoption validation
@@ -38,6 +38,7 @@ import org.koin.test.get
  */
 @Tag("integration-test")
 class KoinGoldenOutputTest : KoinTestBase() {
+
 	/**
 	 * Basic Koin initialization and simulation execution test
 	 *
@@ -60,10 +61,9 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		assertThat(factory).isNotNull()
 
 		// Load vyhybna.xml and create simulation context
-		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+		val xml = javaClass.getResourceAsStream(
+			"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+		)
 		assertThat(xml).isNotNull()
 
 		val context = factory.createContext(xml)
@@ -72,9 +72,8 @@ class KoinGoldenOutputTest : KoinTestBase() {
 
 		// Wrap in MockSimulationContext to avoid running actual simulation
 		// Safe cast after type validation above
-		val defaultContext =
-			context as? DefaultContext
-				?: throw AssertionError("Context should be DefaultContext")
+		val defaultContext = context as? DefaultContext
+			?: throw AssertionError("Context should be DefaultContext")
 		val simContext = MockSimulationContext(defaultContext)
 
 		// Create ShuntingLoop with Koin-managed context
