@@ -46,47 +46,59 @@ fun <V> Array2DMap<V>.lastEntry(): Map.Entry<Point, V>? = lastPoint()?.let { poi
 
 /**
  * Returns the least point strictly greater than the given point, or null if no such point exists.
- * This is equivalent to NavigableMap's higherKey.
  *
  * Useful for: Advancing to the next cell during grid traversal.
  *
  * @param point the reference point
  * @return the next point after the given point, or null
  */
-fun <V> Array2DMap<V>.higherPoint(point: Point): Point? = (keys as? java.util.NavigableSet<Point>)?.higher(point)
+fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
+	val comparator = Array2DMap.POINT_COMPARATOR
+	return keys.filter { comparator.compare(it, point) > 0 }
+		.minWithOrNull(comparator)
+}
 
 /**
  * Returns the greatest point strictly less than the given point, or null if no such point exists.
- * This is equivalent to NavigableMap's lowerKey.
  *
  * Useful for: Moving backwards during grid traversal.
  *
  * @param point the reference point
  * @return the previous point before the given point, or null
  */
-fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? = (keys as? java.util.NavigableSet<Point>)?.lower(point)
+fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? {
+	val comparator = Array2DMap.POINT_COMPARATOR
+	return keys.filter { comparator.compare(it, point) < 0 }
+		.maxWithOrNull(comparator)
+}
 
 /**
  * Returns the least point greater than or equal to the given point, or null if no such point exists.
- * This is equivalent to NavigableMap's ceilingKey.
  *
  * Useful for: Finding the starting point for a range query in pathfinding.
  *
  * @param point the reference point
  * @return the ceiling point, or null
  */
-fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? = (keys as? java.util.NavigableSet<Point>)?.ceiling(point)
+fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? {
+	val comparator = Array2DMap.POINT_COMPARATOR
+	return keys.filter { comparator.compare(it, point) >= 0 }
+		.minWithOrNull(comparator)
+}
 
 /**
  * Returns the greatest point less than or equal to the given point, or null if no such point exists.
- * This is equivalent to NavigableMap's floorKey.
  *
  * Useful for: Finding the ending point for a range query.
  *
  * @param point the reference point
  * @return the floor point, or null
  */
-fun <V> Array2DMap<V>.floorPoint(point: Point): Point? = (keys as? java.util.NavigableSet<Point>)?.floor(point)
+fun <V> Array2DMap<V>.floorPoint(point: Point): Point? {
+	val comparator = Array2DMap.POINT_COMPARATOR
+	return keys.filter { comparator.compare(it, point) <= 0 }
+		.maxWithOrNull(comparator)
+}
 
 /**
  * Returns a view of the portion of this map whose points range from [fromPoint] (inclusive)
@@ -103,10 +115,8 @@ fun <V> Array2DMap<V>.subMap(
 	toPoint: Point
 ): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	val subKeys =
-		(keys as? java.util.SortedSet<Point>)?.subSet(fromPoint, toPoint)
-			?: keys.filter { comparator.compare(it, fromPoint) >= 0 && comparator.compare(it, toPoint) < 0 }.toSet()
-	return subKeys.associateWith { point: Point -> this[point]!! }
+	return keys.filter { comparator.compare(it, fromPoint) >= 0 && comparator.compare(it, toPoint) < 0 }
+		.associateWith { point -> this[point]!! }
 }
 
 /**
@@ -119,10 +129,8 @@ fun <V> Array2DMap<V>.subMap(
  */
 fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	val headKeys =
-		(keys as? java.util.SortedSet<Point>)?.headSet(toPoint)
-			?: keys.filter { comparator.compare(it, toPoint) < 0 }.toSet()
-	return headKeys.associateWith { point: Point -> this[point]!! }
+	return keys.filter { comparator.compare(it, toPoint) < 0 }
+		.associateWith { point -> this[point]!! }
 }
 
 /**
@@ -135,10 +143,8 @@ fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
  */
 fun <V> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	val tailKeys =
-		(keys as? java.util.SortedSet<Point>)?.tailSet(fromPoint)
-			?: keys.filter { comparator.compare(it, fromPoint) >= 0 }.toSet()
-	return tailKeys.associateWith { point: Point -> this[point]!! }
+	return keys.filter { comparator.compare(it, fromPoint) >= 0 }
+		.associateWith { point -> this[point]!! }
 }
 
 /**
@@ -249,17 +255,7 @@ fun <V> Array2DMap<V>.pointsInRegion(
 	minY: Int,
 	maxX: Int,
 	maxY: Int
-): Sequence<Point> =
-	sequence {
-		val from = Point(minX, minY)
-		val to = Point(maxX + 1, maxY + 1)
-		val comparator = Array2DMap.POINT_COMPARATOR
-		val rangeKeys =
-			(keys as? java.util.SortedSet<Point>)?.subSet(from, to)
-				?: keys.filter { comparator.compare(it, from) >= 0 && comparator.compare(it, to) < 0 }
-		for (point in rangeKeys) {
-			if (point.x <= maxX && point.y <= maxY) {
-				yield(point)
-			}
-		}
-	}
+): Sequence<Point> {
+	return keys.asSequence()
+		.filter { it.x in minX..maxX && it.y in minY..maxY }
+}
