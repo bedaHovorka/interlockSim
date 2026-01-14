@@ -61,6 +61,8 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 
 	private inner class Array2DEntrySet : AbstractSet<MutableMap.MutableEntry<Point, V>>() {
 		private inner class Array2DIterator : MutableIterator<MutableMap.MutableEntry<Point, V>> {
+			// Safe: Kotlin TreeSet.iterator() returns MutableIterator which is compatible with Java Iterator
+			@Suppress("UNCHECKED_CAST")
 			private val iterator: java.util.Iterator<Point> = _keys.iterator() as java.util.Iterator<Point>
 			private var current: Point? = null
 
