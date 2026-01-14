@@ -254,8 +254,15 @@ class XMLContextFactory :
 		}
 
 		override fun endDocument() {
-			// Note: InOut validation removed - contexts can be created without InOut elements
-			// for editing purposes. Simulation validation happens when run() is called.
+			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
+			val ctx = context ?: throw SAXException("Context not initialized")
+			val inOuts = ctx.getInOuts()
+			if (inOuts.size < 2) {
+				throw SAXException(
+					"Railway network must have at least 2 InOut elements (entry and exit points). " +
+						"Found: ${inOuts.size}"
+				)
+			}
 			ended = true
 		}
 

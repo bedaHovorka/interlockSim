@@ -78,11 +78,11 @@ class ShuntingLoopTest : KoinTestBase() {
 
 		@Test
 		fun constructor_minimimalContext_throwsException() {
-			// Load minimal network fixture (only 1 InOut, insufficient for ShuntingLoop)
+			// Load minimal network fixture (2 InOut nodes but insufficient infrastructure for ShuntingLoop)
 			val xml = xml("/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml")
 			val simContext = createMockSimulationContext(xml)
 
-			// ShuntingLoop expects specific vyhybna.xml structure with 2 InOuts, semaphores, switches
+			// ShuntingLoop expects specific vyhybna.xml structure with 2 InOuts, semaphores, switches, and specific grid coordinates
 			assertThatBlock { ShuntingLoop(simContext, 60L) }
 				.withMessage("ShuntingLoop requires specific network structure from vyhybna.xml")
 				.isFailure()
