@@ -33,7 +33,6 @@ import org.koin.test.inject
 import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
-import java.util.ArrayList
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -97,7 +96,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 		val exceptions = CopyOnWriteArrayList<Exception>()
 
 		// Act - Launch multiple threads saving to different files
-		val threads = ArrayList<Thread>()
+		val threads = mutableListOf<Thread>()
 		for (i in 0 until threadCount) {
 			val threadId = i
 			val thread =
@@ -164,7 +163,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 		val exceptions = CopyOnWriteArrayList<Exception>()
 
 		// Act - Launch multiple threads saving to same file
-		val threads = ArrayList<Thread>()
+		val threads = mutableListOf<Thread>()
 		for (i in 0 until threadCount) {
 			val thread =
 				Thread {

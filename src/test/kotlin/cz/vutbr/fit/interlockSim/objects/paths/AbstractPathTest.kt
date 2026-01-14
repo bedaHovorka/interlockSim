@@ -887,17 +887,15 @@ private class MockNodeCell(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = null
 
-	override fun possibleFollowers(from: Cell.Segment): java.util.Set<Cell.Segment> {
-		@Suppress("UNCHECKED_CAST")
-		return emptySet<Any>() as java.util.Set<Cell.Segment>
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
+		return emptySet()
 	}
 
 	override fun allowedSpeed(): Double = 80.0
 
-	override fun joins(): java.util.Set<Cell.Segment> {
+	override fun joins(): Set<Cell.Segment> {
 		// Return the two segments that join for HORIZONTAL type
-		@Suppress("UNCHECKED_CAST")
-		return setOf(Cell.Segment.F, Cell.Segment.A) as java.util.Set<Cell.Segment>
+		return setOf(Cell.Segment.F, Cell.Segment.A)
 	}
 
 	init {

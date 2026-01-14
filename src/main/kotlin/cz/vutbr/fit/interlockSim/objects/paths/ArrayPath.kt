@@ -11,88 +11,46 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.util.Util
-import java.util.ArrayDeque
-import java.util.Deque
-import java.util.Iterator
 
 /**
- * ArrayDeque delegated implemetation of {@link Path}
- * There is nothing special to see, please try {@link AbstractPath}
+ * [Path] implementation backed by Kotlin's multiplatform [ArrayDeque].
+ *
+ * This implementation uses [kotlin.collections.ArrayDeque] for storage, providing:
+ * - Efficient O(1) operations at both ends
+ * - Multiplatform compatibility (JVM, JS, Native)
+ * - Memory-efficient resizable circular buffer
+ *
+ * @param context the simulation context for this path
  */
-@Suppress("ABSTRACT_MEMBER_NOT_IMPLEMENTED", "BASE_WITH_NULLABLE_UPPER_BOUND")
 class ArrayPath(
 	context: SimulationContext
 ) : AbstractPath(context) {
-	private val deque: Deque<PathElement> = ArrayDeque<PathElement>()
+	private val deque = ArrayDeque<PathElement>()
 
-	override fun add(e: PathElement): Boolean = deque.add(e)
-
-	override fun addFirst(e: PathElement) {
-		deque.addFirst(e)
-	}
-
-	override fun addLast(e: PathElement) {
-		deque.addLast(e)
-	}
-
-	override fun clear() {
-		deque.clear()
-	}
-
-	override fun contains(o: PathElement): Boolean = deque.contains(o)
-
-	@Suppress("RETURN_TYPE_MISMATCH_ON_OVERRIDE")
-	override fun descendingIterator(): Iterator<PathElement> = deque.descendingIterator() as Iterator<PathElement>
-
-	override fun element(): PathElement = deque.element()
-
-	override fun getFirst(): PathSeparator = Util.assertInstanceOf(PathSeparator::class.java, deque.first)
-
-	override fun getLast(): OrientedPathSeparator = Util.assertInstanceOf(OrientedPathSeparator::class.java, deque.last)
-
+	// MutableCollection contract - delegate to underlying ArrayDeque
+	override fun add(element: PathElement): Boolean = deque.add(element)
+	override val size: Int get() = deque.size
+	override fun clear() = deque.clear()
 	override fun isEmpty(): Boolean = deque.isEmpty()
+	override fun contains(element: PathElement): Boolean = deque.contains(element)
+	override fun containsAll(elements: Collection<PathElement>): Boolean = deque.containsAll(elements)
+	override fun iterator(): MutableIterator<PathElement> = deque.iterator()
+	override fun remove(element: PathElement): Boolean = deque.remove(element)
+	override fun removeAll(elements: Collection<PathElement>): Boolean = deque.removeAll(elements.toSet())
+	override fun retainAll(elements: Collection<PathElement>): Boolean = deque.retainAll(elements.toSet())
+	override fun addAll(elements: Collection<PathElement>): Boolean = deque.addAll(elements)
 
-	@Suppress("RETURN_TYPE_MISMATCH_ON_OVERRIDE")
-	override fun iterator(): Iterator<PathElement> = deque.iterator() as Iterator<PathElement>
-
-	override fun offer(e: PathElement): Boolean = deque.offer(e)
-
-	override fun offerFirst(e: PathElement): Boolean = deque.offerFirst(e)
-
-	override fun offerLast(e: PathElement): Boolean = deque.offerLast(e)
-
-	override fun peek(): PathElement? = deque.peek()
-
-	override fun peekFirst(): PathElement? = deque.peekFirst()
-
-	override fun peekLast(): PathElement? = deque.peekLast()
-
-	override fun poll(): PathElement? = deque.poll()
-
-	override fun pollFirst(): PathElement? = deque.pollFirst()
-
-	override fun pollLast(): PathElement? = deque.pollLast()
-
-	override fun pop(): PathElement = deque.pop()
-
-	override fun push(e: PathElement) {
-		deque.push(e)
-	}
-
-	override fun remove(): PathElement = deque.remove()
-
-	override fun remove(o: PathElement): Boolean = deque.remove(o)
-
+	// Path construction operations - delegate to ArrayDeque's efficient implementations
+	override fun addFirst(element: PathElement) = deque.addFirst(element)
+	override fun addLast(element: PathElement) = deque.addLast(element)
 	override fun removeFirst(): PathElement = deque.removeFirst()
 
-	override fun removeFirstOccurrence(o: Any?): Boolean = deque.removeFirstOccurrence(o)
+	// Path-specific typed accessors with runtime type validation
+	override fun getFirst(): PathSeparator = Util.assertInstanceOf(PathSeparator::class.java, deque.first())
+	override fun getLast(): OrientedPathSeparator = Util.assertInstanceOf(OrientedPathSeparator::class.java, deque.last())
 
-	override fun removeLast(): PathElement = deque.removeLast()
-
-	override fun removeLastOccurrence(o: Any?): Boolean = deque.removeLastOccurrence(o)
-
-	override val size: Int
-		get() = deque.size
+	// Reverse iteration support
+	override fun descendingIterator(): Iterator<PathElement> = deque.asReversed().iterator()
 
 	override fun toString(): String = deque.toString()
 }

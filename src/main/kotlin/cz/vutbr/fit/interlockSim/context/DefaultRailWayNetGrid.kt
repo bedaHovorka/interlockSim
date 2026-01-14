@@ -14,10 +14,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.util.Point
 import java.util.AbstractSet
-import java.util.Iterator
-import java.util.Map
-import java.util.Map.Entry
-import java.util.Set
 
 /**
  * Grid represantation
@@ -27,18 +23,17 @@ class DefaultRailWayNetGrid(
 	rows: Int
 ) : AbstractRailwayNetGrid(cols, rows) {
 	private inner class KeySet(
-		private val set: Set<Entry<Point, Cell>>
+		private val set: Set<Map.Entry<Point, Cell>>
 	) : AbstractSet<Point>() {
 		override fun iterator(): MutableIterator<Point> {
-			@Suppress("UNCHECKED_CAST")
-			val delegate: Iterator<Entry<Point, Cell>> = (set.iterator() as Iterator<Entry<Point, Cell>>)
+			val delegate: Iterator<Map.Entry<Point, Cell>> = set.iterator()
 			return PointIterator(delegate)
 		}
 
 		private inner class PointIterator(
-			private val delegate: Iterator<Entry<Point, Cell>>
+			private val delegate: Iterator<Map.Entry<Point, Cell>>
 		) : MutableIterator<Point> {
-			private var next: Entry<Point, Cell>? = null
+			private var next: Map.Entry<Point, Cell>? = null
 
 			override fun next(): Point {
 				next = delegate.next()
@@ -50,10 +45,10 @@ class DefaultRailWayNetGrid(
 			override fun remove() {
 				if (delegate is MutableIterator<*>) {
 					// Save the cell BEFORE removing from cells map
-					// (Entry.getValue() will fail after removal since it looks up the key)
+					// (Map.Entry.getValue() will fail after removal since it looks up the key)
 					val cell = next?.value
 					// Remove from cells map via delegate
-					(delegate as MutableIterator<Entry<Point, Cell>>).remove()
+					(delegate as MutableIterator<Map.Entry<Point, Cell>>).remove()
 					// Also remove from reverse table to maintain invariant
 					if (cell != null) {
 						getReverseTable().remove(cell)
@@ -117,11 +112,9 @@ class DefaultRailWayNetGrid(
 	 * @param map of point to trackblock part
 	 */
 	@Synchronized
-	fun putMap(map: java.util.Map<Point, TrackBlockPart>) {
-		val iter = map.entrySet().iterator()
-		while (iter.hasNext()) {
-			val entry = iter.next()
-			put(entry.key, entry.value)
+	fun putMap(map: Map<Point, TrackBlockPart>) {
+		for ((key, value) in map) {
+			put(key, value)
 		}
 	}
 
@@ -171,9 +164,9 @@ class DefaultRailWayNetGrid(
 	 * All cell in grid
 	 * @return set of cells
 	 */
-	fun keySet(): Set<Point> {
+	fun keySet(): MutableSet<Point> {
 		@Suppress("UNCHECKED_CAST")
-		val entries = getCells().entries as java.util.Set<Entry<Point, Cell>>
-		return KeySet(entries) as Set<Point>
+		val entries = getCells().entries as Set<Map.Entry<Point, Cell>>
+		return KeySet(entries) as MutableSet<Point>
 	}
 }

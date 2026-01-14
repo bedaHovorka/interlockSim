@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point
-import java.util.Set
 
 /**
  * Cell in Grid
@@ -122,7 +121,7 @@ interface Cell {
 	 *
 	 * @return {@link SpatialType}
 	 */
-	fun getSpatialType(): SpatialType
+	fun getSpatialType(): SpatialType?
 
 	/**
 	 * @return Possible joins

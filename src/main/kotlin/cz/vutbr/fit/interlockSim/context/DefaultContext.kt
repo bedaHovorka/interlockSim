@@ -48,15 +48,8 @@ import jDisco.DiscoException
 import jDisco.Process
 import jDisco.Random
 import java.beans.PropertyChangeSupport
-import java.util.ArrayList
-import java.util.Collection
-import java.util.Collections
 import java.util.EnumSet
 import java.util.IdentityHashMap
-import java.util.LinkedHashMap
-import java.util.List
-import java.util.Map
-import java.util.Set
 import java.util.TreeMap
 
 /**
@@ -90,7 +83,7 @@ abstract class DefaultContext :
 	/**
 	 * List of entry/exit points in the railway network
 	 */
-	private var inouts: ArrayList<InOut> = ArrayList(2)
+	private var inouts: MutableList<InOut> = mutableListOf()
 
 	/**
 	 * Workers for each entry/exit point
@@ -297,7 +290,7 @@ abstract class DefaultContext :
 		val p1 = pi1
 		val p2 = pi2
 
-		val keys: MutableList<Point> = ArrayList()
+		val keys: MutableList<Point> = mutableListOf()
 		val b = bresenham(key1, key2, p1, p2, keys)
 		if (keys.isEmpty()) return null
 
@@ -310,11 +303,9 @@ abstract class DefaultContext :
 
 		if (builtPath != null && builtPath.isNotEmpty()) {
 			@Suppress("UNCHECKED_CAST")
-			val mapToAdd = builtPath as java.util.Map<Point, TrackBlockPart>
+			val mapToAdd = builtPath as MutableMap<Point, TrackBlockPart>
 			getGrid().putMap(mapToAdd)
-			@Suppress("UNCHECKED_CAST")
-			val mapKeys: Set<Point> = mapToAdd.keySet() as Set<Point>
-			linesKeys[trackBlock] = mapKeys
+			linesKeys[trackBlock] = mapToAdd.keys.toSet()
 			requireValidState(!extendedUnorientedGraph.contains(key1, key2)) {
 				"Graph already contains edge between ($key1, $key2)"
 			}
@@ -336,7 +327,7 @@ abstract class DefaultContext :
 		requireValidArgument(bresenham != null && bresenham.isNotEmpty()) {
 			"Bresenham path list cannot be null or empty"
 		}
-		val map: MutableMap<Point, TrackBlockPart> = LinkedHashMap()
+		val map: MutableMap<Point, TrackBlockPart> = linkedMapOf()
 		var from = key1
 		var middle = bresenham[0]
 		var part: TrackBlockPart?
@@ -559,7 +550,7 @@ abstract class DefaultContext :
 				)
 			}
 		}
-		if (nodeCell is InOut) getInOuts().add(nodeCell as InOut)
+		if (nodeCell is InOut) inouts.add(nodeCell as InOut)
 		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
 		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
 	}
@@ -926,7 +917,7 @@ abstract class DefaultContext :
 		if (types == null || types.isEmpty()) {
 			allowedReportTypes.clear()
 		} else {
-			Collections.addAll(allowedReportTypes, *types)
+			allowedReportTypes.addAll(types.asList())
 		}
 	}
 

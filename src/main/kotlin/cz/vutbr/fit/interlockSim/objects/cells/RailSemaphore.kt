@@ -13,7 +13,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.Set
 
 private val logger = KotlinLogging.logger {}
 

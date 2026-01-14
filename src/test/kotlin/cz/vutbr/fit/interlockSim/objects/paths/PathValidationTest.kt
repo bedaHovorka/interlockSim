@@ -440,11 +440,11 @@ class PathValidationTest : KoinTestBase() {
 			path.addLast(track3)
 
 			// Assert - first element is track1
-			val first = path.peekFirst()
+			val first = path.first()
 			assertThat(first).isEqualTo(track1)
 
 			// Last element is track3
-			val last = path.peekLast()
+			val last = path.last()
 			assertThat(last).isEqualTo(track3)
 		}
 
@@ -509,8 +509,8 @@ class PathValidationTest : KoinTestBase() {
 			path.addLast(track2)
 
 			// Act
-			val first = path.pollFirst()
-			val second = path.pollFirst()
+			val first = path.removeFirst()
+			val second = path.removeFirst()
 
 			// Assert - FIFO order maintained
 			assertThat(first).isEqualTo(track1)

@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.Iterator
 
 private val logger = KotlinLogging.logger {}
 

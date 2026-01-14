@@ -31,9 +31,7 @@ import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.ArrayList
 import java.util.Collections
-import java.util.HashMap
 import java.util.LinkedList
 import java.util.Queue
 
@@ -49,11 +47,11 @@ class ShuntingLoop : Interlocking {
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
 	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
-	private val approwedTrains: MutableList<Train> = ArrayList<Train>()
+	private val approwedTrains: MutableList<Train> = mutableListOf()
 	private val generator: InnerGenerator
-	private val paths: HashMap<RailSemaphore, MutableList<Path>> = HashMap<RailSemaphore, MutableList<Path>>()
-	private val innerTrackBlocks: ArrayList<SimpleTrackBlock> = ArrayList<SimpleTrackBlock>()
-	private val outerTrackblocks: HashMap<SimpleTrackBlock, RailSemaphore> = HashMap<SimpleTrackBlock, RailSemaphore>()
+	private val paths: MutableMap<RailSemaphore, MutableList<Path>> = mutableMapOf()
+	private val innerTrackBlocks: MutableList<SimpleTrackBlock> = mutableListOf()
+	private val outerTrackblocks: MutableMap<SimpleTrackBlock, RailSemaphore> = mutableMapOf()
 	private val endTime: Long
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -158,7 +156,7 @@ class ShuntingLoop : Interlocking {
 		val first: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, arrayPath.getFirst())
 		var sublist: MutableList<Path>? = paths[first]
 		if (sublist == null) {
-			sublist = ArrayList<Path>(3)
+			sublist = mutableListOf()
 			paths[first] = sublist
 		}
 		sublist.add(arrayPath)

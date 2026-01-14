@@ -403,7 +403,7 @@ class XMLContextFactory :
 
 			// Save all NodeCells from the grid (including isolated nodes)
 			// Use LinkedHashSet to avoid duplicates while preserving insertion order
-			val allNodes = LinkedHashSet<Point>()
+			val allNodes = linkedSetOf<Point>()
 
 			// Add all nodes from the graph (nodes with connections)
 			allNodes.addAll(xmlContext.getGraph().nodeSet())
@@ -490,7 +490,7 @@ class XMLContextFactory :
 		val clazz = cell.javaClass
 		beginOfTag(builder, clazz)
 		appendAttribute(builder, "", key)
-		appendAttribute(builder, cell.getSpatialType())
+		cell.getSpatialType()?.let { appendAttribute(builder, it) }
 		if (cell is OrientedPathSeparator) {
 			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
 		}

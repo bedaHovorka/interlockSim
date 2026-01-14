@@ -12,9 +12,6 @@ package cz.vutbr.fit.interlockSim.context
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
-import java.util.Iterator
-import java.util.Map.Entry
-import java.util.Set
 import java.util.WeakHashMap
 
 /**
@@ -52,11 +49,9 @@ abstract class AbstractRailwayNetGrid(
 
 	override fun getRows(): Int = _rows
 
-	override fun iterator(): kotlin.collections.Iterator<Entry<Point, Cell>> {
+	override fun iterator(): kotlin.collections.Iterator<Map.Entry<Point, Cell>> {
 		// Build entries from cells and return an immutable iterator
-		@Suppress("UNCHECKED_CAST")
-		val entries = (cells.entries as java.util.Set<Entry<Point, Cell>>).toList()
-		return entries.iterator()
+		return cells.entries.toList().iterator()
 	}
 
 	override fun getLocation(value: Cell): Point? = reverseTable[value]

@@ -11,40 +11,84 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
-import java.util.Deque
 
 /**
- * Represents aPath
- * is a sequence of {@link PathElement} - {@link PathSeparator} and {@link Track}
+ * Represents a Path - a sequence of [PathElement] ([PathSeparator] and [Track]).
  *
+ * A Path combines track-like behavior (length, speed limits) with ordered collection
+ * semantics for managing path elements. In production usage, paths should alternate
+ * between PathSeparators and Tracks, starting with a PathSeparator and ending with
+ * an OrientedPathSeparator.
+ *
+ * This interface provides a minimal set of operations for path construction and traversal,
+ * designed to be multiplatform-compatible using Kotlin collections.
  */
-interface Path :
-	Deque<PathElement>,
-	Track {
+interface Path : Track, MutableCollection<PathElement> {
 	/**
-	 * @return last element must be semaphore
+	 * Returns the last semaphore in this path.
+	 * The last element must be a [RailSemaphore] or [InOut] (which contains an output semaphore).
 	 */
 	fun getLastPathSemaphore(): RailSemaphore
 
 	/**
-	 * @return minimal value of {@link Track#maxSpeed(PathSeparator)} in sequence
+	 * Returns the minimal speed limit across all tracks in this path sequence.
+	 * Considers the speed limits of all tracks when approached from the given separator.
 	 */
 	override fun maxSpeed(sep: PathSeparator?): Double
 
 	/**
-	 * @return copy of this aPath in reverse
+	 * Creates a reversed copy of this path with elements in opposite order.
 	 */
 	fun reversePath(): Path
 
-	override fun getFirst(): PathSeparator
-
-	override fun getLast(): OrientedPathSeparator
+	/**
+	 * Returns the first element in this path, which must be a [PathSeparator].
+	 */
+	fun getFirst(): PathSeparator
 
 	/**
-	 * Same as list equals, because {@link Deque#equals(Object)} should test identity
-	 * @param path
-	 * @return if path have same elements in same order
+	 * Returns the last element in this path, which must be an [OrientedPathSeparator].
+	 */
+	fun getLast(): OrientedPathSeparator
+
+	/**
+	 * Tests element-wise equality with another path.
+	 *
+	 * Unlike standard collection equality, this compares the actual path elements
+	 * in sequence order, which is the appropriate equality test for paths.
+	 *
+	 * @param path the path to compare with
+	 * @return true if both paths contain the same elements in the same order
 	 */
 	fun equalsWithElements(path: Path): Boolean
-// 	 z konvence pro deque neprekryvam equals a hashcode, cesta je "mutable" a to by delalo problemy v kolekcich
+
+	// Path construction operations (multiplatform-compatible)
+
+	/**
+	 * Adds an element at the beginning of this path.
+	 */
+	fun addFirst(element: PathElement)
+
+	/**
+	 * Adds an element at the end of this path.
+	 */
+	fun addLast(element: PathElement)
+
+	/**
+	 * Removes and returns the first element from this path.
+	 * @throws NoSuchElementException if the path is empty
+	 */
+	fun removeFirst(): PathElement
+
+	/**
+	 * Returns an iterator over the elements in this path in reverse order.
+	 */
+	fun descendingIterator(): Iterator<PathElement>
+
+	/**
+	 * Returns a mutable iterator over the elements in this path.
+	 * Overridden to specify mutable iterator for MutableCollection contract.
+	 */
+	override fun iterator(): MutableIterator<PathElement>
+
 }

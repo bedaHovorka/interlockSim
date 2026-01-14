@@ -276,7 +276,7 @@ class DoubletonTest {
 	class ComplexScenarios {
 		@Test
 		fun asMapKey_worksInHashMap() {
-			val map: MutableMap<Doubleton<String, Int>, String> = HashMap()
+			val map: MutableMap<Doubleton<String, Int>, String> = mutableMapOf()
 			val key1: Doubleton<String, Int> = Doubleton("A", "B")
 			val key2: Doubleton<String, Int> = Doubleton("B", "A") // Reversed
 
@@ -302,7 +302,7 @@ class DoubletonTest {
 		fun conversionToList_containsBothElements() {
 			val doubleton: Doubleton<String, Int> = Doubleton("A", "B")
 
-			val list = ArrayList(doubleton)
+			val list = doubleton.toMutableList()
 
 			assertThat(list).hasSize(2)
 			assertThat(list as Iterable<String>).containsExactlyInAnyOrder("A", "B")

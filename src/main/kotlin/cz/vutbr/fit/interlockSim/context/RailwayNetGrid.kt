@@ -11,8 +11,6 @@ package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.util.Point
-import java.util.Iterator
-import java.util.Map.Entry
 
 /**
  * Read-only access interface to Grid...
@@ -20,7 +18,7 @@ import java.util.Map.Entry
  * aby bylo rozhrani dokonale tak iterator vraceny implementaci tohoto rozhrani
  * musi u [Iterator.remove] hazet [UnsupportedOperationException]
  */
-interface RailwayNetGrid : Iterable<Entry<Point, Cell>> {
+interface RailwayNetGrid : Iterable<Map.Entry<Point, Cell>> {
 	/**
 	 * @param x
 	 * @param y

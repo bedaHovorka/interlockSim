@@ -19,8 +19,6 @@ import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
 import java.util.EnumMap
 import java.util.EnumSet
-import java.util.Set
-import java.util.Set as JavaSet
 
 /**
  * Switch
@@ -28,22 +26,22 @@ import java.util.Set as JavaSet
  */
 class RailSwitch : NodeCell {
 	enum class Kind(
-		confs: JavaSet<Conf>
+		confs: Set<Conf>
 	) {
 		/**
 		 * switch with one branch
 		 */
-		SIMPLE(EnumSet.of(Conf.BRANCH, Conf.MAIN) as JavaSet<Conf>),
+		SIMPLE(EnumSet.of(Conf.BRANCH, Conf.MAIN) as Set<Conf>),
 
 		/**
 		 * not specified
 		 */
-		DUAL(EnumSet.noneOf(Conf::class.java) as JavaSet<Conf>); // NOT IMLEMENTED YET - EXTENSION
+		DUAL(EnumSet.noneOf(Conf::class.java) as Set<Conf>); // NOT IMLEMENTED YET - EXTENSION
 
 		@Suppress("UNCHECKED_CAST")
-		private val possibleConfs: JavaSet<Conf> = confs
+		private val possibleConfs: Set<Conf> = confs
 
-		fun getPossibleConfs(): JavaSet<Conf> = possibleConfs
+		fun getPossibleConfs(): Set<Conf> = possibleConfs
 	}
 
 	enum class Conf {
@@ -186,7 +184,7 @@ class RailSwitch : NodeCell {
 
 	@Suppress("OVERRIDE_BY_SYNTHETIC")
 	override fun joins(): Set<Cell.Segment> {
-		// Parent Cell interface expects java.util.Set, and joinsOnLine() returns that
+		// Parent Cell interface expects Set, and joinsOnLine() returns MutableSet
 		val joins = joinsOnLine()
 		joins.addAll(getBranchSegments())
 		return joins
@@ -238,7 +236,7 @@ class RailSwitch : NodeCell {
 	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
 		val map = confs.getJoinedNodesAndEdges(from)
 		@Suppress("UNCHECKED_CAST")
-		return (map as Map<Cell.Segment, *>).keys as Set<Cell.Segment>
+		return (map as Map<Cell.Segment, *>).keys
 	}
 
 	/**

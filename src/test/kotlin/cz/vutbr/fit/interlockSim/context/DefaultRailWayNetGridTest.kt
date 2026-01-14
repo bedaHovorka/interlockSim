@@ -432,7 +432,7 @@ class DefaultRailWayNetGridTest {
 			map[point3] = part3
 
 			// Act
-			grid.putMap(map as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(map)
 
 			// Assert - all parts should be in grid
 			assertThat(grid.getCellAt(5, 5)).isSameInstanceAs(part1)
@@ -456,7 +456,7 @@ class DefaultRailWayNetGridTest {
 			map[point3] = part3
 
 			// Act
-			grid.putMap(map as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(map)
 
 			// Assert - all parts should be in reverse table
 			assertThat(grid.getLocation(part1)).isEqualTo(point1)
@@ -478,7 +478,7 @@ class DefaultRailWayNetGridTest {
 			map[point1] = part1
 			map[point2] = part2
 			map[point3] = part3
-			grid.putMap(map as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(map)
 
 			// Act - remove all intermediate cells (simulate removeLine)
 			grid.keySet().removeAll(setOf(point1, point2, point3))
@@ -494,7 +494,7 @@ class DefaultRailWayNetGridTest {
 		@DisplayName("putMap with empty map does nothing")
 		fun putMap_emptyMap_doesNothing() {
 			// Act
-			grid.putMap(java.util.HashMap<Point, TrackBlockPart>() as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(emptyMap())
 
 			// Assert
 			assertThat(grid.isEmpty()).isTrue()
@@ -533,7 +533,7 @@ class DefaultRailWayNetGridTest {
 			val parts = intermediatePoints.map { createTestTrackBlockPart() }
 			val map = java.util.HashMap<Point, TrackBlockPart>()
 			intermediatePoints.zip(parts).forEach { (point, part) -> map[point] = part }
-			grid.putMap(map as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(map)
 
 			// Act & Assert - all points should pass containsKey check
 			assertThatCode {
@@ -586,7 +586,7 @@ class DefaultRailWayNetGridTest {
 			val parts = intermediatePoints.map { createTestTrackBlockPart() }
 			val map = java.util.HashMap<Point, TrackBlockPart>()
 			intermediatePoints.zip(parts).forEach { (point, part) -> map[point] = part }
-			grid.putMap(map as java.util.Map<Point, TrackBlockPart>)
+			grid.putMap(map)
 
 			// Act - remove all intermediate cells (simulates removeLine scenario)
 			grid.keySet().removeAll(intermediatePoints.toSet())

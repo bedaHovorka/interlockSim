@@ -14,7 +14,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import java.util.EnumSet
-import java.util.Set
 
 /**
  * predstavuje spojeni s externi zeleznicni siti

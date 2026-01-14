@@ -29,9 +29,6 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.InputStream
-import java.util.ArrayList
-import java.util.Collection
-import java.util.HashMap
 
 /**
  * Mock implementation of {@link SimulationContext} for testing simulation components
@@ -56,8 +53,8 @@ import java.util.HashMap
  */
 class MockSimulationContext(private val delegate: DefaultContext) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
-	private val workers: MutableMap<InOut, InOutWorker> = HashMap()
-	private val enabledReports: MutableCollection<ReportType> = ArrayList()
+	private val workers: MutableMap<InOut, InOutWorker> = mutableMapOf()
+	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
 	private var stopped: Boolean = false
 
 	init {
@@ -95,7 +92,7 @@ class MockSimulationContext(private val delegate: DefaultContext) : SimulationCo
 	override fun getWorkerFor(inOut: InOut): InOutWorker = workers[inOut]!!
 
 	override fun getInOuts(): Collection<InOut> {
-		val inOuts: ArrayList<InOut> = ArrayList()
+		val inOuts = mutableListOf<InOut>()
 		val grid = delegate.getRailWayNetGrid()
 		for (p in delegate.getGraph().nodeSet()) {
 			val cell = grid[p]
@@ -103,7 +100,7 @@ class MockSimulationContext(private val delegate: DefaultContext) : SimulationCo
 				inOuts.add(cell)
 			}
 		}
-		return inOuts as Collection<InOut>
+		return inOuts
 	}
 
 	override fun run() {

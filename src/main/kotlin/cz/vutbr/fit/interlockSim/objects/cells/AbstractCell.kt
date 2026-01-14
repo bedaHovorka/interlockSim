@@ -11,19 +11,18 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.EnumSet
-import java.util.Set
 
 /**
  * Base implementation of {@link Cell}
  *
  */
 abstract class AbstractCell : Cell {
-	protected fun joinsOnLine(): Set<Cell.Segment> {
+	protected fun joinsOnLine(): MutableSet<Cell.Segment> {
 		val st = getSpatialType()
 		requireValidState(st != null) { "Spatial type is null for cell: $this" }
 		val arr2set = arr2set(st!!.segments)
 		requireValidState(arr2set.size == 2) { "Expected 2 segments but got ${arr2set.size}" }
-		return arr2set
+		return arr2set.toMutableSet()
 	}
 
 	protected fun secondOnLine(from: Cell.Segment?): Cell.Segment? {

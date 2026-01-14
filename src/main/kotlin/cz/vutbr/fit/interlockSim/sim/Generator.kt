@@ -32,7 +32,7 @@ open class Generator(
 	}
 
 	protected var random = Random()
-	val trains = ArrayList<Train>()
+	val trains = mutableListOf<Train>()
 	private var i = 0
 
 	private fun generateRandomTimetable(): Timetable {

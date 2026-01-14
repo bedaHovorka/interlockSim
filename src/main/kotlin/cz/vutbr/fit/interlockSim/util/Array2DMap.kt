@@ -198,7 +198,7 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 		@Suppress("UNCHECKED_CAST")
 		val result: java.util.List<V> =
 			if (list == null) {
-				(java.util.ArrayList<V>() as java.util.List<V>)
+				(mutableListOf<V>() as java.util.List<V>)
 			} else {
 				(list as java.util.List<V>)
 			}

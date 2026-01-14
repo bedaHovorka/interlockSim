@@ -11,10 +11,7 @@ package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.AbstractCollection
-import java.util.ArrayList
 import java.util.Collection
-import java.util.HashMap
-import java.util.HashSet
 import java.util.Iterator
 import java.util.Map
 import java.util.Map.Entry
@@ -75,7 +72,7 @@ class HashMapGraph<N, E, X> :
 
 	private var nodeCollection: NodeCollection? = null
 
-	private val map = HashMap<Doubleton<N, X>, E>()
+	private val map: MutableMap<Doubleton<N, X>, E> = mutableMapOf()
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#put(N, N, I)
@@ -124,7 +121,7 @@ class HashMapGraph<N, E, X> :
 		remove: Boolean
 	): Collection<E> {
 		requireValidState(node != null) { "Node cannot be null" }
-		val collection = ArrayList<E>()
+		val collection = mutableListOf<E>()
 
 		val iterator = map.entries.iterator()
 		while (iterator.hasNext()) {
@@ -143,7 +140,7 @@ class HashMapGraph<N, E, X> :
 	 */
 	override fun remove(h: E): Collection<N> {
 		requireValidState(h != null) { "Edge cannot be null" }
-		val collection = HashSet<N>()
+		val collection = mutableSetOf<N>()
 		val iterator = map.entries.iterator()
 		while (iterator.hasNext()) {
 			val next = iterator.next()
@@ -161,7 +158,7 @@ class HashMapGraph<N, E, X> :
 	override fun nodeSet(): Set<N> {
 		if (nodeCollection == null) nodeCollection = NodeCollection()
 		// TODO: Return unmodifiable view instead of copy - see issue #59
-		val set = HashSet<N>(nodeCollection)
+		val set = nodeCollection!!.toMutableSet()
 		// for (Doubleton<N> c: map.keySet()) {
 		// 	set.addAll(c);
 		// }
@@ -205,7 +202,7 @@ class HashMapGraph<N, E, X> :
 	): Doubleton<N, X> = Doubleton(first, second)
 
 	override fun assignedEdges(node: N): Map<X, E> {
-		val lmap = HashMap<X, E>()
+		val lmap = mutableMapOf<X, E>()
 		(
 			object : DoubletonEntrySetProcessor<X>(map as java.util.Map<Doubleton<N, X>, E>) {
 				override fun processEntryNode(
@@ -281,7 +278,7 @@ class HashMapGraph<N, E, X> :
 		node2: N
 	): Boolean = map.containsKey(getReferencer(node1, node2))
 
-	override fun implementationContainer(): HashMap<Doubleton<N, X>, E> = map
+	override fun implementationContainer(): HashMap<Doubleton<N, X>, E> = map as java.util.HashMap<Doubleton<N, X>, E>
 
 	override fun size(): Int = map.size
 

@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.cells // jinde?
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import java.util.Set
 
 /**
  * Cell as part of [TrackBlock] in grid
@@ -37,6 +36,5 @@ class TrackBlockPart(
 
 	override fun joins(): Set<Cell.Segment> = arr2set(getSegments())
 
-	@Suppress("UNCHECKED_CAST")
-	override fun getSpatialType(): Cell.SpatialType = null as Cell.SpatialType
+	override fun getSpatialType(): Cell.SpatialType? = null
 }

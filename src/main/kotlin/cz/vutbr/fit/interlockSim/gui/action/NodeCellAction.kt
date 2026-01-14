@@ -20,7 +20,6 @@ import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.event.ActionEvent
 import java.awt.image.BufferedImage
-import java.util.HashMap
 import javax.swing.AbstractAction
 import javax.swing.Icon
 import javax.swing.ImageIcon
@@ -43,8 +42,8 @@ class NodeCellAction(
 	companion object {
 		private const val iconSize: Int = 20
 		private val editorCellRenderer = EditorCellRenderer(iconSize, iconSize)
-		private val renderingHints: HashMap<RenderingHints.Key, Any> =
-			HashMap<RenderingHints.Key, Any>().apply {
+		private val renderingHints: MutableMap<RenderingHints.Key, Any> =
+			mutableMapOf<RenderingHints.Key, Any>().apply {
 				put(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 				put(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED)
 			}
