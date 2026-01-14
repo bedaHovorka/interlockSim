@@ -127,7 +127,7 @@ assert(dynamicSwitch.getConf() == Conf.BRANCH)
 // Create static track (editing-time configuration)
 val separator1 = OrientedPathSeparator(null, null)
 val separator2 = OrientedPathSeparator(null, null)
-val staticTrack = SimpleTrack(
+val staticTrack = SimpleTrackBlock(
     end1 = separator1,
     end2 = separator2,
     length = 100.0,
@@ -282,7 +282,7 @@ assert(occupiedTracks.contains(dynamicTrack))  // Still found
 // Test static structure without simulation state
 @Test
 fun testTrackTopology() {
-    val track = SimpleTrack(sep1, sep2, 100.0, 30.0, 30.0)
+    val track = SimpleTrackBlock(sep1, sep2, 100.0, 30.0, 30.0)
     assert(track.length() == 100.0)
     assert(track.ends().contains(sep1))
     // No simulation state to worry about

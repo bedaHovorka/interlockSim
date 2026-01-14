@@ -42,9 +42,9 @@ class DynamicTrackTest {
 		separator1 = OrientedPathSeparator(null, null)
 		separator2 = OrientedPathSeparator(null, null)
 		
-		// Create static tracks (SimpleTrack implements TrackFacility)
-		staticTrack1 = SimpleTrack(separator1, separator2, 100.0, 30.0, 30.0)
-		staticTrack2 = SimpleTrack(separator1, separator2, 200.0, 40.0, 40.0)
+		// Create static tracks (SimpleTrackBlock implements TrackFacility)
+		staticTrack1 = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
+		staticTrack2 = SimpleTrackBlock(separator1, separator2, 200.0, 40.0, 40.0)
 		
 		// Create dynamic wrappers
 		dynamicTrack1 = DynamicTrack(staticTrack1)
