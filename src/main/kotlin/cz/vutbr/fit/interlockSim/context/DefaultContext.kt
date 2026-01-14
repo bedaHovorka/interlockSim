@@ -773,12 +773,7 @@ abstract class DefaultContext :
 			requireValidState(trackBlock != null) { "TrackBlock cannot be null for current track section" }
 			val nextTrackSection = trackBlock?.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
-				if (logger.isTraceEnabled()) {
-					logger.trace(
-						"getNextTrackSection: found next section within same block from {}",
-						separator
-					)
-				}
+				logger.trace { "getNextTrackSection: found next section within same block from $separator" }
 				return nextTrackSection
 			}
 		}
