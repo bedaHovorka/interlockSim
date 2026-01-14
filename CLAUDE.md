@@ -317,9 +317,20 @@ For detailed Docker + Koin integration guide, see:
 
 **Context system:**
 - `Context` - Base abstraction for railway network configuration
-- `SimulationContext` - Simulation execution context
+- `SimulationContext` - Simulation execution context  
+- `EditingContext` - Editing operations for railway network
+- `DefaultContext` - Implementation combining both editing and simulation capabilities
+- `SimulationProcessFactory` - Factory interface for creating simulation processes (decouples context from concrete sim/ classes)
+- `DefaultSimulationProcessFactory` - Default factory implementation using jDisco-based processes (Generator, InOutWorker)
 - `EditingContextFactory` / `SimulationContextFactory` - Factory pattern for context creation
 - `XMLContextFactory` - Creates contexts from XML files (defined by `data.xsd` schema)
+
+**Factory Pattern (2026-01-14):**
+DefaultContext now uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
+- Follows Dependency Inversion Principle (depends on abstraction, not concrete classes)
+- Enables testing with mock factories
+- Prepares for jDisco→DSOL/Kalasim migration
+- See `CONTEXT_REFACTORING_DESIGN.md` and `FACTORY_PATTERN_IMPLEMENTATION.md` for details
 
 **Object model:**
 - `objects/tracks/` - Track facilities, blocks, occupants
@@ -421,10 +432,14 @@ Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/Interl
 
 - **utilModule** - Utility classes (ready for expansion)
 - **xmlModule** - XML parsing, XMLContextFactory
-- **contextModule** - Context lifecycle management
+- **editingModule** - Editing context factories
+- **simulationModule** - Simulation context factories and SimulationProcessFactory
 - **guiModule** - Swing components (ready for expansion)
 - **objectsModule** - Domain model (minimal by design)
-- **sim/** - ❌ **EXCLUDED** (wait for jDisco migration)
+- **sim/** - ❌ **EXCLUDED** (wait for jDisco migration, except new factory classes)
+
+**SimulationProcessFactory (2026-01-14):**
+The simulation module now provides `SimulationProcessFactory` as a singleton. This factory abstracts creation of simulation processes (Generator, InOutWorker) following the Factory pattern. Contexts receive the factory via constructor injection, eliminating direct dependencies on concrete sim/ classes.
 
 ### Critical DI Rules
 
