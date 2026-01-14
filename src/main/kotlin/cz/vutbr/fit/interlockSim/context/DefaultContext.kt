@@ -35,12 +35,13 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.anti
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.cells.segmentFor
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.DiscoException
 import jDisco.Process
@@ -239,8 +240,8 @@ abstract class DefaultContext :
 
 		if (key1.distance(key2) <= SQRT2) return null
 
-		val nodecell1: NodeCell = Util.assertNodeCell(getGrid().get(key1)!!)
-		val nodecell2: NodeCell = Util.assertNodeCell(getGrid().get(key2)!!)
+		val nodecell1: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key1)!!)
+		val nodecell2: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key2)!!)
 
 		for (s1: Segment in nodecell1.joins()) {
 			val p1 = s1.transform(key1)
@@ -665,7 +666,7 @@ abstract class DefaultContext :
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
 		} else {
-			val nodeCell: NodeCell = Util.assertNodeCell(separator)
+			val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
 			val trackBlock: TrackBlock = Util.assertInstanceOf(TrackBlock::class.java, track)
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(nodeCell, trackBlock as TrackBlock?)
@@ -683,7 +684,7 @@ abstract class DefaultContext :
 		if (trackBlock.isInnerElement(separator)) {
 			return trackBlock.getJoin(separator, section)
 		}
-		val nodeCell: NodeCell = Util.assertNodeCell(separator)
+		val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
 		return getSegment(nodeCell, trackBlock as TrackBlock?)
 	}
 
@@ -759,7 +760,7 @@ abstract class DefaultContext :
 		}
 
 		// z dalsi TrackBlock
-		val nodeCell = Util.assertNodeCell(separator)
+		val nodeCell = CellUtilities.assertNodeCell(separator)
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
 		@Suppress("UNCHECKED_CAST")

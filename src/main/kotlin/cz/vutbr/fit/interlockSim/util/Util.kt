@@ -9,50 +9,23 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 
 /**
- * Collection of shared static methods
+ * Collection of type-agnostic utility methods.
  *
+ * For domain-specific utilities (e.g., working with Cell objects),
+ * see [cz.vutbr.fit.interlockSim.objects.cells.CellUtilities].
  */
 object Util {
-	private fun toClass(o: Any): Class<*> {
-		val class1 = o.javaClass
-		return if (SimulationContext::class.java.isAssignableFrom(class1)) SimulationContext::class.java else class1
-	}
-
 	/**
-	 * This method is designed specifically for InterlockSim
-	 * @param objects array of objects
-	 * @return array of classes which represent types of objects
-	 */
-	fun toClass(objects: Array<out Any?>): Array<Class<*>?> {
-		val classes = arrayOfNulls<Class<*>>(objects.size)
-		for (i in objects.indices) {
-			val obj = objects[i]
-			if (obj != null) {
-				requireValidState(!obj.javaClass.isArray) { "Arrays are not supported as input objects" }
-				classes[i] = toClass(obj)
-			}
-		}
-		return classes
-	}
-
-	/**
-	 * Most used cast in program
-	 * @param obj
-	 * @return casted instance
-	 */
-	fun assertNodeCell(obj: Any): NodeCell = assertInstanceOf(NodeCell::class.java, obj)
-
-	/**
-	 * assert and cast routine
-	 * @param <T>
-	 * @param clazz
-	 * @param obj
-	 * @return casted instance
+	 * Generic type assertion and cast utility.
+	 *
+	 * @param T target type
+	 * @param clazz target class to cast to
+	 * @param obj object to cast
+	 * @return casted instance of type T
+	 * @throws IllegalStateException if obj is not an instance of clazz
 	 */
 	fun <T> assertInstanceOf(
 		clazz: Class<T>,

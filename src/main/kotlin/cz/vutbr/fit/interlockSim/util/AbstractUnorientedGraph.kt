@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import java.lang.reflect.InvocationTargetException
 import java.util.Collection
 import java.util.Map
@@ -48,7 +49,7 @@ abstract class AbstractUnorientedGraph<N, E> : UnorientedGraph<N, E> {
 		val methodName = e.methodName
 		try {
 			@Suppress("UNCHECKED_CAST")
-			val classArray = Util.toClass(args) as Array<Class<*>?>
+			val classArray = CellUtilities.toClass(args) as Array<Class<*>?>
 			val method = o.javaClass.getMethod(methodName, *classArray)
 			return method.invoke(o, *args)
 		} catch (ee: InvocationTargetException) {

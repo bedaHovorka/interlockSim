@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
@@ -202,11 +201,11 @@ class RailwayNetGridCanvas :
 				state = State.EDITING
 				changeListeners(simulationControlListener, editListener)
 			}
-		 is SimulationContext -> {
+			else -> {
+				// Covers SimulationContext and any future context types
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
-		 else -> error("Unknown context type: ${newContext.javaClass}")
 		}
 		changeContext(newContext)
 	}
@@ -333,8 +332,8 @@ class RailwayNetGridCanvas :
 	}
 
 	@Deprecated("Use setContext instead")
-	fun setSimulation(simulationContext: SimulationContext) {
-		setContext(simulationContext)
+	fun setSimulation(context: Context) {
+		setContext(context)
 	}
 
 	// Scrollable interface implementation

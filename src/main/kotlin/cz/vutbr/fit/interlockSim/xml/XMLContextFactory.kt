@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -149,8 +150,8 @@ class XMLContextFactory :
 				check(from != to) { "from and to points must be different" }
 
 				val railwayNetGrid = ctx.getRailWayNetGrid()
-				val fromNode = Util.assertNodeCell(railwayNetGrid[from] as Any)
-				val toNode = Util.assertNodeCell(railwayNetGrid[to] as Any)
+				val fromNode = CellUtilities.assertNodeCell(railwayNetGrid[from] as Any)
+				val toNode = CellUtilities.assertNodeCell(railwayNetGrid[to] as Any)
 
 				val segmentFrom =
 					getEnum(uri, attributes, Segment::class.java, FROM)
