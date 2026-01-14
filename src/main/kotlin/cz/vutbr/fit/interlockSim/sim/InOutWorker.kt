@@ -52,13 +52,21 @@ class InOutWorker(
 					val isFree = pathExists && path?.isFreeFrom(inOut) ?: false
 
 					if (!pathExists) {
-						logger.debug { "${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path does not exist" }
+						logger.debug {
+							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path does not exist"
+						}
 					} else if (!isFree) {
-						logger.debug { "${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path not free, length=${path?.length()}" }
+						logger.debug {
+							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - " +
+								"path not free, length=${path?.length()}"
+						}
 					}
 					isFree
 				} catch (e: TrackOperationException) {
-					logger.error { "${Process.time()} APPROVAL_ERROR: InOut ${inOut.getName()} - path check failed: ${e.message}" }
+					logger.error {
+						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.getName()} - " +
+							"path check failed: ${e.message}"
+					}
 					context.errorStop(e)
 					false
 				}
@@ -77,9 +85,15 @@ class InOutWorker(
 			try {
 				// zarezervovat koleje
 				path?.setUpPath(inOut)
-				logger.info { "${Process.time()} APPROVAL_GRANTED: InOut ${inOut.getName()} - path reserved for $first, length=${path?.length()}" }
+				logger.info {
+					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.getName()} - " +
+						"path reserved for $first, length=${path?.length()}"
+				}
 			} catch (e: Exception) {
-				logger.warn { "${Process.time()} APPROVAL_DENIED: InOut ${inOut.getName()} - path setup failed for $first: ${e.message}" }
+				logger.warn {
+					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.getName()} - " +
+						"path setup failed for $first: ${e.message}"
+				}
 				logger.debug { "InOutWorker ${inOut.getName()} path setup failed: ${e.message}" }
 				context.errorStop(e)
 				return
