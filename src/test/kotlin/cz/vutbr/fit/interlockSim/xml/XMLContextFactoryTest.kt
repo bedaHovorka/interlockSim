@@ -929,7 +929,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 				.isGreaterThan(3)
 
 			// Find signals in south throat area (X=50-69)
-			val southSignals = findSignalsInArea(context as DefaultSimulationContext, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
+			val southSignals =
+				findSignalsInArea(context as DefaultSimulationContext, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
 			assertThat(southSignals.size)
 				.withMessage("South throat should have exit signals")
 				.isGreaterThan(3)
