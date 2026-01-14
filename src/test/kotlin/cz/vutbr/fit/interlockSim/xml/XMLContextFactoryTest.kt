@@ -51,12 +51,12 @@ import org.koin.test.inject
  * - Edge cases and malformed input
  *
  * Test Fixtures (src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/):
- * - minimal-network.xml - Single InOut node
+ * - minimal-network.xml - Minimal valid network (2 InOut nodes, no tracks)
  * - linear-track.xml - Two InOut nodes connected by SimpleTrackBlock
  * - switch-basic.xml - RailSwitch with two output tracks
  * - semaphore-basic.xml - RailSemaphore between two InOut nodes
  * - two-tracks-parallel.xml - Two parallel independent tracks
- * - empty-grid.xml - Empty railway network (no cells)
+ * - empty-grid.xml - Grid with minimal elements (2 InOut nodes, no tracks)
  * - invalid-*.xml - Various malformed/invalid XML files
  */
 class XMLContextFactoryTest : KoinTestBase() {
@@ -102,17 +102,19 @@ class XMLContextFactoryTest : KoinTestBase() {
 	@DisplayName("Parsing valid XML fixtures")
 	inner class ValidXMLParsingTests {
 		@Test
-		fun parseXML_minimalNetwork_createsSingleInOut() {
+		fun parseXML_minimalNetwork_createsTwoInOuts() {
 			val xml = getFixtureStream("minimal-network.xml")
 
 			val context = factory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			val cell = grid.getCellAt(10, 10)
-			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
-			val inOut = cell as InOut
-			assertThat(inOut.getName()).isEqualTo("A")
+			val cellA = grid.getCellAt(10, 10)
+			val cellB = grid.getCellAt(20, 10)
+			assertThat(cellA).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellB).isNotNull().isInstanceOf(InOut::class)
+			assertThat((cellA as InOut).getName()).isEqualTo("A")
+			assertThat((cellB as InOut).getName()).isEqualTo("B")
 		}
 
 		@Test
@@ -174,7 +176,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		fun parseXML_emptyGrid_createsContextWithNoElements() {
+		fun parseXML_emptyGrid_createsContextWithMinimalElements() {
 			val xml = getFixtureStream("empty-grid.xml")
 
 			val context = factory.createContext(xml)
@@ -183,17 +185,20 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val grid = context.getRailWayNetGrid()
 			assertThat(grid.getCols()).isEqualTo(50)
 			assertThat(grid.getRows()).isEqualTo(50)
+			// Should have 2 InOut elements (minimum required)
+			assertThat(context.getInOuts().size).isEqualTo(2)
 		}
 
 		@Test
-		fun parseXML_emptyGrid_hasEmptyGraph() {
+		fun parseXML_emptyGrid_hasNoTracks() {
 			val xml = getFixtureStream("empty-grid.xml")
 
 			val context = factory.createContext(xml)
 
-			assertThat(context.getGraph().nodeSet())
-				.withMessage("Empty grid should have empty graph")
-				.isEmpty()
+			// Grid has InOut nodes but no track connections
+			assertThat(context.getGraph().entrySet().size)
+				.withMessage("Empty grid should have no track connections")
+				.isEqualTo(0)
 		}
 
 		@Test

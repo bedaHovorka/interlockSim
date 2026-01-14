@@ -141,7 +141,7 @@ class ContextInitializationTest : KoinTestBase() {
 		/**
 		 * Validates that loading a valid XML file creates context with expected content.
 		 *
-		 * Test uses minimal-network.xml fixture: simple 2-cell network with one InOut.
+		 * Test uses minimal-network.xml fixture: simple network with two InOut nodes (minimum required).
 		 *
 		 * Railway context: XML files are the persistent format for railway network configs.
 		 */

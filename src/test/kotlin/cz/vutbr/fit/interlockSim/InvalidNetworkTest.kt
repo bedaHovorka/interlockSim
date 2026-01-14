@@ -53,30 +53,28 @@ class InvalidNetworkTest : KoinTestBase() {
 	@DisplayName("Missing Required Elements")
 	inner class MissingElementsTests {
 		/**
-		 * Test: Network with no InOut elements can be created (for editing)
-		 * but will fail when trying to run simulation (InOut required for train operations)
-		 * Rationale: InOut (entry/exit points) are required for simulation, not for context creation
+		 * Test: Network with no InOut elements must be rejected (strict validation)
+		 * Rationale: Railway networks require at least 2 InOut elements (entry and exit points)
 		 */
 		@Test
-		fun createContext_noInOutElements_succeeds() {
+		fun createContext_noInOutElements_throwsException() {
 			val networkXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			// Context creation should succeed (allows editing empty networks)
-			val context = factory.createContext(stream)
-			assertThat(context).isNotNull()
-			assertThat(context.getInOuts().isEmpty()).isTrue()
+			// Strict validation: must reject networks without sufficient InOut elements
+			assertThatBlock { factory.createContext(stream) }
+				.isFailure()
 		}
 
 		/**
-		 * Test: Network with single InOut but no tracks for connectivity
-		 * Rationale: Single isolated InOut is valid but useless for simulation
+		 * Test: Network with single InOut must be rejected (strict validation)
+		 * Rationale: Railway networks require at least 2 InOut elements (entry and exit points)
 		 */
 		@Test
-		fun createContext_singleInOutNoTracks_succeeds() {
+		fun createContext_singleInOutNoTracks_throwsException() {
 			val networkXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -84,9 +82,9 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			// Single InOut is valid - creation should succeed
-			val context = factory.createContext(stream)
-			assertThat(context).isNotNull()
+			// Strict validation: single InOut is insufficient
+			assertThatBlock { factory.createContext(stream) }
+				.isFailure()
 		}
 
 		/**
