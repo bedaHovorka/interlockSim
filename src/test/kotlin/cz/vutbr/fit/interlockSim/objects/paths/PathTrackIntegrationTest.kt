@@ -14,7 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
@@ -55,8 +55,8 @@ import java.io.File
 class PathTrackIntegrationTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
-	private lateinit var linearContext: DefaultContext
-	private lateinit var switchContext: DefaultContext
+	private lateinit var linearContext: DefaultSimulationContext
+	private lateinit var switchContext: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {

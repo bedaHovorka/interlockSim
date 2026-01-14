@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * ## Design Decision (Option 1)
  *
- * Context and its implementations (DefaultContext, EditingContext, SimulationContext)
+ * Context and its implementations (DefaultSimulationContext, EditingContext, SimulationContext)
  * are documented as NOT thread-safe. Multi-threaded access is not supported.
  *
  * ### Rationale:
@@ -69,7 +69,7 @@ import java.util.concurrent.atomic.AtomicReference
  * **Usage:** Do not enable these tests unless implementing thread-safety (Option 2).
  *
  * @see cz.vutbr.fit.interlockSim.context.Context
- * @see cz.vutbr.fit.interlockSim.context.DefaultContext
+ * @see cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
  * @since 2026-01 (Phase 6 advanced testing)
  * @tag integration-test
  */

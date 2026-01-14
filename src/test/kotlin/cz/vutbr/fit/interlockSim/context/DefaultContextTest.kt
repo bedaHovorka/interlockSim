@@ -44,7 +44,7 @@ import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import org.koin.test.get
 
 /**
- * Comprehensive unit tests for {@link DefaultContext}.
+ * Comprehensive unit tests for {@link DefaultSimulationContext}.
  *
  * <p>Coverage:
  * <ul>
@@ -55,8 +55,8 @@ import org.koin.test.get
  *   <li>Report management: addReportTypes, isReporting</li>
  * </ul>
  */
-@DisplayName("DefaultContext")
-class DefaultContextTest : KoinTestBase() {
+@DisplayName("DefaultSimulationContext")
+class DefaultSimulationContextTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
 	@Nested
@@ -176,7 +176,7 @@ class DefaultContextTest : KoinTestBase() {
 		fun setUp() {
 			// Create a multi-block track: InOut-A -> RS1 -> RS2 -> InOut-B
 			// This allows testing navigation between blocks
-			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
+			context = this@DefaultSimulationContextTest.factory.createEmptyContext() as DefaultSimulationContext
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			rs2 = RailSemaphore(false, SpatialType.HORIZONTAL)
@@ -257,7 +257,7 @@ class DefaultContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Create a simple track: InOut-A -> Semaphore -> InOut-B
-			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
+			context = this@DefaultSimulationContextTest.factory.createEmptyContext() as DefaultSimulationContext
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			outB = InOut("B", true, SpatialType.HORIZONTAL)
@@ -318,7 +318,7 @@ class DefaultContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
+			context = this@DefaultSimulationContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -374,7 +374,7 @@ class DefaultContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
+			context = this@DefaultSimulationContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -474,7 +474,7 @@ class DefaultContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
+			context = this@DefaultSimulationContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test

@@ -77,8 +77,8 @@ class ContextInitializationTest : KoinTestBase() {
 				.withMessage("Should be EditingContext instance")
 				.isInstanceOf(EditingContext::class)
 			assertThat(context)
-				.withMessage("Should also be DefaultContext for grid access")
-				.isInstanceOf(DefaultContext::class)
+				.withMessage("Should also be DefaultSimulationContext for grid access")
+				.isInstanceOf(DefaultSimulationContext::class)
 		}
 
 		/**
@@ -239,7 +239,7 @@ class ContextInitializationTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Context State Validation")
 	inner class ContextStateTests {
-		private lateinit var linearTrackContext: DefaultContext
+		private lateinit var linearTrackContext: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {

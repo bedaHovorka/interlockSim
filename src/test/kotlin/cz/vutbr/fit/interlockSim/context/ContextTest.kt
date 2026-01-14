@@ -32,7 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
  */
 class ContextTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private val context: DefaultContext by lazy { factory.createEmptyContext() }
+	private val context: DefaultSimulationContext by lazy { factory.createEmptyContext() }
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
 	private val tl: SimpleTrackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)

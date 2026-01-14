@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
@@ -269,7 +270,7 @@ class XMLContextFactory :
 			ended = true
 		}
 
-		fun getContext(): DefaultContext? = if (ended) context else null
+		fun getContext(): DefaultSimulationContext? = if (ended) context else null
 	}
 
 	private var validator: Validator? = null
@@ -305,10 +306,10 @@ class XMLContextFactory :
 		private const val DEFAULT_GRID_SIZE = 100
 	}
 
-	override fun createEmptyContext(): DefaultContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
+	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): DefaultContext =
+	override fun createContext(file: File): Context =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -316,7 +317,7 @@ class XMLContextFactory :
 		}
 
 	@Throws(ContextCreationException::class)
-	private fun createContext(reader: Reader): DefaultContext {
+	private fun createContext(reader: Reader): DefaultSimulationContext {
 		val validator = validator ?: throw ContextCreationException("Validator not initialized")
 		return try {
 			val inputSource = InputSource(reader)
@@ -330,7 +331,7 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): DefaultContext = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context = createContext(InputStreamReader(stream))
 
 	override fun saveContext(
 		context: Context,
