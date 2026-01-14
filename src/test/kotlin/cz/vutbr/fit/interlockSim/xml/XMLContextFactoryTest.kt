@@ -19,7 +19,8 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -180,14 +181,14 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_emptyGrid_createsContextWithMinimalElements() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
 			assertThat(grid.getCols()).isEqualTo(50)
 			assertThat(grid.getRows()).isEqualTo(50)
 			// Should have 2 InOut elements (minimum required)
-			assertThat(context.getInOuts().size).isEqualTo(2)
+			assertThat((context as DefaultSimulationContext).getInOuts().size).isEqualTo(2)
 		}
 
 		@Test
@@ -223,7 +224,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_rudyUjezd_createsValidContext() {
 			val xml = getFixtureStream("rudyUjezd.xml")
 
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -260,15 +261,15 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(s2).isNotNull().isInstanceOf(InOut::class)
 
 			// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
-			assertThat(existPath(f1 as InOut, s1 as InOut, context)).isTrue()
-			assertThat(existPath(f1, s2 as InOut, context)).isTrue()
-			assertThat(existPath(f2 as InOut, s1, context)).isTrue()
-			assertThat(existPath(f2, s2, context)).isTrue()
+			assertThat(existPath(f1 as InOut, s1 as InOut, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(f1, s2 as InOut, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(f2 as InOut, s1, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(f2, s2, context as DefaultSimulationContext)).isTrue()
 			// and back
-			assertThat(existPath(s1, f1, context)).isTrue()
-			assertThat(existPath(s1, f2, context)).isTrue()
-			assertThat(existPath(s2, f1, context)).isTrue()
-			assertThat(existPath(s2, f2, context)).isTrue()
+			assertThat(existPath(s1, f1, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(s1, f2, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(s2, f1, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(s2, f2, context as DefaultSimulationContext)).isTrue()
 
 
 			assertThat(hasInOut).withMessage("Should contain at least one InOut").isTrue()
@@ -283,7 +284,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		private fun existPath(
 			from: InOut,
 			to: InOut,
-			context: DefaultContext
+			context: DefaultSimulationContext
 		) : Boolean {
 			// Get grid locations for both InOuts
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
@@ -660,7 +661,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the leftmost InOut element (typically main line entry from west/north).
 		 */
-		private fun findMainLineEntry(context: DefaultContext): InOut? {
+		private fun findMainLineEntry(context: DefaultSimulationContext): InOut? {
 			var leftmost: InOut? = null
 			var minX = Int.MAX_VALUE
 
@@ -680,7 +681,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the rightmost InOut element (typically main line exit to east/south).
 		 */
-		private fun findMainLineExit(context: DefaultContext): InOut? {
+		private fun findMainLineExit(context: DefaultSimulationContext): InOut? {
 			var rightmost: InOut? = null
 			var maxX = Int.MIN_VALUE
 
@@ -701,7 +702,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all mid-layout InOut points (platforms).
 		 * These are InOuts that are not at the extreme left or right edges.
 		 */
-		private fun findPlatformInOuts(context: DefaultContext): List<InOut> {
+		private fun findPlatformInOuts(context: DefaultSimulationContext): List<InOut> {
 			val allInOuts = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				if (entry.value is InOut) {
@@ -736,7 +737,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard access point (mid-area InOut for freight yard).
 		 */
-		private fun findYardAccessPoint(context: DefaultContext): InOut? {
+		private fun findYardAccessPoint(context: DefaultSimulationContext): InOut? {
 			// For yard, we look for InOuts in middle Y range
 			val grid = context.getRailWayNetGrid()
 			val midY = grid.getRows() / 2
@@ -756,7 +757,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard siding tracks (dead-end InOuts for parking/storage).
 		 */
-		private fun findYardSidings(context: DefaultContext): List<InOut> {
+		private fun findYardSidings(context: DefaultSimulationContext): List<InOut> {
 			val sidings = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -773,7 +774,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds switch where multiple lines converge (junction merge point).
 		 */
-		private fun findJunctionMergePoint(context: DefaultContext): RailSwitch? {
+		private fun findJunctionMergePoint(context: DefaultSimulationContext): RailSwitch? {
 			// Junction switch typically has connections from 3+ directions
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -816,7 +817,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all signals within specified grid rectangle.
 		 */
 		private fun findSignalsInArea(
-			context: DefaultContext,
+			context: DefaultSimulationContext,
 			startX: Int,
 			endX: Int,
 			startY: Int,
@@ -863,7 +864,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPrahaElementComposition() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 			val counts = countElements(context.getRailWayNetGrid())
 
 			// Verify element counts meet thresholds (adjusted for simplified topology)
@@ -881,7 +882,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPrahaPlatformConnectivity() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			// Find entry and exit InOuts by orientation
 			val entries = mutableListOf<InOut>()  // orientation=false (entries from west/north)
@@ -909,7 +910,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			if (entries.isNotEmpty() && exits.isNotEmpty()) {
 				val from = entries[0]
 				val to = exits[0]
-				assertThat(existPath(from, to, context))
+				assertThat(existPath(from, to, context as DefaultSimulationContext))
 					.withMessage("Path should exist from north entry ${from.getName()} to south exit ${to.getName()}")
 					.isTrue()
 			}
@@ -918,17 +919,18 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testPrahaSignalPlacement() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = factory.createContext(xml) as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Find signals in north throat area (X=1-20)
-			val northSignals = findSignalsInArea(context, 1, 20, 0, grid.getRows() - 1)
+			val northSignals = findSignalsInArea(context as DefaultSimulationContext, 1, 20, 0, grid.getRows() - 1)
 			assertThat(northSignals.size)
 				.withMessage("North throat should have entry signals")
 				.isGreaterThan(3)
 
 			// Find signals in south throat area (X=50-69)
-			val southSignals = findSignalsInArea(context, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
+			val southSignals =
+				findSignalsInArea(context as DefaultSimulationContext, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
 			assertThat(southSignals.size)
 				.withMessage("South throat should have exit signals")
 				.isGreaterThan(3)
@@ -1018,8 +1020,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(25)
 
 			// Verify element counts match
-			val originalCounts = countElements(originalContext.getRailWayNetGrid())
-			val loadedCounts = countElements(loadedContext.getRailWayNetGrid())
+			val originalCounts = countElements(originalContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
+			val loadedCounts = countElements(loadedContext.getRailWayNetGrid() as DefaultRailWayNetGrid)
 			assertThat(loadedCounts["InOut"]).isEqualTo(originalCounts["InOut"])
 			assertThat(loadedCounts["RailSwitch"]).isEqualTo(originalCounts["RailSwitch"])
 			assertThat(loadedCounts["RailSemaphore"]).isEqualTo(originalCounts["RailSemaphore"])
@@ -1030,7 +1032,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Reuses the existPath method from ValidXMLParsingTests for connectivity checking.
 		 */
-		private fun existPath(from: InOut, to: InOut, context: DefaultContext): Boolean {
+		private fun existPath(from: InOut, to: InOut, context: DefaultSimulationContext): Boolean {
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
 			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
 			if (fromLoc == toLoc) return true
