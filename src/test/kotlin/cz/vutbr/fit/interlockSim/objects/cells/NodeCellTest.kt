@@ -13,7 +13,7 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
@@ -48,7 +48,7 @@ import org.koin.test.get
  */
 @DisplayName("NodeCell Tests")
 class NodeCellTest : KoinTestBase() {
-	private lateinit var context: DefaultContext
+	private lateinit var context: DefaultSimulationContext
 	private lateinit var nodeA: MockNodeCell
 	private lateinit var nodeB: MockNodeCell
 

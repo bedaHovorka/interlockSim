@@ -36,11 +36,11 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 @DisplayName("Bresenham Line Algorithm (via joinCells)")
 class BresenhamJoinTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private lateinit var context: DefaultContext
+	private lateinit var context: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext()
+		context = factory.createEmptyContext() as DefaultSimulationContext
 	}
 
 	@Test

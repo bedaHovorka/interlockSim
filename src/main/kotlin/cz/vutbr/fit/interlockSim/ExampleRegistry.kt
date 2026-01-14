@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -69,7 +69,7 @@ class ExampleRegistry {
 
 		// Use .use {} to ensure stream is properly closed
 		return stream.use {
-			val context = Util.assertInstanceOf(DefaultContext::class.java, factory.createContext(it))
+			val context = Util.assertInstanceOf(DefaultSimulationContext::class.java, factory.createContext(it))
 			val time = args[2].toLong()
 			context.setMainProcess(ShuntingLoop(context, time))
 			context

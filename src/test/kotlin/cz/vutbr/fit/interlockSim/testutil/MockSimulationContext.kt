@@ -14,7 +14,7 @@
 
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
@@ -51,7 +51,7 @@ import java.io.InputStream
  * @see SimulationContext
  * @see TestContextBuilder
  */
-class MockSimulationContext(private val delegate: DefaultContext) : SimulationContext by delegate {
+class MockSimulationContext(private val delegate: DefaultSimulationContext) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
 	private val workers: MutableMap<InOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
@@ -143,7 +143,7 @@ class MockSimulationContext(private val delegate: DefaultContext) : SimulationCo
 
 	override fun isReporting(type: ReportType): Boolean = enabledReports.contains(type)
 
-	// Delegate methods to wrapped DefaultContext
+	// Delegate methods to wrapped DefaultSimulationContext
 
 	override fun getNextTrackSection(
 		separator: PathSeparator,
@@ -198,12 +198,12 @@ class MockSimulationContext(private val delegate: DefaultContext) : SimulationCo
 }
 
 fun createMockSimulationContext(): MockSimulationContext {
-	val defaultContext = contextFactory().createEmptyContext()
+	val defaultContext = contextFactory().createEmptyContext() as DefaultSimulationContext
 	return MockSimulationContext(defaultContext)
 }
 
 fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
-	val defaultContext = contextFactory().createContext(xml)
+	val defaultContext = contextFactory().createContext(xml) as DefaultSimulationContext
 	return MockSimulationContext(defaultContext)
 }
 

@@ -14,13 +14,13 @@
 
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.java.KoinJavaComponent.getKoin
 
 /**
- * Test utility for building {@link DefaultContext} instances with fluent API.
+ * Test utility for building {@link DefaultSimulationContext} instances with fluent API.
  *
  * <p>This is a scaffold implementation created in Phase 1.
  * Full implementation will be provided in Phase 2 by Developer 2.</p>
@@ -35,11 +35,11 @@ import org.koin.java.KoinJavaComponent.getKoin
  *     .build();
  * }</pre>
  *
- * @see DefaultContext
+ * @see DefaultSimulationContext
  */
 class TestContextBuilder {
 	private val factory: XMLContextFactory by getKoin().inject()
-	private val context = factory.createEmptyContext()
+	private val context = factory.createEmptyContext() as DefaultSimulationContext
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -141,9 +141,9 @@ class TestContextBuilder {
 	/**
 	 * Builds and returns the configured context.
 	 *
-	 * @return configured DefaultContext instance
+	 * @return configured DefaultSimulationContext instance
 	 */
-	fun build(): DefaultContext = context
+	fun build(): DefaultSimulationContext = context
 }
 
 	/**
@@ -152,8 +152,8 @@ class TestContextBuilder {
 	 *
 	 * @return configured context with linear track
 	 */
-	fun buildLinearTrack(): DefaultContext {
-		val context =getKoin().get<XMLContextFactory>().createEmptyContext()
+	fun buildLinearTrack(): DefaultSimulationContext {
+		val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
 		val inA =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				"A",
@@ -184,8 +184,8 @@ class TestContextBuilder {
 	 *
 	 * @return configured context with semaphore
 	 */
-	fun buildLinearTrackWithSemaphore(): DefaultContext {
-		val context = getKoin().get<XMLContextFactory>().createEmptyContext()
+	fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
+		val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
 		val inA =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				"A",
@@ -224,7 +224,7 @@ class TestContextBuilder {
 	 *
 	 * @return context with two InOut elements
 	 */
-	fun buildMinimal(): DefaultContext {
+	fun buildMinimal(): DefaultSimulationContext {
 		return getKoin().get<TestContextBuilder>()
 			.withInOut("A", 1, 1, true)  // entry point
 			.withInOut("B", 2, 1, false)  // exit point
