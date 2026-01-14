@@ -113,7 +113,6 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		cell: Cell
 	) {
-		requireValidState(cell != null) { "Cell cannot be null" }
 
 		try {
 			// Use reflection to find and invoke the specific draw method for this cell type

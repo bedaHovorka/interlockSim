@@ -526,9 +526,6 @@ class XMLContextFactory :
 		clazz: Class<*>,
 		vararg arguments: Any
 	): Any {
-		check(context != null) { "Context cannot be null" }
-		check(clazz != null) { "Class cannot be null" }
-
 		val argumentClasses =
 			arguments
 				.map { arg ->

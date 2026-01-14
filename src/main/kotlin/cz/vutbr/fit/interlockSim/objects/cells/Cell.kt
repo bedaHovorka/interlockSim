@@ -81,7 +81,6 @@ interface Cell {
 		 * @return neighbour Point
 		 */
 		fun transform(from: Point): Point {
-			requireValidState(from != null) { "Point cannot be null" }
 			val tr = Point(from.x + dx, from.y + dy)
 			requireValidState(from != tr) { "Transformed point must be different from original: segment=$this" }
 			return tr

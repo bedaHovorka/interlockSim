@@ -191,7 +191,6 @@ abstract class AbstractPath protected constructor(
 		previous: Track?,
 		next: Track
 	): Boolean {
-		requireValidArgument(methodName != null && next != null) { "Method name and next track must not be null" }
 		val from = context.getSegment(separator, previous, next)
 		val to = context.getSegment(separator, next, previous)
 		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }

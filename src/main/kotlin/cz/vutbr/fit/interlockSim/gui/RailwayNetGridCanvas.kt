@@ -234,7 +234,6 @@ class RailwayNetGridCanvas :
 
 	// Update context and recalculate display
 	private fun changeContext(cont: Context) {
-		requireEditorNotNull(cont) { "Context cannot be null" }
 		if (context != null) {
 			context!!.removePropertyChangeListener(this)
 		}
@@ -263,7 +262,6 @@ class RailwayNetGridCanvas :
 		for (entry in grid) {
 			val key = entry.key
 			val cell = entry.value
-			requireValidState(key != null && cell != null) { "Grid entry has null key or value: ($key, $cell)" }
 
 			val x = key.x * CELL_WIDTH
 			val y = key.y * CELL_HEIGHT

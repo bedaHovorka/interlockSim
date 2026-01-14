@@ -50,12 +50,10 @@ class Doubleton<T, V> : AbstractSet<T> {
 		private var state = IteratorState.INIT
 
 		override fun hasNext(): Boolean {
-			requireValidState(state != null) { "Iterator state cannot be null" }
 			return state != IteratorState.SECOND
 		}
 
 		override fun next(): T {
-			requireValidState(state != null) { "Iterator state cannot be null" }
 			return when (state) {
 				IteratorState.INIT -> {
 					state = IteratorState.FIRST
@@ -105,8 +103,8 @@ class Doubleton<T, V> : AbstractSet<T> {
 	}
 
 	override fun hashCode(): Int {
-		var result = if (first == null) 0 else first.hashCode()
-		result += if (second == null) 0 else second.hashCode() // kongruentni komutativita?
+		var result = first.hashCode()
+		result += second.hashCode() // kongruentni komutativita?
 		return result
 	}
 

@@ -42,10 +42,10 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 			val e = other
 			val k1 = key
 			val k2 = e.key
-			if (k1 == k2 || (k1 != null && k1 == k2)) {
+			if (k1 == k2) {
 				val v1 = value
 				val v2 = e.value
-				if (v1 == v2 || (v1 != null && v1 == v2)) {
+				if (v1 == v2) {
 					return true
 				}
 			}

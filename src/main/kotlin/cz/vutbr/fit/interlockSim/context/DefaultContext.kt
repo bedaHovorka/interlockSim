@@ -245,11 +245,9 @@ abstract class DefaultContext :
 		val nodecell2: NodeCell = Util.assertNodeCell(getGrid().get(key2)!!)
 
 		for (s1: Segment in nodecell1.joins()) {
-			requireEditorNotNull(s1) { "Segment s1 cannot be null for nodecell $nodecell1" }
 			val p1 = s1.transform(key1)
 			if (used(p1)) continue
 			for (s2: Segment in nodecell2.joins()) {
-				requireEditorNotNull(s2) { "Segment s2 cannot be null for nodecell $nodecell2" }
 				if (s1 == s2) continue // stejne segmenty se nepropoji
 				val p2 = s2.transform(key2)
 				if (used(p2)) continue
@@ -284,7 +282,6 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): Boolean {
-		requireEditor(key1 != null && key2 != null) { "Keys cannot be null in hardJoin" }
 		if (key1.distance(key2) > SQRT2) {
 			val blockEndFrom = s1.transform(key1)
 			val blockEndTo = s2.transform(key2)
@@ -321,7 +318,6 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): Map<Point, TrackBlockPart>? {
-		if (pi1 == null || pi2 == null) throw IllegalArgumentException()
 		val p1 = pi1
 		val p2 = pi2
 
@@ -359,8 +355,8 @@ abstract class DefaultContext :
 		key2: Point,
 		trackBlock: TrackBlock
 	): MutableMap<Point, TrackBlockPart>? {
-		requireValidArgument(bresenham != null && bresenham.isNotEmpty()) {
-			"Bresenham path list cannot be null or empty"
+		requireValidArgument(bresenham.isNotEmpty()) {
+			"Bresenham path list cannot be empty"
 		}
 		val map: MutableMap<Point, TrackBlockPart> = linkedMapOf()
 		var from = key1
@@ -394,7 +390,6 @@ abstract class DefaultContext :
 		to: Point,
 		block: TrackBlock
 	): TrackBlockPart? {
-		requireEditorNotNull(block) { "TrackBlock cannot be null in createPart" }
 		if (used(middle)) return null
 		if (from == to || from == middle || middle == to) return null
 
@@ -426,9 +421,6 @@ abstract class DefaultContext :
 		p2: Point,
 		points: MutableList<Point>
 	): Boolean {
-		requireValidArgument(key1 != null && key2 != null && p1 != null && p2 != null) {
-			"All points must be non-null in bresenham algorithm"
-		}
 		requireValidArgument(key1 != p1 && key2 != p2 && key1 != p2 && key2 != p1) {
 			"Keys and intermediate points must be distinct in bresenham algorithm"
 		}
@@ -548,7 +540,6 @@ abstract class DefaultContext :
 		key: Point,
 		nodeCell: NodeCell
 	) {
-		requireEditorNotNull(key) { "Cell key cannot be null in putCell" }
 		// Validate coordinates are within grid bounds
 		if (key.x < 0 || key.y < 0 || key.x >= railwayNetGrid.getCols() || key.y >= railwayNetGrid.getRows()) {
 			throw ContextCreationException(
@@ -560,7 +551,6 @@ abstract class DefaultContext :
 
 		// vedlejsi Nody (sousedni bunky)
 		for (s1: Segment in nodeCell.joins()) {
-			requireEditorNotNull(s1) { "Segment s1 cannot be null for nodeCell $nodeCell" }
 			val p = s1.transform(key)
 			// Skip neighbor if it's outside grid bounds (boundary cells)
 			if (p.x < 0 || p.y < 0 || p.x >= railwayNetGrid.getCols() || p.y >= railwayNetGrid.getRows()) {
@@ -619,7 +609,6 @@ abstract class DefaultContext :
 	 * Remove a track line from the railway network
 	 */
 	override fun removeLine(line: TrackBlock) {
-		requireEditorNotNull(line) { "TrackBlock line cannot be null in removeLine" }
 		extendedUnorientedGraph.remove(line)
 		getGrid().keySet().removeAll(linesKeys.remove(line) ?: emptySet())
 		changeSupport.firePropertyChange(
@@ -656,7 +645,6 @@ abstract class DefaultContext :
 	): Segment? {
 		// If track is not null, use it; otherwise use secondEndTrack
 		if (track != null) return getSegment(separator, track)
-		requireValidArgument(separator != null) { "PathSeparator cannot be null" }
 		requireValidArgument(secondEndTrack != null) { "secondEndTrack cannot be null for separator $separator" }
 		requireValidArgument(separator is OrientedPathSeparator) {
 			"PathSeparator must be OrientedPathSeparator, got ${separator.javaClass.simpleName}"
@@ -673,9 +661,6 @@ abstract class DefaultContext :
 		separator: PathSeparator,
 		track: Track
 	): Segment? {
-		if (separator == null || track == null) {
-			throw IllegalArgumentException("separator or track is null")
-		}
 		return if (track is TrackSection) {
 			@Suppress("UNCHECKED_CAST")
 			val section = track as TrackSection
@@ -696,9 +681,6 @@ abstract class DefaultContext :
 		separator: PathSeparator,
 		section: TrackSection
 	): Segment? {
-		if (section == null) {
-			throw IllegalArgumentException("section is null")
-		}
 		val trackBlock = section.getTrackBlock()
 		if (trackBlock.isInnerElement(separator)) {
 			return trackBlock.getJoin(separator, section)
@@ -749,7 +731,6 @@ abstract class DefaultContext :
 		nodeCell: NodeCell,
 		current: TrackBlock?
 	): TrackBlock? {
-		if (nodeCell == null) throw IllegalArgumentException("node is null")
 		val location = getLocation(nodeCell)
 		val segment = getSegment(location, current)
 		val followingSegment = nodeCell.getFollowingSegment(segment)
@@ -766,7 +747,6 @@ abstract class DefaultContext :
 		separator: PathSeparator,
 		current: TrackSection?
 	): TrackSection? {
-		if (separator == null) throw IllegalArgumentException("separator is null")
 		var trackBlock: TrackBlock? = null
 		if (current != null) {
 			trackBlock = current.getTrackBlock()
@@ -865,12 +845,10 @@ abstract class DefaultContext :
 		next: Track?,
 		previous: Track?
 	): Boolean {
-		requireSimulation(separator != null) { "Separator cannot be null in isSeparatorInDirection" }
 		val segment = getSegment(separator, next, previous)
 		if (segment == null && separator is InOut) return true
 		requireSimulation(segment != null) { "Segment cannot be null for separator $separator" }
 		val direction = separator.direction()
-		requireSimulation(direction != null) { "Direction cannot be null for oriented separator" }
 		val inDirection = segment === direction
 		if (logger.isDebugEnabled()) {
 			logger.debug(
@@ -891,9 +869,6 @@ abstract class DefaultContext :
 		sep: PathSeparator,
 		nxt: TrackSection
 	): Path? {
-		if (sep == null || nxt == null) {
-			throw IllegalArgumentException("wrong arguments for aPath finding")
-		}
 		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
 		var separator = sep
 		var previous: TrackSection? = null
@@ -949,7 +924,7 @@ abstract class DefaultContext :
 	 * Add report types to be reported
 	 */
 	override fun addReportTypes(vararg types: ReportType) {
-		if (types == null || types.isEmpty()) {
+		if (types.isEmpty()) {
 			allowedReportTypes.clear()
 		} else {
 			allowedReportTypes.addAll(types.asList())
@@ -965,9 +940,8 @@ abstract class DefaultContext :
 	 * Remove report types from reporting
 	 */
 	override fun removeReportTypes(vararg types: ReportType) {
-		if (types == null || types.isEmpty()) return
+		if (types.isEmpty()) return
 		for (t in types) {
-			if (t == null) continue
 			allowedReportTypes.remove(t)
 		}
 	}

@@ -57,7 +57,6 @@ abstract class GridCanvasPopupMenu : JPopupMenu() {
 		key: cz.vutbr.fit.interlockSim.util.Point?,
 		cell: Cell?
 	) {
-		requireValidState(canvas != null && e != null) { "Canvas and event cannot be null" }
 		if (key == null || cell == null) return
 		this.canvas = canvas
 		reorganizeMenu(key, cell)

@@ -142,7 +142,6 @@ class DefaultRailWayNetGrid(
 	 */
 	@Synchronized
 	fun remove(key: Point) {
-		requireValidState(key != null) { "Key cannot be null" }
 		val removed: Cell? = getCells().remove(key)
 		val remove2: Point? = getReverseTable().remove(removed)
 		requireValidState(key == remove2) {

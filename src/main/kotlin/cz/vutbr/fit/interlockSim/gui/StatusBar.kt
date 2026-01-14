@@ -35,9 +35,7 @@ class StatusBar :
 				val source = e.source
 				requireValidState(source is StatusProducer) { "Source must be a StatusProducer" }
 				val status = (source as StatusProducer).getStatus(e)
-				if (status != null) {
-					text = status
-				}
+				text = status
 			}
 		}
 
