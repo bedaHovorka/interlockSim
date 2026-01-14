@@ -16,6 +16,16 @@ import cz.vutbr.fit.interlockSim.util.Point
 /**
  * Interface to shared functions of inner data model, which is allowed by editing
  *
+ * ## Thread Safety
+ *
+ * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
+ * documentation and usage guidelines.
+ *
+ * All editing operations (putCell, removeCell, moveCell, joinCells, removeLine)
+ * must be performed from a single thread.
+ *
+ * @see Context
+ * @see javax.annotation.concurrent.NotThreadSafe
  */
 interface EditingContext : Context {
 	/**

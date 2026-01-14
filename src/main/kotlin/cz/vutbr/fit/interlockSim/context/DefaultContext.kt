@@ -54,6 +54,41 @@ import java.util.TreeMap
 
 /**
  * implementation of {@link EditingContext} and {@link SimulationContext}
+ *
+ * ## Thread Safety
+ *
+ * **This class is NOT thread-safe.**
+ *
+ * DefaultContext maintains mutable state including:
+ * - Railway network grid (DefaultRailWayNetGrid)
+ * - Graph structure (ExtendedUnorientedGraph)
+ * - Property change listeners (PropertyChangeSupport)
+ * - Track block mappings and simulation state
+ *
+ * These data structures are not synchronized and will experience race conditions
+ * if accessed concurrently from multiple threads. Observed issues include:
+ * - NullPointerException in grid access
+ * - ArrayIndexOutOfBoundsException in cell operations
+ * - ConcurrentModificationException in listener notifications
+ *
+ * ### Design Decision
+ *
+ * Thread safety is intentionally NOT implemented because:
+ * 1. Railway simulations are inherently sequential (discrete event model)
+ * 2. The jDisco framework operates in a single thread
+ * 3. No current use cases require concurrent access
+ * 4. Thread-safety would add complexity and performance overhead
+ *
+ * ### Usage
+ *
+ * - Access DefaultContext only from the simulation/editing thread
+ * - Do not share instances across thread boundaries
+ * - Use external synchronization if multi-threaded access is unavoidable
+ *
+ * @see Context
+ * @see EditingContext
+ * @see SimulationContext
+ * @see javax.annotation.concurrent.NotThreadSafe
  */
 abstract class DefaultContext :
 	EditingContext,

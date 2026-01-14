@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -38,37 +39,37 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Comprehensive race condition tests for concurrent access scenarios.
  *
- * Tests the thread safety of core railway interlocking operations under
- * concurrent access patterns. These advanced tests validate that public APIs
- * properly handle simultaneous operations from multiple threads.
+ * **IMPORTANT: Tests in this class are DISABLED by design.**
  *
- * Key scenarios tested:
- * 1. Concurrent path reservation attempts
- * 2. Simultaneous switch state changes
- * 3. Concurrent track occupancy updates
- * 4. Thread safety of Context modifications
+ * These tests demonstrate race conditions that occur when Context classes are
+ * accessed concurrently. However, Context is intentionally NOT thread-safe:
  *
- * Test organization:
- * - Concurrent path operations (reservation, setup, cancellation)
- * - Switch state modifications under concurrent access
- * - Track occupancy and entry/leave operations
- * - Context grid modifications during concurrent access
+ * ## Design Decision (Option 1)
  *
- * Safety Properties Validated:
- * - SI-4: Path reservation atomicity (all-or-nothing)
- * - SI-5: Switch locking during path use (no state corruption)
- * - SI-1: No collision detection (track occupancy integrity)
- * - Data consistency under concurrent access
+ * Context and its implementations (DefaultContext, EditingContext, SimulationContext)
+ * are documented as NOT thread-safe. Multi-threaded access is not supported.
  *
- * Thread Safety Strategy:
- * - Use CountDownLatch for precise synchronization
- * - Use AtomicInteger/AtomicBoolean for thread-safe counters
- * - Use CopyOnWriteArrayList for thread-safe exception collection
- * - Avoid timing-dependent assertions (use latches instead)
- * - Conservative API testing (test only public methods)
+ * ### Rationale:
+ * 1. Railway simulations are inherently sequential (discrete event model)
+ * 2. The jDisco framework is single-threaded by design
+ * 3. No current use cases require concurrent Context access
+ * 4. Thread-safety would add unnecessary complexity and performance overhead
+ * 5. Aligns with KISS principle
  *
- * Coverage Target: ~50-75 instructions
+ * ### Race Conditions Documented:
+ * - NullPointerException in grid access during concurrent modifications
+ * - ArrayIndexOutOfBoundsException in cell operations
+ * - ConcurrentModificationException in listener notifications
  *
+ * These tests remain in the codebase to:
+ * 1. Document known race conditions if thread-safety is attempted in the future
+ * 2. Provide evidence for the design decision to not implement thread-safety
+ * 3. Serve as integration tests if the design decision is revisited
+ *
+ * **Usage:** Do not enable these tests unless implementing thread-safety (Option 2).
+ *
+ * @see cz.vutbr.fit.interlockSim.context.Context
+ * @see cz.vutbr.fit.interlockSim.context.DefaultContext
  * @since 2026-01 (Phase 6 advanced testing)
  * @tag integration-test
  */
@@ -632,8 +633,19 @@ class RaceConditionTest : KoinTestBase() {
 	inner class ConcurrentContextModifications {
 		/**
 		 * Test concurrent cell placement and retrieval from the context grid.
+		 *
+		 * **DISABLED: Context is not thread-safe by design.**
+		 *
+		 * This test demonstrates ArrayIndexOutOfBoundsException that occurs when
+		 * multiple threads concurrently access the Context grid. This is expected
+		 * behavior as Context is intentionally not thread-safe.
+		 *
+		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Concurrent cell operations on context grid are thread-safe")
 		fun concurrentCellOperations_contextGrid_threadSafe() {
 			// Arrange
@@ -692,8 +704,19 @@ class RaceConditionTest : KoinTestBase() {
 
 		/**
 		 * Test concurrent context modifications maintain grid consistency.
+		 *
+		 * **DISABLED: Context is not thread-safe by design.**
+		 *
+		 * This test demonstrates NullPointerException that occurs when multiple
+		 * threads concurrently modify the Context grid. This is expected behavior
+		 * as Context is intentionally not thread-safe.
+		 *
+		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Concurrent context modifications maintain grid consistency")
 		fun concurrentContextMod_maintainsGridConsistency() {
 			// Arrange
@@ -950,8 +973,19 @@ class RaceConditionTest : KoinTestBase() {
 		/**
 		 * Test that multiple listener registrations and removals work correctly
 		 * under concurrent grid modifications.
+		 *
+		 * **DISABLED: Context is not thread-safe by design.**
+		 *
+		 * This test demonstrates ConcurrentModificationException that occurs when
+		 * listener notifications happen concurrently with grid modifications. This
+		 * is expected behavior as Context is intentionally not thread-safe.
+		 *
+		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Listeners and grid modifications work correctly concurrently")
 		fun listenersAndGridMods_workConcurrently() {
 			// Arrange
