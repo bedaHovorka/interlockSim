@@ -450,7 +450,7 @@ class MainArgumentParsingTest {
 			// Assert
 			val output = getCapturedError()
 			// Should print that example doesn't exist and show list
-			assertThat(output).contains("not exist")
+			assertThat(output).contains("Unknown example")
 		}
 
 		@Test

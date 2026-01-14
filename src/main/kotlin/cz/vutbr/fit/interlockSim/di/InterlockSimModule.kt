@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.di
 
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
+import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
@@ -30,10 +31,9 @@ import org.koin.dsl.module
 /**
  * Utility module
  *
- * Currently empty - utilities will be migrated incrementally
- * Candidates for DI:
- * - Resource loading patterns
- * - Utility factories (if any)
+ * Manages utilities and example registry
+ * - MyResourceBundle for resource loading
+ * - ExampleRegistry for simulation examples
  */
 val utilModule: Module = module {
 	single<MyResourceBundle> { MyResourceBundle() }
@@ -84,6 +84,7 @@ val simulationModule: Module = module {
 	// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
 	// Bind factory interfaces to the singleton XMLContextFactory instance
 	single<SimulationContextFactory> { get<XMLContextFactory>() }
+	single<ExampleRegistry> { ExampleRegistry() }
 }
 
 /**

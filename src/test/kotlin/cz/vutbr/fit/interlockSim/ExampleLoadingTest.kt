@@ -11,502 +11,265 @@ package cz.vutbr.fit.interlockSim
 
 import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.cause
 import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.get
-import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Modifier
 
 /**
- * Comprehensive tests for example loading and execution via reflection.
+ * Tests for the example loading system.
  *
- * Tests the discovery and invocation of methods annotated with @Example in the Main class.
- * This validates the reflection-based example system that allows users to run built-in
- * simulation scenarios like shuntingLoop.
+ * This validates the map registry-based example system that allows users to run
+ * built-in simulation scenarios like shuntingLoop via command line.
+ *
+ * Refactored from reflection-based approach (January 2026) to use idiomatic
+ * Kotlin with map registry.
  */
 @DisplayName("Example Loading Tests")
 class ExampleLoadingTest : KoinTestBase() {
 
 	@Nested
-	@DisplayName("Example Discovery")
-	inner class ExampleDiscoveryTests {
+	@DisplayName("Example Registry")
+	inner class ExampleRegistryTests {
 		/**
-		 * Test that examples can be discovered via reflection.
-		 * Validates that Main class contains methods and we can inspect them.
+		 * Test that ExampleRegistry has examples registered
 		 */
 		@Test
-		fun `examples discovered via reflection`() {
+		fun `examples registry exists and is accessible`() {
 			// Arrange
-			val mainClass = Main::class.java
+			val registry = get<ExampleRegistry>()
 
 			// Act
-			val allMethods = mainClass.declaredMethods
+			val examples = registry.examples
 
 			// Assert
-			assertThat(allMethods.size > 0).isTrue()
+			assertThat(examples).isNotNull()
+			assertThat(examples.size > 0).isTrue()
 		}
 
 		/**
-		 * Test that example list includes the shuntingLoop example.
-		 * Validates that the @Example annotation marks the shuntingLoop method.
+		 * Test that shuntingLoop example is registered
 		 */
 		@Test
-		fun `example list includes shuntingLoop`() {
+		fun `shuntingLoop example is registered`() {
 			// Arrange
-			val mainClass = Main::class.java
-			val examples = mutableListOf<String>()
+			val registry = get<ExampleRegistry>()
 
 			// Act
-			for (method in mainClass.declaredMethods) {
-				if (Modifier.isPublic(method.modifiers) && method.isAnnotationPresent(Example::class.java)) {
-					examples.add(method.name)
-				}
-			}
+			val hasShuntingLoop = registry.examples.containsKey("shuntingLoop")
 
 			// Assert
-			assertThat(examples.contains("shuntingLoop")).isTrue()
+			assertThat(hasShuntingLoop).isTrue()
 		}
 
 		/**
-		 * Test that example discovery finds annotated methods.
-		 * Validates that reflection-based discovery finds at least one example.
+		 * Test that example names can be retrieved
 		 */
 		@Test
-		fun `example discovery finds annotated methods`() {
+		fun `example names are retrievable`() {
 			// Arrange
-			val mainClass = Main::class.java
-			var annotatedCount = 0
+			val registry = get<ExampleRegistry>()
 
 			// Act
-			for (method in mainClass.declaredMethods) {
-				if (method.isAnnotationPresent(Example::class.java)) {
-					annotatedCount++
-				}
-			}
+			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(annotatedCount > 0).isTrue()
-		}
-
-		/**
-		 * Test that example method names are discoverable.
-		 * Validates that discovered names match method names.
-		 */
-		@Test
-		fun `example names match method names`() {
-			// Arrange
-			val mainClass = Main::class.java
-
-			// Act
-			val exampleMethod =
-				mainClass.declaredMethods.find { m ->
-					Modifier.isPublic(m.modifiers) && m.name == "shuntingLoop"
-				}
-
-			// Assert
-			assertThat(exampleMethod).isNotNull()
-			assertThat(exampleMethod!!.isAnnotationPresent(Example::class.java)).isTrue()
+			assertThat(exampleNames).hasSize(1)
+			assertThat(exampleNames.contains("shuntingLoop")).isTrue()
 		}
 	}
 
 	@Nested
-	@DisplayName("Example Method Signature Validation")
-	inner class ExampleMethodSignatureTests {
-		/**
-		 * Test that example methods have the correct signature.
-		 * Validates that shuntingLoop method accepts (SimulationContextFactory, Array<String>).
-		 */
-		@Test
-		fun `example methods have correct signature`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val shuntingLoopMethod =
-				mainClass.getMethod(
-					"shuntingLoop",
-					SimulationContextFactory::class.java,
-					Array<String>::class.java
-				)
-
-			// Act
-			val paramTypes = shuntingLoopMethod.parameterTypes
-
-			// Assert
-			assertThat(paramTypes).hasSize(2)
-			assertThat(paramTypes[0] == SimulationContextFactory::class.java).isTrue()
-			assertThat(paramTypes[1] == Array<String>::class.java).isTrue()
-		}
-
-		/**
-		 * Test that example method is public.
-		 * Validates that example methods are accessible for invocation.
-		 */
-		@Test
-		fun `example method is public`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val shuntingLoopMethod =
-				mainClass.getMethod(
-					"shuntingLoop",
-					SimulationContextFactory::class.java,
-					Array<String>::class.java
-				)
-
-			// Act
-			val isPublic = Modifier.isPublic(shuntingLoopMethod.modifiers)
-
-			// Assert
-			assertThat(isPublic).isTrue()
-		}
-
-		/**
-		 * Test that example methods are marked with @Example annotation.
-		 * Validates that the annotation is correctly applied.
-		 */
-		@Test
-		fun `example method has @Example annotation`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val shuntingLoopMethod =
-				mainClass.getMethod(
-					"shuntingLoop",
-					SimulationContextFactory::class.java,
-					Array<String>::class.java
-				)
-
-			// Act
-			val hasAnnotation = shuntingLoopMethod.isAnnotationPresent(Example::class.java)
-
-			// Assert
-			assertThat(hasAnnotation).isTrue()
-		}
-	}
-
-	@Nested
-	@DisplayName("Example Execution")
+	@DisplayName("Example Execution via runExample")
 	inner class ExampleExecutionTests {
 		/**
-		 * Test that unknown example name throws NoSuchMethodException.
-		 * Validates error handling for non-existent examples.
+		 * Test that runExample with no arguments shows available examples
 		 */
 		@Test
-		fun `unknown example throws NoSuchMethodException`() {
+		fun `runExample with no example name shows available examples`() {
 			// Arrange
-			val mainClass = Main::class.java
-			val unknownExampleName = "nonExistentExample"
+			val main = get<Main>()
+			val args = arrayOf("example")
 
-			// Act & Assert
-			assertFailure {
-				mainClass.getMethod(unknownExampleName, SimulationContextFactory::class.java, Array<String>::class.java)
-			}.isInstanceOf<NoSuchMethodException>()
-				.message()
-				.isNotNull()
+			// Act - this should log a warning but not throw
+			main.runExample(args)
+
+			// Assert - no exception thrown
 		}
 
 		/**
-		 * Test that example method with insufficient arguments throws ContextCreationException.
-		 * Validates that end time parameter is required.
+		 * Test that runExample with unknown example name shows error
 		 */
 		@Test
-		fun `example invocation without required end time throws ContextCreationException`() {
+		fun `runExample with unknown example name handles gracefully`() {
 			// Arrange
-			val mainClass = Main::class.java
 			val main = get<Main>()
-			val factory = get<SimulationContextFactory>()
-			val insufficientArgs = arrayOf("example") // Missing end time
+			val args = arrayOf("example", "unknownExample", "100")
+
+			// Act - should log error but not throw
+			main.runExample(args)
+
+			// Assert - no exception thrown
+		}
+
+		/**
+		 * Test that runExample with insufficient arguments throws ContextCreationException
+		 */
+		@Test
+		fun `runExample with insufficient arguments catches exception`() {
+			// Arrange
+			val main = get<Main>()
+			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+
+			// Act - should catch ContextCreationException and log it
+			main.runExample(args)
+
+			// Assert - no exception propagated
+		}
+
+		/**
+		 * Test that runExample with non-numeric endTime catches exception
+		 */
+		@Test
+		fun `runExample with non-numeric endTime catches exception`() {
+			// Arrange
+			val main = get<Main>()
+			val args = arrayOf("example", "shuntingLoop", "notANumber")
+
+			// Act - should catch NumberFormatException and log it
+			main.runExample(args)
+
+			// Assert - no exception propagated
+		}
+	}
+
+	@Nested
+	@DisplayName("ShuntingLoop Example Factory")
+	inner class ShuntingLoopFactoryTests {
+		/**
+		 * Test that shuntingLoop factory is accessible via registry
+		 */
+		@Test
+		fun `shuntingLoop factory can be invoked via registry`() {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+			val factory = registry.examples["shuntingLoop"]
 
 			// Act & Assert
-			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
+			assertThat(factory).isNotNull()
+		}
+
+		/**
+		 * Test that createShuntingLoopExample with insufficient args throws
+		 */
+		@Test
+		fun `createShuntingLoopExample requires endTime argument`() {
+			// Arrange
+			val registry = get<ExampleRegistry>()
+			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
+				"createShuntingLoopExample",
+				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+				Array<String>::class.java
+			)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoop") // Missing endTime
+
+			// Act & Assert
 			assertFailure {
-				method.invoke(main, factory, insufficientArgs)
-			}.isInstanceOf<InvocationTargetException>()
-				.cause()
+				createMethod.invoke(registry, factory, args)
+			}.isInstanceOf<java.lang.reflect.InvocationTargetException>()
+				.transform { it.cause }
 				.isNotNull()
 				.isInstanceOf<ContextCreationException>()
+				.message()
+				.isNotNull()
+				.contains("End time")
 		}
 
 		/**
-		 * Test that example method with non-numeric end time throws NumberFormatException.
-		 * Validates argument parsing error handling.
+		 * Test that createShuntingLoopExample with non-numeric endTime throws
 		 */
 		@Test
-		fun `example invocation with non-numeric end time throws NumberFormatException`() {
+		fun `createShuntingLoopExample validates endTime is numeric`() {
 			// Arrange
-			val mainClass = Main::class.java
-			val main = get<Main>()
-			val factory = get<SimulationContextFactory>()
-			val invalidArgs = arrayOf("example", "shuntingLoop", "notANumber")
+			val registry = get<ExampleRegistry>()
+			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
+				"createShuntingLoopExample",
+				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+				Array<String>::class.java
+			)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoop", "notANumber")
 
 			// Act & Assert
-			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
 			assertFailure {
-				method.invoke(main, factory, invalidArgs)
-			}.isInstanceOf<InvocationTargetException>()
-				.cause()
+				createMethod.invoke(registry, factory, args)
+			}.isInstanceOf<java.lang.reflect.InvocationTargetException>()
+				.transform { it.cause }
 				.isNotNull()
 				.isInstanceOf<NumberFormatException>()
 		}
 
 		/**
-		 * Test that example method returns a SimulationContext when invoked correctly.
-		 * Validates successful example execution path (requires valid resource file).
+		 * Test that createShuntingLoopExample with valid arguments creates context
 		 */
 		@Test
-		fun `example method invocation with valid arguments returns context`() {
+		fun `createShuntingLoopExample with valid arguments returns context`() {
 			// Arrange
-			val mainClass = Main::class.java
-			val main = get<Main>()
-			val factory = get<SimulationContextFactory>()
-			val validArgs = arrayOf("example", "shuntingLoop", "100")
+			val registry = get<ExampleRegistry>()
+			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
+				"createShuntingLoopExample",
+				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+				Array<String>::class.java
+			)
+			createMethod.isAccessible = true
+			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
+			val args = arrayOf("example", "shuntingLoop", "100")
 
 			// Act & Assert
 			try {
-				val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
-				val result = method.invoke(main, factory, validArgs)
-
+				val result = createMethod.invoke(registry, factory, args)
 				assertThat(result).isNotNull()
-			} catch (e: InvocationTargetException) {
+			} catch (e: java.lang.reflect.InvocationTargetException) {
 				val cause = e.cause
 				// ContextCreationException is acceptable if resource not found in test environment
 				if (cause is ContextCreationException) {
 					assertThat((cause.message ?: "").contains("vyhybna.xml")).isTrue()
 				} else {
-					throw AssertionError("Unexpected exception during example invocation: $cause")
+					throw AssertionError("Unexpected exception during example creation: $cause")
 				}
 			}
 		}
 	}
 
 	@Nested
-	@DisplayName("Exception Handling in Example Loading")
-	inner class ExceptionHandlingTests {
+	@DisplayName("Example List Sorting")
+	inner class ExampleListSortingTests {
 		/**
-		 * Test that InvocationTargetException is thrown when reflection invocation fails.
-		 * Validates wrapper exception behavior.
+		 * Test that example names are sortable
 		 */
 		@Test
-		fun `reflection invocation wraps exceptions in InvocationTargetException`() {
+		fun `example names are sortable`() {
 			// Arrange
-			val mainClass = Main::class.java
-			val main = get<Main>()
-			val factory = get<SimulationContextFactory>()
-			val args = arrayOf("example") // Insufficient args will cause ContextCreationException
-
-			// Act & Assert
-			val method = mainClass.getMethod("shuntingLoop", SimulationContextFactory::class.java, Array<String>::class.java)
-			assertFailure {
-				method.invoke(main, factory, args)
-			}.isInstanceOf<InvocationTargetException>()
-				.cause()
-				.isNotNull()
-		}
-
-		/**
-		 * Test that NoSuchMethodException indicates method not found.
-		 * Validates error reporting for invalid example names.
-		 */
-		@Test
-		fun `NoSuchMethodException indicates invalid example name`() {
-			// Arrange
-			val mainClass = Main::class.java
-
-			// Act & Assert
-			assertFailure {
-				mainClass.getMethod("invalidExample", SimulationContextFactory::class.java, Array<String>::class.java)
-			}.isInstanceOf<NoSuchMethodException>()
-				.transform { it.message ?: "" }
-				.contains("invalidExample")
-		}
-
-		/**
-		 * Test that missing @Example annotation is detected during invocation.
-		 * Validates annotation requirement enforcement.
-		 */
-		@Test
-		fun `missing @Example annotation prevents execution`() {
-			// Arrange
-			val mainClass = Main::class.java
+			val registry = get<ExampleRegistry>()
 
 			// Act
-			var methodWithoutAnnotation: java.lang.reflect.Method? = null
-			for (method in mainClass.declaredMethods) {
-				if (Modifier.isPublic(method.modifiers) && !method.isAnnotationPresent(Example::class.java)) {
-					methodWithoutAnnotation = method
-					break
-				}
-			}
+			val sortedNames = registry.getAvailableExamples()
 
 			// Assert
-			if (methodWithoutAnnotation != null) {
-				assertThat(methodWithoutAnnotation.isAnnotationPresent(Example::class.java)).isFalse()
-			}
-		}
-	}
-
-	@Nested
-	@DisplayName("Example Discovery and Formatting")
-	inner class ExampleDiscoveryFormattingTests {
-		/**
-		 * Test that example discovery returns a sorted list.
-		 * Validates the list formatting for user display.
-		 */
-		@Test
-		fun `example discovery returns sortable list`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val examples = mutableListOf<String>()
-
-			// Act
-			for (method in mainClass.declaredMethods) {
-				if (Modifier.isPublic(method.modifiers) && method.isAnnotationPresent(Example::class.java)) {
-					examples.add(method.name)
-				}
-			}
-			examples.sortWith(String.CASE_INSENSITIVE_ORDER)
-
-			// Assert
-			assertThat(examples.size > 0).isTrue()
-			// Verify list is sorted (each element <= next element)
-			for (i in 0 until examples.size - 1) {
-				val comparison = examples[i].compareTo(examples[i + 1])
-				assertThat(comparison <= 0).isTrue()
-			}
-		}
-
-		/**
-		 * Test that example discovery with zero examples is handled.
-		 * Validates graceful handling of empty result.
-		 */
-		@Test
-		fun `example discovery handles empty list gracefully`() {
-			// Arrange
-			val examples = emptyList<String>()
-
-			// Act
-			val isEmpty = examples.isEmpty()
-
-			// Assert
-			assertThat(isEmpty).isTrue()
-		}
-
-		/**
-		 * Test that example names are unique.
-		 * Validates no duplicate example names.
-		 */
-		@Test
-		fun `example names are unique`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val examples = mutableListOf<String>()
-
-			// Act
-			for (method in mainClass.declaredMethods) {
-				if (Modifier.isPublic(method.modifiers) && method.isAnnotationPresent(Example::class.java)) {
-					examples.add(method.name)
-				}
-			}
-
-			// Assert
-			assertThat(examples.size).isEqualTo(examples.toSet().size)
-		}
-
-		/**
-		 * Test that example methods are non-private.
-		 * Validates accessibility requirement.
-		 */
-		@Test
-		fun `example methods are public not private`() {
-			// Arrange
-			val mainClass = Main::class.java
-
-			// Act
-			var foundPrivateExample = false
-			for (method in mainClass.declaredMethods) {
-				if (method.isAnnotationPresent(Example::class.java)) {
-					if (Modifier.isPrivate(method.modifiers)) {
-						foundPrivateExample = true
-					}
-				}
-			}
-
-			// Assert
-			assertThat(foundPrivateExample).isFalse()
-		}
-	}
-
-	@Nested
-	@DisplayName("Example Annotation Properties")
-	inner class ExampleAnnotationTests {
-		/**
-		 * Test that @Example annotation exists and is accessible.
-		 * Validates annotation framework availability.
-		 */
-		@Test
-		fun `@Example annotation is accessible`() {
-			// Arrange
-			val annotationClass = Example::class.java
-
-			// Act
-			val isAnnotation = annotationClass.isAnnotation
-
-			// Assert
-			assertThat(isAnnotation).isTrue()
-		}
-
-		/**
-		 * Test that @Example annotation can be applied to methods.
-		 * Validates annotation target scope.
-		 */
-		@Test
-		fun `@Example annotation can mark methods`() {
-			// Arrange
-			val shuntingLoopMethod =
-				Main::class.java.getMethod(
-					"shuntingLoop",
-					SimulationContextFactory::class.java,
-					Array<String>::class.java
-				)
-
-			// Act
-			val annotation = shuntingLoopMethod.getAnnotation(Example::class.java)
-
-			// Assert
-			assertThat(annotation).isNotNull()
-		}
-
-		/**
-		 * Test that non-example methods are not marked.
-		 * Validates annotation specificity.
-		 */
-		@Test
-		fun `non-example methods lack @Example annotation`() {
-			// Arrange
-			val mainClass = Main::class.java
-			val notAnnotatedCount: Int
-
-			// Act
-			var count = 0
-			for (method in mainClass.declaredMethods) {
-				if (Modifier.isPublic(method.modifiers) && !method.isAnnotationPresent(Example::class.java)) {
-					count++
-				}
-			}
-			notAnnotatedCount = count
-
-			// Assert
-			assertThat(notAnnotatedCount > 0).isTrue()
+			assertThat(sortedNames.size > 0).isTrue()
+			assertThat(sortedNames).isEqualTo(listOf("shuntingLoop"))
 		}
 	}
 }

@@ -21,18 +21,18 @@ import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Method
-import java.util.ArrayList
-import java.util.Collections
-import java.util.HashMap
 import java.util.Iterator
-import java.util.List
+
+private val logger = KotlinLogging.logger {}
+
+private const val IS_FREE_FROM = "isFreeFrom"
+private const val SET_UP_PATH = "setUpPath"
+private const val CANCEL_PATH_SETUP = "cancelPathSetup"
+private const val IS_SET_UP_PATH = "isSetUpPath"
 
 /**
  * Base implemetation of {@link Path}
@@ -41,40 +41,6 @@ abstract class AbstractPath protected constructor(
 	private val context: SimulationContext
 ) : AbstractTrack(),
 	Path {
-	companion object {
-		private val logger = KotlinLogging.logger {}
-
-		private const val IS_FREE_FROM = "isFreeFrom"
-		private const val SET_UP_PATH = "setUpPath"
-		private const val CANCEL_PATH_SETUP = "cancelPathSetup"
-		private const val IS_SET_UP_PATH = "isSetUpPath"
-		private val trackMethods: MutableMap<String, Method> = HashMap()
-		private val parameterTypes: MutableMap<Class<*>, Array<Class<*>>> = HashMap()
-
-		init {
-			try {
-				parameterTypes[Track::class.java] = arrayOf(PathSeparator::class.java)
-				val nameList = ArrayList<String>()
-				Collections.addAll(nameList, CANCEL_PATH_SETUP, SET_UP_PATH, IS_FREE_FROM, IS_SET_UP_PATH)
-				fillMethodMap(trackMethods, Track::class.java, nameList as List<String>)
-			} catch (e: Exception) {
-				// Unexpected error during method map initialization
-				throw SimulationException("Failed to initialize track methods", e, null)
-			}
-		}
-
-		@Throws(Exception::class)
-		private fun fillMethodMap(
-			map: MutableMap<String, Method>,
-			clazz: Class<*>,
-			methodNames: List<String>
-		) {
-			for (name in methodNames) {
-				val method = clazz.getMethod(name, *parameterTypes[clazz]!!)
-				map[name] = method
-			}
-		}
-	}
 
 	override fun getLastPathSemaphore(): RailSemaphore {
 		val last = getLast()
@@ -130,69 +96,90 @@ abstract class AbstractPath protected constructor(
 
 	override fun ends(): Array<PathSeparator> = arrayOf(getFirst(), getLast())
 
-	override fun isFreeFrom(sep: PathSeparator): Boolean = pathIterating(sep)
+	override fun isFreeFrom(sep: PathSeparator): Boolean =
+		pathIterating(sep, IS_FREE_FROM) { track, separator ->
+			track.isFreeFrom(separator)
+		}
 
-	override fun isSetUpPath(sep: PathSeparator): Boolean = pathIterating(sep)
+	override fun isSetUpPath(sep: PathSeparator): Boolean =
+		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
+			track.isSetUpPath(separator)
+		}
 
 	override fun setUpPath(sep: PathSeparator) {
 		logger.debug { "Setting up path from separator: $sep" }
-		pathIterating(sep)
+		pathIterating(sep, SET_UP_PATH) { track, separator ->
+			track.setUpPath(separator)
+			true
+		}
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
-		pathIterating(sep)
+		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
+			track.cancelPathSetup(separator)
+			true
+		}
 	}
 
+	/**
+	 * Iterates over path elements and applies the given operation to each track.
+	 * This replaces the legacy Java 6 reflection-based approach with idiomatic Kotlin lambdas.
+	 *
+	 * @param sep The path separator to start iteration from
+	 * @param operationName Name of the operation for logging and separator setting
+	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful
+	 * @return true if all operations succeeded, false otherwise
+	 */
 	@Throws(TrackOperationException::class)
-	private fun pathIterating(sep: PathSeparator): Boolean {
+	private fun pathIterating(
+		sep: PathSeparator,
+		operationName: String,
+		trackOperation: (Track, PathSeparator) -> Boolean
+	): Boolean {
 		try {
-			// lepsi nez 10x copypastovat kod z cyklem a vymenit jen volani metody
-			val e = Thread.currentThread().stackTrace[2]
-			val methodName = e.methodName
-			val method = trackMethods[methodName]
 			var previous: Track? = null
-			logger.debug { "Path iteration starting: method=$methodName, separator=$sep, pathLength=${length()}" }
+			logger.debug { "Path iteration starting: operation=$operationName, separator=$sep, pathLength=${length()}" }
 
 			val iterator = getIterator(sep)
 			while (iterator.hasNext()) {
 				val separator = Util.assertInstanceOf(PathSeparator::class.java, iterator.next())
-				if (!iterator.hasNext()) break // posledni prvek je semafor a separatorSetting ho nenastavuje
+				if (!iterator.hasNext()) break // Last element is semaphore, separatorSetting doesn't set it
 				val nextTrack = Util.assertInstanceOf(Track::class.java, iterator.next())
 
-				if (!separatorSetting(methodName, separator, previous, nextTrack)) {
-					if (IS_FREE_FROM == methodName) {
+				if (!separatorSetting(operationName, separator, previous, nextTrack)) {
+					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
 						}
 					}
-					logger.debug { "Separator setting failed for method: $methodName" }
+					logger.debug { "Separator setting failed for operation: $operationName" }
 					return false
 				}
 
-				val invoke = method!!.invoke(nextTrack, separator)
-				if (java.lang.Boolean.FALSE == invoke) {
-					if (IS_FREE_FROM == methodName) {
+				// Execute the track operation via lambda (replaces reflection invoke)
+				if (!trackOperation(nextTrack, separator)) {
+					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
 								"state=${if (nextTrack is SimpleTrack) nextTrack.getState() else "unknown"}"
 						}
 					}
-					logger.debug { "Method invocation returned false for method: $methodName" }
+					logger.debug { "Track operation returned false for operation: $operationName" }
 					return false
 				}
-				requireSimulation(invoke == null || java.lang.Boolean.TRUE == invoke) {
-					"Track method invocation returned unexpected result: $invoke"
-				}
+
 				previous = nextTrack
 			}
-			if (method == trackMethods[SET_UP_PATH]) {
+
+			// Set up semaphores if this is a setUpPath operation
+			if (operationName == SET_UP_PATH) {
 				logger.debug { "Setting up semaphores for path" }
 				setUpSemaphores(sep)
 			}
+
 			return true
-		} catch (e: InvocationTargetException) {
-			val cause = e.cause
-			throw if (cause is TrackOperationException) cause else TrackOperationException(cause ?: e, this)
+		} catch (e: TrackOperationException) {
+			throw e
 		} catch (e: Exception) {
 			throw TrackOperationException(e, this)
 		}

@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -19,14 +18,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.gui.Frame
-import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
-import java.io.InputStream
-import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Modifier
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.mp.KoinPlatform.getKoin
@@ -43,8 +37,8 @@ private val logger = KotlinLogging.logger {}
  *
  */
 class Main {
-	private val myResourceBundle: MyResourceBundle by getKoin().inject()
 	private val editingContextFactory: EditingContextFactory by getKoin().inject()
+	private val exampleRegistry: ExampleRegistry by getKoin().inject()
 	private val frame: Frame by lazy {  getKoin().get<Frame>()  }
 
 	fun loadGui(args: Array<String>) {
@@ -88,68 +82,31 @@ class Main {
 
 	fun runExample(args: Array<String>) {
 		if (args.size == 1) {
-			printListOfExamples()
+			logger.warn { "Available examples: ${exampleRegistry.getAvailableExamples()}\nUsage: example <name> <endTime>" }
 			return
 		}
+
 		val name = args[1]
+		val exampleFactory = exampleRegistry.examples[name]
+
+		if (exampleFactory == null) {
+			logger.error { "Unknown example: $name" }
+			logger.warn { "Available examples: ${exampleRegistry.getAvailableExamples()}" }
+			return
+		}
+
 		try {
-			val method = Main::class.java.getMethod(name, SimulationContextFactory::class.java, Array<String>::class.java)
-			if (!method.isAnnotationPresent(Example::class.java)) throw NoSuchMethodException("Method $name isn't annotated")
-			// Get injected SimulationContextFactory from Koin DI container
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
-			val context = method.invoke(this, simulationContextFactory, args) as SimulationContext
+			val context = exampleFactory(simulationContextFactory, args)
 			context.run()
-		} catch (e: NoSuchMethodException) {
-			logger.error(e) { "Example with name $name not exist" }
-			printListOfExamples()
+		} catch (e: ContextCreationException) {
+			logger.error(e) { "Example context creation failed" }
 		} catch (e: SimulationException) {
 			logger.error(e) { "Example simulation failed" }
 		} catch (e: EmptyContextException) {
-			logger.error(e) { "Example simulation could not started - empty context" }
-		} catch (e: InvocationTargetException) {
-			val cause = e.cause
-			logger.error(cause) { "Example initialization failed" }
+			logger.error(e) { "Example simulation could not be started - empty context" }
 		} catch (e: Exception) {
 			logger.error(e) { "Example initialization failed" }
-		}
-	}
-
-	/**
-	 * @param factory
-	 * @return loaded and initialed context
-	 * @throws ContextCreationException
-	 */
-	@Example
-	fun shuntingLoop(
-		factory: SimulationContextFactory,
-		args: Array<String>
-	): SimulationContext {
-		if (args.size < 3) {
-			throw ContextCreationException("End time of simulation not inserted")
-		}
-		val stream: InputStream =
-			myResourceBundle.getFile("vyhybna.xml")
-				?: throw ContextCreationException("Resource file vyhybna.xml not found")
-		val context = Util.assertInstanceOf(DefaultContext::class.java, factory.createContext(stream))
-		val time = args[2].toLong()
-		context.setMainProcess(ShuntingLoop(context, time))
-		return context
-	}
-
-	private fun printListOfExamples() {
-		val list = ArrayList<String>()
-		for (m in Main::class.java.declaredMethods) {
-			if (Modifier.isPublic(m.modifiers) && m.isAnnotationPresent(Example::class.java)) {
-				list.add(m.name)
-			}
-		}
-		list.sortWith(String.CASE_INSENSITIVE_ORDER)
-		logger.warn {
-			if (list.size > 0) {
-				"You must specify valid name of example\nList of examples: $list"
-			} else {
-				"No Examples in program"
-			}
 		}
 	}
 }
