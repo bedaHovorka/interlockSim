@@ -26,21 +26,21 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.exists
-import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.exists
+import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import org.koin.test.inject
 
 /**
  * Unit tests for {@link XMLContextFactory}.
@@ -62,7 +62,6 @@ import org.koin.test.inject
  * - invalid-*.xml - Various malformed/invalid XML files
  */
 class XMLContextFactoryTest : KoinTestBase() {
-
 	private val factory: XMLContextFactory by inject()
 
 	@Nested
@@ -271,7 +270,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(existPath(s2, f1, context as DefaultSimulationContext)).isTrue()
 			assertThat(existPath(s2, f2, context as DefaultSimulationContext)).isTrue()
 
-
 			assertThat(hasInOut).withMessage("Should contain at least one InOut").isTrue()
 			assertThat(hasSwitch).withMessage("Should contain at least one RailSwitch").isTrue()
 			assertThat(hasSemaphore).withMessage("Should contain at least one RailSemaphore").isTrue()
@@ -285,7 +283,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			from: InOut,
 			to: InOut,
 			context: DefaultSimulationContext
-		) : Boolean {
+		): Boolean {
 			// Get grid locations for both InOuts
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
 			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
@@ -333,7 +331,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 			// No path found
 			return false
 		}
-
 	}
 
 	@Nested
@@ -655,7 +652,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Complex railway station configurations")
 	inner class ComplexStationConfigurationTests {
-
 		// Helper methods for complex station validation
 
 		/**
@@ -885,8 +881,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val context = factory.createContext(xml) as DefaultSimulationContext
 
 			// Find entry and exit InOuts by orientation
-			val entries = mutableListOf<InOut>()  // orientation=false (entries from west/north)
-			val exits = mutableListOf<InOut>()    // orientation=true (exits to east/south)
+			val entries = mutableListOf<InOut>() // orientation=false (entries from west/north)
+			val exits = mutableListOf<InOut>() // orientation=true (exits to east/south)
 
 			for (entry in context.getRailWayNetGrid()) {
 				if (entry.value is InOut) {

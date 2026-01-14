@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 
 /**
  * "Oddelovac oddilu (i automaticky řízené prvky) uzel cesty z pohledu vlaku"

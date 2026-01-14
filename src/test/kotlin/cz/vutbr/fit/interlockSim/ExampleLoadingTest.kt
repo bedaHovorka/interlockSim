@@ -36,7 +36,6 @@ import org.koin.test.get
  */
 @DisplayName("Example Loading Tests")
 class ExampleLoadingTest : KoinTestBase() {
-
 	@Nested
 	@DisplayName("Example Registry")
 	inner class ExampleRegistryTests {
@@ -175,11 +174,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample requires endTime argument`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop") // Missing endTime
@@ -203,11 +203,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample validates endTime is numeric`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop", "notANumber")
@@ -228,11 +229,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample with valid arguments returns context`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop", "100")

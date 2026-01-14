@@ -17,6 +17,7 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.util.Point
@@ -25,7 +26,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 

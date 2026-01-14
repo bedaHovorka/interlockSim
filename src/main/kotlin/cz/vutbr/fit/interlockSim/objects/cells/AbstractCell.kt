@@ -35,7 +35,6 @@ abstract class AbstractCell : Cell {
 		requireValidState(iterator.hasNext()) { "Iterator should have next element" }
 		return iterator.next()
 	}
-
 }
 
 fun arr2set(segments: Array<Cell.Segment>): Set<Cell.Segment> {

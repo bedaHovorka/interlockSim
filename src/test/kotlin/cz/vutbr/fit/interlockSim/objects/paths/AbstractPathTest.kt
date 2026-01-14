@@ -22,15 +22,15 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 
 /**
  * Comprehensive unit tests for AbstractPath class.
@@ -887,9 +887,7 @@ private class MockNodeCell(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = null
 
-	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
-		return emptySet()
-	}
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = 80.0
 

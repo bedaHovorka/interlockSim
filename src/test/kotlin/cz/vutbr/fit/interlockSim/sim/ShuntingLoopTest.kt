@@ -15,15 +15,15 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
-import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Unit tests for {@link ShuntingLoop}.
@@ -266,9 +266,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		}
 	}
 
-	private fun shuntingXml(): InputStream {
-		return xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
+	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {
 		val xml = javaClass.getResourceAsStream(name)

@@ -17,13 +17,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
-import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.gui.Frame
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.io.File
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.mp.KoinPlatform.getKoin
+import java.io.File
 
 private val logger = KotlinLogging.logger {}
 
@@ -39,7 +39,7 @@ private val logger = KotlinLogging.logger {}
 class Main {
 	private val editingContextFactory: EditingContextFactory by getKoin().inject()
 	private val exampleRegistry: ExampleRegistry by getKoin().inject()
-	private val frame: Frame by lazy {  getKoin().get<Frame>()  }
+	private val frame: Frame by lazy { getKoin().get<Frame>() }
 
 	fun loadGui(args: Array<String>) {
 		try {
@@ -57,7 +57,7 @@ class Main {
 			if (!file.startsWith(userDir)) {
 				val errorMsg =
 					"Refusing to open file outside user directory. " +
-					"Requested: '${file.path}', allowed base: '${userDir.path}'"
+						"Requested: '${file.path}', allowed base: '${userDir.path}'"
 				logger.error { errorMsg }
 				throw ContextCreationException(errorMsg)
 			}
@@ -133,21 +133,24 @@ fun main(args: Array<String>) {
 	}
 
 	// Add shutdown hook to clean up Koin when JVM exits
-	Runtime.getRuntime().addShutdownHook(Thread {
-		try {
-			stopKoin()
-		} catch (e: Exception) {
-			logger.debug(e) { "Koin shutdown failed" }
+	Runtime.getRuntime().addShutdownHook(
+		Thread {
+			try {
+				stopKoin()
+			} catch (e: Exception) {
+				logger.debug(e) { "Koin shutdown failed" }
+			}
 		}
-	})
+	)
 
 	val main = getKoin().get<Main>()
 	when {
 		args.isNotEmpty() && args[0] == "sim" -> main.loadSim(args)
 		args.isNotEmpty() && args[0] == "example" -> main.runExample(args)
 		args.isNotEmpty() && args[0] == "edit" -> main.loadGui(args)
-		else -> logger.error {
-			"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n\t\t example [name]"
-		}
+		else ->
+			logger.error {
+				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n\t\t example [name]"
+			}
 	}
 }

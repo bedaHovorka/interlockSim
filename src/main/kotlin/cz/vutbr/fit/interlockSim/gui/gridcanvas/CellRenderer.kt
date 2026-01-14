@@ -113,7 +113,6 @@ abstract class CellRenderer(
 		g: Graphics2D,
 		cell: Cell
 	) {
-
 		try {
 			// Use reflection to find and invoke the specific draw method for this cell type
 			val method = javaClass.getMethod("draw", Graphics2D::class.java, cell.javaClass)

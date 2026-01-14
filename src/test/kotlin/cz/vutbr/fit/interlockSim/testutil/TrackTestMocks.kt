@@ -42,9 +42,7 @@ class MockNodeCell(
 
 	override fun getFollowingSegment(from: Segment?): Segment? = null
 
-	override fun possibleFollowers(from: Segment): Set<Segment> {
-		return emptySet()
-	}
+	override fun possibleFollowers(from: Segment): Set<Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = 80.0
 

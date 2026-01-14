@@ -194,7 +194,6 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 		// Simplified implementation for testing
 		return true
 	}
-
 }
 
 fun createMockSimulationContext(): MockSimulationContext {
@@ -208,5 +207,3 @@ fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
 }
 
 private fun contextFactory(): XMLContextFactory = getKoin().get<XMLContextFactory>()
-
-

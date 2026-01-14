@@ -42,7 +42,6 @@ import kotlin.test.assertNotNull
  * @see EditingContextFactory
  */
 class KoinInitializationOrderTest {
-
 	@AfterEach
 	fun tearDown() {
 		// Clean up Koin context if it was started
@@ -62,7 +61,8 @@ class KoinInitializationOrderTest {
 		// Ensure Koin is NOT initialized - expect IllegalStateException (Koin 3.5.6)
 		assertFailsWith<IllegalStateException> {
 			// This should fail if Koin is not initialized
-			org.koin.java.KoinJavaComponent.get(EditingContextFactory::class.java)
+			org.koin.java.KoinJavaComponent
+				.get(EditingContextFactory::class.java)
 		}
 
 		// Attempting to get Main should also fail since Koin is not initialized
@@ -116,7 +116,7 @@ class KoinInitializationOrderTest {
 
 		// Step 3: Access a method that uses editingContextFactory
 		assertDoesNotThrow {
-			val factory =  getKoin().get<EditingContextFactory>()
+			val factory = getKoin().get<EditingContextFactory>()
 			assertNotNull(factory)
 		}
 	}
