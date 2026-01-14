@@ -641,9 +641,11 @@ class RaceConditionTest : KoinTestBase() {
 		 * behavior as Context is intentionally not thread-safe.
 		 *
 		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
-		@Disabled("Context is not thread-safe by design. Do not use from multiple threads.")
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Concurrent cell operations on context grid are thread-safe")
 		fun concurrentCellOperations_contextGrid_threadSafe() {
 			// Arrange
@@ -710,9 +712,11 @@ class RaceConditionTest : KoinTestBase() {
 		 * as Context is intentionally not thread-safe.
 		 *
 		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
-		@Disabled("Context is not thread-safe by design. Do not use from multiple threads.")
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Concurrent context modifications maintain grid consistency")
 		fun concurrentContextMod_maintainsGridConsistency() {
 			// Arrange
@@ -977,9 +981,11 @@ class RaceConditionTest : KoinTestBase() {
 		 * is expected behavior as Context is intentionally not thread-safe.
 		 *
 		 * See Context documentation for rationale and usage guidelines.
+		 *
+		 * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/28">Issue #28</a>
 		 */
 		@Test
-		@Disabled("Context is not thread-safe by design. Do not use from multiple threads.")
+		@Disabled("Context is not thread-safe by design (Issue #28). Do not use from multiple threads.")
 		@DisplayName("Listeners and grid modifications work correctly concurrently")
 		fun listenersAndGridMods_workConcurrently() {
 			// Arrange
