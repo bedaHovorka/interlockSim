@@ -72,16 +72,3 @@ abstract class DefaultContext(
 		)
 	}
 }
-
-/**
- * Type alias for backward compatibility.
- *
- * Note: In the future (Phase 3), DefaultContext will be split into separate
- * DefaultEditingContext and DefaultSimulationContext classes as described
- * in issue #92 comments.
- */
-@Deprecated(
-	"Use DefaultContext instead. This alias will be replaced with a concrete class in Phase 3.",
-	ReplaceWith("DefaultContext")
-)
-typealias DefaultSimulationContext = DefaultContext

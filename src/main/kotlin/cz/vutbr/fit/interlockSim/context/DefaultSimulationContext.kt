@@ -106,15 +106,15 @@ open class DefaultSimulationContext(
 
 	companion object {
 		/**
+		 * Logger for general simulation context operations.
+		 */
+		private val logger = KotlinLogging.logger {}
+
+		/**
 		 * Separate logger for simulation events to allow independent level control.
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
-
-		/**
-		 * Logger for general simulation context operations.
-		 */
-		private val logger = KotlinLogging.logger {}
 	}
 
 	/**
