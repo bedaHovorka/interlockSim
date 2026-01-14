@@ -141,7 +141,7 @@ abstract class DefaultContext(
 	/**
 	 * Railway network grid structure
 	 */
-	private val railwayNetGrid: DefaultRailWayNetGrid
+	private lateinit var railwayNetGrid: DefaultRailWayNetGrid
 
 	/**
 	 * Name string for train generation (backing field for currentNameString)
@@ -814,10 +814,6 @@ abstract class DefaultContext(
 			throw SimulationException(e)
 		}
 	}
-			logger.error(e) { "Failed to activate main simulation process" }
-			throw SimulationException(e)
-		}
-	}
 
 	/**
 	 * Stop the simulation
@@ -982,3 +978,16 @@ abstract class DefaultContext(
 		mainProcess = process
 	}
 }
+
+/**
+ * Type alias for backward compatibility.
+ *
+ * Note: In the future (Phase 3), DefaultContext will be split into separate
+ * DefaultEditingContext and DefaultSimulationContext classes as described
+ * in issue #92 comments.
+ */
+@Deprecated(
+	"Use DefaultContext instead. This alias will be replaced with a concrete class in Phase 3.",
+	ReplaceWith("DefaultContext")
+)
+typealias DefaultSimulationContext = DefaultContext
