@@ -51,30 +51,14 @@ class InOutWorker(
 					val pathExists = path != null
 					val isFree = pathExists && path?.isFreeFrom(inOut) ?: false
 
-					if (logger.isDebugEnabled) {
-						if (!pathExists) {
-							logger.debug(
-								"{} APPROVAL_CHECK: InOut {} - path does not exist",
-								Process.time(),
-								inOut.getName()
-							)
-						} else if (!isFree) {
-							logger.debug(
-								"{} APPROVAL_CHECK: InOut {} - path not free, length={}",
-								Process.time(),
-								inOut.getName(),
-								path?.length()
-							)
-						}
+					if (!pathExists) {
+						logger.debug { "${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path does not exist" }
+					} else if (!isFree) {
+						logger.debug { "${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path not free, length=${path?.length()}" }
 					}
 					isFree
 				} catch (e: TrackOperationException) {
-					logger.error(
-						"{} APPROVAL_ERROR: InOut {} - path check failed: {}",
-						Process.time(),
-						inOut.getName(),
-						e.message
-					)
+					logger.error { "${Process.time()} APPROVAL_ERROR: InOut ${inOut.getName()} - path check failed: ${e.message}" }
 					context.errorStop(e)
 					false
 				}
@@ -84,48 +68,32 @@ class InOutWorker(
 	override fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
-			logger.debug("InOutWorker {} queue non-empty, processing train", inOut.getName())
+			logger.debug { "InOutWorker ${inOut.getName()} queue non-empty, processing train" }
 			context.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
 			waitUntil(pathFree)
 			val first = queqe.first() as Link
-			logger.debug("InOutWorker {} path is now free, reserving for train", inOut.getName())
+			logger.debug { "InOutWorker ${inOut.getName()} path is now free, reserving for train" }
 
 			try {
 				// zarezervovat koleje
 				path?.setUpPath(inOut)
-				if (logger.isInfoEnabled) {
-					logger.info(
-						"{} APPROVAL_GRANTED: InOut {} - path reserved for {}, length={}",
-						Process.time(),
-						inOut.getName(),
-						first,
-						path?.length()
-					)
-				}
+				logger.info { "${Process.time()} APPROVAL_GRANTED: InOut ${inOut.getName()} - path reserved for $first, length=${path?.length()}" }
 			} catch (e: Exception) {
-				if (logger.isWarnEnabled) {
-					logger.warn(
-						"{} APPROVAL_DENIED: InOut {} - path setup failed for {}: {}",
-						Process.time(),
-						inOut.getName(),
-						first,
-						e.message
-					)
-				}
-				logger.debug("InOutWorker {} path setup failed: {}", inOut.getName(), e.message)
+				logger.warn { "${Process.time()} APPROVAL_DENIED: InOut ${inOut.getName()} - path setup failed for $first: ${e.message}" }
+				logger.debug { "InOutWorker ${inOut.getName()} path setup failed: ${e.message}" }
 				context.errorStop(e)
 				return
 			}
 			context.report("Path reserved for $first", inOut, ReportType.NODE_EVENTS)
 
 			// cekej na odchod vlaku z fronty
-			logger.debug("InOutWorker {} waiting for train {} to leave queue", inOut.getName(), first)
+			logger.debug { "InOutWorker ${inOut.getName()} waiting for train $first to leave queue" }
 			waitUntil(
 				object : Condition {
 					override fun test(): Boolean = first != queqe.first()
 				}
 			)
-			logger.debug("InOutWorker {} train left queue", inOut.getName())
+			logger.debug { "InOutWorker ${inOut.getName()} train left queue" }
 		}
 		myIdle = true
 	}
@@ -140,7 +108,7 @@ class InOutWorker(
 	 * @param train
 	 */
 	fun enterTrain(train: Train) {
-		logger.debug("InOutWorker {} entering train {}, queue empty: {}", inOut.getName(), train, queqe.empty())
+		logger.debug { "InOutWorker ${inOut.getName()} entering train $train, queue empty: ${queqe.empty()}" }
 		if (queqe.empty()) {
 			train.into(queqe)
 		} else {
@@ -148,7 +116,7 @@ class InOutWorker(
 		}
 
 		if (myIdle) {
-			logger.debug("InOutWorker {} was idle, activating to process train {}", inOut.getName(), train)
+			logger.debug { "InOutWorker ${inOut.getName()} was idle, activating to process train $train" }
 			Process.activate(this)
 		}
 	}

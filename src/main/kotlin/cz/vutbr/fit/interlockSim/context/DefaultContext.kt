@@ -872,14 +872,8 @@ abstract class DefaultContext :
 		val direction = separator.direction()
 		requireSimulation(direction != null) { "Direction cannot be null for oriented separator" }
 		val inDirection = segment === direction
-		if (logger.isDebugEnabled()) {
-			logger.debug(
-				"isSeparatorInDirection: separator {}, segment={}, direction={}, result={}",
-				separator,
-				segment,
-				direction,
-				inDirection
-			)
+		logger.debug {
+			"isSeparatorInDirection: separator $separator, segment=$segment, direction=$direction, result=$inDirection"
 		}
 		return inDirection
 	}

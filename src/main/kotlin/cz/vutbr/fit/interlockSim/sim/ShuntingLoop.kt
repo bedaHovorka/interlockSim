@@ -232,34 +232,34 @@ class ShuntingLoop : Interlocking {
 		try {
 			val from: PathSeparator = path.getFirst()
 			if (!path.isFreeFrom(from)) {
-				logger.debug("Path not free from separator: {}", from)
+				logger.debug { "Path not free from separator: $from" }
 				return false
 			}
-			logger.debug("Setting up path from separator: {}", from)
+			logger.debug { "Setting up path from separator: $from" }
 			path.setUpPath(from)
 			return true
 		} catch (e: TrackOperationException) {
 			requireSimulation(false) { "Unexpected track operation exception during path setup: $e" }
-			logger.debug("Exception during path setup: {}", e.message)
+			logger.debug { "Exception during path setup: ${e.message}" }
 			return false
 		}
 	}
 
 	private fun trySetupPaths(sem: RailSemaphore): Boolean {
-		logger.debug("Attempting to setup paths from semaphore: {}", sem.getName())
+		logger.debug { "Attempting to setup paths from semaphore: ${sem.getName()}" }
 		for (path in paths[sem]!!) {
 			// zkusit postavit cestu
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) {
-					logger.debug("Path setup successful from semaphore: {}", sem.getName())
+					logger.debug { "Path setup successful from semaphore: ${sem.getName()}" }
 					return true
 				}
 			} catch (e: TrackOperationException) {
 				requireSimulation(false) { "Unexpected track operation exception during path setup attempt: $e" }
-				logger.debug("Exception in path setup attempt: {}", e.message)
+				logger.debug { "Exception in path setup attempt: ${e.message}" }
 			}
 		}
-		logger.debug("All path setup attempts failed from semaphore: {}", sem.getName())
+		logger.debug { "All path setup attempts failed from semaphore: ${sem.getName()}" }
 		return false
 	}
 
@@ -270,11 +270,11 @@ class ShuntingLoop : Interlocking {
 // 		 je v bloku vlak?
 		if (block.getState() == State.FREE) return false
 		if (block.getState() == State.OCCUPIED) {
-			logger.debug("Block occupied, checking if next semaphore is: {}", to.getName())
+			logger.debug { "Block occupied, checking if next semaphore is: ${to.getName()}" }
 			if (block.getTrackOccupant().nextSemaphore() != to) return false
 			return trySetupPaths(to)
 		} else if (block.getState() == State.RESERVED) {
-			logger.debug("Block reserved, checking path setup for semaphore: {}", to.getName())
+			logger.debug { "Block reserved, checking path setup for semaphore: ${to.getName()}" }
 			if (block.isSetUpPath(block.getSecondEnd(to))) {
 				return trySetupPaths(to)
 			}
@@ -285,7 +285,7 @@ class ShuntingLoop : Interlocking {
 	private fun approveTrains() {
 		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.size > 0) {
 			val poll: Train = unapprowedTrains.poll()
-			logger.debug("Approving train: {} (approved: {}/{} max)", poll, approwedTrains.size + 1, MAX_TRAINS)
+			logger.debug { "Approving train: $poll (approved: ${approwedTrains.size + 1}/$MAX_TRAINS max)" }
 			approwedTrains.add(poll)
 			activate(poll)
 		}
