@@ -29,6 +29,8 @@ class HashMapGraph<N, E, X> :
 	ExtendedUnorientedGraph<N, E, X> {
 	inner class NodeCollection : AbstractCollection<N>() {
 		private inner class NodeCollectionIterator : MutableIterator<N> {
+			// Safe: Kotlin MutableSet.iterator() returns MutableIterator which is compatible with Java Iterator
+			@Suppress("UNCHECKED_CAST")
 			private val keySetIterator: java.util.Iterator<Doubleton<N, X>> =
 				keySet.iterator() as java.util.Iterator<Doubleton<N, X>>
 			private var currentPair: Iterator<N>? = null
@@ -39,6 +41,8 @@ class HashMapGraph<N, E, X> :
 			 */
 			init {
 				if (keySetIterator.hasNext()) {
+					// Safe: Doubleton.iterator() returns MutableIterator which is compatible with Java Iterator
+					@Suppress("UNCHECKED_CAST")
 					currentPair = keySetIterator.next().iterator() as Iterator<N>
 				}
 			}
@@ -51,6 +55,8 @@ class HashMapGraph<N, E, X> :
 
 			override fun next(): N {
 				if (currentPair?.hasNext() != true) {
+					// Safe: Doubleton.iterator() returns MutableIterator which is compatible with Java Iterator
+					@Suppress("UNCHECKED_CAST")
 					currentPair = keySetIterator.next().iterator() as Iterator<N>
 				}
 				current = currentPair!!.next()
@@ -62,6 +68,8 @@ class HashMapGraph<N, E, X> :
 					keySetIterator.hasNext()
 		}
 
+		// Safe: Kotlin MutableMap.keys returns MutableSet which is compatible with Java Set
+		@Suppress("UNCHECKED_CAST")
 		private val keySet: java.util.Set<Doubleton<N, X>> = map.keys as java.util.Set<Doubleton<N, X>>
 
 		override fun iterator(): MutableIterator<N> = NodeCollectionIterator()
@@ -132,6 +140,8 @@ class HashMapGraph<N, E, X> :
 				if (remove) iterator.remove()
 			}
 		}
+		// Safe: Kotlin MutableList is compatible with Java Collection
+		@Suppress("UNCHECKED_CAST")
 		return collection as java.util.Collection<E>
 	}
 
@@ -149,6 +159,8 @@ class HashMapGraph<N, E, X> :
 				iterator.remove()
 			}
 		}
+		// Safe: Kotlin MutableSet is compatible with Java Collection
+		@Suppress("UNCHECKED_CAST")
 		return collection as java.util.Collection<N>
 	}
 
@@ -162,6 +174,8 @@ class HashMapGraph<N, E, X> :
 		// for (Doubleton<N> c: map.keySet()) {
 		// 	set.addAll(c);
 		// }
+		// Safe: Kotlin MutableSet is compatible with Java Set
+		@Suppress("UNCHECKED_CAST")
 		return set as java.util.Set<N>
 	}
 
@@ -203,6 +217,8 @@ class HashMapGraph<N, E, X> :
 
 	override fun assignedEdges(node: N): Map<X, E> {
 		val lmap = mutableMapOf<X, E>()
+		// Safe: Kotlin MutableMap is compatible with Java Map
+		@Suppress("UNCHECKED_CAST")
 		(
 			object : DoubletonEntrySetProcessor<X>(map as java.util.Map<Doubleton<N, X>, E>) {
 				override fun processEntryNode(
@@ -218,6 +234,8 @@ class HashMapGraph<N, E, X> :
 				}
 			}
 		).process()
+		// Safe: Kotlin MutableMap is compatible with Java Map
+		@Suppress("UNCHECKED_CAST")
 		return lmap as java.util.Map<X, E>
 	}
 
@@ -225,6 +243,8 @@ class HashMapGraph<N, E, X> :
 		node: N,
 		edge: E
 	): X {
+		// Safe: Kotlin MutableMap is compatible with Java Map
+		@Suppress("UNCHECKED_CAST")
 		val p =
 			object : DoubletonEntrySetProcessor<X>(map as java.util.Map<Doubleton<N, X>, E>) {
 				override fun processEntryNode(
