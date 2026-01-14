@@ -25,6 +25,17 @@ import java.util.EnumSet
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
  *
+ * ## Thread Safety
+ *
+ * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
+ * documentation and usage guidelines.
+ *
+ * All simulation operations must be performed within the jDisco simulation thread.
+ * The jDisco discrete event simulation framework is single-threaded by design,
+ * ensuring sequential execution of all simulation events.
+ *
+ * @see Context
+ * @see javax.annotation.concurrent.NotThreadSafe
  */
 interface SimulationContext : Context {
 	/**
