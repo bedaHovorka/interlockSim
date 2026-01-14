@@ -19,7 +19,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -283,7 +283,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		private fun existPath(
 			from: InOut,
 			to: InOut,
-			context: DefaultContext
+			context: DefaultSimulationContext
 		) : Boolean {
 			// Get grid locations for both InOuts
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
@@ -660,7 +660,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the leftmost InOut element (typically main line entry from west/north).
 		 */
-		private fun findMainLineEntry(context: DefaultContext): InOut? {
+		private fun findMainLineEntry(context: DefaultSimulationContext): InOut? {
 			var leftmost: InOut? = null
 			var minX = Int.MAX_VALUE
 
@@ -680,7 +680,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the rightmost InOut element (typically main line exit to east/south).
 		 */
-		private fun findMainLineExit(context: DefaultContext): InOut? {
+		private fun findMainLineExit(context: DefaultSimulationContext): InOut? {
 			var rightmost: InOut? = null
 			var maxX = Int.MIN_VALUE
 
@@ -701,7 +701,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all mid-layout InOut points (platforms).
 		 * These are InOuts that are not at the extreme left or right edges.
 		 */
-		private fun findPlatformInOuts(context: DefaultContext): List<InOut> {
+		private fun findPlatformInOuts(context: DefaultSimulationContext): List<InOut> {
 			val allInOuts = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				if (entry.value is InOut) {
@@ -736,7 +736,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard access point (mid-area InOut for freight yard).
 		 */
-		private fun findYardAccessPoint(context: DefaultContext): InOut? {
+		private fun findYardAccessPoint(context: DefaultSimulationContext): InOut? {
 			// For yard, we look for InOuts in middle Y range
 			val grid = context.getRailWayNetGrid()
 			val midY = grid.getRows() / 2
@@ -756,7 +756,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard siding tracks (dead-end InOuts for parking/storage).
 		 */
-		private fun findYardSidings(context: DefaultContext): List<InOut> {
+		private fun findYardSidings(context: DefaultSimulationContext): List<InOut> {
 			val sidings = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -773,7 +773,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds switch where multiple lines converge (junction merge point).
 		 */
-		private fun findJunctionMergePoint(context: DefaultContext): RailSwitch? {
+		private fun findJunctionMergePoint(context: DefaultSimulationContext): RailSwitch? {
 			// Junction switch typically has connections from 3+ directions
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -816,7 +816,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all signals within specified grid rectangle.
 		 */
 		private fun findSignalsInArea(
-			context: DefaultContext,
+			context: DefaultSimulationContext,
 			startX: Int,
 			endX: Int,
 			startY: Int,
@@ -1030,7 +1030,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Reuses the existPath method from ValidXMLParsingTests for connectivity checking.
 		 */
-		private fun existPath(from: InOut, to: InOut, context: DefaultContext): Boolean {
+		private fun existPath(from: InOut, to: InOut, context: DefaultSimulationContext): Boolean {
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
 			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
 			if (fromLoc == toLoc) return true

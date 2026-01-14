@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.xml
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -72,7 +72,7 @@ class XMLContextFactory :
 	private inner class XMLContext(
 		cols: Int,
 		rows: Int
-	) : DefaultContext(cols, rows, processFactory) {
+	) : DefaultSimulationContext(cols, rows, processFactory) {
 		// No additional implementation needed
 	}
 
@@ -399,7 +399,7 @@ class XMLContextFactory :
 		context: Context,
 		file: File
 	): Boolean {
-		val xmlContext = Util.assertInstanceOf(DefaultContext::class.java, context) // zatim
+		val xmlContext = Util.assertInstanceOf(DefaultSimulationContext::class.java, context) // zatim
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		return try {
 			val fileWriter = FileWriter(file)
@@ -519,8 +519,8 @@ class XMLContextFactory :
 		clazz: Class<*>
 	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
 
-	override fun createContext(editingContext: EditingContext): DefaultContext {
-		return Util.assertInstanceOf(DefaultContext::class.java, editingContext) // zatim
+	override fun createContext(editingContext: EditingContext): SimulationContext {
+		return Util.assertInstanceOf(DefaultSimulationContext::class.java, editingContext) // zatim
 	}
 
 	@Throws(Exception::class)

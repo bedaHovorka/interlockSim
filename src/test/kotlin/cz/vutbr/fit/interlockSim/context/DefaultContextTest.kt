@@ -62,11 +62,11 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Grid Operations")
 	inner class GridOperationsTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = factory.createEmptyContext()
+			context = factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -164,7 +164,7 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Track Navigation")
 	inner class TrackNavigationTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 		private lateinit var inA: InOut
 		private lateinit var rs1: RailSemaphore
 		private lateinit var rs2: RailSemaphore
@@ -176,7 +176,7 @@ class DefaultContextTest : KoinTestBase() {
 		fun setUp() {
 			// Create a multi-block track: InOut-A -> RS1 -> RS2 -> InOut-B
 			// This allows testing navigation between blocks
-			context = this@DefaultContextTest.factory.createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			rs2 = RailSemaphore(false, SpatialType.HORIZONTAL)
@@ -248,7 +248,7 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Path Operations")
 	inner class PathOperationsTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 		private lateinit var inA: InOut
 		private lateinit var rs1: RailSemaphore
 		private lateinit var outB: InOut
@@ -257,7 +257,7 @@ class DefaultContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Create a simple track: InOut-A -> Semaphore -> InOut-B
-			context = this@DefaultContextTest.factory.createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			outB = InOut("B", true, SpatialType.HORIZONTAL)
@@ -314,11 +314,11 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Configuration Management")
 	inner class ConfigurationTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -370,11 +370,11 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Report Management")
 	inner class ReportManagementTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -470,11 +470,11 @@ class DefaultContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Grid Consistency - Issue #38")
 	inner class GridConsistencyTests {
-		private lateinit var context: DefaultContext
+		private lateinit var context: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultContextTest.factory.createEmptyContext()
+			context = this@DefaultContextTest.factory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
