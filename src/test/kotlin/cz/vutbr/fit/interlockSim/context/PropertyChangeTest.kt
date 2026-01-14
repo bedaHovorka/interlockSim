@@ -43,7 +43,7 @@ class PropertyChangeTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext()
+		context = factory.createEmptyContext() as DefaultSimulationContext
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

@@ -245,7 +245,7 @@ class ContextInitializationTest : KoinTestBase() {
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile)
+			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile) as DefaultSimulationContext
 		}
 
 		/**

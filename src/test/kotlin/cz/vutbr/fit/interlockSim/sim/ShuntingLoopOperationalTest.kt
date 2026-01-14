@@ -74,7 +74,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 			javaClass.getResourceAsStream(
 				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 			)
-		val context = factory.createContext(xml)
+		val context = factory.createContext(xml) as DefaultSimulationContext
 		validContext = MockSimulationContext(context)
 	}
 

@@ -39,7 +39,7 @@ import org.koin.java.KoinJavaComponent.getKoin
  */
 class TestContextBuilder {
 	private val factory: XMLContextFactory by getKoin().inject()
-	private val context = factory.createEmptyContext()
+	private val context = factory.createEmptyContext() as DefaultSimulationContext
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -153,7 +153,7 @@ class TestContextBuilder {
 	 * @return configured context with linear track
 	 */
 	fun buildLinearTrack(): DefaultSimulationContext {
-		val context =getKoin().get<XMLContextFactory>().createEmptyContext()
+		val context =getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
 		val inA =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				"A",
@@ -185,7 +185,7 @@ class TestContextBuilder {
 	 * @return configured context with semaphore
 	 */
 	fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
-		val context = getKoin().get<XMLContextFactory>().createEmptyContext()
+		val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
 		val inA =
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				"A",

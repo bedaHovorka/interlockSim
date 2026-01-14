@@ -65,8 +65,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 		val switchFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
 
 		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
-		linearContext = factory.createContext(linearFile)
-		switchContext = factory.createContext(switchFile)
+		linearContext = factory.createContext(linearFile) as DefaultSimulationContext
+		switchContext = factory.createContext(switchFile) as DefaultSimulationContext
 	}
 
 	/**

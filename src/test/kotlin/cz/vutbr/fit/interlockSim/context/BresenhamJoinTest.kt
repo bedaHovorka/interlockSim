@@ -40,7 +40,7 @@ class BresenhamJoinTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext()
+		context = factory.createEmptyContext() as DefaultSimulationContext
 	}
 
 	@Test
