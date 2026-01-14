@@ -773,11 +773,8 @@ abstract class DefaultContext :
 			requireValidState(trackBlock != null) { "TrackBlock cannot be null for current track section" }
 			val nextTrackSection = trackBlock?.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
-				if (logger.isTraceEnabled()) {
-					logger.trace(
-						"getNextTrackSection: found next section within same block from {}",
-						separator
-					)
+				logger.trace {
+					"getNextTrackSection: found next section within same block from $separator"
 				}
 				return nextTrackSection
 			}
@@ -872,14 +869,8 @@ abstract class DefaultContext :
 		val direction = separator.direction()
 		requireSimulation(direction != null) { "Direction cannot be null for oriented separator" }
 		val inDirection = segment === direction
-		if (logger.isDebugEnabled()) {
-			logger.debug(
-				"isSeparatorInDirection: separator {}, segment={}, direction={}, result={}",
-				separator,
-				segment,
-				direction,
-				inDirection
-			)
+		logger.debug {
+			"isSeparatorInDirection: separator $separator, segment=$segment, direction=$direction, result=$inDirection"
 		}
 		return inDirection
 	}
