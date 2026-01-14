@@ -21,7 +21,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * Dynamic wrapper for Track (specifically TrackFacility) separating static and dynamic properties.
  * 
- * **Static properties** (from wrapped track): length, maxSpeed, ends (PathSeparators)
+ * **Static properties** (delegated from wrapped track): length, maxSpeed, ends
  * **Dynamic properties** (in this class): state (FREE/RESERVED/OCCUPIED), occupant, reservation direction
  * 
  * This wrapper uses the static Track object for:
@@ -36,6 +36,10 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrack(
 	val static: TrackFacility
 ) {
+	// Static properties delegated from wrapped object using Kotlin delegation
+	val length: Double by static::length
+	val ends: Array<PathSeparator> by static::ends
+	
 	/**
 	 * Dynamic property: Current state (FREE, RESERVED, or OCCUPIED)
 	 * 
@@ -273,5 +277,5 @@ class DynamicTrack(
 	 * String representation for debugging
 	 */
 	override fun toString(): String = 
-		"Dynamic[${static.hashCode()}, state=$state, occupant=$occupant, from=$reservedFrom]"
+		"Dynamic[length=$length, state=$state, occupant=$occupant, from=$reservedFrom]"
 }

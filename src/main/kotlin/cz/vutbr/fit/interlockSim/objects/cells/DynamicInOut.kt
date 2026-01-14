@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.objects.cells
 /**
  * Dynamic wrapper for InOut separating static and dynamic properties.
  * 
- * **Static properties** (from wrapped InOut): name, orientation, spatialType, semaphore references
- * **Dynamic properties** (via semaphores): Signal states of inSemaphore (inherited from DynamicRailSemaphore)
+ * **Static properties** (delegated from wrapped InOut): name, orientation, spatialType
+ * **Dynamic properties** (via semaphores): Signal states of inSemaphore (via DynamicRailSemaphore)
  * 
  * This wrapper uses the static InOut object for:
  * - Stable identity (equals/hashCode based on static object)
@@ -34,12 +34,10 @@ class DynamicInOut(
 	val dynamicInSemaphore: DynamicRailSemaphore,
 	val dynamicOutSemaphore: DynamicRailSemaphore
 ) {
-	/**
-	 * Gets the name of this InOut point
-	 * 
-	 * @return Name (delegates to static object)
-	 */
-	fun getName(): String = static.getName()
+	// Static properties delegated from wrapped object using Kotlin delegation
+	val name: String by static::getName
+	val orientation: Boolean by static::getOrientation
+	val spatialType: Cell.SpatialType by static::getSpatialType
 	
 	/**
 	 * Gets the dynamic input semaphore
@@ -83,5 +81,5 @@ class DynamicInOut(
 	/**
 	 * String representation for debugging
 	 */
-	override fun toString(): String = "Dynamic[${static.getName()}]"
+	override fun toString(): String = "Dynamic[$name]"
 }

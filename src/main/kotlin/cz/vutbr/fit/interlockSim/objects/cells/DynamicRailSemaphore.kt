@@ -17,7 +17,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * Dynamic wrapper for RailSemaphore separating static and dynamic properties.
  * 
- * **Static properties** (from wrapped semaphore): orientation, spatialType, position
+ * **Static properties** (delegated from wrapped semaphore): orientation, spatialType, position
  * **Dynamic properties** (in this class): signal state (changes during simulation)
  * 
  * This wrapper uses the static RailSemaphore object for:
@@ -32,6 +32,11 @@ private val logger = KotlinLogging.logger {}
 class DynamicRailSemaphore(
 	val static: RailSemaphore
 ) {
+	// Static properties delegated from wrapped object using Kotlin delegation
+	val orientation: Boolean by static::getOrientation
+	val spatialType: Cell.SpatialType by static::getSpatialType
+	val name: String by static::getName
+	
 	/**
 	 * Dynamic property: Current signal state (mutable, changes during simulation)
 	 * 
@@ -92,5 +97,5 @@ class DynamicRailSemaphore(
 	/**
 	 * String representation for debugging
 	 */
-	override fun toString(): String = "Dynamic[${static.getName()}, signal=$signal]"
+	override fun toString(): String = "Dynamic[$name, signal=$signal]"
 }

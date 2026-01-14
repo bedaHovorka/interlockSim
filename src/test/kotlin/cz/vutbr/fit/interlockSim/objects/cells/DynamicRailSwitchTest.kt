@@ -257,4 +257,16 @@ class DynamicRailSwitchTest {
 		// Verify via property
 		assertThat(dynamicSwitch1.locked).isTrue()
 	}
+	
+	@Test
+	fun `static properties are delegated correctly`() {
+		// Verify delegation works - properties accessible directly
+		assertThat(dynamicSwitch1.type).isEqualTo(staticSwitch1.type)
+		assertThat(dynamicSwitch1.spatialType).isEqualTo(staticSwitch1.getSpatialType())
+		assertThat(dynamicSwitch1.name).isEqualTo(staticSwitch1.getName())
+		
+		// Verify for second switch with different properties
+		assertThat(dynamicSwitch2.type).isEqualTo(staticSwitch2.type)
+		assertThat(dynamicSwitch2.spatialType).isEqualTo(staticSwitch2.getSpatialType())
+	}
 }

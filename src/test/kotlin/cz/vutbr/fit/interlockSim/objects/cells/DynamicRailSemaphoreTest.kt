@@ -170,4 +170,16 @@ class DynamicRailSemaphoreTest {
 		assertThat(dynamicSemaphore1.static).isSameAs(staticSemaphore1)
 		assertThat(dynamicSemaphore2.static).isSameAs(staticSemaphore2)
 	}
+	
+	@Test
+	fun `static properties are delegated correctly`() {
+		// Verify delegation works - properties accessible directly
+		assertThat(dynamicSemaphore1.orientation).isEqualTo(staticSemaphore1.getOrientation())
+		assertThat(dynamicSemaphore1.spatialType).isEqualTo(staticSemaphore1.getSpatialType())
+		assertThat(dynamicSemaphore1.name).isEqualTo(staticSemaphore1.getName())
+		
+		// Verify for second semaphore with different properties
+		assertThat(dynamicSemaphore2.orientation).isEqualTo(staticSemaphore2.getOrientation())
+		assertThat(dynamicSemaphore2.spatialType).isEqualTo(staticSemaphore2.getSpatialType())
+	}
 }

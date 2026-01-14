@@ -314,4 +314,15 @@ class DynamicTrackTest {
 		// Verify via property
 		assertThat(dynamicTrack1.state).isEqualTo(TrackFacility.State.RESERVED)
 	}
+	
+	@Test
+	fun `static properties are delegated correctly`() {
+		// Verify delegation works - properties accessible directly
+		assertThat(dynamicTrack1.length).isEqualTo(staticTrack1.length())
+		assertThat(dynamicTrack1.ends).isEqualTo(staticTrack1.ends())
+		
+		// Verify for second track with different properties
+		assertThat(dynamicTrack2.length).isEqualTo(staticTrack2.length())
+		assertThat(dynamicTrack2.ends).isEqualTo(staticTrack2.ends())
+	}
 }

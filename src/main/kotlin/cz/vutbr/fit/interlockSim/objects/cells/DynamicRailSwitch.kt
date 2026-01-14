@@ -19,7 +19,7 @@ private val logger = KotlinLogging.logger {}
 /**
  * Dynamic wrapper for RailSwitch separating static and dynamic properties.
  * 
- * **Static properties** (from wrapped switch): type, speeds (MAIN/BRANCH), topology, spatialType
+ * **Static properties** (delegated from wrapped switch): type, speeds, topology, spatialType
  * **Dynamic properties** (in this class): current configuration (MAIN/BRANCH), locked state
  * 
  * This wrapper uses the static RailSwitch object for:
@@ -34,6 +34,11 @@ private val logger = KotlinLogging.logger {}
 class DynamicRailSwitch(
 	val static: RailSwitch
 ) {
+	// Static properties delegated from wrapped object using Kotlin delegation
+	val type: RailSwitch.Type by static::type
+	val spatialType: Cell.SpatialType by static::getSpatialType
+	val name: String by static::getName
+	
 	/**
 	 * Dynamic property: Current configuration (MAIN or BRANCH)
 	 * 
@@ -177,5 +182,5 @@ class DynamicRailSwitch(
 	/**
 	 * String representation for debugging
 	 */
-	override fun toString(): String = "Dynamic[${static.hashCode()}, conf=$conf, locked=$locked]"
+	override fun toString(): String = "Dynamic[$name, conf=$conf, locked=$locked]"
 }
