@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -271,11 +272,12 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent switch configuration changes resolve without exception")
 		fun concurrentSwitchChanges_multipleThreads_noException() {
 			// Arrange
-			val switch =
+			val staticSwitch =
 				RailSwitch(
 					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
+			val switch = DynamicRailSwitch(staticSwitch)
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -327,11 +329,12 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Switch configuration queries are consistent during concurrent modifications")
 		fun switchConfigQueries_duringConcurrentMod_returnsConsistentState() {
 			// Arrange
-			val switch =
+			val staticSwitch =
 				RailSwitch(
 					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
+			val switch = DynamicRailSwitch(staticSwitch)
 
 			val iterations = 20
 			val readThreadCount = 2
@@ -349,7 +352,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (i in 0 until iterations) {
 						try {
 							switch.changeConf()
-							lastSeenConf.set(switch.getConf())
+							lastSeenConf.set(switch.conf)
 							Thread.sleep(1)
 						} catch (e: IllegalStateException) {
 							// Expected if switch is locked
@@ -368,7 +371,7 @@ class RaceConditionTest : KoinTestBase() {
 					try {
 						startLatch.await()
 						for (i in 0 until iterations) {
-							val conf = switch.getConf()
+							val conf = switch.conf
 							// Configuration should be one of the valid states
 							if (conf != RailSwitch.Conf.MAIN && conf != RailSwitch.Conf.BRANCH) {
 								consistencyViolations.incrementAndGet()

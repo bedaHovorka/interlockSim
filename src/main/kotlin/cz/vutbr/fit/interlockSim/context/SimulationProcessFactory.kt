@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 
@@ -63,6 +63,6 @@ interface SimulationProcessFactory {
 	 */
 	fun createInOutWorker(
 		context: SimulationContext,
-		inOut: InOut
+		inOut: DynamicInOut
 	): InOutWorker
 }

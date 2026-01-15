@@ -9,6 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+
 /**
  * Dynamic wrapper for InOut separating static and dynamic properties.
  *
@@ -26,49 +32,61 @@ package cz.vutbr.fit.interlockSim.objects.cells
  * Part of Phase 4: Static/Dynamic property separation (bedaHovorka/interlockSim#92)
  *
  * @property static The static InOut object with immutable editing-time properties
- * @property dynamicInSemaphore Dynamic wrapper for the input semaphore
- * @property dynamicOutSemaphore Dynamic wrapper for the output semaphore
+ * @property inSemaphore Dynamic wrapper for the input semaphore
+ * @property outSemaphore Dynamic wrapper for the output semaphore
  */
 class DynamicInOut(
 	val static: InOut,
-	val dynamicInSemaphore: DynamicRailSemaphore,
-	val dynamicOutSemaphore: DynamicRailSemaphore
-) {
+	val inSemaphore: DynamicRailSemaphore,
+	val outSemaphore: DynamicRailSemaphore
+) : OrientedPathSeparator by static, DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val name: String
 		get() = static.getName()
-	val orientation: Boolean
-		get() = static.getOrientation()
-	val spatialType: Cell.SpatialType
-		get() = static.getSpatialType()
-
-	/**
-	 * Gets the dynamic input semaphore
-	 *
-	 * @return Dynamic wrapper for the input semaphore
-	 */
-	fun getInSemaphore(): DynamicRailSemaphore = dynamicInSemaphore
-
-	/**
-	 * Gets the dynamic output semaphore
-	 *
-	 * @return Dynamic wrapper for the output semaphore
-	 */
-	fun getOutSemaphore(): DynamicRailSemaphore = dynamicOutSemaphore
+	// orientation and direction() are delegated from OrientedPathSeparator
 
 	/**
 	 * Equality based on the static object (stable identity).
 	 *
 	 * Two DynamicInOut instances are equal if they wrap the same
 	 * static InOut object, regardless of their semaphore signal states.
+	 * Also supports comparison with static InOut objects directly.
 	 *
-	 * This ensures stable identity for use in collections (Set, Map).
+	 * This ensures stable identity for use in collections (Set, Map) and
+	 * compatibility with code that uses static objects (e.g., ShuntingLoop).
 	 */
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
-		if (other !is DynamicInOut) return false
-		// Identity comparison (===) for stable equals based on static object
-		return static === other.static
+		return when (other) {
+			is DynamicInOut -> static === other.static
+			is InOut -> static === other
+			else -> false
+		}
+	}
+
+	override fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
+		val sem = getSemaphoreForWithException(from, to)
+		sem.signal = forSpeed(allowedSpeed)
+	}
+
+	override fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
+		val sem = getSemaphoreForWithException(from, to)
+		sem.signal = Signal.STOP
+	}
+
+	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
+
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
+		if (from == null) return static.direction()
+		requireSimulation(from === static.direction()) { "Invalid segment: $from, expected: ${static.direction()}" }
+		return null
 	}
 
 	/**
@@ -85,4 +103,21 @@ class DynamicInOut(
 	 * String representation for debugging
 	 */
 	override fun toString(): String = "Dynamic[$name]"
+
+	private fun getSemaphoreFor(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): DynamicRailSemaphore? {
+		if (from == null && to == static.direction()) return inSemaphore
+		if (to == null && from == static.direction()) return outSemaphore
+		return null
+	}
+
+	@Throws(PathSeparatorChangeException::class)
+	private fun getSemaphoreForWithException(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): DynamicRailSemaphore {
+		return getSemaphoreFor(from, to) ?: throw PathSeparatorChangeException(this)
+	}
 }

@@ -103,14 +103,19 @@ class ContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun testPathToNextSemaphore() {
+		// Get Dynamic wrappers for InOut objects (simulation context uses Dynamic wrappers)
+		val inOuts = context.getInOuts()
+		val dynamicInA = inOuts.find { it.name == "A" }!!
+		val dynamicOutB = inOuts.find { it.name == "B" }!!
+
 		val arrayPath = ArrayPath(context)
-		arrayPath.add(inA)
+		arrayPath.add(dynamicInA)
 		arrayPath.add(tl)
-		arrayPath.add(outB)
-		val pathFromInA = context.pathToNextSemaphore(inA, tl)
+		arrayPath.add(dynamicOutB)
+		val pathFromInA = context.pathToNextSemaphore(dynamicInA, tl)
 		assertThat(pathFromInA).isNotNull()
 		assertThat(arrayPath.equalsWithElements(pathFromInA!!)).isTrue()
-		val pathFromOutB = context.pathToNextSemaphore(outB, tl)
+		val pathFromOutB = context.pathToNextSemaphore(dynamicOutB, tl)
 		assertThat(pathFromOutB).isNotNull()
 		assertThat(arrayPath.reversePath().equalsWithElements(pathFromOutB!!)).isTrue()
 		// Note: Null parameter checks from Java version are now handled by Kotlin's type system at compile time

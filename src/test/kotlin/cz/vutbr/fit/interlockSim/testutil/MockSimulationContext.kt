@@ -17,9 +17,11 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
@@ -53,7 +55,7 @@ import java.io.InputStream
  */
 class MockSimulationContext(private val delegate: DefaultSimulationContext) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
-	private val workers: MutableMap<InOut, InOutWorker> = mutableMapOf()
+	private val workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
 	private var stopped: Boolean = false
 
@@ -89,18 +91,11 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 	 */
 	fun time(): Double = currentTime
 
-	override fun getWorkerFor(inOut: InOut): InOutWorker = workers[inOut]!!
+	override fun getWorkerFor(inOut: DynamicInOut): InOutWorker = workers[inOut]!!
 
-	override fun getInOuts(): Collection<InOut> {
-		val inOuts = mutableListOf<InOut>()
-		val grid = delegate.getRailWayNetGrid()
-		for (p in delegate.getGraph().nodeSet()) {
-			val cell = grid[p]
-			if (cell is InOut) {
-				inOuts.add(cell)
-			}
-		}
-		return inOuts
+	override fun getInOuts(): Collection<DynamicInOut> {
+		// Delegate to the real context to get DynamicInOut wrappers
+		return delegate.getInOuts()
 	}
 
 	override fun run() {
@@ -150,7 +145,13 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 		current: TrackSection?
 	): TrackSection? {
 		// Check if node is in grid before delegating
-		if (separator is NodeCell && delegate.getRailWayNetGrid().getLocation(separator) == null) {
+		// Extract static NodeCell from Dynamic wrapper for grid lookup
+		val staticSeparator = when (separator) {
+			is DynamicPathSeparator -> cz.vutbr.fit.interlockSim.objects.cells.CellUtilities.assertNodeCell(separator)
+			is NodeCell -> separator
+			else -> null
+		}
+		if (staticSeparator != null && delegate.getRailWayNetGrid().getLocation(staticSeparator) == null) {
 			// Node not in grid - return null (graceful handling for tests)
 			return null
 		}
@@ -170,7 +171,7 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 	}
 
 	override fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track
 	): Segment {
 		// Simplified implementation for testing
@@ -178,10 +179,10 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 	}
 
 	override fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track?,
 		secondEndTrack: Track?
-	): Segment {
+	): Cell.Segment {
 		// Simplified implementation for testing
 		return Segment.A
 	}

@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertThat
 import assertk.assertions.*
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -36,8 +35,8 @@ class DynamicRailSemaphoreTest {
 		staticSemaphore2 = RailSemaphore(false, Cell.SpatialType.VERTICAL)
 
 		// Create dynamic wrappers
-		dynamicSemaphore1 = DynamicRailSemaphore(staticSemaphore1)
-		dynamicSemaphore2 = DynamicRailSemaphore(staticSemaphore2)
+		dynamicSemaphore1 = createDynamicInstance(staticSemaphore1)
+		dynamicSemaphore2 = createDynamicInstance(staticSemaphore2)
 	}
 
 	@Test
@@ -85,7 +84,7 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `equals is based on static object identity`() {
 		// Same static object -> equal
-		val anotherWrapper = DynamicRailSemaphore(staticSemaphore1)
+		val anotherWrapper = createDynamicInstance(staticSemaphore1)
 		assertThat(dynamicSemaphore1).isEqualTo(anotherWrapper)
 
 		// Different static object -> not equal
@@ -95,7 +94,7 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `hashCode is stable based on static object`() {
 		// Hash code should be same for same static object
-		val anotherWrapper = DynamicRailSemaphore(staticSemaphore1)
+		val anotherWrapper = createDynamicInstance(staticSemaphore1)
 		assertThat(dynamicSemaphore1.hashCode()).isEqualTo(anotherWrapper.hashCode())
 
 		// Hash code should differ for different static objects
@@ -120,7 +119,7 @@ class DynamicRailSemaphoreTest {
 
 	@Test
 	fun `equals is stable across signal state changes`() {
-		val anotherWrapper = DynamicRailSemaphore(staticSemaphore1)
+		val anotherWrapper = createDynamicInstance(staticSemaphore1)
 
 		// Initially equal
 		assertThat(dynamicSemaphore1).isEqualTo(anotherWrapper)
@@ -147,7 +146,7 @@ class DynamicRailSemaphoreTest {
 		assertThat(set).hasSize(1)
 
 		// Add wrapper for same static object -> should not increase size
-		val anotherWrapper1 = DynamicRailSemaphore(staticSemaphore1)
+		val anotherWrapper1 = createDynamicInstance(staticSemaphore1)
 		set.add(anotherWrapper1)
 		assertThat(set).hasSize(1)
 
@@ -167,19 +166,19 @@ class DynamicRailSemaphoreTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicSemaphore1.static).isSameAs(staticSemaphore1)
-		assertThat(dynamicSemaphore2.static).isSameAs(staticSemaphore2)
+		assertThat(dynamicSemaphore1.static).isSameInstanceAs(staticSemaphore1)
+		assertThat(dynamicSemaphore2.static).isSameInstanceAs(staticSemaphore2)
 	}
 
 	@Test
 	fun `static properties are delegated correctly`() {
 		// Verify delegation works - properties accessible directly
-		assertThat(dynamicSemaphore1.orientation).isEqualTo(staticSemaphore1.getOrientation())
-		assertThat(dynamicSemaphore1.spatialType).isEqualTo(staticSemaphore1.getSpatialType())
+		assertThat(dynamicSemaphore1.getOrientation()).isEqualTo(staticSemaphore1.getOrientation())
+		assertThat(dynamicSemaphore1.getSpatialType()).isEqualTo(staticSemaphore1.getSpatialType())
 		assertThat(dynamicSemaphore1.name).isEqualTo(staticSemaphore1.getName())
 
 		// Verify for second semaphore with different properties
-		assertThat(dynamicSemaphore2.orientation).isEqualTo(staticSemaphore2.getOrientation())
-		assertThat(dynamicSemaphore2.spatialType).isEqualTo(staticSemaphore2.getSpatialType())
+		assertThat(dynamicSemaphore2.getOrientation()).isEqualTo(staticSemaphore2.getOrientation())
+		assertThat(dynamicSemaphore2.getSpatialType()).isEqualTo(staticSemaphore2.getSpatialType())
 	}
 }

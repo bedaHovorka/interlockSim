@@ -14,9 +14,13 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -626,12 +630,12 @@ class DeadlockDetectionTest : KoinTestBase() {
 	private fun createMockSemaphore(
 		name: String,
 		isAllowing: Boolean
-	): RailSemaphore {
-		val semaphore = mock(RailSemaphore::class.java)
-		val signal = if (isAllowing) RailSemaphore.Signal.FREE else RailSemaphore.Signal.STOP
-		`when`(semaphore.getSignal()).thenReturn(signal)
-		`when`(semaphore.toString()).thenReturn("Semaphore:$name:$signal")
-		return semaphore
+	): DynamicRailSemaphore {
+		val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
+		val signal = if (isAllowing) Signal.FREE else Signal.STOP
+		dynamicSemaphore.signal = signal
+		return dynamicSemaphore
 	}
 
 	private fun createMockSwitch(name: String): RailSwitch {

@@ -9,7 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -33,12 +37,10 @@ private val logger = KotlinLogging.logger {}
  */
 class DynamicRailSwitch(
 	val static: RailSwitch
-) {
+) : PathSeparator by static, DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val type: RailSwitch.Type
 		get() = static.type
-	val spatialType: Cell.SpatialType
-		get() = static.getSpatialType()
 	val name: String
 		get() = static.getName()
 
@@ -82,6 +84,60 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${static.hashCode()} position change: $oldConf -> $conf"
 		}
+	}
+
+	override fun cancelPathSetup(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	) {
+		val pathConf = getPathConfWithException(from, to)
+		if (pathConf != conf) {
+			throw PathSeparatorChangeException("cancelPathSetup: Switch is not configured (neccesarry except?)", this)
+		}
+	}
+
+	override fun allowedSpeed(): Double {
+		val double1 = static.speeds.get(conf)
+		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=${static.speeds}" }
+		return double1!!.toDouble()
+	}
+
+	override fun setUpPath(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
+		val newConf = getPathConfWithException(from, to)
+		logger.info {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
+				"conf=$newConf, allowedSpeed=$allowedSpeed"
+		}
+		conf = newConf
+	}
+
+	@Throws(PathSeparatorChangeException::class)
+	private fun getPathConfWithException(
+		from: Cell.Segment?,
+		to: Cell.Segment?
+	): Conf {
+		// Java would NPE here if from or to are null - we make it explicit
+		if (from == null || to == null) {
+			throw PathSeparatorChangeException("switch segments cannot be null", this)
+		}
+		return static.confs.get(from, to) ?: throw PathSeparatorChangeException(
+			"switch doesn't join this segments",
+			this
+		)
+	}
+
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
+		val map = static.confs.getJoinedNodesAndEdges(from)
+		for (e in (map as Map<*, *>).entries) {
+			@Suppress("UNCHECKED_CAST")
+			val entry = e as Map.Entry<Cell.Segment, Conf>
+			if (entry.value == conf) return entry.key
+		}
+		return null
 	}
 
 	/**
@@ -156,14 +212,18 @@ class DynamicRailSwitch(
 	 *
 	 * Two DynamicRailSwitch instances are equal if they wrap the same
 	 * static switch object, regardless of their current configuration or lock state.
+	 * Also supports comparison with static RailSwitch objects directly.
 	 *
-	 * This ensures stable identity for use in collections (Set, Map).
+	 * This ensures stable identity for use in collections (Set, Map) and
+	 * compatibility with code that uses static objects (e.g., ShuntingLoop).
 	 */
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
-		if (other !is DynamicRailSwitch) return false
-		// Identity comparison (===) for stable equals based on static object
-		return static === other.static
+		return when (other) {
+			is DynamicRailSwitch -> static === other.static
+			is RailSwitch -> static === other
+			else -> false
+		}
 	}
 
 	/**

@@ -26,6 +26,15 @@ import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -92,7 +101,18 @@ open class DefaultSimulationContext(
 	/**
 	 * Workers for each entry/exit point
 	 */
-	private var workers: MutableMap<InOut, InOutWorker> = IdentityHashMap<InOut, InOutWorker>()
+	private var workers: MutableMap<DynamicInOut, InOutWorker> = IdentityHashMap()
+
+	/**
+	 * Cache of dynamic InOut wrappers (lazily created)
+	 */
+	private var dynamicInOuts: MutableList<DynamicInOut>? = null
+
+	/**
+	 * Mapping from static PathSeparator to Dynamic wrapper (for simulation context)
+	 * Maps InOut, RailSemaphore, RailSwitch to their Dynamic counterparts
+	 */
+	private val staticToDynamicMap: MutableMap<PathSeparator, DynamicPathSeparator> = IdentityHashMap()
 
 	/**
 	 * Main simulation process
@@ -121,7 +141,7 @@ open class DefaultSimulationContext(
 	 * Get segment for a path separator and tracks
 	 */
 	override fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track?,
 		secondEndTrack: Track?
 	): Segment? {
@@ -140,7 +160,7 @@ open class DefaultSimulationContext(
 	 * Get segment for a path separator and track
 	 */
 	override fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track
 	): Segment? {
 		return if (track is TrackSection) {
@@ -160,7 +180,7 @@ open class DefaultSimulationContext(
 	 * Get pseudo join segment in block for a path separator and track section
 	 */
 	fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		section: TrackSection
 	): Segment? {
 		val trackBlock = section.getTrackBlock()
@@ -213,9 +233,22 @@ open class DefaultSimulationContext(
 		nodeCell: NodeCell,
 		current: TrackBlock?
 	): TrackBlock? {
-		val location = getLocation(nodeCell)
+		// Extract static NodeCell if it's a Dynamic wrapper (for location/graph operations)
+		val staticNodeCell = CellUtilities.assertNodeCell(nodeCell)
+		val location = getLocation(staticNodeCell)
 		val segment = getSegment(location, current)
-		val followingSegment = nodeCell.getFollowingSegment(segment)
+
+		// For getFollowingSegment, we need DynamicPathSeparator or OrientedNodeCell
+		// Dynamic* wrappers always have getFollowingSegment, static may not (only OrientedNodeCell does)
+		val followingSegment = when {
+			nodeCell is DynamicPathSeparator -> nodeCell.getFollowingSegment(segment)
+			staticNodeCell is OrientedNodeCell -> staticNodeCell.getFollowingSegment(segment)
+			else -> {
+				// Fall back to possibleFollowers for non-oriented NodeCells (like RailSwitch)
+				val followers = staticNodeCell.possibleFollowers(segment ?: return null)
+				followers.firstOrNull()
+			}
+		}
 		if (followingSegment == null) return null
 
 		val assignedEdges = getGraph().assignedEdges(location)
@@ -243,7 +276,14 @@ open class DefaultSimulationContext(
 		}
 
 		// z dalsi TrackBlock
-		val nodeCell = CellUtilities.assertNodeCell(separator)
+		// Extract static NodeCell for getNextTrackBlock (which needs NodeCell interface)
+		// but preserve the separator (which could be Dynamic*) for proper type checking
+		val staticNodeCell = CellUtilities.assertNodeCell(separator)
+
+		// Pass separator as NodeCell to getNextTrackBlock
+		// (NodeCell is a subtype of PathSeparator, so static objects work directly;
+		// Dynamic* also implement PathSeparator, so they work too)
+		val nodeCell = if (separator is NodeCell) separator else staticNodeCell
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
 		@Suppress("UNCHECKED_CAST")
@@ -257,6 +297,110 @@ open class DefaultSimulationContext(
 	/**
 	 * Run the simulation (jDisco framework integration)
 	 */
+	/**
+	 * Initialize static-to-dynamic mapping for all PathSeparators in the network
+	 * Must be called before simulation starts to ensure all separators have Dynamic wrappers
+	 */
+	private fun initializeDynamicMapping() {
+		// Track what we're mapping to avoid duplicates
+		var mappedCount = 0
+		val grid = getRailWayNetGrid()
+
+		// Iterate through all cells in the railway network grid
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid.getCellAt(x, y) ?: continue
+
+				// Skip if already mapped (handles case where getInOuts was called early)
+				if (cell in staticToDynamicMap) {
+					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - already mapped" }
+					continue
+				}
+
+				// Create Dynamic wrapper based on cell type
+				when (cell) {
+					is InOut -> {
+						// Create and map InOut dynamic wrapper
+						val dynamic = createDynamic(cell)
+						staticToDynamicMap[cell] = dynamic
+						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
+						// These semaphores might be used in paths before they're encountered as separate cells
+						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
+						staticToDynamicMap.putIfAbsent(cell.getInSemaphore(), dynamic.inSemaphore)
+						staticToDynamicMap.putIfAbsent(cell.getOutSemaphore(), dynamic.outSemaphore)
+						// Also add to dynamicInOuts list if it doesn't exist yet
+						if (dynamicInOuts == null) {
+							dynamicInOuts = mutableListOf()
+						}
+						if (dynamic !in dynamicInOuts!!) {
+							dynamicInOuts!!.add(dynamic)
+						}
+						mappedCount++
+						logger.trace { "Mapped InOut at ($x,$y) to dynamic wrapper (with semaphores)" }
+					}
+					is RailSemaphore -> {
+						val dynamic = createDynamicInstance(cell)
+						staticToDynamicMap[cell] = dynamic
+						mappedCount++
+						logger.trace { "Mapped RailSemaphore at ($x,$y) to dynamic wrapper" }
+					}
+					is RailSwitch -> {
+						val dynamic = DynamicRailSwitch(cell)
+						staticToDynamicMap[cell] = dynamic
+						mappedCount++
+						logger.trace { "Mapped RailSwitch at ($x,$y) to dynamic wrapper" }
+					}
+				}
+			}
+		}
+		logger.debug { "Initialized $mappedCount dynamic wrappers (total in map: ${staticToDynamicMap.size})" }
+	}
+
+	/**
+	 * Validate that all PathSeparators in the network have Dynamic wrappers.
+	 *
+	 * Based on architectural assumption: simulation context has immutable network structure.
+	 * All separators must be wrapped at initialization - discovering an unwrapped separator
+	 * during simulation indicates a bug.
+	 */
+	private fun validateDynamicMapping() {
+		val grid = getRailWayNetGrid()
+		val unmapped = mutableListOf<String>()
+
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid.getCellAt(x, y) ?: continue
+
+				if (cell is PathSeparator && cell !in staticToDynamicMap) {
+					unmapped.add("${cell.javaClass.simpleName} at ($x,$y)")
+				}
+			}
+		}
+
+		if (unmapped.isNotEmpty()) {
+			throw IllegalStateException(
+				"Dynamic mapping incomplete! Unmapped separators: ${unmapped.joinToString(", ")}. " +
+				"Map contains ${staticToDynamicMap.size} entries. " +
+				"This indicates initialization logic is incomplete."
+			)
+		}
+
+		logger.info { "Dynamic mapping validation passed: all ${staticToDynamicMap.size} separators mapped" }
+	}
+
+	/**
+	 * Convert a static PathSeparator to its Dynamic wrapper.
+	 * Returns the Dynamic wrapper if found, otherwise returns the input separator unchanged.
+	 * This is used by Train to ensure it always works with Dynamic wrappers.
+	 */
+	override fun toDynamic(separator: PathSeparator): PathSeparator {
+		return if (separator is DynamicPathSeparator) {
+			separator  // Already dynamic
+		} else {
+			staticToDynamicMap[separator] ?: separator  // Convert or fallback to static
+		}
+	}
+
 	@Throws(EmptyContextException::class, SimulationException::class)
 	override fun run() {
 		if (getGraph().isEmpty() || getRailWayNetGrid().isEmpty() || inouts.isEmpty()) {
@@ -267,6 +411,20 @@ open class DefaultSimulationContext(
 			}
 			throw EmptyContextException()
 		}
+
+		// Initialize ALL dynamic wrappers before starting simulation
+		// Based on assumption: immutable network structure in simulation context
+		// NOTE: getInOuts() might have been called already (e.g., by XMLContextFactory),
+		// so initializeDynamicMapping handles both fresh init and completion of partial init
+		initializeDynamicMapping()  // Maps ALL separators (InOut, RailSemaphore, RailSwitch)
+
+		// Validate completeness - catch initialization bugs early
+		validateDynamicMapping()
+
+		logger.info {
+			"Simulation initialization complete: ${staticToDynamicMap.size} dynamic wrappers created"
+		}
+
 		// Use factory to create main process if not already set
 		if (mainProcess == null) {
 			mainProcess = processFactory.createMainProcess(this)
@@ -278,8 +436,9 @@ open class DefaultSimulationContext(
 		}
 
 		// Use factory to create worker for each InOut
-		for (i in inouts) {
-			workers[i] = processFactory.createInOutWorker(this, i)
+		// Reuse dynamic wrappers from getInOuts() (already initialized above)
+		for (dynamicInOut in getInOuts()) {
+			workers[dynamicInOut] = processFactory.createInOutWorker(this, dynamicInOut)
 		}
 
 		try {
@@ -288,6 +447,13 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Failed to activate main simulation process" }
 			throw SimulationException(e)
 		}
+	}
+
+	private fun createDynamic(i: InOut) : DynamicInOut {
+		val inSemaphore = createDynamicInstance(i.getInSemaphore())
+		val outSemaphore = createConstantInstance(i.getOutSemaphore(), Signal.FREE)
+		val dynamicInOut = DynamicInOut(i, inSemaphore, outSemaphore)
+		return dynamicInOut
 	}
 
 	/**
@@ -299,7 +465,7 @@ open class DefaultSimulationContext(
 			worker.terminate()
 		}
 		mainProcess?.terminate()
-		System.exit(1) // TODO: Remove System.exit - see GitHub issue #56
+		System.exit(1) // TODO: Remove System.exit - successful termination handling
 	}
 
 	/**
@@ -311,9 +477,25 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Get list of entry/exit points
+	 * Get list of entry/exit points (dynamic wrappers for simulation)
+	 *
+	 * Returns the dynamic InOut wrappers. Creates them lazily if not yet initialized.
+	 * These wrappers separate static properties (name, position) from dynamic state (signal states).
 	 */
-	override fun getInOuts(): Collection<InOut> = inouts as Collection<InOut>
+	override fun getInOuts(): Collection<DynamicInOut> {
+		// Lazy initialization: create dynamic wrappers if not yet created
+		if (dynamicInOuts == null) {
+			dynamicInOuts = inouts.map {
+				val dynamic = createDynamic(it)
+				staticToDynamicMap[it] = dynamic
+				// Map InOut's semaphores (use putIfAbsent to avoid conflicts)
+				staticToDynamicMap.putIfAbsent(it.getInSemaphore(), dynamic.inSemaphore)
+				staticToDynamicMap.putIfAbsent(it.getOutSemaphore(), dynamic.outSemaphore)
+				dynamic
+			}.toMutableList()
+		}
+		return dynamicInOuts!!
+	}
 
 	/**
 	 * Check if a separator is in the specified direction
@@ -323,8 +505,20 @@ open class DefaultSimulationContext(
 		next: Track?,
 		previous: Track?
 	): Boolean {
-		val segment = getSegment(separator, next, previous)
-		if (segment == null && separator is InOut) return true
+		// Try to use Dynamic wrapper if available, otherwise use static OrientedNodeCell
+		val segment = if (separator is DynamicPathSeparator) {
+			getSegment(separator, next, previous)
+		} else {
+			// Static separator - need to get segment differently
+			val staticNodeCell = CellUtilities.assertNodeCell(separator)
+			if (next != null) {
+				getSegment(staticNodeCell, next as? TrackBlock)
+			} else {
+				getSegment(staticNodeCell, previous as? TrackBlock)
+			}
+		}
+		// Allow null segment for InOut (both static and Dynamic wrapper)
+		if (segment == null && (separator is InOut || separator is DynamicInOut)) return true
 		requireSimulation(segment != null) { "Segment cannot be null for separator $separator" }
 		val direction = separator.direction()
 		val inDirection = segment === direction
@@ -350,7 +544,16 @@ open class DefaultSimulationContext(
 			path.add(separator)
 			if (next != null) {
 				path.add(next)
-				separator = next.getSecondEnd(separator)
+				// Extract static separator for track operations (getSecondEnd uses === comparison)
+				val staticSeparator = CellUtilities.assertNodeCell(separator)
+				val staticResult = next.getSecondEnd(staticSeparator)
+				// Wrap static result back to Dynamic wrapper (must exist in map)
+				separator = staticToDynamicMap[staticResult]
+					?: throw IllegalStateException(
+						"No dynamic wrapper found for static separator: $staticResult. " +
+							"Map contains ${staticToDynamicMap.size} entries. " +
+							"This indicates initialization failed."
+					)
 				previous = next
 				next = getNextTrackSection(separator, next)
 			} else {
@@ -435,7 +638,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Get the worker for an entry/exit point
 	 */
-	override fun getWorkerFor(inOut: InOut): InOutWorker =
+	override fun getWorkerFor(inOut: DynamicInOut): InOutWorker =
 		workers[inOut] ?: throw IllegalStateException("No worker found for InOut: $inOut")
 
 	/**

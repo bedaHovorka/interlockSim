@@ -869,7 +869,7 @@ class AbstractPathTest : KoinTestBase() {
  */
 private class MockNodeCell(
 	private val name: String
-) : NodeCell(Cell.SpatialType.HORIZONTAL) {
+) : NodeCell(Cell.SpatialType.HORIZONTAL), DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Cell.Segment?,
 		to: Cell.Segment?

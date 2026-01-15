@@ -14,6 +14,8 @@ import assertk.assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
+// Factory functions for creating dynamic semaphores
+
 /**
  * Tests for DynamicInOut wrapper class
  *
@@ -39,12 +41,12 @@ class DynamicInOutTest {
 		staticInOut2 = InOut("Station B", false, Cell.SpatialType.VERTICAL)
 
 		// Create dynamic semaphore wrappers for InOut1
-		dynamicInSemaphore1 = DynamicRailSemaphore(staticInOut1.getInSemaphore())
-		dynamicOutSemaphore1 = DynamicRailSemaphore(staticInOut1.getOutSemaphore())
+		dynamicInSemaphore1 = createDynamicInstance(staticInOut1.getInSemaphore())
+		dynamicOutSemaphore1 = createConstantInstance(staticInOut1.getOutSemaphore(), Signal.FREE)
 
 		// Create dynamic semaphore wrappers for InOut2
-		dynamicInSemaphore2 = DynamicRailSemaphore(staticInOut2.getInSemaphore())
-		dynamicOutSemaphore2 = DynamicRailSemaphore(staticInOut2.getOutSemaphore())
+		dynamicInSemaphore2 = createDynamicInstance(staticInOut2.getInSemaphore())
+		dynamicOutSemaphore2 = createConstantInstance(staticInOut2.getOutSemaphore(), Signal.FREE)
 
 		// Create dynamic InOut wrappers
 		dynamicInOut1 = DynamicInOut(staticInOut1, dynamicInSemaphore1, dynamicOutSemaphore1)
@@ -53,12 +55,12 @@ class DynamicInOutTest {
 
 	@Test
 	fun `can access dynamic input semaphore`() {
-		assertThat(dynamicInOut1.getInSemaphore()).isSameAs(dynamicInSemaphore1)
+		assertThat(dynamicInOut1.inSemaphore).isSameAs(dynamicInSemaphore1)
 	}
 
 	@Test
 	fun `can access dynamic output semaphore`() {
-		assertThat(dynamicInOut1.getOutSemaphore()).isSameAs(dynamicOutSemaphore1)
+		assertThat(dynamicInOut1.outSemaphore).isSameAs(dynamicOutSemaphore1)
 	}
 
 	@Test
@@ -68,17 +70,17 @@ class DynamicInOutTest {
 		assertThat(dynamicInOut1.name).isEqualTo("Station A")
 
 		// Verify orientation delegation
-		assertThat(dynamicInOut1.orientation).isEqualTo(staticInOut1.getOrientation())
-		assertThat(dynamicInOut1.orientation).isTrue()
+		assertThat(dynamicInOut1.getOrientation()).isEqualTo(staticInOut1.getOrientation())
+		assertThat(dynamicInOut1.getOrientation()).isTrue()
 
 		// Verify spatialType delegation
-		assertThat(dynamicInOut1.spatialType).isEqualTo(staticInOut1.getSpatialType())
-		assertThat(dynamicInOut1.spatialType).isEqualTo(Cell.SpatialType.HORIZONTAL)
+		assertThat(dynamicInOut1.static.getSpatialType()).isEqualTo(staticInOut1.getSpatialType())
+		assertThat(dynamicInOut1.static.getSpatialType()).isEqualTo(Cell.SpatialType.HORIZONTAL)
 
 		// Verify for second InOut with different properties
 		assertThat(dynamicInOut2.name).isEqualTo("Station B")
-		assertThat(dynamicInOut2.orientation).isFalse()
-		assertThat(dynamicInOut2.spatialType).isEqualTo(Cell.SpatialType.VERTICAL)
+		assertThat(dynamicInOut2.getOrientation()).isFalse()
+		assertThat(dynamicInOut2.static.getSpatialType()).isEqualTo(Cell.SpatialType.VERTICAL)
 	}
 
 	@Test
@@ -107,10 +109,10 @@ class DynamicInOutTest {
 		val initialHash = dynamicInOut1.hashCode()
 
 		// Change semaphore states
-		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
+		dynamicInSemaphore1.signal = Signal.S60
 		assertThat(dynamicInOut1.hashCode()).isEqualTo(initialHash)
 
-		dynamicOutSemaphore1.signal = RailSemaphore.Signal.FREE
+		dynamicOutSemaphore1.signal = Signal.FREE
 		assertThat(dynamicInOut1.hashCode()).isEqualTo(initialHash)
 	}
 
@@ -122,7 +124,7 @@ class DynamicInOutTest {
 		assertThat(dynamicInOut1).isEqualTo(anotherWrapper)
 
 		// Change one wrapper's semaphore states
-		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
+		dynamicInSemaphore1.signal = Signal.S60
 
 		// Still equal (equality based on static object, not semaphore states)
 		assertThat(dynamicInOut1).isEqualTo(anotherWrapper)
@@ -163,29 +165,29 @@ class DynamicInOutTest {
 	@Test
 	fun `semaphore wrappers are independent`() {
 		// Change state of InOut1's input semaphore
-		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
+		dynamicInSemaphore1.signal = Signal.S60
 
 		// Verify InOut2's semaphores are unaffected
-		assertThat(dynamicInSemaphore2.signal).isEqualTo(RailSemaphore.Signal.STOP)
+		assertThat(dynamicInSemaphore2.signal).isEqualTo(Signal.STOP)
 
 		// Verify we can access and modify InOut1's output semaphore independently
-		dynamicOutSemaphore1.signal = RailSemaphore.Signal.FREE
-		assertThat(dynamicOutSemaphore1.signal).isEqualTo(RailSemaphore.Signal.FREE)
-		assertThat(dynamicInSemaphore1.signal).isEqualTo(RailSemaphore.Signal.S60)
+		dynamicOutSemaphore1.signal = Signal.FREE
+		assertThat(dynamicOutSemaphore1.signal).isEqualTo(Signal.FREE)
+		assertThat(dynamicInSemaphore1.signal).isEqualTo(Signal.S60)
 	}
 
 	@Test
 	fun `different dynamic wrappers can share same semaphore instances`() {
 		// This tests that different DynamicInOut instances can be created
 		// with different semaphore wrapper instances
-		val alternativeInSemaphore = DynamicRailSemaphore(staticInOut1.getInSemaphore())
-		val alternativeOutSemaphore = DynamicRailSemaphore(staticInOut1.getOutSemaphore())
+		val alternativeInSemaphore = createDynamicInstance(staticInOut1.getInSemaphore())
+		val alternativeOutSemaphore = createConstantInstance(staticInOut1.getOutSemaphore(), Signal.FREE)
 		val alternativeWrapper = DynamicInOut(staticInOut1, alternativeInSemaphore, alternativeOutSemaphore)
 
 		// Should still be equal based on static object
 		assertThat(alternativeWrapper).isEqualTo(dynamicInOut1)
 
 		// But semaphore wrappers are different instances
-		assertThat(alternativeWrapper.getInSemaphore()).isNotSameAs(dynamicInOut1.getInSemaphore())
+		assertThat(alternativeWrapper.inSemaphore).isNotSameAs(dynamicInOut1.inSemaphore)
 	}
 }
