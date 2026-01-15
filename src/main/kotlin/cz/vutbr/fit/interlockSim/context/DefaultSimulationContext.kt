@@ -449,11 +449,10 @@ open class DefaultSimulationContext(
 		}
 	}
 
-	private fun createDynamic(i: InOut) : DynamicInOut {
+	private fun createDynamic(i: InOut): DynamicInOut {
 		val inSemaphore = createDynamicInstance(i.getInSemaphore())
 		val outSemaphore = createConstantInstance(i.getOutSemaphore(), Signal.FREE)
-		val dynamicInOut = DynamicInOut(i, inSemaphore, outSemaphore)
-		return dynamicInOut
+		return DynamicInOut(i, inSemaphore, outSemaphore)
 	}
 
 	/**

@@ -192,9 +192,9 @@ private class ConstantSemaphore(
 ) : DynamicRailSemaphore(static) {
 
 	override var signal: Signal = signal
-		set(newSignal) {
-			// ignore changes
-			field = field
+		set(_) {
+			// Ignore changes: constant semaphore signal must not change
+			// No-op setter to maintain compatibility with parent var
 		}
 }
 

@@ -79,14 +79,6 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 		// Act
 		val worker = processFactory.createInOutWorker(mockContext, inOut)
 
-
-
-
-
-
-
-
-
 		// Assert
 		assertThat(worker).isNotNull()
 		assertThat(worker).isInstanceOf<InOutWorker>()
