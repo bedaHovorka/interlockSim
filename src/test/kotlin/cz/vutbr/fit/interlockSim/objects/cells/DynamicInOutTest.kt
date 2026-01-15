@@ -107,10 +107,10 @@ class DynamicInOutTest {
 		val initialHash = dynamicInOut1.hashCode()
 
 		// Change semaphore states
-		dynamicInSemaphore1.setSignal(RailSemaphore.Signal.S60)
+		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
 		assertThat(dynamicInOut1.hashCode()).isEqualTo(initialHash)
 
-		dynamicOutSemaphore1.setSignal(RailSemaphore.Signal.FREE)
+		dynamicOutSemaphore1.signal = RailSemaphore.Signal.FREE
 		assertThat(dynamicInOut1.hashCode()).isEqualTo(initialHash)
 	}
 
@@ -122,7 +122,7 @@ class DynamicInOutTest {
 		assertThat(dynamicInOut1).isEqualTo(anotherWrapper)
 
 		// Change one wrapper's semaphore states
-		dynamicInSemaphore1.setSignal(RailSemaphore.Signal.S60)
+		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
 
 		// Still equal (equality based on static object, not semaphore states)
 		assertThat(dynamicInOut1).isEqualTo(anotherWrapper)
@@ -163,13 +163,13 @@ class DynamicInOutTest {
 	@Test
 	fun `semaphore wrappers are independent`() {
 		// Change state of InOut1's input semaphore
-		dynamicInSemaphore1.setSignal(RailSemaphore.Signal.S60)
+		dynamicInSemaphore1.signal = RailSemaphore.Signal.S60
 
 		// Verify InOut2's semaphores are unaffected
 		assertThat(dynamicInSemaphore2.signal).isEqualTo(RailSemaphore.Signal.STOP)
 
 		// Verify we can access and modify InOut1's output semaphore independently
-		dynamicOutSemaphore1.setSignal(RailSemaphore.Signal.FREE)
+		dynamicOutSemaphore1.signal = RailSemaphore.Signal.FREE
 		assertThat(dynamicOutSemaphore1.signal).isEqualTo(RailSemaphore.Signal.FREE)
 		assertThat(dynamicInSemaphore1.signal).isEqualTo(RailSemaphore.Signal.S60)
 	}
