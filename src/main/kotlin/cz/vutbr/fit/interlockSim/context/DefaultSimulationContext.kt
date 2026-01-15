@@ -117,8 +117,8 @@ open class DefaultSimulationContext(
 	private val staticToDynamicMap: MutableMap<PathSeparator, DynamicPathSeparator> = IdentityHashMap()
 
 	/**
-	 * Mapping from static TrackFacility to Dynamic wrapper (for simulation context)
-	 * Maps TrackBlock to DynamicTrack wrappers for state management
+	 * Mapping from static TrackFacility to DynamicTrack wrapper (for simulation context)
+	 * Maps track facilities to their Dynamic wrappers for state management
 	 */
 	private val staticTrackToDynamicMap: MutableMap<TrackFacility, DynamicTrack> = IdentityHashMap()
 
@@ -433,12 +433,19 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Convert a static TrackFacility to its Dynamic wrapper.
-	 * Returns the Dynamic wrapper if found, otherwise returns null.
-	 * This is used by simulation components to access dynamic track state.
+	 * Convert a TrackFacility to its DynamicTrack wrapper.
+	 * Creates wrapper lazily if not yet created (for tracks discovered during simulation).
+	 * Uses identity-based mapping to ensure each static track maps to exactly one wrapper.
 	 */
-	override fun toDynamic(track: TrackFacility): DynamicTrack? {
-		return staticTrackToDynamicMap[track]
+	override fun toDynamic(track: TrackFacility): DynamicTrack {
+		// Return existing wrapper if already mapped
+		staticTrackToDynamicMap[track]?.let { return it }
+
+		// Create new wrapper for unmapped track (lazy initialization)
+		val dynamicTrack = DynamicTrack(track)
+		staticTrackToDynamicMap[track] = dynamicTrack
+		logger.debug { "Lazy-created DynamicTrack wrapper for track ${System.identityHashCode(track)}" }
+		return dynamicTrack
 	}
 
 	@Throws(EmptyContextException::class, SimulationException::class)

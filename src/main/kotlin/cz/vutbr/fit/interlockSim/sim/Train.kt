@@ -350,7 +350,7 @@ class Train :
 					"Path to semaphore first element must match current position: where=$where, pathFirst=$pathFirst"
 				}
 			}
-			if (next != null) next.enter(this@Train)
+			if (next != null) context.toDynamic(next as cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility).enter(this@Train)
 		}
 	}
 
@@ -370,7 +370,7 @@ class Train :
 				start()
 			}
 
-			if (current != null) current.leave(this@Train)
+			if (current != null) context.toDynamic(current as cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility).leave(this@Train)
 			if (next == null &&
 				!(where is DynamicInOut && where == timetable.getOut())
 			) {
