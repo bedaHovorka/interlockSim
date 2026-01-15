@@ -351,7 +351,12 @@ class Train :
 					"Path to semaphore first element must match current position: where=$where, pathFirst=$pathFirst"
 				}
 			}
-			if (next != null) context.toDynamic(next as TrackFacility).enter(this@Train)
+			if (next != null) {
+				requireSimulation(next is TrackFacility) {
+					"TrackSection must implement TrackFacility: ${next.javaClass.name}"
+				}
+				context.toDynamic(next as TrackFacility).enter(this@Train)
+			}
 		}
 	}
 
@@ -371,7 +376,12 @@ class Train :
 				start()
 			}
 
-			if (current != null) context.toDynamic(current as TrackFacility).leave(this@Train)
+			if (current != null) {
+				requireSimulation(current is TrackFacility) {
+					"TrackSection must implement TrackFacility: ${current.javaClass.name}"
+				}
+				context.toDynamic(current as TrackFacility).leave(this@Train)
+			}
 			if (next == null &&
 				!(where is DynamicInOut && where == timetable.getOut())
 			) {
