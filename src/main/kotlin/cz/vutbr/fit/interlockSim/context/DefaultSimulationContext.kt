@@ -464,7 +464,7 @@ open class DefaultSimulationContext(
 			worker.terminate()
 		}
 		mainProcess?.terminate()
-		System.exit(1) // TODO: Remove System.exit - successful termination handling
+		System.exit(0) // TODO: Remove System.exit - use proper termination handling
 	}
 
 	/**

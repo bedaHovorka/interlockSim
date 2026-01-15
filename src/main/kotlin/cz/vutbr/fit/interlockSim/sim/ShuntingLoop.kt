@@ -98,6 +98,15 @@ class ShuntingLoop : Interlocking {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.offer(train)
 		}
+
+		override fun iteration() {
+			// Stop generating trains when approaching endTime
+			if (time() >= endTime) {
+				terminate()
+				return
+			}
+			super.iteration()
+		}
 	}
 
 	/**
