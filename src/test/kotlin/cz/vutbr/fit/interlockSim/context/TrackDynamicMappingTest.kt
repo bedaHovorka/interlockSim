@@ -13,7 +13,6 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -56,7 +55,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			for (trackBlock in graph.values()) {
 				val trackFacility = trackBlock as TrackFacility
 				val dynamicTrack = context.toDynamic(trackFacility)
-				
+
 				// Assert - should return null before run()
 				assertThat(dynamicTrack).isNull()
 				tracksChecked++
@@ -78,7 +77,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			val context = factory.createEmptyContext() as DefaultSimulationContext
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			val contextWithTracks = factory.createContext(xmlFile) as DefaultSimulationContext
-			
+
 			// Get a track from the context with tracks
 			val graph = contextWithTracks.getGraph()
 			val trackFacility = graph.values().first() as TrackFacility
@@ -97,11 +96,11 @@ class TrackDynamicMappingTest : KoinTestBase() {
 	inner class VyhybnaIntegrationTests {
 		/**
 		 * Integration test: Load vyhybna.xml and verify track mapping is initialized
-		 * 
+		 *
 		 * Note: We cannot fully run() the simulation in tests as it blocks indefinitely.
 		 * Instead, we verify that the mapping infrastructure is in place and would be
 		 * populated by run(). The actual population during run() is tested manually.
-		 * 
+		 *
 		 * Railway context: vyhybna.xml is a test network with switches and multiple track segments
 		 */
 		@Test
@@ -118,7 +117,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			for (trackBlock in graph.values()) {
 				totalTracks++
 				val trackFacility = trackBlock as TrackFacility
-				
+
 				// Before run(), toDynamic should return null
 				val dynamicTrack = context.toDynamic(trackFacility)
 				assertThat(dynamicTrack)
@@ -153,7 +152,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 
 		/**
 		 * Manual verification test: Documents expected behavior after run()
-		 * 
+		 *
 		 * This test documents the expected behavior but doesn't execute run()
 		 * due to simulation blocking. Manual testing confirms:
 		 * 1. run() calls initializeDynamicMapping()
@@ -165,15 +164,15 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("DOCUMENTED: run() populates track mappings (manual test required)")
 		fun documentedBehavior_runPopulatesTrackMappings() {
 			// This test documents expected behavior that must be verified manually:
-			// 
+			//
 			// val context = factory.createContext(xmlFile) as DefaultSimulationContext
 			// context.run()  // Would block in test - manual verification needed
-			// 
+			//
 			// After run(), for each track in graph.values():
 			// - context.toDynamic(track) should return non-null DynamicTrack
 			// - DynamicTrack.static should equal the original track
 			// - Multiple calls to toDynamic(track) should return same instance
-			
+
 			// Test passes to document this requirement
 			assertThat(true).isEqualTo(true)
 		}

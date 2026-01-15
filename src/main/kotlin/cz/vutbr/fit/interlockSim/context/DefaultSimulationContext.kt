@@ -382,7 +382,9 @@ open class DefaultSimulationContext(
 			trackMappedCount++
 			logger.trace { "Mapped TrackBlock ${trackFacility.hashCode()} to dynamic wrapper" }
 		}
-		logger.debug { "Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})" }
+		logger.debug {
+			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"
+		}
 	}
 
 	/**
