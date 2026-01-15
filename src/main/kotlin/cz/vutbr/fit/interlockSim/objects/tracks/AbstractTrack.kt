@@ -15,10 +15,11 @@ import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
- * Base implementation of {@link Track}
+ * Base implementation of {@link StaticTrack}
  *
+ * Provides common implementations for static track operations.
  */
-abstract class AbstractTrack : Track {
+abstract class AbstractTrack : StaticTrack {
 	final override fun getSecondEnd(sep: PathSeparator): PathSeparator {
 		val ends = ends()
 		requireValidState(ends.size == 2) { "Track must have exactly 2 ends, but has ${ends.size}" }
