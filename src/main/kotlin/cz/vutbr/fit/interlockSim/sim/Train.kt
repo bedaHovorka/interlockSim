@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -350,7 +351,7 @@ class Train :
 					"Path to semaphore first element must match current position: where=$where, pathFirst=$pathFirst"
 				}
 			}
-			if (next != null) context.toDynamic(next as cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility).enter(this@Train)
+			if (next != null) context.toDynamic(next as TrackFacility).enter(this@Train)
 		}
 	}
 
@@ -370,7 +371,7 @@ class Train :
 				start()
 			}
 
-			if (current != null) context.toDynamic(current as cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility).leave(this@Train)
+			if (current != null) context.toDynamic(current as TrackFacility).leave(this@Train)
 			if (next == null &&
 				!(where is DynamicInOut && where == timetable.getOut())
 			) {
