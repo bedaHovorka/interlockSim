@@ -247,7 +247,7 @@ class ShuntingLoop : Interlocking {
 				is RailSemaphore -> context.toDynamic(element)
 				is RailSwitch -> context.toDynamic(element)
 				is InOut -> context.toDynamic(element)  // Use toDynamic for consistency
-				is SimpleTrackBlock -> element  // Track blocks remain unchanged
+				is SimpleTrackBlock -> element  // Track blocks remain STATIC - they manage their own state
 				else -> element
 			}
 			dynamicPath.addLast(dynamicElement)
@@ -320,15 +320,21 @@ class ShuntingLoop : Interlocking {
 		if (block.getState() == State.FREE) return false
 		if (block.getState() == State.OCCUPIED) {
 			logger.debug { "Block occupied, checking if next semaphore is: ${to.name}" }
-			if (block.getTrackOccupant().nextSemaphore() != to) return false
+			// Compare using static references to avoid Dynamic wrapper identity issues
+			val nextSem = block.getTrackOccupant().nextSemaphore()
+			val nextSemStatic = when (nextSem) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.static
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.static
+				else -> nextSem
+			}
+			if (nextSemStatic != to.static) return false
 			return trySetupPaths(to)
 		} else if (block.getState() == State.RESERVED) {
 			logger.debug { "Block reserved, checking path setup for semaphore: ${to.name}" }
-			// Use static separator for getSecondEnd (works with track block API which uses static separators)
-			// Then convert result to Dynamic for isSetUpPath check (paths use Dynamic separators)
+			// Use static separator for both getSecondEnd AND isSetUpPath
+			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
 			val staticSecondEnd = block.getSecondEnd(to.static)
-			val dynamicSecondEnd = context.toDynamic(staticSecondEnd)
-			if (block.isSetUpPath(dynamicSecondEnd)) {
+			if (block.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}
 		}
