@@ -128,10 +128,12 @@ abstract class AbstractPath protected constructor(
 	/**
 	 * Iterates over path elements and applies the given operation to each track.
 	 * This replaces the legacy Java 6 reflection-based approach with idiomatic Kotlin lambdas.
+	 * Operations are performed via DynamicTrack wrappers to ensure proper state management.
 	 *
 	 * @param sep The path separator to start iteration from
 	 * @param operationName Name of the operation for logging and separator setting
-	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful
+	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful.
+	 *                       The lambda receives the Track and should convert it to DynamicTrack via context.toDynamic()
 	 * @return true if all operations succeeded, false otherwise
 	 */
 	@Throws(TrackOperationException::class)
