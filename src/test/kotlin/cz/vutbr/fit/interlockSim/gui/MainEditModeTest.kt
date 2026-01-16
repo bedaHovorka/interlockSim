@@ -49,6 +49,10 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("Main Edit Mode with Frame")
 class MainEditModeTest : AbstractFrameTestBase() {
+	// Nullable properties to handle JUnit lifecycle:
+	// - JUnit calls tearDown() even when tests are skipped via Assumptions.assumeFalse()
+	// - If setUp() is skipped (headless environment), these remain null
+	// - tearDown() must handle null case gracefully
 	private var systemErr: PrintStream? = null
 	private var capturedErr: ByteArrayOutputStream? = null
 
@@ -58,8 +62,9 @@ class MainEditModeTest : AbstractFrameTestBase() {
 
 		// Capture System.err to verify error messages
 		systemErr = System.err
-		capturedErr = ByteArrayOutputStream()
-		System.setErr(PrintStream(capturedErr!!))
+		val errStream = ByteArrayOutputStream()
+		capturedErr = errStream
+		System.setErr(PrintStream(errStream))
 	}
 
 	@AfterEach
