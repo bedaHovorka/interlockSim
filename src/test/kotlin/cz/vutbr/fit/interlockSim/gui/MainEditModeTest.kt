@@ -115,6 +115,19 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		return capturedErr?.toString() ?: ""
 	}
 
+	/**
+	 * Checks if an exception is GUI-related (Frame, AWT, X11, display, headless).
+	 * Used to verify that exceptions are due to GUI initialization failures, not mode selection errors.
+	 */
+	private fun isGuiRelatedException(e: Exception): Boolean {
+		val message = e.message ?: e.javaClass.name
+		return message.lowercase().contains("frame") ||
+			message.lowercase().contains("awt") ||
+			message.lowercase().contains("x11") ||
+			message.lowercase().contains("display") ||
+			message.lowercase().contains("headless")
+	}
+
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("edit mode selected with edit argument")
@@ -143,13 +156,7 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			assertThat(usageNotPrinted).isTrue()
 		} catch (e: Exception) {
 			// Check if it's a GUI-related exception (mode was recognized)
-			val message = e.message ?: e.javaClass.name
-			val isGuiRelated = message.lowercase().contains("frame") ||
-				message.lowercase().contains("awt") ||
-				message.lowercase().contains("x11") ||
-				message.lowercase().contains("display") ||
-				message.lowercase().contains("headless")
-			assertThat(isGuiRelated).isTrue()
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
 	}
 
@@ -175,13 +182,7 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			// Expected in headless environment - mode was recognized but GUI creation failed
 		} catch (e: Exception) {
 			// Check if it's a GUI-related exception (mode was recognized)
-			val message = e.message ?: e.javaClass.name
-			val isGuiRelated = message.lowercase().contains("frame") ||
-				message.lowercase().contains("awt") ||
-				message.lowercase().contains("x11") ||
-				message.lowercase().contains("display") ||
-				message.lowercase().contains("headless")
-			assertThat(isGuiRelated).isTrue()
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
 	}
 
@@ -206,14 +207,7 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			// Test passes - exception is GUI-related as expected
 		} catch (e: Exception) {
 			// Verify that exception is GUI-related (mode was recognized), not mode-selection-related
-			val message = e.message ?: e.javaClass.name
-			val isGuiRelated =
-				message.lowercase().contains("frame") ||
-					message.lowercase().contains("awt") ||
-					message.lowercase().contains("x11") ||
-					message.lowercase().contains("display") ||
-					message.lowercase().contains("headless")
-			assertThat(isGuiRelated).isTrue()
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
 	}
 }
