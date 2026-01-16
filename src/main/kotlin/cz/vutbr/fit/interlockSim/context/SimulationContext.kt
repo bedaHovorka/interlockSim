@@ -216,10 +216,10 @@ interface SimulationContext : Context {
 	fun toDynamic(separator: PathSeparator): PathSeparator
 
 	/**
-	 * Convert a static TrackFacility to its Dynamic wrapper if available.
-	 * Used by simulation components to ensure consistent use of Dynamic wrappers.
-	 * @param track The track to convert (static TrackFacility)
-	 * @return The Dynamic wrapper if found, otherwise the input track unchanged
+	 * Convert a TrackFacility to its DynamicTrack wrapper.
+	 * Used by Train to manage track state (enter/leave) via DynamicTrack wrappers.
+	 * @param track The track facility to wrap
+	 * @return The DynamicTrack wrapper for state operations
 	 */
-	fun toDynamic(track: TrackFacility): DynamicTrack?
+	fun toDynamic(track: TrackFacility): DynamicTrack
 }
