@@ -27,6 +27,7 @@ import org.koin.java.KoinJavaComponent.get
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
+import java.util.concurrent.TimeUnit
 
 /**
  * Unit tests for {@link Main} class CLI argument parsing and mode selection.
@@ -68,6 +69,7 @@ import java.io.PrintStream
  *
  * GitHub Issue: #56 (fixed)
  */
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class MainArgumentParsingTest {
 	private lateinit var systemErr: PrintStream
 	private lateinit var capturedErr: ByteArrayOutputStream

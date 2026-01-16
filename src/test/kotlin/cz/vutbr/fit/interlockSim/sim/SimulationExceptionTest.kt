@@ -29,7 +29,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.mockito.Mockito.mock
+import java.util.concurrent.TimeUnit
 
 /**
  * Unit tests for SimulationException, TrackOperationException, and PathSeparatorChangeException.
@@ -45,6 +47,7 @@ import org.mockito.Mockito.mock
  *
  * Coverage target: ~150 instructions (Phase 6.1)
  */
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class SimulationExceptionTest : KoinTestBase() {
 	private lateinit var mockContext: MockSimulationContext
 	private lateinit var mockTrack: SimpleTrack

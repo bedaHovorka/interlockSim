@@ -36,10 +36,12 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
@@ -61,6 +63,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - empty-grid.xml - Grid with minimal elements (2 InOut nodes, no tracks)
  * - invalid-*.xml - Various malformed/invalid XML files
  */
+@Timeout(value = 10, unit = TimeUnit.SECONDS)
 class XMLContextFactoryTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
