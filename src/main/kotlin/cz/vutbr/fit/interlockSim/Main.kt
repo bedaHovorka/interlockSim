@@ -133,12 +133,10 @@ fun main(args: Array<String>) {
 		modules(interlockSimModule)
 	}
 
-	// Load GUI module only when needed (edit mode or no args)
-	// This prevents Frame initialization overhead in sim/example modes
-	val needsGui = args.isEmpty() || (args.isNotEmpty() && args[0] == "edit")
-	if (needsGui) {
-		getKoin().loadModules(listOf(guiModule))
-	}
+	// Load GUI module (includes Main coordinator and Frame)
+	// Note: Main is always needed for all modes (sim/edit/example)
+	// Frame is only created lazily when actually needed (edit mode)
+	getKoin().loadModules(listOf(guiModule))
 
 	// Add shutdown hook to clean up Koin when JVM exits
 	Runtime.getRuntime().addShutdownHook(
