@@ -104,11 +104,17 @@ abstract class AbstractPath protected constructor(
 	 * Converts a Track to DynamicTrack wrapper for state operations.
 	 * Helper method to reduce code duplication in path operations.
 	 *
+	 * **Precondition:** track must be a TrackFacility (all tracks in paths are TrackFacility instances)
+	 *
 	 * @param track The track to wrap (must be TrackFacility)
 	 * @return DynamicTrack wrapper for state operations
+	 * @throws ClassCastException if track is not a TrackFacility
 	 */
 	private fun toDynamicTrack(track: Track): DynamicTrack {
-		return context.toDynamic(track as TrackFacility)
+		require(track is TrackFacility) {
+			"Track in path must be a TrackFacility, got: ${track::class.simpleName}"
+		}
+		return context.toDynamic(track)
 	}
 
 	override fun isFreeFrom(sep: PathSeparator): Boolean =
@@ -141,11 +147,13 @@ abstract class AbstractPath protected constructor(
 	 * This replaces the legacy Java 6 reflection-based approach with idiomatic Kotlin lambdas.
 	 * Operations are performed via DynamicTrack wrappers to ensure proper state management.
 	 *
+	 * The conversion to DynamicTrack is handled internally by the calling methods
+	 * (isFreeFrom, setUpPath, etc.) which use the toDynamicTrack() helper.
+	 *
 	 * @param sep The path separator to start iteration from
 	 * @param operationName Name of the operation for logging and separator setting
 	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful.
-	 *                       The lambda receives a Track (which must be a TrackFacility) and should use
-	 *                       toDynamicTrack() helper to convert it to DynamicTrack before calling operations.
+	 *                       The lambda receives a Track parameter (guaranteed to be a TrackFacility).
 	 * @return true if all operations succeeded, false otherwise
 	 */
 	@Throws(TrackOperationException::class)
