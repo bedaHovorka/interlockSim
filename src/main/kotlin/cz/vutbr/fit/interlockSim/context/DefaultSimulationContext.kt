@@ -17,8 +17,10 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
@@ -113,6 +115,12 @@ open class DefaultSimulationContext(
 	 * Maps InOut, RailSemaphore, RailSwitch to their Dynamic counterparts
 	 */
 	private val staticToDynamicMap: MutableMap<PathSeparator, DynamicPathSeparator> = IdentityHashMap()
+
+	/**
+	 * Mapping from static TrackFacility to Dynamic wrapper (for simulation context)
+	 * Maps TrackBlock to DynamicTrack wrappers for state management
+	 */
+	private val staticTrackToDynamicMap: MutableMap<TrackFacility, DynamicTrack> = IdentityHashMap()
 
 	/**
 	 * Main simulation process
@@ -354,6 +362,29 @@ open class DefaultSimulationContext(
 			}
 		}
 		logger.debug { "Initialized $mappedCount dynamic wrappers (total in map: ${staticToDynamicMap.size})" }
+
+		// Now iterate through all edges (TrackBlocks) in the graph and create DynamicTrack wrappers
+		var trackMappedCount = 0
+		val graph = getGraph()
+		for (trackBlock in graph.values()) {
+			// TrackBlock extends TrackFacility, so we can safely cast
+			val trackFacility = trackBlock as TrackFacility
+			
+			// Skip if already mapped
+			if (staticTrackToDynamicMap.containsKey(trackFacility)) {
+				logger.trace { "Skipping TrackBlock ${trackFacility.hashCode()} - already mapped" }
+				continue
+			}
+
+			// Create DynamicTrack wrapper for each TrackBlock
+			val dynamicTrack = DynamicTrack(trackFacility)
+			staticTrackToDynamicMap[trackFacility] = dynamicTrack
+			trackMappedCount++
+			logger.trace { "Mapped TrackBlock ${trackFacility.hashCode()} to dynamic wrapper" }
+		}
+		logger.debug {
+			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"
+		}
 	}
 
 	/**
@@ -399,6 +430,15 @@ open class DefaultSimulationContext(
 		} else {
 			staticToDynamicMap[separator] ?: separator  // Convert or fallback to static
 		}
+	}
+
+	/**
+	 * Convert a static TrackFacility to its Dynamic wrapper.
+	 * Returns the Dynamic wrapper if found, otherwise returns null.
+	 * This is used by simulation components to access dynamic track state.
+	 */
+	override fun toDynamic(track: TrackFacility): DynamicTrack? {
+		return staticTrackToDynamicMap[track]
 	}
 
 	@Throws(EmptyContextException::class, SimulationException::class)

@@ -17,8 +17,10 @@ import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import java.util.EnumSet
@@ -212,4 +214,12 @@ interface SimulationContext : Context {
 	 * @return The Dynamic wrapper if found, otherwise the input separator unchanged
 	 */
 	fun toDynamic(separator: PathSeparator): PathSeparator
+
+	/**
+	 * Convert a static TrackFacility to its Dynamic wrapper if available.
+	 * Used by simulation components to ensure consistent use of Dynamic wrappers.
+	 * @param track The track to convert (static TrackFacility)
+	 * @return The Dynamic wrapper if found, otherwise the input track unchanged
+	 */
+	fun toDynamic(track: TrackFacility): DynamicTrack?
 }

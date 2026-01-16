@@ -20,9 +20,11 @@ import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.core.module.Module
 import org.koin.test.get
 
 /**
@@ -36,6 +38,7 @@ import org.koin.test.get
  */
 @DisplayName("Example Loading Tests")
 class ExampleLoadingTest : KoinTestBase() {
+	override fun getTestModule(): Module = testModuleFull
 	@Nested
 	@DisplayName("Example Registry")
 	inner class ExampleRegistryTests {
