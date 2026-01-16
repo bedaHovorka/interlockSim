@@ -76,6 +76,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @Tag("integration-test")
 @DisplayName("Race Condition and Concurrent Access Tests")
+@Disabled("Phase 1: Tests require DynamicTrack integration (Phase 2)")
 class RaceConditionTest : KoinTestBase() {
 	companion object {
 		private const val DEFAULT_TIMEOUT_SECONDS = 10

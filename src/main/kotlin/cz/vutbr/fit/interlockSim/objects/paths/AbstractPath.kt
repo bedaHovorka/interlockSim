@@ -22,8 +22,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -164,7 +165,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is SimpleTrack) nextTrack.getState() else "unknown"}"
+								"state=${if (nextTrack is TrackFacility) nextTrack.getState() else "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -298,6 +299,36 @@ abstract class AbstractPath protected constructor(
 	 * @return context getter
 	 */
 	fun getContext(): SimulationContext = context
+
+	// Dynamic behavior methods for Path (aggregate operations)
+	// These are not typically called on Path directly, but required by interface
+	
+	override fun getState(): TrackFacility.State {
+		// Path doesn't have its own state - it's an aggregate
+		// Return FREE as default (paths are not facilities themselves)
+		return TrackFacility.State.FREE
+	}
+
+	override fun enter(occupant: TrackOccupant) {
+		throw UnsupportedOperationException(
+			"Enter operation not supported on Path aggregate. " +
+			"Call enter() on individual TrackSection elements."
+		)
+	}
+
+	override fun leave(occupant: TrackOccupant) {
+		throw UnsupportedOperationException(
+			"Leave operation not supported on Path aggregate. " +
+			"Call leave() on individual TrackSection elements."
+		)
+	}
+
+	override fun getTrackOccupant(): TrackOccupant {
+		throw UnsupportedOperationException(
+			"getTrackOccupant not supported on Path aggregate. " +
+			"Query individual TrackSection elements."
+		)
+	}
 
 	override fun reversePath(): Path {
 		val arrayPath = ArrayPath(getContext())
