@@ -102,25 +102,25 @@ abstract class AbstractPath protected constructor(
 
 	override fun isFreeFrom(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_FREE_FROM) { track, separator ->
-			track.isFreeFrom(separator)
+			context.toDynamic(track as TrackFacility).isFreeFrom(separator)
 		}
 
 	override fun isSetUpPath(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
-			track.isSetUpPath(separator)
+			context.toDynamic(track as TrackFacility).isSetUpPath(separator)
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
 		logger.debug { "Setting up path from separator: $sep" }
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
-			track.setUpPath(separator)
+			context.toDynamic(track as TrackFacility).setUpPath(separator)
 			true
 		}
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
 		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
-			track.cancelPathSetup(separator)
+			context.toDynamic(track as TrackFacility).cancelPathSetup(separator)
 			true
 		}
 	}
