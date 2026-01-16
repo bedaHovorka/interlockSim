@@ -11,17 +11,19 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
-import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -39,9 +41,12 @@ abstract class AbstractPath protected constructor(
 	private val context: SimulationContext
 ) : AbstractTrack(),
 	Path {
-
 	override fun getLastPathSemaphore(): RailSemaphore {
 		val last = getLast()
+		// Handle Dynamic wrappers
+		if (last is DynamicRailSemaphore) return last.static
+		if (last is DynamicInOut) return last.static.getOutSemaphore()
+		// Fallback for static types (shouldn't happen in simulation context)
 		if (last is RailSemaphore) return last
 		return Util.assertInstanceOf(InOut::class.java, last).getOutSemaphore()
 	}
@@ -49,7 +54,7 @@ abstract class AbstractPath protected constructor(
 	override fun maxSpeed(sep: PathSeparator?): Double {
 		var prevSep = sep
 		// Track prevTrack = null;
-		var min = sep!!.allowedSpeed()
+		var min = (sep as DynamicPathSeparator).allowedSpeed()
 
 		val it = getIterator(sep!!)
 		while (it.hasNext()) {
@@ -190,8 +195,10 @@ abstract class AbstractPath protected constructor(
 		previous: Track?,
 		next: Track
 	): Boolean {
-		val from = context.getSegment(separator, previous, next)
-		val to = context.getSegment(separator, next, previous)
+		val dynamicSeparator = separator as? DynamicPathSeparator
+			?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
+		val from = context.getSegment(dynamicSeparator, previous, next)
+		val to = context.getSegment(dynamicSeparator, next, previous)
 		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
 
 		// NOTE: from and to CAN be null - this is intentional and matches Java behavior
@@ -201,23 +208,23 @@ abstract class AbstractPath protected constructor(
 		if (methodName == IS_SET_UP_PATH) {
 			// Java: return separator.getFollowingSegment(from) == to;
 			// NOTE: getFollowingSegment accepts nullable Segment, so no null check needed
-			return separator.getFollowingSegment(from) === to
+			return dynamicSeparator.getFollowingSegment(from) === to
 		} else if (methodName == CANCEL_PATH_SETUP) {
 			// Java: separator.cancelPathSetup(from, to);
-			separator.cancelPathSetup(from, to)
+			dynamicSeparator.cancelPathSetup(from, to)
 		} else if (methodName == SET_UP_PATH) {
 			// Java: if (!(separator instanceof RailSemaphore)) separator.setUpPath(from, to, ...);
 			// CRITICAL FIX: Java has NO null check here!
 			// setUpPath is called via reflection on Track objects (see pathIterating method)
 			// The segments may be null in certain network configurations
 			// Passing nulls to setUpPath is INTENTIONAL - it's up to the implementation to handle
-			if (separator !is RailSemaphore) {
+			if (separator !is DynamicRailSemaphore) {
 				logger.debug {
-					"SET_UP_PATH: setUpPath(from=$from, to=$to, speed=${separator.allowedSpeed()}) on $separator"
+					"SET_UP_PATH: setUpPath(from=$from, to=$to, speed=${dynamicSeparator.allowedSpeed()}) on $separator"
 				}
-				separator.setUpPath(from, to, separator.allowedSpeed())
+				dynamicSeparator.setUpPath(from, to, dynamicSeparator.allowedSpeed())
 			}
-			val following = separator.getFollowingSegment(from)
+			val following = dynamicSeparator.getFollowingSegment(from)
 			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
 			requireSimulation(following === to) {
 				"Separator $separator: getFollowingSegment($from) returned $following but expected $to"
@@ -234,21 +241,21 @@ abstract class AbstractPath protected constructor(
 	@Throws(PathSeparatorChangeException::class)
 	private fun setUpSemaphores(sep: PathSeparator) {
 		// ukolem je natavit zpetnym pruchodem rychlosti semaforu podle vyhybek
-		var previousSwitch: RailSwitch? = null
+		var previousSwitch: DynamicPathSeparator? = null
 		var previousTrack: Track? = null
 		val iterator = getIterator(getSecondEnd(sep))
 		while (iterator.hasNext()) {
 			val element = iterator.next()
-			if (element is RailSwitch) {
+			if (element is DynamicRailSwitch) {
 				previousSwitch = element
-			} else if (element is OrientedPathSeparator) {
+			} else if (element is OrientedPathSeparator && element is DynamicPathSeparator) {
 				if (previousTrack == null) continue
 				val semaphore = element
 				if (context.isSeparatorInDirection(semaphore, previousTrack, null)) {
 					val speed = previousSwitch?.allowedSpeed() ?: PathElement.ABSOLUTE_MAX_SPEED
 					val segment = context.getSegment(semaphore, null, previousTrack)
 					val segment2 = context.getSegment(semaphore, previousTrack, null)
-					semaphore.setUpPath(segment, segment2, speed)
+					element.setUpPath(segment, segment2, speed)
 					previousSwitch = null
 				}
 			} else {

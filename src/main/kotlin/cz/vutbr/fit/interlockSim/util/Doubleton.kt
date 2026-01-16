@@ -49,12 +49,10 @@ class Doubleton<T, V> : AbstractSet<T> {
 	private inner class DoubletonIterator : MutableIterator<T> {
 		private var state = IteratorState.INIT
 
-		override fun hasNext(): Boolean {
-			return state != IteratorState.SECOND
-		}
+		override fun hasNext(): Boolean = state != IteratorState.SECOND
 
-		override fun next(): T {
-			return when (state) {
+		override fun next(): T =
+			when (state) {
 				IteratorState.INIT -> {
 					state = IteratorState.FIRST
 					first
@@ -65,7 +63,6 @@ class Doubleton<T, V> : AbstractSet<T> {
 				}
 				IteratorState.SECOND -> throw NoSuchElementException()
 			}
-		}
 
 		override fun remove(): Unit = throw UnsupportedOperationException()
 	}

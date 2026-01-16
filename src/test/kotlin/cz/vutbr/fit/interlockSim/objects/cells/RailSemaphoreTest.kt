@@ -14,20 +14,20 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import org.koin.test.get
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.concurrent.atomic.AtomicInteger
-import org.koin.test.get
 
 /**
- * Unit tests for {@link RailSemaphore}.
+ * Unit tests for {@link DynamicRailSemaphore}.
  *
  * Tests railway signal behavior including:
  * - Signal aspect transitions (STOP, PROCEED, CAUTION)
@@ -43,16 +43,17 @@ import org.koin.test.get
  */
 @DisplayName("RailSemaphore")
 class RailSemaphoreTest : KoinTestBase() {
-	private lateinit var semaphore: RailSemaphore
+	private lateinit var semaphore: DynamicRailSemaphore
 
 	@BeforeEach
 	fun setUp() {
 		// Create a basic horizontal semaphore with STOP aspect
-		semaphore =
+		val staticSemaphore =
 			RailSemaphore(
 				orientation = false,
 				spatialType = Cell.SpatialType.HORIZONTAL
 			)
+		semaphore = createDynamicInstance(staticSemaphore)
 	}
 
 	@Nested
@@ -64,57 +65,57 @@ class RailSemaphoreTest : KoinTestBase() {
 			// Semaphore created in setUp()
 
 			// Assert
-			assertThat(semaphore.getSignal())
+			assertThat(semaphore.signal)
 				.withMessage("initial signal should be STOP")
-				.isEqualTo(RailSemaphore.Signal.STOP)
+				.isEqualTo(Signal.STOP)
 		}
 
 		@Test
 		fun `semaphore changes to PROCEED aspect`() {
 			// Arrange
-			val initialSignal = semaphore.getSignal()
+			val initialSignal = semaphore.signal
 			assertThat(initialSignal)
 				.withMessage("initial signal must be STOP")
-				.isEqualTo(RailSemaphore.Signal.STOP)
+				.isEqualTo(Signal.STOP)
 
 			// Act
-			semaphore.setSignal(RailSemaphore.Signal.FREE)
+			semaphore.signal = Signal.FREE
 
 			// Assert
-			assertThat(semaphore.getSignal())
+			assertThat(semaphore.signal)
 				.withMessage("signal should change to FREE after setSignal")
-				.isEqualTo(RailSemaphore.Signal.FREE)
+				.isEqualTo(Signal.FREE)
 		}
 
 		@Test
 		fun `semaphore changes to CAUTION aspect`() {
 			// Arrange
-			semaphore.setSignal(RailSemaphore.Signal.STOP)
+			semaphore.signal = Signal.STOP
 
 			// Act
-			semaphore.setSignal(RailSemaphore.Signal.S30)
+			semaphore.signal = Signal.S30
 
 			// Assert
-			assertThat(semaphore.getSignal())
+			assertThat(semaphore.signal)
 				.withMessage("signal should change to S30 (caution speed)")
-				.isEqualTo(RailSemaphore.Signal.S30)
+				.isEqualTo(Signal.S30)
 		}
 
 		@Test
 		fun `semaphore returns to STOP aspect`() {
 			// Arrange
-			semaphore.setSignal(RailSemaphore.Signal.FREE)
-			assertThat(semaphore.getSignal())
+			semaphore.signal = Signal.FREE
+			assertThat(semaphore.signal)
 				.withMessage("setup: signal must be FREE")
-				.isEqualTo(RailSemaphore.Signal.FREE)
+				.isEqualTo(Signal.FREE)
 
 			// Act
-			semaphore.setSignal(RailSemaphore.Signal.STOP)
+			semaphore.signal = Signal.STOP
 
 			// Assert
-			assertThat(semaphore.getSignal())
+			assertThat(semaphore.signal)
 				.withMessage("signal should return to STOP")
-				.isEqualTo(RailSemaphore.Signal.STOP)
+				.isEqualTo(Signal.STOP)
 		}
 	}
 
@@ -150,30 +151,33 @@ class RailSemaphoreTest : KoinTestBase() {
 
 			context.addPropertyChangeListener(listener)
 
-			// Act
-			semaphoreFromContext.setSignal(RailSemaphore.Signal.FREE)
+			// Create dynamic instance
+			val dynSemaphore = createDynamicInstance(semaphoreFromContext)
 
-			// Assert - Note: Direct setSignal() calls don't fire context events
+			// Act
+			dynSemaphore.signal = Signal.FREE
+
+			// Assert - Note: Direct signal assignment doesn't fire context events
 			// This test documents the current behavior where PropertyChangeListener
 			// would fire if called through context API rather than directly on semaphore
 			// For now we verify that signal changed
-			assertThat(semaphoreFromContext.getSignal())
+			assertThat(dynSemaphore.signal)
 				.withMessage("signal should have changed to FREE")
-				.isEqualTo(RailSemaphore.Signal.FREE)
+				.isEqualTo(Signal.FREE)
 		}
 
 		@Test
 		fun `same aspect transition is no-op`() {
 			// Arrange
-			val initialSignal = RailSemaphore.Signal.STOP
-			semaphore.setSignal(initialSignal)
+			val initialSignal = Signal.STOP
+			semaphore.signal = initialSignal
 
 			// Act - set to same signal multiple times
-			semaphore.setSignal(initialSignal)
-			semaphore.setSignal(initialSignal)
+			semaphore.signal = initialSignal
+			semaphore.signal = initialSignal
 
 			// Assert - signal remains unchanged
-			assertThat(semaphore.getSignal())
+			assertThat(semaphore.signal)
 				.withMessage("signal should remain STOP after no-op transitions")
 				.isEqualTo(initialSignal)
 		}
@@ -195,19 +199,20 @@ class RailSemaphoreTest : KoinTestBase() {
 					.build()
 
 			// Act
-			val semaphoreFromContext =
+			val staticSemaphore =
 				context
 					.getRailWayNetGrid()
 					.getCellAt(1, 0) as? RailSemaphore
 
 			// Assert - semaphore should exist at the specified location
-			assertThat(semaphoreFromContext != null)
+			assertThat(staticSemaphore != null)
 				.withMessage("semaphore should be associated with track position (1,0)")
 				.isTrue()
 
-			assertThat(semaphoreFromContext?.getSignal())
+			val dynSemaphore = createDynamicInstance(staticSemaphore!!)
+			assertThat(dynSemaphore.signal)
 				.withMessage("semaphore should have initial STOP signal")
-				.isEqualTo(RailSemaphore.Signal.STOP)
+				.isEqualTo(Signal.STOP)
 		}
 
 		@Test
@@ -222,28 +227,30 @@ class RailSemaphoreTest : KoinTestBase() {
 					.withConnection(1, 0, 2, 0, 100.0, 20.0)
 					.build()
 
-			val semaphoreFromContext =
+			val staticSemaphore =
 				context
 					.getRailWayNetGrid()
 					.getCellAt(1, 0) as RailSemaphore
 
+			val dynSemaphore = createDynamicInstance(staticSemaphore)
+
 			// Arrange - set semaphore to STOP (red light)
-			semaphoreFromContext.setSignal(RailSemaphore.Signal.STOP)
+			dynSemaphore.signal = Signal.STOP
 
 			// Assert - signal at STOP means train should not proceed
-			assertThat(semaphoreFromContext.getSignal().isAllowing())
+			assertThat(dynSemaphore.signal.isAllowing())
 				.withMessage("STOP signal should not allow trains to proceed")
 				.isFalse()
 
 			// Act - change to permissive signal
-			semaphoreFromContext.setSignal(RailSemaphore.Signal.FREE)
+			dynSemaphore.signal = Signal.FREE
 
 			// Assert - FREE signal allows maximum speed
-			assertThat(semaphoreFromContext.getSignal().isAllowing())
+			assertThat(dynSemaphore.signal.isAllowing())
 				.withMessage("FREE signal should allow trains to proceed")
 				.isTrue()
 
-			assertThat(semaphoreFromContext.allowedSpeed() > 0)
+			assertThat(dynSemaphore.allowedSpeed() > 0)
 				.withMessage("allowed speed for FREE signal should be positive")
 				.isTrue()
 		}

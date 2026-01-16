@@ -17,6 +17,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
@@ -24,8 +26,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import java.io.File
 
 /**
@@ -77,8 +77,8 @@ class ContextInitializationTest : KoinTestBase() {
 				.withMessage("Should be EditingContext instance")
 				.isInstanceOf(EditingContext::class)
 			assertThat(context)
-				.withMessage("Should also be DefaultContext for grid access")
-				.isInstanceOf(DefaultContext::class)
+				.withMessage("Should also be DefaultSimulationContext for grid access")
+				.isInstanceOf(DefaultSimulationContext::class)
 		}
 
 		/**
@@ -212,9 +212,10 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("nonexistent/path/does-not-exist.xml")
 
 			// Act & Assert
-			assertk.assertFailure {
-				this@ContextInitializationTest.factory.createContext(xmlFile)
-			}.isInstanceOf(Exception::class)
+			assertk
+				.assertFailure {
+					this@ContextInitializationTest.factory.createContext(xmlFile)
+				}.isInstanceOf(Exception::class)
 		}
 
 		/**
@@ -230,22 +231,23 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/invalid-malformed-xml.xml")
 
 			// Act & Assert
-			assertk.assertFailure {
-				this@ContextInitializationTest.factory.createContext(xmlFile)
-			}.isInstanceOf(Exception::class)
+			assertk
+				.assertFailure {
+					this@ContextInitializationTest.factory.createContext(xmlFile)
+				}.isInstanceOf(Exception::class)
 		}
 	}
 
 	@Nested
 	@DisplayName("Context State Validation")
 	inner class ContextStateTests {
-		private lateinit var linearTrackContext: DefaultContext
+		private lateinit var linearTrackContext: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile)
+			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile) as DefaultSimulationContext
 		}
 
 		/**

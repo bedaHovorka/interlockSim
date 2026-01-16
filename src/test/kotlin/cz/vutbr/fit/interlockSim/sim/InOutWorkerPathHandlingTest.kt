@@ -14,8 +14,10 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
@@ -44,14 +46,14 @@ import org.junit.jupiter.api.Test
  */
 class InOutWorkerPathHandlingTest : KoinTestBase() {
 	private lateinit var context: MockSimulationContext
-	private lateinit var entryInOut: InOut
+	private lateinit var entryInOut: DynamicInOut
 	private lateinit var worker: InOutWorker
 	private lateinit var queue: Head
 
 	@BeforeEach
 	fun setUp() {
 		context = createMockSimulationContext()
-		entryInOut = InOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
+		entryInOut = createTestDynamicInOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()
 
@@ -80,7 +82,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 			// pathFree condition checks if path exists and is free from inOut
 			// If no next track section, path is null and worker handles gracefully
 
-			val orphanInOut = InOut("ORPHAN", false, SpatialType.VERTICAL)
+			val orphanInOut = createTestDynamicInOut("ORPHAN", false, SpatialType.VERTICAL)
 			val orphanWorker = InOutWorker(context, orphanInOut)
 
 			assertThat(orphanWorker)
@@ -93,7 +95,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 			// If path.setUpPath() throws exception (e.g., TrackOperationException),
 			// worker catches it, logs APPROVAL_DENIED, calls context.errorStop()
 
-			val failureInOut = InOut("FAILURE_TEST", false, SpatialType.HORIZONTAL)
+			val failureInOut = createTestDynamicInOut("FAILURE_TEST", false, SpatialType.HORIZONTAL)
 			val failureWorker = InOutWorker(context, failureInOut)
 
 			assertThat(failureWorker)
@@ -137,7 +139,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 			// Previous path's semaphore resets when path.cancelPathSetup() called
 			// (or implicitly when not holding reference anymore)
 
-			val entryPoint = InOut("ENTRY", false, SpatialType.HORIZONTAL)
+			val entryPoint = createTestDynamicInOut("ENTRY", false, SpatialType.HORIZONTAL)
 			val entryWorker = InOutWorker(context, entryPoint)
 
 			assertThat(entryWorker.getQueqe())
@@ -151,7 +153,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 			// setUpSemaphores() backtracks and configures each semaphore for route
 			// Worker manages this via path operations
 
-			val complexEntry = InOut("COMPLEX_ENTRY", false, SpatialType.HORIZONTAL)
+			val complexEntry = createTestDynamicInOut("COMPLEX_ENTRY", false, SpatialType.HORIZONTAL)
 			val complexWorker = InOutWorker(context, complexEntry)
 
 			assertThat(complexWorker.getQueqe())
@@ -222,8 +224,8 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 			// Each worker processes independently
 			// Trains entering via enterTrain() are serialized per worker
 
-			val entry1 = InOut("ENTRY_1", false, SpatialType.HORIZONTAL)
-			val entry2 = InOut("ENTRY_2", false, SpatialType.VERTICAL)
+			val entry1 = createTestDynamicInOut("ENTRY_1", false, SpatialType.HORIZONTAL)
+			val entry2 = createTestDynamicInOut("ENTRY_2", false, SpatialType.VERTICAL)
 
 			val worker1 = InOutWorker(context, entry1)
 			val worker2 = InOutWorker(context, entry2)
@@ -258,5 +260,19 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 				.withMessage("Loop should not execute while queue is empty")
 				.isFalse()
 		}
+	}
+
+	/**
+	 * Helper function to create a DynamicInOut for testing.
+	 */
+	private fun createTestDynamicInOut(
+		name: String,
+		orientation: Boolean,
+		spatialType: SpatialType
+	): DynamicInOut {
+		val staticInOut = InOut(name, orientation, spatialType)
+		val inSemaphore = createDynamicInstance(RailSemaphore(true, spatialType))
+		val outSemaphore = createDynamicInstance(RailSemaphore(false, spatialType))
+		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
 	}
 }

@@ -12,13 +12,16 @@ package cz.vutbr.fit.interlockSim.xml
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -28,7 +31,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -62,15 +64,15 @@ import kotlin.getValue
 class XMLContextFactory :
 	EditingContextFactory,
 	SimulationContextFactory {
-
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
+	private val processFactory: SimulationProcessFactory by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
 	private inner class XMLContext(
 		cols: Int,
 		rows: Int
-	) : DefaultContext(cols, rows) {
+	) : DefaultSimulationContext(cols, rows, processFactory) {
 		// No additional implementation needed
 	}
 
@@ -267,7 +269,7 @@ class XMLContextFactory :
 			ended = true
 		}
 
-		fun getContext(): DefaultContext? = if (ended) context else null
+		fun getContext(): DefaultSimulationContext? = if (ended) context else null
 	}
 
 	private var validator: Validator? = null
@@ -303,10 +305,10 @@ class XMLContextFactory :
 		private const val DEFAULT_GRID_SIZE = 100
 	}
 
-	override fun createEmptyContext(): DefaultContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
+	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): DefaultContext =
+	override fun createContext(file: File): Context =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -314,7 +316,7 @@ class XMLContextFactory :
 		}
 
 	@Throws(ContextCreationException::class)
-	private fun createContext(reader: Reader): DefaultContext {
+	private fun createContext(reader: Reader): DefaultSimulationContext {
 		val validator = validator ?: throw ContextCreationException("Validator not initialized")
 		return try {
 			val inputSource = InputSource(reader)
@@ -328,7 +330,7 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): DefaultContext = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context = createContext(InputStreamReader(stream))
 
 	override fun saveContext(
 		context: Context,
@@ -397,7 +399,7 @@ class XMLContextFactory :
 		context: Context,
 		file: File
 	): Boolean {
-		val xmlContext = Util.assertInstanceOf(DefaultContext::class.java, context) // zatim
+		val xmlContext = Util.assertInstanceOf(DefaultSimulationContext::class.java, context) // zatim
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		return try {
 			val fileWriter = FileWriter(file)
@@ -517,8 +519,8 @@ class XMLContextFactory :
 		clazz: Class<*>
 	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
 
-	override fun createContext(editingContext: EditingContext): DefaultContext {
-		return Util.assertInstanceOf(DefaultContext::class.java, editingContext) // zatim
+	override fun createContext(editingContext: EditingContext): SimulationContext {
+		return Util.assertInstanceOf(DefaultSimulationContext::class.java, editingContext) // zatim
 	}
 
 	@Throws(Exception::class)

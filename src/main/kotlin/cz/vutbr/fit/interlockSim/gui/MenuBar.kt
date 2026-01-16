@@ -11,13 +11,13 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import org.koin.mp.KoinPlatform.getKoin
 import java.awt.event.ActionEvent
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
 import javax.swing.JOptionPane
-import org.koin.mp.KoinPlatform.getKoin
 
 /**
  * Application menu bar with File and Help menus

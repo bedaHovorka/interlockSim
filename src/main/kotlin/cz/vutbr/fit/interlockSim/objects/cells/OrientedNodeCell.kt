@@ -21,6 +21,12 @@ abstract class OrientedNodeCell protected constructor(
 	spatialType: Cell.SpatialType
 ) : NodeCell(spatialType),
 	OrientedPathSeparator {
+	/**
+	 * Get the following segment from a given segment (static configuration).
+	 * This is used by possibleFollowers and also needed by Dynamic wrappers.
+	 */
+	abstract fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
+
 	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> =
 		EnumSet.of(getFollowingSegment(from)) as Set<Cell.Segment>
 

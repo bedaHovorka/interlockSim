@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -36,9 +36,10 @@ class ExampleRegistry {
 	/**
 	 * Registry of available examples. Maps example name to factory function.
 	 */
-	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> = mapOf(
-		"shuntingLoop" to ::createShuntingLoopExample
-	)
+	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
+		mapOf(
+			"shuntingLoop" to ::createShuntingLoopExample
+		)
 
 	/**
 	 * Returns a sorted list of available example names.
@@ -69,8 +70,10 @@ class ExampleRegistry {
 
 		// Use .use {} to ensure stream is properly closed
 		return stream.use {
-			val context = Util.assertInstanceOf(DefaultContext::class.java, factory.createContext(it))
+			val context = Util.assertInstanceOf(DefaultSimulationContext::class.java, factory.createContext(it))
 			val time = args[2].toLong()
+			// Initialize dynamic wrapper map by calling getInOuts()
+			context.getInOuts()
 			context.setMainProcess(ShuntingLoop(context, time))
 			context
 		}

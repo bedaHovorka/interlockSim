@@ -9,12 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.di
 
+import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
-import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -35,9 +37,10 @@ import org.koin.dsl.module
  * - MyResourceBundle for resource loading
  * - ExampleRegistry for simulation examples
  */
-val utilModule: Module = module {
-	single<MyResourceBundle> { MyResourceBundle() }
-}
+val utilModule: Module =
+	module {
+		single<MyResourceBundle> { MyResourceBundle() }
+	}
 
 /**
  * Domain objects module
@@ -46,9 +49,10 @@ val utilModule: Module = module {
  * Candidates for DI:
  * - Factories for path/cell creation (if code-based creation is added)
  */
-val objectsModule: Module = module {
-	// Empty for now - if code-based path/cell creation is added, this is where factories go
-}
+val objectsModule: Module =
+	module {
+		// Empty for now - if code-based path/cell creation is added, this is where factories go
+	}
 
 /**
  * XML module
@@ -56,9 +60,10 @@ val objectsModule: Module = module {
  * Manages XML parsing and context factory singletons
  * Primary target for initial Koin migration implementation
  */
-val xmlModule: Module = module {
-	single<XMLContextFactory> { XMLContextFactory() }
-}
+val xmlModule: Module =
+	module {
+		single<XMLContextFactory> { XMLContextFactory() }
+	}
 
 /**
  * Editing module
@@ -67,36 +72,59 @@ val xmlModule: Module = module {
  * @see EditingContextFactory
  * @see XMLContextFactory
  */
-val editingModule: Module = module {
-	// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
-	// Bind factory interfaces to the singleton XMLContextFactory instance
-	single<EditingContextFactory> { get<XMLContextFactory>() }
-}
+val editingModule: Module =
+	module {
+		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
+		// Bind factory interfaces to the singleton XMLContextFactory instance
+		single<EditingContextFactory> { get<XMLContextFactory>() }
+	}
 
 /**
  * Simulation module
  *
+ * Provides simulation-related dependencies:
+ * - SimulationProcessFactory for creating simulation processes
+ * - SimulationContextFactory for creating simulation contexts
+ * - ExampleRegistry for managing simulation examples
  *
  * @see SimulationContextFactory
+ * @see SimulationProcessFactory
  * @see XMLContextFactory
  */
-val simulationModule: Module = module {
-	// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
-	// Bind factory interfaces to the singleton XMLContextFactory instance
-	single<SimulationContextFactory> { get<XMLContextFactory>() }
-	single<ExampleRegistry> { ExampleRegistry() }
-}
+val simulationModule: Module =
+	module {
+		// Factory for creating simulation processes (Generator, InOutWorker)
+		// Singleton as factory is stateless
+		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+
+		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
+		// Bind factory interfaces to the singleton XMLContextFactory instance
+		single<SimulationContextFactory> { get<XMLContextFactory>() }
+		single<ExampleRegistry> { ExampleRegistry() }
+	}
+
+/**
+ * Main module
+ *
+ * Manages Main application coordinator
+ * Always included to support CLI argument parsing
+ */
+val mainModule: Module =
+	module {
+		// Main application launcher as singleton
+		single<Main> { Main() }
+	}
 
 /**
  * GUI module
  *
  * Manages Swing components, editor, UI elements
+ * Load only when GUI (Frame) is needed
  */
-val guiModule: Module = module {
-	single<Frame> { Frame() }
-	// Main application launcher as singleton
-	single<Main> { Main() }
-}
+val guiModule: Module =
+	module {
+		single<Frame> { Frame() }
+	}
 
 /**
  * Main application module - combines all sub-modules
@@ -106,15 +134,17 @@ val guiModule: Module = module {
  * NOTE: guiModule is NOT included by default to prevent Frame initialization overhead.
  * Load guiModule explicitly when GUI is needed (see Main.kt for conditional loading).
  */
-val interlockSimModule: Module = module {
-	// Include all sub-modules
-	includes(
-		utilModule,
-		objectsModule,     // Domain objects (minimal - see design decision)
-		xmlModule,
-		editingModule,
-		simulationModule
-		// NOTE: guiModule is NOT included by default
-		// Load it explicitly when GUI is needed (edit mode)
-	)
-}
+val interlockSimModule: Module =
+	module {
+		// Include all sub-modules
+		includes(
+			utilModule,
+			objectsModule, // Domain objects (minimal - see design decision)
+			xmlModule,
+			editingModule,
+			simulationModule,
+			mainModule // Main coordinator (always included)
+			// NOTE: guiModule (Frame) is NOT included by default
+			// Load it explicitly when GUI is needed (edit mode)
+		)
+	}

@@ -14,12 +14,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -29,7 +30,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import java.io.File
 
 /**
@@ -55,8 +55,8 @@ import java.io.File
 class PathTrackIntegrationTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
-	private lateinit var linearContext: DefaultContext
-	private lateinit var switchContext: DefaultContext
+	private lateinit var linearContext: DefaultSimulationContext
+	private lateinit var switchContext: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
@@ -65,8 +65,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 		val switchFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
 
 		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
-		linearContext = factory.createContext(linearFile)
-		switchContext = factory.createContext(switchFile)
+		linearContext = factory.createContext(linearFile) as DefaultSimulationContext
+		switchContext = factory.createContext(switchFile) as DefaultSimulationContext
 	}
 
 	/**

@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
 import org.koin.test.inject
 import java.io.ByteArrayInputStream
+import java.util.concurrent.TimeUnit
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
@@ -45,6 +46,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @Tag("integration-test")
 @DisplayName("Invalid Network Configuration Tests")
+@Timeout(value = 15, unit = TimeUnit.SECONDS)
 class InvalidNetworkTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
