@@ -167,7 +167,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is TrackFacility) nextTrack.getState() else "unknown"}"
+								"state=${if (nextTrack is TrackFacility) context.toDynamic(nextTrack).state else "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -218,7 +218,7 @@ abstract class AbstractPath protected constructor(
 		} else if (methodName == SET_UP_PATH) {
 			// Java: if (!(separator instanceof RailSemaphore)) separator.setUpPath(from, to, ...);
 			// CRITICAL FIX: Java has NO null check here!
-			// setUpPath is called via reflection on Track objects (see pathIterating method)
+			// setUpPath is called via DynamicTrack wrappers on Track objects (see pathIterating method)
 			// The segments may be null in certain network configurations
 			// Passing nulls to setUpPath is INTENTIONAL - it's up to the implementation to handle
 			if (separator !is DynamicRailSemaphore) {
