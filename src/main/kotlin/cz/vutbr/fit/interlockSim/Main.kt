@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -130,6 +131,13 @@ fun main(args: Array<String>) {
 	// Initialize Koin dependency injection framework with interlockSim module
 	startKoin {
 		modules(interlockSimModule)
+	}
+
+	// Load GUI module only when needed (edit mode or no args)
+	// This prevents Frame initialization overhead in sim/example modes
+	val needsGui = args.isEmpty() || (args.isNotEmpty() && args[0] == "edit")
+	if (needsGui) {
+		getKoin().loadModules(listOf(guiModule))
 	}
 
 	// Add shutdown hook to clean up Koin when JVM exits
