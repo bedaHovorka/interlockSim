@@ -13,7 +13,8 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isNull
+import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -41,38 +42,29 @@ class TrackDynamicMappingTest : KoinTestBase() {
 	@DisplayName("Unit Tests - Track Mapping")
 	inner class TrackMappingUnitTests {
 		/**
-		 * Validates that empty context has no track mappings initialized
+		 * Validates that empty context has no tracks in graph
 		 */
 		@Test
-		@DisplayName("empty context has no track mappings")
-		fun emptyContext_hasNoTrackMappings() {
+		@DisplayName("empty context has no tracks in graph")
+		fun emptyContext_hasNoTracks() {
 			// Arrange
 			val context = factory.createEmptyContext() as DefaultSimulationContext
 
-			// Act - before run(), no mappings should exist
+			// Act - get the graph
 			val graph = context.getGraph()
-			var tracksChecked = 0
-			for (trackBlock in graph.values()) {
-				val trackFacility = trackBlock as TrackFacility
-				val dynamicTrack = context.toDynamic(trackFacility)
 
-				// Assert - should return null before run()
-				assertThat(dynamicTrack).isNull()
-				tracksChecked++
-			}
-
-			// Context should have some tracks (non-empty)
-			assertThat(tracksChecked)
+			// Assert - empty context should have no tracks
+			assertThat(graph.size())
 				.withMessage("Empty context should have no tracks in graph")
 				.isEqualTo(0)
 		}
 
 		/**
-		 * Validates that toDynamic() returns null for unmapped tracks
+		 * Validates that toDynamic() creates wrapper lazily for unmapped tracks
 		 */
 		@Test
-		@DisplayName("toDynamic returns null for unmapped track")
-		fun toDynamic_unmappedTrack_returnsNull() {
+		@DisplayName("toDynamic creates wrapper lazily for unmapped track")
+		fun toDynamic_unmappedTrack_createsLazily() {
 			// Arrange
 			val context = factory.createEmptyContext() as DefaultSimulationContext
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -82,11 +74,13 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			val graph = contextWithTracks.getGraph()
 			val trackFacility = graph.values().first() as TrackFacility
 
-			// Act - call toDynamic on different context (should return null)
-			val dynamicTrack = context.toDynamic(trackFacility)
+			// Act - call toDynamic on different context (should create wrapper lazily)
+			val dynamicTrack1 = context.toDynamic(trackFacility)
+			val dynamicTrack2 = context.toDynamic(trackFacility)
 
-			// Assert
-			assertThat(dynamicTrack).isNull()
+			// Assert - should create wrapper and return same instance on subsequent calls
+			assertThat(dynamicTrack1).isNotNull()
+			assertThat(dynamicTrack2).isSameInstanceAs(dynamicTrack1)
 		}
 	}
 
@@ -95,22 +89,20 @@ class TrackDynamicMappingTest : KoinTestBase() {
 	@Tag("integration-test")
 	inner class VyhybnaIntegrationTests {
 		/**
-		 * Integration test: Load vyhybna.xml and verify track mapping is initialized
+		 * Integration test: Load vyhybna.xml and verify track mapping works with lazy creation
 		 *
-		 * Note: We cannot fully run() the simulation in tests as it blocks indefinitely.
-		 * Instead, we verify that the mapping infrastructure is in place and would be
-		 * populated by run(). The actual population during run() is tested manually.
+		 * Validates that toDynamic creates wrappers lazily for all tracks in the network.
 		 *
 		 * Railway context: vyhybna.xml is a test network with switches and multiple track segments
 		 */
 		@Test
-		@DisplayName("vyhybna.xml - track mapping infrastructure is ready")
-		fun vyhybnaXml_trackMappingInfrastructure() {
+		@DisplayName("vyhybna.xml - track mapping with lazy creation")
+		fun vyhybnaXml_trackMappingLazyCreation() {
 			// Arrange - Load vyhybna.xml configuration
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			val context = factory.createContext(xmlFile) as DefaultSimulationContext
 
-			// Assert - Graph should have tracks (ready for mapping)
+			// Assert - Graph should have tracks and toDynamic creates wrappers lazily
 			val graph = context.getGraph()
 			var totalTracks = 0
 
@@ -118,11 +110,16 @@ class TrackDynamicMappingTest : KoinTestBase() {
 				totalTracks++
 				val trackFacility = trackBlock as TrackFacility
 
-				// Before run(), toDynamic should return null
-				val dynamicTrack = context.toDynamic(trackFacility)
-				assertThat(dynamicTrack)
-					.withMessage("toDynamic should return null before run()")
-					.isNull()
+				// toDynamic should create wrapper lazily
+				val dynamicTrack1 = context.toDynamic(trackFacility)
+				val dynamicTrack2 = context.toDynamic(trackFacility)
+
+				assertThat(dynamicTrack1)
+					.withMessage("toDynamic should create wrapper for track")
+					.isNotNull()
+				assertThat(dynamicTrack2)
+					.withMessage("toDynamic should return same wrapper instance")
+					.isSameInstanceAs(dynamicTrack1)
 			}
 
 			// Verify we have tracks
