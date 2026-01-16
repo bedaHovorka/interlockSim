@@ -247,7 +247,7 @@ class ShuntingLoop : Interlocking {
 				is RailSemaphore -> context.toDynamic(element)
 				is RailSwitch -> context.toDynamic(element)
 				is InOut -> context.toDynamic(element)  // Use toDynamic for consistency
-				is SimpleTrackBlock -> element  // Track blocks remain STATIC - they manage their own state
+				is SimpleTrackBlock -> element  // Track blocks remain static in path - wrapped on-demand by AbstractPath
 				else -> element
 			}
 			dynamicPath.addLast(dynamicElement)
@@ -317,11 +317,12 @@ class ShuntingLoop : Interlocking {
 		to: DynamicRailSemaphore
 	): Boolean {
 // 		 je v bloku vlak?
-		if (block.getState() == State.FREE) return false
-		if (block.getState() == State.OCCUPIED) {
+		val dynamicBlock = context.toDynamic(block)
+		if (dynamicBlock.state == TrackFacility.State.FREE) return false
+		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
 			logger.debug { "Block occupied, checking if next semaphore is: ${to.name}" }
 			// Compare using static references to avoid Dynamic wrapper identity issues
-			val nextSem = block.getTrackOccupant().nextSemaphore()
+			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
 			val nextSemStatic = when (nextSem) {
 				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.static
 				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.static
@@ -329,12 +330,12 @@ class ShuntingLoop : Interlocking {
 			}
 			if (nextSemStatic != to.static) return false
 			return trySetupPaths(to)
-		} else if (block.getState() == State.RESERVED) {
+		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
 			logger.debug { "Block reserved, checking path setup for semaphore: ${to.name}" }
 			// Use static separator for both getSecondEnd AND isSetUpPath
 			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
 			val staticSecondEnd = block.getSecondEnd(to.static)
-			if (block.isSetUpPath(staticSecondEnd)) {
+			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}
 		}
