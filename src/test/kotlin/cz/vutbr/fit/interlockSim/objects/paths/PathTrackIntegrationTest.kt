@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -49,14 +48,13 @@ import java.io.File
  * - linear-track.xml: Simple linear track from A to B (100m) for basic tests
  * - switch-basic.xml: Switch with two exit paths for conflict tests
  *
- * Phase coverage: ~200 instructions via AbstractPath.pathIterating() reflection
+ * Phase coverage: ~200 instructions via AbstractPath.pathIterating() with DynamicTrack wrappers
  *
- * **DISABLED**: Phase 1 - Tests require DynamicTrack integration (Phase 2)
- * These tests call dynamic methods (getState, setUpPath, enter, leave) directly on SimpleTrack,
- * which no longer supports these operations after Phase 1 refactoring.
- * Will be re-enabled in Phase 2 when DynamicTrack is integrated into simulation runtime.
+ * **RE-ENABLED**: Phase 2 - DynamicTrack integration complete
+ * These tests now work with DynamicTrack wrappers integrated into AbstractPath operations.
+ * Path operations (getState, setUpPath, enter, leave) use context.toDynamic() to access
+ * track state through DynamicTrack wrappers.
  */
-@Disabled("Phase 1: Requires DynamicTrack integration (Phase 2)")
 @Tag("integration-test")
 @DisplayName("Path-Track Integration Tests")
 class PathTrackIntegrationTest : KoinTestBase() {
