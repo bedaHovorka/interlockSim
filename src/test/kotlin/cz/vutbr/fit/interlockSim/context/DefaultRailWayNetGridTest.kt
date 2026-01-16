@@ -67,6 +67,16 @@ private class MockTrackBlock : TrackBlock {
 	override fun maxSpeed(from: PathSeparator?): Double = 80.0
 
 	override fun ends(): Array<PathSeparator> = emptyArray()
+
+	override fun getState(): cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State =
+		cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State.FREE
+
+	override fun enter(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+
+	override fun leave(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+
+	override fun getTrackOccupant(): cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant =
+		throw UnsupportedOperationException("Mock implementation")
 }
 
 /**

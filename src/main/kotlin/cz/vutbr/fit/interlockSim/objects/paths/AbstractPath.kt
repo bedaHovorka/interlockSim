@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
