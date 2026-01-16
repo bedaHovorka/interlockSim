@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
@@ -131,6 +132,11 @@ fun main(args: Array<String>) {
 	startKoin {
 		modules(interlockSimModule)
 	}
+
+	// Load GUI module (includes Main coordinator and Frame)
+	// Note: Main is always needed for all modes (sim/edit/example)
+	// Frame is only created lazily when actually needed (edit mode)
+	getKoin().loadModules(listOf(guiModule))
 
 	// Add shutdown hook to clean up Koin when JVM exits
 	Runtime.getRuntime().addShutdownHook(
