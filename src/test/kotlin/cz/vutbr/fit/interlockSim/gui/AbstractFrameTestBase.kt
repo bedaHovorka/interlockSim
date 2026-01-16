@@ -125,8 +125,9 @@ abstract class AbstractFrameTestBase : KoinTestBase() {
 		SwingUtilities.invokeAndWait {
 			frame = Frame()
 		}
-		frames.add(frame!!)
-		return frame!!
+		val createdFrame = frame ?: error("Frame creation failed")
+		frames.add(createdFrame)
+		return createdFrame
 	}
 
 	/**

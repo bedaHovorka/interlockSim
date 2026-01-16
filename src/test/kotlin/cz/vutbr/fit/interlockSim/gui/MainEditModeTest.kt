@@ -22,7 +22,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.context.GlobalContext
-import org.koin.core.context.stopKoin
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.util.concurrent.TimeUnit
@@ -69,24 +68,22 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		System.setErr(systemErr)
 
 		// Get Frame from Koin if it was created and add to disposal list
+		// Important: Frame is a singleton, so koin.getOrNull() only retrieves it if already instantiated
 		try {
 			val koin = GlobalContext.getOrNull()
 			if (koin != null) {
-				val frame = koin.get<Frame>()
-				frames.add(frame)
+				// Use getOrNull to avoid creating Frame if it wasn't instantiated yet
+				val frame = koin.getOrNull<Frame>()
+				if (frame != null) {
+					frames.add(frame)
+				}
 			}
 		} catch (e: Exception) {
 			// Frame might not have been created, that's okay
 		}
 
-		// Clean up Koin context if it was started by main()
-		try {
-			stopKoin()
-		} catch (e: Exception) {
-			// Koin might not be started, that's okay
-		}
-
 		// Call base class tearDown to dispose all frames
+		// Note: KoinTestBase.tearDownKoin() will call stopKoin() after this method
 		super.tearDown()
 	}
 
@@ -124,16 +121,17 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		// Arrange
 		val args = arrayOf("edit")
 
-		// Act
-		try {
-			main(args)
-		} catch (e: Exception) {
-			// Frame initialization may fail without X11
-		}
-
-		// Assert
+		// Act & Assert
 		// Edit mode should accept zero or more XML file arguments
-		val output = getCapturedError()
+		// In headless environment, Frame creation will fail, but mode should be recognized
+		val output = try {
+			main(args)
+			getCapturedError()
+		} catch (e: Exception) {
+			// Frame initialization may fail without X11, check if mode was recognized first
+			getCapturedError()
+		}
+		
 		val isValidMode = !output.contains("usage:") || output.isEmpty()
 		assertThat(isValidMode).isTrue()
 	}
@@ -146,19 +144,25 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		val args = arrayOf("edit")
 
 		// Act & Assert
-		try {
+		// In headless environment, Frame creation will fail but mode should be recognized
+		val exception = try {
 			main(args)
+			null  // Success - Frame was created (non-headless environment)
 		} catch (e: Exception) {
-			// Frame initialization will fail without X11 - expected behavior
-			// Just verify the mode was recognized before failure
-			val message = e.message ?: e.javaClass.name
-			val isModeIssue =
+			e  // Capture exception for verification
+		}
+
+		// Verify that if an exception occurred, it's GUI-related, not mode-selection-related
+		if (exception != null) {
+			val message = exception.message ?: exception.javaClass.name
+			val isGuiRelated =
 				message.lowercase().contains("frame") ||
 					message.lowercase().contains("awt") ||
 					message.lowercase().contains("x11") ||
-					message.lowercase().contains("display")
-			// If exception occurs, it should be about Frame/GUI, not about mode selection
-			// We don't assert here because X11 failure is expected
+					message.lowercase().contains("display") ||
+					message.lowercase().contains("headless")
+			assertThat(isGuiRelated).isTrue()
 		}
+		// If no exception, edit mode was successfully initialized (non-headless environment)
 	}
 }
