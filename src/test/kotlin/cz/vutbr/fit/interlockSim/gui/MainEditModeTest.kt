@@ -49,8 +49,8 @@ import java.util.concurrent.TimeUnit
  */
 @DisplayName("Main Edit Mode with Frame")
 class MainEditModeTest : AbstractFrameTestBase() {
-	private lateinit var systemErr: PrintStream
-	private lateinit var capturedErr: ByteArrayOutputStream
+	private var systemErr: PrintStream? = null
+	private var capturedErr: ByteArrayOutputStream? = null
 
 	@BeforeEach
 	override fun setUp() {
@@ -59,13 +59,13 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		// Capture System.err to verify error messages
 		systemErr = System.err
 		capturedErr = ByteArrayOutputStream()
-		System.setErr(PrintStream(capturedErr))
+		System.setErr(PrintStream(capturedErr!!))
 	}
 
 	@AfterEach
 	override fun tearDown() {
-		// Restore original System.err
-		System.setErr(systemErr)
+		// Restore original System.err (only if setUp completed)
+		systemErr?.let { System.setErr(it) }
 
 		// Get Frame from Koin if it was created and add to disposal list
 		// Important: Frame is a singleton, so koin.getOrNull() only retrieves it if already instantiated
@@ -89,7 +89,7 @@ class MainEditModeTest : AbstractFrameTestBase() {
 
 	private fun getCapturedError(): String {
 		System.err.flush()
-		return capturedErr.toString()
+		return capturedErr?.toString() ?: ""
 	}
 
 	@Test
