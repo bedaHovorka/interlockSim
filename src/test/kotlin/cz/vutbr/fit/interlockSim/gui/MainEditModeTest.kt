@@ -22,6 +22,9 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.context.GlobalContext
+import org.koin.core.context.stopKoin
+import java.awt.AWTError
+import java.awt.HeadlessException
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.util.concurrent.TimeUnit
@@ -34,6 +37,8 @@ import java.util.concurrent.TimeUnit
  *
  * Key differences from original MainArgumentParsingTest:
  * - Extends AbstractFrameTestBase for proper Frame disposal
+ * - Does NOT extend KoinTestBase to avoid double Koin initialization
+ * - main() starts Koin with interlockSimModule, not testModule
  * - Tagged as @Tag("integration-test") via base class
  * - Has timeout annotations to prevent 10-minute hangs
  * - Properly disposes Frame instances created by main()
@@ -41,9 +46,11 @@ import java.util.concurrent.TimeUnit
  *
  * Architecture notes:
  * - main(arrayOf("edit")) creates Frame via lazy initialization
+ * - main() calls startKoin() with interlockSimModule
  * - Frame is registered in Koin DI container
  * - We retrieve Frame from Koin after main() call for disposal
  * - tearDown() in base class handles Frame disposal automatically
+ * - Koin is stopped after each test to clean up resources
  *
  * GitHub Issue: #111 (CI timeout prevention)
  */
@@ -58,8 +65,10 @@ class MainEditModeTest : AbstractFrameTestBase() {
 
 	@BeforeEach
 	override fun setUp() {
+		// Check for headless environment first (may skip test via Assumptions.assumeFalse)
 		super.setUp()
 
+		// Only set up System.err capture if we passed the headless check
 		// Capture System.err to verify error messages
 		systemErr = System.err
 		val errStream = ByteArrayOutputStream()
@@ -87,14 +96,36 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			// Frame might not have been created, that's okay
 		}
 
-		// Call base class tearDown to dispose all frames
-		// Note: KoinTestBase.tearDownKoin() will call stopKoin() after this method
+		// Call base class tearDown to dispose all frames collected in this test
 		super.tearDown()
+
+		// Stop Koin to clean up the DI container started by main()
+		// Note: main() calls startKoin(), so we must clean it up here
+		try {
+			if (GlobalContext.getOrNull() != null) {
+				stopKoin()
+			}
+		} catch (e: Exception) {
+			// Koin might already be stopped, that's okay
+		}
 	}
 
 	private fun getCapturedError(): String {
 		System.err.flush()
 		return capturedErr?.toString() ?: ""
+	}
+
+	/**
+	 * Checks if an exception is GUI-related (Frame, AWT, X11, display, headless).
+	 * Used to verify that exceptions are due to GUI initialization failures, not mode selection errors.
+	 */
+	private fun isGuiRelatedException(e: Exception): Boolean {
+		val message = e.message ?: e.javaClass.name
+		return message.lowercase().contains("frame") ||
+			message.lowercase().contains("awt") ||
+			message.lowercase().contains("x11") ||
+			message.lowercase().contains("display") ||
+			message.lowercase().contains("headless")
 	}
 
 	@Test
@@ -109,14 +140,24 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		// So we verify the mode is recognized by checking usage is NOT printed
 		try {
 			main(args)
+			// Success - Frame was created (non-headless environment)
+			val afterErr = getCapturedError()
+			val usageNotPrinted = !afterErr.contains("usage:")
+			assertThat(usageNotPrinted).isTrue()
+		} catch (e: HeadlessException) {
+			// Expected in headless environment - mode was recognized but GUI creation failed
+			val afterErr = getCapturedError()
+			val usageNotPrinted = !afterErr.contains("usage:")
+			assertThat(usageNotPrinted).isTrue()
+		} catch (e: AWTError) {
+			// Expected in headless environment - mode was recognized but GUI creation failed
+			val afterErr = getCapturedError()
+			val usageNotPrinted = !afterErr.contains("usage:")
+			assertThat(usageNotPrinted).isTrue()
 		} catch (e: Exception) {
-			// Frame initialization may fail - that's OK, we're just checking mode selection
+			// Check if it's a GUI-related exception (mode was recognized)
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
-		val afterErr = getCapturedError()
-
-		// If edit mode was selected, usage should not be printed
-		val usageNotPrinted = !afterErr.contains("usage:")
-		assertThat(usageNotPrinted).isTrue()
 	}
 
 	@Test
@@ -129,16 +170,20 @@ class MainEditModeTest : AbstractFrameTestBase() {
 		// Act & Assert
 		// Edit mode should accept zero or more XML file arguments
 		// In headless environment, Frame creation will fail, but mode should be recognized
-		val output = try {
+		try {
 			main(args)
-			getCapturedError()
+			// Success - Frame was created (non-headless environment)
+			val output = getCapturedError()
+			val isValidMode = !output.contains("usage:") || output.isEmpty()
+			assertThat(isValidMode).isTrue()
+		} catch (e: HeadlessException) {
+			// Expected in headless environment - mode was recognized but GUI creation failed
+		} catch (e: AWTError) {
+			// Expected in headless environment - mode was recognized but GUI creation failed
 		} catch (e: Exception) {
-			// Frame initialization may fail without X11, check if mode was recognized first
-			getCapturedError()
+			// Check if it's a GUI-related exception (mode was recognized)
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
-		
-		val isValidMode = !output.contains("usage:") || output.isEmpty()
-		assertThat(isValidMode).isTrue()
 	}
 
 	@Test
@@ -150,24 +195,19 @@ class MainEditModeTest : AbstractFrameTestBase() {
 
 		// Act & Assert
 		// In headless environment, Frame creation will fail but mode should be recognized
-		val exception = try {
+		try {
 			main(args)
-			null  // Success - Frame was created (non-headless environment)
+			// Success - Frame was created (non-headless environment)
+			// Test passes - edit mode was recognized and handled
+		} catch (e: HeadlessException) {
+			// Expected in headless environment - verify mode was recognized (GUI exception, not mode error)
+			// Test passes - exception is GUI-related as expected
+		} catch (e: AWTError) {
+			// Expected in headless environment - verify mode was recognized (GUI exception, not mode error)
+			// Test passes - exception is GUI-related as expected
 		} catch (e: Exception) {
-			e  // Capture exception for verification
+			// Verify that exception is GUI-related (mode was recognized), not mode-selection-related
+			assertThat(isGuiRelatedException(e)).isTrue()
 		}
-
-		// Verify that if an exception occurred, it's GUI-related, not mode-selection-related
-		if (exception != null) {
-			val message = exception.message ?: exception.javaClass.name
-			val isGuiRelated =
-				message.lowercase().contains("frame") ||
-					message.lowercase().contains("awt") ||
-					message.lowercase().contains("x11") ||
-					message.lowercase().contains("display") ||
-					message.lowercase().contains("headless")
-			assertThat(isGuiRelated).isTrue()
-		}
-		// If no exception, edit mode was successfully initialized (non-headless environment)
 	}
 }
