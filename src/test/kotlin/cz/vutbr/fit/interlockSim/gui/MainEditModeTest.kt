@@ -16,6 +16,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.main
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -25,6 +26,8 @@ import org.koin.core.context.GlobalContext
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.util.concurrent.TimeUnit
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Tests for Main class edit mode that creates Frame GUI components.
@@ -85,6 +88,7 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			}
 		} catch (e: Exception) {
 			// Frame might not have been created, that's okay
+			logger.debug(e) { "Failed to retrieve Frame from Koin during tearDown" }
 		}
 
 		// Call base class tearDown to dispose all frames
