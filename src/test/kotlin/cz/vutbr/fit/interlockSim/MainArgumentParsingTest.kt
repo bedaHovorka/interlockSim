@@ -136,25 +136,8 @@ class MainArgumentParsingTest {
 			assertThat(usageNotPrinted).isTrue()
 		}
 
-		@Test
-		fun `edit mode selected with edit argument`() {
-			// Arrange
-			val args = arrayOf("edit")
-
-			// Act & Assert
-			// Edit mode would instantiate Frame, which we can't do without X11
-			// So we verify the mode is recognized by checking usage is NOT printed
-			try {
-				main(args)
-			} catch (e: Exception) {
-				// Frame initialization may fail - that's OK, we're just checking mode selection
-			}
-			val afterErr = getCapturedError()
-
-			// If edit mode was selected, usage should not be printed
-			val usageNotPrinted = !afterErr.contains("usage:")
-			assertThat(usageNotPrinted).isTrue()
-		}
+		// NOTE: edit mode test moved to MainEditModeTest.kt to ensure proper Frame disposal
+		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
 		fun `example mode selected with example argument`() {
@@ -206,24 +189,8 @@ class MainArgumentParsingTest {
 			assertThat(isValidResponse).isTrue()
 		}
 
-		@Test
-		fun `edit mode accepts optional XML file`() {
-			// Arrange
-			val args = arrayOf("edit")
-
-			// Act
-			try {
-				main(args)
-			} catch (e: Exception) {
-				// Frame initialization may fail without X11
-			}
-
-			// Assert
-			// Edit mode should accept zero or more XML file arguments
-			val output = getCapturedError()
-			val isValidMode = !output.contains("usage:") || output.isEmpty()
-			assertThat(isValidMode).isTrue()
-		}
+		// NOTE: edit mode test moved to MainEditModeTest.kt to ensure proper Frame disposal
+		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
 		fun `example mode accepts optional example name`() {
@@ -417,27 +384,8 @@ class MainArgumentParsingTest {
 			assertThat(usageNotShown).isTrue()
 		}
 
-		@Test
-		fun `edit mode attempt without X11 is handled`() {
-			// Arrange
-			val args = arrayOf("edit")
-
-			// Act & Assert
-			try {
-				main(args)
-			} catch (e: Exception) {
-				// Frame initialization will fail without X11 - expected behavior
-				// Just verify the mode was recognized before failure
-				val message = e.message ?: e.javaClass.name
-				val isModeIssue =
-					message.lowercase().contains("frame") ||
-						message.lowercase().contains("awt") ||
-						message.lowercase().contains("x11") ||
-						message.lowercase().contains("display")
-				// If exception occurs, it should be about Frame/GUI, not about mode selection
-				// We don't assert here because X11 failure is expected
-			}
-		}
+		// NOTE: edit mode test moved to MainEditModeTest.kt to ensure proper Frame disposal
+		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
 		fun `example mode with invalid example name`() {
