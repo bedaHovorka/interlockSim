@@ -100,27 +100,38 @@ abstract class AbstractPath protected constructor(
 
 	override fun ends(): Array<PathSeparator> = arrayOf(getFirst(), getLast())
 
+	/**
+	 * Converts a Track to DynamicTrack wrapper for state operations.
+	 * Helper method to reduce code duplication in path operations.
+	 *
+	 * @param track The track to wrap (must be TrackFacility)
+	 * @return DynamicTrack wrapper for state operations
+	 */
+	private fun toDynamicTrack(track: Track): DynamicTrack {
+		return context.toDynamic(track as TrackFacility)
+	}
+
 	override fun isFreeFrom(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_FREE_FROM) { track, separator ->
-			context.toDynamic(track as TrackFacility).isFreeFrom(separator)
+			toDynamicTrack(track).isFreeFrom(separator)
 		}
 
 	override fun isSetUpPath(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
-			context.toDynamic(track as TrackFacility).isSetUpPath(separator)
+			toDynamicTrack(track).isSetUpPath(separator)
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
 		logger.debug { "Setting up path from separator: $sep" }
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
-			context.toDynamic(track as TrackFacility).setUpPath(separator)
+			toDynamicTrack(track).setUpPath(separator)
 			true
 		}
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
 		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
-			context.toDynamic(track as TrackFacility).cancelPathSetup(separator)
+			toDynamicTrack(track).cancelPathSetup(separator)
 			true
 		}
 	}
@@ -133,7 +144,8 @@ abstract class AbstractPath protected constructor(
 	 * @param sep The path separator to start iteration from
 	 * @param operationName Name of the operation for logging and separator setting
 	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful.
-	 *                       The lambda receives the Track and should convert it to DynamicTrack via context.toDynamic()
+	 *                       The lambda receives a Track (which must be a TrackFacility) and should use
+	 *                       toDynamicTrack() helper to convert it to DynamicTrack before calling operations.
 	 * @return true if all operations succeeded, false otherwise
 	 */
 	@Throws(TrackOperationException::class)
@@ -167,7 +179,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is TrackFacility) context.toDynamic(nextTrack).state else "unknown"}"
+								"state=${if (nextTrack is TrackFacility) toDynamicTrack(nextTrack).state else "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
