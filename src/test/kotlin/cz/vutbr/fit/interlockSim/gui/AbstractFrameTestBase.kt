@@ -13,10 +13,12 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
+import org.koin.core.module.Module
 import java.awt.GraphicsEnvironment
 import javax.swing.SwingUtilities
 
@@ -29,6 +31,7 @@ import javax.swing.SwingUtilities
  * - Thread safety issues (GUI operations on non-EDT threads)
  *
  * All tests that extend this class:
+ * - Use testModuleFull (includes guiModule) for Frame access
  * - Are tagged as @Tag("integration-test") and run separately
  * - Have proper Frame disposal in @AfterEach
  * - Run GUI operations on EDT via SwingUtilities.invokeAndWait
@@ -64,14 +67,21 @@ import javax.swing.SwingUtilities
  *
  * Architecture notes:
  * - Extends KoinTestBase for dependency injection support
+ * - Overrides getTestModule() to return testModuleFull (includes GUI)
  * - Tagged as integration test at class level
  * - Checks for headless environment and skips tests if X11 unavailable
  * - Provides centralized Frame disposal logic
  *
  * GitHub Issue: #111 (CI timeout prevention)
+ * GitHub Issue: #116 (Performance optimization - guiModule only for GUI tests)
  */
 @Tag("integration-test")
 abstract class AbstractFrameTestBase : KoinTestBase() {
+	/**
+	 * Override to use full test module with GUI components.
+	 * This ensures Frame is available for GUI tests.
+	 */
+	override fun getTestModule(): Module = testModuleFull
 	/**
 	 * List of Frame instances created during test execution.
 	 * Subclasses should add Frame references to this list for automatic disposal.

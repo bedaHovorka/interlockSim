@@ -120,6 +120,8 @@ val guiModule: Module =
  *
  * This is the module that gets passed to startKoin()
  *
+ * NOTE: guiModule is NOT included by default to prevent Frame initialization overhead.
+ * Load guiModule explicitly when GUI is needed (see Main.kt for conditional loading).
  */
 val interlockSimModule: Module =
 	module {
@@ -129,7 +131,8 @@ val interlockSimModule: Module =
 			objectsModule, // Domain objects (minimal - see design decision)
 			xmlModule,
 			editingModule,
-			simulationModule,
-			guiModule // GUI components and Main coordinator
+			simulationModule
+			// NOTE: guiModule is NOT included by default
+			// Load it explicitly when GUI is needed (edit mode)
 		)
 	}
