@@ -17,9 +17,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
-import org.junit.jupiter.api.Timeout
 import java.awt.GraphicsEnvironment
-import java.util.concurrent.TimeUnit
 import javax.swing.SwingUtilities
 
 /**
