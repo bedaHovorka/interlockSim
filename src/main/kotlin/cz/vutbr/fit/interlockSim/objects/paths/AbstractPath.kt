@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
@@ -100,27 +101,44 @@ abstract class AbstractPath protected constructor(
 
 	override fun ends(): Array<PathSeparator> = arrayOf(getFirst(), getLast())
 
+	/**
+	 * Converts a Track to DynamicTrack wrapper for state operations.
+	 * Helper method to reduce code duplication in path operations.
+	 *
+	 * **Precondition:** track must be a TrackFacility (all tracks in paths are TrackFacility instances)
+	 *
+	 * @param track The track to wrap (must be TrackFacility)
+	 * @return DynamicTrack wrapper for state operations
+	 * @throws ClassCastException if track is not a TrackFacility
+	 */
+	private fun toDynamicTrack(track: Track): DynamicTrack {
+		require(track is TrackFacility) {
+			"Track in path must be a TrackFacility, got: ${track::class.simpleName}"
+		}
+		return context.toDynamic(track)
+	}
+
 	override fun isFreeFrom(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_FREE_FROM) { track, separator ->
-			track.isFreeFrom(separator)
+			toDynamicTrack(track).isFreeFrom(separator)
 		}
 
 	override fun isSetUpPath(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
-			track.isSetUpPath(separator)
+			toDynamicTrack(track).isSetUpPath(separator)
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
 		logger.debug { "Setting up path from separator: $sep" }
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
-			track.setUpPath(separator)
+			toDynamicTrack(track).setUpPath(separator)
 			true
 		}
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
 		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
-			track.cancelPathSetup(separator)
+			toDynamicTrack(track).cancelPathSetup(separator)
 			true
 		}
 	}
@@ -128,10 +146,15 @@ abstract class AbstractPath protected constructor(
 	/**
 	 * Iterates over path elements and applies the given operation to each track.
 	 * This replaces the legacy Java 6 reflection-based approach with idiomatic Kotlin lambdas.
+	 * Operations are performed via DynamicTrack wrappers to ensure proper state management.
+	 *
+	 * The conversion to DynamicTrack is handled internally by the calling methods
+	 * (isFreeFrom, setUpPath, etc.) which use the toDynamicTrack() helper.
 	 *
 	 * @param sep The path separator to start iteration from
 	 * @param operationName Name of the operation for logging and separator setting
-	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful
+	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful.
+	 *                       The lambda receives a Track parameter (guaranteed to be a TrackFacility).
 	 * @return true if all operations succeeded, false otherwise
 	 */
 	@Throws(TrackOperationException::class)
@@ -165,7 +188,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is TrackFacility) nextTrack.getState() else "unknown"}"
+								"state=${if (nextTrack is TrackFacility) toDynamicTrack(nextTrack).state else "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -216,7 +239,7 @@ abstract class AbstractPath protected constructor(
 		} else if (methodName == SET_UP_PATH) {
 			// Java: if (!(separator instanceof RailSemaphore)) separator.setUpPath(from, to, ...);
 			// CRITICAL FIX: Java has NO null check here!
-			// setUpPath is called via reflection on Track objects (see pathIterating method)
+			// setUpPath is called via DynamicTrack wrappers on Track objects (see pathIterating method)
 			// The segments may be null in certain network configurations
 			// Passing nulls to setUpPath is INTENTIONAL - it's up to the implementation to handle
 			if (separator !is DynamicRailSemaphore) {
