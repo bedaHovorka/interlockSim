@@ -17,7 +17,6 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -99,10 +98,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all track blocks from the graph (they are edges connecting nodes)
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -145,10 +144,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all tracks from switch fixture
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -197,10 +196,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -252,10 +251,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -294,10 +293,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -334,10 +333,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(switchContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -395,10 +394,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -434,10 +433,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -496,10 +495,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			}
 
 			// Act: Reserve a path through the switch
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -545,10 +544,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			}
 
 			// Get tracks and verify path release behavior
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
