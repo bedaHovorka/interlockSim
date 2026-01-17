@@ -113,7 +113,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val track = tracks[0]
 
 			// Verify initial state: track must be FREE
-			assertThat(context.toDynamic(track).state)
+			val initialState = context.toDynamic(track).state
+			assertThat(initialState)
 				.withMessage("Track should start in FREE state before reservation")
 				.isEqualTo(TrackFacility.State.FREE)
 
@@ -123,7 +124,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).setUpPath(endpoints[0])
 
 			// Assert: Track transitions to RESERVED
-			assertThat(context.toDynamic(track).state)
+			val reservedState = context.toDynamic(track).state
+			assertThat(reservedState)
 				.withMessage("Track should transition to RESERVED after setUpPath()")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -177,7 +179,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track1).cancelPathSetup(endpoint1)
 
 			// Assert: First track reverts to FREE after cancellation
-			assertThat(context.toDynamic(track1).state)
+			val cancelledState = context.toDynamic(track1).state
+			assertThat(cancelledState)
 				.withMessage("Cancelling path should revert track to FREE state")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -274,7 +277,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).enter(mockOccupant)
 
 			// Assert: Track transitions to OCCUPIED
-			assertThat(context.toDynamic(track).state)
+			val occupiedState = context.toDynamic(track).state
+			assertThat(occupiedState)
 				.withMessage("Track should transition to OCCUPIED when train enters")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 		}
@@ -314,7 +318,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).leave(mockOccupant)
 
 			// Assert: Track transitions back to FREE
-			assertThat(context.toDynamic(track).state)
+			val freedState = context.toDynamic(track).state
+			assertThat(freedState)
 				.withMessage("Track should transition to FREE when train exits")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -360,11 +365,13 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track2).setUpPath(endpoint2)
 
 			// Verify: Track 1 is OCCUPIED, Track 2 is RESERVED
-			assertThat(context.toDynamic(track1).state)
+			val track1State = context.toDynamic(track1).state
+			assertThat(track1State)
 				.withMessage("Current track should be OCCUPIED")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
-			assertThat(context.toDynamic(track2).state)
+			val track2State = context.toDynamic(track2).state
+			assertThat(track2State)
 				.withMessage("Ahead track should remain RESERVED")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -414,7 +421,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).leave(mockOccupant)
 
 			// Assert: Track is FREE again
-			assertThat(context.toDynamic(track).state)
+			val releasedState = context.toDynamic(track).state
+			assertThat(releasedState)
 				.withMessage("Track should be FREE after train departure completes path release")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -457,7 +465,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).setUpPath(endpoint2)
 
 			// Assert: Second train can reserve the track
-			assertThat(context.toDynamic(track).state)
+			val reservedAgainState = context.toDynamic(track).state
+			assertThat(reservedAgainState)
 				.withMessage("Released track should be reservable by another train")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -512,7 +521,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 				context.toDynamic(track).cancelPathSetup(endpoint)
 
 				// Assert: Track is FREE, switch should be unlocked (implicitly)
-				assertThat(context.toDynamic(track).state)
+				val pathReleasedState = context.toDynamic(track).state
+				assertThat(pathReleasedState)
 					.withMessage("After path release, track should be FREE")
 					.isEqualTo(TrackFacility.State.FREE)
 			}
@@ -565,7 +575,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 				context.toDynamic(track).leave(mockTrain)
 
 				// Assert: All tracks are cleared
-				assertThat(context.toDynamic(track).state)
+				val finalState = context.toDynamic(track).state
+				assertThat(finalState)
 					.withMessage("After train releases path, track should be FREE")
 					.isEqualTo(TrackFacility.State.FREE)
 
