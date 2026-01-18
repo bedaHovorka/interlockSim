@@ -1,0 +1,326 @@
+@startuml grid-parameterization-architecture
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+
+title Railway Network Grid Parameterization Architecture
+
+package "Core Cell Hierarchy" {
+    interface Cell {
+        + getSpatialType(): SpatialType?
+        + joins(): Set<Segment>
+        + acceptRenderer(visitor, g)
+    }
+
+    abstract class AbstractCell {
+        - segments: Set<Segment>
+    }
+
+    abstract class NodeCell {
+        - spatialType: SpatialType
+        - name: String
+        + getName(): String
+        + setName(name: String)
+    }
+
+    interface PathSeparator {
+        + possibleFollowers(from): Set<Segment>
+    }
+
+    class TrackBlockPart {
+        - segments: Array<Segment>
+        + getSegments(): Array<Segment>
+    }
+
+    Cell <|-- AbstractCell
+    Cell <|-- TrackBlockPart
+    AbstractCell <|-- NodeCell
+    PathSeparator <|-- NodeCell
+}
+
+package "Static Railway Objects (Editing Context)" {
+    class RailSwitch {
+        {static} STATIC OBJECT
+        ..immutable configuration..
+        + type: Type
+        + speeds: Map<Conf, Double>
+        + confs: EnumUnorientedGraph
+        ..rendering protocol..
+        + acceptRenderer(visitor, g)
+        ..methods..
+        + getBranchSegments(): Set<Segment>
+    }
+
+    class RailSemaphore {
+        {static} STATIC OBJECT
+        ..immutable configuration..
+        + orientation: Boolean
+        ..rendering protocol..
+        + acceptRenderer(visitor, g)
+        ..methods..
+        + direction(): Segment
+    }
+
+    class InOut {
+        {static} STATIC OBJECT
+        ..immutable configuration..
+        + inSemaphore: RailSemaphore
+        + outSemaphore: RailSemaphore
+        ..rendering protocol..
+        + acceptRenderer(visitor, g)
+        ..methods..
+        + getName(): String
+    }
+
+    NodeCell <|-- RailSwitch
+    NodeCell <|-- RailSemaphore
+    NodeCell <|-- InOut
+}
+
+package "Dynamic Wrappers (Simulation Context)" {
+    interface DynamicPathSeparator {
+        + setUpPath(from, to, allowedSpeed)
+        + cancelPathSetup(from, to)
+        + allowedSpeed(): Double
+        + getFollowingSegment(from): Segment?
+    }
+
+    class DynamicRailSwitch {
+        {static} DYNAMIC WRAPPER
+        ..wrapped reference..
+        + static: RailSwitch
+        ..mutable state..
+        + conf: Conf = MAIN
+        + locked: Boolean = false
+        ..identity delegation..
+        + equals(other): Boolean
+        + hashCode(): Int
+        ..rendering delegation..
+        + acceptRenderer(visitor, g)
+        ..state management..
+        + changeConf()
+        + lock()
+        + unlock()
+    }
+
+    class DynamicRailSemaphore {
+        {static} DYNAMIC WRAPPER
+        ..wrapped reference..
+        + static: RailSemaphore
+        ..mutable state..
+        + signal: Signal = STOP
+        ..identity delegation..
+        + equals(other): Boolean
+        + hashCode(): Int
+        ..rendering delegation..
+        + acceptRenderer(visitor, g)
+    }
+
+    class DynamicInOut {
+        {static} DYNAMIC WRAPPER
+        ..wrapped reference..
+        + static: InOut
+        + inSemaphore: DynamicRailSemaphore
+        + outSemaphore: DynamicRailSemaphore
+        ..identity delegation..
+        + equals(other): Boolean
+        + hashCode(): Int
+        ..rendering delegation..
+        + acceptRenderer(visitor, g)
+    }
+
+    PathSeparator <|-- DynamicPathSeparator
+    DynamicPathSeparator <|.. DynamicRailSwitch
+    DynamicPathSeparator <|.. DynamicRailSemaphore
+    DynamicPathSeparator <|.. DynamicInOut
+
+    DynamicRailSwitch o-right- RailSwitch : wraps >
+    DynamicRailSemaphore o-right- RailSemaphore : wraps >
+    DynamicInOut o-right- InOut : wraps >
+}
+
+package "Grid Infrastructure" {
+    class "Array2DMap<T : Cell>" as Array2DMap {
+        {static} TYPE PARAMETERIZED
+        ..storage..
+        - cells: RelocableList
+        - keys: TreeSet<Point>
+        ..methods..
+        + get(point): T?
+        + put(point, cell: T): T?
+        + containsKey(point): Boolean
+    }
+
+    abstract class "AbstractRailwayNetGrid<T : Cell>" as AbstractGrid {
+        {static} TYPE PARAMETERIZED
+        ..grid storage..
+        - cells: Array2DMap<T>
+        - reverseTable: Map<T, Point>
+        ..dimensions..
+        - cols: Int
+        - rows: Int
+        ..protected access..
+        # getCells(): Array2DMap<T>
+        # getReverseTable(): Map<T, Point>
+        ..public API..
+        + getCellAt(x, y): T?
+        + get(point): T?
+        + getLocation(cell: T): Point?
+    }
+
+    AbstractGrid o-- Array2DMap
+}
+
+package "Context Hierarchy" {
+    interface Context {
+        + getCols(): Int
+        + getRows(): Int
+    }
+
+    interface EditingContext {
+        + putCellAt(x, y, cell)
+        + removeCellAt(x, y)
+        + moveCellAt(from, to)
+    }
+
+    interface SimulationContext {
+        + run()
+        + stop()
+        + toDynamic(separator): DynamicPathSeparator
+        + toDynamic(track): DynamicTrack
+        + getWorkerFor(inOut): InOutWorker
+    }
+
+    class DefaultEditingContext {
+        {static} STATIC CELLS ONLY
+        ..inherited..
+        ~ cells: Array2DMap<Cell>
+        ..graph management..
+        - graph: ExtendedUnorientedGraph
+        - linesKeys: Map<TrackBlock, Set<Point>>
+        ..editing operations..
+        + putCellAt(x, y, cell)
+        + removeCellAt(x, y)
+        + moveCellAt(from, to)
+        + joinCells(from, to)
+    }
+
+    class DefaultSimulationContext {
+        {static} DYNAMIC WRAPPERS
+        ..inherited..
+        ~ cells: Array2DMap<Cell>
+        ..wrapper cache..
+        - dynamicMap: IdentityHashMap<PathSeparator, DynamicPathSeparator>
+        - trackMap: IdentityHashMap<TrackFacility, DynamicTrack>
+        ..factory injection..
+        - processFactory: SimulationProcessFactory
+        ..simulation operations..
+        + run()
+        + stop()
+        ..transformation..
+        + toDynamic(separator): DynamicPathSeparator
+        + toDynamic(track): DynamicTrack
+    }
+
+    Context <|-- EditingContext
+    EditingContext <|-- SimulationContext
+    AbstractGrid <|-- DefaultEditingContext
+    AbstractGrid <|-- DefaultSimulationContext
+    EditingContext <|.. DefaultEditingContext
+    SimulationContext <|.. DefaultSimulationContext
+}
+
+package "Rendering Infrastructure" {
+    interface Renderable {
+        + acceptRenderer(visitor, g)
+    }
+
+    interface CellRenderVisitor {
+        + visitRailSwitch(switch, g)
+        + visitRailSemaphore(semaphore, g)
+        + visitInOut(inOut, g)
+        + visitTrackBlockPart(part, g)
+    }
+
+    abstract class CellRenderer {
+        - cellWidth: Int
+        - cellHeight: Int
+        ..visitor implementation..
+        + visitRailSwitch(switch, g)
+        + visitRailSemaphore(semaphore, g)
+        + visitInOut(inOut, g)
+        + visitTrackBlockPart(part, g)
+        ..main entry point..
+        + draw(g, cell: Cell)
+        ..protected rendering..
+        # draw(g, switch: RailSwitch)
+        # draw(g, semaphore: RailSemaphore)
+        # draw(g, inOut: InOut)
+        # draw(g, part: TrackBlockPart)
+        ..helpers..
+        # drawSegments(g, segments)
+        # drawTriangle(g, cell)
+        # drawLine(g, type)
+    }
+
+    class EditorCellRenderer {
+        ..concrete implementations..
+        # draw(g, switch: RailSwitch)
+        # draw(g, semaphore: RailSemaphore)
+        # draw(g, inOut: InOut)
+        # draw(g, part: TrackBlockPart)
+    }
+
+    Cell --|> Renderable
+    CellRenderVisitor <|.. CellRenderer
+    CellRenderer <|-- EditorCellRenderer
+}
+
+note right of DynamicRailSwitch::equals
+  Identity based on wrapped static object:
+
+  override fun equals(other: Any?): Boolean {
+      if (this === other) return true
+      return when (other) {
+          is DynamicRailSwitch -> static === other.static
+          is RailSwitch -> static === other
+          else -> false
+      }
+  }
+
+  override fun hashCode(): Int =
+      System.identityHashCode(static)
+end note
+
+note bottom of Array2DMap
+  Type parameter T : Cell allows:
+  - Array2DMap<Cell> for static objects (editing)
+  - Array2DMap<Cell> for dynamic wrappers (simulation)
+
+  Both use same base type but different instances
+end note
+
+note bottom of DefaultSimulationContext
+  Transformation Contract:
+
+  1. Create dynamic wrappers via toDynamic()
+  2. Cache in IdentityHashMap (stable identity)
+  3. Replace static cells in grid with wrappers
+  4. Preserve Point → Cell mapping
+  5. Maintain graph structure integrity
+end note
+
+note top of CellRenderer::draw
+  Visitor Pattern replaces reflection:
+
+  OLD: javaClass.getMethod("draw", cell.javaClass).invoke(...)
+  NEW: cell.acceptRenderer(this, g)
+
+  Benefits:
+  - Type safe (compile-time checking)
+  - Fast (no reflection overhead)
+  - Works with dynamic wrappers (delegation)
+end note
+
+@enduml
