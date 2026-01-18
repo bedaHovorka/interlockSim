@@ -128,44 +128,50 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 	@Tag("integration-test")
 	inner class VyhybnaIntegrationTests {
 		/**
-		 * Integration test: Verify all separators are registered after getInOuts()
+		 * Integration test: Verify InOut-related separators are registered after getInOuts()
+		 *
+		 * Note: getInOuts() only initializes InOut cells and their associated semaphores.
+		 * Other separators (standalone RailSemaphore, RailSwitch) are initialized later
+		 * by initializeDynamicMapping() when run() is called.
 		 */
 		@Test
-		@DisplayName("vyhybna.xml - all separators registered after getInOuts()")
-		fun vyhybnaXml_allSeparatorsRegistered() {
+		@DisplayName("vyhybna.xml - InOut-related separators registered after getInOuts()")
+		fun vyhybnaXml_inOutRelatedSeparatorsRegistered() {
 			// Arrange - Load vyhybna.xml configuration
 			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 
-			// Act - Trigger initialization by calling getInOuts()
-			context.getInOuts()
+			// Act - Trigger InOut initialization by calling getInOuts()
+			val dynamicInOuts = context.getInOuts()
 
-			// Assert - All separators in grid should be convertible
-			val grid = context.getRailWayNetGrid()
-			var testedSeparators = 0
+			// Assert - InOut cells and their semaphores should be convertible
+			var testedInOuts = 0
+			var testedSemaphores = 0
 
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
-					val cell = grid.getCellAt(x, y)
-					if (cell is RailSemaphore) {
-						val dynamic = context.toDynamic(cell)
-						assertThat(dynamic).isInstanceOf(DynamicPathSeparator::class)
-						assertThat(dynamic).isInstanceOf(DynamicRailSemaphore::class)
-						testedSeparators++
-					} else if (cell is RailSwitch) {
-						val dynamic = context.toDynamic(cell)
-						assertThat(dynamic).isInstanceOf(DynamicPathSeparator::class)
-						testedSeparators++
-					} else if (cell is InOut) {
-						val dynamic = context.toDynamic(cell)
-						assertThat(dynamic).isInstanceOf(DynamicPathSeparator::class)
-						testedSeparators++
-					}
-				}
+			for (inOut in dynamicInOuts) {
+				// Test InOut itself
+				val dynamicInOut = context.toDynamic(inOut.static)
+				assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
+				testedInOuts++
+
+				// Test InOut's semaphores (these are registered by getInOuts())
+				val staticInSem = inOut.static.getInSemaphore()
+				val staticOutSem = inOut.static.getOutSemaphore()
+
+				val dynamicInSem = context.toDynamic(staticInSem)
+				assertThat(dynamicInSem).isInstanceOf(DynamicPathSeparator::class)
+				assertThat(dynamicInSem).isInstanceOf(DynamicRailSemaphore::class)
+				testedSemaphores++
+
+				val dynamicOutSem = context.toDynamic(staticOutSem)
+				assertThat(dynamicOutSem).isInstanceOf(DynamicPathSeparator::class)
+				assertThat(dynamicOutSem).isInstanceOf(DynamicRailSemaphore::class)
+				testedSemaphores++
 			}
 
-			// Verify we tested multiple separators
-			assertThat(testedSeparators).isNotNull()
-			println("Tested $testedSeparators separators successfully")
+			// Verify we tested InOuts and their semaphores
+			assertThat(testedInOuts).isNotNull()
+			assertThat(testedSemaphores).isNotNull()
+			println("Tested $testedInOuts InOuts and $testedSemaphores associated semaphores successfully")
 		}
 
 		/**
