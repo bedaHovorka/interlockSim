@@ -21,7 +21,7 @@ import java.util.AbstractSet
 class DefaultRailWayNetGrid(
 	cols: Int,
 	rows: Int
-) : AbstractRailwayNetGrid(cols, rows) {
+) : AbstractRailwayNetGrid<Cell>(cols, rows) {
 	private inner class KeySet(
 		private val set: Set<Map.Entry<Point, Cell>>
 	) : AbstractSet<Point>() {

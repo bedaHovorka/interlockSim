@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
@@ -57,7 +58,7 @@ interface Context {
 	 * get grid, which is graphic representation of model
 	 * @return grid
 	 */
-	fun getRailWayNetGrid(): RailwayNetGrid
+	fun getRailWayNetGrid(): RailwayNetGrid<Cell>
 
 	/**
 	 * ...
