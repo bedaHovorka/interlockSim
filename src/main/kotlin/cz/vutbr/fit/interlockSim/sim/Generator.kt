@@ -31,7 +31,7 @@ open class Generator(
 		}
 	}
 
-	protected var random = Random()
+	protected var random = Random(0)
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
