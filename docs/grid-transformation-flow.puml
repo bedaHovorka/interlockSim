@@ -1,0 +1,194 @@
+@startuml grid-transformation-flow
+!theme plain
+skinparam shadowing false
+
+title Grid Transformation Flow: Editing Context → Simulation Context
+
+|#LightBlue|Editing Context (Static Cells)|
+start
+
+:Create Editing Context;
+note right
+  DefaultEditingContext(cols, rows)
+  Grid: Array2DMap<Cell>
+end note
+
+:Add Railway Objects;
+note right
+  RailSwitch at (5, 10)
+  RailSemaphore at (8, 12)
+  InOut at (15, 3)
+  TrackBlockPart at (6, 11)
+
+  **All static, immutable objects**
+end note
+
+:Build Track Connections;
+note right
+  - Join cells to create track blocks
+  - Build graph structure
+  - Define paths and routes
+end note
+
+:Save to XML (optional);
+note right
+  Serialize static configuration
+  Schema: data.xsd
+end note
+
+|#LightGreen|Transformation Process|
+
+:Initiate Transformation;
+note right
+  editingContext.toSimulationContext(
+    processFactory
+  )
+end note
+
+fork
+  :Create Simulation Context;
+  note right
+    DefaultSimulationContext(
+      cols, rows, processFactory
+    )
+    Grid: Array2DMap<Cell>
+    Initially empty
+  end note
+fork again
+  :Initialize IdentityHashMap;
+  note right
+    dynamicMap: IdentityHashMap<
+      PathSeparator,
+      DynamicPathSeparator
+    >
+    Used for stable wrapper identity
+  end note
+end fork
+
+:Iterate Over Editing Grid;
+note right
+  forEach { (point, staticCell) -> ... }
+end note
+
+repeat
+  :Get Cell at Point;
+
+  if (Cell type?) then (RailSwitch)
+    :Create DynamicRailSwitch;
+    note right
+      DynamicRailSwitch(staticSwitch)
+      - conf = MAIN
+      - locked = false
+      - static === staticSwitch
+    end note
+  elseif (RailSemaphore) then
+    :Create DynamicRailSemaphore;
+    note right
+      createDynamicInstance(staticSemaphore)
+      - signal = STOP
+      - static === staticSemaphore
+    end note
+  elseif (InOut) then
+    :Create DynamicInOut;
+    note right
+      DynamicInOut(
+        staticInOut,
+        inSemaphore: DynamicRailSemaphore,
+        outSemaphore: DynamicRailSemaphore
+      )
+      - static === staticInOut
+    end note
+  else (TrackBlockPart)
+    :Keep Static Cell;
+    note right
+      TrackBlockPart has no
+      dynamic state - remains
+      immutable in simulation
+    end note
+  endif
+
+  :Cache in IdentityHashMap;
+  note right
+    dynamicMap[staticCell] = dynamicWrapper
+    **Ensures single wrapper per static object**
+  end note
+
+  :Put Dynamic Cell in Grid;
+  note right
+    simContext.putCellAt(point.x, point.y, dynamicCell)
+    **Preserves Point → Cell mapping**
+  end note
+
+repeat while (More cells?) is (yes)
+->no;
+
+:Copy Graph Structure;
+note right
+  Transform static references
+  to dynamic wrappers in:
+  - ExtendedUnorientedGraph
+  - Track block definitions
+  - Path configurations
+end note
+
+:Copy Track Blocks;
+note right
+  Maintain track sections,
+  facilities, and connections
+  with dynamic cell references
+end note
+
+|#LightCoral|Simulation Context (Dynamic Wrappers)|
+
+:Simulation Context Ready;
+note right
+  Grid contains dynamic wrappers:
+  - DynamicRailSwitch at (5, 10)
+  - DynamicRailSemaphore at (8, 12)
+  - DynamicInOut at (15, 3)
+  - TrackBlockPart at (6, 11) ← static
+
+  **Identity preserved via IdentityHashMap**
+end note
+
+:Verify Identity Contract;
+note right
+  val dynamicSwitch = simContext.getCellAt(5, 10)
+  val staticSwitch = editingContext.getCellAt(5, 10)
+
+  assert(dynamicSwitch.static === staticSwitch) ✓
+  assert(dynamicSwitch == staticSwitch) ✓
+  assert(dynamicSwitch.hashCode() ==
+         System.identityHashCode(staticSwitch)) ✓
+end note
+
+:Run Simulation;
+note right
+  - Trains update dynamic state
+    (switch conf, semaphore signals)
+  - Static configuration unchanged
+  - Stable identity for all operations
+end note
+
+stop
+
+legend right
+  **Key Concepts**
+
+  |= Symbol |= Meaning |
+  | === | Referential equality |
+  | == | Value equality (via equals()) |
+  | → | Object reference |
+
+  **Identity Contracts**
+  - TC1: Point mapping preserved
+  - TC2: Wrapper unwraps to original
+  - TC3: Identity consistency
+
+  **Performance**
+  - IdentityHashMap: O(1) lookup
+  - Single wrapper per static object
+  - No memory duplication of config
+endlegend
+
+@enduml
