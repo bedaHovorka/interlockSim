@@ -317,20 +317,31 @@ For detailed Docker + Koin integration guide, see:
 
 **Context system:**
 - `Context` - Base abstraction for railway network configuration
-- `SimulationContext` - Simulation execution context  
-- `EditingContext` - Editing operations for railway network
-- `DefaultContext` - Implementation combining both editing and simulation capabilities
+- `EditingContext` - Interface for editing operations on railway network
+- `SimulationContext` - Interface for simulation execution (extends EditingContext)
+- `DefaultEditingContext` - Implementation of editing operations only (613 lines)
+- `DefaultSimulationContext` - Implementation extending editing with simulation capabilities (829 lines)
+- `DefaultContext` - **DEPRECATED** backward-compatibility wrapper extending DefaultSimulationContext (74 lines)
 - `SimulationProcessFactory` - Factory interface for creating simulation processes (decouples context from concrete sim/ classes)
 - `DefaultSimulationProcessFactory` - Default factory implementation using jDisco-based processes (Generator, InOutWorker)
 - `EditingContextFactory` / `SimulationContextFactory` - Factory pattern for context creation
 - `XMLContextFactory` - Creates contexts from XML files (defined by `data.xsd` schema)
 
-**Factory Pattern (2026-01-14):**
-DefaultContext now uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
+**Context Refactoring (Issue #98, 2026-01-18):**
+DefaultContext split into separate editing and simulation implementations. This:
+- Separates concerns: editing operations vs simulation execution
+- Follows Single Responsibility Principle
+- Enables testing editing without simulation dependencies
+- DefaultEditingContext has NO sim/ package dependencies
+- DefaultSimulationContext extends editing with simulation via factory injection
+- Deprecated DefaultContext wrapper maintains backward compatibility
+- See `CONTEXT_REFACTORING_DESIGN.md` and `FACTORY_PATTERN_IMPLEMENTATION.md` for details
+
+**Factory Pattern (Phase 2, 2026-01-14):**
+DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
 - Follows Dependency Inversion Principle (depends on abstraction, not concrete classes)
 - Enables testing with mock factories
 - Prepares for jDisco→DSOL/Kalasim migration
-- See `CONTEXT_REFACTORING_DESIGN.md` and `FACTORY_PATTERN_IMPLEMENTATION.md` for details
 
 **Static/Dynamic Separation (Issue #100, 2026-01-18):**
 Complete wrapper pattern implementation separating static configuration from dynamic simulation state:
@@ -385,13 +396,13 @@ src/
     ├── java/cz/vutbr/fit/interlockSim/
     │   ├── context/               - Context and serialization tests
     │   │   ├── ConcurrentSaveTest.java
-    │   │   └── DefaultContextTest.java
+    │   │   └── DefaultContextTest.java  (tests deprecated wrapper)
     │   ├── sim/                   - Simulation scenario tests
     │   │   ├── InOutWorkerTest.java
     │   │   ├── ShuntingLoopTest.java
     │   │   └── TrainTest.java
     │   ├── testutil/              - Test utilities and builders
-    │   │   ├── MockSimulationContext.java
+    │   │   ├── MockSimulationContext.java  (delegates to DefaultSimulationContext)
     │   │   ├── TestContextBuilder.java
     │   │   ├── TestFixtures.java
     │   │   └── TestTrackBuilder.java
@@ -962,11 +973,12 @@ The codebase has been analyzed for deprecated Java standard library APIs. This i
 
 ### Key Findings
 
-**CRITICAL Issue:**
-- **java.util.Observable/Observer** (6 occurrences) - Deprecated in Java 9, blocks Java 17+ migration
-  - Used in: `DefaultContext`, `Context`, `RailwayNetGridCanvas`, `StatusBar`
-  - **Must be replaced** before upgrading to Java 17+
-  - **Recommended replacement:** `java.beans.PropertyChangeSupport`
+**CRITICAL Issue (✅ RESOLVED):**
+- **java.util.Observable/Observer** - Deprecated in Java 9
+  - **Status:** ✅ Fixed in Java 21 migration (2025-12-28)
+  - Previously used in: `DefaultContext`, `Context`, `RailwayNetGridCanvas`, `StatusBar`
+  - **Replacement:** `java.beans.PropertyChangeSupport`
+  - **Note:** DefaultContext subsequently split (2026-01-18) into DefaultEditingContext and DefaultSimulationContext
 
 **HIGH Priority:**
 - **Integer constructor** (1 occurrence in test code) - Deprecated in Java 9, marked for removal
