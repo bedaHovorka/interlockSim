@@ -321,7 +321,6 @@ class ShuntingLoop : Interlocking {
 		val dynamicBlock = context.toDynamic(block)
 		if (dynamicBlock.state == TrackFacility.State.FREE) return false
 		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
-			logger.debug { "Block occupied, checking if next semaphore is: ${to.name}" }
 			// Compare using static references to avoid Dynamic wrapper identity issues
 			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
 			val nextSemStatic = when (nextSem) {
@@ -332,7 +331,6 @@ class ShuntingLoop : Interlocking {
 			if (nextSemStatic != to.static) return false
 			return trySetupPaths(to)
 		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
-			logger.debug { "Block reserved, checking path setup for semaphore: ${to.name}" }
 			// Use static separator for both getSecondEnd AND isSetUpPath
 			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
 			val staticSecondEnd = block.getSecondEnd(to.static)

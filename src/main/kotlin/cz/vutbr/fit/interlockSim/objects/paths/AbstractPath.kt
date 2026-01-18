@@ -129,11 +129,12 @@ abstract class AbstractPath protected constructor(
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
-		logger.debug { "Setting up path from separator: $sep" }
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
-			toDynamicTrack(track).setUpPath(separator)
+			val dynamic = toDynamicTrack(track)
+			dynamic.setUpPath(separator)
 			true
 		}
+		logger.debug { "Path setup from $sep: reserved tracks, length=${length()}" }
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {

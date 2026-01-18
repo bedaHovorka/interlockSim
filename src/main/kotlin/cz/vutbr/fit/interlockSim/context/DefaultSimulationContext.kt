@@ -381,6 +381,11 @@ open class DefaultSimulationContext(
 			staticTrackToDynamicMap[trackFacility] = dynamicTrack
 			trackMappedCount++
 			logger.trace { "Mapped TrackBlock ${trackFacility.hashCode()} to dynamic wrapper" }
+
+			// Recursively map any internal TrackSection objects
+			// For SimpleTrackBlock (current impl), this is a no-op
+			// For future CompoundTrackBlock, ensures all internal sections are mapped
+			mapInternalSections(trackBlock)
 		}
 		logger.debug {
 			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"
@@ -388,35 +393,144 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Validate that all PathSeparators in the network have Dynamic wrappers.
+	 * Recursively discover and map all TrackSection objects within a TrackBlock.
+	 *
+	 * For SimpleTrackBlock (which is its own TrackSection), this is a no-op.
+	 * For future CompoundTrackBlock implementations with internal sections, this ensures
+	 * all sections get DynamicTrack wrappers during initialization.
+	 *
+	 * This prevents "Wrong state: FREE, expected: RESERVED" errors when trains
+	 * try to enter internal sections that weren't mapped at initialization.
+	 *
+	 * @param trackBlock The TrackBlock to scan for internal sections
+	 */
+	private fun mapInternalSections(trackBlock: TrackBlock) {
+		// Scan from both ends of the TrackBlock to discover all internal sections
+		val ends = trackBlock.ends()
+		val visited = mutableSetOf<TrackSection>()
+
+		for (end in ends) {
+			// Start navigation from this end (null current means "start of block")
+			var currentSection: TrackSection? = trackBlock.getNextTrackSection(end, null)
+
+			while (currentSection != null && currentSection !in visited) {
+				visited.add(currentSection)
+
+				// Skip if section is the TrackBlock itself (SimpleTrackBlock case)
+				// SimpleTrackBlock implements both TrackBlock and TrackSection interfaces
+				if (currentSection === trackBlock) {
+					logger.trace { "Section is TrackBlock itself, skipping (SimpleTrackBlock pattern)" }
+					break
+				}
+
+				// Check if this is a TrackFacility that needs mapping
+				if (currentSection is TrackFacility) {
+					if (!staticTrackToDynamicMap.containsKey(currentSection)) {
+						// Create and map DynamicTrack wrapper for internal section
+						val dynamicSection = DynamicTrack(currentSection)
+						staticTrackToDynamicMap[currentSection] = dynamicSection
+						logger.debug {
+							"Mapped internal TrackSection ${System.identityHashCode(currentSection)} " +
+							"within TrackBlock ${System.identityHashCode(trackBlock)}"
+						}
+					} else {
+						logger.trace {
+							"Internal section ${System.identityHashCode(currentSection)} already mapped"
+						}
+					}
+				}
+
+				// Move to next section in the sequence
+				// getSecondEnd returns the opposite end of the current section
+				val nextSeparator = currentSection.getSecondEnd(end)
+				currentSection = trackBlock.getNextTrackSection(nextSeparator, currentSection)
+			}
+		}
+
+		if (visited.isNotEmpty() && visited.size > 1) {
+			logger.info {
+				"TrackBlock ${System.identityHashCode(trackBlock)} contains ${visited.size} sections"
+			}
+		}
+	}
+
+	/**
+	 * Validate that all PathSeparators and TrackFacilities in the network have Dynamic wrappers.
 	 *
 	 * Based on architectural assumption: simulation context has immutable network structure.
-	 * All separators must be wrapped at initialization - discovering an unwrapped separator
-	 * during simulation indicates a bug.
+	 * All separators and track facilities must be wrapped at initialization - discovering an
+	 * unwrapped element during simulation indicates a bug.
 	 */
 	private fun validateDynamicMapping() {
 		val grid = getRailWayNetGrid()
-		val unmapped = mutableListOf<String>()
+		val unmappedSeparators = mutableListOf<String>()
+		val unmappedTracks = mutableListOf<String>()
 
+		// Validate PathSeparators from grid
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y) ?: continue
 
 				if (cell is PathSeparator && cell !in staticToDynamicMap) {
-					unmapped.add("${cell.javaClass.simpleName} at ($x,$y)")
+					unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y)")
 				}
 			}
 		}
 
-		if (unmapped.isNotEmpty()) {
-			throw IllegalStateException(
-				"Dynamic mapping incomplete! Unmapped separators: ${unmapped.joinToString(", ")}. " +
-				"Map contains ${staticToDynamicMap.size} entries. " +
-				"This indicates initialization logic is incomplete."
-			)
+		// Validate all TrackFacility objects (including internal sections)
+		val graph = getGraph()
+		for (trackBlock in graph.values()) {
+			// Check top-level TrackBlock
+			val trackFacility = trackBlock as TrackFacility
+			if (trackFacility !in staticTrackToDynamicMap) {
+				unmappedTracks.add("TrackBlock ${System.identityHashCode(trackBlock)}")
+			}
+
+			// Check internal TrackSections
+			val ends = trackBlock.ends()
+			for (end in ends) {
+				var currentSection: TrackSection? = trackBlock.getNextTrackSection(end, null)
+				val visited = mutableSetOf<TrackSection>()
+
+				while (currentSection != null && currentSection !in visited) {
+					visited.add(currentSection)
+
+					// Skip if section is the TrackBlock itself
+					if (currentSection === trackBlock) break
+
+					// Check if internal section is mapped
+					if (currentSection is TrackFacility && currentSection !in staticTrackToDynamicMap) {
+						unmappedTracks.add(
+							"TrackSection ${System.identityHashCode(currentSection)} " +
+							"in TrackBlock ${System.identityHashCode(trackBlock)}"
+						)
+					}
+
+					val nextSeparator = currentSection.getSecondEnd(end)
+					currentSection = trackBlock.getNextTrackSection(nextSeparator, currentSection)
+				}
+			}
 		}
 
-		logger.info { "Dynamic mapping validation passed: all ${staticToDynamicMap.size} separators mapped" }
+		if (unmappedSeparators.isNotEmpty() || unmappedTracks.isNotEmpty()) {
+			val message = buildString {
+				append("Dynamic mapping incomplete!\n")
+				if (unmappedSeparators.isNotEmpty()) {
+					append("Unmapped separators: ${unmappedSeparators.joinToString(", ")}\n")
+				}
+				if (unmappedTracks.isNotEmpty()) {
+					append("Unmapped tracks: ${unmappedTracks.joinToString(", ")}\n")
+				}
+				append("Separator map: ${staticToDynamicMap.size} entries, ")
+				append("Track map: ${staticTrackToDynamicMap.size} entries.")
+			}
+			throw IllegalStateException(message)
+		}
+
+		logger.info {
+			"Dynamic mapping validation passed: ${staticToDynamicMap.size} separators, " +
+			"${staticTrackToDynamicMap.size} tracks mapped"
+		}
 	}
 
 	/**
@@ -552,15 +666,18 @@ open class DefaultSimulationContext(
 		previous: Track?
 	): Boolean {
 		// Try to use Dynamic wrapper if available, otherwise use static OrientedNodeCell
+		// CRITICAL FIX: Use PREVIOUS track (where train is coming FROM) to check if semaphore
+		// is "in direction". This checks if the train is approaching the semaphore from its
+		// facing direction, not if the train is going toward a track in that direction.
 		val segment = if (separator is DynamicPathSeparator) {
-			getSegment(separator, next, previous)
+			getSegment(separator, previous, next)  // Swapped: previous first!
 		} else {
 			// Static separator - need to get segment differently
 			val staticNodeCell = CellUtilities.assertNodeCell(separator)
-			if (next != null) {
-				getSegment(staticNodeCell, next as? TrackBlock)
-			} else {
+			if (previous != null) {  // Changed: check previous first!
 				getSegment(staticNodeCell, previous as? TrackBlock)
+			} else {
+				getSegment(staticNodeCell, next as? TrackBlock)
 			}
 		}
 		// Allow null segment for InOut (both static and Dynamic wrapper)
@@ -602,15 +719,19 @@ open class DefaultSimulationContext(
 					)
 				previous = next
 				next = getNextTrackSection(separator, next)
+
+				// Check if we've reached the final semaphore AFTER getting next section
+				// This ensures we have proper next/previous values for direction check
+				if (separator is OrientedPathSeparator) {
+					// Direction check for oriented semaphores
+					if (isSeparatorInDirection(separator, next, previous)) {
+						path.add(separator)
+						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
+						return path
+					}
+				}
 			} else {
 				break
-			}
-			if (separator is OrientedPathSeparator) {
-				if (isSeparatorInDirection(separator, next, previous)) {
-					path.add(separator)
-					logger.trace { "pathToNextSemaphore: found complete path with length ${path.length()}" }
-					return path
-				}
 			}
 		} while (next != null)
 		logger.debug { "pathToNextSemaphore: no path found from $sep" }
