@@ -332,9 +332,18 @@ DefaultContext now uses dependency injection to obtain a `SimulationProcessFacto
 - Prepares for jDisco→DSOL/Kalasim migration
 - See `CONTEXT_REFACTORING_DESIGN.md` and `FACTORY_PATTERN_IMPLEMENTATION.md` for details
 
+**Static/Dynamic Separation (Issue #100, 2026-01-18):**
+Complete wrapper pattern implementation separating static configuration from dynamic simulation state:
+- **Static objects** (RailSwitch, RailSemaphore, InOut, SimpleTrack) contain immutable configuration
+- **Dynamic wrappers** (DynamicRailSwitch, DynamicRailSemaphore, DynamicInOut, DynamicTrack) manage mutable state
+- **SimulationContext.toDynamic()** converts static objects to dynamic wrappers
+- **IdentityHashMap** ensures stable wrapper identity across simulation
+- **Pattern usage:** Call `context.toDynamic(track)` before state operations (enter/leave/setUpPath)
+- See `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` for complete architecture documentation
+
 **Object model:**
-- `objects/tracks/` - Track facilities, blocks, occupants
-- `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`)
+- `objects/tracks/` - Track facilities, blocks, occupants, DynamicTrack wrapper
+- `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
 
 **Utilities:**
