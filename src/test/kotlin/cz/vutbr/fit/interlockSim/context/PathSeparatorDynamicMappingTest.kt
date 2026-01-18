@@ -44,6 +44,10 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 class PathSeparatorDynamicMappingTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
+	companion object {
+		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+	}
+
 	@Nested
 	@DisplayName("Unit Tests - toDynamic() behavior")
 	inner class ToDynamicUnitTests {
@@ -54,8 +58,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic returns same instance for already-dynamic separator")
 		fun toDynamic_alreadyDynamic_returnsSameInstance() {
 			// Arrange - Load vyhybna.xml and initialize mappings
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 
 			// Initialize dynamic wrappers for InOuts
 			val dynamicInOuts = context.getInOuts()
@@ -131,8 +134,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - all separators registered after getInOuts()")
 		fun vyhybnaXml_allSeparatorsRegistered() {
 			// Arrange - Load vyhybna.xml configuration
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 
 			// Act - Trigger initialization by calling getInOuts()
 			context.getInOuts()
@@ -173,8 +175,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - InOut semaphores are registered")
 		fun vyhybnaXml_inOutSemaphoresRegistered() {
 			// Arrange
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 
 			// Act - Trigger initialization
 			val dynamicInOuts = context.getInOuts()
@@ -199,13 +200,12 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - repeated toDynamic calls return same instance")
 		fun vyhybnaXml_repeatedCallsReturnSameInstance() {
 			// Arrange
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 			context.getInOuts()
 
-			// Get a static semaphore
-			val grid = context.getRailWayNetGrid()
-			val staticSemaphore = grid.getCellAt(14, 8) as RailSemaphore
+			// Get a static semaphore - use first InOut's in semaphore for reliability
+			val dynamicInOut = context.getInOuts().first()
+			val staticSemaphore = dynamicInOut.static.getInSemaphore()
 
 			// Act - call toDynamic multiple times
 			val dynamic1 = context.toDynamic(staticSemaphore)
