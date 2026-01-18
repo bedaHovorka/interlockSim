@@ -14,6 +14,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
  * nejmensi jednotka ve ktere se muze nachazet jeden "normalni vlak"
  * (v rozsireni: ve stanici je mozno do bloku pustit posun)
  *
+ * Combines Track (static + dynamic) with state query functionality.
  */
 interface TrackFacility : Track {
 	/**
@@ -36,9 +37,4 @@ interface TrackFacility : Track {
 		 */
 		OCCUPIED
 	}
-
-	/**
-	 * @return state of facility
-	 */
-	fun getState(): State
 }

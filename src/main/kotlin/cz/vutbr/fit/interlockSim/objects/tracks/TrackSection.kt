@@ -12,27 +12,12 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 /**
  *
  * tratovy oddil v posloupnosti prvku cesty z pohledu vlaku
+ *
+ * Extends Track (static + dynamic) with block-level operations.
  */
 interface TrackSection : Track {
-	/**
-	 * Train entering
-	 * @param occupant
-	 */
-	fun enter(occupant: TrackOccupant)
-
-	/**
-	 * Train leaving
-	 * @param occupant
-	 */
-	fun leave(occupant: TrackOccupant)
-
 	/**
 	 * @return block, in which is this section
 	 */
 	fun getTrackBlock(): TrackBlock
-
-	/**
-	 * @return object in section
-	 */
-	fun getTrackOccupant(): TrackOccupant
 }

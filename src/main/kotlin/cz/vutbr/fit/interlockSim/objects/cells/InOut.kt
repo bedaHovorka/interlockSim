@@ -10,9 +10,6 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import java.util.EnumSet
 
 /**
@@ -34,7 +31,7 @@ class InOut(
 		requireSimulation(inSemaphore.direction() == anti(direction())) {
 			"In semaphore direction must be anti-parallel to InOut direction"
 		}
-		this.outSemaphore = getConstantInstance(orientation, spatialType, Signal.FREE)
+		this.outSemaphore = RailSemaphore(orientation, spatialType)
 		setName(name)
 	}
 
@@ -60,42 +57,4 @@ class InOut(
 	 * @return semaphore on output
 	 */
 	fun getOutSemaphore(): RailSemaphore = outSemaphore
-
-	private fun getSemaphoreFor(
-		from: Cell.Segment?,
-		to: Cell.Segment?
-	): RailSemaphore? {
-		if (from == null && to == direction()) return inSemaphore
-		if (to == null && from == direction()) return outSemaphore
-		return null
-	}
-
-	@Throws(PathSeparatorChangeException::class)
-	private fun getSemaphoreForWithExeption(
-		from: Cell.Segment?,
-		to: Cell.Segment?
-	): RailSemaphore {
-		val sem = getSemaphoreFor(from, to)
-		if (sem == null) throw PathSeparatorChangeException(this)
-		return sem
-	}
-
-	override fun setUpPath(
-		from: Cell.Segment?,
-		to: Cell.Segment?,
-		allowedSpeed: Double
-	) {
-		val sem = getSemaphoreForWithExeption(from, to)
-		sem.setSignal(forSpeed(allowedSpeed))
-	}
-
-	override fun cancelPathSetup(
-		from: Cell.Segment?,
-		to: Cell.Segment?
-	) {
-		val sem = getSemaphoreForWithExeption(from, to)
-		sem.setSignal(Signal.STOP)
-	}
-
-	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
 }

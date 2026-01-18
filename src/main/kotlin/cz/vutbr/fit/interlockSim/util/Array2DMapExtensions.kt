@@ -54,7 +54,8 @@ fun <V> Array2DMap<V>.lastEntry(): Map.Entry<Point, V>? = lastPoint()?.let { poi
  */
 fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, point) > 0 }
+	return keys
+		.filter { comparator.compare(it, point) > 0 }
 		.minWithOrNull(comparator)
 }
 
@@ -68,7 +69,8 @@ fun <V> Array2DMap<V>.higherPoint(point: Point): Point? {
  */
 fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, point) < 0 }
+	return keys
+		.filter { comparator.compare(it, point) < 0 }
 		.maxWithOrNull(comparator)
 }
 
@@ -82,7 +84,8 @@ fun <V> Array2DMap<V>.lowerPoint(point: Point): Point? {
  */
 fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, point) >= 0 }
+	return keys
+		.filter { comparator.compare(it, point) >= 0 }
 		.minWithOrNull(comparator)
 }
 
@@ -96,7 +99,8 @@ fun <V> Array2DMap<V>.ceilingPoint(point: Point): Point? {
  */
 fun <V> Array2DMap<V>.floorPoint(point: Point): Point? {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, point) <= 0 }
+	return keys
+		.filter { comparator.compare(it, point) <= 0 }
 		.maxWithOrNull(comparator)
 }
 
@@ -115,7 +119,8 @@ fun <V> Array2DMap<V>.subMap(
 	toPoint: Point
 ): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, fromPoint) >= 0 && comparator.compare(it, toPoint) < 0 }
+	return keys
+		.filter { comparator.compare(it, fromPoint) >= 0 && comparator.compare(it, toPoint) < 0 }
 		.associateWith { point -> this[point]!! }
 }
 
@@ -129,7 +134,8 @@ fun <V> Array2DMap<V>.subMap(
  */
 fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, toPoint) < 0 }
+	return keys
+		.filter { comparator.compare(it, toPoint) < 0 }
 		.associateWith { point -> this[point]!! }
 }
 
@@ -143,7 +149,8 @@ fun <V> Array2DMap<V>.headMap(toPoint: Point): Map<Point, V> {
  */
 fun <V> Array2DMap<V>.tailMap(fromPoint: Point): Map<Point, V> {
 	val comparator = Array2DMap.POINT_COMPARATOR
-	return keys.filter { comparator.compare(it, fromPoint) >= 0 }
+	return keys
+		.filter { comparator.compare(it, fromPoint) >= 0 }
 		.associateWith { point -> this[point]!! }
 }
 
@@ -255,7 +262,7 @@ fun <V> Array2DMap<V>.pointsInRegion(
 	minY: Int,
 	maxX: Int,
 	maxY: Int
-): Sequence<Point> {
-	return keys.asSequence()
+): Sequence<Point> =
+	keys
+		.asSequence()
 		.filter { it.x in minX..maxX && it.y in minY..maxY }
-}

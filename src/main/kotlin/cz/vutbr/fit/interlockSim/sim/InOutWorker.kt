@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -27,7 +27,7 @@ import jDisco.Process
  */
 class InOutWorker(
 	private val context: SimulationContext,
-	private val inOut: InOut
+	private val inOut: DynamicInOut
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -53,20 +53,21 @@ class InOutWorker(
 
 					if (!pathExists) {
 						logger.debug {
-							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - path does not exist"
+							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.name} - path does not exist"
 						}
 					} else if (!isFree) {
 						logger.debug {
-							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.getName()} - " +
+							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.name} - " +
 								"path not free, length=${path?.length()}"
 						}
 					}
 					isFree
 				} catch (e: TrackOperationException) {
 					logger.error {
-						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.getName()} - " +
+						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
 							"path check failed: ${e.message}"
 					}
+					logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
 					context.errorStop(e)
 					false
 				}
@@ -76,38 +77,38 @@ class InOutWorker(
 	override fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
-			logger.debug { "InOutWorker ${inOut.getName()} queue non-empty, processing train" }
+			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
 			context.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
 			waitUntil(pathFree)
 			val first = queqe.first() as Link
-			logger.debug { "InOutWorker ${inOut.getName()} path is now free, reserving for train" }
+			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {
 				// zarezervovat koleje
 				path?.setUpPath(inOut)
 				logger.info {
-					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.getName()} - " +
+					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
 						"path reserved for $first, length=${path?.length()}"
 				}
 			} catch (e: Exception) {
 				logger.warn {
-					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.getName()} - " +
+					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +
 						"path setup failed for $first: ${e.message}"
 				}
-				logger.debug { "InOutWorker ${inOut.getName()} path setup failed: ${e.message}" }
+				logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
 				context.errorStop(e)
 				return
 			}
 			context.report("Path reserved for $first", inOut, ReportType.NODE_EVENTS)
 
 			// cekej na odchod vlaku z fronty
-			logger.debug { "InOutWorker ${inOut.getName()} waiting for train $first to leave queue" }
+			logger.debug { "InOutWorker ${inOut.name} waiting for train $first to leave queue" }
 			waitUntil(
 				object : Condition {
 					override fun test(): Boolean = first != queqe.first()
 				}
 			)
-			logger.debug { "InOutWorker ${inOut.getName()} train left queue" }
+			logger.debug { "InOutWorker ${inOut.name} train left queue" }
 		}
 		myIdle = true
 	}
@@ -122,7 +123,7 @@ class InOutWorker(
 	 * @param train
 	 */
 	fun enterTrain(train: Train) {
-		logger.debug { "InOutWorker ${inOut.getName()} entering train $train, queue empty: ${queqe.empty()}" }
+		logger.debug { "InOutWorker ${inOut.name} entering train $train, queue empty: ${queqe.empty()}" }
 		if (queqe.empty()) {
 			train.into(queqe)
 		} else {
@@ -130,7 +131,7 @@ class InOutWorker(
 		}
 
 		if (myIdle) {
-			logger.debug { "InOutWorker ${inOut.getName()} was idle, activating to process train $train" }
+			logger.debug { "InOutWorker ${inOut.name} was idle, activating to process train $train" }
 			Process.activate(this)
 		}
 	}

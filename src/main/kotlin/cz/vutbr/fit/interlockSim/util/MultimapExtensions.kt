@@ -21,7 +21,10 @@ import java.util.TreeMap
  * @param key the key to associate the value with
  * @param value the value to add to the set of values for this key
  */
-fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.putMulti(key: K, value: V) {
+fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.putMulti(
+	key: K,
+	value: V
+) {
 	getOrPut(key) { LinkedHashSet() }.add(value)
 }
 
@@ -48,5 +51,4 @@ fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.valuesMulti(): Collection<V
  * @param key the key to look up
  * @return set of values for the key, or empty set if key not present
  */
-fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.getMulti(key: K): Set<V> =
-	get(key)?.toSet() ?: emptySet()
+fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.getMulti(key: K): Set<V> = get(key)?.toSet() ?: emptySet()

@@ -19,7 +19,10 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -43,7 +46,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * jDisco framework and are beyond the scope of unit testing.
  */
 class InOutWorkerTest : KoinTestBase() {
-
 	@Nested
 	@DisplayName("InOutWorker initialization")
 	inner class InitializationTests {
@@ -51,20 +53,20 @@ class InOutWorkerTest : KoinTestBase() {
 		fun constructor_validInOut_succeeds() {
 			// Create mock context with a single InOut
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val dynInOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 
-			val worker = InOutWorker(context, inOut)
+			val worker = InOutWorker(context, dynInOut)
 
 			assertThat(worker).isNotNull()
 		}
 
 		@Test
 		fun constructor_nullContext_throwsNullPointerException() {
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val dynInOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val nullContext: SimulationContext? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-			assertThatBlock { InOutWorker(nullContext!!, inOut) }
+			assertThatBlock { InOutWorker(nullContext!!, dynInOut) }
 				.isFailure()
 				.isInstanceOf(NullPointerException::class)
 		}
@@ -72,7 +74,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_nullInOut_throwsNullPointerException() {
 			val context = createMockSimulationContext()
-			val nullInOut: InOut? = null
+			val nullInOut: DynamicInOut? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			assertThatBlock { InOutWorker(context, nullInOut!!) }
@@ -83,7 +85,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_entryInOut_succeeds() {
 			val context = createMockSimulationContext()
-			val entryInOut = InOut("IN", false, SpatialType.HORIZONTAL)
+			val entryInOut = createTestDynamicInOut("IN", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, entryInOut)
 
@@ -93,7 +95,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_exitInOut_succeeds() {
 			val context = createMockSimulationContext()
-			val exitInOut = InOut("OUT", true, SpatialType.HORIZONTAL)
+			val exitInOut = createTestDynamicInOut("OUT", true, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, exitInOut)
 
@@ -107,7 +109,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun getQueqe_afterConstruction_returnsNonNullQueue() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue = worker.getQueqe()
@@ -120,7 +122,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun getQueqe_afterConstruction_queueIsEmpty() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue = worker.getQueqe()
@@ -133,7 +135,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun getQueqe_calledMultipleTimes_returnsSameInstance() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue1 = worker.getQueqe()
@@ -151,7 +153,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun queueEmpty_afterConstruction_returnsTrue() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val isEmpty = worker.getQueqe().empty()
@@ -164,7 +166,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun queueEmpty_afterConstruction_isConsistent() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			// Verify queue is empty
@@ -183,7 +185,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_horizontalInOut_succeeds() {
 			val context = createMockSimulationContext()
-			val horizontalInOut = InOut("H", false, SpatialType.HORIZONTAL)
+			val horizontalInOut = createTestDynamicInOut("H", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, horizontalInOut)
 
@@ -193,7 +195,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_verticalInOut_succeeds() {
 			val context = createMockSimulationContext()
-			val verticalInOut = InOut("V", false, SpatialType.VERTICAL)
+			val verticalInOut = createTestDynamicInOut("V", false, SpatialType.VERTICAL)
 
 			val worker = InOutWorker(context, verticalInOut)
 
@@ -203,7 +205,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_diagonal1InOut_succeeds() {
 			val context = createMockSimulationContext()
-			val diagonalInOut = InOut("D1", false, SpatialType.DIAGONAL1)
+			val diagonalInOut = createTestDynamicInOut("D1", false, SpatialType.DIAGONAL1)
 
 			val worker = InOutWorker(context, diagonalInOut)
 
@@ -213,7 +215,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_diagonal2InOut_succeeds() {
 			val context = createMockSimulationContext()
-			val diagonalInOut = InOut("D2", false, SpatialType.DIAGONAL2)
+			val diagonalInOut = createTestDynamicInOut("D2", false, SpatialType.DIAGONAL2)
 
 			val worker = InOutWorker(context, diagonalInOut)
 
@@ -223,7 +225,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_inOutWithLongName_succeeds() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
 
@@ -233,7 +235,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_inOutWithSingleCharName_succeeds() {
 			val context = createMockSimulationContext()
-			val inOut = InOut("X", false, SpatialType.HORIZONTAL)
+			val inOut = createTestDynamicInOut("X", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
 
@@ -250,8 +252,8 @@ class InOutWorkerTest : KoinTestBase() {
 			val xml = xml("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
 			val simContext = createMockSimulationContext(xml)
 
-			// Get InOut A from context
-			val inOutA = simContext.getRailWayNetGrid().getCellAt(10, 10) as InOut
+			// Get first DynamicInOut from context
+			val inOutA = simContext.getInOuts().first()
 			assertThat(inOutA).isNotNull()
 
 			val worker = InOutWorker(simContext, inOutA)
@@ -267,8 +269,8 @@ class InOutWorkerTest : KoinTestBase() {
 			val xml: InputStream = xml("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
 			val simContext = createMockSimulationContext(xml)
 
-			// Get InOut IN from context
-			val inOutIN = simContext.getRailWayNetGrid().getCellAt(10, 10) as InOut
+			// Get first DynamicInOut from context
+			val inOutIN = simContext.getInOuts().first()
 			assertThat(inOutIN).isNotNull()
 
 			val worker = InOutWorker(simContext, inOutIN)
@@ -282,10 +284,10 @@ class InOutWorkerTest : KoinTestBase() {
 			// Load vyhybna.xml fixture
 			val simContext = createMockSimulationContext(shuntingXml())
 
-			// Get InOut A from vyhybna.xml (at position 11, 8)
-			val inOutA = simContext.getRailWayNetGrid().getCellAt(11, 8) as InOut
+			// Get InOut A from vyhybna.xml
+			val inOutA = simContext.getInOuts().first { it.name == "A" }
 			assertThat(inOutA).isNotNull()
-			assertThat(inOutA.getName()).isEqualTo("A")
+			assertThat(inOutA.name).isEqualTo("A")
 
 			val worker = InOutWorker(simContext, inOutA)
 
@@ -300,8 +302,9 @@ class InOutWorkerTest : KoinTestBase() {
 			val simContext = createMockSimulationContext(shuntingXml())
 
 			// Get both InOuts from vyhybna.xml
-			val inOutA = simContext.getRailWayNetGrid().getCellAt(11, 8) as InOut
-			val inOutB = simContext.getRailWayNetGrid().getCellAt(30, 8) as InOut
+			val inOutList = simContext.getInOuts().toList()
+			val inOutA = inOutList.first { it.name == "A" }
+			val inOutB = inOutList.first { it.name == "B" }
 			assertThat(inOutA).isNotNull()
 			assertThat(inOutB).isNotNull()
 
@@ -316,13 +319,25 @@ class InOutWorkerTest : KoinTestBase() {
 		}
 	}
 
-	private fun shuntingXml(): InputStream {
-		return xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
+	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {
 		val xml = javaClass.getResourceAsStream(name)
 		requireNotNull(xml) { "$name must exist in resources" }
 		return xml
+	}
+
+	/**
+	 * Helper function to create a DynamicInOut for testing.
+	 */
+	private fun createTestDynamicInOut(
+		name: String,
+		orientation: Boolean,
+		spatialType: SpatialType
+	): DynamicInOut {
+		val staticInOut = InOut(name, orientation, spatialType)
+		val inSemaphore = createDynamicInstance(RailSemaphore(true, spatialType))
+		val outSemaphore = createDynamicInstance(RailSemaphore(false, spatialType))
+		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
 	}
 }

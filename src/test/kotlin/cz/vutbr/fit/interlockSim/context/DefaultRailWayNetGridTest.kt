@@ -39,19 +39,44 @@ import org.junit.jupiter.api.Test
  */
 private class MockTrackBlock : TrackBlock {
 	// TrackBlock methods
-	override fun getNextTrackSection(separator: PathSeparator, current: TrackSection?): TrackSection? = null
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? = null
+
 	override fun isInnerElement(element: PathElement): Boolean = false
-	override fun getJoin(separator: PathSeparator, current: TrackSection): Cell.Segment = Cell.Segment.A
+
+	override fun getJoin(
+		separator: PathSeparator,
+		current: TrackSection
+	): Cell.Segment = Cell.Segment.A
 
 	// Track methods
 	override fun isFreeFrom(sep: PathSeparator): Boolean = true
+
 	override fun setUpPath(from: PathSeparator) {}
+
 	override fun isSetUpPath(from: PathSeparator): Boolean = false
+
 	override fun cancelPathSetup(from: PathSeparator) {}
+
 	override fun getSecondEnd(sep: PathSeparator): PathSeparator = sep
+
 	override fun length(): Double = 100.0
+
 	override fun maxSpeed(from: PathSeparator?): Double = 80.0
+
 	override fun ends(): Array<PathSeparator> = emptyArray()
+
+	override fun getState(): cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State =
+		cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State.FREE
+
+	override fun enter(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+
+	override fun leave(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+
+	override fun getTrackOccupant(): cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant =
+		throw UnsupportedOperationException("Mock implementation")
 }
 
 /**
@@ -70,10 +95,10 @@ class DefaultRailWayNetGridTest {
 		private val mockTrackBlock = MockTrackBlock()
 
 		// Helper function to create TrackBlockPart for testing
-		private fun createTestTrackBlockPart(): TrackBlockPart {
-			return TrackBlockPart(mockTrackBlock, arrayOf(Cell.Segment.A, Cell.Segment.F))
-		}
+		private fun createTestTrackBlockPart(): TrackBlockPart =
+			TrackBlockPart(mockTrackBlock, arrayOf(Cell.Segment.A, Cell.Segment.F))
 	}
+
 	@Nested
 	@DisplayName("Basic Operations")
 	class BasicOperationsTests {
@@ -525,11 +550,17 @@ class DefaultRailWayNetGridTest {
 			grid.put(nodePoint2, node2)
 			
 			// Add intermediate TrackBlockParts (simulating joinCells)
-			val intermediatePoints = listOf(
-				Point(2, 2), Point(3, 3), Point(4, 4),
-				Point(5, 5), Point(6, 6), Point(7, 7),
-				Point(8, 8), Point(9, 9)
-			)
+			val intermediatePoints =
+				listOf(
+					Point(2, 2),
+					Point(3, 3),
+					Point(4, 4),
+					Point(5, 5),
+					Point(6, 6),
+					Point(7, 7),
+					Point(8, 8),
+					Point(9, 9)
+				)
 			val parts = intermediatePoints.map { createTestTrackBlockPart() }
 			val map = java.util.HashMap<Point, TrackBlockPart>()
 			intermediatePoints.zip(parts).forEach { (point, part) -> map[point] = part }
@@ -579,10 +610,14 @@ class DefaultRailWayNetGridTest {
 		@DisplayName("removing intermediate cells via removeAll maintains consistency")
 		fun removingIntermediateCellsViaRemoveAll_maintainsConsistency() {
 			// Arrange - create layout with intermediate cells
-			val intermediatePoints = listOf(
-				Point(2, 2), Point(3, 3), Point(4, 4),
-				Point(5, 5), Point(6, 6)
-			)
+			val intermediatePoints =
+				listOf(
+					Point(2, 2),
+					Point(3, 3),
+					Point(4, 4),
+					Point(5, 5),
+					Point(6, 6)
+				)
 			val parts = intermediatePoints.map { createTestTrackBlockPart() }
 			val map = java.util.HashMap<Point, TrackBlockPart>()
 			intermediatePoints.zip(parts).forEach { (point, part) -> map[point] = part }

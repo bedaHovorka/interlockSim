@@ -9,17 +9,20 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import java.util.EnumSet
 
 /**
@@ -165,7 +168,7 @@ interface SimulationContext : Context {
 	 * @return topology join
 	 */
 	fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track
 	): Segment?
 
@@ -188,7 +191,7 @@ interface SimulationContext : Context {
 	 * @return segment for track, or null if no following segment exists
 	 */
 	fun getSegment(
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		track: Track?,
 		secondEndTrack: Track?
 	): Segment?
@@ -197,10 +200,26 @@ interface SimulationContext : Context {
 	 * @param inOut
 	 * @return worker
 	 */
-	fun getWorkerFor(inOut: InOut): InOutWorker
+	fun getWorkerFor(inOut: DynamicInOut): InOutWorker
 
 	/**
 	 * @return all inouts in model
 	 */
-	fun getInOuts(): Collection<InOut>
+	fun getInOuts(): Collection<DynamicInOut>
+
+	/**
+	 * Convert a static PathSeparator to its Dynamic wrapper if available.
+	 * Used by Train to ensure consistent use of Dynamic wrappers throughout simulation.
+	 * @param separator The separator to convert (static or already Dynamic)
+	 * @return The Dynamic wrapper if found, otherwise the input separator unchanged
+	 */
+	fun toDynamic(separator: PathSeparator): PathSeparator
+
+	/**
+	 * Convert a TrackFacility to its DynamicTrack wrapper.
+	 * Used by Train to manage track state (enter/leave) via DynamicTrack wrappers.
+	 * @param track The track facility to wrap
+	 * @return The DynamicTrack wrapper for state operations
+	 */
+	fun toDynamic(track: TrackFacility): DynamicTrack
 }
