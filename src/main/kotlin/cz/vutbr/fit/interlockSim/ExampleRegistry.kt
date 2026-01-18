@@ -36,9 +36,10 @@ class ExampleRegistry {
 	/**
 	 * Registry of available examples. Maps example name to factory function.
 	 */
-	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> = mapOf(
-		"shuntingLoop" to ::createShuntingLoopExample
-	)
+	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
+		mapOf(
+			"shuntingLoop" to ::createShuntingLoopExample
+		)
 
 	/**
 	 * Returns a sorted list of available example names.
@@ -71,6 +72,8 @@ class ExampleRegistry {
 		return stream.use {
 			val context = Util.assertInstanceOf(DefaultSimulationContext::class.java, factory.createContext(it))
 			val time = args[2].toLong()
+			// Initialize dynamic wrapper map by calling getInOuts()
+			context.getInOuts()
 			context.setMainProcess(ShuntingLoop(context, time))
 			context
 		}

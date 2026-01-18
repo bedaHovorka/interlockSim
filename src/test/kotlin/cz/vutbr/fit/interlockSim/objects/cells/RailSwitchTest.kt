@@ -28,7 +28,7 @@ import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 
 /**
- * Tests for RailSwitch cell type with comprehensive behavior validation.
+ * Tests for DynamicRailSwitch cell type with comprehensive behavior validation.
  *
  * This test suite verifies:
  * - Position management (toggle between MAIN and BRANCH configurations)
@@ -40,19 +40,20 @@ import java.beans.PropertyChangeListener
  */
 @DisplayName("RailSwitch Tests")
 class RailSwitchTest {
-	private lateinit var switch: RailSwitch
+	private lateinit var switch: DynamicRailSwitch
 	private lateinit var propertyListener: TestPropertyChangeListener
 
 	@BeforeEach
 	fun setUp() {
 		// Create a simple right-facing switch with horizontal spatial type
-		switch =
+		val staticSwitch =
 			RailSwitch(
 				Cell.SpatialType.HORIZONTAL,
 				Type.SIMPLE_RIGHT_FALSE,
 				COMMON_MAIN_SPEED.toDouble(),
 				COMMON_BRANCH_SPEED.toDouble()
 			)
+		switch = DynamicRailSwitch(staticSwitch)
 		propertyListener = TestPropertyChangeListener()
 		switch.addPropertyChangeListener(propertyListener)
 	}
@@ -67,7 +68,7 @@ class RailSwitchTest {
 		@Test
 		fun `switch created in normal position`() {
 			// Switch starts in MAIN configuration (normal position)
-			assertThat(switch.getConf()).isEqualTo(Conf.MAIN)
+			assertThat(switch.conf).isEqualTo(Conf.MAIN)
 			assertThat(propertyListener.events).isEmpty()
 		}
 
@@ -76,7 +77,7 @@ class RailSwitchTest {
 			// MAIN -> BRANCH is the toggle operation
 			switch.changeConf()
 
-			assertThat(switch.getConf()).isEqualTo(Conf.BRANCH)
+			assertThat(switch.conf).isEqualTo(Conf.BRANCH)
 		}
 
 		@Test
@@ -85,7 +86,7 @@ class RailSwitchTest {
 			switch.changeConf()
 			switch.changeConf()
 
-			assertThat(switch.getConf()).isEqualTo(Conf.MAIN)
+			assertThat(switch.conf).isEqualTo(Conf.MAIN)
 		}
 
 		@Test
@@ -101,7 +102,7 @@ class RailSwitchTest {
 			// This test validates that if listeners are registered, they are notified
 			val oldConf = Conf.MAIN
 			val newConf = Conf.BRANCH
-			assertThat(switch.getConf()).isEqualTo(newConf)
+			assertThat(switch.conf).isEqualTo(newConf)
 		}
 	}
 
@@ -118,7 +119,7 @@ class RailSwitchTest {
 			// Switch should support being locked
 			switch.lock()
 
-			assertThat(switch.isLocked()).isTrue()
+			assertThat(switch.locked).isTrue()
 		}
 
 		@Test
@@ -134,7 +135,7 @@ class RailSwitchTest {
 			assertThat(exception.message).isNotNull().contains("locked")
 
 			// Configuration should remain unchanged
-			assertThat(switch.getConf()).isEqualTo(Conf.MAIN)
+			assertThat(switch.conf).isEqualTo(Conf.MAIN)
 		}
 
 		@Test
@@ -143,7 +144,7 @@ class RailSwitchTest {
 			switch.lock()
 			switch.unlock()
 
-			assertThat(switch.isLocked()).isFalse()
+			assertThat(switch.locked).isFalse()
 		}
 
 		@Test
@@ -155,7 +156,7 @@ class RailSwitchTest {
 			// Should be able to toggle now
 			switch.changeConf()
 
-			assertThat(switch.getConf()).isEqualTo(Conf.BRANCH)
+			assertThat(switch.conf).isEqualTo(Conf.BRANCH)
 		}
 
 		@Test
@@ -194,7 +195,7 @@ class RailSwitchTest {
 
 			// The specific segment depends on type and configuration
 			// For SIMPLE_RIGHT_FALSE HORIZONTAL, MAIN should route to opposite side
-			assertThat(switch.getConf()).isEqualTo(Conf.MAIN)
+			assertThat(switch.conf).isEqualTo(Conf.MAIN)
 		}
 
 		@Test
@@ -209,7 +210,7 @@ class RailSwitchTest {
 			assertThat(following).isNotNull()
 
 			// In BRANCH configuration, routing is different
-			assertThat(switch.getConf()).isEqualTo(Conf.BRANCH)
+			assertThat(switch.conf).isEqualTo(Conf.BRANCH)
 		}
 
 		@Test
@@ -254,15 +255,15 @@ class RailSwitchTest {
 		@Test
 		fun `isLocked returns correct state`() {
 			// Initially unlocked
-			assertThat(switch.isLocked()).isFalse()
+			assertThat(switch.locked).isFalse()
 
 			// After locking
 			switch.lock()
-			assertThat(switch.isLocked()).isTrue()
+			assertThat(switch.locked).isTrue()
 
 			// After unlocking
 			switch.unlock()
-			assertThat(switch.isLocked()).isFalse()
+			assertThat(switch.locked).isFalse()
 		}
 	}
 

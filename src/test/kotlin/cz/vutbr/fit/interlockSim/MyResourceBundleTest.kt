@@ -23,5 +23,4 @@ class MyResourceBundleTest : KoinTestBase() {
 			assertThat(it, "File InputStream for $testFileName should not be null").isNotNull()
 		}
 	}
-
 }

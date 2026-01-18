@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -75,9 +75,9 @@ class DefaultSimulationProcessFactory : SimulationProcessFactory {
 	 */
 	override fun createInOutWorker(
 		context: SimulationContext,
-		inOut: InOut
+		inOut: DynamicInOut
 	): InOutWorker {
-		logger.debug { "Creating InOutWorker for InOut: ${inOut.getName()}" }
+		logger.debug { "Creating InOutWorker for InOut: ${inOut.name}" }
 		return InOutWorker(context, inOut)
 	}
 }

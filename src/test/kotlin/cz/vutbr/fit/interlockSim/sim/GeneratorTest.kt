@@ -506,8 +506,8 @@ class GeneratorTest : KoinTestBase() {
 		// Get first two InOuts from context
 		val inOuts = mockContext.getInOuts().toList()
 		return Timetable(
-			inOuts[0],
-			inOuts[1],
+			inOuts[0].static,
+			inOuts[1].static,
 			Time(0.0),
 			Time(0.0),
 			length
