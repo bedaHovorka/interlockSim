@@ -536,7 +536,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
 	 * This is used by Train to ensure it always works with Dynamic wrappers.
-	 * 
+	 *
 	 * @param separator The separator to convert (static or already Dynamic)
 	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
 	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
