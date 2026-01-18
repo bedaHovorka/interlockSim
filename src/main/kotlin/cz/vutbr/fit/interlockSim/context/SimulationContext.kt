@@ -208,12 +208,13 @@ interface SimulationContext : Context {
 	fun getInOuts(): Collection<DynamicInOut>
 
 	/**
-	 * Convert a static PathSeparator to its Dynamic wrapper if available.
+	 * Convert a static PathSeparator to its Dynamic wrapper.
 	 * Used by Train to ensure consistent use of Dynamic wrappers throughout simulation.
 	 * @param separator The separator to convert (static or already Dynamic)
-	 * @return The Dynamic wrapper if found, otherwise the input separator unchanged
+	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
+	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
 	 */
-	fun toDynamic(separator: PathSeparator): PathSeparator
+	fun toDynamic(separator: PathSeparator): DynamicPathSeparator
 
 	/**
 	 * Convert a TrackFacility to its DynamicTrack wrapper.

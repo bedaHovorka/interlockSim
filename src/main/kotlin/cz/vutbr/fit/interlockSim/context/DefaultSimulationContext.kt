@@ -535,14 +535,23 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
-	 * Returns the Dynamic wrapper if found, otherwise returns the input separator unchanged.
 	 * This is used by Train to ensure it always works with Dynamic wrappers.
+	 * 
+	 * @param separator The separator to convert (static or already Dynamic)
+	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
+	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
 	 */
-	override fun toDynamic(separator: PathSeparator): PathSeparator {
+	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
 		return if (separator is DynamicPathSeparator) {
 			separator  // Already dynamic
 		} else {
-			staticToDynamicMap[separator] ?: separator  // Convert or fallback to static
+			staticToDynamicMap[separator]
+				?: throw IllegalStateException(
+					"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
+						"Map contains ${staticToDynamicMap.size} entries. " +
+						"This indicates the separator was not registered during initialization. " +
+						"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+				)
 		}
 	}
 
