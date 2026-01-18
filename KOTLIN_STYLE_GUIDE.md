@@ -608,7 +608,9 @@ InterlockSim uses **Koin 3.5.6** for dependency injection - a lightweight (~1MB)
 // Define dependencies in module
 val myModule = module {
 	single<XMLContextFactory> { XMLContextFactory() }  // Singleton
-	factory<SimulationContext> { DefaultContext(100, 100) }  // New instance each time
+	single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }  // Factory for processes
+	// Note: Do NOT inject contexts as singletons - they need fresh state
+	// Instead, inject factories that create contexts
 }
 
 // Start Koin in Main.kt
@@ -671,11 +673,15 @@ class Train(private val context: SimulationContext)  // ✅ Constructor paramete
 ```kotlin
 // WRONG - Context as singleton
 val contextModule = module {
-	single<SimulationContext> { DefaultContext(100, 100) }  // ❌ Don't do this
+	// ❌ Don't do this - contexts need fresh state per simulation
+	single<SimulationContext> { 
+		DefaultSimulationContext(100, 100, get<SimulationProcessFactory>())
+	}
 }
 
 // CORRECT - Factory pattern preserved
 val contextModule = module {
+	single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 	single<SimulationContextFactory> { XMLContextFactory() }  // ✅ Factory is singleton
 }
 
@@ -722,24 +728,29 @@ class MyClass(private val factory: XMLContextFactory)
 #### Factory Pattern (Non-Singleton)
 
 ```kotlin
-// Define in module
+// Define in module - Example of parameterized factory (not currently used in interlockSim)
 val myModule = module {
-	factory<SimulationContext> { (editingContext: EditingContext) ->
-		DefaultContext(editingContext)
+	factory<SimulationContext> { (cols: Int, rows: Int) ->
+		DefaultSimulationContext(cols, rows, get<SimulationProcessFactory>())
 	}
 }
 
 // Use in code with parameters
-val context: SimulationContext = get { parametersOf(editingContext) }
+val context: SimulationContext = get { parametersOf(100, 100) }
+
+// NOTE: In interlockSim, we use XMLContextFactory instead of Koin factory pattern
+// because contexts need complex initialization from XML files
 ```
 
 #### Scoped Instances
 
 ```kotlin
-// Define scope
+// Define scope - Example pattern (not currently used for contexts)
 val myModule = module {
 	scope<SimulationScope> {
-		scoped<SimulationContext> { DefaultContext(100, 100) }
+		scoped<SimulationContext> { 
+			DefaultSimulationContext(100, 100, get<SimulationProcessFactory>())
+		}
 	}
 }
 
@@ -756,7 +767,7 @@ scope.close()  // Close scope when done
 
 ```kotlin
 class MockSimulationContext : SimulationContext {
-	private val delegate: DefaultContext
+	private val delegate: DefaultSimulationContext
 	// ... 260+ lines of manual delegation
 }
 
