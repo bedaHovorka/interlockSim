@@ -297,8 +297,15 @@ class ShuntingLoop : Interlocking {
 
 	private fun trySetupPaths(sem: DynamicRailSemaphore): Boolean {
 		logger.debug { "Attempting to setup paths from semaphore: ${sem.name}" }
-		for (path in paths[sem]!!) {
-			// zkusit postavit cestu
+		val pathList = paths[sem]
+		if (pathList == null) {
+			logger.warn {
+				"No paths found for semaphore: ${sem.name}, available keys: ${paths.keys.map { it.name }}"
+			}
+			return false
+		}
+		// zkusit postavit cestu
+		for (path in pathList) {
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) {
 					logger.debug { "Path setup successful from semaphore: ${sem.name}" }
