@@ -104,11 +104,6 @@ class DynamicInOut(
 	 */
 	override fun toString(): String = "Dynamic[$name]"
 
-	/**
-	 * Indicates this is a dynamic wrapper
-	 */
-	override fun isDynamic(): Boolean = true
-
 	private fun getSemaphoreFor(
 		from: Cell.Segment?,
 		to: Cell.Segment?

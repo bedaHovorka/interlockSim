@@ -126,11 +126,6 @@ sealed class DynamicRailSemaphore(
 	 * String representation for debugging
 	 */
 	override fun toString(): String = "Dynamic[$name, signal=$signal]"
-
-	/**
-	 * Indicates this is a dynamic wrapper
-	 */
-	override fun isDynamic(): Boolean = true
 }
 
 /**

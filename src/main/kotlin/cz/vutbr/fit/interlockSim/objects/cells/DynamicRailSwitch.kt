@@ -240,9 +240,4 @@ class DynamicRailSwitch(
 	 * String representation for debugging
 	 */
 	override fun toString(): String = "Dynamic[$name, conf=$conf, locked=$locked]"
-
-	/**
-	 * Indicates this is a dynamic wrapper
-	 */
-	override fun isDynamic(): Boolean = true
 }
