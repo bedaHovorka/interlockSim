@@ -16,6 +16,15 @@ import cz.vutbr.fit.interlockSim.util.Point
 /**
  * Interface to shared functions of inner data model, which is allowed by editing
  *
+ * ## Type Parameter
+ *
+ * EditingContext specializes Context to use [NodeCell] as the cell type.
+ * This enforces that editing operations work exclusively with static cells
+ * (NodeCell and its subtypes like InOut, RailSwitch, RailSemaphore).
+ *
+ * The grid returns [cz.vutbr.fit.interlockSim.context.RailwayNetGrid]<[NodeCell]>,
+ * ensuring type safety for editing operations.
+ *
  * ## Thread Safety
  *
  * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
@@ -27,7 +36,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context {
+interface EditingContext : Context<NodeCell> {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key
