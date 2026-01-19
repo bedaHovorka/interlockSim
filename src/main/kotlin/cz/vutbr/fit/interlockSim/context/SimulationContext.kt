@@ -30,7 +30,9 @@ import java.util.EnumSet
  *
  * ## Type Parameter
  *
- * SimulationContext specializes Context to use [DynamicPathSeparator] as the cell type.
+ * **Phase 6 Temporary Compromise**: SimulationContext extends EditingContext to allow
+ * DefaultSimulationContext to extend DefaultEditingContext during the transition period.
+ * This will be changed in Phase 7 when BaseContext is introduced.
  *
  * The grid stores dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
  * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) created during transformation
@@ -50,10 +52,11 @@ import java.util.EnumSet
  * ensuring sequential execution of all simulation events.
  *
  * @see Context
+ * @see EditingContext
  * @see DynamicPathSeparator
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : Context<DynamicPathSeparator> {
+interface SimulationContext : EditingContext {
 	/**
 	 * simulation reporting types
 	 */

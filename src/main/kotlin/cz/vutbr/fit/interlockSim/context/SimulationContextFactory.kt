@@ -15,10 +15,10 @@ package cz.vutbr.fit.interlockSim.context
 interface SimulationContextFactory : ContextFactory {
 	/**
 	 * Convert editing to simulation context.
-	 * 
+	 *
 	 * Phase 6 update: Implementations should use DefaultSimulationContext.fromEditingContext()
 	 * to properly transform the grid from static to dynamic cells.
-	 * 
+	 *
 	 * @param editingContext The editing context with static network
 	 * @return Simulation context with transformed dynamic grid
 	 * @throws ContextCreationException if editing context is invalid
