@@ -34,32 +34,28 @@ class SimulationCellRenderer(
 		g: Graphics2D,
 		cell: RailSwitch
 	) {
-		drawLine(g, cell.getSpatialType())
-		val segments = cell.getBranchSegments().toTypedArray()
-		drawSegments(g, *segments)
+		drawStaticRailSwitch(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: RailSemaphore
 	) {
-		drawLine(g, cell.getSpatialType())
-		drawTriangle(g, cell)
+		drawStaticRailSemaphore(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: TrackBlockPart
 	) {
-		drawSegments(g, *cell.getSegments())
+		drawStaticTrackBlockPart(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: InOut
 	) {
-		drawSegments(g, cell.direction())
-		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
+		drawStaticInOut(g, cell)
 	}
 
 	// Dynamic cell rendering - render configuration from static ref with dynamic state
@@ -68,10 +64,7 @@ class SimulationCellRenderer(
 		cell: DynamicRailSwitch
 	) {
 		// Render base configuration from static reference
-		val staticRef = cell.staticRef
-		drawLine(g, staticRef.getSpatialType())
-		val segments = staticRef.getBranchSegments().toTypedArray()
-		drawSegments(g, *segments)
+		drawStaticRailSwitch(g, cell.staticRef)
 
 		// TODO (Issue #153): Add visual indicator for switch position (cell.conf)
 		// TODO (Issue #153): Add visual indicator for locked state (cell.locked)
@@ -104,9 +97,7 @@ class SimulationCellRenderer(
 		cell: DynamicInOut
 	) {
 		// Render base configuration from static reference
-		val staticRef = cell.staticRef
-		drawSegments(g, staticRef.direction())
-		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
+		drawStaticInOut(g, cell.staticRef)
 
 		// TODO (Issue #153): Add visual indicator for occupancy state
 		// Future: Animate train entry/exit

@@ -111,6 +111,39 @@ abstract class CellRenderer(
 		g.transform = transform
 	}
 
+	// Protected helper methods for common static cell rendering logic
+	protected fun drawStaticRailSwitch(
+		g: Graphics2D,
+		cell: RailSwitch
+	) {
+		drawLine(g, cell.getSpatialType())
+		val segments = cell.getBranchSegments().toTypedArray()
+		drawSegments(g, *segments)
+	}
+
+	protected fun drawStaticRailSemaphore(
+		g: Graphics2D,
+		cell: RailSemaphore
+	) {
+		drawLine(g, cell.getSpatialType())
+		drawTriangle(g, cell)
+	}
+
+	protected fun drawStaticTrackBlockPart(
+		g: Graphics2D,
+		cell: TrackBlockPart
+	) {
+		drawSegments(g, *cell.getSegments())
+	}
+
+	protected fun drawStaticInOut(
+		g: Graphics2D,
+		cell: InOut
+	) {
+		drawSegments(g, cell.direction())
+		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
+	}
+
 	// Render cell using reflection to find appropriate draw method
 	fun draw(
 		g: Graphics2D,

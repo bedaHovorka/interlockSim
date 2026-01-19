@@ -29,32 +29,28 @@ class EditorCellRenderer(
 		g: Graphics2D,
 		cell: RailSwitch
 	) {
-		drawLine(g, cell.getSpatialType())
-		val segments = cell.getBranchSegments().toTypedArray()
-		drawSegments(g, *segments)
+		drawStaticRailSwitch(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: RailSemaphore
 	) {
-		drawLine(g, cell.getSpatialType())
-		drawTriangle(g, cell)
+		drawStaticRailSemaphore(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: TrackBlockPart
 	) {
-		drawSegments(g, *cell.getSegments())
+		drawStaticTrackBlockPart(g, cell)
 	}
 
 	override fun draw(
 		g: Graphics2D,
 		cell: InOut
 	) {
-		drawSegments(g, cell.direction())
-		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
+		drawStaticInOut(g, cell)
 	}
 
 	// Dynamic cell rendering - extract static reference and delegate to static methods
