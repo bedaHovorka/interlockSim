@@ -612,18 +612,21 @@ open class DefaultSimulationContext(
 	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
 		// If already dynamic, return as-is (idempotent operation)
 		if (separator is DynamicPathSeparator) {
+			logger.trace { "toDynamic: separator already dynamic, returning as-is: ${separator.javaClass.simpleName}" }
 			return separator
 		}
 
 		// Phase 6-7: Use static-to-dynamic map for conversions
 		// Grid lookup will be added in Phase 8-9 when dynamic grid is stored
-		return staticToDynamicMap[separator]
+		val dynamic = staticToDynamicMap[separator]
 			?: throw IllegalStateException(
 				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
 					"Map contains ${staticToDynamicMap.size} entries. " +
 					"This indicates the separator was not registered during initialization. " +
 					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
 			)
+		logger.trace { "toDynamic: converted static ${separator.javaClass.simpleName} to ${dynamic.javaClass.simpleName}" }
+		return dynamic
 	}
 
 	/**
@@ -786,6 +789,7 @@ open class DefaultSimulationContext(
 		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
 		// Phase 7: Convert initial separator to dynamic reference
 		var separator = toDynamic(sep)
+		logger.trace { "Phase 7: Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
 		var previous: TrackSection? = null
 		var next: TrackSection? = nxt
 		val path = ArrayPath(this)
@@ -799,6 +803,7 @@ open class DefaultSimulationContext(
 				val staticResult = next.getSecondEnd(staticSeparator)
 				// Phase 7: Convert static result to dynamic wrapper before adding to path
 				separator = toDynamic(staticResult)
+				logger.trace { "Phase 7: Converted separator from track to dynamic: ${separator.javaClass.simpleName}" }
 				previous = next
 				next = getNextTrackSection(separator, next)
 
