@@ -30,9 +30,9 @@ import java.util.EnumSet
  *
  * ## Type Parameter
  *
- * **Phase 6 Temporary Compromise**: SimulationContext extends EditingContext to allow
+ * **Grid parameterization temporary compromise**: SimulationContext extends EditingContext to allow
  * DefaultSimulationContext to extend DefaultEditingContext during the transition period.
- * This will be changed in Phase 7 when BaseContext is introduced.
+ * This will be changed in future when BaseContext is introduced.
  *
  * The grid stores dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
  * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) created during transformation

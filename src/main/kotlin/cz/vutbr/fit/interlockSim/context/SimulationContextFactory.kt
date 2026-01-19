@@ -16,7 +16,7 @@ interface SimulationContextFactory : ContextFactory {
 	/**
 	 * Convert editing to simulation context.
 	 *
-	 * Phase 6 update: Implementations should use DefaultSimulationContext.fromEditingContext()
+	 * Grid parameterization: Implementations should use DefaultSimulationContext.fromEditingContext()
 	 * to properly transform the grid from static to dynamic cells.
 	 *
 	 * @param editingContext The editing context with static network

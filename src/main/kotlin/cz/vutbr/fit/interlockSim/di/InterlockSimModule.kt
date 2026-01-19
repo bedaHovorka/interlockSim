@@ -100,7 +100,7 @@ val simulationModule: Module =
 		// Singleton as factory is stateless
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 
-		// Grid transformer for static-to-dynamic cell conversion (Phase 6)
+		// Grid transformer for static-to-dynamic cell conversion (grid parameterization)
 		// GridTransformer is a Kotlin object (singleton), we provide it via Koin for DI consistency
 		single { GridTransformer }
 

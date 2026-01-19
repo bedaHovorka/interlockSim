@@ -147,7 +147,7 @@ open class DefaultSimulationContext(
 		/**
 		 * Factory method to create SimulationContext from EditingContext.
 		 *
-		 * Phase 6: Uses GridTransformer to convert static grid to dynamic grid.
+		 * Grid parameterization: Uses GridTransformer to convert static grid to dynamic grid.
 		 * This method creates a new simulation context with a parameterized grid
 		 * of type RailwayNetGrid<DynamicPathSeparator>.
 		 *
@@ -176,8 +176,8 @@ open class DefaultSimulationContext(
 			// Store the transformation map for toDynamic() lookups
 			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
 			
-			// TODO Phase 6.5: Replace inherited grid with transformed grid
-			// Currently keeping both for compatibility, will be fully replaced in Phase 7-9
+			// TODO Grid parameterization TODO: Replace inherited grid with transformed grid
+			// Currently keeping both for compatibility, will be fully replaced in Grid parameterization future
 			
 			logger.info {
 				"Created simulation context from editing context: " +
@@ -190,16 +190,16 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Phase 6 Note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
+	 * Grid parameterization note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
 	 * We do NOT override this method because:
-	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary until Phase 7)
+	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary during grid parameterization)
 	 * 2. The interface SimulationContext : Context<DynamicPathSeparator> expects RailwayNetGrid<DynamicPathSeparator>
 	 * 3. These are incompatible, but the implementation works because:
 	 *    - Internal code uses staticToDynamicMap for conversions
 	 *    - Grid lookup happens via parent's getRailWayNetGrid() (returns NodeCell grid)
 	 *    - Results are then converted via toDynamic() when needed
 	 *
-	 * Phase 7-9 will resolve this by introducing BaseContext and separate grid storage.
+	 * Grid parameterization future will resolve this by introducing BaseContext and separate grid storage.
 	 */
 
 	/**
@@ -604,9 +604,9 @@ open class DefaultSimulationContext(
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
 	 *
-	 * Phase 6: Uses staticToDynamicMap for lookups (grid still contains static cells).
-	 * Phase 7: Used in pathToNextSemaphore to ensure paths contain only dynamic references.
-	 * Phase 8-9 will enable grid-based lookup when dynamic grid is stored separately.
+	 * Grid parameterization: Uses staticToDynamicMap for lookups (grid still contains static cells).
+	 * Grid parameterization: Used in pathToNextSemaphore to ensure paths contain only dynamic references.
+	 * Grid parameterization future will enable grid-based lookup when dynamic grid is stored separately.
 	 *
 	 * @param separator The separator to convert (static or already Dynamic)
 	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
@@ -619,8 +619,8 @@ open class DefaultSimulationContext(
 			return separator
 		}
 
-		// Phase 6-7: Use static-to-dynamic map for conversions
-		// Grid lookup will be added in Phase 8-9 when dynamic grid is stored
+		// Grid parameterization: Use static-to-dynamic map for conversions
+		// Grid lookup will be added in Grid parameterization future when dynamic grid is stored
 		val dynamic = staticToDynamicMap[separator]
 			?: throw IllegalStateException(
 				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
@@ -781,7 +781,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Find path to the next semaphore from a path separator
 	 *
-	 * Phase 7: Returns paths containing only dynamic references.
+	 * Grid parameterization: Returns paths containing only dynamic references.
 	 * All PathSeparators added to the path are converted to their dynamic wrappers
 	 * to ensure consistent use of dynamic types throughout simulation.
 	 */
@@ -790,23 +790,23 @@ open class DefaultSimulationContext(
 		nxt: TrackSection
 	): Path? {
 		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
-		// Phase 7: Convert initial separator to dynamic reference
+		// Grid parameterization: Convert initial separator to dynamic reference
 		var separator = toDynamic(sep)
-		logger.trace { "Phase 7: Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
+		logger.trace { "Grid parameterization: Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
 		var previous: TrackSection? = null
 		var next: TrackSection? = nxt
 		val path = ArrayPath(this)
 		do {
-			// Phase 7: Add dynamic separator to path
+			// Grid parameterization: Add dynamic separator to path
 			path.add(separator)
 			if (next != null) {
 				path.add(next)
 				// Extract static separator for track operations (getSecondEnd uses === comparison)
 				val staticSeparator = CellUtilities.assertNodeCell(separator)
 				val staticResult = next.getSecondEnd(staticSeparator)
-				// Phase 7: Convert static result to dynamic wrapper before adding to path
+				// Grid parameterization: Convert static result to dynamic wrapper before adding to path
 				separator = toDynamic(staticResult)
-				logger.trace { "Phase 7: Converted separator from track to dynamic: ${separator.javaClass.simpleName}" }
+				logger.trace { "Grid parameterization: Converted separator from track to dynamic: ${separator.javaClass.simpleName}" }
 				previous = next
 				next = getNextTrackSection(separator, next)
 
@@ -815,7 +815,7 @@ open class DefaultSimulationContext(
 				if (separator is OrientedPathSeparator) {
 					// Direction check for oriented semaphores
 					if (isSeparatorInDirection(separator, next, previous)) {
-						// Phase 7: Add dynamic separator to path
+						// Grid parameterization: Add dynamic separator to path
 						path.add(separator)
 						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
 						return path

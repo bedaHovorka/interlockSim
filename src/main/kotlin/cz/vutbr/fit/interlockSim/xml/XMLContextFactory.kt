@@ -420,7 +420,7 @@ class XMLContextFactory :
 			allNodes.addAll(xmlContext.getGraph().nodeSet())
 
 			// Add any isolated NodeCells from the grid that aren't in the graph
-			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Grid parameterization: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
 			// Cast to Cell grid to iterate without ClassCastException
 			@Suppress("UNCHECKED_CAST")
 			val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
