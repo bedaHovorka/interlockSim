@@ -28,6 +28,21 @@ import java.util.EnumSet
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
  *
+ * ## Type Parameter
+ *
+ * SimulationContext extends [EditingContext] and therefore uses
+ * [cz.vutbr.fit.interlockSim.objects.cells.Cell] as the cell type.
+ *
+ * The grid stores static cells ([cz.vutbr.fit.interlockSim.objects.cells.NodeCell] and
+ * [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart]). Dynamic wrappers
+ * ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) are maintained
+ * separately in the simulation context via [toDynamic] methods.
+ *
+ * The [toDynamic] methods act as bridges between static objects and their
+ * dynamic wrappers, enabling the separation of static configuration from
+ * dynamic simulation state.
+ *
  * ## Thread Safety
  *
  * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
@@ -38,9 +53,10 @@ import java.util.EnumSet
  * ensuring sequential execution of all simulation events.
  *
  * @see Context
+ * @see EditingContext
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : Context {
+interface SimulationContext : EditingContext {
 	/**
 	 * simulation reporting types
 	 */

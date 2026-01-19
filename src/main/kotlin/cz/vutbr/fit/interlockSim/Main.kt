@@ -51,7 +51,7 @@ class Main {
 		}
 	}
 
-	fun createContext(args: Array<String>): Context {
+	fun createContext(args: Array<String>): Context<*> {
 		if (args.size > 1) {
 			val userDir = File(".").canonicalFile
 			val file = File(args[1]).canonicalFile

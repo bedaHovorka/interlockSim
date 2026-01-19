@@ -22,6 +22,19 @@ import java.beans.PropertyChangeListener
  *
  * Point is used as Pair of integers
  *
+ * ## Type Parameter
+ *
+ * @param C The type of cells stored in the railway network grid. Must extend [Cell].
+ *          - Both [EditingContext] and [SimulationContext] use [Cell] as the grid type
+ *          - The grid stores mixed cell types: [cz.vutbr.fit.interlockSim.objects.cells.NodeCell]
+ *            subclasses (RailSwitch, RailSemaphore, InOut) and
+ *            [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] (intermediate track segments)
+ *          - During simulation, [cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator]
+ *            wrappers are maintained separately via [SimulationContext.toDynamic] methods,
+ *            not stored in the grid
+ *
+ * The type parameter provides compile-time type safety for grid access operations.
+ *
  * ## Thread Safety
  *
  * **This interface and its implementations are NOT thread-safe.**
@@ -53,12 +66,12 @@ import java.beans.PropertyChangeListener
  *
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface Context {
+interface Context<out C : Cell> {
 	/**
 	 * get grid, which is graphic representation of model
-	 * @return grid
+	 * @return grid with cells of type C
 	 */
-	fun getRailWayNetGrid(): RailwayNetGrid<Cell>
+	fun getRailWayNetGrid(): RailwayNetGrid<C>
 
 	/**
 	 * ...

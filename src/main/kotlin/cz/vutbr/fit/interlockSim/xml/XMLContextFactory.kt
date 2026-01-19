@@ -308,7 +308,7 @@ class XMLContextFactory :
 	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): Context =
+	override fun createContext(file: File): Context<*> =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -330,10 +330,10 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): Context = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context<*> = createContext(InputStreamReader(stream))
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		stream: OutputStream
 	): Boolean {
 		// TODO: Implement XML serialization - see issue #61 (relates to Goal 5)
@@ -396,7 +396,7 @@ class XMLContextFactory :
 	}
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		file: File
 	): Boolean {
 		val xmlContext = Util.assertInstanceOf(DefaultSimulationContext::class.java, context) // zatim
