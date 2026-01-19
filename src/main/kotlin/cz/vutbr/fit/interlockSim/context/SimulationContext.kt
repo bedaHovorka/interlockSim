@@ -30,18 +30,15 @@ import java.util.EnumSet
  *
  * ## Type Parameter
  *
- * SimulationContext extends [EditingContext] and therefore uses
- * [cz.vutbr.fit.interlockSim.objects.cells.Cell] as the cell type.
+ * SimulationContext specializes Context to use [DynamicPathSeparator] as the cell type.
  *
- * The grid stores static cells ([cz.vutbr.fit.interlockSim.objects.cells.NodeCell] and
- * [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart]). Dynamic wrappers
- * ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
- * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) are maintained
- * separately in the simulation context via [toDynamic] methods.
+ * The grid stores dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) created during transformation
+ * from editing context. These wrappers maintain references to static objects via `staticRef`
+ * property for identity preservation.
  *
- * The [toDynamic] methods act as bridges between static objects and their
- * dynamic wrappers, enabling the separation of static configuration from
- * dynamic simulation state.
+ * The simulation context is created from an editing context using `GridTransformer` to convert
+ * static NodeCell instances to their dynamic wrapper counterparts.
  *
  * ## Thread Safety
  *
@@ -53,10 +50,10 @@ import java.util.EnumSet
  * ensuring sequential execution of all simulation events.
  *
  * @see Context
- * @see EditingContext
+ * @see DynamicPathSeparator
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : EditingContext {
+interface SimulationContext : Context<DynamicPathSeparator> {
 	/**
 	 * simulation reporting types
 	 */

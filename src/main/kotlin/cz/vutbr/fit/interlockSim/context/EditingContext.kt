@@ -19,14 +19,15 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * ## Type Parameter
  *
- * EditingContext specializes Context to use [Cell] as the cell type.
+ * EditingContext specializes Context to use [NodeCell] as the cell type.
  * While editing operations via [putCell] only accept [NodeCell] and its
  * subtypes (InOut, RailSwitch, RailSemaphore), the grid also contains
  * [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] cells that are
  * automatically generated when joining nodes with track blocks.
  *
- * The grid returns [RailwayNetGrid]<[Cell]>, containing both NodeCell subclasses
- * and TrackBlockPart instances.
+ * The grid returns [RailwayNetGrid]<[NodeCell]>, containing NodeCell subclasses.
+ * TrackBlockPart instances are stored internally but not exposed through the
+ * parameterized interface.
  *
  * ## Thread Safety
  *
@@ -39,7 +40,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context<Cell> {
+interface EditingContext : Context<NodeCell> {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key

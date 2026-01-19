@@ -142,7 +142,12 @@ open class DefaultEditingContext(
 		logger.debug { "Initialized railway network grid: ${cols}x$rows cells" }
 	}
 
-	override fun getRailWayNetGrid(): RailwayNetGrid<Cell> = railwayNetGrid
+	override fun getRailWayNetGrid(): RailwayNetGrid<NodeCell> {
+		// The grid internally stores Cell (NodeCell + TrackBlockPart), but we only expose NodeCell
+		// This is type-safe because all NodeCell operations go through putCell/removeCell/moveCell
+		@Suppress("UNCHECKED_CAST")
+		return railwayNetGrid as RailwayNetGrid<NodeCell>
+	}
 
 	/**
 	 * Add a listener for context changes.
