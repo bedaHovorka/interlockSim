@@ -29,7 +29,7 @@ class SimulationCellRenderer(
 	cellWidth: Int,
 	cellHeight: Int
 ) : CellRenderer(cellWidth, cellHeight) {
-	// Static cell rendering (should not normally appear in simulation grid)
+	// Static cell rendering (supported for flexibility but uncommon in simulation grid)
 	override fun draw(
 		g: Graphics2D,
 		cell: RailSwitch

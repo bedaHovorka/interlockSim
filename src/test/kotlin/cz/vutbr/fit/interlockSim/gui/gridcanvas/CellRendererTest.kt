@@ -48,6 +48,13 @@ val image = BufferedImage(cellWidth, cellHeight, BufferedImage.TYPE_INT_ARGB)
 graphics = image.createGraphics()
 }
 
+// Helper method to create DynamicInOut with required semaphores
+private fun createDynamicInOut(staticInOut: InOut): DynamicInOut {
+val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
+val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
+return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
+}
+
 @Test
 fun `EditorCellRenderer can render static RailSwitch`() {
 // Given
@@ -99,9 +106,7 @@ editorRenderer.draw(graphics, dynamicSemaphore)
 fun `EditorCellRenderer can render DynamicInOut`() {
 // Given
 val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
-val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
-val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
-val dynamicInOut = DynamicInOut(staticInOut, inSemaphore, outSemaphore)
+val dynamicInOut = createDynamicInOut(staticInOut)
 
 // When/Then - should not throw exception
 editorRenderer.draw(graphics, dynamicInOut)
@@ -158,9 +163,7 @@ simulationRenderer.draw(graphics, dynamicSemaphore)
 fun `SimulationCellRenderer can render DynamicInOut`() {
 // Given
 val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
-val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
-val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
-val dynamicInOut = DynamicInOut(staticInOut, inSemaphore, outSemaphore)
+val dynamicInOut = createDynamicInOut(staticInOut)
 
 // When/Then - should not throw exception
 simulationRenderer.draw(graphics, dynamicInOut)
