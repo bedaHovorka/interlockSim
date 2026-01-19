@@ -17,8 +17,10 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * aby bylo rozhrani dokonale tak iterator vraceny implementaci tohoto rozhrani
  * musi u [Iterator.remove] hazet [UnsupportedOperationException]
+ *
+ * @param T the type of cells stored in this grid (must extend [Cell])
  */
-interface RailwayNetGrid : Iterable<Map.Entry<Point, Cell>> {
+interface RailwayNetGrid<out T : Cell> : Iterable<Map.Entry<Point, T>> {
 	/**
 	 * @param x
 	 * @param y
@@ -27,13 +29,13 @@ interface RailwayNetGrid : Iterable<Map.Entry<Point, Cell>> {
 	fun getCellAt(
 		x: Int,
 		y: Int
-	): Cell?
+	): T?
 
 	/**
 	 * @param point
 	 * @return cell
 	 */
-	fun get(point: Point): Cell?
+	fun get(point: Point): T?
 
 	/**
 	 * @return count of colums (width)
@@ -49,5 +51,5 @@ interface RailwayNetGrid : Iterable<Map.Entry<Point, Cell>> {
 	 * @param out
 	 * @return location of cell
 	 */
-	fun getLocation(out: Cell): Point?
+	fun getLocation(out: @UnsafeVariance T): Point?
 }

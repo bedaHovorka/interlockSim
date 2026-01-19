@@ -188,7 +188,7 @@ class ShuntingLoop : Interlocking {
 		x: Int,
 		y: Int
 	): T {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
 		return Util.assertInstanceOf(clazz, cell)
 	}
@@ -209,7 +209,7 @@ class ShuntingLoop : Interlocking {
 		cell1: Cell,
 		cell2: Cell
 	): SimpleTrackBlock {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = context.getGraph()
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
