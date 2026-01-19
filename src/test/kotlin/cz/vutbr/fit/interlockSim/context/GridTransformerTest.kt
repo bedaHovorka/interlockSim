@@ -16,6 +16,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -62,7 +63,7 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("transforms empty grid successfully")
 		fun transformGrid_emptyGrid_returnsEmptyGrid() {
 			// Arrange - Create empty grid
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -80,10 +81,10 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("transforms grid with single RailSwitch")
 		fun transformGrid_singleRailSwitch_wrapsCorrectly() {
 			// Arrange - Create grid with single RailSwitch
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val railSwitch = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			railSwitch.setName("switch1")
-			staticGrid.putCell(Point(5, 5), railSwitch)
+			staticGrid.put(Point(5, 5), railSwitch)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -91,7 +92,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(5, 5)
 			assertThat(dynamicCell).isNotNull()
-			assertThat(dynamicCell).isInstanceOf(DynamicRailSwitch::class)
+			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
 			
 			val dynamicSwitch = dynamicCell as DynamicRailSwitch
 			assertThat(dynamicSwitch.staticRef).isSameInstanceAs(railSwitch)
@@ -105,10 +106,10 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("transforms grid with single RailSemaphore")
 		fun transformGrid_singleRailSemaphore_wrapsCorrectly() {
 			// Arrange - Create grid with single RailSemaphore
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
 			val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 			railSemaphore.setName("sem1")
-			staticGrid.putCell(Point(3, 3), railSemaphore)
+			staticGrid.put(Point(3, 3), railSemaphore)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -116,7 +117,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(3, 3)
 			assertThat(dynamicCell).isNotNull()
-			assertThat(dynamicCell).isInstanceOf(DynamicPathSeparator::class)
+			assertThat(dynamicCell as Any).isInstanceOf<DynamicPathSeparator>()
 			
 			// Verify identity preservation via mapping
 			assertThat(result.staticToDynamicMap).hasSize(1)
@@ -127,10 +128,9 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("transforms grid with single InOut")
 		fun transformGrid_singleInOut_wrapsCorrectly() {
 			// Arrange - Create grid with single InOut
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val inOut = InOut(true)
-			inOut.setName("A")
-			staticGrid.putCell(Point(2, 2), inOut)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val inOut = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+			staticGrid.put(Point(2, 2), inOut)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -138,7 +138,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(2, 2)
 			assertThat(dynamicCell).isNotNull()
-			assertThat(dynamicCell).isInstanceOf(DynamicInOut::class)
+			assertThat(dynamicCell as Any).isInstanceOf<DynamicInOut>()
 			
 			val dynamicInOut = dynamicCell as DynamicInOut
 			assertThat(dynamicInOut.staticRef).isSameInstanceAs(inOut)
@@ -200,20 +200,20 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("skips TrackBlockPart cells")
 		fun transformGrid_withTrackBlockParts_skipsNonNodeCells() {
 			// Arrange - Create grid with mixed cell types
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val railSwitch = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
-			val trackBlock = SimpleTrackBlock(railSwitch, railSwitch, Cell.Segment.A)
-			val trackBlockPart = TrackBlockPart(trackBlock, Cell.Segment.A)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val trackBlock = SimpleTrackBlock(railSwitch, railSwitch, 100.0, 80.0, 80.0)
+			val trackBlockPart = TrackBlockPart(trackBlock, arrayOf(Cell.Segment.A))
 			
-			staticGrid.putCell(Point(1, 1), railSwitch)
-			staticGrid.putCell(Point(2, 2), trackBlockPart)
+			staticGrid.put(Point(1, 1), railSwitch)
+			staticGrid.put(Point(2, 2), trackBlockPart)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
 
 			// Assert - Only NodeCell transformed, TrackBlockPart skipped
 			assertThat(result.dynamicGrid.getCellAt(1, 1)).isNotNull()
-			assertThat(result.dynamicGrid.getCellAt(2, 2)).isNotNull() // Should be null as TrackBlockPart was skipped
+			assertThat(result.dynamicGrid.getCellAt(2, 2)).isNull() // Should be null as TrackBlockPart was skipped
 			
 			// Only the RailSwitch should be in the mapping
 			assertThat(result.staticToDynamicMap).hasSize(1)
@@ -227,11 +227,11 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("preserves identity via staticRef")
 		fun transformGrid_anyCell_preservesIdentity() {
 			// Arrange - Create grid with cells
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val railSwitch = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			staticGrid.putCell(Point(1, 1), railSwitch)
-			staticGrid.putCell(Point(2, 2), railSemaphore)
+			staticGrid.put(Point(1, 1), railSwitch)
+			staticGrid.put(Point(2, 2), railSemaphore)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -248,9 +248,9 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("mapping allows reverse lookup")
 		fun transformGrid_anyCell_allowsReverseLookup() {
 			// Arrange - Create grid with cells
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val railSwitch = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
-			staticGrid.putCell(Point(5, 5), railSwitch)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			staticGrid.put(Point(5, 5), railSwitch)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -258,7 +258,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Can look up dynamic from static
 			val dynamicCell = result.staticToDynamicMap[railSwitch]
 			assertThat(dynamicCell).isNotNull()
-			assertThat(dynamicCell).isInstanceOf(DynamicRailSwitch::class)
+			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
 			
 			// Can verify identity via staticRef
 			val dynamicSwitch = dynamicCell as DynamicRailSwitch
@@ -326,7 +326,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - InOut and its semaphores are mapped
 			val dynamicInOut = result.staticToDynamicMap[inOut!!]
 			assertThat(dynamicInOut).isNotNull()
-			assertThat(dynamicInOut).isInstanceOf(DynamicInOut::class)
+			assertThat(dynamicInOut as Any).isInstanceOf<DynamicInOut>()
 			
 			// Verify embedded semaphores are also mapped
 			assertThat(result.staticToDynamicMap[inOut.getInSemaphore()]).isNotNull()
@@ -360,20 +360,20 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("transforms large grid efficiently")
 		fun transformGrid_largeGrid_performsReasonably() {
 			// Arrange - Create large grid with many cells
-			val staticGrid = DefaultRailWayNetGrid<Cell>(100, 100)
+			val staticGrid = DefaultRailWayNetGrid(100, 100)
 			
 			// Add 100 cells across the grid
 			for (i in 0 until 100) {
 				val x = i % 100
 				val y = i / 100
 				val cell = if (i % 3 == 0) {
-					RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
+					RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 				} else if (i % 3 == 1) {
 					RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 				} else {
-					InOut(true)
+					InOut("InOut$i", true, Cell.SpatialType.HORIZONTAL)
 				}
-				staticGrid.putCell(Point(x, y), cell as Cell)
+				staticGrid.put(Point(x, y), cell as Cell)
 			}
 
 			// Act - Transform and measure time
@@ -394,11 +394,11 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("handles grid with only TrackBlockParts")
 		fun transformGrid_onlyTrackBlockParts_returnsEmptyDynamicGrid() {
 			// Arrange - Create grid with only TrackBlockParts
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val railSwitch = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
-			val trackBlock = SimpleTrackBlock(railSwitch, railSwitch, Cell.Segment.A)
-			val trackBlockPart = TrackBlockPart(trackBlock, Cell.Segment.A)
-			staticGrid.putCell(Point(1, 1), trackBlockPart)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val trackBlock = SimpleTrackBlock(railSwitch, railSwitch, 100.0, 80.0, 80.0)
+			val trackBlockPart = TrackBlockPart(trackBlock, arrayOf(Cell.Segment.A))
+			staticGrid.put(Point(1, 1), trackBlockPart)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -416,11 +416,11 @@ class GridTransformerTest : KoinTestBase() {
 		@DisplayName("handles grid boundaries correctly")
 		fun transformGrid_cellsAtBoundaries_transformsCorrectly() {
 			// Arrange - Create grid with cells at boundaries
-			val staticGrid = DefaultRailWayNetGrid<Cell>(10, 10)
-			val topLeft = RailSwitch(RailSwitch.Type.NORMAL, Cell.SpatialType.HORIZONTAL)
+			val staticGrid = DefaultRailWayNetGrid(10, 10)
+			val topLeft = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			val bottomRight = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			staticGrid.putCell(Point(0, 0), topLeft)
-			staticGrid.putCell(Point(9, 9), bottomRight)
+			staticGrid.put(Point(0, 0), topLeft)
+			staticGrid.put(Point(9, 9), bottomRight)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
