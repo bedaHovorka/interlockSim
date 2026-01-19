@@ -166,8 +166,8 @@ class DynamicRailSemaphoreTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicSemaphore1.static).isSameInstanceAs(staticSemaphore1)
-		assertThat(dynamicSemaphore2.static).isSameInstanceAs(staticSemaphore2)
+		assertThat(dynamicSemaphore1.staticRef).isSameInstanceAs(staticSemaphore1)
+		assertThat(dynamicSemaphore2.staticRef).isSameInstanceAs(staticSemaphore2)
 	}
 
 	@Test

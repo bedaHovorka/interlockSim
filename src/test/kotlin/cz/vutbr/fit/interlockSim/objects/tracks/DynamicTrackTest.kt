@@ -307,8 +307,8 @@ class DynamicTrackTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicTrack1.static).isSameAs(staticTrack1)
-		assertThat(dynamicTrack2.static).isSameAs(staticTrack2)
+		assertThat(dynamicTrack1.staticRef).isSameAs(staticTrack1)
+		assertThat(dynamicTrack2.staticRef).isSameAs(staticTrack2)
 	}
 
 	@Test

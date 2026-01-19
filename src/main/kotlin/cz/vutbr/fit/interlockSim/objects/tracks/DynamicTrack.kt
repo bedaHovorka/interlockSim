@@ -31,16 +31,16 @@ private val logger = KotlinLogging.logger {}
  *
  * Part of Phase 4: Static/Dynamic property separation (bedaHovorka/interlockSim#92)
  *
- * @property static The static track object with immutable editing-time properties
+ * @property staticRef The static track object with immutable editing-time properties
  */
 class DynamicTrack(
-	val static: TrackFacility
+	val staticRef: TrackFacility
 ) {
 	// Static properties delegated from wrapped object
 	val length: Double
-		get() = static.length()
+		get() = staticRef.length()
 	val ends: Array<PathSeparator>
-		get() = static.ends()
+		get() = staticRef.ends()
 
 	/**
 	 * Dynamic property: Current state (FREE, RESERVED, or OCCUPIED)
@@ -93,11 +93,11 @@ class DynamicTrack(
 	 */
 	fun enter(newOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${static.hashCode()} ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
+			"${Process.time()} Block ${staticRef.hashCode()} ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
 		}
 		if (occupant != null) {
 			logger.error {
-				"${Process.time()} CONFLICT: Block ${static.hashCode()} collision! " +
+				"${Process.time()} CONFLICT: Block ${staticRef.hashCode()} collision! " +
 					"Existing occupant=$occupant, newOccupant=$newOccupant"
 			}
 		}
@@ -119,7 +119,7 @@ class DynamicTrack(
 	 */
 	fun leave(leavingOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${static.hashCode()} EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
+			"${Process.time()} Block ${staticRef.hashCode()} EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
 		}
 		requireSimulation(occupant === leavingOccupant) {
 			"Track occupant mismatch on leave"
@@ -137,7 +137,7 @@ class DynamicTrack(
 	fun isFreeFrom(sep: PathSeparator): Boolean {
 		val isFree = state == TrackFacility.State.FREE
 		logger.debug {
-			"Track ${static.hashCode()} isFreeFrom check: from=$sep, state=$state, result=$isFree"
+			"Track ${staticRef.hashCode()} isFreeFrom check: from=$sep, state=$state, result=$isFree"
 		}
 		return isFree
 	}
@@ -152,11 +152,11 @@ class DynamicTrack(
 	 */
 	fun setUpPath(sep: PathSeparator) {
 		logger.info {
-			"${Process.time()} Block ${static.hashCode()} RESERVE: from=$sep, state=FREE->RESERVED"
+			"${Process.time()} Block ${staticRef.hashCode()} RESERVE: from=$sep, state=FREE->RESERVED"
 		}
 		if (state != TrackFacility.State.FREE) {
 			logger.warn {
-				"${Process.time()} CONFLICT: Block ${static.hashCode()} reservation rejected - " +
+				"${Process.time()} CONFLICT: Block ${staticRef.hashCode()} reservation rejected - " +
 					"state=$state, occupant=$occupant, requested by=$sep"
 			}
 		}
@@ -182,7 +182,7 @@ class DynamicTrack(
 			isSetUp = false
 		}
 		logger.debug {
-			"Track ${static.hashCode()} isSetUpPath check: sep=$sep, state=$state, " +
+			"Track ${staticRef.hashCode()} isSetUpPath check: sep=$sep, state=$state, " +
 				"from=$reservedFrom, result=$isSetUp"
 		}
 		return isSetUp
@@ -198,11 +198,11 @@ class DynamicTrack(
 	 */
 	fun cancelPathSetup(sep: PathSeparator) {
 		logger.info {
-			"${Process.time()} Block ${static.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE"
+			"${Process.time()} Block ${staticRef.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE"
 		}
 		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
 		if (sep !== reservedFrom) {
-			throw TrackOperationException("wrong end on cancel", static)
+			throw TrackOperationException("wrong end on cancel", staticRef)
 		}
 		reservedFrom = null
 	}
@@ -225,10 +225,10 @@ class DynamicTrack(
 	) {
 		if (!stateChange(from, to)) {
 			logger.error {
-				"${Process.time()} CONFLICT: Block ${static.hashCode()} state violation - " +
+				"${Process.time()} CONFLICT: Block ${staticRef.hashCode()} state violation - " +
 					"expected=$from, actual=$state, attempted=$to"
 			}
-			throw TrackOperationException(errorStateMessage(from), static)
+			throw TrackOperationException(errorStateMessage(from), staticRef)
 		}
 	}
 
@@ -254,7 +254,7 @@ class DynamicTrack(
 		if (this === other) return true
 		if (other !is DynamicTrack) return false
 		// Identity comparison (===) for stable equals based on static object
-		return static === other.static
+		return staticRef === other.staticRef
 	}
 
 	/**
@@ -265,7 +265,7 @@ class DynamicTrack(
 	 * - Stability across state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(static)
+	override fun hashCode(): Int = System.identityHashCode(staticRef)
 
 	/**
 	 * String representation for debugging

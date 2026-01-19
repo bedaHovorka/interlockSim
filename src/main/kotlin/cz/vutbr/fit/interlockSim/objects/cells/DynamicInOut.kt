@@ -36,13 +36,13 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathElement
  * @property outSemaphore Dynamic wrapper for the output semaphore
  */
 class DynamicInOut(
-	val static: InOut,
+	val staticRef: InOut,
 	val inSemaphore: DynamicRailSemaphore,
 	val outSemaphore: DynamicRailSemaphore
-) : OrientedPathSeparator by static, DynamicPathSeparator {
+) : OrientedPathSeparator by staticRef, DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val name: String
-		get() = static.getName()
+		get() = staticRef.getName()
 	// orientation and direction() are delegated from OrientedPathSeparator
 
 	/**
@@ -58,8 +58,8 @@ class DynamicInOut(
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
 		return when (other) {
-			is DynamicInOut -> static === other.static
-			is InOut -> static === other
+			is DynamicInOut -> staticRef === other.staticRef
+			is InOut -> staticRef === other
 			else -> false
 		}
 	}
@@ -84,8 +84,8 @@ class DynamicInOut(
 	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
-		if (from == null) return static.direction()
-		requireSimulation(from === static.direction()) { "Invalid segment: $from, expected: ${static.direction()}" }
+		if (from == null) return staticRef.direction()
+		requireSimulation(from === staticRef.direction()) { "Invalid segment: $from, expected: ${staticRef.direction()}" }
 		return null
 	}
 
@@ -97,19 +97,24 @@ class DynamicInOut(
 	 * - Stability across state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(static)
+	override fun hashCode(): Int = System.identityHashCode(staticRef)
 
 	/**
 	 * String representation for debugging
 	 */
 	override fun toString(): String = "Dynamic[$name]"
 
+	/**
+	 * Indicates this is a dynamic wrapper
+	 */
+	override fun isDynamic(): Boolean = true
+
 	private fun getSemaphoreFor(
 		from: Cell.Segment?,
 		to: Cell.Segment?
 	): DynamicRailSemaphore? {
-		if (from == null && to == static.direction()) return inSemaphore
-		if (to == null && from == static.direction()) return outSemaphore
+		if (from == null && to == staticRef.direction()) return inSemaphore
+		if (to == null && from == staticRef.direction()) return outSemaphore
 		return null
 	}
 

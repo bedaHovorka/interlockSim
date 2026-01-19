@@ -93,7 +93,7 @@ class Train :
 		final override fun actions() {
 			val staticInOut = timetable.getIn()
 			requireSimulationNotNull(staticInOut) { "PathSeparator from timetable.getIn() must not be null" }
-			var where: PathSeparator = context.getInOuts().first { it.static === staticInOut }
+			var where: PathSeparator = context.getInOuts().first { it.staticRef === staticInOut }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
@@ -582,7 +582,7 @@ class Train :
 	override fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout: InOut = timetable.getIn()
-		val dynamicInOut: DynamicInOut = context.getInOuts().first { it.static === inout }
+		val dynamicInOut: DynamicInOut = context.getInOuts().first { it.staticRef === inout }
 		val worker: InOutWorker = context.getWorkerFor(dynamicInOut)
 		logger.debug { "Train $number approved for movement from ${inout.getName()} to ${timetable.getOut().getName()}" }
 		worker.enterTrain(this)

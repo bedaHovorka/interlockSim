@@ -331,16 +331,16 @@ class ShuntingLoop : Interlocking {
 			// Compare using static references to avoid Dynamic wrapper identity issues
 			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
 			val nextSemStatic = when (nextSem) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.static
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.static
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
 				else -> nextSem
 			}
-			if (nextSemStatic != to.static) return false
+			if (nextSemStatic != to.staticRef) return false
 			return trySetupPaths(to)
 		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
 			// Use static separator for both getSecondEnd AND isSetUpPath
 			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
-			val staticSecondEnd = block.getSecondEnd(to.static)
+			val staticSecondEnd = block.getSecondEnd(to.staticRef)
 			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}

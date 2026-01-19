@@ -32,9 +32,9 @@ object CellUtilities {
 	fun assertNodeCell(obj: Any): NodeCell {
 		// Handle Dynamic* wrappers by extracting their static NodeCell
 		when (obj) {
-			is DynamicInOut -> return obj.static
-			is DynamicRailSwitch -> return obj.static
-			is DynamicRailSemaphore -> return obj.static
+			is DynamicInOut -> return obj.staticRef
+			is DynamicRailSwitch -> return obj.staticRef
+			is DynamicRailSemaphore -> return obj.staticRef
 			is NodeCell -> return obj
 			else -> {
 				requireValidState(false) {
