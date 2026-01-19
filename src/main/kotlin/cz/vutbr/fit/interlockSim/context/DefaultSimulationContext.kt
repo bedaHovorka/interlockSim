@@ -369,12 +369,19 @@ open class DefaultSimulationContext(
 	private fun initializeDynamicMapping() {
 		// Track what we're mapping to avoid duplicates
 		var mappedCount = 0
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 
 		// Iterate through all cells in the railway network grid
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y) ?: continue
+
+				// Skip TrackBlockPart - these are not NodeCells and don't need dynamic wrappers
+				if (cell !is NodeCell) {
+					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - not a NodeCell" }
+					continue
+				}
 
 				// Skip if already mapped (handles case where getInOuts was called early)
 				if (cell in staticToDynamicMap) {
@@ -519,7 +526,8 @@ open class DefaultSimulationContext(
 	 * unwrapped element during simulation indicates a bug.
 	 */
 	private fun validateDynamicMapping() {
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 		val unmappedSeparators = mutableListOf<String>()
 		val unmappedTracks = mutableListOf<String>()
 

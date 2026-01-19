@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -147,6 +148,14 @@ open class DefaultEditingContext(
 		@Suppress("UNCHECKED_CAST")
 		return railwayNetGrid as RailwayNetGrid<NodeCell>
 	}
+
+	/**
+	 * Protected accessor for the internal grid that stores Cell (not just NodeCell).
+	 * This is needed by DefaultSimulationContext to iterate over all cells including TrackBlockPart.
+	 *
+	 * @return the internal grid that can contain both NodeCell and TrackBlockPart
+	 */
+	protected fun getInternalGrid(): RailwayNetGrid<Cell> = railwayNetGrid
 
 	/**
 	 * Add a listener for context changes.
