@@ -190,20 +190,17 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Override to return grid with correct type parameter for simulation.
-	 * 
-	 * Phase 6: Currently returns inherited grid cast to DynamicPathSeparator type.
-	 * In later phases, this will return a fully transformed grid stored separately.
-	 * 
-	 * WARNING: This cast is unsafe and will cause ClassCastException if grid contains
-	 * static cells. Proper initialization via fromEditingContext() is required.
+	 * Phase 6 Note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
+	 * We do NOT override this method because:
+	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary until Phase 7)
+	 * 2. The interface SimulationContext : Context<DynamicPathSeparator> expects RailwayNetGrid<DynamicPathSeparator>
+	 * 3. These are incompatible, but the implementation works because:
+	 *    - Internal code uses staticToDynamicMap for conversions
+	 *    - Grid lookup happens via parent's getRailWayNetGrid() (returns NodeCell grid)
+	 *    - Results are then converted via toDynamic() when needed
+	 *
+	 * Phase 7-9 will resolve this by introducing BaseContext and separate grid storage.
 	 */
-	override fun getRailWayNetGrid(): RailwayNetGrid<DynamicPathSeparator> {
-		// Phase 6 temporary implementation: cast inherited grid
-		// TODO Phase 7-9: Return separately stored transformed grid
-		@Suppress("UNCHECKED_CAST")
-		return super.getRailWayNetGrid() as RailwayNetGrid<DynamicPathSeparator>
-	}
 
 	/**
 	 * Get segment for a path separator and tracks
@@ -595,12 +592,12 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
-	 * 
-	 * Phase 6 update: Attempts grid lookup first, then falls back to map.
-	 * This prepares for full grid-based lookup in later phases.
+	 *
+	 * Phase 6: Uses staticToDynamicMap for lookups (grid still contains static cells).
+	 * Phase 7-9 will enable grid-based lookup when dynamic grid is stored separately.
 	 *
 	 * @param separator The separator to convert (static or already Dynamic)
-	 * @return The Dynamic wrapper (either found in grid/map or the input if already dynamic)
+	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
 	 * @throws IllegalStateException if the separator is static and not found
 	 */
 	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
@@ -608,19 +605,9 @@ open class DefaultSimulationContext(
 		if (separator is DynamicPathSeparator) {
 			return separator
 		}
-		
-		// Phase 6: Try grid lookup first (for separators that are NodeCells with locations)
-		if (separator is NodeCell) {
-			val location = getRailWayNetGrid().getLocation(separator)
-			if (location != null) {
-				val cell = getRailWayNetGrid().getCellAt(location.x, location.y)
-				if (cell is DynamicPathSeparator) {
-					return cell
-				}
-			}
-		}
-		
-		// Fallback to static-to-dynamic map (for embedded semaphores, etc.)
+
+		// Phase 6: Use static-to-dynamic map for conversions
+		// Grid lookup will be added in Phase 7-9 when dynamic grid is stored
 		return staticToDynamicMap[separator]
 			?: throw IllegalStateException(
 				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
