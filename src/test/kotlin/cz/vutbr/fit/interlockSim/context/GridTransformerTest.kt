@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.containsAll
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf

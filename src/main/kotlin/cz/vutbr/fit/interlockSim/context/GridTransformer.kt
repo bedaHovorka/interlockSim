@@ -17,11 +17,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.util.Point
 import java.util.IdentityHashMap
 
 /**
