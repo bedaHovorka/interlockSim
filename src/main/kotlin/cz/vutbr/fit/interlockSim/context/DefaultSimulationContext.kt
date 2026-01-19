@@ -365,8 +365,11 @@ open class DefaultSimulationContext(
 	/**
 	 * Initialize static-to-dynamic mapping for all PathSeparators in the network
 	 * Must be called before simulation starts to ensure all separators have Dynamic wrappers
+	 *
+	 * Visibility: internal (visible for testing)
+	 * Tests that call pathToNextSemaphore() without running full simulation must call this first
 	 */
-	private fun initializeDynamicMapping() {
+	internal fun initializeDynamicMapping() {
 		// Track what we're mapping to avoid duplicates
 		var mappedCount = 0
 		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
@@ -777,7 +780,7 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Find path to the next semaphore from a path separator
-	 * 
+	 *
 	 * Phase 7: Returns paths containing only dynamic references.
 	 * All PathSeparators added to the path are converted to their dynamic wrappers
 	 * to ensure consistent use of dynamic types throughout simulation.

@@ -296,7 +296,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 				assertThat(e.message).containsAnyOf(
 					"No following segment",
 					"No track block found",
-					"No dynamic wrapper found"
+					"Dynamic wrapper not found"
 				)
 			}
 		}
@@ -317,7 +317,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 				assertThat(e.message).containsAnyOf(
 					"No following segment",
 					"No track block found",
-					"No dynamic wrapper found"
+					"Dynamic wrapper not found"
 				)
 			}
 		}

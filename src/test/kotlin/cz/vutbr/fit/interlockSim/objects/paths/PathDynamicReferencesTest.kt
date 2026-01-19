@@ -48,6 +48,10 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		// Arrange - Load vyhybna.xml and initialize mappings
 		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
 
+		// Initialize ALL dynamic mappings (InOuts, RailSemaphores, RailSwitches)
+		// Required because pathToNextSemaphore needs all separators mapped
+		context.initializeDynamicMapping()
+
 		// Get dynamic InOuts to start path search
 		val dynamicInOuts = context.getInOuts()
 		assertThat(dynamicInOuts).isNotNull()
@@ -99,6 +103,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	fun pathToNextSemaphore_handlesDynamicInput() {
 		// Arrange - Load configuration
 		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
 		
 		// Get dynamic InOut (already dynamic)
@@ -123,6 +128,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	fun pathToNextSemaphore_convertsStaticInput() {
 		// Arrange - Load configuration
 		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
 		
 		// Get STATIC InOut reference (before conversion)
@@ -156,6 +162,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	fun pathIteration_returnsDynamicSeparators() {
 		// Arrange
 		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
 		val firstInOut = dynamicInOuts.first()
 		val staticInOut = firstInOut.staticRef
