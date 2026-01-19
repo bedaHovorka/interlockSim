@@ -35,7 +35,7 @@ interface RailwayNetGrid<out T : Cell> : Iterable<Map.Entry<Point, T>> {
 	 * @param point
 	 * @return cell
 	 */
-	fun get(point: Point): T?
+	operator fun get(point: Point): T?
 
 	/**
 	 * @return count of colums (width)
@@ -52,4 +52,11 @@ interface RailwayNetGrid<out T : Cell> : Iterable<Map.Entry<Point, T>> {
 	 * @return location of cell
 	 */
 	fun getLocation(out: @UnsafeVariance T): Point?
+
+	/**
+	 * Check if a point contains a cell
+	 * @param point the point to check
+	 * @return true if the point contains a cell
+	 */
+	fun containsKey(point: Point): Boolean
 }

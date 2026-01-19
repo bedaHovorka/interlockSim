@@ -56,4 +56,6 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 	}
 
 	override fun getLocation(value: @UnsafeVariance T): Point? = reverseTable[value]
+
+	override fun containsKey(point: Point): Boolean = cells.containsKey(point)
 }

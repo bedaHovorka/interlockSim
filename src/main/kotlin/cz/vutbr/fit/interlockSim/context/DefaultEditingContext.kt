@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -141,7 +142,7 @@ open class DefaultEditingContext(
 		logger.debug { "Initialized railway network grid: ${cols}x$rows cells" }
 	}
 
-	override fun getRailWayNetGrid(): DefaultRailWayNetGrid = railwayNetGrid
+	override fun getRailWayNetGrid(): RailwayNetGrid<Cell> = railwayNetGrid
 
 	/**
 	 * Add a listener for context changes.

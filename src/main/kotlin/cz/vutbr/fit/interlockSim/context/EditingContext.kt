@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
@@ -18,12 +19,14 @@ import cz.vutbr.fit.interlockSim.util.Point
  *
  * ## Type Parameter
  *
- * EditingContext specializes Context to use [NodeCell] as the cell type.
- * This enforces that editing operations work exclusively with static cells
- * (NodeCell and its subtypes like InOut, RailSwitch, RailSemaphore).
+ * EditingContext specializes Context to use [Cell] as the cell type.
+ * While editing operations via [putCell] only accept [NodeCell] and its
+ * subtypes (InOut, RailSwitch, RailSemaphore), the grid also contains
+ * [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] cells that are
+ * automatically generated when joining nodes with track blocks.
  *
- * The grid returns [cz.vutbr.fit.interlockSim.context.RailwayNetGrid]<[NodeCell]>,
- * ensuring type safety for editing operations.
+ * The grid returns [RailwayNetGrid]<[Cell]>, containing both NodeCell subclasses
+ * and TrackBlockPart instances.
  *
  * ## Thread Safety
  *
@@ -36,7 +39,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context<NodeCell> {
+interface EditingContext : Context<Cell> {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key

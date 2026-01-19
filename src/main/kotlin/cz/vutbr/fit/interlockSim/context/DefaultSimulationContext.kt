@@ -321,7 +321,7 @@ open class DefaultSimulationContext(
 
 				// Skip if already mapped (handles case where getInOuts was called early)
 				if (cell in staticToDynamicMap) {
-					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - already mapped" }
+					logger.trace { "Skipping ${cell::class.java.simpleName} at ($x,$y) - already mapped" }
 					continue
 				}
 
@@ -573,10 +573,11 @@ open class DefaultSimulationContext(
 
 	@Throws(EmptyContextException::class, SimulationException::class)
 	override fun run() {
-		if (getGraph().isEmpty() || getRailWayNetGrid().isEmpty() || inouts.isEmpty()) {
+		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
+		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
 			logger.warn {
 				"Cannot start simulation: graph=${if (getGraph().isEmpty()) "empty" else "ok"}, " +
-					"grid=${if (getRailWayNetGrid().isEmpty()) "empty" else "ok"}, " +
+					"grid=${if (gridEmpty) "empty" else "ok"}, " +
 					"inouts=${if (inouts.isEmpty()) "empty" else "ok"}"
 			}
 			throw EmptyContextException()

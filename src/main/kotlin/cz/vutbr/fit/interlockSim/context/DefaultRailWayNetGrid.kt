@@ -123,7 +123,7 @@ class DefaultRailWayNetGrid(
 	 * @return true if point is present
 	 */
 	@Synchronized
-	fun containsKey(newPoint: Point): Boolean {
+	override fun containsKey(newPoint: Point): Boolean {
 		if (getCells().containsKey(newPoint)) {
 			requireValidState(getReverseTable().containsValue(newPoint)) {
 				"Inconsistent grid state: point $newPoint in cells but not in reverse table"

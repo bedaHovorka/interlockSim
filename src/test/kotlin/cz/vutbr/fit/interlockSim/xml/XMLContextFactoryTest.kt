@@ -21,6 +21,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -794,7 +795,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Counts elements by type in the grid.
 		 */
-		private fun countElements(grid: cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid): Map<String, Int> {
+		private fun countElements(grid: RailwayNetGrid<Cell>): Map<String, Int> {
 			val counts = mutableMapOf<String, Int>()
 			counts["InOut"] = 0
 			counts["RailSwitch"] = 0

@@ -25,11 +25,15 @@ import java.beans.PropertyChangeListener
  * ## Type Parameter
  *
  * @param C The type of cells stored in the railway network grid. Must extend [Cell].
- *          - [EditingContext] uses [cz.vutbr.fit.interlockSim.objects.cells.NodeCell] for static editing
- *          - [SimulationContext] uses [cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator] for dynamic simulation
+ *          - Both [EditingContext] and [SimulationContext] use [Cell] as the grid type
+ *          - The grid stores mixed cell types: [cz.vutbr.fit.interlockSim.objects.cells.NodeCell]
+ *            subclasses (RailSwitch, RailSemaphore, InOut) and
+ *            [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] (intermediate track segments)
+ *          - During simulation, [cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator]
+ *            wrappers are maintained separately via [SimulationContext.toDynamic] methods,
+ *            not stored in the grid
  *
- * The type parameter enforces compile-time type safety, ensuring editing contexts
- * work with static cells and simulation contexts work with dynamic wrappers.
+ * The type parameter provides compile-time type safety for grid access operations.
  *
  * ## Thread Safety
  *
