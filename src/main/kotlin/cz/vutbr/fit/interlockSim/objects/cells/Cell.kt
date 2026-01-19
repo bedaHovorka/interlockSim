@@ -125,6 +125,13 @@ interface Cell {
 	 * @return Possible joins
 	 */
 	fun joins(): Set<Segment>
+
+	/**
+	 * Checks if this cell is a dynamic wrapper
+	 *
+	 * @return true if this is a dynamic cell (wraps static configuration), false otherwise
+	 */
+	fun isDynamic(): Boolean = false
 }
 
 /**

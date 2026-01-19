@@ -64,7 +64,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 
 			// Get a dynamic InOut (these are guaranteed to be registered)
 			val dynamicInOut = dynamicInOuts.first()
-			val staticInOut = dynamicInOut.static
+			val staticInOut = dynamicInOut.staticRef
 			
 			// Get the InOut's in semaphore (also registered)
 			val staticInSemaphore = staticInOut.getInSemaphore()
@@ -147,13 +147,13 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 
 			for (inOut in dynamicInOuts) {
 				// Test InOut itself
-				val dynamicInOut = context.toDynamic(inOut.static)
+				val dynamicInOut = context.toDynamic(inOut.staticRef)
 				assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
 				testedInOuts++
 
 				// Test InOut's semaphores (these are registered by getInOuts())
-				val staticInSem = inOut.static.getInSemaphore()
-				val staticOutSem = inOut.static.getOutSemaphore()
+				val staticInSem = inOut.staticRef.getInSemaphore()
+				val staticOutSem = inOut.staticRef.getOutSemaphore()
 
 				val dynamicInSem = context.toDynamic(staticInSem)
 				assertThat(dynamicInSem).isInstanceOf(DynamicPathSeparator::class)
@@ -186,7 +186,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 
 			// Assert - InOut semaphores should be convertible
 			for (dynamicInOut in dynamicInOuts) {
-				val staticInOut = dynamicInOut.static
+				val staticInOut = dynamicInOut.staticRef
 				
 				// Convert InOut's semaphores
 				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
@@ -209,7 +209,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 
 			// Get a static semaphore - use first InOut's in semaphore for reliability
 			val dynamicInOut = context.getInOuts().first()
-			val staticSemaphore = dynamicInOut.static.getInSemaphore()
+			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
 
 			// Act - call toDynamic multiple times
 			val dynamic1 = context.toDynamic(staticSemaphore)

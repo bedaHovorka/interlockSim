@@ -46,8 +46,8 @@ abstract class AbstractPath protected constructor(
 	override fun getLastPathSemaphore(): RailSemaphore {
 		val last = getLast()
 		// Handle Dynamic wrappers
-		if (last is DynamicRailSemaphore) return last.static
-		if (last is DynamicInOut) return last.static.getOutSemaphore()
+		if (last is DynamicRailSemaphore) return last.staticRef
+		if (last is DynamicInOut) return last.staticRef.getOutSemaphore()
 		// Fallback for static types (shouldn't happen in simulation context)
 		if (last is RailSemaphore) return last
 		return Util.assertInstanceOf(InOut::class.java, last).getOutSemaphore()
