@@ -13,7 +13,6 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
