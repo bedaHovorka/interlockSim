@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasPopupMenu
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.SimulationCellRenderer
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -53,7 +54,7 @@ class RailwayNetGridCanvas :
 		val popupMenu: GridCanvasPopupMenu?
 	) {
 		EDITING(EditorCellRenderer(CELL_WIDTH, CELL_HEIGHT), GridCanvasEditingPopupMenu()),
-		SIMULATION(null, null)
+		SIMULATION(SimulationCellRenderer(CELL_WIDTH, CELL_HEIGHT), null)
 
 		// EXTENSION - Consider moving to separate enum
 	}
