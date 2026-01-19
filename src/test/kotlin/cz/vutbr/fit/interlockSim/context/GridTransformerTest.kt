@@ -176,8 +176,12 @@ class GridTransformerTest : KoinTestBase() {
 			val staticGrid = context.getRailWayNetGrid()
 
 			// Collect original positions of NodeCells
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = staticGrid as RailwayNetGrid<Cell>
 			val originalPositions = mutableSetOf<Point>()
-			for ((point, cell) in staticGrid) {
+			for ((point, cell) in cellGrid) {
 				if (cell is NodeCell) {
 					originalPositions.add(point)
 				}
@@ -276,9 +280,13 @@ class GridTransformerTest : KoinTestBase() {
 			val staticGrid = context.getRailWayNetGrid()
 
 			// Count NodeCells in original grid
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = staticGrid as RailwayNetGrid<Cell>
 			var staticNodeCellCount = 0
 			val staticNodeCells = mutableListOf<NodeCell>()
-			for ((_, cell) in staticGrid) {
+			for ((_, cell) in cellGrid) {
 				if (cell is NodeCell) {
 					staticNodeCellCount++
 					staticNodeCells.add(cell)

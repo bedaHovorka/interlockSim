@@ -238,7 +238,11 @@ class XMLContextFactoryTest : KoinTestBase() {
 			var hasInOut = false
 			var hasSwitch = false
 			var hasSemaphore = false
-			for (entry in grid) {
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = grid as RailwayNetGrid<Cell>
+			for (entry in cellGrid) {
 				when (entry.value) {
 					is InOut -> hasInOut = true
 					is RailSwitch -> hasSwitch = true
@@ -316,17 +320,20 @@ class XMLContextFactoryTest : KoinTestBase() {
 				// For each track block, find the other end and add it to the queue
 				for (entry in edges.entrySet()) {
 					val trackBlock = entry.value
-
 					// TrackBlocks should be TrackSections which have ends()
-					if (trackBlock is TrackSection) {
-						val ends = trackBlock.ends()
-						// Get grid locations of both ends
-						for (pathSeparator in ends) {
-							val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator)
-							// Add the other end (not current) to the queue
-							if (endLocation != null && endLocation != current && endLocation !in visited) {
-								queue.add(endLocation)
-							}
+					if (trackBlock !is TrackSection) continue
+
+					val ends = trackBlock.ends()
+					// Get grid locations of both ends
+					for (pathSeparator in ends) {
+						// Phase 6: Grid is now typed as NodeCell, but ends() returns PathSeparator
+						// PathSeparator instances should be NodeCell in editing context
+						if (pathSeparator !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) continue
+
+						val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator) ?: continue
+						// Add the other end (not current) to the queue
+						if (endLocation != current && endLocation !in visited) {
+							queue.add(endLocation)
 						}
 					}
 				}
@@ -824,7 +831,10 @@ class XMLContextFactoryTest : KoinTestBase() {
 			endY: Int
 		): List<RailSemaphore> {
 			val signals = mutableListOf<RailSemaphore>()
-			val grid = context.getRailWayNetGrid()
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to access all cells without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 
 			for (x in startX..endX) {
 				for (y in startY..endY) {
@@ -1050,13 +1060,17 @@ class XMLContextFactoryTest : KoinTestBase() {
 				val edges = graph.assignedEdges(current)
 				for (entry in edges.entrySet()) {
 					val trackBlock = entry.value
-					if (trackBlock is TrackSection) {
-						val ends = trackBlock.ends()
-						for (pathSeparator in ends) {
-							val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator)
-							if (endLocation != null && endLocation != current && endLocation !in visited) {
-								queue.add(endLocation)
-							}
+					if (trackBlock !is TrackSection) continue
+
+					val ends = trackBlock.ends()
+					for (pathSeparator in ends) {
+						// Phase 6: Grid is now typed as NodeCell, but ends() returns PathSeparator
+						// PathSeparator instances should be NodeCell in editing context
+						if (pathSeparator !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) continue
+
+						val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator) ?: continue
+						if (endLocation != current && endLocation !in visited) {
+							queue.add(endLocation)
 						}
 					}
 				}

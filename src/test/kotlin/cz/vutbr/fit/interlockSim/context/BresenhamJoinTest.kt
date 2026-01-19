@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
@@ -61,8 +62,12 @@ class BresenhamJoinTest : KoinTestBase() {
 
 		// Assert - Bresenham should create straight horizontal line
 		// Check intermediate cells exist (x from 2 to 9, y stays at 5)
+		// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+		// Cast to Cell grid to access TrackBlockPart cells without ClassCastException
+		@Suppress("UNCHECKED_CAST")
+		val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 		for (x in 2..9) {
-			val cell = context.getRailWayNetGrid().getCellAt(x, 5)
+			val cell = grid.getCellAt(x, 5)
 			assertThat(cell)
 				.withMessage("Expected cell at ($x, 5) from horizontal Bresenham line")
 				.isNotNull()
@@ -86,9 +91,13 @@ class BresenhamJoinTest : KoinTestBase() {
 		context.joinCells(start, end, block)
 
 		// Assert - Bresenham should create straight vertical line
-		// Check intermediate cells exist (y from 2 to 9, x stays at 5)
+		// Check intermediate cells exist (y from 2..9, x stays at 5)
+		// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+		// Cast to Cell grid to access TrackBlockPart cells without ClassCastException
+		@Suppress("UNCHECKED_CAST")
+		val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 		for (y in 2..9) {
-			val cell = context.getRailWayNetGrid().getCellAt(5, y)
+			val cell = grid.getCellAt(5, y)
 			assertThat(cell)
 				.withMessage("Expected cell at (5, $y) from vertical Bresenham line")
 				.isNotNull()

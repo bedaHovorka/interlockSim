@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
@@ -419,7 +420,11 @@ class XMLContextFactory :
 			allNodes.addAll(xmlContext.getGraph().nodeSet())
 
 			// Add any isolated NodeCells from the grid that aren't in the graph
-			for (entry in railwayNetGrid) {
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
+			for (entry in cellGrid) {
 				val point = entry.key
 				val cell = entry.value
 				if (cell is NodeCell) {

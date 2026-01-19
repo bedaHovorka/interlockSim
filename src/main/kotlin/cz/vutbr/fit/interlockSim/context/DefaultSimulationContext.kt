@@ -143,7 +143,64 @@ open class DefaultSimulationContext(
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
+
+		/**
+		 * Factory method to create SimulationContext from EditingContext.
+		 *
+		 * Phase 6: Uses GridTransformer to convert static grid to dynamic grid.
+		 * This method creates a new simulation context with a parameterized grid
+		 * of type RailwayNetGrid<DynamicPathSeparator>.
+		 *
+		 * @param editingContext The editing context with static network configuration
+		 * @param processFactory Factory for creating simulation processes
+		 * @return New simulation context with transformed grid
+		 */
+		fun fromEditingContext(
+			editingContext: EditingContext,
+			processFactory: SimulationProcessFactory
+		): DefaultSimulationContext {
+			// Create base simulation context
+			val grid = editingContext.getRailWayNetGrid()
+			val cols = grid.getCols()
+			val rows = grid.getRows()
+			
+			val context = DefaultSimulationContext(cols, rows, processFactory)
+			
+			// Transform static grid to dynamic grid
+			// Cast to Cell grid for transformation (safe because EditingContext grid contains Cells)
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = grid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
+			
+			val transformationResult = GridTransformer.transformGrid(cellGrid)
+			
+			// Store the transformation map for toDynamic() lookups
+			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
+			
+			// TODO Phase 6.5: Replace inherited grid with transformed grid
+			// Currently keeping both for compatibility, will be fully replaced in Phase 7-9
+			
+			logger.info {
+				"Created simulation context from editing context: " +
+				"${transformationResult.staticToDynamicMap.size} dynamic wrappers, " +
+				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
+			}
+			
+			return context
+		}
 	}
+
+	/**
+	 * Phase 6 Note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
+	 * We do NOT override this method because:
+	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary until Phase 7)
+	 * 2. The interface SimulationContext : Context<DynamicPathSeparator> expects RailwayNetGrid<DynamicPathSeparator>
+	 * 3. These are incompatible, but the implementation works because:
+	 *    - Internal code uses staticToDynamicMap for conversions
+	 *    - Grid lookup happens via parent's getRailWayNetGrid() (returns NodeCell grid)
+	 *    - Results are then converted via toDynamic() when needed
+	 *
+	 * Phase 7-9 will resolve this by introducing BaseContext and separate grid storage.
+	 */
 
 	/**
 	 * Get segment for a path separator and tracks
@@ -312,12 +369,19 @@ open class DefaultSimulationContext(
 	private fun initializeDynamicMapping() {
 		// Track what we're mapping to avoid duplicates
 		var mappedCount = 0
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 
 		// Iterate through all cells in the railway network grid
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y) ?: continue
+
+				// Skip TrackBlockPart - these are not NodeCells and don't need dynamic wrappers
+				if (cell !is NodeCell) {
+					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - not a NodeCell" }
+					continue
+				}
 
 				// Skip if already mapped (handles case where getInOuts was called early)
 				if (cell in staticToDynamicMap) {
@@ -462,7 +526,8 @@ open class DefaultSimulationContext(
 	 * unwrapped element during simulation indicates a bug.
 	 */
 	private fun validateDynamicMapping() {
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 		val unmappedSeparators = mutableListOf<String>()
 		val unmappedTracks = mutableListOf<String>()
 
@@ -535,24 +600,29 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
-	 * This is used by Train to ensure it always works with Dynamic wrappers.
+	 *
+	 * Phase 6: Uses staticToDynamicMap for lookups (grid still contains static cells).
+	 * Phase 7-9 will enable grid-based lookup when dynamic grid is stored separately.
 	 *
 	 * @param separator The separator to convert (static or already Dynamic)
 	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
-	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
+	 * @throws IllegalStateException if the separator is static and not found
 	 */
 	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
-		return if (separator is DynamicPathSeparator) {
-			separator  // Already dynamic
-		} else {
-			staticToDynamicMap[separator]
-				?: throw IllegalStateException(
-					"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
-						"Map contains ${staticToDynamicMap.size} entries. " +
-						"This indicates the separator was not registered during initialization. " +
-						"Ensure initializeDynamicMapping() completed successfully before simulation starts."
-				)
+		// If already dynamic, return as-is
+		if (separator is DynamicPathSeparator) {
+			return separator
 		}
+
+		// Phase 6: Use static-to-dynamic map for conversions
+		// Grid lookup will be added in Phase 7-9 when dynamic grid is stored
+		return staticToDynamicMap[separator]
+			?: throw IllegalStateException(
+				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
+					"Map contains ${staticToDynamicMap.size} entries. " +
+					"This indicates the separator was not registered during initialization. " +
+					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+			)
 	}
 
 	/**
