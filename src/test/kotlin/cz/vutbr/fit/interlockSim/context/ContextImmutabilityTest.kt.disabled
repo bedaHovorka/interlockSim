@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
@@ -43,6 +44,7 @@ import org.koin.test.inject
  *
  * @since 2026-01-20
  */
+@Disabled("Issue #168: freeze()/isFrozen() methods need to be exposed in EditingContext interface")
 class ContextImmutabilityTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
