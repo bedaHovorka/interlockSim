@@ -47,28 +47,46 @@ import java.util.EnumSet
 import java.util.IdentityHashMap
 
 /**
- * Default implementation of {@link SimulationContext} that extends {@link DefaultEditingContext}.
+ * Default implementation of {@link SimulationContext} that extends {@link BaseContext}.
  *
- * Combines editing capabilities with simulation-specific operations:
+ * Provides simulation-specific operations without editing capabilities:
  * - Running discrete event simulations using jDisco framework
  * - Managing simulation processes (main process, InOut workers)
  * - Path finding for train navigation (pathToNextSemaphore)
  * - Simulation reporting and event logging
  * - Train name generation
+ * - Dynamic wrapper management (PathSeparator and TrackFacility wrappers)
  *
- * This class extends {@link DefaultEditingContext} and adds simulation-specific fields
- * and methods. It uses {@link SimulationProcessFactory} to create simulation processes,
+ * This class extends {@link BaseContext} directly, separating simulation from editing concerns.
+ * Simulation contexts are immutable - network structure cannot be modified during simulation.
+ * It uses {@link SimulationProcessFactory} to create simulation processes,
  * decoupling from concrete simulation class implementations.
+ *
+ * ## Architecture
+ *
+ * **BaseContext** provides:
+ * - Grid and graph storage (immutable during simulation)
+ * - Property change notification
+ * - Configuration management (maxSpeed, trackLength, nameString)
+ * - InOut list management
+ *
+ * **DefaultSimulationContext** adds:
+ * - Simulation execution (run, stop, errorStop)
+ * - Dynamic wrapper mappings (static to dynamic conversion)
+ * - Path operations (pathToNextSemaphore, navigation methods)
+ * - Simulation reporting and logging
+ * - Process and worker management
  *
  * ## Thread Safety
  *
  * **This class is NOT thread-safe.**
  *
- * In addition to inherited thread-safety concerns from DefaultEditingContext,
+ * In addition to inherited thread-safety concerns from BaseContext,
  * DefaultSimulationContext maintains additional mutable state:
  * - Simulation process references (mainProcess, workers)
  * - Report type configuration (allowedReportTypes)
  * - Random number generator (for train naming)
+ * - Dynamic wrapper mappings (staticToDynamicMap, staticTrackToDynamicMap)
  *
  * The jDisco discrete event simulation framework operates in a single thread,
  * ensuring sequential execution of all simulation events.
@@ -78,9 +96,10 @@ import java.util.IdentityHashMap
  * - Access DefaultSimulationContext only from the simulation thread
  * - All simulation events execute sequentially via jDisco
  * - Do not share instances across thread boundaries
+ * - Do NOT call editing methods (putCell, removeCell, etc.) - use EditingContext for that
  *
  * @see SimulationContext
- * @see DefaultEditingContext
+ * @see BaseContext
  * @see EditingContext
  * @see SimulationProcessFactory
  * @see javax.annotation.concurrent.NotThreadSafe
@@ -93,7 +112,7 @@ open class DefaultSimulationContext(
 	 * Decouples context from concrete simulation class implementations.
 	 */
 	private val processFactory: SimulationProcessFactory
-) : DefaultEditingContext(cols, rows), SimulationContext {
+) : BaseContext(cols, rows), SimulationContext {
 
 	/**
 	 * Set of allowed report types for simulation output
@@ -132,6 +151,124 @@ open class DefaultSimulationContext(
 	 */
 	private val random: Random = Random(0)
 
+	// ========================================
+	// EditingContext Interface Implementation
+	// ========================================
+	// Simulation contexts are immutable - editing operations are not supported
+	// These methods are required by SimulationContext : EditingContext interface hierarchy
+	// but should never be called during simulation
+
+	/**
+	 * Get the railway network grid.
+	 *
+	 * **Covariant return type override**: Returns `RailwayNetGrid<NodeCell>` to match
+	 * the EditingContext interface requirement (via SimulationContext : EditingContext).
+	 *
+	 * Even though simulation works with all Cell types internally (including TrackBlockPart),
+	 * the interface contract expects NodeCell to maintain compatibility with EditingContext.
+	 * Internal operations use getInternalGrid() when full Cell access is needed.
+	 *
+	 * @return railway network grid containing node cells
+	 */
+	override fun getRailWayNetGrid(): RailwayNetGrid<NodeCell> {
+		// The grid internally stores Cell (NodeCell + TrackBlockPart), but interface requires NodeCell
+		// This is type-safe because:
+		// 1. Simulation doesn't call putCell (throws UnsupportedOperationException)
+		// 2. Internal operations use getInternalGrid() for full Cell access
+		// 3. External callers through EditingContext interface only see NodeCell operations
+		@Suppress("UNCHECKED_CAST")
+		return getInternalGrid() as RailwayNetGrid<NodeCell>
+	}
+
+	/**
+	 * Not supported in simulation context - network structure is immutable.
+	 * @throws UnsupportedOperationException always
+	 */
+	override fun putCell(key: Point, cell: cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
+		throw UnsupportedOperationException(
+			"putCell() is not supported in simulation context. " +
+			"Network structure is immutable during simulation. " +
+			"Use EditingContext for building railway networks."
+		)
+	}
+
+	/**
+	 * Not supported in simulation context - network structure is immutable.
+	 * @throws UnsupportedOperationException always
+	 */
+	override fun removeCell(key: Point) {
+		throw UnsupportedOperationException(
+			"removeCell() is not supported in simulation context. " +
+			"Network structure is immutable during simulation. " +
+			"Use EditingContext for modifying railway networks."
+		)
+	}
+
+	/**
+	 * Not supported in simulation context - network structure is immutable.
+	 * @throws UnsupportedOperationException always
+	 */
+	override fun moveCell(from: Point, to: Point) {
+		throw UnsupportedOperationException(
+			"moveCell() is not supported in simulation context. " +
+			"Network structure is immutable during simulation. " +
+			"Use EditingContext for modifying railway networks."
+		)
+	}
+
+	/**
+	 * Not supported in simulation context - network structure is immutable.
+	 * @throws UnsupportedOperationException always
+	 */
+	override fun removeLine(block: TrackBlock) {
+		throw UnsupportedOperationException(
+			"removeLine() is not supported in simulation context. " +
+			"Network structure is immutable during simulation. " +
+			"Use EditingContext for modifying railway networks."
+		)
+	}
+
+	/**
+	 * Not supported in simulation context - network structure is immutable.
+	 * @throws UnsupportedOperationException always
+	 */
+	override fun joinCells(key1: Point, key2: Point, trackBlock: TrackBlock) {
+		throw UnsupportedOperationException(
+			"joinCells() is not supported in simulation context. " +
+			"Network structure is immutable during simulation. " +
+			"Use EditingContext for building railway networks."
+		)
+	}
+
+	// ========================================
+	// Configuration Properties (from EditingContext)
+	// ========================================
+	// These are inherited from BaseContext but need to be exposed as EditingContext interface properties
+
+	/**
+	 * Current maximum speed for path elements.
+	 * Inherited from BaseContext, exposed via EditingContext interface.
+	 */
+	override var currentMaxSpeed: Double
+		get() = super.currentMaxSpeed
+		set(value) {
+			super.currentMaxSpeed = value
+		}
+
+	/**
+	 * Current track length for new track elements.
+	 * Inherited from BaseContext, exposed via EditingContext interface.
+	 */
+	override var currentTrackLength: Double
+		get() = super.currentTrackLength
+		set(value) {
+			super.currentTrackLength = value
+		}
+
+	// ========================================
+	// Simulation-Specific Implementation
+	// ========================================
+
 	companion object {
 		/**
 		 * Logger for general simulation context operations.
@@ -147,9 +284,9 @@ open class DefaultSimulationContext(
 		/**
 		 * Factory method to create SimulationContext from EditingContext.
 		 *
-		 * Grid parameterization: Uses GridTransformer to convert static grid to dynamic grid.
-		 * This method creates a new simulation context with a parameterized grid
-		 * of type RailwayNetGrid<DynamicPathSeparator>.
+		 * Uses GridTransformer to convert static grid to dynamic grid.
+		 * This method creates a new simulation context with dynamic wrapper mappings
+		 * for PathSeparators (InOut, RailSemaphore, RailSwitch).
 		 *
 		 * @param editingContext The editing context with static network configuration
 		 * @param processFactory Factory for creating simulation processes
@@ -176,9 +313,6 @@ open class DefaultSimulationContext(
 			// Store the transformation map for toDynamic() lookups
 			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
 			
-			// TODO Grid parameterization TODO: Replace inherited grid with transformed grid
-			// Currently keeping both for compatibility, will be fully replaced in Grid parameterization future
-			
 			logger.info {
 				"Created simulation context from editing context: " +
 				"${transformationResult.staticToDynamicMap.size} dynamic wrappers, " +
@@ -188,19 +322,6 @@ open class DefaultSimulationContext(
 			return context
 		}
 	}
-
-	/**
-	 * Grid parameterization note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
-	 * We do NOT override this method because:
-	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary during grid parameterization)
-	 * 2. The interface SimulationContext : Context<DynamicPathSeparator> expects RailwayNetGrid<DynamicPathSeparator>
-	 * 3. These are incompatible, but the implementation works because:
-	 *    - Internal code uses staticToDynamicMap for conversions
-	 *    - Grid lookup happens via parent's getRailWayNetGrid() (returns NodeCell grid)
-	 *    - Results are then converted via toDynamic() when needed
-	 *
-	 * Grid parameterization future will resolve this by introducing BaseContext and separate grid storage.
-	 */
 
 	/**
 	 * Get segment for a path separator and tracks
@@ -604,9 +725,9 @@ open class DefaultSimulationContext(
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
 	 *
-	 * Grid parameterization: Uses staticToDynamicMap for lookups (grid still contains static cells).
-	 * Grid parameterization: Used in pathToNextSemaphore to ensure paths contain only dynamic references.
-	 * Grid parameterization future will enable grid-based lookup when dynamic grid is stored separately.
+	 * Uses staticToDynamicMap for lookups. The grid contains static cells (NodeCell),
+	 * and this method provides dynamic wrappers for simulation state management.
+	 * Used in pathToNextSemaphore to ensure paths contain only dynamic references.
 	 *
 	 * @param separator The separator to convert (static or already Dynamic)
 	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
@@ -619,8 +740,7 @@ open class DefaultSimulationContext(
 			return separator
 		}
 
-		// Grid parameterization: Use static-to-dynamic map for conversions
-		// Grid lookup will be added in Grid parameterization future when dynamic grid is stored
+		// Use static-to-dynamic map for conversions
 		val dynamic = staticToDynamicMap[separator]
 			?: throw IllegalStateException(
 				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
@@ -781,7 +901,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Find path to the next semaphore from a path separator
 	 *
-	 * Grid parameterization: Returns paths containing only dynamic references.
+	 * Returns paths containing only dynamic references.
 	 * All PathSeparators added to the path are converted to their dynamic wrappers
 	 * to ensure consistent use of dynamic types throughout simulation.
 	 */
@@ -790,24 +910,24 @@ open class DefaultSimulationContext(
 		nxt: TrackSection
 	): Path? {
 		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
-		// Grid parameterization: Convert initial separator to dynamic reference
+		// Convert initial separator to dynamic reference
 		var separator = toDynamic(sep)
-		logger.trace { "Grid parameterization: Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
+		logger.trace { "Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
 		var previous: TrackSection? = null
 		var next: TrackSection? = nxt
 		val path = ArrayPath(this)
 		do {
-			// Grid parameterization: Add dynamic separator to path
+			// Add dynamic separator to path
 			path.add(separator)
 			if (next != null) {
 				path.add(next)
 				// Extract static separator for track operations (getSecondEnd uses === comparison)
 				val staticSeparator = CellUtilities.assertNodeCell(separator)
 				val staticResult = next.getSecondEnd(staticSeparator)
-				// Grid parameterization: Convert static result to dynamic wrapper before adding to path
+				// Convert static result to dynamic wrapper before adding to path
 				separator = toDynamic(staticResult)
 				logger.trace {
-					"Grid parameterization: Converted separator from track to dynamic: ${separator.javaClass.simpleName}"
+					"Converted separator from track to dynamic: ${separator.javaClass.simpleName}"
 				}
 				previous = next
 				next = getNextTrackSection(separator, next)
@@ -817,7 +937,7 @@ open class DefaultSimulationContext(
 				if (separator is OrientedPathSeparator) {
 					// Direction check for oriented semaphores
 					if (isSeparatorInDirection(separator, next, previous)) {
-						// Grid parameterization: Add dynamic separator to path
+						// Add dynamic separator to path
 						path.add(separator)
 						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
 						return path
