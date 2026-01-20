@@ -129,7 +129,7 @@ class RailwayNetGridCanvasTest : KoinTestBase() {
 		// Then: The grid should be accessible and match
 		val grid = canvas.getEditingContext().getRailWayNetGrid()
 		assertThat(grid).isNotNull()
-		assertThat(grid.getCols()).isEqualTo(30) // Default grid size
+		assertThat(grid.getCols()).isEqualTo(100) // Default grid size from XMLContextFactory.createEmptyContext()
 	}
 
 	@Test

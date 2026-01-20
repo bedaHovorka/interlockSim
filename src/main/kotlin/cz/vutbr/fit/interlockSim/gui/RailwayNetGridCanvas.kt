@@ -418,16 +418,17 @@ class RailwayNetGridCanvas :
 	 * @throws IllegalArgumentException if no context is set or context is not an EditingContext
 	 */
 	fun getEditingContext(): EditingContext {
-		require(context != null) {
+		val ctx = context
+		require(ctx != null) {
 			"No context is currently set"
 		}
 		require(state == State.EDITING) {
 			"Cannot get EditingContext when in $state state"
 		}
-		require(context is EditingContext) {
-			"Current context is not an EditingContext: ${context.javaClass.simpleName}"
+		require(ctx is EditingContext) {
+			"Current context is not an EditingContext: ${ctx.javaClass.simpleName}"
 		}
-		return context as EditingContext
+		return ctx
 	}
 
 	/**
@@ -437,16 +438,17 @@ class RailwayNetGridCanvas :
 	 * @throws IllegalArgumentException if no context is set or context is not a SimulationContext
 	 */
 	fun getSimulationContext(): SimulationContext {
-		require(context != null) {
+		val ctx = context
+		require(ctx != null) {
 			"No context is currently set"
 		}
 		require(state == State.SIMULATION) {
 			"Cannot get SimulationContext when in $state state"
 		}
-		require(context is SimulationContext) {
-			"Current context is not a SimulationContext: ${context.javaClass.simpleName}"
+		require(ctx is SimulationContext) {
+			"Current context is not a SimulationContext: ${ctx.javaClass.simpleName}"
 		}
-		return context as SimulationContext
+		return ctx
 	}
 
 	// Grid display options
