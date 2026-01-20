@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import assertk.assertions.messageContains
@@ -21,7 +22,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
@@ -44,7 +44,6 @@ import org.koin.test.inject
  *
  * @since 2026-01-20
  */
-@Disabled("Issue #168: freeze()/isFrozen() methods need to be exposed in EditingContext interface")
 class ContextImmutabilityTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 
@@ -193,7 +192,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
 
 		// Verify simulation context is frozen
 		assertThat(simulationContext.isFrozen()).isTrue()
@@ -215,7 +214,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
 
 		// Already frozen from factory method
 		assertThat(simulationContext.isFrozen()).isTrue()
@@ -245,7 +244,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 		mutableContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// No exceptions thrown - operations succeeded
-		assertThat(mutableContext.getGraph().size()).isTrue()
+		assertThat(mutableContext.getGraph().size()).isGreaterThan(0)
 	}
 
 	/**
@@ -325,9 +324,9 @@ class ContextImmutabilityTest : KoinTestBase() {
 		context.freeze()
 
 		// All read operations should still work
-		assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isInstanceOf(InOut::class)
-		assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isInstanceOf(InOut::class)
-		assertThat(context.getGraph().size()).isTrue()
+		assertThat(context.getRailWayNetGrid().getCellAt(1, 1)!!).isInstanceOf<InOut>()
+		assertThat(context.getRailWayNetGrid().getCellAt(5, 5)!!).isInstanceOf<InOut>()
+		assertThat(context.getGraph().size()).isGreaterThan(0)
 		assertThat(context.isFrozen()).isTrue()
 	}
 
