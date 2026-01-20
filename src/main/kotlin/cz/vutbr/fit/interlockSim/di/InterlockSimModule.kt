@@ -87,12 +87,14 @@ val editingModule: Module =
  * - SimulationProcessFactory for creating simulation processes
  * - SimulationContextFactory for creating simulation contexts
  * - GridTransformer for static-to-dynamic grid transformation
+ * - ContextTransformer for EditingContext → SimulationContext transformation
  * - ExampleRegistry for managing simulation examples
  *
  * @see SimulationContextFactory
  * @see SimulationProcessFactory
  * @see XMLContextFactory
  * @see GridTransformer
+ * @see ContextTransformer
  */
 val simulationModule: Module =
 	module {
@@ -103,6 +105,10 @@ val simulationModule: Module =
 		// Grid transformer for static-to-dynamic cell conversion (grid parameterization)
 		// GridTransformer is a Kotlin object (singleton), we provide it via Koin for DI consistency
 		single { GridTransformer }
+
+		// Context transformer for EditingContext → SimulationContext transformation
+		// ContextTransformer is a Kotlin object (singleton), we provide it via Koin for DI consistency
+		single { ContextTransformer }
 
 		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
 		// Bind factory interfaces to the singleton XMLContextFactory instance
