@@ -15,8 +15,11 @@ import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -213,13 +216,19 @@ class CellsPolishTest {
 
 		@Test
 		fun `getSpatialType returns null for TrackBlockPart`() {
-			val part = TrackBlockPart(arrayOf(Segment.A, Segment.F))
+			val sep1 = mockk<OrientedPathSeparator>()
+			val sep2 = mockk<OrientedPathSeparator>()
+			val trackBlock = SimpleTrackBlock(sep1, sep2, 100.0, 30.0, 30.0)
+			val part = TrackBlockPart(trackBlock, arrayOf(Segment.A, Segment.F))
 			assertThat(part.getSpatialType()).isNull()
 		}
 
 		@Test
 		fun `joins returns segment set for TrackBlockPart`() {
-			val part = TrackBlockPart(arrayOf(Segment.A, Segment.F))
+			val sep1 = mockk<OrientedPathSeparator>()
+			val sep2 = mockk<OrientedPathSeparator>()
+			val trackBlock = SimpleTrackBlock(sep1, sep2, 100.0, 30.0, 30.0)
+			val part = TrackBlockPart(trackBlock, arrayOf(Segment.A, Segment.F))
 			val joins = part.joins()
 			assertThat(joins).containsExactly(Segment.A, Segment.F)
 		}
@@ -227,7 +236,10 @@ class CellsPolishTest {
 		@Test
 		fun `TrackBlockPart with 3 segments`() {
 			// Test with more than 2 segments (edge case)
-			val part = TrackBlockPart(arrayOf(Segment.A, Segment.F, Segment.C))
+			val sep1 = mockk<OrientedPathSeparator>()
+			val sep2 = mockk<OrientedPathSeparator>()
+			val trackBlock = SimpleTrackBlock(sep1, sep2, 100.0, 30.0, 30.0)
+			val part = TrackBlockPart(trackBlock, arrayOf(Segment.A, Segment.F, Segment.C))
 			val joins = part.joins()
 			assertThat(joins).hasSize(3)
 			assertThat(joins).containsAll(Segment.A, Segment.F, Segment.C)
