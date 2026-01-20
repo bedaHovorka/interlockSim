@@ -127,7 +127,7 @@ interface SimulationContext : EditingContext {
 }
 ```
 
-**Note**: SimulationContext extends EditingContext, maintaining `Context<NodeCell>` type parameter. The dynamic grid is managed internally via GridTransformer.
+**Note**: As of Issue #153 (2026-01-20), SimulationContext extends Context<Cell>, NOT EditingContext (Interface Segregation Principle). BaseContext provides shared infrastructure for both DefaultEditingContext and DefaultSimulationContext. The dynamic grid is managed internally via GridTransformer.
 
 ### Implementation Classes
 

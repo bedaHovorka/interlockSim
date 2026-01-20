@@ -87,10 +87,12 @@ class DynamicRailSwitch(val static: RailSwitch) : DynamicPathSeparator {
 ```
 Context (interface)
   ├─ EditingContext (interface) - mutable editing operations
-  │    └─ DefaultEditingContext (impl) - uses Array2DMap<Cell> with static objects
+  │    └─ DefaultEditingContext : BaseContext - uses Array2DMap<Cell> with static objects
   │
-  └─ SimulationContext (interface) - extends EditingContext + simulation ops
-       └─ DefaultSimulationContext (impl) - uses IdentityHashMap for static→dynamic
+  └─ SimulationContext (interface) - separate from EditingContext (Issue #153)
+       └─ DefaultSimulationContext : BaseContext - uses IdentityHashMap for static→dynamic
+
+BaseContext provides shared infrastructure (grid, graph, properties, freeze mechanism)
 ```
 
 **Current Grid Usage:**
