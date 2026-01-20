@@ -257,4 +257,64 @@ class ContextTransformerTest : KoinTestBase() {
 			assertThat(sim2.getRailWayNetGrid().getCellAt(1, 1)).isNotNull()
 		}
 	}
+
+	@Nested
+	@DisplayName("Custom EditingContext Implementation")
+	inner class CustomEditingContextImplementation {
+		/**
+		 * Mock custom EditingContext implementation that delegates to DefaultEditingContext
+		 * but provides interface-only access. This simulates a user-defined EditingContext
+		 * subtype to verify that the transformation respects Liskov Substitution Principle.
+		 */
+		private inner class CustomEditingContext(cols: Int, rows: Int) : DefaultEditingContext(cols, rows) {
+			// Inherits all implementation from DefaultEditingContext
+			// but provides interface-only access for transformation test
+		}
+
+		@Test
+		@DisplayName("transforms custom EditingContext implementation successfully")
+		fun transformContext_customImplementation_succeeds() {
+			// Arrange - Create custom EditingContext (not DefaultEditingContext directly)
+			val editingContext: EditingContext = CustomEditingContext(20, 20)
+			val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(1, 1), inA)
+			editingContext.putCell(Point(10, 10), inB)
+			val trackBlock = SimpleTrackBlock(inA, inB, 100.0, 80.0)
+			editingContext.joinCells(Point(1, 1), Point(10, 10), trackBlock)
+
+			// Act - Transform using interface reference (not concrete type)
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Assert - Transformation succeeded without type checking
+			assertThat(simulationContext).isNotNull()
+			assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(20)
+			assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(20)
+
+			// Verify InOut list was copied via interface method
+			val inOuts = simulationContext.getInOuts()
+			assertThat(inOuts).hasSize(2)
+			val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+			assertThat(staticRefs).containsAll(inA, inB)
+
+			// Verify graph was copied
+			assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
+		}
+
+		@Test
+		@DisplayName("custom EditingContext provides InOut access via interface")
+		fun customEditingContext_providesInOutAccess() {
+			// Arrange
+			val editingContext: EditingContext = CustomEditingContext(20, 20)
+			val inOut = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(1, 1), inOut)
+
+			// Act - Access InOuts via Context interface method (not concrete implementation)
+			val inOuts = editingContext.getInOuts()
+
+			// Assert - Interface method returns correct list
+			assertThat(inOuts).hasSize(1)
+			assertThat(inOuts).contains(inOut)
+		}
+	}
 }
