@@ -34,7 +34,7 @@ import org.koin.test.get
  * - Tolerance: position within 1e-6m, time within 1e-9s
  * - These tests MUST pass before merging any Koin changes
  *
- * @see <a href="https://github.com/bedavs/interlockSim">KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
+ * @see <a href="https://github.com/bedavs/interlockSim">docs/KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
  */
 @Tag("integration-test")
 class KoinGoldenOutputTest : KoinTestBase() {

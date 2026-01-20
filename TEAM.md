@@ -680,7 +680,7 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 
 **Adopted:** 2026-01-12 (Phase 1)
 **Framework:** Koin 3.5.6
-**Documentation:** KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin section), CLAUDE.md
+**Documentation:** docs/KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin section), CLAUDE.md
 
 ### DI Collaboration Guidelines
 

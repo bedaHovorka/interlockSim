@@ -1044,7 +1044,7 @@ tasks.register("koinStatus") {
             |  4. Plan DSOL migration for Phase 5+ simulation core
             |
             |For more information:
-            |  - KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin): Detailed DI patterns
+            |  - docs/KOTLIN_STYLE_GUIDE.md (Dependency Injection with Koin): Detailed DI patterns
             |  - CI-CD-KOIN-INTEGRATION-ANALYSIS.md: CI/CD analysis and recommendations
             |  - LONG_TERM_GOALS.md: Future migration planning
             |

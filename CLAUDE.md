@@ -37,7 +37,7 @@ Dependencies are managed via Gradle with fallback strategy:
   - Fallback order: `mavenLocal()` (cache) → GitHub Packages → build fails
   - Requires GitHub authentication for package download (see below)
 - **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
-- **AssertJ 3.27.6** - Fluent assertion library for better test readability
+- **AssertK 0.28.1** - Fluent Kotlin assertion library
 - **Mockito 5.21.0** - Mocking framework
 - **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
 - **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
@@ -279,32 +279,7 @@ Build outputs copied to `./artifacts/`: `app/interlockSim.jar`, `text/bakalarka.
 
 ### Koin Integration
 
-**Status:** ✅ Migration complete, fully compatible with Docker (verified 2026-01-12)
-
-The Docker configuration supports Koin dependency injection framework without any modifications:
-- Koin 3.5.6 automatically included in uber JAR via Gradle dependency resolution
-- JAR size: 6.6 MB (Koin adds ~1.12 MB, within expected overhead)
-- All 698 tests pass in Docker build
-- All application modes work: `sim`, `edit`, `example`
-
-**Quick verification:**
-```bash
-# Build and test
-docker compose build app
-
-# Verify Koin is included
-docker run --rm interlocksim:latest sh -c \
-  "unzip -l /app/interlockSim.jar | grep org/koin/ | wc -l"
-# Output: 225+ Koin class files
-
-# Run simulation with Koin DI
-docker compose run --rm app java -jar interlockSim.jar example shuntingLoop 10
-```
-
-For detailed Docker + Koin integration guide, see:
-- `DOCKER_KOIN_QUICKSTART.md` - Quick reference and commands
-- `KOIN_DOCKER_INTEGRATION_REPORT.md` - Full verification report
-- `KOTLIN_STYLE_GUIDE.md` - Complete Koin DI guide (section: Dependency Injection with Koin)
+Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_STYLE_GUIDE.md` for Koin DI guide.
 
 ## Architecture
 
@@ -329,15 +304,7 @@ For detailed Docker + Koin integration guide, see:
 - `EditingContextFactory` / `SimulationContextFactory` - Factory pattern for context creation
 - `XMLContextFactory` - Creates contexts from XML files (defined by `data.xsd` schema)
 
-**Context Refactoring (Issue #98, 2026-01-18):**
-DefaultContext split into separate editing and simulation implementations. This:
-- Separates concerns: editing operations vs simulation execution
-- Follows Single Responsibility Principle
-- Enables testing editing without simulation dependencies
-- DefaultEditingContext has NO sim/ package dependencies
-- DefaultSimulationContext extends editing with simulation via factory injection
-- Deprecated DefaultContext wrapper maintains backward compatibility
-- See `CONTEXT_REFACTORING_DESIGN.md` and `FACTORY_PATTERN_IMPLEMENTATION.md` for details
+**Context Refactoring (Issue #98):** DefaultContext split into DefaultEditingContext and DefaultSimulationContext. See `docs/CONTEXT_REFACTORING_DESIGN.md` and `docs/FACTORY_PATTERN_IMPLEMENTATION.md` for details.
 
 **Factory Pattern (Phase 2, 2026-01-14):**
 DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
@@ -345,30 +312,9 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - Enables testing with mock factories
 - Prepares for jDisco→DSOL/Kalasim migration
 
-**Static/Dynamic Separation (Issue #100, 2026-01-18):**
-Complete wrapper pattern implementation separating static configuration from dynamic simulation state:
-- **Static objects** (RailSwitch, RailSemaphore, InOut, SimpleTrack) contain immutable configuration
-- **Dynamic wrappers** (DynamicRailSwitch, DynamicRailSemaphore, DynamicInOut, DynamicTrack) manage mutable state
-- **SimulationContext.toDynamic()** converts static objects to dynamic wrappers
-- **IdentityHashMap** ensures stable wrapper identity across simulation
-- **Pattern usage:** Call `context.toDynamic(track)` before state operations (enter/leave/setUpPath)
-- See `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` for complete architecture documentation
+**Static/Dynamic Separation (Issue #100):** Wrapper pattern separates static configuration from dynamic state. Use `context.toDynamic(track)` before state operations. See `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`.
 
-**Grid Parameterization (Issue #131, 2026-01-19):**
-Type-safe grid infrastructure with parameterized cell types:
-- **`RailwayNetGrid<out T : Cell>`** - Covariant type parameter for read-only grid access
-- **`AbstractRailwayNetGrid<out T : Cell>`** - Parameterized base implementation
-- **`Context<out C : Cell>`** - Base context parameterized over cell type
-- **`EditingContext : Context<NodeCell>`** - Editing context specialized for NodeCell subtypes
-- **Type safety:** Compile-time verification of cell type compatibility
-- **Usage:** `@UnsafeVariance` annotations where mutable collections require invariance
-- **Example usage:**
-```kotlin
-val context: EditingContext = factory.createContext()
-val grid: RailwayNetGrid<NodeCell> = context  // Type-safe grid access
-val cell: NodeCell? = grid.getCellAt(5, 10)    // Returns NodeCell or subtype
-```
-- See `docs/GRID_PARAMETERIZATION_DESIGN.md` and `docs/PHASE9_VALIDATION_CHECKLIST.md` for complete documentation
+**Grid Parameterization (Issue #131):** Type-safe grid with parameterized cell types (`RailwayNetGrid<out T : Cell>`, `Context<out C : Cell>`). See `docs/GRID_PARAMETERIZATION_*.md` for detailed documentation.
 
 **Object model:**
 - `objects/tracks/` - Track facilities, blocks, occupants, DynamicTrack wrapper
@@ -450,7 +396,7 @@ src/
 
 **Status:** Migration complete (2026-01-12)
 **Framework:** Koin 3.5.6 (Kotlin-native, lightweight ~1MB)
-**Documentation:** See `KOTLIN-MIGRATION-STATUS.md` for migration overview and DI notes, `KOTLIN_STYLE_GUIDE.md` for coding patterns
+**Documentation:** See `KOTLIN-MIGRATION-STATUS.md` for migration overview and DI notes, `docs/KOTLIN_STYLE_GUIDE.md` for coding patterns
 
 ### Quick Start
 
@@ -503,7 +449,7 @@ fun myTest() {
 
 **Benefits:** Eliminates MockSimulationContext (268 lines), enables Mockito in 235 test files
 
-See `KOTLIN-MIGRATION-STATUS.md` for comprehensive guide, `KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
+See `KOTLIN-MIGRATION-STATUS.md` for comprehensive guide, `docs/KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
 
 ## Code Style
 
@@ -723,7 +669,7 @@ This triggers strict rule enforcement via the `detektStrict` task.
 cat -A src/main/kotlin/path/to/file.kt | head -20  # Tabs show as ^I
 ```
 
-See `KOTLIN_STYLE_GUIDE.md` for complete details on coding conventions and quality enforcement levels.
+See `docs/KOTLIN_STYLE_GUIDE.md` for complete details on coding conventions and quality enforcement levels.
 
 ## Continuous Integration
 
@@ -733,303 +679,53 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 
 ## Documentation
 
-**Thesis:** LaTeX sources in `text/`, build with `make` (requires gnuplot, latex, wmf2eps)
-**JavaDoc:** `ant doc` outputs to `doc/` directory
+**Thesis:** LaTeX sources in `text/`, build with `docker compose up text` (outputs to `artifacts/text/bakalarka.pdf`)
+**JavaDoc:** Generate with `./gradlew javadoc` (outputs to `build/docs/javadoc/`)
 
 ## Logging
 
-The application uses **kotlin-logging** (a Kotlin wrapper for SLF4J) with Logback as the backend. This provides flexible log configuration, runtime control, and lambda-based lazy evaluation to eliminate verbose guard checks.
+Uses **kotlin-logging** (SLF4J wrapper) with Logback backend. Configuration: `src/main/resources/logback.xml`
 
-**Migration Status (January 2026):** Migrated from SLF4J to kotlin-logging. All logger declarations now use `KotlinLogging.logger {}` for automatic lazy evaluation and cleaner syntax.
-
-### Configuration Files
-
-- **Main application:** `src/main/resources/logback.xml` - Logback configuration
-- **jDisco tests:** `jdisco/src/test/resources/simplelogger.properties` - SLF4J simple logger for tests
-
-### Log Levels
-
-Standard log levels (most to least verbose):
-- `TRACE` - Very detailed diagnostic information
-- `DEBUG` - Detailed debugging information
-- `INFO` - General informational messages (default for most loggers)
-- `WARN` - Warning messages
-- `ERROR` - Error messages
-
-### Changing Log Levels During Development
-
-**Edit logback.xml:**
-```xml
-<!-- Change root logger level (affects all classes) -->
-<root level="DEBUG">
-    <appender-ref ref="CONSOLE"/>
-</root>
-
-<!-- Or target specific packages/classes -->
-<logger name="cz.vutbr.fit.interlockSim.sim.Train" level="TRACE"/>
-<logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="DEBUG"/>
-```
-
-**Runtime system property override:**
-```bash
-java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
-```
-
-**Docker environment variable:**
-```bash
-docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar example shuntingLoop 60
-```
-
-### Pre-configured Loggers
-
-The following loggers are configured in `logback.xml`:
-
-- `cz.vutbr.fit.interlockSim.simulation` - Simulation events (INFO, separate file output)
-- `jDisco.statistics` - jDisco statistical reports (INFO, console only)
-- `cz.vutbr.fit.interlockSim.sim.Train` - Train behavior (DEBUG)
-- `cz.vutbr.fit.interlockSim.sim.ShuntingLoop` - Shunting loop operations (DEBUG)
-- `cz.vutbr.fit.interlockSim.objects.paths.AbstractPath` - Path management (DEBUG)
-- `cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack` - Track operations (DEBUG)
-
-### Log Output Destinations
-
-**Console appender:**
-- Format: `HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
-- All loggers by default
-
-**File appender:**
-- Location: `logs/interlockSim.log`
-- Format: `yyyy-MM-dd HH:mm:ss.SSS [thread] LEVEL Logger.method(File:Line) - message`
-- Append mode (accumulates across runs)
-- Captures simulation events logger output
-
-### Adding Logging to Code
-
-When adding logging to Kotlin code, use kotlin-logging for automatic lazy evaluation:
-
+**In Kotlin code:**
 ```kotlin
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
-// In methods - lambda-based lazy evaluation (no manual guard checks needed):
-logger.trace { "Very detailed trace message" }
-logger.debug { "Debug message with context: $variable" }
-logger.info { "Informational message" }
-logger.warn { "Warning message" }
-logger.error(exception) { "Error message" }
+logger.debug { "Message with $variable" }  // Lambda-based lazy evaluation
 ```
 
-**Benefits of kotlin-logging:**
-- **No manual guard checks** - Eliminates verbose `if (logger.isDebugEnabled)` patterns
-- **Lazy evaluation** - Lambda content only evaluated if log level is enabled
-- **String interpolation** - Use Kotlin string templates (`$variable`) instead of SLF4J placeholders
-- **Cleaner syntax** - Idiomatic Kotlin logger initialization
-
-**Legacy SLF4J syntax (deprecated, use only for compatibility):**
-
-```kotlin
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-
-private val logger: Logger = LoggerFactory.getLogger(ClassName::class.java)
-
-// Old pattern with manual guard checks (avoid in new code):
-if (logger.isDebugEnabled) {
-    logger.debug("Debug message with context: {}", variable)
-}
+**Change log levels:** Edit `logback.xml` or use runtime override:
+```bash
+java -Dlogback.level=DEBUG -jar interlockSim.jar ...
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar ...
 ```
 
-## Known Bugs and Issues
+Output: Console + `logs/interlockSim.log` file
 
-**Last Updated:** 2026-01-05
+## Known Issues
 
-This section documents known bugs that remain in the codebase. These have been identified through SonarQube analysis and comprehensive simulation verification. For detailed analysis, see the report files in the project root.
+**Critical:** None. All critical SonarQube bugs fixed.
 
-### Critical Issues
+**Notable issues:**
+- **SIM-004:** ShuntingLoop hardcoded for `vyhybna.xml` configuration only
+- **DEFERRED-001:** XMLContextFactoryTest missing exception type predicates (9 occurrences)
+- Minor simulation issues (SIM-001 to SIM-006) documented in code comments
 
-None. All critical bugs identified by SonarQube have been fixed.
+**Test coverage:** 662 tests (628 passing, 34 skipped), 51% code coverage. One disabled performance test (`Array2DMapTest.testSpeed()`).
 
-### Major Issues
-
-#### DEFERRED-001: Missing Assertion Predicates in XMLContextFactoryTest (9 occurrences)
-
-**Severity:** Major (SonarQube rule java:S5833)
-**Files:** `src/test/java/cz/vutbr/fit/interlockSim/xml/XMLContextFactoryTest.java`
-**Lines:** 219, 228, 237, 246, 255, 262, 271, 281, 433
-
-**Description:** Tests use `assertThatThrownBy()` without specifying expected exception types. The assertions verify that methods execute without unexpected exceptions but lack explicit exception class predicates.
-
-**Impact:** Tests function correctly but are less precise than they could be. No false positives or missed failures observed.
-
-**Workaround:** Tests work as intended; this is a test quality enhancement opportunity.
-
-**Recommendation:** Add `.isInstanceOf(ExpectedException.class)` predicates in future test improvements.
-
-### Minor Issues
-
-#### SIM-001: Potential Division by Zero in Motor Calculation
-
-**Severity:** Minor (mitigated)
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java` (Motor inner class, line ~468)
-
-**Description:** The acceleration calculation `a = ((targetSpeed - velocity)*(targetSpeed + velocity)) / (2*s)` could divide by zero if distance `s` approaches zero.
-
-**Impact:** Numerical instability in edge cases.
-
-**Workaround:** Already mitigated by `if (s <= 0) { accelerate = false; return; }` guard.
-
-**Recommendation:** No action required; current mitigation is sufficient.
-
-#### SIM-002: Static Train Counter Not Reset Between Runs
-
-**Severity:** Minor
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java` (line 487)
-
-**Description:** Static `count` variable increments across simulation runs without reset.
-
-**Impact:** Cosmetic only - train IDs continue incrementing in same JVM instance. Affects logging/toString output.
-
-**Workaround:** Restart JVM between simulation runs if sequential train numbering is required.
-
-#### SIM-003: Unused Variable Increment in Generator
-
-**Severity:** Minor (dead code)
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Generator.java` (line 87)
-
-**Description:** Variable `i` is incremented but never used.
-
-**Impact:** None - dead code with no functional effect.
-
-**Workaround:** None needed.
-
-#### DEFERRED-002: Integer Division Precision Loss (3 occurrences)
-
-**Severity:** Minor (SonarQube rule java:S2184)
-**Files:**
-- `src/main/java/cz/vutbr/fit/interlockSim/gui/gridcanvas/CellRenderer.java` (line 83, 2 occurrences)
-- `src/main/java/cz/vutbr/fit/interlockSim/objects/cells/Cell.java` (line 146)
-
-**Description:** Integer division where result is assigned to double, potentially losing fractional part.
-
-**Impact:** May affect GUI rendering precision. No visual issues observed in testing.
-
-**Workaround:** None needed for current functionality.
-
-**Recommendation:** Review with domain expert if high-precision rendering is required.
-
-#### RESOLVED: Doubleton equals() Override
-
-**Status:** RESOLVED (equals() override added during Kotlin migration)
-**File:** `src/main/kotlin/cz/vutbr/fit/interlockSim/util/Doubleton.kt` (line 110)
-
-**Description:** Class now properly overrides both `hashCode()` and `equals()`, satisfying the contract.
-
-**Resolution:** The equals() method was added during Kotlin migration. Additionally, the incorrect `@Deprecated` annotation was removed after analysis showed that Doubleton has no equivalent in Kotlin's standard library. Kotlin's `Pair` is ordered (A,B ≠ B,A), while Doubleton is unordered (A,B = B,A) and supports associated values, making it essential for representing bidirectional graph edges.
-
-**Documentation:** Updated KDoc explains why Doubleton cannot be replaced with Kotlin's Pair.
-
-### Design Limitations
-
-#### SIM-004: Hardcoded Grid Coordinates in ShuntingLoop
-
-**Severity:** Design Limitation (documented)
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/ShuntingLoop.java` (lines 116-129)
-
-**Description:** ShuntingLoop uses hardcoded grid positions (x/y coordinates) that only work with `vyhybna.xml` network configuration.
-
-**Impact:** Cannot reuse ShuntingLoop with other railway network configurations without code changes.
-
-**Workaround:** Use only with the provided `vyhybna.xml` configuration file.
-
-**Recommendation:** Future enhancement - make ShuntingLoop configurable via XML or constructor parameters.
-
-#### SIM-005: Negative Train Length Allowed
-
-**Severity:** Low (validation gap)
-**File:** `src/main/java/cz/vutbr/fit/interlockSim/sim/Train.java`
-
-**Description:** Train constructor accepts negative length values without validation.
-
-**Impact:** Could cause undefined simulation behavior with invalid inputs.
-
-**Workaround:** Ensure positive train lengths when creating Train instances.
-
-**Recommendation:** Add parameter validation in future releases.
-
-#### SIM-006: Assertion-Only Validation
-
-**Severity:** Medium (production concern)
-**Files:** Multiple simulation classes
-
-
-**Impact:** Invalid states may not be detected when running without assertions enabled.
-
-
-**Recommendation:** Convert critical assertions to explicit validation with exceptions.
-
-### Test Suite Notes
-
-**Skipped Tests:** 1 test (0.4% of suite) is currently disabled:
-- `Array2DMapTest.testSpeed()`: Performance benchmark marked with `@Disabled` annotation due to timing variability
-
-**Note:** As of January 2026, 4 previously disabled ShuntingLoop tests were re-enabled after confirming they properly verify exception handling for invalid contexts. The tests validate that ShuntingLoop fails gracefully (throwing appropriate exceptions) when given incompatible network structures, which is correct behavior despite the design limitation documented as SIM-004.
-
-### Reference Reports
-
-For comprehensive details, see:
-- `SIMULATION-VERIFICATION-REPORT.md` - Simulation engine analysis and SIM-* issues
-- `GOAL3-PHASE2-REPORT.md` - SonarQube findings and bug triage
-- `FINAL-VERIFICATION-REPORT.md` - Consolidated verification results
-- `QA_ISSUES_DETAIL.md` - QA testing findings
+Run SonarQube for detailed analysis: `./gradlew clean test jacocoTestReport sonar`
 
 ## Deprecated Java API Usage
 
-**Analysis Last Run:** 2026-01-05
+**Key findings:**
+- ✅ **RESOLVED:** java.util.Observable/Observer replaced with PropertyChangeSupport (2025-12-28)
+- **HIGH:** Integer constructor (1 test occurrence) - use `Integer.valueOf()`
+- **MEDIUM:** Internal project deprecations (`TreeMultiMap`, ~27 occurrences)
 
-The codebase has been analyzed for deprecated Java standard library APIs. This is critical for planning future Java version upgrades, especially to Java 17+.
+Run analysis: `./gradlew checkDeprecations`
 
-### Key Findings
-
-**CRITICAL Issue (✅ RESOLVED):**
-- **java.util.Observable/Observer** - Deprecated in Java 9
-  - **Status:** ✅ Fixed in Java 21 migration (2025-12-28)
-  - Previously used in: `DefaultContext`, `Context`, `RailwayNetGridCanvas`, `StatusBar`
-  - **Replacement:** `java.beans.PropertyChangeSupport`
-  - **Note:** DefaultContext subsequently split (2026-01-18) into DefaultEditingContext and DefaultSimulationContext
-
-**HIGH Priority:**
-- **Integer constructor** (1 occurrence in test code) - Deprecated in Java 9, marked for removal
-  - Easy fix: Use `Integer.valueOf()` or autoboxing
-
-**MEDIUM Priority:**
-- Internal project classes marked deprecated (`TreeMultiMap`) - ~27 occurrences
-  - These are project-specific deprecations, not Java SE
-  - Note: `Doubleton` deprecation was removed after analysis showed no Kotlin stdlib equivalent
-  - Require design review to determine replacement strategy
-
-### Monitoring
-
-Run deprecation analysis:
-```bash
-./gradlew checkDeprecations
-```
-
-Generate detailed report:
-```bash
-./gradlew clean compileJava compileTestJava 2>&1 | tee build/reports/deprecation-main.txt
-```
-
-Review comprehensive report:
-```bash
-cat docs/deprecated-api-report.md
-```
-
-### jDisco Library
-
-The jDisco library (Java 6 compatible) is now maintained as a separate project at https://github.com/bedavs/jDisco and has **no deprecated Java API usage**. It remains at Java 6 compatibility as designed.
-
-**Note:** This analysis is documentation-only for the interlockSim codebase. See `docs/deprecated-api-report.md` for detailed findings about interlockSim. For jDisco deprecation analysis, see the jDisco repository.
+**jDisco:** Maintained separately at https://github.com/bedavs/jDisco, no deprecated API usage.
 
 ## Future Development Considerations
 

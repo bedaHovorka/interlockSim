@@ -326,7 +326,7 @@ GitHub Actions workflows in `.github/workflows/`:
 
 - **Comprehensive documentation:** See `CLAUDE.md` for detailed information
 - **Architecture:** See `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` for static/dynamic separation pattern
-- **Code style guide:** See `KOTLIN_STYLE_GUIDE.md`
+- **Code style guide:** See `docs/KOTLIN_STYLE_GUIDE.md`
 - **CI/CD workflows:** See `CICD_WORKFLOW_QUICK_START.md`
 
 ## Getting Help

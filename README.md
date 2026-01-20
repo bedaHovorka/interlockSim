@@ -463,9 +463,9 @@ Tests are automatically executed during the build process. The build will fail i
 
 - **`CLAUDE.md`** - Comprehensive development guide (build, test, architecture)
 - **`STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`** - Complete static/dynamic separation architecture with diagrams
-- **`CONTEXT_REFACTORING_DESIGN.md`** - Context refactoring and factory pattern design
-- **`FACTORY_PATTERN_IMPLEMENTATION.md`** - Factory pattern implementation summary
-- **`KOTLIN_STYLE_GUIDE.md`** - Kotlin coding standards and detekt configuration
+- **`docs/CONTEXT_REFACTORING_DESIGN.md`** - Context refactoring and factory pattern design
+- **`docs/FACTORY_PATTERN_IMPLEMENTATION.md`** - Factory pattern implementation summary
+- **`docs/KOTLIN_STYLE_GUIDE.md`** - Kotlin coding standards and detekt configuration
 - **`TEAM.md`** - Multi-agent development workflows and roles
 
 ### Thesis Documentation (LaTeX)
