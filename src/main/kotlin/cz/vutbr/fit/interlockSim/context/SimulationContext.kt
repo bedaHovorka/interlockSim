@@ -46,6 +46,37 @@ import java.util.EnumSet
  * The simulation context is created from an editing context using `GridTransformer` to convert
  * static NodeCell instances to their dynamic wrapper counterparts.
  *
+ * ## Immutability Contract
+ *
+ * **Network structure is immutable after initialization.**
+ *
+ * Once a SimulationContext is created (via factory method or initialization in run()),
+ * the railway network structure is frozen:
+ * - No cells can be added or removed
+ * - No track blocks can be created or destroyed
+ * - No cells can be moved
+ * - No network topology changes allowed
+ *
+ * This immutability is enforced at runtime:
+ * - [BaseContext.freeze] is called after network initialization
+ * - Attempts to modify frozen context throw [UnsupportedOperationException]
+ * - Clear error messages guide users to use [EditingContext] for modifications
+ *
+ * ### Rationale
+ *
+ * Immutability ensures simulation correctness:
+ * - Pre-computed paths remain valid throughout simulation
+ * - Dynamic wrapper mappings stay consistent
+ * - Simulation physics assumptions hold (fixed track lengths, etc.)
+ * - No undefined behavior from runtime topology changes
+ *
+ * ### Usage
+ *
+ * - Build networks with [EditingContext] (putCell, joinCells, etc.)
+ * - Convert to [SimulationContext] via factory (network freezes at this point)
+ * - Run simulation with immutable network structure
+ * - To modify network: create new EditingContext, make changes, convert to new SimulationContext
+ *
  * ## Thread Safety
  *
  * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
@@ -58,6 +89,7 @@ import java.util.EnumSet
  * @see Context
  * @see EditingContext
  * @see DynamicPathSeparator
+ * @see BaseContext.freeze
  * @see javax.annotation.concurrent.NotThreadSafe
  */
 interface SimulationContext : Context<Cell> {

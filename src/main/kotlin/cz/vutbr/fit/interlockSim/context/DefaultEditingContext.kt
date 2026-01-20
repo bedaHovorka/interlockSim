@@ -402,6 +402,7 @@ open class DefaultEditingContext(
 		key: Point,
 		nodeCell: NodeCell
 	) {
+		checkNotFrozen("add cell")
 		// Validate coordinates are within grid bounds
 		val grid = getGrid()
 		if (key.x < 0 || key.y < 0 || key.x >= grid.getCols() || key.y >= grid.getRows()) {
@@ -448,6 +449,7 @@ open class DefaultEditingContext(
 	 */
 	@Synchronized
 	override fun removeCell(key: Point) {
+		checkNotFrozen("remove cell")
 		val grid = getGrid()
 		val cell = grid.get(key)
 		if (cell is NodeCell) {
@@ -468,6 +470,7 @@ open class DefaultEditingContext(
 	 * Remove a track line from the railway network
 	 */
 	override fun removeLine(line: TrackBlock) {
+		checkNotFrozen("remove track block")
 		val grid = getGrid()
 		getGraph().remove(line)
 		grid.keySet().removeAll(getLinesKeys().remove(line) ?: emptySet())
@@ -485,6 +488,7 @@ open class DefaultEditingContext(
 		from: Point,
 		to: Point
 	) {
+		checkNotFrozen("move cell")
 		val grid = getGrid()
 		val fromCell = grid.get(from)
 		if (fromCell !is NodeCell) return
@@ -504,6 +508,7 @@ open class DefaultEditingContext(
 		key2: Point,
 		trackBlock: TrackBlock
 	) {
+		checkNotFrozen("join cells")
 		// pokusit se nakreslit primku
 		val lineParts = findTrackLineParts(key1, key2, trackBlock)
 

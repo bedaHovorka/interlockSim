@@ -151,6 +151,13 @@ abstract class BaseContext(
 	 */
 	private var nameString: String? = null
 
+	/**
+	 * Frozen state flag - when true, network structure is immutable.
+	 * Used for simulation contexts to prevent runtime modifications after initialization.
+	 * Default is false (mutable) for editing contexts.
+	 */
+	private var frozen: Boolean = false
+
 	companion object {
 		/**
 		 * Logger for general class operations.
@@ -264,4 +271,54 @@ abstract class BaseContext(
 		set(value) {
 			nameString = value
 		}
+
+	/**
+	 * Check if this context is frozen (immutable network structure).
+	 *
+	 * @return true if context is frozen and modifications are not allowed
+	 */
+	fun isFrozen(): Boolean = frozen
+
+	/**
+	 * Freeze this context, making the network structure immutable.
+	 *
+	 * Once frozen, any attempt to modify the network structure (adding/removing cells,
+	 * joining cells, modifying track blocks) will throw [UnsupportedOperationException].
+	 *
+	 * This operation is idempotent - calling freeze() multiple times has no effect.
+	 * Once frozen, a context cannot be unfrozen.
+	 *
+	 * ## Usage
+	 *
+	 * Simulation contexts call freeze() after network initialization to enforce immutability.
+	 * Editing contexts remain unfrozen to allow network modifications.
+	 *
+	 * @see isFrozen
+	 * @see checkNotFrozen
+	 */
+	fun freeze() {
+		if (!frozen) {
+			frozen = true
+			logger.info { "Context frozen - network structure is now immutable" }
+		}
+	}
+
+	/**
+	 * Protected helper for subclasses to check frozen state before modifications.
+	 *
+	 * Throws [UnsupportedOperationException] if context is frozen.
+	 * Should be called at the start of any method that modifies network structure.
+	 *
+	 * @param operation Name of the operation being attempted (for error message)
+	 * @throws UnsupportedOperationException if context is frozen
+	 */
+	protected fun checkNotFrozen(operation: String) {
+		if (frozen) {
+			throw UnsupportedOperationException(
+				"Cannot $operation: context is frozen. " +
+					"Network structure is immutable after simulation initialization. " +
+					"Use EditingContext for network modifications."
+			)
+		}
+	}
 }
