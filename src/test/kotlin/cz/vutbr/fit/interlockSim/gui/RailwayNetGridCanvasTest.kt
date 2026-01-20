@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import org.koin.test.inject
