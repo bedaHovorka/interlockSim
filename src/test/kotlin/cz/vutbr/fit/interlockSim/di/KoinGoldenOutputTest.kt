@@ -127,7 +127,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	 * TODO: Enable after Koin initialization complete
 	 */
 	@Test
-	@Disabled("Enable after Koin initialization in Main.kt")
+	@Disabled("Waiting for implementation. Koin is now integrated - see Issue #218.")
 	fun `validate simulation with Koin matches baseline`() {
 		// TODO: Implement validation test
 		// 1. Initialize Koin with interlockSimModule
@@ -154,7 +154,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	 * TODO: Enable after Koin initialization complete
 	 */
 	@Test
-	@Disabled("Enable after Koin initialization in Main.kt")
+	@Disabled("Performance test should use JMH, not JUnit. See Issue #219.")
 	fun `measure Koin performance overhead`() {
 		// TODO: Implement performance benchmarks
 		// 1. Measure context creation time with/without Koin
@@ -172,7 +172,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	 * TODO: Implement when context module is enhanced
 	 */
 	@Test
-	@Disabled("Context module complete - enhance for scope testing")
+	@Disabled("Context module not yet enhanced for scope testing. See Issue #220.")
 	fun `validate context lifecycle with Koin scopes`() {
 		// TODO: Implement context scope tests
 		// 1. Create multiple contexts sequentially

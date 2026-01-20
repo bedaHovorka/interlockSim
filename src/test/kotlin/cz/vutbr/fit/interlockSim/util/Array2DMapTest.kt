@@ -258,7 +258,7 @@ class Array2DMapTest {
 	 * If you need to run performance benchmarks, consider using JMH (Java Microbenchmark Harness)
 	 * instead of JUnit assertions.
 	 */
-	@Disabled("Performance benchmark with timing variability - not a functional test")
+	@Disabled("Performance benchmark with timing variability - not a functional test. See Issue #216 for JMH migration.")
 	@Test
 	fun testSpeed() {
 		@Suppress("UNCHECKED_CAST")

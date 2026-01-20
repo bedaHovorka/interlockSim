@@ -122,12 +122,12 @@ class ContextTransformerTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Simple Network Transformation")
 	inner class SimpleNetworkTransformation {
-		// TODO: Issue #168 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
+		// TODO: Issue #221 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
 		// @Test
 		// @DisplayName("transforms context with two InOuts")
 		// fun transformContext_twoInOuts_preservesInOuts()
 
-		// TODO: Issue #168 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
+		// TODO: Issue #221 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
 		// @Test
 		// @DisplayName("transforms context with InOut + RailSwitch")
 		// fun transformContext_inOutAndSwitch_preservesStructure()
@@ -173,7 +173,7 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
-	// TODO: Issue #168 - Property Preservation tests disabled due to SimulationContext property visibility issues
+	// TODO: Issue #221 - Property Preservation tests disabled due to SimulationContext property visibility issues
 	// The following tests need to be fixed to properly access currentMaxSpeed, currentTrackLength, currentNameString
 	// on SimulationContext. The compiler cannot resolve these properties through the interface hierarchy.
 	//
@@ -224,7 +224,7 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
-	// TODO: Issue #168 - Complex Network Transformation tests disabled
+	// TODO: Issue #221 - Complex Network Transformation tests disabled
 	// XMLContextFactory.createContext(File) returns SimulationContext, not EditingContext
 	// These tests try to cast SimulationContext to EditingContext which fails at runtime
 	//

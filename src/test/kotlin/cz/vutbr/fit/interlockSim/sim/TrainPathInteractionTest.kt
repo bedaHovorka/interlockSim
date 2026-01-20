@@ -154,7 +154,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 		}
 
 		@Test
-		@Disabled("Mockito cannot mock sealed class DynamicRailSemaphore")
+		@Disabled("Mockito cannot mock sealed class DynamicRailSemaphore. See Issue #217 for MockK migration.")
 		fun `train handles path becoming available - proceeds`() {
 			// Arrange: Create a path that initially blocks but becomes free
 			val semaphore = createMockSemaphore(true) // Initially allowing
