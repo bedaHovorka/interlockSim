@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
@@ -85,17 +86,23 @@ val editingModule: Module =
  * Provides simulation-related dependencies:
  * - SimulationProcessFactory for creating simulation processes
  * - SimulationContextFactory for creating simulation contexts
+ * - GridTransformer for static-to-dynamic grid transformation
  * - ExampleRegistry for managing simulation examples
  *
  * @see SimulationContextFactory
  * @see SimulationProcessFactory
  * @see XMLContextFactory
+ * @see GridTransformer
  */
 val simulationModule: Module =
 	module {
 		// Factory for creating simulation processes (Generator, InOutWorker)
 		// Singleton as factory is stateless
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+
+		// Grid transformer for static-to-dynamic cell conversion (grid parameterization)
+		// GridTransformer is a Kotlin object (singleton), we provide it via Koin for DI consistency
+		single { GridTransformer }
 
 		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
 		// Bind factory interfaces to the singleton XMLContextFactory instance

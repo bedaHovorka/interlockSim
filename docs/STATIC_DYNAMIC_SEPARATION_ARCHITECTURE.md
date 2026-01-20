@@ -776,9 +776,206 @@ This architecture provides a solid foundation for future development and ensures
 
 ---
 
+## Grid Parameterization Extension (Issue #131, 2026-01-19)
+
+### Overview
+
+The static/dynamic separation architecture was extended with **type-parameterized grid infrastructure** to provide compile-time type safety for cell access operations. This complements the static/dynamic wrapper pattern by adding type checking at the grid level.
+
+### Grid Type Hierarchy
+
+```
+RailwayNetGrid<out T : Cell>      - Covariant parameterized grid interface
+    ↑
+AbstractRailwayNetGrid<out T : Cell>  - Parameterized base implementation
+    ↑                                   (uses Array2DMap<T> internally)
+    ├── EditingContext                - Grid type: RailwayNetGrid<NodeCell>
+    └── SimulationContext             - Grid type: RailwayNetGrid<NodeCell> (inherited)
+```
+
+### Context Type Specialization
+
+```kotlin
+// Base abstraction - parameterized over cell type
+interface Context<out C : Cell> {
+    fun getCellAt(x: Int, y: Int): C?
+    fun getLocation(cell: @UnsafeVariance C): Point?
+    // ... other methods ...
+}
+
+// Editing context - specialized for NodeCell subtypes
+interface EditingContext : Context<NodeCell> {
+    fun putCell(key: Point, cell: NodeCell)
+    // Grid contains: RailSwitch, RailSemaphore, InOut, TrackBlockPart
+}
+
+// Simulation context - inherits NodeCell type from EditingContext
+interface SimulationContext : EditingContext {
+    fun toDynamic(separator: PathSeparator): DynamicPathSeparator
+    // Grid contains same static cells as EditingContext
+    // Dynamic wrappers maintained separately in IdentityHashMap
+}
+```
+
+### Type Safety Benefits
+
+**Compile-time verification:**
+```kotlin
+val editContext: EditingContext = factory.createContext()
+val grid: RailwayNetGrid<NodeCell> = editContext
+
+// Type-safe access - returns NodeCell or subtype
+val cell: NodeCell? = grid.getCellAt(5, 10)
+
+// Compile error - cannot assign wrong type
+// grid.putCellAt(5, 10, TrackBlockPart(...))  // ✗ Won't compile
+```
+
+**Covariant type parameters:**
+```kotlin
+interface RailwayNetGrid<out T : Cell> {
+    // 'out' modifier = covariant = read-only grid access
+    // Allows: RailwayNetGrid<NodeCell> to be used as RailwayNetGrid<Cell>
+    fun getCellAt(x: Int, y: Int): T?
+    fun getLocation(value: @UnsafeVariance T): Point?  // @UnsafeVariance for mutable collections
+}
+```
+
+### Integration with Static/Dynamic Separation
+
+The grid parameterization is **orthogonal** to the static/dynamic wrapper pattern:
+
+**Static Grid (EditingContext):**
+```kotlin
+val editContext: EditingContext = factory.createContext()
+val staticSwitch = RailSwitch(SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_FALSE)
+editContext.putCell(Point(5, 10), staticSwitch)
+
+// Grid contains static objects
+val cell: NodeCell? = editContext.getCellAt(5, 10)
+assert(cell === staticSwitch)  // ✓ Same object reference
+```
+
+**Dynamic Wrappers (SimulationContext):**
+```kotlin
+val simContext: SimulationContext = editContext.toSimulationContext()
+
+// Grid STILL contains static objects (unchanged)
+val staticCell: NodeCell? = simContext.getCellAt(5, 10)
+assert(staticCell === staticSwitch)  // ✓ Still the same static object
+
+// Dynamic wrappers maintained separately via IdentityHashMap
+val dynamicSwitch: DynamicRailSwitch = simContext.toDynamic(staticSwitch)
+assert(dynamicSwitch.static === staticSwitch)  // ✓ Wrapper references static
+```
+
+**Key Insight:** The grid stores static cells in both editing and simulation contexts. The `toDynamic()` method provides dynamic wrappers on-demand, maintained in a separate `IdentityHashMap`.
+
+### Identity Preservation
+
+Grid parameterization **preserves** the identity guarantees of static/dynamic separation:
+
+```kotlin
+// Static object identity
+val static1 = RailSwitch(...)
+val static2 = RailSwitch(...)
+assert(static1 !== static2)  // Different objects
+
+// Dynamic wrapper identity based on static reference
+val dynamic1 = simContext.toDynamic(static1)
+val dynamic2 = simContext.toDynamic(static1)
+assert(dynamic1 === dynamic2)  // ✓ Same wrapper instance (cached in IdentityHashMap)
+assert(dynamic1.static === static1)  // ✓ Both reference same static object
+
+// Wrapper equality based on static identity
+val dynamic1b = DynamicRailSwitch(static1)
+assert(dynamic1 == dynamic1b)  // ✓ Equal (same static reference)
+assert(dynamic1.hashCode() == dynamic1b.hashCode())  // ✓ Same hash (identity-based)
+```
+
+### Type Variance and Safety
+
+**Covariance (`out`) for read-only operations:**
+```kotlin
+interface RailwayNetGrid<out T : Cell> {
+    fun getCellAt(x: Int, y: Int): T?  // ✓ Covariant return type
+}
+```
+
+**Invariance with `@UnsafeVariance` for mutable collections:**
+```kotlin
+abstract class AbstractRailwayNetGrid<out T : Cell> {
+    private val reverseTable: MutableMap<@UnsafeVariance T, Point> = WeakHashMap()
+    // @UnsafeVariance: WeakHashMap is internally mutable but API is read-only
+}
+```
+
+### Example Usage Patterns
+
+**Creating and accessing parameterized grids:**
+```kotlin
+// Factory creates editing context with NodeCell grid
+val context: EditingContext = factory.createContext()
+
+// Type-safe grid access
+val grid: RailwayNetGrid<NodeCell> = context
+val allCells: Sequence<NodeCell> = grid.asSequence().map { it.value }
+
+// Filtering by type (type-safe)
+val switches: List<RailSwitch> = allCells.filterIsInstance<RailSwitch>().toList()
+val semaphores: List<RailSemaphore> = allCells.filterIsInstance<RailSemaphore>().toList()
+```
+
+**Transformation to simulation context:**
+```kotlin
+val editContext: EditingContext = factory.createContext()
+// ... add cells, tracks, etc ...
+
+// Transform to simulation context (grid structure preserved)
+val simContext: SimulationContext = editContext.toSimulationContext()
+
+// Grid points and static cells are identical
+assert(editContext.getCellAt(5, 10) === simContext.getCellAt(5, 10))
+
+// But dynamic wrappers are available on-demand
+val dynamic = simContext.toDynamic(editContext.getCellAt(5, 10) as PathSeparator)
+```
+
+### Benefits Summary
+
+1. **Type Safety:** Compile-time verification of cell type compatibility
+2. **Consistency:** All grid operations use same parameterized interface
+3. **Backward Compatible:** Existing code continues to work (type parameters inferred)
+4. **Identity Preserved:** Static/dynamic separation guarantees unchanged
+5. **Documentation:** Type parameters serve as self-documenting code
+
+### Testing Impact
+
+Grid parameterization required **no test migration** - tests already used correct types:
+
+```kotlin
+// Test code (unchanged)
+@Test
+fun testGridAccess() {
+    val context: EditingContext = factory.createContext()
+    val switch = RailSwitch(...)
+    context.putCell(Point(5, 10), switch)
+    
+    val retrieved = context.getCellAt(5, 10)
+    assertThat(retrieved).isSameInstanceAs(switch)
+}
+```
+
+All 662 tests pass with grid parameterization - type parameters are transparent to existing usage.
+
+---
+
 **References:**
 - Issue #100: Static/Dynamic Separation Implementation
+- Issue #131: Grid Parameterization Implementation
 - `PHASE1_BREAKING_CHANGES.md`: Phase 1 documentation
 - `ISSUE_100_5_SUMMARY.md`: Phase 2 documentation
 - `CONTEXT_REFACTORING_DESIGN.md`: Context refactoring design
 - `FACTORY_PATTERN_IMPLEMENTATION.md`: Factory pattern implementation
+- `docs/GRID_PARAMETERIZATION_DESIGN.md`: Grid parameterization design
+- `docs/PHASE9_VALIDATION_CHECKLIST.md`: Phase 9 validation checklist

@@ -34,13 +34,13 @@ private val logger = KotlinLogging.logger {}
  * @property static The static semaphore object with immutable editing-time properties
  */
 sealed class DynamicRailSemaphore(
-	val static: RailSemaphore
-) : OrientedPathSeparator by static, DynamicPathSeparator {
+	val staticRef: RailSemaphore
+) : OrientedPathSeparator by staticRef, DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
 	// spatialType is already available via PathSeparator delegation (getSpatialType())
 	val name: String
-		get() = static.getName()
+		get() = staticRef.getName()
 
 	/**
 	 * Dynamic property: Current signal state (mutable, changes during simulation)
@@ -51,7 +51,7 @@ sealed class DynamicRailSemaphore(
 		set(newSignal) {
 			logger.debug {
 				if (field != newSignal) {
-					"Semaphore ${static.getName()} " +
+					"Semaphore ${staticRef.getName()} " +
 						"signal change: $field -> $newSignal at t=${jDisco.Process.time()}"
 				} else {
 					""
@@ -85,13 +85,13 @@ sealed class DynamicRailSemaphore(
 		from: Cell.Segment?,
 		to: Cell.Segment?
 	): Boolean {
-		val d = static.direction()
+		val d = staticRef.direction()
 		if (to == d && from == anti(d)) return true
 		if (from == d && to == anti(d)) return false
 		throw PathSeparatorChangeException("wrong aPath segments", this)
 	}
 
-	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = static.getFollowingSegment(from)
+	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = staticRef.getFollowingSegment(from)
 
 	/**
 	 * Equality based on the static object (stable identity).
@@ -106,8 +106,8 @@ sealed class DynamicRailSemaphore(
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
 		return when (other) {
-			is DynamicRailSemaphore -> static === other.static
-			is RailSemaphore -> static === other
+			is DynamicRailSemaphore -> staticRef === other.staticRef
+			is RailSemaphore -> staticRef === other
 			else -> false
 		}
 	}
@@ -120,7 +120,7 @@ sealed class DynamicRailSemaphore(
 	 * - Stability across signal state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(static)
+	override fun hashCode(): Int = System.identityHashCode(staticRef)
 
 	/**
 	 * String representation for debugging

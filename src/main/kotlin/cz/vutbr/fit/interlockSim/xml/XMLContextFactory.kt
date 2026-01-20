@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
@@ -308,7 +309,7 @@ class XMLContextFactory :
 	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): Context =
+	override fun createContext(file: File): Context<*> =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -330,10 +331,10 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): Context = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context<*> = createContext(InputStreamReader(stream))
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		stream: OutputStream
 	): Boolean {
 		// TODO: Implement XML serialization - see issue #61 (relates to Goal 5)
@@ -396,7 +397,7 @@ class XMLContextFactory :
 	}
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		file: File
 	): Boolean {
 		val xmlContext = Util.assertInstanceOf(DefaultSimulationContext::class.java, context) // zatim
@@ -419,7 +420,11 @@ class XMLContextFactory :
 			allNodes.addAll(xmlContext.getGraph().nodeSet())
 
 			// Add any isolated NodeCells from the grid that aren't in the graph
-			for (entry in railwayNetGrid) {
+			// Grid parameterization: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
+			for (entry in cellGrid) {
 				val point = entry.key
 				val cell = entry.value
 				if (cell is NodeCell) {

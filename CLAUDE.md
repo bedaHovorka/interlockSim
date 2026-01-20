@@ -316,9 +316,11 @@ For detailed Docker + Koin integration guide, see:
 - `example` - Run built-in examples (uses reflection to find methods annotated with `@Example`)
 
 **Context system:**
-- `Context` - Base abstraction for railway network configuration
-- `EditingContext` - Interface for editing operations on railway network
-- `SimulationContext` - Interface for simulation execution (extends EditingContext)
+- `Context<out C : Cell>` - Base abstraction for railway network configuration (parameterized over cell type)
+- `EditingContext : Context<NodeCell>` - Interface for editing operations on railway network
+- `SimulationContext : EditingContext` - Interface for simulation execution (extends EditingContext)
+- `RailwayNetGrid<out T : Cell>` - Parameterized grid interface for type-safe cell access
+- `AbstractRailwayNetGrid<out T : Cell>` - Parameterized base implementation using `Array2DMap<T>`
 - `DefaultEditingContext` - Implementation of editing operations only (613 lines)
 - `DefaultSimulationContext` - Implementation extending editing with simulation capabilities (829 lines)
 - `DefaultContext` - **DEPRECATED** backward-compatibility wrapper extending DefaultSimulationContext (74 lines)
@@ -351,6 +353,22 @@ Complete wrapper pattern implementation separating static configuration from dyn
 - **IdentityHashMap** ensures stable wrapper identity across simulation
 - **Pattern usage:** Call `context.toDynamic(track)` before state operations (enter/leave/setUpPath)
 - See `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` for complete architecture documentation
+
+**Grid Parameterization (Issue #131, 2026-01-19):**
+Type-safe grid infrastructure with parameterized cell types:
+- **`RailwayNetGrid<out T : Cell>`** - Covariant type parameter for read-only grid access
+- **`AbstractRailwayNetGrid<out T : Cell>`** - Parameterized base implementation
+- **`Context<out C : Cell>`** - Base context parameterized over cell type
+- **`EditingContext : Context<NodeCell>`** - Editing context specialized for NodeCell subtypes
+- **Type safety:** Compile-time verification of cell type compatibility
+- **Usage:** `@UnsafeVariance` annotations where mutable collections require invariance
+- **Example usage:**
+```kotlin
+val context: EditingContext = factory.createContext()
+val grid: RailwayNetGrid<NodeCell> = context  // Type-safe grid access
+val cell: NodeCell? = grid.getCellAt(5, 10)    // Returns NodeCell or subtype
+```
+- See `docs/GRID_PARAMETERIZATION_DESIGN.md` and `docs/PHASE9_VALIDATION_CHECKLIST.md` for complete documentation
 
 **Object model:**
 - `objects/tracks/` - Track facilities, blocks, occupants, DynamicTrack wrapper

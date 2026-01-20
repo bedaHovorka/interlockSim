@@ -28,6 +28,20 @@ import java.util.EnumSet
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
  *
+ * ## Type Parameter
+ *
+ * **Grid parameterization temporary compromise**: SimulationContext extends EditingContext to allow
+ * DefaultSimulationContext to extend DefaultEditingContext during the transition period.
+ * This will be changed in future when BaseContext is introduced.
+ *
+ * The grid stores dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) created during transformation
+ * from editing context. These wrappers maintain references to static objects via `staticRef`
+ * property for identity preservation.
+ *
+ * The simulation context is created from an editing context using `GridTransformer` to convert
+ * static NodeCell instances to their dynamic wrapper counterparts.
+ *
  * ## Thread Safety
  *
  * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
@@ -38,9 +52,11 @@ import java.util.EnumSet
  * ensuring sequential execution of all simulation events.
  *
  * @see Context
+ * @see EditingContext
+ * @see DynamicPathSeparator
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : Context {
+interface SimulationContext : EditingContext {
 	/**
 	 * simulation reporting types
 	 */

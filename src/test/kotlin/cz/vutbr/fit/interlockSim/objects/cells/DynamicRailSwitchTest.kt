@@ -231,8 +231,8 @@ class DynamicRailSwitchTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicSwitch1.static).isSameAs(staticSwitch1)
-		assertThat(dynamicSwitch2.static).isSameAs(staticSwitch2)
+		assertThat(dynamicSwitch1.staticRef).isSameAs(staticSwitch1)
+		assertThat(dynamicSwitch2.staticRef).isSameAs(staticSwitch2)
 	}
 
 	@Test

@@ -16,6 +16,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.buildMinimal
@@ -184,7 +185,10 @@ class ContextInitializationTest : KoinTestBase() {
 				.isNotNull()
 
 			// Railway context: Should have entry and exit InOut points
-			val grid = context.getRailWayNetGrid()
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to access all cells without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
@@ -284,7 +288,10 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("context initialized with correct InOut points")
 		fun context_hasInOutPoints() {
 			// Arrange & Act
-			val grid = linearTrackContext.getRailWayNetGrid()
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to access all cells without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val grid = linearTrackContext.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
 			val inOutPoints = mutableListOf<InOut>()
 

@@ -74,13 +74,13 @@ class DynamicInOutTest {
 		assertThat(dynamicInOut1.getOrientation()).isTrue()
 
 		// Verify spatialType delegation
-		assertThat(dynamicInOut1.static.getSpatialType()).isEqualTo(staticInOut1.getSpatialType())
-		assertThat(dynamicInOut1.static.getSpatialType()).isEqualTo(Cell.SpatialType.HORIZONTAL)
+		assertThat(dynamicInOut1.staticRef.getSpatialType()).isEqualTo(staticInOut1.getSpatialType())
+		assertThat(dynamicInOut1.staticRef.getSpatialType()).isEqualTo(Cell.SpatialType.HORIZONTAL)
 
 		// Verify for second InOut with different properties
 		assertThat(dynamicInOut2.name).isEqualTo("Station B")
 		assertThat(dynamicInOut2.getOrientation()).isFalse()
-		assertThat(dynamicInOut2.static.getSpatialType()).isEqualTo(Cell.SpatialType.VERTICAL)
+		assertThat(dynamicInOut2.staticRef.getSpatialType()).isEqualTo(Cell.SpatialType.VERTICAL)
 	}
 
 	@Test
@@ -158,8 +158,8 @@ class DynamicInOutTest {
 
 	@Test
 	fun `static object is accessible`() {
-		assertThat(dynamicInOut1.static).isSameAs(staticInOut1)
-		assertThat(dynamicInOut2.static).isSameAs(staticInOut2)
+		assertThat(dynamicInOut1.staticRef).isSameAs(staticInOut1)
+		assertThat(dynamicInOut2.staticRef).isSameAs(staticInOut2)
 	}
 
 	@Test

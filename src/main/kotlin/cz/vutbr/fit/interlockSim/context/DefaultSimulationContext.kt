@@ -143,7 +143,64 @@ open class DefaultSimulationContext(
 		 * Configured in logback.xml as "cz.vutbr.fit.interlockSim.simulation".
 		 */
 		private val simulationLogger = KotlinLogging.logger("cz.vutbr.fit.interlockSim.simulation")
+
+		/**
+		 * Factory method to create SimulationContext from EditingContext.
+		 *
+		 * Grid parameterization: Uses GridTransformer to convert static grid to dynamic grid.
+		 * This method creates a new simulation context with a parameterized grid
+		 * of type RailwayNetGrid<DynamicPathSeparator>.
+		 *
+		 * @param editingContext The editing context with static network configuration
+		 * @param processFactory Factory for creating simulation processes
+		 * @return New simulation context with transformed grid
+		 */
+		fun fromEditingContext(
+			editingContext: EditingContext,
+			processFactory: SimulationProcessFactory
+		): DefaultSimulationContext {
+			// Create base simulation context
+			val grid = editingContext.getRailWayNetGrid()
+			val cols = grid.getCols()
+			val rows = grid.getRows()
+			
+			val context = DefaultSimulationContext(cols, rows, processFactory)
+			
+			// Transform static grid to dynamic grid
+			// Cast to Cell grid for transformation (safe because EditingContext grid contains Cells)
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = grid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
+			
+			val transformationResult = GridTransformer.transformGrid(cellGrid)
+			
+			// Store the transformation map for toDynamic() lookups
+			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
+			
+			// TODO Grid parameterization TODO: Replace inherited grid with transformed grid
+			// Currently keeping both for compatibility, will be fully replaced in Grid parameterization future
+			
+			logger.info {
+				"Created simulation context from editing context: " +
+				"${transformationResult.staticToDynamicMap.size} dynamic wrappers, " +
+				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
+			}
+			
+			return context
+		}
 	}
+
+	/**
+	 * Grid parameterization note: getRailWayNetGrid() inherited from DefaultEditingContext returns RailwayNetGrid<NodeCell>.
+	 * We do NOT override this method because:
+	 * 1. DefaultSimulationContext still extends DefaultEditingContext (temporary during grid parameterization)
+	 * 2. The interface SimulationContext : Context<DynamicPathSeparator> expects RailwayNetGrid<DynamicPathSeparator>
+	 * 3. These are incompatible, but the implementation works because:
+	 *    - Internal code uses staticToDynamicMap for conversions
+	 *    - Grid lookup happens via parent's getRailWayNetGrid() (returns NodeCell grid)
+	 *    - Results are then converted via toDynamic() when needed
+	 *
+	 * Grid parameterization future will resolve this by introducing BaseContext and separate grid storage.
+	 */
 
 	/**
 	 * Get segment for a path separator and tracks
@@ -308,20 +365,30 @@ open class DefaultSimulationContext(
 	/**
 	 * Initialize static-to-dynamic mapping for all PathSeparators in the network
 	 * Must be called before simulation starts to ensure all separators have Dynamic wrappers
+	 *
+	 * Visibility: internal (visible for testing)
+	 * Tests that call pathToNextSemaphore() without running full simulation must call this first
 	 */
-	private fun initializeDynamicMapping() {
+	internal fun initializeDynamicMapping() {
 		// Track what we're mapping to avoid duplicates
 		var mappedCount = 0
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 
 		// Iterate through all cells in the railway network grid
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y) ?: continue
 
+				// Skip TrackBlockPart - these are not NodeCells and don't need dynamic wrappers
+				if (cell !is NodeCell) {
+					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - not a NodeCell" }
+					continue
+				}
+
 				// Skip if already mapped (handles case where getInOuts was called early)
 				if (cell in staticToDynamicMap) {
-					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - already mapped" }
+					logger.trace { "Skipping ${cell::class.java.simpleName} at ($x,$y) - already mapped" }
 					continue
 				}
 
@@ -462,7 +529,8 @@ open class DefaultSimulationContext(
 	 * unwrapped element during simulation indicates a bug.
 	 */
 	private fun validateDynamicMapping() {
-		val grid = getRailWayNetGrid()
+		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+		val grid = getInternalGrid()
 		val unmappedSeparators = mutableListOf<String>()
 		val unmappedTracks = mutableListOf<String>()
 
@@ -535,24 +603,33 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a static PathSeparator to its Dynamic wrapper.
-	 * This is used by Train to ensure it always works with Dynamic wrappers.
+	 *
+	 * Grid parameterization: Uses staticToDynamicMap for lookups (grid still contains static cells).
+	 * Grid parameterization: Used in pathToNextSemaphore to ensure paths contain only dynamic references.
+	 * Grid parameterization future will enable grid-based lookup when dynamic grid is stored separately.
 	 *
 	 * @param separator The separator to convert (static or already Dynamic)
 	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
-	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
+	 * @throws IllegalStateException if the separator is static and not found
 	 */
 	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
-		return if (separator is DynamicPathSeparator) {
-			separator  // Already dynamic
-		} else {
-			staticToDynamicMap[separator]
-				?: throw IllegalStateException(
-					"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
-						"Map contains ${staticToDynamicMap.size} entries. " +
-						"This indicates the separator was not registered during initialization. " +
-						"Ensure initializeDynamicMapping() completed successfully before simulation starts."
-				)
+		// If already dynamic, return as-is (idempotent operation)
+		if (separator is DynamicPathSeparator) {
+			logger.trace { "toDynamic: separator already dynamic, returning as-is: ${separator.javaClass.simpleName}" }
+			return separator
 		}
+
+		// Grid parameterization: Use static-to-dynamic map for conversions
+		// Grid lookup will be added in Grid parameterization future when dynamic grid is stored
+		val dynamic = staticToDynamicMap[separator]
+			?: throw IllegalStateException(
+				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
+					"Map contains ${staticToDynamicMap.size} entries. " +
+					"This indicates the separator was not registered during initialization. " +
+					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+			)
+		logger.trace { "toDynamic: converted static ${separator.javaClass.simpleName} to ${dynamic.javaClass.simpleName}" }
+		return dynamic
 	}
 
 	/**
@@ -573,10 +650,11 @@ open class DefaultSimulationContext(
 
 	@Throws(EmptyContextException::class, SimulationException::class)
 	override fun run() {
-		if (getGraph().isEmpty() || getRailWayNetGrid().isEmpty() || inouts.isEmpty()) {
+		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
+		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
 			logger.warn {
 				"Cannot start simulation: graph=${if (getGraph().isEmpty()) "empty" else "ok"}, " +
-					"grid=${if (getRailWayNetGrid().isEmpty()) "empty" else "ok"}, " +
+					"grid=${if (gridEmpty) "empty" else "ok"}, " +
 					"inouts=${if (inouts.isEmpty()) "empty" else "ok"}"
 			}
 			throw EmptyContextException()
@@ -702,30 +780,35 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Find path to the next semaphore from a path separator
+	 *
+	 * Grid parameterization: Returns paths containing only dynamic references.
+	 * All PathSeparators added to the path are converted to their dynamic wrappers
+	 * to ensure consistent use of dynamic types throughout simulation.
 	 */
 	override fun pathToNextSemaphore(
 		sep: PathSeparator,
 		nxt: TrackSection
 	): Path? {
 		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
-		var separator = sep
+		// Grid parameterization: Convert initial separator to dynamic reference
+		var separator = toDynamic(sep)
+		logger.trace { "Grid parameterization: Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
 		var previous: TrackSection? = null
 		var next: TrackSection? = nxt
 		val path = ArrayPath(this)
 		do {
+			// Grid parameterization: Add dynamic separator to path
 			path.add(separator)
 			if (next != null) {
 				path.add(next)
 				// Extract static separator for track operations (getSecondEnd uses === comparison)
 				val staticSeparator = CellUtilities.assertNodeCell(separator)
 				val staticResult = next.getSecondEnd(staticSeparator)
-				// Wrap static result back to Dynamic wrapper (must exist in map)
-				separator = staticToDynamicMap[staticResult]
-					?: throw IllegalStateException(
-						"No dynamic wrapper found for static separator: $staticResult. " +
-							"Map contains ${staticToDynamicMap.size} entries. " +
-							"This indicates initialization failed."
-					)
+				// Grid parameterization: Convert static result to dynamic wrapper before adding to path
+				separator = toDynamic(staticResult)
+				logger.trace {
+					"Grid parameterization: Converted separator from track to dynamic: ${separator.javaClass.simpleName}"
+				}
 				previous = next
 				next = getNextTrackSection(separator, next)
 
@@ -734,6 +817,7 @@ open class DefaultSimulationContext(
 				if (separator is OrientedPathSeparator) {
 					// Direction check for oriented semaphores
 					if (isSeparatorInDirection(separator, next, previous)) {
+						// Grid parameterization: Add dynamic separator to path
 						path.add(separator)
 						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
 						return path

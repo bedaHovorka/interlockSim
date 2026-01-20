@@ -188,7 +188,7 @@ class ShuntingLoop : Interlocking {
 		x: Int,
 		y: Int
 	): T {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
 		return Util.assertInstanceOf(clazz, cell)
 	}
@@ -209,7 +209,7 @@ class ShuntingLoop : Interlocking {
 		cell1: Cell,
 		cell2: Cell
 	): SimpleTrackBlock {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = context.getGraph()
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
@@ -331,16 +331,16 @@ class ShuntingLoop : Interlocking {
 			// Compare using static references to avoid Dynamic wrapper identity issues
 			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
 			val nextSemStatic = when (nextSem) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.static
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.static
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
 				else -> nextSem
 			}
-			if (nextSemStatic != to.static) return false
+			if (nextSemStatic != to.staticRef) return false
 			return trySetupPaths(to)
 		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
 			// Use static separator for both getSecondEnd AND isSetUpPath
 			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
-			val staticSecondEnd = block.getSecondEnd(to.static)
+			val staticSecondEnd = block.getSecondEnd(to.staticRef)
 			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}

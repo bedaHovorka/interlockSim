@@ -36,13 +36,13 @@ private val logger = KotlinLogging.logger {}
  * @property static The static switch object with immutable editing-time properties
  */
 class DynamicRailSwitch(
-	val static: RailSwitch
-) : PathSeparator by static, DynamicPathSeparator {
+	val staticRef: RailSwitch
+) : PathSeparator by staticRef, DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val type: RailSwitch.Type
-		get() = static.type
+		get() = staticRef.type
 	val name: String
-		get() = static.getName()
+		get() = staticRef.getName()
 
 	/**
 	 * Dynamic property: Current configuration (MAIN or BRANCH)
@@ -82,7 +82,7 @@ class DynamicRailSwitch(
 		val oldConf = conf
 		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
 		logger.info {
-			"${jDisco.Process.time()} Switch ${static.hashCode()} position change: $oldConf -> $conf"
+			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
 	}
 
@@ -97,8 +97,8 @@ class DynamicRailSwitch(
 	}
 
 	override fun allowedSpeed(): Double {
-		val double1 = static.speeds.get(conf)
-		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=${static.speeds}" }
+		val double1 = staticRef.speeds.get(conf)
+		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=${staticRef.speeds}" }
 		return double1!!.toDouble()
 	}
 
@@ -124,14 +124,14 @@ class DynamicRailSwitch(
 		if (from == null || to == null) {
 			throw PathSeparatorChangeException("switch segments cannot be null", this)
 		}
-		return static.confs.get(from, to) ?: throw PathSeparatorChangeException(
+		return staticRef.confs.get(from, to) ?: throw PathSeparatorChangeException(
 			"switch doesn't join this segments",
 			this
 		)
 	}
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
-		val map = static.confs.getJoinedNodesAndEdges(from)
+		val map = staticRef.confs.getJoinedNodesAndEdges(from)
 		for (e in (map as Map<*, *>).entries) {
 			@Suppress("UNCHECKED_CAST")
 			val entry = e as Map.Entry<Cell.Segment, Conf>
@@ -149,7 +149,7 @@ class DynamicRailSwitch(
 		val oldLocked = locked
 		locked = true
 		logger.debug {
-			"${jDisco.Process.time()} Switch ${static.hashCode()} locked"
+			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
 		propertyChangeSupport.firePropertyChange("locked", oldLocked, locked)
 	}
@@ -163,7 +163,7 @@ class DynamicRailSwitch(
 		val oldLocked = locked
 		locked = false
 		logger.debug {
-			"${jDisco.Process.time()} Switch ${static.hashCode()} unlocked"
+			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
 		propertyChangeSupport.firePropertyChange("locked", oldLocked, locked)
 	}
@@ -220,8 +220,8 @@ class DynamicRailSwitch(
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
 		return when (other) {
-			is DynamicRailSwitch -> static === other.static
-			is RailSwitch -> static === other
+			is DynamicRailSwitch -> staticRef === other.staticRef
+			is RailSwitch -> staticRef === other
 			else -> false
 		}
 	}
@@ -234,7 +234,7 @@ class DynamicRailSwitch(
 	 * - Stability across configuration changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(static)
+	override fun hashCode(): Int = System.identityHashCode(staticRef)
 
 	/**
 	 * String representation for debugging
