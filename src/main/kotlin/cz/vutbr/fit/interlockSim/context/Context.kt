@@ -94,27 +94,4 @@ interface Context<out C : Cell> {
 	 * @param listener the listener to remove
 	 */
 	fun removePropertyChangeListener(listener: PropertyChangeListener)
-
-	/**
-	 * Get the list of InOut elements (entry/exit points) in this context.
-	 *
-	 * InOut elements represent entry and exit points in the railway network where
-	 * trains enter and leave the system. This method provides access to these elements
-	 * for both editing and simulation contexts.
-	 *
-	 * ## Implementation Notes
-	 *
-	 * Returns an immutable list to prevent external modification of the internal InOut
-	 * collection. Changes to the InOut list should be made through proper context
-	 * operations (e.g., putCell for EditingContext).
-	 *
-	 * ## Usage
-	 *
-	 * - **EditingContext**: Access InOut elements during network construction
-	 * - **SimulationContext**: Access InOut elements for worker management and train generation
-	 * - **Transformation**: Copy InOut elements when converting EditingContext to SimulationContext
-	 *
-	 * @return Immutable list of InOut elements (entry/exit points)
-	 */
-	fun getInOuts(): List<cz.vutbr.fit.interlockSim.objects.cells.InOut>
 }

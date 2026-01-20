@@ -263,20 +263,6 @@ abstract class BaseContext(
 	fun getInOutsList(): List<InOut> = inouts
 
 	/**
-	 * Get the list of InOut elements (entry/exit points) in this context.
-	 *
-	 * Implementation of [Context.getInOuts] interface method.
-	 * Returns an immutable copy of the InOut list to prevent external modifications.
-	 *
-	 * This method enables type-safe access to InOut elements through the Context interface,
-	 * supporting the Liskov Substitution Principle by allowing any Context implementation
-	 * to provide InOut access without requiring concrete type knowledge.
-	 *
-	 * @return Immutable list of InOut elements (copy of internal list)
-	 */
-	override fun getInOuts(): List<InOut> = inouts.toList()
-
-	/**
 	 * Current name string for train generation.
 	 * Property with custom getter/setter for null handling.
 	 * Open to allow subclass override (DefaultSimulationContext adds random generation).

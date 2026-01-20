@@ -107,6 +107,27 @@ open class DefaultEditingContext(
 	}
 
 	/**
+	 * Get the list of InOut elements (entry/exit points) in this context.
+	 *
+	 * Implementation of [EditingContext.getInOuts] interface method.
+	 * Returns an immutable copy of the InOut list to prevent external modifications.
+	 *
+	 * This method enables type-safe access to InOut elements through the EditingContext
+	 * interface, supporting the Liskov Substitution Principle by allowing any
+	 * EditingContext implementation to provide InOut access without requiring concrete
+	 * type knowledge.
+	 *
+	 * ## Design Note
+	 *
+	 * This method is distinct from `SimulationContext.getInOuts()` which returns
+	 * `Collection<DynamicInOut>`. EditingContext returns static InOut elements,
+	 * enabling type-safe transformation without runtime type checking.
+	 *
+	 * @return Immutable list of InOut elements (copy of internal list)
+	 */
+	override fun getInOuts(): List<InOut> = getInOutsList()
+
+	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
 	 */
 	private fun swapXY(p: Point): Point = Point(p.y, p.x)
