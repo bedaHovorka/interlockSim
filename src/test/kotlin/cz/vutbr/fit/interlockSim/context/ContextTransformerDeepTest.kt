@@ -134,8 +134,12 @@ class ContextTransformerDeepTest : KoinTestBase() {
 
 			// Verify entry/exit configuration preserved
 			val dynamicInOuts = inOuts.map { it as DynamicInOut }
-			val entryNames = dynamicInOuts.filter { it.staticRef.getName() in listOf("Entry1", "Entry2") }.map { it.staticRef.getName() }
-			val exitNames = dynamicInOuts.filter { it.staticRef.getName() in listOf("Exit1", "Exit2") }.map { it.staticRef.getName() }
+			val entryNames = dynamicInOuts
+				.filter { it.staticRef.getName() in listOf("Entry1", "Entry2") }
+				.map { it.staticRef.getName() }
+			val exitNames = dynamicInOuts
+				.filter { it.staticRef.getName() in listOf("Exit1", "Exit2") }
+				.map { it.staticRef.getName() }
 
 			assertThat(entryNames).hasSize(2)
 			assertThat(exitNames).hasSize(2)
@@ -297,7 +301,10 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			editingContext.putCell(Point(15, 5), outB)
 
 			// Act
-			val simulationContext = transformer.createSimulationContext(editingContext, processFactory) as DefaultSimulationContext
+			val simulationContext = transformer.createSimulationContext(
+				editingContext,
+				processFactory
+			) as DefaultSimulationContext
 
 			// Assert - All PathSeparators can be converted to dynamic
 			// (toDynamic would throw IllegalStateException if mapping incomplete)
@@ -321,7 +328,10 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			editingContext.putCell(Point(5, 5), inA)
 
 			// Act
-			val simulationContext = transformer.createSimulationContext(editingContext, processFactory) as DefaultSimulationContext
+			val simulationContext = transformer.createSimulationContext(
+				editingContext,
+				processFactory
+			) as DefaultSimulationContext
 
 			// Get dynamic wrapper
 			val dynamic1 = simulationContext.toDynamic(inA)
@@ -343,7 +353,10 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			editingContext.putCell(Point(5, 5), inOut)
 
 			// Act
-			val simulationContext = transformer.createSimulationContext(editingContext, processFactory) as DefaultSimulationContext
+			val simulationContext = transformer.createSimulationContext(
+				editingContext,
+				processFactory
+			) as DefaultSimulationContext
 
 			// Assert - InOut's internal semaphores are also mapped
 			val inSem = inOut.getInSemaphore()
