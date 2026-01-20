@@ -17,7 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
+import io.mockk.mockk
 
 /**
  * Tests for DynamicTrack wrapper class
@@ -39,8 +39,8 @@ class DynamicTrackTest {
 	@BeforeEach
 	fun setUp() {
 		// Create path separators for track ends
-		separator1 = mock(OrientedPathSeparator::class.java)
-		separator2 = mock(OrientedPathSeparator::class.java)
+		separator1 = mockk<OrientedPathSeparator>()
+		separator2 = mockk<OrientedPathSeparator>()
 
 		// Create static tracks (SimpleTrackBlock implements TrackFacility)
 		staticTrack1 = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -51,7 +51,7 @@ class DynamicTrackTest {
 		dynamicTrack2 = DynamicTrack(staticTrack2)
 
 		// Create mock occupant (train)
-		occupant = mock(TrackOccupant::class.java)
+		occupant = mockk<TrackOccupant>()
 	}
 
 	@Test
@@ -126,7 +126,7 @@ class DynamicTrackTest {
 		dynamicTrack1.enter(occupant)
 
 		// Try to enter again with different occupant
-		val occupant2 = mock(TrackOccupant::class.java)
+		val occupant2 = mockk<TrackOccupant>()
 		assertFailure { dynamicTrack1.enter(occupant2) }
 			.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 			.message()
@@ -155,7 +155,7 @@ class DynamicTrackTest {
 		dynamicTrack1.enter(occupant)
 
 		// Try to leave with different occupant
-		val occupant2 = mock(TrackOccupant::class.java)
+		val occupant2 = mockk<TrackOccupant>()
 		assertFailure { dynamicTrack1.leave(occupant2) }
 			.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 			.message()

@@ -23,8 +23,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
+import io.mockk.every
+import io.mockk.mockk
 
 /**
  * Comprehensive unit tests for Train physics and Motor inner class.
@@ -508,19 +508,19 @@ class TrainPhysicsTest : KoinTestBase() {
 
 	/**
 	 * Creates a timetable with specified train length for testing.
-	 * Uses Mockito to mock InOut objects without complex context setup.
+	 * Uses MockK to mock InOut objects without complex context setup.
 	 *
 	 * @param length the train length in meters
 	 * @return configured Timetable instance
 	 */
 	private fun createTimetableWithLength(length: Double): Timetable {
-		val mockInOut = mock(InOut::class.java)
-		`when`(mockInOut.getName()).thenReturn("MOCK_IN")
-		`when`(mockInOut.toString()).thenReturn("InOut:MOCK_IN")
+		val mockInOut = mockk<InOut>()
+		every { mockInOut.getName() } returns "MOCK_IN"
+		every { mockInOut.toString() } returns "InOut:MOCK_IN"
 
-		val mockOutOut = mock(InOut::class.java)
-		`when`(mockOutOut.getName()).thenReturn("MOCK_OUT")
-		`when`(mockOutOut.toString()).thenReturn("InOut:MOCK_OUT")
+		val mockOutOut = mockk<InOut>()
+		every { mockOutOut.getName() } returns "MOCK_OUT"
+		every { mockOutOut.toString() } returns "InOut:MOCK_OUT"
 
 		return Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), length)
 	}
