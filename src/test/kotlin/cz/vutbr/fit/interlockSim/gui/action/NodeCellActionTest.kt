@@ -20,23 +20,21 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.gui.AbstractFrameTestBase
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.core.module.Module
 import org.koin.test.get
 import java.awt.event.ActionEvent
 import javax.swing.ImageIcon
 
 /**
- * Unit tests for NodeCellAction class
+ * Integration tests for NodeCellAction class
  *
  * Tests cover:
  * - Action construction with cell class and arguments
@@ -48,25 +46,25 @@ import javax.swing.ImageIcon
  *
  * Note: These are integration tests that use real Koin dependencies since
  * NodeCellAction uses getKoin() directly to resolve EditingContextFactory and Frame.
+ * Tests are skipped in headless CI environments (no X11 display).
  *
  * Coverage target: 80%+ for gui.action package (156 instructions)
+ * GitHub Issue: #111 (CI headless environment support)
  */
 @DisplayName("NodeCellAction")
-class NodeCellActionTest : KoinTestBase() {
-private lateinit var context: EditingContext
-private lateinit var factory: EditingContextFactory
+class NodeCellActionTest : AbstractFrameTestBase() {
+	private lateinit var context: EditingContext
+	private lateinit var factory: EditingContextFactory
 
-/**
- * Use full test module to access GUI components (Frame, RailwayNetGridCanvas)
- */
-override fun getTestModule(): Module = testModuleFull
+	@BeforeEach
+	override fun setUp() {
+		// Check for headless environment (AbstractFrameTestBase)
+		super.setUp()
 
-@BeforeEach
-fun setUp() {
-// Get real Koin dependencies (required since NodeCellAction uses getKoin())
-factory = get<EditingContextFactory>()
-context = factory.createEmptyContext()
-}
+		// Get real Koin dependencies (required since NodeCellAction uses getKoin())
+		factory = get<EditingContextFactory>()
+		context = factory.createEmptyContext()
+	}
 
 /**
  * Test 1: Constructor creates action with correct name format
