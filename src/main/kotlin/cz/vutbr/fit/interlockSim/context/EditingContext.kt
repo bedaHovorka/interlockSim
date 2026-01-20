@@ -97,4 +97,99 @@ interface EditingContext : Context<NodeCell> {
 	 * Name which is setting in elements
 	 */
 	var currentNameString: String
+
+	/**
+	 * Freeze this context, making the network structure immutable.
+	 *
+	 * Once frozen, any attempt to modify the network structure (adding/removing cells,
+	 * joining cells, modifying track blocks) will throw [UnsupportedOperationException].
+	 *
+	 * This operation is idempotent - calling freeze() multiple times has no effect.
+	 * Once frozen, a context cannot be unfrozen.
+	 *
+	 * ## Usage
+	 *
+	 * Typical usage patterns:
+	 * - **Explicit freeze**: Build network in editing context, then freeze before manual
+	 *   conversion to simulation context
+	 * - **Implicit freeze**: Conversion to [SimulationContext] automatically freezes
+	 *   the context to enforce immutability
+	 * - **Test scenarios**: Tests may freeze editing contexts to verify immutability
+	 *   enforcement
+	 *
+	 * ## Design Rationale
+	 *
+	 * Exposing freeze() in EditingContext interface (not just BaseContext) provides:
+	 * - **Clean API**: Users can freeze without casting to concrete types
+	 * - **Type Safety**: Works with interface references, no runtime type checks
+	 * - **Testability**: Tests can verify immutability without implementation knowledge
+	 * - **Explicit Intent**: Makes immutability enforcement visible in the public API
+	 *
+	 * ## Example
+	 *
+	 * ```kotlin
+	 * val context: EditingContext = factory.createEmptyContext()
+	 * context.putCell(Point(1, 1), inA)
+	 * context.putCell(Point(5, 5), outB)
+	 *
+	 * // Freeze before conversion (explicit)
+	 * context.freeze()
+	 * val simContext = factory.createContext(context)  // Already frozen
+	 *
+	 * // Or let factory freeze implicitly
+	 * val simContext2 = factory.createContext(context)  // Freezes internally
+	 * ```
+	 *
+	 * @see isFrozen
+	 * @throws UnsupportedOperationException if subsequent modifications are attempted
+	 */
+	fun freeze()
+
+	/**
+	 * Check if this context is frozen (immutable network structure).
+	 *
+	 * Returns `true` if the context has been frozen via [freeze] or during conversion
+	 * to [SimulationContext]. When frozen, all editing operations (putCell, removeCell,
+	 * moveCell, joinCells, removeLine) will throw [UnsupportedOperationException].
+	 *
+	 * ## Frozen vs Unfrozen States
+	 *
+	 * **Unfrozen (false)**: Editing operations allowed
+	 * - putCell(), removeCell(), moveCell() work normally
+	 * - joinCells(), removeLine() work normally
+	 * - Network structure can be modified
+	 * - Typical state for EditingContext
+	 *
+	 * **Frozen (true)**: Editing operations prohibited
+	 * - All editing operations throw UnsupportedOperationException
+	 * - Network structure is immutable
+	 * - Read operations (getRailWayNetGrid, getGraph) still work
+	 * - Typical state for SimulationContext
+	 *
+	 * ## Usage
+	 *
+	 * Use this method to:
+	 * - **Test preconditions**: Verify context state before operations
+	 * - **Debug immutability**: Check why editing operations fail
+	 * - **Conditional logic**: Branch based on mutability state (rare)
+	 *
+	 * ## Example
+	 *
+	 * ```kotlin
+	 * val context: EditingContext = factory.createEmptyContext()
+	 * println(context.isFrozen())  // false (editing allowed)
+	 *
+	 * context.freeze()
+	 * println(context.isFrozen())  // true (editing prohibited)
+	 *
+	 * // Safe check before modification
+	 * if (!context.isFrozen()) {
+	 *     context.putCell(Point(1, 1), inA)
+	 * }
+	 * ```
+	 *
+	 * @return true if context is frozen and modifications are not allowed, false otherwise
+	 * @see freeze
+	 */
+	fun isFrozen(): Boolean
 }
