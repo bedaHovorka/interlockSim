@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
@@ -194,16 +195,25 @@ class RailwayNetGridCanvas :
 	}
 
 	/**
-	 * Switch context and update mouse listeners for the appropriate mode
+	 * Switch context and update mouse listeners for the appropriate mode.
+	 *
+	 * Explicitly handles both EditingContext and SimulationContext without assuming
+	 * inheritance relationship between them (preparation for Issue #153.5).
 	 */
 	fun setContext(newContext: Context<*>) {
 		when (newContext) {
+			is SimulationContext -> {
+				// Handle SimulationContext first (more specific type)
+				state = State.SIMULATION
+				changeListeners(editListener, simulationControlListener)
+			}
 			is EditingContext -> {
+				// Handle EditingContext (base editing functionality)
 				state = State.EDITING
 				changeListeners(simulationControlListener, editListener)
 			}
 			else -> {
-				// Covers SimulationContext and any future context types
+				// Future context types default to simulation mode
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
@@ -388,10 +398,37 @@ class RailwayNetGridCanvas :
 		scrollRectToVisible(r)
 	}
 
-	// Context access
+	// Context access methods with type safety
+	/**
+	 * Get the current context as EditingContext.
+	 *
+	 * @return EditingContext if current context is an EditingContext
+	 * @throws IllegalStateException if current context is not an EditingContext
+	 */
 	fun getEditingContext(): EditingContext {
-		// assert state == State.EDITING && context is EditingContext
+		require(state == State.EDITING) {
+			"Cannot get EditingContext when in $state state"
+		}
+		require(context is EditingContext) {
+			"Current context is not an EditingContext: ${context?.javaClass?.simpleName}"
+		}
 		return context as EditingContext
+	}
+
+	/**
+	 * Get the current context as SimulationContext.
+	 *
+	 * @return SimulationContext if current context is a SimulationContext
+	 * @throws IllegalStateException if current context is not a SimulationContext
+	 */
+	fun getSimulationContext(): SimulationContext {
+		require(state == State.SIMULATION) {
+			"Cannot get SimulationContext when in $state state"
+		}
+		require(context is SimulationContext) {
+			"Current context is not a SimulationContext: ${context?.javaClass?.simpleName}"
+		}
+		return context as SimulationContext
 	}
 
 	// Grid display options
