@@ -41,11 +41,13 @@ import java.util.IdentityHashMap
  * (intermediate track segments). Using a type parameter would require `@UnsafeVariance` annotations
  * throughout the codebase and create variance complexity without benefits.
  *
- * **Covariant Return Types**: Subclasses override [getRailWayNetGrid] with more specific return types:
- * - [DefaultEditingContext] returns `RailwayNetGrid<NodeCell>` (editing operations only work with nodes)
- * - [DefaultSimulationContext] returns `RailwayNetGrid<Cell>` (simulation needs access to all cells)
+ * **Covariant Return Types**:
+ * - [BaseContext.getRailWayNetGrid] returns `RailwayNetGrid<Cell>` (full mixed cell grid)
+ * - [DefaultEditingContext] overrides it to return `RailwayNetGrid<NodeCell>` (editing operates on node cells)
+ * - [DefaultSimulationContext] inherits the base `RailwayNetGrid<Cell>` implementation without override
  *
- * This approach provides compile-time type safety without variance complexity.
+ * This approach provides compile-time type safety without variance complexity while keeping the base
+ * context usable in both editing and simulation scenarios.
  *
  * ## Separation of Concerns
  *
