@@ -27,7 +27,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrackWithSemaphore
 import cz.vutbr.fit.interlockSim.testutil.buildMinimal
