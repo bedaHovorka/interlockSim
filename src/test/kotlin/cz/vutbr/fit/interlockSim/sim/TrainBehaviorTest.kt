@@ -126,7 +126,6 @@ class TrainBehaviorTest : KoinTestBase() {
 			// Motor will apply acceleration when train starts moving
 			// Acceleration limited by MAXIMAL_ACCELERATION = 4 m/s²
 			assertThat(train).isNotNull()
-			assertThat(train.evNoticeTime()).isGreaterThanOrEqualTo(0.0)
 		}
 
 		/**

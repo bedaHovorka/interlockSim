@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isFailure
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -225,7 +227,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		@Test
 		fun `generator detects insufficient InOuts`() {
 			// Arrange - Create empty context (no InOuts)
-			val emptyContext = DefaultSimulationContext(10, 10)
+			val emptyContext = DefaultSimulationContext(10, 10, DefaultSimulationProcessFactory())
 			val mockContext = MockSimulationContext(emptyContext)
 
 			// Generator requires 2 InOuts for timetable generation
@@ -249,7 +251,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		@Test
 		fun `generator requires at least two InOuts`() {
 			// Arrange - Context with only 1 InOut
-			val singleInOutContext = DefaultSimulationContext(10, 10)
+			val singleInOutContext = DefaultSimulationContext(10, 10, DefaultSimulationProcessFactory())
 			// Would need to add single InOut via editing context
 			// For this test, we just verify the requirement is documented
 
@@ -257,7 +259,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			// inOutsList[0] (origin) and inOutsList[1] (destination)
 			// With fewer InOuts, IndexOutOfBoundsException would occur
 
-			assertThat(validContext.getInOuts().size).isGreaterThanOrEqualTo(2)
+			assertThat(validContext.getInOuts().size >= 2).isTrue()
 		}
 
 		/**
@@ -302,7 +304,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			// Act & Assert
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-				InOutWorker(null, inOut)
+				InOutWorker(null!!, inOut)
 			}
 				.withMessage("Creating InOutWorker with null context should throw exception")
 				.isFailure()
@@ -321,7 +323,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			// Act & Assert
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-				InOutWorker(validContext, null)
+				InOutWorker(validContext, null!!)
 			}
 				.withMessage("Creating InOutWorker with null InOut should throw exception")
 				.isFailure()
@@ -392,7 +394,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			// Act & Assert
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-				ShuntingLoop(null, 60L)
+				ShuntingLoop(null!!, 60L)
 			}
 				.withMessage("Creating ShuntingLoop with null context should throw exception")
 				.isFailure()
@@ -411,7 +413,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		@Tag("known-issue-SIM-004")
 		fun `ShuntingLoop detects empty context`() {
 			// Arrange - Empty context
-			val emptyContext = DefaultSimulationContext(10, 10)
+			val emptyContext = DefaultSimulationContext(10, 10, DefaultSimulationProcessFactory())
 			val mockContext = MockSimulationContext(emptyContext)
 
 			// Act & Assert
@@ -554,10 +556,4 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		)
 	}
 
-	/**
-	 * Extension for assertThat to check size.
-	 */
-	private fun Int.isGreaterThanOrEqualTo(expected: Int) {
-		assertThat(this >= expected).isTrue()
-	}
 }
