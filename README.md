@@ -53,7 +53,8 @@ The simulator uses a combined discrete-continuous simulation approach powered by
   - jDisco 1.2.0 (from Maven local repository, Java 6 compatible)
   - JUnit 5.11.4 (from Maven Central)
   - AssertJ 3.27.6 (from Maven Central)
-  - Mockito 5.21.0 (from Maven Central)
+  - MockK 1.13.14 (from Maven Central) - Kotlin-native mocking for sealed classes
+  - Mockito 5.21.0 (from Maven Central) - being phased out
 
 ### Optional (for thesis documentation):
 - LaTeX, gnuplot, make, wmf2eps, sed

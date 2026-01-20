@@ -38,7 +38,8 @@ Dependencies are managed via Gradle with fallback strategy:
   - Requires GitHub authentication for package download (see below)
 - **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
 - **AssertK 0.28.1** - Fluent Kotlin assertion library
-- **Mockito 5.21.0** - Mocking framework
+- **MockK 1.13.14** - Kotlin-native mocking framework (supports sealed classes, coroutines)
+- **Mockito 5.21.0** - Java mocking framework (deprecated, being phased out in favor of MockK)
 - **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
 - **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
 - **Koin 3.5.6** - Kotlin-native dependency injection framework (adopted 2026-01-12, migration complete)
@@ -479,7 +480,7 @@ fun myTest() {
 }
 ```
 
-**Benefits:** Eliminates MockSimulationContext (268 lines), enables Mockito in 235 test files
+**Benefits:** Eliminates MockSimulationContext (268 lines), enables MockK/Mockito in 235 test files
 
 See `KOTLIN-MIGRATION-STATUS.md` for comprehensive guide, `docs/KOTLIN_STYLE_GUIDE.md` for coding patterns and DI examples.
 

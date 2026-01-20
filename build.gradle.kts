@@ -533,7 +533,8 @@ tasks.register("printConfig") {
             |  Logback: $logbackVersion
             |  JUnit: $junitJupiterVersion
             |  AssertK: $assertkVersion
-            |  Mockito: $mockitoVersion
+            |  MockK: $mockkVersion
+            |  Mockito: $mockitoVersion (being phased out - replaced by MockK)
             |
             |Build Outputs:
             |  Classes: build/classes/java/main
