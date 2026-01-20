@@ -83,7 +83,15 @@ Use **Factory Pattern** with **Dependency Injection** to abstract simulation obj
 3. Inject factory into contexts that need simulation
 4. Keep editing contexts free of simulation dependencies
 
-### Architecture Diagram
+### Architecture Diagrams
+
+For detailed architecture diagrams, see:
+- [Context Class Hierarchy](diagrams/context-hierarchy.svg) - Shows inheritance and implementation structure
+- [Factory Pattern Integration](diagrams/factory-pattern.svg) - Shows factory relationships and DI
+
+![Context Hierarchy](diagrams/context-hierarchy.png)
+
+**ASCII Overview:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

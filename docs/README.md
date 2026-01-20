@@ -9,6 +9,13 @@
 
 ## Quick Navigation
 
+### Architecture Diagrams
+- **[Context Hierarchy](diagrams/context-hierarchy.svg)** - Context class inheritance structure
+- **[Context Transformation](diagrams/context-transformation.svg)** - Editing → Simulation workflow
+- **[Factory Pattern](diagrams/factory-pattern.svg)** - Factory relationships and DI
+- **[Grid Parameterization](grid-parameterization-architecture.puml)** - Grid type hierarchy
+- **[Grid Transformation Flow](grid-transformation-flow.puml)** - Transformation process
+
 ### Start Here
 - **[GRID_PARAMETERIZATION_INDEX.md](./GRID_PARAMETERIZATION_INDEX.md)** - Complete navigation guide and quick reference
 
@@ -22,6 +29,14 @@
 - **[GRID_TRANSFORMATION_DESIGN.md](./GRID_TRANSFORMATION_DESIGN.md)** - Grid transformation algorithm, path reconstruction, simulation correctness, and safety invariants
 
 ### Visual Diagrams
+
+#### Context Architecture (Issue #153)
+- **[diagrams/context-hierarchy.puml](diagrams/context-hierarchy.puml)** - Context class hierarchy (PlantUML)
+- **[diagrams/context-transformation.puml](diagrams/context-transformation.puml)** - Context transformation flow (PlantUML)
+- **[diagrams/factory-pattern.puml](diagrams/factory-pattern.puml)** - Factory pattern integration (PlantUML)
+- See [diagrams/README.md](diagrams/README.md) for details
+
+#### Grid Parameterization (Issue #131)
 - **[grid-parameterization-architecture.puml](./grid-parameterization-architecture.puml)** - Type hierarchy and architecture diagram (PlantUML)
 - **[grid-transformation-flow.puml](./grid-transformation-flow.puml)** - Transformation flow diagram (PlantUML)
 

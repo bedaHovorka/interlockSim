@@ -1,0 +1,228 @@
+@startuml factory-pattern
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+
+title Factory Pattern Integration
+
+package "Factory Interfaces" {
+    interface ContextFactory {
+        + createContext(file: File): Context<*>
+        + createContext(stream: InputStream): Context<*>
+        + saveContext(context, file): Boolean
+        + saveContext(context, stream): Boolean
+    }
+
+    interface EditingContextFactory {
+        + createEmptyContext(): EditingContext
+        + createNew(context, clazz, ...args): Any
+    }
+
+    interface SimulationContextFactory {
+        + createContext(editingContext): SimulationContext
+    }
+
+    interface SimulationProcessFactory {
+        + createMainProcess(context): LoopProcess
+        + createInOutWorker(context, inOut): InOutWorker
+    }
+
+    note right of SimulationProcessFactory
+        **Dependency Inversion:**
+        Context depends on abstraction,
+        not concrete simulation classes.
+        
+        Enables:
+        - Testing with mock factories
+        - jDisco → DSOL/Kalasim migration
+        - Custom simulation engines
+    end note
+}
+
+package "Factory Implementations" {
+    class XMLContextFactory {
+        {static} PRIMARY FACTORY
+        --
+        - processFactory: SimulationProcessFactory
+        --
+        + createContext(file): Context<*>
+        + createContext(stream): Context<*>
+        + saveContext(context, file): Boolean
+        + saveContext(context, stream): Boolean
+        + createEmptyContext(): EditingContext
+        + createContext(editingContext): SimulationContext
+        + createNew(context, clazz, ...args): Any
+        --
+        - parseXML(source): Document
+        - createContextFromXML(doc): EditingContext
+        - serializeToXML(context): Document
+    }
+
+    class DefaultSimulationProcessFactory {
+        {static} DEFAULT FACTORY (sim/ package)
+        --
+        + createMainProcess(context): LoopProcess
+        + createInOutWorker(context, inOut): InOutWorker
+        --
+        {method} Implementation:
+        {method} - MainProcess → Generator(context)
+        {method} - InOutWorker → InOutWorker(context, inOut)
+    }
+
+    note bottom of DefaultSimulationProcessFactory
+        **Encapsulation:**
+        Only place that knows about
+        concrete Generator and InOutWorker.
+        
+        Lives in sim/ package.
+        No Koin DI in sim/ (per constraint).
+    end note
+}
+
+package "Context Implementations" {
+    class DefaultEditingContext {
+        {static} EDITING
+        --
+        + putCell(point, cell)
+        + removeCell(point)
+        + joinCells(from, to, block)
+        --
+        {method} NO simulation dependencies
+        {method} NO sim/ package imports
+    }
+
+    class DefaultSimulationContext {
+        {static} SIMULATION
+        --
+        - processFactory: SimulationProcessFactory
+        - mainProcess: LoopProcess?
+        - workers: Map<InOut, InOutWorker>
+        --
+        + run()
+        + stop()
+        --
+        {method} Uses factory for process creation
+    }
+}
+
+package "Dependency Injection (Koin)" {
+    class InterlockSimModule {
+        {static} DI CONFIGURATION
+        --
+        + xmlModule
+        + editingModule
+        + simulationModule
+        --
+        <<bindings>>
+        single<SimulationProcessFactory>
+        single<XMLContextFactory>
+        single<EditingContextFactory>
+        single<SimulationContextFactory>
+    }
+
+    note bottom of InterlockSimModule
+        **DI Modules:**
+        
+        xmlModule:
+        - XMLContextFactory (singleton)
+        
+        editingModule:
+        - EditingContextFactory → XMLContextFactory
+        
+        simulationModule:
+        - SimulationProcessFactory → DefaultSimulationProcessFactory
+        - SimulationContextFactory → XMLContextFactory
+        
+        **Contexts are NOT singletons:**
+        Created fresh via factories (factory scope).
+    end note
+}
+
+package "Simulation Processes (sim/)" {
+    abstract class LoopProcess {
+        {abstract} BASE PROCESS
+        --
+        + activate()
+        + actions()
+    }
+
+    class Generator {
+        {static} DEFAULT MAIN PROCESS
+        --
+        - context: SimulationContext
+        --
+        + actions()
+        {method} Generates trains at InOuts
+    }
+
+    class InOutWorker {
+        {static} INOUT PROCESS
+        --
+        - context: SimulationContext
+        - inOut: InOut
+        --
+        + actions()
+        {method} Manages train entry/exit
+    }
+
+    LoopProcess <|-- Generator
+    LoopProcess <|-- InOutWorker
+}
+
+' Factory inheritance
+ContextFactory <|-- EditingContextFactory
+ContextFactory <|-- SimulationContextFactory
+EditingContextFactory <|.. XMLContextFactory
+SimulationContextFactory <|.. XMLContextFactory
+SimulationProcessFactory <|.. DefaultSimulationProcessFactory
+
+' Factory usage relationships
+XMLContextFactory ..> DefaultEditingContext : creates >
+XMLContextFactory ..> DefaultSimulationContext : creates >
+XMLContextFactory o-- SimulationProcessFactory : uses >
+DefaultSimulationContext o-- SimulationProcessFactory : injected >
+DefaultSimulationProcessFactory ..> Generator : creates >
+DefaultSimulationProcessFactory ..> InOutWorker : creates >
+
+' DI relationships
+InterlockSimModule ..> XMLContextFactory : provides >
+InterlockSimModule ..> DefaultSimulationProcessFactory : provides >
+
+note as N1
+    **Factory Pattern Benefits:**
+    
+    1. **Separation of Concerns**
+       - Editing contexts free of simulation code
+       - Clear responsibility boundaries
+    
+    2. **Dependency Inversion**
+       - Context depends on factory interface
+       - Not on concrete Generator/InOutWorker
+    
+    3. **Testability**
+       - Mock factories for testing
+       - Test editing without simulation
+    
+    4. **Flexibility**
+       - Easy to add new process types
+       - Custom factories for specialized simulations
+    
+    5. **Future Migration**
+       - Ready for jDisco → DSOL/Kalasim
+       - Swap factory, contexts unchanged
+end note
+
+note as N2
+    **Factory Usage Flow:**
+    
+    1. Koin provides SimulationProcessFactory singleton
+    2. XMLContextFactory receives factory via injection
+    3. XMLContextFactory creates DefaultSimulationContext
+    4. DefaultSimulationContext stores factory reference
+    5. Context.run() calls factory methods
+    6. Factory creates concrete processes
+    7. Processes execute simulation
+end note
+
+@enduml

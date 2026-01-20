@@ -9,6 +9,17 @@
 
 ---
 
+## Architecture Diagrams
+
+For detailed visual architecture, see:
+- [Context Class Hierarchy](diagrams/context-hierarchy.svg) - Complete inheritance structure
+- [Context Transformation Flow](diagrams/context-transformation.svg) - Editing → Simulation workflow
+- [Factory Pattern Integration](diagrams/factory-pattern.svg) - Factory relationships and DI
+
+![Context Hierarchy](diagrams/context-hierarchy.png)
+
+---
+
 ## Executive Summary
 
 **Problem:** `DefaultSimulationContext` currently extends `DefaultEditingContext`, but this inheritance relationship is **architecturally incompatible** with the Grid Parameterization design (#131/#139) and violates the principle that simulation contexts have **immutable network structures**.
