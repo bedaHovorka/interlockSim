@@ -22,24 +22,27 @@ import org.koin.java.KoinJavaComponent.getKoin
 /**
  * Test utility for building {@link DefaultSimulationContext} instances with fluent API.
  *
- * <p>This is a scaffold implementation created in Phase 1.
- * Full implementation will be provided in Phase 2 by Developer 2.</p>
+ * <p>This builder uses a two-phase approach:
+ * 1. Build the network structure using DefaultEditingContext (supports editing operations)
+ * 2. Convert to DefaultSimulationContext for simulation (immutable structure)
+ * </p>
  *
- * <p>Example usage (future API):
+ * <p>Example usage:
  * <pre>{@code
- * Context context = get<TestContextBuilder>()
- *     .withSimpleTrack("T1", 100.0)
- *     .withSimpleTrack("T2", 150.0)
- *     .withConnection("T1", "T2")
- *     .withSemaphore("SEM1", "T1", Signal.GREEN)
+ * DefaultSimulationContext context = get<TestContextBuilder>()
+ *     .withInOut("A", 1, 1, true)
+ *     .withInOut("B", 10, 10, false)
+ *     .withConnection(1, 1, 10, 10, 100.0, 80.0)
  *     .build();
  * }</pre>
  *
  * @see DefaultSimulationContext
+ * @see cz.vutbr.fit.interlockSim.context.DefaultEditingContext
  */
 class TestContextBuilder {
 	private val factory: XMLContextFactory by getKoin().inject()
-	private val context = factory.createEmptyContext() as DefaultSimulationContext
+	// Use DefaultEditingContext for building the network (supports putCell/joinCells)
+	private val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(30, 30)
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -63,7 +66,7 @@ class TestContextBuilder {
 				!isEntry, // orientation is inverted for exit points
 				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
 			)
-		context.putCell(position, inOut)
+		editingContext.putCell(position, inOut)
 		return this
 	}
 
@@ -86,7 +89,7 @@ class TestContextBuilder {
 				isAllowing,
 				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
 			)
-		context.putCell(position, semaphore)
+		editingContext.putCell(position, semaphore)
 		return this
 	}
 
@@ -112,8 +115,8 @@ class TestContextBuilder {
 		val fromPoint = Point(fromX, fromY)
 		val toPoint = Point(toX, toY)
 
-		val fromCell = context.getRailWayNetGrid().getCellAt(fromX, fromY)
-		val toCell = context.getRailWayNetGrid().getCellAt(toX, toY)
+		val fromCell = editingContext.getRailWayNetGrid().getCellAt(fromX, fromY)
+		val toCell = editingContext.getRailWayNetGrid().getCellAt(toX, toY)
 
 		if (fromCell == null || toCell == null) {
 			throw IllegalArgumentException("Both cells must exist before connecting them")
@@ -134,16 +137,21 @@ class TestContextBuilder {
 				maxSpeed
 			)
 
-		context.joinCells(fromPoint, toPoint, trackBlock)
+		editingContext.joinCells(fromPoint, toPoint, trackBlock)
 		return this
 	}
 
 	/**
-	 * Builds and returns the configured context.
+	 * Builds and returns the configured simulation context.
+	 * Converts the editing context to a simulation context using the factory.
 	 *
-	 * @return configured DefaultSimulationContext instance
+	 * @return configured DefaultSimulationContext instance (immutable network structure)
 	 */
-	fun build(): DefaultSimulationContext = context
+	fun build(): DefaultSimulationContext {
+		// Convert editing context to simulation context
+		val processFactory = getKoin().get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
 }
 
 /**
