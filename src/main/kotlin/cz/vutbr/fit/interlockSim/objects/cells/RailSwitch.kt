@@ -186,13 +186,23 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * allowed speed
+ * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED] from domain.PhysicsConstants
  */
-const val COMMON_BRANCH_SPEED = 13
+@Deprecated(
+	"Use COMMON_BRANCH_SPEED from domain.PhysicsConstants",
+	ReplaceWith("COMMON_BRANCH_SPEED", "cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED")
+)
+const val COMMON_BRANCH_SPEED = cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED
 
 /**
  * allowed speed
+ * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED] from domain.PhysicsConstants
  */
-const val COMMON_MAIN_SPEED = 30
+@Deprecated(
+	"Use COMMON_MAIN_SPEED from domain.PhysicsConstants",
+	ReplaceWith("COMMON_MAIN_SPEED", "cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED")
+)
+const val COMMON_MAIN_SPEED = cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED
 
 /**
  *

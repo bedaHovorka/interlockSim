@@ -40,11 +40,17 @@ class Train :
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		private var count: Int = 0
-	}
 
-	// Motor acceleration/deceleration constants (accessible to inner classes)
-	private val MAXIMAL_ACCELERATION: Int = 4
-	private val MINIMAL_DECELERATION: Int = -3
+		/**
+		 * Maximum train acceleration in m/s²
+		 */
+		private const val MAXIMAL_ACCELERATION = 4
+
+		/**
+		 * Minimum train deceleration in m/s² (negative value for braking)
+		 */
+		private const val MINIMAL_DECELERATION = -3
+	}
 
 	private val r: Reporter =
 		object : Reporter() { // nesmi byt static!!!
@@ -536,9 +542,9 @@ class Train :
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
 				if (currentCondition!!.getStopTest().isDecelarate()) {
-					Math.max(a, this@Train.MINIMAL_DECELERATION.toDouble())
+					Math.max(a, MINIMAL_DECELERATION.toDouble())
 				} else {
-					Math.min(a, this@Train.MAXIMAL_ACCELERATION.toDouble())
+					Math.min(a, MAXIMAL_ACCELERATION.toDouble())
 				}
 		}
 	}

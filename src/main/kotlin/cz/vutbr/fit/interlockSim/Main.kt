@@ -122,17 +122,8 @@ class Main {
 	}
 }
 
-const val PROGRAM_NAME = "InterlockSim"
-
-/**
- * Version
- */
-const val PROGRAM_VERSION = "0.1-bachelor"
-
-/**
- * Program title
- */
-const val PROGRAM_FULL_NAME = "$PROGRAM_NAME $PROGRAM_VERSION"
+// Application metadata constants moved to AppMetadata.kt
+// PROGRAM_NAME, PROGRAM_VERSION, and PROGRAM_FULL_NAME are now defined in AppMetadata.kt
 
 /**
  * @param args

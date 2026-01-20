@@ -15,17 +15,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
  *
  * Combines both static (immutable) and dynamic (mutable) track aspects.
  * For interface segregation, see StaticTrack and DynamicTrackBehavior.
+ *
+ * Note: Track length constants are defined in [StaticTrack.Companion].
  */
-interface Track : StaticTrack, DynamicTrackBehavior {
-	companion object {
-		/**
-		 * model bound constants
-		 */
-		const val MIN_LENGTH = 5.0 // m
-
-		/**
-		 * model bound constants
-		 */
-		const val COMMON_TRACK_LENGTH = 100.0 // m
-	}
-}
+interface Track : StaticTrack, DynamicTrackBehavior

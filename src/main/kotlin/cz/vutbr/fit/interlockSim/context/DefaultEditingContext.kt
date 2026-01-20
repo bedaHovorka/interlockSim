@@ -14,7 +14,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.TreeMap
+import kotlin.math.sqrt
 
 /**
  * Default implementation of {@link EditingContext}.
@@ -82,12 +83,6 @@ open class DefaultEditingContext(
 		 * Logger for general class operations.
 		 */
 		private val logger = KotlinLogging.logger {}
-
-		/**
-		 * Constant - square root of 2
-		 * 1.4142135623730951
-		 */
-		const val SQRT2: Double = 1.4142135623730951
 	}
 
 	/**
@@ -147,7 +142,7 @@ open class DefaultEditingContext(
 		// Replaces TreeMultiMap with standard library + extensions
 		val distanceMap = TreeMap<Double, MutableSet<Tranporter>>()
 
-		if (key1.distance(key2) <= SQRT2) return null
+		if (key1.distance(key2) <= sqrt(2.0)) return null
 
 		val nodecell1: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key1)!!)
 		val nodecell2: NodeCell = CellUtilities.assertNodeCell(getGrid().get(key2)!!)
@@ -190,7 +185,7 @@ open class DefaultEditingContext(
 		key2: Point,
 		trackBlock: TrackBlock
 	): Boolean {
-		if (key1.distance(key2) > SQRT2) {
+		if (key1.distance(key2) > sqrt(2.0)) {
 			val blockEndFrom = s1.transform(key1)
 			val blockEndTo = s2.transform(key2)
 			val result = tryJoin(blockEndFrom, blockEndTo, s1, s2, key1, key2, trackBlock)
@@ -435,7 +430,7 @@ open class DefaultEditingContext(
 					s1,
 					p,
 					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, currentMaxSpeed)
+					SimpleTrackBlock(nodeCell, nodeCell2, StaticTrack.MIN_LENGTH, currentMaxSpeed)
 				)
 			}
 		}

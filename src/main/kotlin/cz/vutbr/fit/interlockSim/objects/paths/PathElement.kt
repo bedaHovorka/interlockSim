@@ -17,17 +17,32 @@ interface PathElement {
 	companion object {
 		/**
 		 * model constant
+		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED] from domain.PhysicsConstants
 		 */
-		const val COMMON_MAX_SPEED = 24.0 // in m/s
+		@Deprecated(
+			"Use COMMON_MAX_SPEED from domain.PhysicsConstants",
+			ReplaceWith("COMMON_MAX_SPEED", "cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED")
+		)
+		const val COMMON_MAX_SPEED = cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED
 
 		/**
 		 * model constant
+		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED] from domain.PhysicsConstants
 		 */
-		const val ABSOLUTE_MAX_SPEED = 90.0 // in m/s
+		@Deprecated(
+			"Use ABSOLUTE_MAX_SPEED from domain.PhysicsConstants",
+			ReplaceWith("ABSOLUTE_MAX_SPEED", "cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED")
+		)
+		const val ABSOLUTE_MAX_SPEED = cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 
 		/**
 		 * model constant
+		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED] from domain.PhysicsConstants
 		 */
-		const val MINIMAL_MAX_SPEED = 2.0 // in m/s
+		@Deprecated(
+			"Use MINIMAL_MAX_SPEED from domain.PhysicsConstants",
+			ReplaceWith("MINIMAL_MAX_SPEED", "cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED")
+		)
+		const val MINIMAL_MAX_SPEED = cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 	}
 }

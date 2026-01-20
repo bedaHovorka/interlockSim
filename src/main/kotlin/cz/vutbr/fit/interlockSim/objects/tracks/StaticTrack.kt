@@ -34,13 +34,23 @@ interface StaticTrack : PathElement {
 	companion object {
 		/**
 		 * Minimum allowed track length in meters
+		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH] from domain.PhysicsConstants
 		 */
-		const val MIN_LENGTH = 5.0
+		@Deprecated(
+			"Use MIN_TRACK_LENGTH from domain.PhysicsConstants",
+			ReplaceWith("MIN_TRACK_LENGTH", "cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH")
+		)
+		const val MIN_LENGTH = cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
 
 		/**
 		 * Typical track length in meters
+		 * @deprecated Use [cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH] from domain.PhysicsConstants
 		 */
-		const val COMMON_TRACK_LENGTH = 100.0
+		@Deprecated(
+			"Use COMMON_TRACK_LENGTH from domain.PhysicsConstants",
+			ReplaceWith("COMMON_TRACK_LENGTH", "cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH")
+		)
+		const val COMMON_TRACK_LENGTH = cz.vutbr.fit.interlockSim.domain.COMMON_TRACK_LENGTH
 	}
 
 	/**
