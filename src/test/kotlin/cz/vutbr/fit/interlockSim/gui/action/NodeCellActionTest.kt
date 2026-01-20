@@ -88,7 +88,7 @@ assertThat(actionName).isEqualTo("Insert RailSwitch")
 @Test
 fun `action has valid icon generated from cell`() {
 val cellClass = InOut::class.java
-val args = arrayOf<Any>(InOut.Kind.IN)
+val args = arrayOf<Any>("Entry", true, Cell.SpatialType.HORIZONTAL)
 
 val action = NodeCellAction(cellClass, context, args)
 
@@ -103,7 +103,7 @@ assertThat(icon).isInstanceOf(ImageIcon::class)
 @Test
 fun `actionPerformed delegates to RailwayNetGridCanvas setNodeOnToolbar`() {
 val cellClass = RailSemaphore::class.java
-val args = arrayOf<Any>()
+val args = arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
 val action = NodeCellAction(cellClass, context, args)
 
 val frame = get<Frame>()
@@ -123,8 +123,8 @@ assertThat(action).isNotNull()
 fun `icon generation works for different cell types`() {
 val testCases = listOf(
 RailSwitch::class.java to arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE),
-RailSemaphore::class.java to arrayOf<Any>(),
-InOut::class.java to arrayOf<Any>(InOut.Kind.OUT)
+RailSemaphore::class.java to arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL),
+InOut::class.java to arrayOf<Any>("Exit", false, Cell.SpatialType.HORIZONTAL)
 )
 
 testCases.forEach { (cellClass, args) ->
@@ -149,14 +149,14 @@ NodeCellAction(cellClass, context, invalidArgs)
 }
 
 /**
- * Test 6: Action properly handles empty arguments array
+ * Test 6: Action properly handles RailSemaphore with required arguments
  */
 @Test
-fun `action properly handles empty arguments array`() {
+fun `action properly handles RailSemaphore with required arguments`() {
 val cellClass = RailSemaphore::class.java
-val emptyArgs = arrayOf<Any>()
+val args = arrayOf<Any>(false, Cell.SpatialType.VERTICAL)
 
-val action = NodeCellAction(cellClass, context, emptyArgs)
+val action = NodeCellAction(cellClass, context, args)
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
@@ -210,8 +210,8 @@ InOut::class.java to "InOut"
 testCases.forEach { (cellClass, expectedName) ->
 val args = when (cellClass) {
 RailSwitch::class.java -> arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
-InOut::class.java -> arrayOf<Any>(InOut.Kind.IN)
-else -> arrayOf<Any>()
+InOut::class.java -> arrayOf<Any>("Station", true, Cell.SpatialType.HORIZONTAL)
+else -> arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
 }
 
 val action = NodeCellAction(cellClass, context, args)
