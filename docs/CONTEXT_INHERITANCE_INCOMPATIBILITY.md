@@ -1,10 +1,11 @@
 # Context Inheritance Incompatibility Analysis
 
-**Issue:** Sub-issue of [#92](https://github.com/bedaHovorka/interlockSim/issues/92)
-**Related:** [#131](https://github.com/bedaHovorka/interlockSim/issues/131) (Grid Parameterization), [#139](https://github.com/bedaHovorka/interlockSim/issues/139) (Grid Parameterization Design)
+**Issue:** [#153](https://github.com/bedaHovorka/interlockSim/issues/153) - Context Inheritance Incompatibility: SimulationContext cannot extend EditingContext
+**Parent Issue:** [#92](https://github.com/bedaHovorka/interlockSim/issues/92) (Context Refactoring)
+**Related:** [#131](https://github.com/bedaHovorka/interlockSim/issues/131) (Grid Parameterization), [#139](https://github.com/bedaHovorka/interlockSim/issues/139) (Grid Parameterization Design), [#136](https://github.com/bedaHovorka/interlockSim/issues/136) (JVM Signature Clash Resolution)
 **Author:** Analysis based on architecture review
-**Date:** 2026-01-19
-**Status:** Pre-Analysis / Design Discussion
+**Date:** 2026-01-19 (Initial), 2026-01-20 (Updated)
+**Status:** Active Implementation - 11 Sub-Issues Created (#158-#168)
 
 ---
 
@@ -29,10 +30,14 @@
 3. [Grid Parameterization Impact](#3-grid-parameterization-impact)
 4. [Immutable Network Assumption](#4-immutable-network-assumption)
 5. [Proposed Solution](#5-proposed-solution)
-6. [Implementation Phases](#6-implementation-phases)
-7. [Migration Strategy](#7-migration-strategy)
-8. [Test Impact Analysis](#8-test-impact-analysis)
-9. [References](#9-references)
+6. [Implementation Sub-Issues](#6-implementation-sub-issues)
+7. [Implementation Phases](#7-implementation-phases)
+8. [Migration Strategy](#8-migration-strategy)
+9. [Test Impact Analysis](#9-test-impact-analysis)
+10. [Key Findings from Related Issues](#10-key-findings-from-related-issues)
+11. [References](#11-references)
+12. [Decision Points](#12-decision-points)
+13. [Implementation Status](#13-implementation-status)
 
 ---
 
@@ -530,7 +535,130 @@ class DefaultSimulationContext(...) : SimulationContext {
 
 ---
 
-## 6. Implementation Phases
+## 6. Implementation Sub-Issues
+
+Issue #153 has been broken down into **11 sub-issues** organized across **6 phases**. Each sub-issue represents a distinct deliverable with clear acceptance criteria and dependencies.
+
+### Phase 1: Foundation (2 days)
+
+**[#158](https://github.com/bedaHovorka/interlockSim/issues/158) - Issue #153.2: Design and implement BaseContext abstraction**
+- **Priority:** HIGH
+- **Estimate:** 2 days
+- **Dependencies:** None
+- **Description:** Create abstract base class that provides shared functionality for both editing and simulation contexts without forcing inheritance between them.
+- **Key Deliverables:**
+  - BaseContext abstract class with shared utilities (PropertyChangeSupport, graph management, Bresenham algorithm)
+  - Protected methods for common operations (bresenham, hardJoin)
+  - Architecture documentation
+  - Resolution of JVM signature clash (see #136)
+
+### Phase 2: Context Refactoring (8 days)
+
+**[#159](https://github.com/bedaHovorka/interlockSim/issues/159) - Issue #153.3: Refactor DefaultEditingContext to extend BaseContext**
+- **Priority:** HIGH
+- **Estimate:** 2 days
+- **Dependencies:** #158
+- **Description:** Modify DefaultEditingContext to extend BaseContext instead of implementing EditingContext directly.
+
+**[#160](https://github.com/bedaHovorka/interlockSim/issues/160) - Issue #153.4: Refactor DefaultSimulationContext to extend BaseContext (NOT DefaultEditingContext)**
+- **Priority:** CRITICAL
+- **Estimate:** 3 days
+- **Dependencies:** #159
+- **Description:** Break inheritance: DefaultSimulationContext extends BaseContext, not DefaultEditingContext.
+
+**[#161](https://github.com/bedaHovorka/interlockSim/issues/161) - Issue #153.4.5: Refactor RailwayNetGridCanvas for Context Type Handling**
+- **Priority:** CRITICAL
+- **Estimate:** 1 day
+- **Dependencies:** #160
+- **Description:** Fix GUI code that assumes SimulationContext can be cast to EditingContext.
+- **Status:** MUST be completed before #162 (interface hierarchy change)
+
+**[#162](https://github.com/bedaHovorka/interlockSim/issues/162) - Issue #153.5: Remove EditingContext inheritance from SimulationContext interface**
+- **Priority:** HIGH
+- **Estimate:** 2 days
+- **Dependencies:** #160, #161
+- **Description:** Change SimulationContext interface to extend only Context<Cell>, not EditingContext.
+
+### Phase 3: Context Transformation (2 days)
+
+**[#163](https://github.com/bedaHovorka/interlockSim/issues/163) - Issue #153.6: Implement Context Transformation Factory**
+- **Priority:** MEDIUM
+- **Estimate:** 2 days
+- **Dependencies:** #162
+- **Description:** Create factory method `EditingContext.toSimulationContext()` to transform editing context to simulation context with dynamic wrappers.
+
+### Phase 4: Grid Parameterization Integration (3 days)
+
+**[#164](https://github.com/bedaHovorka/interlockSim/issues/164) - Issue #153.7: Parameterize Context Grids - Static vs Dynamic Separation**
+- **Priority:** HIGH
+- **Estimate:** 3 days
+- **Dependencies:** #163
+- **Description:** Complete grid parameterization integration - static cells in editing, dynamic wrappers in simulation.
+
+### Phase 5: Immutability Enforcement (2 days)
+
+**[#165](https://github.com/bedaHovorka/interlockSim/issues/165) - Issue #153.8: Enforce Simulation Network Immutability**
+- **Priority:** MEDIUM
+- **Estimate:** 2 days
+- **Dependencies:** #164
+- **Description:** Add immutability enforcement with `frozen` flag in DefaultSimulationContext.
+
+### Phase 6: Testing & Documentation (4 days)
+
+**[#168](https://github.com/bedaHovorka/interlockSim/issues/168) - Issue #153.9: Add Comprehensive Context Refactoring Tests**
+- **Priority:** HIGH
+- **Estimate:** 2 days
+- **Dependencies:** #165
+- **Description:** Add 20-30 new tests for context transformation, immutability, and interface segregation.
+
+**[#166](https://github.com/bedaHovorka/interlockSim/issues/166) - Issue #153.10: Update Documentation**
+- **Priority:** MEDIUM
+- **Estimate:** 1 day
+- **Dependencies:** #168
+- **Description:** Update CLAUDE.md, architecture docs, and design documents.
+
+**[#167](https://github.com/bedaHovorka/interlockSim/issues/167) - Issue #153.11: Update Architecture Diagrams**
+- **Priority:** LOW
+- **Estimate:** 1 day
+- **Dependencies:** #166
+- **Description:** Create/update PlantUML diagrams showing new context hierarchy.
+
+### Implementation Timeline Summary
+
+- **Phase 1 (Foundation):** 2 days
+- **Phase 2 (Context Refactoring):** 8 days
+- **Phase 3 (Context Transformation):** 2 days
+- **Phase 4 (Grid Parameterization):** 3 days
+- **Phase 5 (Immutability):** 2 days
+- **Phase 6 (Testing & Documentation):** 4 days
+- **Total Base Estimate:** 21 days
+- **With Buffer (30%):** ~27 days (~5-6 weeks)
+
+### Critical Path
+
+The critical path for this refactoring follows this sequence:
+1. #158 (BaseContext design) → **FOUNDATION**
+2. #159 (EditingContext refactor) → **START REFACTORING**
+3. #160 (SimulationContext refactor) → **BREAK INHERITANCE**
+4. #161 (GUI fix) → **PREPARE FOR INTERFACE CHANGE**
+5. #162 (Interface hierarchy) → **COMPLETE SEPARATION**
+
+**All subsequent work** (#163-#168) depends on completing this critical path.
+
+### Success Criteria Across All Sub-Issues
+
+- ✅ SimulationContext does NOT extend EditingContext
+- ✅ Both contexts extend BaseContext (or implement interfaces independently)
+- ✅ No code duplication between contexts
+- ✅ Grid parameterization complete (static vs dynamic separation)
+- ✅ Immutability enforced for simulation contexts
+- ✅ All 687+ tests pass
+- ✅ No performance regression
+- ✅ Documentation and diagrams updated
+
+---
+
+## 7. Implementation Phases
 
 ### Phase 1: Create BaseContext Abstract Class (2 days)
 
@@ -746,17 +874,146 @@ fun `SimulationContext does not expose editing operations`() {
 
 ---
 
-## 9. References
+## 10. Key Findings from Related Issues
+
+### Issue #136: JVM Signature Clash with Abstract Graph Property
+
+**Status:** ✅ RESOLVED (Closed)
+**Impact on BaseContext Design:** CRITICAL
+
+#### Problem Discovered
+
+During Phase 2 of the DefaultContext refactoring (#98), a JVM signature clash was encountered when attempting to implement the BaseContext/AbstractContext pattern. The issue arose from having both:
+1. An abstract property: `abstract val graph: EnumUnorientedGraph<RailwayObjectInterface>`
+2. An interface method: `override fun getGraph(): EnumUnorientedGraph<RailwayObjectInterface>`
+
+Both map to the same JVM signature `getGraph()`, creating a **platform declaration clash**.
+
+#### Investigation Results
+
+- **Codebase analysis**: 32 usages of `getGraph()` exist across the codebase
+- **Access pattern**: No direct `.graph` property access is used anywhere
+- **Usage**: All code uses the method call syntax `context.getGraph()`
+
+#### Resolution (Implemented)
+
+**Option A (Chosen):** Remove abstract property from AbstractContext
+
+The resolution removed the abstract `graph` property from the base class and requires each concrete subclass to define its own private graph field with a getter method:
+
+```kotlin
+// AbstractContext/BaseContext: NO abstract property
+abstract class BaseContext : Context<Cell> {
+    // ❌ NO: abstract val graph: EnumUnorientedGraph<...>
+    // ✅ YES: Only abstract method from interface
+    abstract override fun getGraph(): EnumUnorientedGraph<...>
+}
+
+// Concrete subclasses: Private field + getter
+class DefaultEditingContext : BaseContext, EditingContext {
+    private val graph = EnumUnorientedGraph<...>()
+    override fun getGraph() = graph
+}
+
+class DefaultSimulationContext : BaseContext, SimulationContext {
+    private val graph = EnumUnorientedGraph<...>()
+    override fun getGraph() = graph
+}
+```
+
+#### Implications for Issue #153
+
+This resolution **directly impacts the BaseContext design** proposed in Section 5.2 Option A:
+
+1. ✅ **BaseContext abstract class is still viable** - we can use it
+2. ⚠️ **Cannot use abstract properties** - must use abstract methods
+3. ✅ **Each context must define own graph field** - acceptable for this refactoring
+4. ✅ **No code duplication concern** - graph initialization is simple (`HashMapGraph()`)
+
+**Updated BaseContext Pattern:**
+
+```kotlin
+abstract class BaseContext(
+    cols: Int,
+    rows: Int
+) : Context<Cell> {
+    protected val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+
+    // ❌ CANNOT DO THIS (JVM signature clash):
+    // protected abstract val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment>
+
+    // ✅ MUST DO THIS INSTEAD:
+    abstract override fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment>
+
+    // Shared utility methods (protected)
+    protected fun bresenham(...) { /* algorithm */ }
+    protected fun hardJoin(...) { /* track joining logic */ }
+}
+
+class DefaultEditingContext(cols: Int, rows: Int) : BaseContext(cols, rows), EditingContext {
+    // Each subclass defines its own private graph field
+    private val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = HashMapGraph()
+    override fun getGraph() = graph
+}
+
+class DefaultSimulationContext(
+    cols: Int,
+    rows: Int,
+    processFactory: SimulationProcessFactory
+) : BaseContext(cols, rows), SimulationContext {
+    // Each subclass defines its own private graph field
+    private val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = HashMapGraph()
+    override fun getGraph() = graph
+}
+```
+
+#### Impact on Section 5.2 Recommendations
+
+The recommendation for **Option A (Base Class)** remains valid with this modification:
+- ✅ Still cleaner than Option B (Helper Class via Delegation)
+- ✅ Still maintains encapsulation
+- ✅ Still provides code reuse for shared utilities
+- ⚠️ Minor adjustment: Each subclass must define `private val graph` field
+
+**No architectural change needed** - just implementation detail adjustment.
+
+#### Verification
+
+Issue #136 verification requirements apply to #158 (BaseContext implementation):
+- [ ] Code compiles without JVM signature clash
+- [ ] All tests pass (687+ tests)
+- [ ] No behavioral changes
+- [ ] Clean architecture maintained (no workarounds needed)
+
+---
+
+## 11. References
 
 ### Related Issues
 
-- **[#92](https://github.com/bedaHovorka/interlockSim/issues/92)** - Parent issue (this is a sub-issue)
+- **[#153](https://github.com/bedaHovorka/interlockSim/issues/153)** - THIS ISSUE: Context Inheritance Incompatibility
+- **[#92](https://github.com/bedaHovorka/interlockSim/issues/92)** - Parent issue (Context Refactoring)
+- **[#136](https://github.com/bedaHovorka/interlockSim/issues/136)** - ✅ RESOLVED: JVM Signature Clash with Abstract Graph Property (CRITICAL for BaseContext design)
 - **[#131](https://github.com/bedaHovorka/interlockSim/issues/131)** - Grid Parameterization (parent epic)
 - **[#139](https://github.com/bedaHovorka/interlockSim/issues/139)** - Grid Parameterization Design (Phase 1 of #131)
 - **[#98](https://github.com/bedaHovorka/interlockSim/issues/98)** - Context Refactoring (DefaultContext split)
 - **[#100](https://github.com/bedaHovorka/interlockSim/issues/100)** - Static/Dynamic Separation (Phase 4)
 - **[#149](https://github.com/bedaHovorka/interlockSim/pull/149)** - Add type parameter to RailwayNetGrid interface
 - **[#151](https://github.com/bedaHovorka/interlockSim/pull/151)** - Add type parameters to Context hierarchy
+
+### Implementation Sub-Issues (#153.X)
+
+- **[#158](https://github.com/bedaHovorka/interlockSim/issues/158)** - #153.2: Design and implement BaseContext abstraction
+- **[#159](https://github.com/bedaHovorka/interlockSim/issues/159)** - #153.3: Refactor DefaultEditingContext to extend BaseContext
+- **[#160](https://github.com/bedaHovorka/interlockSim/issues/160)** - #153.4: Refactor DefaultSimulationContext to extend BaseContext
+- **[#161](https://github.com/bedaHovorka/interlockSim/issues/161)** - #153.4.5: Refactor RailwayNetGridCanvas for Context Type Handling
+- **[#162](https://github.com/bedaHovorka/interlockSim/issues/162)** - #153.5: Remove EditingContext inheritance from SimulationContext interface
+- **[#163](https://github.com/bedaHovorka/interlockSim/issues/163)** - #153.6: Implement Context Transformation Factory
+- **[#164](https://github.com/bedaHovorka/interlockSim/issues/164)** - #153.7: Parameterize Context Grids - Static vs Dynamic Separation
+- **[#165](https://github.com/bedaHovorka/interlockSim/issues/165)** - #153.8: Enforce Simulation Network Immutability
+- **[#168](https://github.com/bedaHovorka/interlockSim/issues/168)** - #153.9: Add Comprehensive Context Refactoring Tests
+- **[#166](https://github.com/bedaHovorka/interlockSim/issues/166)** - #153.10: Update Documentation
+- **[#167](https://github.com/bedaHovorka/interlockSim/issues/167)** - #153.11: Update Architecture Diagrams
 
 ### Design Documents
 
@@ -775,53 +1032,82 @@ fun `SimulationContext does not expose editing operations`() {
 
 ---
 
-## 10. Decision Points
+## 12. Decision Points
 
-### 10.1 Questions for Architecture Review
+### 12.1 Questions for Architecture Review
 
-1. **Shared Functionality Approach:**
+1. **Shared Functionality Approach:** ✅ **RESOLVED via #136**
    - Option A: BaseContext abstract class (recommended)
    - Option B: ContextHelper delegation class
-   - **Decision:** ?
+   - **Decision:** ✅ **Option A - BaseContext abstract class**
+   - **Resolution:** Issue #136 proved this approach is viable with minor modification (no abstract properties due to JVM signature clash, each subclass defines private graph field)
+   - **Status:** Ready for implementation in #158
 
 2. **Graph Parameterization:**
    - Should simulation context have `ExtendedUnorientedGraph<Point, DynamicTrack, Segment>`?
    - Or keep `ExtendedUnorientedGraph<Point, TrackBlock, Segment>` and wrap on access?
-   - **Decision:** ?
+   - **Decision:** ⏳ **DEFERRED to Phase 4 (#164)**
+   - **Recommendation:** Keep `ExtendedUnorientedGraph<Point, TrackBlock, Segment>` initially for backward compatibility, evaluate during #164 implementation
 
 3. **Migration Strategy:**
    - Big-bang refactor (all at once)
    - Incremental (deprecate, migrate, remove)
-   - **Decision:** ?
+   - **Decision:** ✅ **Phased incremental approach (6 phases over 5-6 weeks)**
+   - **Rationale:** Sub-issues #158-#168 define clear incremental path with minimal risk
+   - **Critical path:** #158 → #159 → #160 → #161 → #162 (foundation before new features)
 
 4. **Immutability Enforcement:**
    - Compile-time (remove operations from interface) ✓ Recommended
    - Runtime (throw exceptions if frozen)
    - Both (defense in depth)
-   - **Decision:** ?
+   - **Decision:** ⏳ **DEFERRED to #165 (Phase 5)**
+   - **Recommendation:** Both (compile-time via interface segregation + runtime frozen flag for defense in depth)
 
-### 10.2 Approval Required From
+### 12.2 Approval Status
 
-- **traffic-simulation-expert** - Simulation correctness, immutability assumptions
-- **kotlin-tech-lead** - Architecture, type parameterization, design patterns
-- **java-senior-dev** - Legacy code compatibility, migration risks
-- **railway-civil-engineer** - Domain validation, network immutability requirements
-
----
-
-## 11. Next Steps
-
-1. **Review Meeting:** Present this pre-analysis to architecture team
-2. **GitHub Issue:** Create new issue with this document as description (sub-issue of #92)
-3. **Decision Making:** Resolve decision points (Section 10.1)
-4. **Implementation Planning:**
-   - Assign phases to developers
-   - Set milestones and deadlines
-   - Coordinate with Grid Parameterization (#139) implementation
-5. **TDD Approach:** Write tests first, implement second
+- **traffic-simulation-expert** - ⏳ Pending (simulation correctness, immutability assumptions)
+- **kotlin-tech-lead** - ⏳ Pending (architecture, type parameterization, design patterns)
+- **java-senior-dev** - ⏳ Pending (legacy code compatibility, migration risks)
+- **railway-civil-engineer** - ⏳ Pending (domain validation, network immutability requirements)
 
 ---
 
-**Status:** This document represents pre-analysis of architectural incompatibility. Implementation should only proceed after approval from required reviewers and resolution of decision points.
+## 13. Implementation Status
 
-**Author Note:** This analysis is based on architectural review of Context hierarchy, Grid Parameterization design (#131/#139), and the user requirement that simulation contexts have immutable network structures. The inheritance relationship between DefaultSimulationContext and DefaultEditingContext is fundamentally incompatible with these design goals and should be refactored to use composition instead.
+### Current Phase: Foundation (Phase 1)
+
+**Next Action:** Begin implementation of **#158 (BaseContext abstraction)**
+
+### Issue Status Summary
+
+| Phase | Sub-Issue | Title | Status | Priority | Est. Days |
+|-------|-----------|-------|--------|----------|-----------|
+| 1 | #158 | BaseContext abstraction | 🔵 OPEN | HIGH | 2 |
+| 2 | #159 | Refactor DefaultEditingContext | 🔵 OPEN | HIGH | 2 |
+| 2 | #160 | Refactor DefaultSimulationContext | 🔵 OPEN | CRITICAL | 3 |
+| 2 | #161 | Fix RailwayNetGridCanvas | 🔵 OPEN | CRITICAL | 1 |
+| 2 | #162 | Remove EditingContext inheritance | 🔵 OPEN | HIGH | 2 |
+| 3 | #163 | Context Transformation Factory | 🔵 OPEN | MEDIUM | 2 |
+| 4 | #164 | Parameterize Context Grids | 🔵 OPEN | HIGH | 3 |
+| 5 | #165 | Enforce Network Immutability | 🔵 OPEN | MEDIUM | 2 |
+| 6 | #168 | Add Refactoring Tests | 🔵 OPEN | HIGH | 2 |
+| 6 | #166 | Update Documentation | 🔵 OPEN | MEDIUM | 1 |
+| 6 | #167 | Update Architecture Diagrams | 🔵 OPEN | LOW | 1 |
+
+**Total Progress:** 0/11 complete (0%)
+**Estimated Remaining:** 21 days (base) + 6 days buffer = 27 days
+
+### Key Milestones
+
+- [ ] **Milestone 1 (Phase 1-2 Complete):** BaseContext created, both contexts refactored (Day 10)
+- [ ] **Milestone 2 (Phase 3-4 Complete):** Context transformation and grid parameterization (Day 15)
+- [ ] **Milestone 3 (Phase 5-6 Complete):** Immutability enforced, testing complete (Day 21)
+- [ ] **Final Release:** All sub-issues closed, documentation updated (Day 27)
+
+---
+
+**Status:** ✅ **Active Implementation** - Document updated with findings from #136. Ready to proceed with #158 (BaseContext implementation).
+
+**Document History:**
+- 2026-01-19: Initial pre-analysis created
+- 2026-01-20: Updated with #153 sub-issues (#158-#168), #136 findings (JVM signature clash resolution), implementation timeline, and critical path analysis
