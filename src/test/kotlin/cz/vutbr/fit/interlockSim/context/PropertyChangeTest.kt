@@ -38,12 +38,12 @@ import java.beans.PropertyChangeListener
 @DisplayName("PropertyChange Notification Tests")
 class PropertyChangeTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private lateinit var context: DefaultSimulationContext
+	private lateinit var context: EditingContext
 	private lateinit var listener: TestPropertyChangeListener
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext() as DefaultSimulationContext
+		context = factory.createEmptyContext()
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

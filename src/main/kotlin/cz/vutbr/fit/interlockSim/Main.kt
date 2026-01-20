@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -40,6 +41,7 @@ private val logger = KotlinLogging.logger {}
 class Main {
 	private val editingContextFactory: EditingContextFactory by getKoin().inject()
 	private val exampleRegistry: ExampleRegistry by getKoin().inject()
+	private val simulationContextFactory: SimulationContextFactory by getKoin().inject()
 	private val frame: Frame by lazy { getKoin().get<Frame>() }
 
 	fun loadGui(args: Array<String>) {
@@ -69,7 +71,15 @@ class Main {
 
 	fun loadSim(args: Array<String>) {
 		try {
-			val context = createContext(args) as SimulationContext
+			// Get context and ensure it's a SimulationContext
+			val rawContext = createContext(args)
+			val context: SimulationContext = when (rawContext) {
+				is SimulationContext -> rawContext
+				is EditingContext -> simulationContextFactory.createContext(rawContext)
+				else -> throw ContextCreationException(
+					"Unexpected context type: ${rawContext.javaClass.name}"
+				)
+			}
 			context.addReportTypes(*ReportType.values())
 			context.run()
 		} catch (e: ContextCreationException) {

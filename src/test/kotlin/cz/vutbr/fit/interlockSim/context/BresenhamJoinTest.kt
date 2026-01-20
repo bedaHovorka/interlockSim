@@ -37,11 +37,11 @@ import org.koin.test.inject
 @DisplayName("Bresenham Line Algorithm (via joinCells)")
 class BresenhamJoinTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private lateinit var context: DefaultSimulationContext
+	private lateinit var context: EditingContext
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext() as DefaultSimulationContext
+		context = factory.createEmptyContext()
 	}
 
 	@Test

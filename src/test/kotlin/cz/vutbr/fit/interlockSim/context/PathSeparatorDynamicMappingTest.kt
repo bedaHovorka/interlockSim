@@ -85,7 +85,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic throws IllegalStateException for unregistered separator")
 		fun toDynamic_unregisteredSeparator_throwsException() {
 			// Arrange - Empty context with no separators
-			val context = factory.createEmptyContext() as DefaultSimulationContext
+			val context = factory.createEmptySimulationContext()
 
 			// Create a RailSemaphore that's not registered
 			val unregisteredSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
@@ -107,7 +107,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic error message includes map size and class name")
 		fun toDynamic_unregisteredSeparator_includesDebugInfo() {
 			// Arrange
-			val context = factory.createEmptyContext() as DefaultSimulationContext
+			val context = factory.createEmptySimulationContext()
 			val unregisteredSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
 			// Act & Assert

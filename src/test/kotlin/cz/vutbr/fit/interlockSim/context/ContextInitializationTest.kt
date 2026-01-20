@@ -78,8 +78,8 @@ class ContextInitializationTest : KoinTestBase() {
 				.withMessage("Should be EditingContext instance")
 				.isInstanceOf(EditingContext::class)
 			assertThat(context)
-				.withMessage("Should also be DefaultSimulationContext for grid access")
-				.isInstanceOf(DefaultSimulationContext::class)
+				.withMessage("Should be DefaultEditingContext implementation")
+				.isInstanceOf(DefaultEditingContext::class)
 		}
 
 		/**
