@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.di
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
+import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
