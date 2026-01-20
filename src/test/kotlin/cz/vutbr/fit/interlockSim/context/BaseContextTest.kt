@@ -15,7 +15,6 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
@@ -148,8 +147,8 @@ class BaseContextTest : KoinTestBase() {
 		// Assert
 		val retrievedCell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
 		assertThat(retrievedCell).isNotNull()
-		assertThat(retrievedCell).isInstanceOf(InOut::class)
-		assertThat((retrievedCell as InOut).name).isEqualTo("A")
+		assertThat(retrievedCell!!).isInstanceOf<InOut>()
+		assertThat((retrievedCell as InOut).getName()).isEqualTo("A")
 	}
 
 	/**

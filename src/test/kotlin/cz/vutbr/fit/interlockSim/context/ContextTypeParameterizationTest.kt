@@ -64,12 +64,12 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 		// Assert - Grid is parameterized with NodeCell
 		// The type system ensures this at compile time, but we can verify runtime behavior
 		assertThat(grid).isNotNull()
-		assertThat(grid).isInstanceOf(RailwayNetGrid::class)
-		
+		assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
+
 		// Add a cell and verify it's stored correctly
 		context.putCell(Point(1, 1), inA)
 		val cell = grid.getCellAt(1, 1)
-		assertThat(cell).isInstanceOf(NodeCell::class)
+		assertThat(cell!!).isInstanceOf<NodeCell>()
 	}
 
 	/**
@@ -93,11 +93,11 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 
 		// Assert - Grid is parameterized with Cell (most general type)
 		assertThat(grid).isNotNull()
-		assertThat(grid).isInstanceOf(RailwayNetGrid::class)
-		
+		assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
+
 		// All cells in grid should be Cell instances
 		val cell = grid.getCellAt(1, 1)
-		assertThat(cell).isInstanceOf(Cell::class)
+		assertThat(cell!!).isInstanceOf<Cell>()
 	}
 
 	/**
