@@ -125,41 +125,50 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `throws SimulationException with FATAL severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireSimulation(false, Severity.FATAL) { "Fatal error" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: SimulationException) {
+				e
 			}
-				.isInstanceOf(SimulationException::class)
-				.hasMessageContaining("Fatal error")
 
-			// Verify severity
-			assertThat((exception as SimulationException).severity).isEqualTo(Severity.FATAL)
+			// Assert
+			assertThat(exception).isInstanceOf(SimulationException::class)
+			assertThat(exception.message).isEqualTo("Fatal error")
+			assertThat(exception.severity).isEqualTo(Severity.FATAL)
 		}
 
 		@Test
 		fun `throws SimulationException with ERROR severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireSimulation(false, Severity.ERROR) { "Error message" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: SimulationException) {
+				e
 			}
-				.isInstanceOf(SimulationException::class)
-				.hasMessageContaining("Error message")
 
-			// Verify severity
-			assertThat((exception as SimulationException).severity).isEqualTo(Severity.ERROR)
+			// Assert
+			assertThat(exception).isInstanceOf(SimulationException::class)
+			assertThat(exception.message).isEqualTo("Error message")
+			assertThat(exception.severity).isEqualTo(Severity.ERROR)
 		}
 
 		@Test
 		fun `throws SimulationException with WARN severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireSimulation(false, Severity.WARN) { "Warning message" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: SimulationException) {
+				e
 			}
-				.isInstanceOf(SimulationException::class)
-				.hasMessageContaining("Warning message")
 
-			// Verify severity
-			assertThat((exception as SimulationException).severity).isEqualTo(Severity.WARN)
+			// Assert
+			assertThat(exception).isInstanceOf(SimulationException::class)
+			assertThat(exception.message).isEqualTo("Warning message")
+			assertThat(exception.severity).isEqualTo(Severity.WARN)
 		}
 
 		@Test
@@ -344,41 +353,50 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `throws EditorException with FATAL severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireEditor(false, Severity.FATAL) { "Fatal editor error" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: EditorException) {
+				e
 			}
-				.isInstanceOf(EditorException::class)
-				.hasMessageContaining("Fatal editor error")
 
-			// Verify severity
-			assertThat((exception as EditorException).severity).isEqualTo(Severity.FATAL)
+			// Assert
+			assertThat(exception).isInstanceOf(EditorException::class)
+			assertThat(exception.message).isEqualTo("Fatal editor error")
+			assertThat(exception.severity).isEqualTo(Severity.FATAL)
 		}
 
 		@Test
 		fun `throws EditorException with ERROR severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireEditor(false, Severity.ERROR) { "Editor error" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: EditorException) {
+				e
 			}
-				.isInstanceOf(EditorException::class)
-				.hasMessageContaining("Editor error")
 
-			// Verify severity
-			assertThat((exception as EditorException).severity).isEqualTo(Severity.ERROR)
+			// Assert
+			assertThat(exception).isInstanceOf(EditorException::class)
+			assertThat(exception.message).isEqualTo("Editor error")
+			assertThat(exception.severity).isEqualTo(Severity.ERROR)
 		}
 
 		@Test
 		fun `throws EditorException with WARN severity`() {
-			// Act & Assert
-			val exception = assertThatThrownBy {
+			// Act
+			val exception = try {
 				requireEditor(false, Severity.WARN) { "Editor warning" }
+				throw AssertionError("Expected exception to be thrown")
+			} catch (e: EditorException) {
+				e
 			}
-				.isInstanceOf(EditorException::class)
-				.hasMessageContaining("Editor warning")
 
-			// Verify severity
-			assertThat((exception as EditorException).severity).isEqualTo(Severity.WARN)
+			// Assert
+			assertThat(exception).isInstanceOf(EditorException::class)
+			assertThat(exception.message).isEqualTo("Editor warning")
+			assertThat(exception.severity).isEqualTo(Severity.WARN)
 		}
 
 		@Test
@@ -607,22 +625,34 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `different exception types are thrown by different functions`() {
-			// Arrange
-			val simulationException = assertThatThrownBy {
+			// Act - capture different exception types
+			val simulationException = try {
 				requireSimulation(false) { "Simulation error" }
-			}.isInstanceOf(SimulationException::class)
+				throw AssertionError("Expected SimulationException")
+			} catch (e: SimulationException) {
+				e
+			}
 
-			val editorException = assertThatThrownBy {
+			val editorException = try {
 				requireEditor(false) { "Editor error" }
-			}.isInstanceOf(EditorException::class)
+				throw AssertionError("Expected EditorException")
+			} catch (e: EditorException) {
+				e
+			}
 
-			val argumentException = assertThatThrownBy {
+			val argumentException = try {
 				requireValidArgument(false) { "Argument error" }
-			}.isInstanceOf(IllegalArgumentException::class)
+				throw AssertionError("Expected IllegalArgumentException")
+			} catch (e: IllegalArgumentException) {
+				e
+			}
 
-			val stateException = assertThatThrownBy {
+			val stateException = try {
 				requireValidState(false) { "State error" }
-			}.isInstanceOf(IllegalStateException::class)
+				throw AssertionError("Expected IllegalStateException")
+			} catch (e: IllegalStateException) {
+				e
+			}
 
 			// Assert - verify all exceptions are different types
 			assertThat(simulationException).isInstanceOf(SimulationException::class)

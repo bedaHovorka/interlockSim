@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.exceptions
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -387,15 +388,15 @@ class EditorExceptionTest {
 
 			// Assert
 			assertThat(result).isNotNull()
-			assertThat(result).isInstanceOf<TestData>()
+			assertThat(result as Any).isInstanceOf<TestData>()
 			assertThat((result as TestData).value).isEqualTo(42)
 		}
 
 		@Test
 		fun `multiple exceptions can store different objects`() {
-			// Arrange
-			val obj1 = "String object"
-			val obj2 = 42
+			// Arrange - use non-String objects to avoid constructor ambiguity
+			val obj1 = 42
+			val obj2 = listOf("test", "data")
 			val exception1 = EditorException(obj1)
 			val exception2 = EditorException(obj2)
 
@@ -490,7 +491,7 @@ class EditorExceptionTest {
 
 			// Assert
 			assertThat(result).isEqualTo(innerException)
-			assertThat(result).isInstanceOf<EditorException>()
+			assertThat(result as Any).isInstanceOf<EditorException>()
 		}
 
 		@Test
