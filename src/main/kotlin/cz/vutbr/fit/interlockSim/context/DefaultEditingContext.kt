@@ -25,48 +25,44 @@ import cz.vutbr.fit.interlockSim.objects.cells.conflict
 import cz.vutbr.fit.interlockSim.objects.cells.segmentFor
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
-import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.beans.PropertyChangeSupport
-import java.util.IdentityHashMap
 import java.util.TreeMap
 
 /**
  * Default implementation of {@link EditingContext}.
  *
- * Handles mutable railway network editing operations:
+ * Extends [BaseContext] and adds editing-specific operations:
  * - Grid operations: adding, removing, moving cells
  * - Track block management: joining cells, creating track sections
- * - Graph management: maintaining track block connectivity
- * - Configuration: max speed, track length, naming conventions
+ * - Track block connectivity: Bresenham line algorithm for intermediate cells
  *
  * This class contains only editing-related functionality. It does NOT include
  * simulation-specific operations (running simulations, train management, etc.).
  * For simulation capabilities, see {@link DefaultSimulationContext}.
  *
+ * ## Architecture
+ *
+ * **BaseContext** provides:
+ * - Grid and graph storage
+ * - Property change notification
+ * - Configuration management (maxSpeed, trackLength, nameString)
+ * - InOut list management
+ *
+ * **DefaultEditingContext** adds:
+ * - Cell manipulation (putCell, removeCell, moveCell)
+ * - Track block joining (joinCells, hardJoin)
+ * - Bresenham line algorithm for intermediate cells
+ * - Track block removal (removeLine)
+ *
  * ## Thread Safety
  *
  * **This class is NOT thread-safe.**
  *
- * DefaultEditingContext maintains mutable state including:
- * - Railway network grid (DefaultRailWayNetGrid)
- * - Graph structure (ExtendedUnorientedGraph)
- * - Property change listeners (PropertyChangeSupport)
- * - Track block mappings
- *
- * These data structures are not synchronized and will experience race conditions
- * if accessed concurrently from multiple threads.
- *
- * ### Design Decision
- *
- * Thread safety is intentionally NOT implemented because:
- * 1. Railway network editing is inherently sequential
- * 2. GUI editors operate in a single thread (Swing EDT)
- * 3. No current use cases require concurrent editing
- * 4. Thread-safety would add complexity and performance overhead
+ * Inherits thread-safety constraints from [BaseContext]. See [BaseContext] for
+ * detailed thread safety documentation.
  *
  * ### Usage
  *
@@ -74,6 +70,7 @@ import java.util.TreeMap
  * - Do not share instances across thread boundaries
  * - Use external synchronization if multi-threaded access is unavoidable
  *
+ * @see BaseContext
  * @see EditingContext
  * @see DefaultSimulationContext
  * @see Context
@@ -82,49 +79,7 @@ import java.util.TreeMap
 open class DefaultEditingContext(
 	cols: Int,
 	rows: Int
-) : EditingContext {
-	/**
-	 * PropertyChangeSupport for notifying listeners of context changes.
-	 * Replaces deprecated Observable pattern (Java 21 migration).
-	 */
-	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
-
-	/**
-	 * Graph representing track blocks and their connections
-	 */
-	private val extendedUnorientedGraph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> =
-		HashMapGraph<Point, TrackBlock, Segment>()
-
-	/**
-	 * Maps track blocks to their line cell keys for removal tracking
-	 */
-	private val linesKeys: MutableMap<TrackBlock, Set<Point>> = IdentityHashMap<TrackBlock, Set<Point>>()
-
-	/**
-	 * List of entry/exit points in the railway network
-	 */
-	protected var inouts: MutableList<InOut> = mutableListOf()
-
-	/**
-	 * Current maximum speed for path elements
-	 */
-	override var currentMaxSpeed: Double = PathElement.COMMON_MAX_SPEED
-
-	/**
-	 * Current track length for new track elements
-	 */
-	override var currentTrackLength: Double = Track.COMMON_TRACK_LENGTH
-
-	/**
-	 * Railway network grid structure
-	 */
-	private val railwayNetGrid: DefaultRailWayNetGrid = DefaultRailWayNetGrid(cols, rows)
-
-	/**
-	 * Name string for train generation (backing field for currentNameString)
-	 */
-	private var nameString: String? = null
-
+) : BaseContext(cols, rows), EditingContext {
 	companion object {
 		/**
 		 * Logger for general class operations.
@@ -138,45 +93,25 @@ open class DefaultEditingContext(
 		const val SQRT2: Double = 1.4142135623730951
 	}
 
-	init {
-		logger.debug { "Initialized railway network grid: ${cols}x$rows cells" }
-	}
-
+	/**
+	 * Get the railway network grid for editing operations.
+	 *
+	 * **Covariant return type**: Overrides [BaseContext.getRailWayNetGrid] to return
+	 * `RailwayNetGrid<NodeCell>` instead of `RailwayNetGrid<Cell>`.
+	 *
+	 * This is type-safe because:
+	 * 1. Editing operations (putCell, removeCell, moveCell) only work with NodeCell
+	 * 2. TrackBlockPart cells are generated automatically during joinCells
+	 * 3. The grid internally stores Cell (NodeCell + TrackBlockPart), but editing
+	 *    interface only exposes NodeCell operations
+	 *
+	 * @return railway network grid containing node cells
+	 */
 	override fun getRailWayNetGrid(): RailwayNetGrid<NodeCell> {
 		// The grid internally stores Cell (NodeCell + TrackBlockPart), but we only expose NodeCell
 		// This is type-safe because all NodeCell operations go through putCell/removeCell/moveCell
 		@Suppress("UNCHECKED_CAST")
-		return railwayNetGrid as RailwayNetGrid<NodeCell>
-	}
-
-	/**
-	 * Protected accessor for the internal grid that stores Cell (not just NodeCell).
-	 * This is needed by DefaultSimulationContext to iterate over all cells including TrackBlockPart.
-	 *
-	 * @return the internal grid that can contain both NodeCell and TrackBlockPart
-	 */
-	protected fun getInternalGrid(): RailwayNetGrid<Cell> = railwayNetGrid
-
-	/**
-	 * Add a listener for context changes.
-	 * Replaces deprecated addObserver(Observer) method.
-	 *
-	 * @param listener the listener to add
-	 */
-	@Synchronized
-	override fun addPropertyChangeListener(listener: java.beans.PropertyChangeListener) {
-		changeSupport.addPropertyChangeListener(listener)
-	}
-
-	/**
-	 * Remove a listener for context changes.
-	 * Replaces deprecated deleteObserver(Observer) method.
-	 *
-	 * @param listener the listener to remove
-	 */
-	@Synchronized
-	override fun removePropertyChangeListener(listener: java.beans.PropertyChangeListener) {
-		changeSupport.removePropertyChangeListener(listener)
+		return getInternalGrid() as RailwayNetGrid<NodeCell>
 	}
 
 	/**
@@ -264,11 +199,11 @@ open class DefaultEditingContext(
 			val result = tryJoin(blockEndFrom, blockEndTo, s1, s2, key1, key2, trackBlock)
 			if (result == null) {
 				// If tryJoin failed, still add the block directly for now
-				extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+				getGraph().put(key1, s1, key2, s2, trackBlock)
 			}
 			return true
 		}
-		extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+		getGraph().put(key1, s1, key2, s2, trackBlock)
 		return true
 	}
 
@@ -312,11 +247,11 @@ open class DefaultEditingContext(
 			@Suppress("UNCHECKED_CAST")
 			val mapToAdd = builtPath as MutableMap<Point, TrackBlockPart>
 			getGrid().putMap(mapToAdd)
-			linesKeys[trackBlock] = mapToAdd.keys.toSet()
-			requireValidState(!extendedUnorientedGraph.contains(key1, key2)) {
+			getLinesKeys()[trackBlock] = mapToAdd.keys.toSet()
+			requireValidState(!getGraph().contains(key1, key2)) {
 				"Graph already contains edge between ($key1, $key2)"
 			}
-			extendedUnorientedGraph.put(key1, s1, key2, s2, trackBlock)
+			getGraph().put(key1, s1, key2, s2, trackBlock)
 			return mapToAdd
 		}
 		return null
@@ -463,6 +398,108 @@ open class DefaultEditingContext(
 	private fun used(newPoint: Point): Boolean = getGrid().containsKey(newPoint)
 
 	/**
+	 * Add a node cell to the railway network grid
+	 */
+	@Synchronized
+	override fun putCell(
+		key: Point,
+		nodeCell: NodeCell
+	) {
+		// Validate coordinates are within grid bounds
+		val grid = getGrid()
+		if (key.x < 0 || key.y < 0 || key.x >= grid.getCols() || key.y >= grid.getRows()) {
+			throw ContextCreationException(
+				"Cell coordinates (${key.x},${key.y}) are outside grid bounds " +
+					"(${grid.getCols()}x${grid.getRows()})"
+			)
+		}
+		if (grid.put(key, nodeCell) === nodeCell) return
+
+		// vedlejsi Nody (sousedni bunky)
+		for (s1: Segment in nodeCell.joins()) {
+			val p = s1.transform(key)
+			// Skip neighbor if it's outside grid bounds (boundary cells)
+			if (p.x < 0 || p.y < 0 || p.x >= grid.getCols() || p.y >= grid.getRows()) {
+				continue
+			}
+			val cell2 = grid.get(p)
+			if (cell2 !is NodeCell) continue
+			val nodeCell2 = cell2
+
+			// vzit proti-segment
+			val s2 = anti(s1)
+			if (nodeCell2.joins().contains(s2)) {
+				requireValidState(s2.transform(p) == key) {
+					"Segment transformation inconsistency: s2.transform($p) != $key"
+				}
+				getGraph().putIfNotExists(
+					key,
+					s1,
+					p,
+					s2,
+					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, currentMaxSpeed)
+				)
+			}
+		}
+		if (nodeCell is InOut) inouts.add(nodeCell as InOut)
+		getChangeSupport().firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
+		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
+	}
+
+	/**
+	 * Remove a node cell from the railway network grid
+	 */
+	@Synchronized
+	override fun removeCell(key: Point) {
+		val grid = getGrid()
+		val cell = grid.get(key)
+		if (cell is NodeCell) {
+			grid.remove(key)
+			for (tl in getGraph().removeAll(key)) {
+				val set = getLinesKeys()[tl]
+				if (set != null) grid.keySet().removeAll(set)
+			}
+			getChangeSupport().firePropertyChange(
+				ContextChangeListener.CELL_REMOVED,
+				null,
+				String.format("Cell removed at (%d,%d)", key.x, key.y)
+			)
+		}
+	}
+
+	/**
+	 * Remove a track line from the railway network
+	 */
+	override fun removeLine(line: TrackBlock) {
+		val grid = getGrid()
+		getGraph().remove(line)
+		grid.keySet().removeAll(getLinesKeys().remove(line) ?: emptySet())
+		getChangeSupport().firePropertyChange(
+			ContextChangeListener.TRACK_BLOCK_REMOVED,
+			null,
+			String.format("TrackBlock %s removed", line)
+		)
+	}
+
+	/**
+	 * Move a cell from one location to another
+	 */
+	override fun moveCell(
+		from: Point,
+		to: Point
+	) {
+		val grid = getGrid()
+		val fromCell = grid.get(from)
+		if (fromCell !is NodeCell) return
+
+		val toCell = grid.get(to)
+		if (toCell != null) return
+
+		putCell(to, fromCell)
+		removeCell(from)
+	}
+
+	/**
 	 * Join two cells with a track block
 	 */
 	override fun joinCells(
@@ -477,7 +514,7 @@ open class DefaultEditingContext(
 			logger.debug {
 				"Join failed between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
 			}
-			changeSupport.firePropertyChange(
+			getChangeSupport().firePropertyChange(
 				ContextChangeListener.JOIN_FAILED,
 				null,
 				String.format(
@@ -495,7 +532,7 @@ open class DefaultEditingContext(
 		logger.debug {
 			"Created track join (${key1.x},${key1.y})->(${key2.x},${key2.y}) with $mapSize intermediate cells"
 		}
-		changeSupport.firePropertyChange(
+		getChangeSupport().firePropertyChange(
 			ContextChangeListener.JOIN_CREATED,
 			null,
 			String.format(
@@ -507,121 +544,5 @@ open class DefaultEditingContext(
 			)
 		)
 	}
-
-	/**
-	 * Add a node cell to the railway network grid
-	 */
-	@Synchronized
-	override fun putCell(
-		key: Point,
-		nodeCell: NodeCell
-	) {
-		// Validate coordinates are within grid bounds
-		if (key.x < 0 || key.y < 0 || key.x >= railwayNetGrid.getCols() || key.y >= railwayNetGrid.getRows()) {
-			throw ContextCreationException(
-				"Cell coordinates (${key.x},${key.y}) are outside grid bounds " +
-					"(${railwayNetGrid.getCols()}x${railwayNetGrid.getRows()})"
-			)
-		}
-		if (getGrid().put(key, nodeCell) === nodeCell) return
-
-		// vedlejsi Nody (sousedni bunky)
-		for (s1: Segment in nodeCell.joins()) {
-			val p = s1.transform(key)
-			// Skip neighbor if it's outside grid bounds (boundary cells)
-			if (p.x < 0 || p.y < 0 || p.x >= railwayNetGrid.getCols() || p.y >= railwayNetGrid.getRows()) {
-				continue
-			}
-			val cell2 = getGrid().get(p)
-			if (cell2 !is NodeCell) continue
-			val nodeCell2 = cell2
-
-			// vzit proti-segment
-			val s2 = anti(s1)
-			if (nodeCell2.joins().contains(s2)) {
-				requireValidState(s2.transform(p) == key) {
-					"Segment transformation inconsistency: s2.transform($p) != $key"
-				}
-				extendedUnorientedGraph.putIfNotExists(
-					key,
-					s1,
-					p,
-					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, Track.MIN_LENGTH, currentMaxSpeed)
-				)
-			}
-		}
-		if (nodeCell is InOut) inouts.add(nodeCell as InOut)
-		changeSupport.firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
-		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
-	}
-
-	/**
-	 * Get the railway network grid
-	 */
-	private fun getGrid(): DefaultRailWayNetGrid = railwayNetGrid
-
-	/**
-	 * Remove a node cell from the railway network grid
-	 */
-	@Synchronized
-	override fun removeCell(key: Point) {
-		val cell = getGrid().get(key)
-		if (cell is NodeCell) {
-			getGrid().remove(key)
-			for (tl in extendedUnorientedGraph.removeAll(key)) {
-				val set = linesKeys[tl]
-				if (set != null) getGrid().keySet().removeAll(set)
-			}
-			changeSupport.firePropertyChange(
-				ContextChangeListener.CELL_REMOVED,
-				null,
-				String.format("Cell removed at (%d,%d)", key.x, key.y)
-			)
-		}
-	}
-
-	/**
-	 * Remove a track line from the railway network
-	 */
-	override fun removeLine(line: TrackBlock) {
-		extendedUnorientedGraph.remove(line)
-		getGrid().keySet().removeAll(linesKeys.remove(line) ?: emptySet())
-		changeSupport.firePropertyChange(
-			ContextChangeListener.TRACK_BLOCK_REMOVED,
-			null,
-			String.format("TrackBlock %s removed", line)
-		)
-	}
-
-	/**
-	 * Move a cell from one location to another
-	 */
-	override fun moveCell(
-		from: Point,
-		to: Point
-	) {
-		val fromCell = getGrid().get(from)
-		if (fromCell !is NodeCell) return
-
-		val toCell = getGrid().get(to)
-		if (toCell != null) return
-
-		putCell(to, fromCell)
-		removeCell(from)
-	}
-
-	/**
-	 * Get the extended unoriented graph of track blocks
-	 */
-	override fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment> = extendedUnorientedGraph
-
-	/**
-	 * Current name string for train generation
-	 */
-	override var currentNameString: String
-		get() = nameString ?: ""
-		set(value) {
-			nameString = value
-		}
 }
+
