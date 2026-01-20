@@ -1605,14 +1605,19 @@ object ContextTransformationFactory {
 #### Context Hierarchy  
 - [x] `Context<out C : Cell>` - Base interface parameterized
 - [x] `EditingContext : Context<NodeCell>` - Specialized for NodeCell subtypes
-- [x] `SimulationContext : EditingContext` - Inherits NodeCell type parameter
+- [x] `SimulationContext : Context<Cell>` - **Separate interface** (no longer extends EditingContext per Issue #153)
+- [x] `BaseContext` - Abstract base class with shared infrastructure (Issue #153)
+- [x] Both DefaultEditingContext and DefaultSimulationContext extend BaseContext independently
 - [x] Type parameters fully documented with KDoc
 
 #### Implementation Classes
-- [x] `DefaultEditingContext` - Implements EditingContext correctly
-- [x] `DefaultSimulationContext` - Implements SimulationContext correctly
+- [x] `BaseContext` - Abstract base class (257 lines of shared infrastructure) - Issue #153
+- [x] `DefaultEditingContext : BaseContext` - Implements EditingContext, composition pattern
+- [x] `DefaultSimulationContext : BaseContext` - Implements SimulationContext, composition pattern
+- [x] `ContextTransformer` - Factory for EditingContext → SimulationContext transformation - Issue #153
 - [x] All grid operations use parameterized types
 - [x] Identity preservation maintained (IdentityHashMap)
+- [x] Network immutability enforcement (freeze/isFrozen/checkNotFrozen) - Issue #153
 
 #### Test Infrastructure
 - [x] Test utilities updated (MockSimulationContext, TestContextBuilder)
@@ -1635,6 +1640,13 @@ object ContextTransformationFactory {
    ```
 
 4. **Grid stores static cells only** - Both EditingContext and SimulationContext grids contain static objects. Dynamic wrappers are maintained separately in `IdentityHashMap` via `toDynamic()` methods.
+
+5. **Composition over inheritance (Issue #153)** - Context architecture refactored to use composition pattern:
+   - BaseContext abstract class extracted (257 lines shared infrastructure)
+   - DefaultSimulationContext no longer extends DefaultEditingContext
+   - SimulationContext no longer extends EditingContext (Interface Segregation Principle)
+   - ContextTransformer factory for EditingContext → SimulationContext transformation
+   - Network immutability enforcement via freeze() mechanism
 
 ### Validation Status
 
@@ -1667,6 +1679,10 @@ object ContextTransformationFactory {
 3. **Backward Compatible:** All existing code continues to work (type parameters inferred)
 4. **Identity Preserved:** Static/dynamic separation guarantees maintained
 5. **jDisco Compatible:** No impact on simulation engine integration
+6. **Composition Pattern (Issue #153):** Clean separation via BaseContext abstraction
+7. **Interface Segregation:** Simulation contexts no longer expose editing operations
+8. **Network Immutability:** Frozen contexts prevent runtime modifications during simulation
+9. **Zero Regressions:** All 927 tests passing after refactoring
 
 ### Example Usage
 
@@ -1709,12 +1725,16 @@ Potential improvements for future phases:
 
 ### References
 
-- **Issue #131:** Grid Parameterization (parent epic)
+- **Issue #131:** Grid Parameterization (parent epic) ✅ COMPLETE
+- **Issue #139:** Grid Parameterization Design (Phase 1) ✅ COMPLETE
+- **Issue #153:** Context Inheritance Incompatibility (Composition over inheritance) ✅ COMPLETE
 - **Phases 1-8:** Implementation phases (completed 2026-01-19)
 - **Phase 9:** Final validation (Issue #131.9)
 - **Design Document:** This file
 - **Validation:** `docs/PHASE9_VALIDATION_CHECKLIST.md`
 - **Architecture:** `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`
+- **Context Design:** `CONTEXT_REFACTORING_DESIGN.md` (Phase 8 - Issue #153)
+- **Retrospective:** `ISSUE_153_RETROSPECTIVE.md`
 
 ---
 

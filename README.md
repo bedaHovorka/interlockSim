@@ -263,10 +263,29 @@ Built on **jDisco** (Java framework for combined discrete and continuous simulat
 
 ### Core Components
 
-- **Context System** - Factory pattern for creating simulation/editing contexts
-- **Object Model** - Track facilities, blocks, cells, and paths
-- **GUI** - Swing-based editor with grid canvas
-- **XML Factory** - Schema-validated configuration loading
+**Context System** - Composition-based architecture (Issue #153, 2026-01-20):
+- **BaseContext** - Abstract base class with shared infrastructure (grid, graph, property change notification)
+- **DefaultEditingContext : BaseContext** - Editing operations (putCell, removeCell, moveCell, joinCells)
+- **DefaultSimulationContext : BaseContext** - Simulation operations (run, stop, pathToNextSemaphore)
+- **ContextTransformer** - Factory for transforming EditingContext to SimulationContext
+- Immutability enforcement via freeze() mechanism (simulation contexts are immutable after initialization)
+- Factory pattern for context creation (EditingContextFactory, SimulationContextFactory, XMLContextFactory)
+- Grid parameterization for type-safe cell access (RailwayNetGrid<T : Cell>)
+
+**Context Separation:**
+- EditingContext and SimulationContext are separate interfaces (no inheritance between them)
+- Both implementations extend BaseContext independently (composition over inheritance)
+- Follows Interface Segregation Principle - simulation contexts do NOT support editing operations
+- Network structure is frozen at simulation initialization time for correctness
+
+**Object Model** - Track facilities, blocks, cells, and paths:
+- Static objects (NodeCell: RailSwitch, RailSemaphore, InOut)
+- Dynamic wrappers (DynamicPathSeparator, DynamicTrack) for simulation state
+- Grid-based spatial representation with pathfinding
+
+**GUI** - Swing-based editor with grid canvas
+
+**XML Factory** - Schema-validated configuration loading
 
 ---
 
