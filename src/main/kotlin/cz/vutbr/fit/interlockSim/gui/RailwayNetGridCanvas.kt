@@ -42,6 +42,17 @@ import javax.swing.SwingConstants
 /**
  * Main GUI component for rendering and editing railway elements in a grid.
  * Implements both visual rendering and interaction handling (mouse events, scrolling).
+ *
+ * ## Context Type Handling
+ *
+ * This component supports both [EditingContext] and [SimulationContext] without assuming
+ * inheritance relationship between them (preparation for Issue #153.5).
+ *
+ * - Use [setContext] to switch between editing and simulation modes
+ * - Use [getEditingContext] to access EditingContext (only when in EDITING state)
+ * - Use [getSimulationContext] to access SimulationContext (only when in SIMULATION state)
+ *
+ * The state machine ensures type-safe access to the appropriate context type.
  */
 class RailwayNetGridCanvas :
 	JComponent(),
