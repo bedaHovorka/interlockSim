@@ -120,6 +120,27 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Simple Network Transformation Tests
+	 *
+	 * Pattern for Testing Static/Dynamic Separation:
+	 *
+	 * 1. **Grid stores STATIC cells** (not dynamic wrappers)
+	 *    - Grid.getCellAt(x, y) returns the original static object
+	 *    - Use `isSameInstanceAs()` to verify identity preservation
+	 *
+	 * 2. **Dynamic wrappers accessed separately**
+	 *    - PathSeparators: via getInOuts() or toDynamic(separator)
+	 *    - Tracks: via toDynamic(track)
+	 *    - Extract static refs: (wrapper as DynamicType).staticRef
+	 *
+	 * 3. **Why this matters**
+	 *    - Enables stable identity comparisons (===)
+	 *    - Separates immutable configuration from mutable simulation state
+	 *    - Context manages dynamic mapping via IdentityHashMap
+	 *
+	 * See: docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md
+	 */
 	@Nested
 	@DisplayName("Simple Network Transformation")
 	inner class SimpleNetworkTransformation {
