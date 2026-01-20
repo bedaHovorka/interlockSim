@@ -234,16 +234,8 @@ open class DefaultSimulationContext(
 			}
 
 			// Copy InOut elements list
-			// Cast editingContext to BaseContext to access protected inouts
-			if (editingContext is DefaultEditingContext) {
-				context.inouts.addAll(editingContext.getInOutsList())
-			} else {
-				throw SimulationException(
-					"Cannot create DefaultSimulationContext from unsupported EditingContext " +
-						"implementation: ${editingContext::class.qualifiedName}. " +
-						"Expected DefaultEditingContext to copy InOut elements."
-				)
-			}
+			// Use interface method getInOuts() instead of type-checking for LSP compliance
+			context.inouts.addAll(editingContext.getInOuts())
 
 			// Copy configuration properties
 			context.currentMaxSpeed = editingContext.currentMaxSpeed

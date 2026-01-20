@@ -99,6 +99,36 @@ interface EditingContext : Context<NodeCell> {
 	var currentNameString: String
 
 	/**
+	 * Get the list of InOut elements (entry/exit points) in this context.
+	 *
+	 * InOut elements represent entry and exit points in the railway network where
+	 * trains enter and leave the system. This method provides access to these elements
+	 * during network construction and transformation to simulation contexts.
+	 *
+	 * ## Implementation Notes
+	 *
+	 * Returns an immutable list to prevent external modification of the internal InOut
+	 * collection. Changes to the InOut list should be made through proper editing
+	 * operations (e.g., putCell).
+	 *
+	 * ## Usage
+	 *
+	 * - **Network Construction**: Access InOut elements during editing
+	 * - **Transformation**: Copy InOut elements when converting to SimulationContext
+	 * - **Validation**: Check network entry/exit points before simulation
+	 *
+	 * ## Design Note
+	 *
+	 * This method is distinct from `SimulationContext.getInOuts()` which returns
+	 * `Collection<DynamicInOut>` (dynamic wrappers). EditingContext returns static
+	 * InOut elements (`List<InOut>`), enabling type-safe transformation without
+	 * runtime type checking.
+	 *
+	 * @return Immutable list of InOut elements (static entry/exit points)
+	 */
+	fun getInOuts(): List<cz.vutbr.fit.interlockSim.objects.cells.InOut>
+
+	/**
 	 * Freeze this context, making the network structure immutable.
 	 *
 	 * Once frozen, any attempt to modify the network structure (adding/removing cells,
