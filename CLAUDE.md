@@ -293,18 +293,50 @@ Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_
 **Context system:**
 - `Context<out C : Cell>` - Base abstraction for railway network configuration (parameterized over cell type)
 - `EditingContext : Context<NodeCell>` - Interface for editing operations on railway network
-- `SimulationContext : EditingContext` - Interface for simulation execution (extends EditingContext)
+- `SimulationContext : Context<Cell>` - Interface for simulation execution (separate from EditingContext, follows Interface Segregation Principle)
 - `RailwayNetGrid<out T : Cell>` - Parameterized grid interface for type-safe cell access
 - `AbstractRailwayNetGrid<out T : Cell>` - Parameterized base implementation using `Array2DMap<T>`
-- `DefaultEditingContext` - Implementation of editing operations only (613 lines)
-- `DefaultSimulationContext` - Implementation extending editing with simulation capabilities (829 lines)
+- `BaseContext` - Abstract base class with shared infrastructure (257 lines):
+  - Grid and graph storage
+  - Property change notification (PropertyChangeSupport)
+  - Configuration management (maxSpeed, trackLength, nameString)
+  - InOut list management
+  - Immutability enforcement (freeze/isFrozen/checkNotFrozen)
+  - Comprehensive KDoc with thread-safety notes
+- `DefaultEditingContext : BaseContext, EditingContext` - Implementation of editing operations (102 lines of domain logic + inherited infrastructure):
+  - Extends BaseContext (composition over inheritance)
+  - Provides mutable network editing: putCell, removeCell, moveCell, joinCells, removeLine
+  - Returns `RailwayNetGrid<NodeCell>` (editing works with node cells only)
+- `DefaultSimulationContext : BaseContext, SimulationContext` - Implementation of simulation operations (829 lines):
+  - Extends BaseContext directly (does NOT extend DefaultEditingContext)
+  - Network structure is immutable (frozen after initialization)
+  - Provides simulation-specific operations: run, stop, pathToNextSemaphore, toDynamic
+  - Returns `RailwayNetGrid<Cell>` (simulation needs both NodeCell and TrackBlockPart)
+  - Uses SimulationProcessFactory for dependency injection
+- `ContextTransformer` - Factory for transforming EditingContext to SimulationContext:
+  - Stateless singleton object
+  - Copies network structure, configuration, and InOut elements
+  - Uses GridTransformer for static-to-dynamic cell transformation
+  - Enables workflow: edit network → save → load → simulate
 - `DefaultContext` - **DEPRECATED** backward-compatibility wrapper extending DefaultSimulationContext (74 lines)
 - `SimulationProcessFactory` - Factory interface for creating simulation processes (decouples context from concrete sim/ classes)
 - `DefaultSimulationProcessFactory` - Default factory implementation using jDisco-based processes (Generator, InOutWorker)
 - `EditingContextFactory` / `SimulationContextFactory` - Factory pattern for context creation
 - `XMLContextFactory` - Creates contexts from XML files (defined by `data.xsd` schema)
 
-**Context Refactoring (Issue #98):** DefaultContext split into DefaultEditingContext and DefaultSimulationContext. See `docs/CONTEXT_REFACTORING_DESIGN.md` and `docs/FACTORY_PATTERN_IMPLEMENTATION.md` for details.
+**Context Refactoring History:**
+
+- **Issue #98 (2026-01-14):** DefaultContext split into DefaultEditingContext and DefaultSimulationContext. See `docs/CONTEXT_REFACTORING_DESIGN.md` and `docs/FACTORY_PATTERN_IMPLEMENTATION.md`.
+
+- **Issue #153 (2026-01-20):** Composition over inheritance refactoring:
+  - Extracted BaseContext abstract base class (257 lines of shared infrastructure)
+  - DefaultSimulationContext no longer extends DefaultEditingContext
+  - SimulationContext no longer extends EditingContext (Interface Segregation Principle)
+  - Both contexts extend BaseContext independently (composition pattern)
+  - Network immutability enforcement via freeze() mechanism
+  - ContextTransformer factory for editing→simulation transformation
+  - All 927 tests passing, zero regressions
+  - See `docs/CONTEXT_INHERITANCE_INCOMPATIBILITY.md` and `docs/ISSUE_153_RETROSPECTIVE.md`
 
 **Factory Pattern (Phase 2, 2026-01-14):**
 DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:

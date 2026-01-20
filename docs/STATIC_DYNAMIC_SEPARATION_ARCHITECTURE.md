@@ -744,9 +744,11 @@ path.setUpPath(separator)  // AbstractPath wraps internally
 
 The following were considered but not needed:
 
-- ❌ Separate EditingContext and SimulationContext classes
-  - Current DefaultSimulationContext extends DefaultEditingContext
-  - Works well, no need to split
+- ✅ **CHANGED (Issue #153):** Separate EditingContext and SimulationContext classes
+  - Original: DefaultSimulationContext extended DefaultEditingContext
+  - Issue #153 refactoring (2026-01-20): Composition over inheritance
+  - Now: Both extend BaseContext independently (composition pattern)
+  - Reason: Interface Segregation Principle, network immutability enforcement
 
 - ❌ Wrapper pattern for all domain objects
   - Only separators and tracks need wrappers
