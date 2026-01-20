@@ -482,7 +482,7 @@ In this chapter I describe some theoretical foundations. Terms like \emph{set} o
   The most reliable source is thus \cite{javaapidoc}.
   In Java I am used to writing code so that variable and method names are self-commenting.
 
-    \paragraph{Containers (Collections)} Are analogous to STL from C++ and serve for storing a predefined amount of data. In Java these are objects, thus they themselves can be elements of another collection.
+    \paragraph{Containers (Collections)} Are analogous to STL from C++ and serve for storing an undefined amount of data. In Java these are objects, thus they themselves can be elements of another collection.
     For example \sourceRef{Map} serves for creating mappings from object to object, which reduces
     creating references directly in objects and thus also dependency of code of one class on another.
     The issue of containers is elaborated more in \cite{heroutUtil}, but when using Java 5 it is
@@ -497,7 +497,7 @@ In this chapter I describe some theoretical foundations. Terms like \emph{set} o
 
     \paragraph{Advantages and Disadvantages}\label{java:col}
     By its syntax it inclines more to general languages (C, C++), yet by amount of standard libraries it catches up with many scripting languages.
-    Strict static type checking may at first glance delay development,
+    Strict static type checking may delay development at first glance,
     but with proper design and use of suitable editors it conversely speeds up debugging, because I can
     concentrate mainly on logical errors in code.
     What however unlike scripting languages it lacks is support for functional programming.
@@ -687,11 +687,11 @@ This chapter focuses on a brief description of implemented components. Details a
       Train waits in entry-exit point queue for movement permission. After obtaining it
       subprocess \sourceRef{Train.Front} starts, which when encountering a node
       (\sourceRef{PathSeparator}), possibly changes parameters according to it and occupies section before it.
-      When train exits completely \sourceRef{Train.Tail} starts. It when passing through each node
+      When the train has completely exited, \sourceRef{Train.Tail} starts. When passing through each node, it
       releases section behind it.
 
       Each signal provides information about permitted speed behind it and about signal aspect at
-      following signal, unless signal \uv{Stop} is showing. In this case the
+      following signal, unless the signal \uv{Stop} is showing. In this case the
       train should brake before it and wait for signal allowing movement.
       For simplification I assume that signal state can be detected only in discrete state,
       when train arrives at signal, because determining when it can register signal
@@ -701,18 +701,18 @@ This chapter focuses on a brief description of implemented components. Details a
       %which it has scheduled departure time, it must stop here and wait for scheduled time and at least
       %until passengers board and alight (waits for them with normal distribution with mean
       %2 and variance 1 minute), then it can depart.
-      When passing by signal it starts changing speed depending on signal aspect.
-      So-called "start on caution", when train at first signal starts accelerating and before
-      following one stops, is handled separately. Subprocesses end at terminal
-      entry-exit points \sourceRef{InOut}. Here I simplified model by assumption
+      When passing by a signal it starts changing speed depending on signal aspect.
+      So-called "start on caution", when the train at the first signal starts accelerating and before
+      the following one stops, is handled separately. Subprocesses end at terminal
+      entry-exit points \sourceRef{InOut}. Here I simplified the model by assumption
       that maximum train length must surely be less than minimum possible length of track block between two
-      \sourceRef{InOut}. Such similar edge cases are not worth handling otherwise than declaring model
+      \sourceRef{InOut}. Such similar edge cases are not worth handling otherwise than by declaring the model
       erroneous. Detection of this error requires finding minimal paths.
 
-      Formally it is a combined process (see section \ref{sim:comb}). Discrete part waits for state conditions
-      of arrival at signal and sets acceleration. This interaction describes Petri net in figure \ref{trainProcess},
+      Formally it is a combined process (see section \ref{sim:comb}). Discrete part waits for the state condition
+      of arrival at a signal and sets acceleration. This interaction describes Petri net in figure \ref{trainProcess},
       it serves however only for illustration. Simulation is not implemented directly using PN.
-      I chose simple continuous model, because from viewpoint of debugging discrete interactions
+      I chose simple continuous model, because from the viewpoint of debugging discrete interactions
       it is more predictable.
       Basic motion equations \ref{vaIntegrator} and \ref{svIntegrator}
       for acceleration $a$, velocity $v$ and distance $s$:
@@ -732,10 +732,10 @@ This chapter focuses on a brief description of implemented components. Details a
       \end{eqnarray}
 
       \section{Example -- Shunting Loop}
-      For better demonstration how simulation model works I created a \uv{shunting loop} controlled based on simple rules.
+      For a better demonstration of how the simulation model works, I created a \uv{shunting loop} controlled based on simple rules.
       To each controllable signal is permanently assigned at least one created path, which leads to another
       track either with possibility of stopover or leaving system,
-      thus from certain viewpoint represents one indivisible transfer operation.
+      thus from a certain viewpoint represents one indivisible transfer operation.
       Trains are created with simple timetable (two data from where, to where -- \sourceRef{InOut}) using generator
       with exponential distribution of time between individual generations.
       Before they are inserted into \sourceRef{InOut} queue, congestion of track layout should be prevented.
@@ -749,11 +749,11 @@ This chapter focuses on a brief description of implemented components. Details a
 	      \begin{enumerate}
 	        \item in which is located a train or reserved path, determines its resp. its direction
                       -- signal to which train is guided
-	        \item if from this signal is free path (previously stored) sets it
+	        \item if a free path from this signal (previously stored) exists, it sets it
               \end{enumerate}
       \end{enumerate}
       \insertimage{vyhybna}{Track diagram of shunting loop}
-      To diagram in figure \ref{vyhybna}: line segments are tracks, their connections are switches,
+      For the diagram in figure \ref{vyhybna}: line segments are tracks, their connections are switches,
                    $\bullet$ is \sourceRef{InOut} and~$\blacktriangleright$ is signal.
       After simulation start messages are printed line by line to standard program output:
       \begin{enumerate}
@@ -770,21 +770,21 @@ time object message
       \verb|distance| is total distance traveled by train, \verb|track_from| track where train beginning is located,
       \verb|track_to| track where train end is located, \verb|dist_signal| distance to nearest signal.
 
-      In graph in figure \ref{shunting} is shown how train in model reacts to signal aspects
+      In the graph in figure \ref{shunting} is shown how the train in the model reacts to signal aspects
       during event of arrival at signal.
-      Here one can see how control logic fails to allow path to following block in time,
-      and train accelerates and stops between signals.
-      In section \ref{trainMoveSection} is explained train behavior.
+      Here one can see how the control logic fails to allow path to following block in time,
+      and the train accelerates and stops between signals.
+      In section \ref{trainMoveSection} the train behavior is explained.
 
 \chapter{Conclusion}
-In this chapter are described possible program extensions and evaluation of entire thesis.
+In this chapter, possible program extensions and evaluation of the entire thesis are described.
 \section{Suggestions for Extensions}\label{chapExtensions}
 There are many ideas how to extend current application, but here I will focus rather on those, for which
-current implementation is directly designed, or which follow from it and are realizable in near future.
+current implementation is directly designed, or which arise from it and are realizable in the near future.
 
-  \subsection*{Goals of Final Application}
+  \subsection*{Goals of the Final Application}
     These goals I set out because I don't want implemented code to be created for only one purpose.
-    By this I would like to somehow express possibilities of further development of entire application.
+    By this I would like to express possibilities for further development of the entire application.
     Other students can build on my work and realize them.
     \begin{itemize}
         \item graphical editor and railway network control simulator in one application,
@@ -796,7 +796,7 @@ current implementation is directly designed, or which follow from it and are rea
     \end{itemize}
 
   \subsection*{Physical Model of Movement}
-    For current movement description also analytical solution exists. Description using differential equation
+    For the current movement description, an analytical solution also exists. Description using differential equation
     however allows its change for more complex one, which will more faithfully model other possible cases.
     Train path (mainly in inter-station sections) I would conceive as curve
     in three-dimensional space -- i.e. another edge property.
@@ -809,26 +809,26 @@ current implementation is directly designed, or which follow from it and are rea
      It can be fixed \sourceRef{TrackBlock} assembled from several sections \sourceRef{SimpleTrack}.
      AB as whole has direction set by dispatcher. Individual sections
      immediately reserve path in that direction when their release occurs.
-     In figure \ref{autoblok} is shown behavior of AB section.
+     In figure \ref{autoblok}, the behavior of an AB section is shown.
      \insertimage{autoblok}{C/E Petri net of section in automatic block}
      AB should also be possible to create from set path.
-     Furthermore with inter-station sections is related also use of other signal types (depends where they will be placed in network):
+     Furthermore with inter-station sections is also related to the use of other signal types (depends where they will be placed in network):
      \begin{description}
        \item[Section signal] in automatic block
        \item[Distant signal] using constant signal with \uv{Clear}
      \end{description}
   \subsection*{Saving Simulation State}
-   Discrete process is fragmented into event commands, such as waiting, leading to activity loss. If by some universal way I create possibility to remember
+   A discrete process is fragmented into event commands, such as waiting, leading to activity loss. If by some universal way I create possibility to remember
    state in which each process is just passive between events and define transformation from beginning to this state, I can save this information together with other properties during serialization.
-   Process could be internally represented as automaton or Petri net and its resp. its state would be
+   The process could be internally represented as an automaton or Petri net and its resp. its state would be
    saved and restored.
    For continuous variables it is necessary to save \sourceRef{jDisco.Variable}.
-   It is possible that due to universal solution, it will require modifications in \emph{jDisco} library for serialization support. State of \sourceRef{LoopProcess} descendants, which inside iteration doesn't come to passive state,
+   It is possible that due to universal solution, it will require modifications in \emph{jDisco} library for serialization support. The state of \sourceRef{LoopProcess} descendants, which inside iteration doesn't come to passive state,
    is possible to save already.
  \subsection*{Visualization Using Cellular Automata, Real-time}
-   Square network of model directly predetermines using cellular automata for rendering control.
-   The effort is to minimize amount of redrawn area and unnecessary computational load,
-   caused by traversing states of all cells, by limitation only to small amount of cells of some types
+   The square network of the model directly predetermines using cellular automata for rendering control.
+   The effort is to minimize the amount of redrawn area and unnecessary computational load,
+   caused by traversing states of all cells, by limiting it to only a small number of cells of some types
    and for others I will proceed from assumption that if one cell changes, then probability
    of change in cells in neighborhood\footnote{non-empty cells} is set to maximum and then decreases with time.
    Furthermore it will be suitable to create \sourceRef{Monitor} with synchronization of real time with model time. It should
@@ -839,19 +839,19 @@ current implementation is directly designed, or which follow from it and are rea
    synchronization pulses, which however need to be scheduled at better moment.
  \subsection*{Interface to Model for Dispatcher Control}
    It is possible to build on current path formalization, implement their search.
-   Create package of routines and functions covering access to model for control from several levels.
+   Create a package of routines and functions covering access to model for control from several levels.
    This also follows completing commands from GUI interface.
    It will be suitable to formalize command sequence as language, which can be possibly optimized.
 
 \section{Evaluation of Achieved Results}
-Program simulates movement of several trains in network simultaneously.
+The program simulates the movement of several trains in the network simultaneously.
 Each train moves according to path determined during simulation -- reacts to signal aspects.
 Another train cannot enter occupied tracks.
-Established minimal goals were thus achieved, which example demonstrates. More complex network is reasonably demonstrable only in case of implementing control module and simulation visualization, when control must be taken over by human.
-Validity of this simulation model could be verified by collecting statistics about real train networks and comparing
+Established minimal goals were thus achieved, which example demonstrates. A more complex network is reasonably demonstrable only in case of implementing control module and simulation visualization, when control must be taken over by a human.
+The validity of this simulation model could be verified by collecting statistics about real train networks and comparing
 with model.
 
-Suitable features of languages resp. tools finally prevail, although some constructs in them were more difficult
+The suitable features of languages resp. tools finally prevail, although some constructs in them were more difficult
 to express.
 If I had to verify what load simulation is on operating system, always values during
 running virtual machine instance\footnote{I ran shunting loop without synchronization with real time for 15 minutes} moved on my device around these values and didn't change significantly:
@@ -863,13 +863,13 @@ immerse myself in problematics of analysis and modeling of complex systems,
 which includes dealing with case studies of technical devices.
 Furthermore I expanded horizon about how to incorporate simulation,
 and improved in application design and programming.
-Problem I had especially at beginning with estimation of time complexity of work.
+The problem I had especially at the beginning with estimation of time complexity of work.
 % numerical error
-Coding itself went quite quickly, but I forgot about debugging in time estimates.
-I prefer to test continuously, error is then easier to find. For extensive projects however it is still necessary to create
+The coding itself went quite quickly, but I forgot about debugging in time estimates.
+I prefer to test continuously, errors are then easier to find. For extensive projects however it is still necessary to create
 testing scripts.
-In design area there is still what to learn and more utilize design patterns and mainly adhere to their principles.
-But I must note that time spent studying and designing system was longer than programming time, which I would like in continuation of building this application to further shorten by avoiding mistakes which I committed.
+In the design area there is still what to learn and to better utilize design patterns and mainly adhere to their principles.
+However, I must note that time spent studying and designing system was longer than programming time, which I would like in continuation of building this application to further shorten by avoiding mistakes which I committed.
 
 \bibliographystyle{czechiso}
 \begin{flushleft}
