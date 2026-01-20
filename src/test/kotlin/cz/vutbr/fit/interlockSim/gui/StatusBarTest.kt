@@ -18,7 +18,6 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach

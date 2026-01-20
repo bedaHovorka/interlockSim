@@ -190,7 +190,7 @@ class ToolBarTest : AbstractFrameTestBase() {
 	fun toolbarHasSeparatorsBetweenButtonGroups() {
 		runOnEDT {
 			// Count separators
-			val separatorCount = toolBar.components.count { 
+			val separatorCount = toolBar.components.count {
 				it.javaClass.simpleName.contains("Separator")
 			}
 			
