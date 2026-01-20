@@ -20,9 +20,11 @@ import assertk.assertions.isTrue
 import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.core.module.Module
 import org.koin.test.get
 
 /**
@@ -36,7 +38,7 @@ import org.koin.test.get
  */
 @DisplayName("Example Loading Tests")
 class ExampleLoadingTest : KoinTestBase() {
-
+	override fun getTestModule(): Module = testModuleFull
 	@Nested
 	@DisplayName("Example Registry")
 	inner class ExampleRegistryTests {
@@ -175,11 +177,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample requires endTime argument`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop") // Missing endTime
@@ -203,11 +206,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample validates endTime is numeric`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop", "notANumber")
@@ -228,11 +232,12 @@ class ExampleLoadingTest : KoinTestBase() {
 		fun `createShuntingLoopExample with valid arguments returns context`() {
 			// Arrange
 			val registry = get<ExampleRegistry>()
-			val createMethod = ExampleRegistry::class.java.getDeclaredMethod(
-				"createShuntingLoopExample",
-				cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
-				Array<String>::class.java
-			)
+			val createMethod =
+				ExampleRegistry::class.java.getDeclaredMethod(
+					"createShuntingLoopExample",
+					cz.vutbr.fit.interlockSim.context.SimulationContextFactory::class.java,
+					Array<String>::class.java
+				)
 			createMethod.isAccessible = true
 			val factory = get<cz.vutbr.fit.interlockSim.context.SimulationContextFactory>()
 			val args = arrayOf("example", "shuntingLoop", "100")

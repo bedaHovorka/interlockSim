@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -26,6 +27,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -49,9 +51,15 @@ class ShuntingLoop : Interlocking {
 	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
 	private val approwedTrains: MutableList<Train> = mutableListOf()
 	private val generator: InnerGenerator
-	private val paths: MutableMap<RailSemaphore, MutableList<Path>> = mutableMapOf()
+	// Temp during construction
+	private val staticPaths: MutableMap<RailSemaphore, MutableList<Path>> = mutableMapOf()
+	// Converted in startAction()
+	private lateinit var paths: MutableMap<DynamicRailSemaphore, MutableList<Path>>
 	private val innerTrackBlocks: MutableList<SimpleTrackBlock> = mutableListOf()
-	private val outerTrackblocks: MutableMap<SimpleTrackBlock, RailSemaphore> = mutableMapOf()
+	// Temp during construction
+	private val staticOuterTrackblocks: MutableMap<SimpleTrackBlock, RailSemaphore> = mutableMapOf()
+	// Converted in startAction()
+	private lateinit var outerTrackblocks: MutableMap<SimpleTrackBlock, DynamicRailSemaphore>
 	private val endTime: Long
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -90,6 +98,15 @@ class ShuntingLoop : Interlocking {
 	) : Generator(context) {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.offer(train)
+		}
+
+		override fun iteration() {
+			// Stop generating trains when approaching endTime
+			if (time() >= endTime) {
+				terminate()
+				return
+			}
+			super.iteration()
 		}
 	}
 
@@ -132,8 +149,8 @@ class ShuntingLoop : Interlocking {
 		constructPath(zB, vB, doB2, k2, doA2)
 		constructPath(doB2, vB, zB, kB, B)
 		Collections.addAll(innerTrackBlocks, k1, k2)
-		outerTrackblocks[kB] = zB
-		outerTrackblocks[kA] = zA
+		staticOuterTrackblocks[kB] = zB
+		staticOuterTrackblocks[kA] = zA
 	}
 
 	private fun constructPath(vararg elements: PathElement): ArrayPath {
@@ -154,10 +171,10 @@ class ShuntingLoop : Interlocking {
 			requireSimulation(false) { "Invalid path element access during path construction: $e" }
 		}
 		val first: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, arrayPath.getFirst())
-		var sublist: MutableList<Path>? = paths[first]
+		var sublist: MutableList<Path>? = staticPaths[first]
 		if (sublist == null) {
 			sublist = mutableListOf()
-			paths[first] = sublist
+			staticPaths[first] = sublist
 		}
 		sublist.add(arrayPath)
 		return arrayPath
@@ -171,7 +188,7 @@ class ShuntingLoop : Interlocking {
 		x: Int,
 		y: Int
 	): T {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
 		return Util.assertInstanceOf(clazz, cell)
 	}
@@ -192,7 +209,7 @@ class ShuntingLoop : Interlocking {
 		cell1: Cell,
 		cell2: Cell
 	): SimpleTrackBlock {
-		val railWayNetGrid: RailwayNetGrid = context.getRailWayNetGrid()
+		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = context.getGraph()
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
@@ -203,9 +220,40 @@ class ShuntingLoop : Interlocking {
 	}
 
 	override fun startAction() {
+		// Convert static objects to Dynamic* wrappers (now available after simulation initialization)
+		paths = mutableMapOf()
+		for ((staticSem, pathList) in staticPaths) {
+			val dynamicSem = context.toDynamic(staticSem) as DynamicRailSemaphore
+			val dynamicPaths = mutableListOf<Path>()
+			for (path in pathList) {
+				val dynamicPath = convertPathToDynamic(path)
+				dynamicPaths.add(dynamicPath)
+			}
+			paths[dynamicSem] = dynamicPaths
+		}
+
+		outerTrackblocks = staticOuterTrackblocks.mapValues { (_, staticSem) ->
+			context.toDynamic(staticSem) as DynamicRailSemaphore
+		}.toMutableMap()
+
 		context.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
 		// activate(RealTimeSynch())
 		activate(generator)
+	}
+
+	private fun convertPathToDynamic(staticPath: Path): Path {
+		val dynamicPath = ArrayPath(context)
+		for (element in staticPath) {
+			val dynamicElement = when (element) {
+				is RailSemaphore -> context.toDynamic(element)
+				is RailSwitch -> context.toDynamic(element)
+				is InOut -> context.toDynamic(element)  // Use toDynamic for consistency
+				is SimpleTrackBlock -> element  // Track blocks remain static in path - wrapped on-demand by AbstractPath
+				else -> element
+			}
+			dynamicPath.addLast(dynamicElement)
+		}
+		return dynamicPath
 	}
 
 	override fun iteration() {
@@ -224,7 +272,9 @@ class ShuntingLoop : Interlocking {
 
 	private fun checkBothEnds(block: SimpleTrackBlock) {
 		for (sep in block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf(RailSemaphore::class.java, sep))) return
+			val railSem = Util.assertInstanceOf(RailSemaphore::class.java, sep)
+			val dynamicSem = context.toDynamic(railSem) as DynamicRailSemaphore
+			if (checkOneEnd(block, dynamicSem)) return
 		}
 	}
 
@@ -245,13 +295,20 @@ class ShuntingLoop : Interlocking {
 		}
 	}
 
-	private fun trySetupPaths(sem: RailSemaphore): Boolean {
-		logger.debug { "Attempting to setup paths from semaphore: ${sem.getName()}" }
-		for (path in paths[sem]!!) {
-			// zkusit postavit cestu
+	private fun trySetupPaths(sem: DynamicRailSemaphore): Boolean {
+		logger.debug { "Attempting to setup paths from semaphore: ${sem.name}" }
+		val pathList = paths[sem]
+		if (pathList == null) {
+			logger.warn {
+				"No paths found for semaphore: ${sem.name}, available keys: ${paths.keys.map { it.name }}"
+			}
+			return false
+		}
+		// zkusit postavit cestu
+		for (path in pathList) {
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) {
-					logger.debug { "Path setup successful from semaphore: ${sem.getName()}" }
+					logger.debug { "Path setup successful from semaphore: ${sem.name}" }
 					return true
 				}
 			} catch (e: TrackOperationException) {
@@ -259,23 +316,32 @@ class ShuntingLoop : Interlocking {
 				logger.debug { "Exception in path setup attempt: ${e.message}" }
 			}
 		}
-		logger.debug { "All path setup attempts failed from semaphore: ${sem.getName()}" }
+		logger.debug { "All path setup attempts failed from semaphore: ${sem.name}" }
 		return false
 	}
 
 	private fun checkOneEnd(
 		block: SimpleTrackBlock,
-		to: RailSemaphore
+		to: DynamicRailSemaphore
 	): Boolean {
 // 		 je v bloku vlak?
-		if (block.getState() == State.FREE) return false
-		if (block.getState() == State.OCCUPIED) {
-			logger.debug { "Block occupied, checking if next semaphore is: ${to.getName()}" }
-			if (block.getTrackOccupant().nextSemaphore() != to) return false
+		val dynamicBlock = context.toDynamic(block)
+		if (dynamicBlock.state == TrackFacility.State.FREE) return false
+		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
+			// Compare using static references to avoid Dynamic wrapper identity issues
+			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
+			val nextSemStatic = when (nextSem) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
+				else -> nextSem
+			}
+			if (nextSemStatic != to.staticRef) return false
 			return trySetupPaths(to)
-		} else if (block.getState() == State.RESERVED) {
-			logger.debug { "Block reserved, checking path setup for semaphore: ${to.getName()}" }
-			if (block.isSetUpPath(block.getSecondEnd(to))) {
+		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
+			// Use static separator for both getSecondEnd AND isSetUpPath
+			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
+			val staticSecondEnd = block.getSecondEnd(to.staticRef)
+			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}
 		}

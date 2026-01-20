@@ -11,14 +11,19 @@ package cz.vutbr.fit.interlockSim.xml
 
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -28,7 +33,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -62,20 +66,25 @@ import kotlin.getValue
 class XMLContextFactory :
 	EditingContextFactory,
 	SimulationContextFactory {
-
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
+	private val processFactory: SimulationProcessFactory by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
+	/**
+	 * Internal editing context used during XML parsing.
+	 * Extends DefaultEditingContext to support editing operations (putCell, hardJoin, etc.)
+	 * during construction. After parsing, it's converted to DefaultSimulationContext.
+	 */
 	private inner class XMLContext(
 		cols: Int,
 		rows: Int
-	) : DefaultContext(cols, rows) {
-		// No additional implementation needed
+	) : cz.vutbr.fit.interlockSim.context.DefaultEditingContext(cols, rows) {
+		// No additional implementation needed - supports editing during XML parsing
 	}
 
 	private inner class Handler : DefaultHandler() {
-		private var context: XMLContext? = null
+		private var editingContext: XMLContext? = null
 		private var ended: Boolean = false
 		private var netElementDepth: Int = 0
 
@@ -101,11 +110,11 @@ class XMLContextFactory :
 				}
 				val cols = getInt(uri!!, attributes!!, X)
 				val rows = getInt(uri, attributes, Y)
-				context = XMLContext(cols, rows)
+				editingContext = XMLContext(cols, rows)
 				return
 			}
 
-			val ctx = context ?: throw SAXException("Context not initialized")
+			val ctx = editingContext ?: throw SAXException("Context not initialized")
 			val clazz = classification(localName!!)
 
 			if (NodeCell::class.java.isAssignableFrom(clazz)) {
@@ -256,18 +265,28 @@ class XMLContextFactory :
 
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
-			val ctx = context ?: throw SAXException("Context not initialized")
-			val inOuts = ctx.getInOuts()
-			if (inOuts.size < 2) {
+			val ctx = editingContext ?: throw SAXException("Context not initialized")
+			// Access inouts via public method from BaseContext
+			val inOutsCount = ctx.getInOutsList().size
+			if (inOutsCount < 2) {
 				throw SAXException(
 					"Railway network must have at least 2 InOut elements (entry and exit points). " +
-						"Found: ${inOuts.size}"
+						"Found: $inOutsCount"
 				)
 			}
 			ended = true
 		}
 
-		fun getContext(): DefaultContext? = if (ended) context else null
+		/**
+		 * Returns the parsed context as a DefaultSimulationContext.
+		 * Converts the editing context (used during parsing) to a simulation context.
+		 */
+		fun getContext(): DefaultSimulationContext? =
+			if (ended && editingContext != null) {
+				DefaultSimulationContext.fromEditingContext(editingContext!!, processFactory)
+			} else {
+				null
+			}
 	}
 
 	private var validator: Validator? = null
@@ -303,10 +322,19 @@ class XMLContextFactory :
 		private const val DEFAULT_GRID_SIZE = 100
 	}
 
-	override fun createEmptyContext(): DefaultContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
+	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
+
+	/**
+	 * Create an empty simulation context (for testing).
+	 * Converts an empty editing context to a simulation context.
+	 */
+	fun createEmptySimulationContext(): DefaultSimulationContext {
+		val editingContext = createEmptyContext()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): DefaultContext =
+	override fun createContext(file: File): Context<*> =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -314,7 +342,7 @@ class XMLContextFactory :
 		}
 
 	@Throws(ContextCreationException::class)
-	private fun createContext(reader: Reader): DefaultContext {
+	private fun createContext(reader: Reader): DefaultSimulationContext {
 		val validator = validator ?: throw ContextCreationException("Validator not initialized")
 		return try {
 			val inputSource = InputSource(reader)
@@ -328,10 +356,10 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): DefaultContext = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context<*> = createContext(InputStreamReader(stream))
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		stream: OutputStream
 	): Boolean {
 		// TODO: Implement XML serialization - see issue #61 (relates to Goal 5)
@@ -394,10 +422,10 @@ class XMLContextFactory :
 	}
 
 	override fun saveContext(
-		context: Context,
+		context: Context<*>,
 		file: File
 	): Boolean {
-		val xmlContext = Util.assertInstanceOf(DefaultContext::class.java, context) // zatim
+		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context) // zatim
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		return try {
 			val fileWriter = FileWriter(file)
@@ -417,7 +445,11 @@ class XMLContextFactory :
 			allNodes.addAll(xmlContext.getGraph().nodeSet())
 
 			// Add any isolated NodeCells from the grid that aren't in the graph
-			for (entry in railwayNetGrid) {
+			// Grid parameterization: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to iterate without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
+			for (entry in cellGrid) {
 				val point = entry.key
 				val cell = entry.value
 				if (cell is NodeCell) {
@@ -517,8 +549,9 @@ class XMLContextFactory :
 		clazz: Class<*>
 	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
 
-	override fun createContext(editingContext: EditingContext): DefaultContext {
-		return Util.assertInstanceOf(DefaultContext::class.java, editingContext) // zatim
+	override fun createContext(editingContext: EditingContext): SimulationContext {
+		// Convert EditingContext to SimulationContext using the factory method
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
 	@Throws(Exception::class)

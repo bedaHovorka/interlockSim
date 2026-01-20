@@ -21,13 +21,28 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 object CellUtilities {
 	/**
 	 * Most used cast in program - asserts and casts to NodeCell
-	 * @param obj object to cast
-	 * @return casted NodeCell instance
-	 * @throws IllegalStateException if obj is not a NodeCell
+	 *
+	 * In simulation contexts, handles both static NodeCell objects and Dynamic* wrappers
+	 * (DynamicInOut, DynamicRailSwitch, DynamicRailSemaphore) by extracting their static NodeCell.
+	 *
+	 * @param obj object to cast (NodeCell or Dynamic* wrapper)
+	 * @return casted NodeCell instance (or extracted static NodeCell from Dynamic wrapper)
+	 * @throws IllegalStateException if obj is neither NodeCell nor Dynamic* wrapper
 	 */
 	fun assertNodeCell(obj: Any): NodeCell {
-		requireValidState(obj is NodeCell) { "Expected instance of NodeCell but got ${obj.javaClass.name}: $obj" }
-		return obj as NodeCell
+		// Handle Dynamic* wrappers by extracting their static NodeCell
+		when (obj) {
+			is DynamicInOut -> return obj.staticRef
+			is DynamicRailSwitch -> return obj.staticRef
+			is DynamicRailSemaphore -> return obj.staticRef
+			is NodeCell -> return obj
+			else -> {
+				requireValidState(false) {
+					"Expected instance of NodeCell or Dynamic* wrapper but got ${obj.javaClass.name}: $obj"
+				}
+				throw IllegalStateException("Unreachable")
+			}
+		}
 	}
 
 	/**

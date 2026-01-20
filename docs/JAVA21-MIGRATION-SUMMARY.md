@@ -48,7 +48,7 @@ Replaced deprecated `java.util.Observable/Observer` pattern (deprecated Java 9, 
 | File | Changes | LOC |
 |------|---------|-----|
 | `ContextChangeListener.java` | **NEW** - Interface extending PropertyChangeListener | 26 |
-| `DefaultContext.java` | Removed Observable inheritance, added PropertyChangeSupport | 15 |
+| `DefaultContext.java` | Removed Observable inheritance, added PropertyChangeSupport. **Note:** Subsequently split in Kotlin migration (2026-01-18) into DefaultEditingContext (613 lines) and DefaultSimulationContext (829 lines), with deprecated wrapper (74 lines) | 15 |
 | `Context.java` | Updated interface to use PropertyChangeListener | 8 |
 | `StatusBar.java` | Implements ContextChangeListener | 12 |
 | `RailwayNetGridCanvas.java` | Implements ContextChangeListener | 14 |
@@ -286,7 +286,7 @@ env:
 | EnumUnorientedGraphTest | 55 | ✅ | Enum-based graph |
 | HashMapGraphTest | 48 | ✅ | HashMap-based graph |
 | TreeMultiMapTest | 25 | ✅ | Tree-based multimap |
-| DefaultContextTest | 8 | ✅ | Railway network context |
+| DefaultContextTest | 8 | ✅ | Railway network context (now tests deprecated DefaultContext wrapper) |
 | ConcurrentSaveTest | 2 | ✅ | Thread-safe XML serialization |
 | PropertyChangeTest | 6 | ✅ | **NEW** - Property change events |
 | TrainTest | 6 | ✅ | Train behavior |

@@ -14,12 +14,12 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -29,7 +29,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import java.io.File
 
 /**
@@ -48,15 +47,20 @@ import java.io.File
  * - linear-track.xml: Simple linear track from A to B (100m) for basic tests
  * - switch-basic.xml: Switch with two exit paths for conflict tests
  *
- * Phase coverage: ~200 instructions via AbstractPath.pathIterating() reflection
+ * Phase coverage: ~200 instructions via AbstractPath.pathIterating() with DynamicTrack wrappers
+ *
+ * **RE-ENABLED**: Phase 2 - DynamicTrack integration complete
+ * These tests now work with DynamicTrack wrappers integrated into AbstractPath operations.
+ * Path operations (getState, setUpPath, enter, leave) use context.toDynamic() to access
+ * track state through DynamicTrack wrappers.
  */
 @Tag("integration-test")
 @DisplayName("Path-Track Integration Tests")
 class PathTrackIntegrationTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 	private lateinit var context: MockSimulationContext
-	private lateinit var linearContext: DefaultContext
-	private lateinit var switchContext: DefaultContext
+	private lateinit var linearContext: DefaultSimulationContext
+	private lateinit var switchContext: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
@@ -65,8 +69,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 		val switchFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
 
 		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
-		linearContext = factory.createContext(linearFile)
-		switchContext = factory.createContext(switchFile)
+		linearContext = factory.createContext(linearFile) as DefaultSimulationContext
+		switchContext = factory.createContext(switchFile) as DefaultSimulationContext
 	}
 
 	/**
@@ -94,10 +98,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all track blocks from the graph (they are edges connecting nodes)
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -109,17 +113,19 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val track = tracks[0]
 
 			// Verify initial state: track must be FREE
-			assertThat(track.getState())
+			val initialState = context.toDynamic(track).state
+			assertThat(initialState)
 				.withMessage("Track should start in FREE state before reservation")
 				.isEqualTo(TrackFacility.State.FREE)
 
 			// Act: Set up path from first endpoint
 			val endpoints = track.ends()
 			assertThat(endpoints.size).isEqualTo(2)
-			track.setUpPath(endpoints[0])
+			context.toDynamic(track).setUpPath(endpoints[0])
 
 			// Assert: Track transitions to RESERVED
-			assertThat(track.getState())
+			val reservedState = context.toDynamic(track).state
+			assertThat(reservedState)
 				.withMessage("Track should transition to RESERVED after setUpPath()")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -140,10 +146,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val graph = context.getGraph()
 
 			// Get all tracks from switch fixture
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -158,22 +164,23 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// Reserve track 1
 			val endpoint1 = track1.ends()[0]
-			track1.setUpPath(endpoint1)
-			assertThat(track1.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			context.toDynamic(track1).setUpPath(endpoint1)
+			assertThat(context.toDynamic(track1).state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Now block track 2 by putting it in RESERVED state from different direction
 			val endpoint2 = track2.ends()[0]
-			track2.setUpPath(endpoint2)
+			context.toDynamic(track2).setUpPath(endpoint2)
 
 			// Verify: Both tracks should be RESERVED but from potentially different paths
-			assertThat(track1.getState()).isEqualTo(TrackFacility.State.RESERVED)
-			assertThat(track2.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(context.toDynamic(track1).state).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(context.toDynamic(track2).state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Cancel first path - this should roll back
-			track1.cancelPathSetup(endpoint1)
+			context.toDynamic(track1).cancelPathSetup(endpoint1)
 
 			// Assert: First track reverts to FREE after cancellation
-			assertThat(track1.getState())
+			val cancelledState = context.toDynamic(track1).state
+			assertThat(cancelledState)
 				.withMessage("Cancelling path should revert track to FREE state")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -192,10 +199,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -205,8 +212,8 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// Act: First path reserves the track
 			val endpoint1 = track.ends()[0]
-			track.setUpPath(endpoint1)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			context.toDynamic(track).setUpPath(endpoint1)
+			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Try to reserve from opposite direction (second path)
 			val endpoint2 = track.ends()[1]
@@ -214,7 +221,7 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			// In the current implementation, setUpPath doesn't throw on re-reservation
 			// Instead, we verify that the track's state doesn't allow a second setup
 			// by checking that isFreeFrom returns false
-			val isFreeFromEnd2 = track.isFreeFrom(endpoint2)
+			val isFreeFromEnd2 = context.toDynamic(track).isFreeFrom(endpoint2)
 
 			// Assert: Track should not be free from the opposite end
 			assertThat(isFreeFromEnd2)
@@ -247,10 +254,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -260,17 +267,18 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// Reserve the track
 			val endpoint = track.ends()[0]
-			track.setUpPath(endpoint)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			context.toDynamic(track).setUpPath(endpoint)
+			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Create a mock occupant (train)
 			val mockOccupant = MockTrainOccupant("TestTrain")
 
 			// Act: Train enters track
-			track.enter(mockOccupant)
+			context.toDynamic(track).enter(mockOccupant)
 
 			// Assert: Track transitions to OCCUPIED
-			assertThat(track.getState())
+			val occupiedState = context.toDynamic(track).state
+			assertThat(occupiedState)
 				.withMessage("Track should transition to OCCUPIED when train enters")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 		}
@@ -289,28 +297,29 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
 
 			val track = tracks[0]
 			val endpoint = track.ends()[0]
-			track.setUpPath(endpoint)
+			context.toDynamic(track).setUpPath(endpoint)
 
 			val mockOccupant = MockTrainOccupant("TestTrain")
-			track.enter(mockOccupant)
+			context.toDynamic(track).enter(mockOccupant)
 
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.OCCUPIED)
+			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act: Train leaves the track
-			track.leave(mockOccupant)
+			context.toDynamic(track).leave(mockOccupant)
 
 			// Assert: Track transitions back to FREE
-			assertThat(track.getState())
+			val freedState = context.toDynamic(track).state
+			assertThat(freedState)
 				.withMessage("Track should transition to FREE when train exits")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -329,10 +338,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(switchContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -346,21 +355,23 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val track2 = tracks[1]
 
 			val endpoint1 = track1.ends()[0]
-			track1.setUpPath(endpoint1)
+			context.toDynamic(track1).setUpPath(endpoint1)
 
 			val mockOccupant = MockTrainOccupant("TestTrain")
-			track1.enter(mockOccupant)
+			context.toDynamic(track1).enter(mockOccupant)
 
 			// Also reserve track 2 (simulating path continuation)
 			val endpoint2 = track2.ends()[0]
-			track2.setUpPath(endpoint2)
+			context.toDynamic(track2).setUpPath(endpoint2)
 
 			// Verify: Track 1 is OCCUPIED, Track 2 is RESERVED
-			assertThat(track1.getState())
+			val track1State = context.toDynamic(track1).state
+			assertThat(track1State)
 				.withMessage("Current track should be OCCUPIED")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
-			assertThat(track2.getState())
+			val track2State = context.toDynamic(track2).state
+			assertThat(track2State)
 				.withMessage("Ahead track should remain RESERVED")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -390,10 +401,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -402,15 +413,16 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint = track.ends()[0]
 
 			// Set up and occupy
-			track.setUpPath(endpoint)
+			context.toDynamic(track).setUpPath(endpoint)
 			val mockOccupant = MockTrainOccupant("TestTrain")
-			track.enter(mockOccupant)
+			context.toDynamic(track).enter(mockOccupant)
 
 			// Act: Train exits, path is implicitly released
-			track.leave(mockOccupant)
+			context.toDynamic(track).leave(mockOccupant)
 
 			// Assert: Track is FREE again
-			assertThat(track.getState())
+			val releasedState = context.toDynamic(track).state
+			assertThat(releasedState)
 				.withMessage("Track should be FREE after train departure completes path release")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
@@ -429,10 +441,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context = MockSimulationContext(linearContext)
 			val graph = context.getGraph()
 
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -441,19 +453,20 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint1 = track.ends()[0]
 
 			// First train: reserve, occupy, release
-			track.setUpPath(endpoint1)
+			context.toDynamic(track).setUpPath(endpoint1)
 			val firstTrain = MockTrainOccupant("Train1")
-			track.enter(firstTrain)
-			track.leave(firstTrain)
+			context.toDynamic(track).enter(firstTrain)
+			context.toDynamic(track).leave(firstTrain)
 
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.FREE)
 
 			// Act: Second train tries to reserve the same track
 			val endpoint2 = track.ends()[1]
-			track.setUpPath(endpoint2)
+			context.toDynamic(track).setUpPath(endpoint2)
 
 			// Assert: Second train can reserve the track
-			assertThat(track.getState())
+			val reservedAgainState = context.toDynamic(track).state
+			assertThat(reservedAgainState)
 				.withMessage("Released track should be reservable by another train")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
@@ -491,10 +504,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			}
 
 			// Act: Reserve a path through the switch
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -502,13 +515,14 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			if (tracks.isNotEmpty()) {
 				val track = tracks[0]
 				val endpoint = track.ends()[0]
-				track.setUpPath(endpoint)
+				context.toDynamic(track).setUpPath(endpoint)
 
 				// Release the path
-				track.cancelPathSetup(endpoint)
+				context.toDynamic(track).cancelPathSetup(endpoint)
 
 				// Assert: Track is FREE, switch should be unlocked (implicitly)
-				assertThat(track.getState())
+				val pathReleasedState = context.toDynamic(track).state
+				assertThat(pathReleasedState)
 					.withMessage("After path release, track should be FREE")
 					.isEqualTo(TrackFacility.State.FREE)
 			}
@@ -540,10 +554,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			}
 
 			// Get tracks and verify path release behavior
-			val tracks = mutableListOf<SimpleTrack>()
+			val tracks = mutableListOf<TrackFacility>()
 			for (entry in graph.entrySet()) {
 				val edge = entry.value
-				if (edge is SimpleTrack) {
+				if (edge is TrackFacility) {
 					tracks.add(edge)
 				}
 			}
@@ -553,15 +567,16 @@ class PathTrackIntegrationTest : KoinTestBase() {
 				val endpoint = track.ends()[0]
 
 				// Set up path
-				track.setUpPath(endpoint)
+				context.toDynamic(track).setUpPath(endpoint)
 
 				// Simulate train occupancy and release
 				val mockTrain = MockTrainOccupant("TestTrain")
-				track.enter(mockTrain)
-				track.leave(mockTrain)
+				context.toDynamic(track).enter(mockTrain)
+				context.toDynamic(track).leave(mockTrain)
 
 				// Assert: All tracks are cleared
-				assertThat(track.getState())
+				val finalState = context.toDynamic(track).state
+				assertThat(finalState)
 					.withMessage("After train releases path, track should be FREE")
 					.isEqualTo(TrackFacility.State.FREE)
 

@@ -24,7 +24,10 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Comprehensive unit tests for SimpleTrack enter/leave operations.
+ * Comprehensive unit tests for Track enter/leave operations via DynamicTrack wrapper.
+ *
+ * **Phase 1 Update (Issue #100.2):** Tests now use DynamicTrack wrapper to access
+ * dynamic behavior, while SimpleTrackBlock provides only static configuration.
  *
  * Tests the critical railway track occupancy management:
  * - Enter operations: Trains entering tracks (state transition RESERVED -> OCCUPIED)
@@ -42,11 +45,17 @@ import org.junit.jupiter.api.Test
  * - Leave operations (4 tests)
  * - Direction handling (4 tests)
  */
-@DisplayName("SimpleTrack Enter/Leave Operations")
+@DisplayName("Track Enter/Leave Operations (via DynamicTrack)")
 class SimpleTrackEnterLeaveTest {
 	// Mock NodeCell for track endpoints (NodeCell implements PathSeparator)
 	private lateinit var end1: MockNodeCell
 	private lateinit var end2: MockNodeCell
+
+	// Static track configuration (immutable)
+	private lateinit var staticTrack: SimpleTrackBlock
+
+	// Dynamic track wrapper for state management
+	private lateinit var track: DynamicTrack
 
 	// Mock TrackOccupant for enter/leave operations
 	private lateinit var train1: MockTrackOccupant
@@ -58,6 +67,12 @@ class SimpleTrackEnterLeaveTest {
 		end1 = MockNodeCell("End1")
 		end2 = MockNodeCell("End2")
 
+		// Create static track configuration
+		staticTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+
+		// Wrap with DynamicTrack for state management
+		track = DynamicTrack(staticTrack)
+
 		// Create mock TrackOccupant implementations
 		train1 = MockTrackOccupant("Train1")
 		train2 = MockTrackOccupant("Train2")
@@ -68,10 +83,9 @@ class SimpleTrackEnterLeaveTest {
 	inner class EnterTests {
 		@Test
 		fun `train enters track from connected neighbor`() {
-			// Arrange: Create track and setup path from end1
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path from end1
 			track.setUpPath(end1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be RESERVED before train enters")
 				.isEqualTo(TrackFacility.State.RESERVED)
 
@@ -79,35 +93,33 @@ class SimpleTrackEnterLeaveTest {
 			track.enter(train1)
 
 			// Assert: Track is now OCCUPIED
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should transition to OCCUPIED after train enters")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 		}
 
 		@Test
 		fun `train cannot enter from non-connected cell`() {
-			// Arrange: Create track and setup path from end1
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path from end1
 			track.setUpPath(end1)
 
 			// Note: In this simplified test infrastructure, we test that entry is only valid
 			// after proper reservation. The actual connection validation happens at path level.
 			// This test verifies that enter() requires RESERVED state.
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be RESERVED after setUpPath()")
 				.isEqualTo(TrackFacility.State.RESERVED)
 
 			// Act & Assert: Enter proceeds normally (connection validation is path concern)
 			track.enter(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be OCCUPIED after valid enter")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 		}
 
 		@Test
 		fun `enter updates track occupancy`() {
-			// Arrange: Create track and setup path
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path
 			track.setUpPath(end1)
 			assertThat(track.isFreeFrom(end1))
 				.withMessage("Track should be free before enter (isFreeFrom checks state)")
@@ -125,20 +137,19 @@ class SimpleTrackEnterLeaveTest {
 
 		@Test
 		fun `enter fires property change event`() {
-			// Arrange: Create track, setup path, and setup listener for occupancy change
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path and setup listener for occupancy change
 			track.setUpPath(end1)
 
 			// Track uses state machine (FREE -> RESERVED -> OCCUPIED)
 			// The enter() method transitions state and updates occupant field
 			// Listeners would be notified via PropertyChangeSupport (if implemented)
-			val stateBefore = track.getState()
+			val stateBefore = track.state
 
 			// Act: Train enters
 			track.enter(train1)
 
 			// Assert: State has changed (property change semantics)
-			val stateAfter = track.getState()
+			val stateAfter = track.state
 			assertThat(stateAfter)
 				.withMessage("Track state should change from RESERVED to OCCUPIED")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
@@ -158,11 +169,10 @@ class SimpleTrackEnterLeaveTest {
 	inner class LeaveTests {
 		@Test
 		fun `train leaves track to connected neighbor`() {
-			// Arrange: Create track, setup path, and train enters
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path and train enters
 			track.setUpPath(end1)
 			track.enter(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be OCCUPIED after train enters")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
@@ -170,15 +180,14 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: Track is now FREE
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should transition to FREE after train leaves")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
 
 		@Test
 		fun `train cannot leave to non-connected cell`() {
-			// Arrange: Create track with path setup and train entry
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path and train entry
 			track.setUpPath(end1)
 			track.enter(train1)
 
@@ -190,15 +199,14 @@ class SimpleTrackEnterLeaveTest {
 
 			// Act & Assert: Leave proceeds with correct occupant (connection validation is path concern)
 			track.leave(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be FREE after valid leave")
 				.isEqualTo(TrackFacility.State.FREE)
 		}
 
 		@Test
 		fun `leave clears track occupancy`() {
-			// Arrange: Create track, setup path, and train enters
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path and train enters
 			track.setUpPath(end1)
 			track.enter(train1)
 			assertThat(track.getTrackOccupant())
@@ -209,18 +217,18 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: Occupancy is cleared (getTrackOccupant fails on FREE track)
-			assertk.assertFailure {
-				track.getTrackOccupant()
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk
+				.assertFailure {
+					track.getTrackOccupant()
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
 		fun `leave fires property change event`() {
-			// Arrange: Create track, setup path, train enters, and track is OCCUPIED
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path, train enters, and track is OCCUPIED
 			track.setUpPath(end1)
 			track.enter(train1)
-			val stateBefore = track.getState()
+			val stateBefore = track.state
 			assertThat(stateBefore)
 				.withMessage("Track should be OCCUPIED before leave")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
@@ -229,7 +237,7 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: State has changed (property change semantics)
-			val stateAfter = track.getState()
+			val stateAfter = track.state
 			assertThat(stateAfter)
 				.withMessage("Track state should change from OCCUPIED to FREE")
 				.isEqualTo(TrackFacility.State.FREE)
@@ -249,8 +257,7 @@ class SimpleTrackEnterLeaveTest {
 	inner class DirectionTests {
 		@Test
 		fun `enter and leave same direction`() {
-			// Arrange: Create track with path from end1, train enters from end1
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Path from end1, train enters from end1
 			track.setUpPath(end1)
 			track.enter(train1)
 			assertThat(track.getTrackOccupant())
@@ -261,21 +268,20 @@ class SimpleTrackEnterLeaveTest {
 			track.leave(train1)
 
 			// Assert: Track is back to FREE
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be FREE after train leaves")
 				.isEqualTo(TrackFacility.State.FREE)
 
 			// Track can be immediately reserved again for next movement
 			track.setUpPath(end2)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be RESERVED after new setUpPath")
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
 
 		@Test
 		fun `enter and leave opposite direction`() {
-			// Arrange: Create track with path from end1 (train enters from end1)
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Path from end1 (train enters from end1)
 			track.setUpPath(end1)
 			track.enter(train1)
 			assertThat(track.getTrackOccupant())
@@ -288,7 +294,7 @@ class SimpleTrackEnterLeaveTest {
 			track.enter(train1)
 
 			// Assert: Train can traverse in opposite direction
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be OCCUPIED with train in opposite direction")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 			assertThat(track.getTrackOccupant())
@@ -301,20 +307,20 @@ class SimpleTrackEnterLeaveTest {
 
 		@Test
 		fun `multiple enter attempts rejected`() {
-			// Arrange: Create track and setup path from end1
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path from end1
 			track.setUpPath(end1)
 			track.enter(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be OCCUPIED with train1")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act & Assert: Attempt to enter with second train should fail
-			// SimpleTrack.enter() throws exception: `in` == null
+			// DynamicTrack.enter() throws exception: occupant == null
 			// This is safety property SI-1 (collision prevention)
-			assertk.assertFailure {
-				track.enter(train2)
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk
+				.assertFailure {
+					track.enter(train2)
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify first train still occupies track
 			assertThat(track.getTrackOccupant())
@@ -324,22 +330,22 @@ class SimpleTrackEnterLeaveTest {
 
 		@Test
 		fun `train can only leave when entered correctly`() {
-			// Arrange: Create track, setup path from end1, and train enters
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Arrange: Setup path from end1 and train enters
 			track.setUpPath(end1)
 			track.enter(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be OCCUPIED with train1")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act & Assert: Only the occupying train can leave
-			// SimpleTrack.leave() throws exception: `in` === occupant
-			assertk.assertFailure {
-				track.leave(train2) // Wrong train attempts to leave
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			// DynamicTrack.leave() throws exception: occupant === leavingOccupant
+			assertk
+				.assertFailure {
+					track.leave(train2) // Wrong train attempts to leave
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 
 			// Verify track still occupied with train1
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should still be OCCUPIED after failed leave attempt")
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 			assertThat(track.getTrackOccupant())
@@ -348,7 +354,7 @@ class SimpleTrackEnterLeaveTest {
 
 			// Clean up - correct train leaves
 			track.leave(train1)
-			assertThat(track.getState())
+			assertThat(track.state)
 				.withMessage("Track should be FREE after correct train leaves")
 				.isEqualTo(TrackFacility.State.FREE)
 		}

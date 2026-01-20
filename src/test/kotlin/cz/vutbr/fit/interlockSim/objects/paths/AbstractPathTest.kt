@@ -22,15 +22,15 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 
 /**
  * Comprehensive unit tests for AbstractPath class.
@@ -41,7 +41,7 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
  * - Reservation operations (atomic multi-track reservation)
  * - Semaphore setup with backtracking algorithm
  * - Switch configuration and locking
- * - Reflection-based method invocation (pathIterating)
+ * - DynamicTrack wrapper integration (pathIterating)
  *
  * Safety Properties Validated:
  * - SI-4: Path reservation atomicity (all-or-nothing)
@@ -54,10 +54,10 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
  * - Reservation atomicity and failure recovery
  * - Semaphore setup and backtracking
  * - Switch configuration
- * - Reflection-based method invocation
+ * - DynamicTrack wrapper operations
  * - Edge cases and error conditions
  *
- * @since 2026-01 (Phase 3.1 test expansion)
+ * @since 2026-01 (Phase 3.1 test expansion, Phase 2 DynamicTrack integration)
  */
 @DisplayName("AbstractPath Tests")
 class AbstractPathTest : KoinTestBase() {
@@ -596,14 +596,14 @@ class AbstractPathTest : KoinTestBase() {
 	}
 
 	/**
-	 * Nested test group: Reflection-Based Iteration
-	 * Tests the pathIterating method and reflection-based method invocation
+	 * Nested test group: DynamicTrack Wrapper Iteration
+	 * Tests the pathIterating method with DynamicTrack wrapper operations
 	 */
 	@Nested
-	@DisplayName("Reflection-Based Iteration")
+	@DisplayName("DynamicTrack Wrapper Iteration")
 	inner class PathIteratingTests {
 		@Test
-		fun `path isFreeFrom uses reflection`() {
+		fun `path isFreeFrom uses DynamicTrack wrapper`() {
 			// Arrange
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -612,20 +612,20 @@ class AbstractPathTest : KoinTestBase() {
 			path.addLast(track)
 			path.addLast(semaphore)
 
-			// Act & Assert - isFreeFrom calls pathIterating with reflection
+			// Act & Assert - isFreeFrom calls pathIterating with DynamicTrack wrappers
 			try {
 				val result = path.isFreeFrom(end1)
 				// If it succeeds, verify result is boolean
 				assertThat(result).isNotNull()
 			} catch (e: Throwable) {
-				// Expected: mock context may not fully support reflection
+				// Expected: mock context may not fully support wrapper operations
 				// Test passes if method is callable
 				assertThat(path).isNotNull()
 			}
 		}
 
 		@Test
-		fun `path isSetUpPath uses reflection`() {
+		fun `path isSetUpPath uses DynamicTrack wrapper`() {
 			// Arrange
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -634,20 +634,20 @@ class AbstractPathTest : KoinTestBase() {
 			path.addLast(track)
 			path.addLast(semaphore)
 
-			// Act & Assert - isSetUpPath calls pathIterating with reflection
+			// Act & Assert - isSetUpPath calls pathIterating with DynamicTrack wrappers
 			try {
 				val result = path.isSetUpPath(end1)
 				// If it succeeds, verify result is boolean
 				assertThat(result).isNotNull()
 			} catch (e: Throwable) {
-				// Expected: mock context may not fully support reflection
+				// Expected: mock context may not fully support wrapper operations
 				// Test passes if method is callable
 				assertThat(path).isNotNull()
 			}
 		}
 
 		@Test
-		fun `pathIterating handles method lookup`() {
+		fun `pathIterating handles DynamicTrack wrapper conversion`() {
 			// Arrange - build a simple path
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -869,7 +869,7 @@ class AbstractPathTest : KoinTestBase() {
  */
 private class MockNodeCell(
 	private val name: String
-) : NodeCell(Cell.SpatialType.HORIZONTAL) {
+) : NodeCell(Cell.SpatialType.HORIZONTAL), DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Cell.Segment?,
 		to: Cell.Segment?
@@ -887,9 +887,7 @@ private class MockNodeCell(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = null
 
-	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> {
-		return emptySet()
-	}
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = 80.0
 

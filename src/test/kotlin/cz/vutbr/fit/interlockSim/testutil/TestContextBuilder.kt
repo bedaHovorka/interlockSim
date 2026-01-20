@@ -14,32 +14,35 @@
 
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.context.DefaultContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.java.KoinJavaComponent.getKoin
 
 /**
- * Test utility for building {@link DefaultContext} instances with fluent API.
+ * Test utility for building {@link DefaultSimulationContext} instances with fluent API.
  *
- * <p>This is a scaffold implementation created in Phase 1.
- * Full implementation will be provided in Phase 2 by Developer 2.</p>
+ * <p>This builder uses a two-phase approach:
+ * 1. Build the network structure using DefaultEditingContext (supports editing operations)
+ * 2. Convert to DefaultSimulationContext for simulation (immutable structure)
+ * </p>
  *
- * <p>Example usage (future API):
+ * <p>Example usage:
  * <pre>{@code
- * Context context = get<TestContextBuilder>()
- *     .withSimpleTrack("T1", 100.0)
- *     .withSimpleTrack("T2", 150.0)
- *     .withConnection("T1", "T2")
- *     .withSemaphore("SEM1", "T1", Signal.GREEN)
+ * DefaultSimulationContext context = get<TestContextBuilder>()
+ *     .withInOut("A", 1, 1, true)
+ *     .withInOut("B", 10, 10, false)
+ *     .withConnection(1, 1, 10, 10, 100.0, 80.0)
  *     .build();
  * }</pre>
  *
- * @see DefaultContext
+ * @see DefaultSimulationContext
+ * @see cz.vutbr.fit.interlockSim.context.DefaultEditingContext
  */
 class TestContextBuilder {
 	private val factory: XMLContextFactory by getKoin().inject()
-	private val context = factory.createEmptyContext()
+	// Use DefaultEditingContext for building the network (supports putCell/joinCells)
+	private val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(30, 30)
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -63,7 +66,7 @@ class TestContextBuilder {
 				!isEntry, // orientation is inverted for exit points
 				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
 			)
-		context.putCell(position, inOut)
+		editingContext.putCell(position, inOut)
 		return this
 	}
 
@@ -86,7 +89,7 @@ class TestContextBuilder {
 				isAllowing,
 				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
 			)
-		context.putCell(position, semaphore)
+		editingContext.putCell(position, semaphore)
 		return this
 	}
 
@@ -112,8 +115,8 @@ class TestContextBuilder {
 		val fromPoint = Point(fromX, fromY)
 		val toPoint = Point(toX, toY)
 
-		val fromCell = context.getRailWayNetGrid().getCellAt(fromX, fromY)
-		val toCell = context.getRailWayNetGrid().getCellAt(toX, toY)
+		val fromCell = editingContext.getRailWayNetGrid().getCellAt(fromX, fromY)
+		val toCell = editingContext.getRailWayNetGrid().getCellAt(toX, toY)
 
 		if (fromCell == null || toCell == null) {
 			throw IllegalArgumentException("Both cells must exist before connecting them")
@@ -134,99 +137,110 @@ class TestContextBuilder {
 				maxSpeed
 			)
 
-		context.joinCells(fromPoint, toPoint, trackBlock)
+		editingContext.joinCells(fromPoint, toPoint, trackBlock)
 		return this
 	}
 
 	/**
-	 * Builds and returns the configured context.
+	 * Builds and returns the configured simulation context.
+	 * Converts the editing context to a simulation context using the factory.
 	 *
-	 * @return configured DefaultContext instance
+	 * @return configured DefaultSimulationContext instance (immutable network structure)
 	 */
-	fun build(): DefaultContext = context
+	fun build(): DefaultSimulationContext {
+		// Convert editing context to simulation context
+		val processFactory = getKoin().get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
 }
 
-	/**
-	 * Creates a simple linear track matching the existing ContextTest pattern.
-	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5) connected by track.
-	 *
-	 * @return configured context with linear track
-	 */
-	fun buildLinearTrack(): DefaultContext {
-		val context =getKoin().get<XMLContextFactory>().createEmptyContext()
-		val inA =
-			cz.vutbr.fit.interlockSim.objects.cells.InOut(
-				"A",
-				false,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-			)
-		val outB =
-			cz.vutbr.fit.interlockSim.objects.cells.InOut(
-				"B",
-				true,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-			)
-		val trackBlock =
-			cz.vutbr.fit.interlockSim.objects.tracks
-				.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+/**
+ * Creates a simple linear track matching the existing ContextTest pattern.
+ * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5) connected by track.
+ *
+ * @return configured context with linear track
+ */
+fun buildLinearTrack(): DefaultSimulationContext {
+	val factory = getKoin().get<XMLContextFactory>()
+	val editingContext = factory.createEmptyContext()
+	val inA =
+		cz.vutbr.fit.interlockSim.objects.cells.InOut(
+			"A",
+			false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+		)
+	val outB =
+		cz.vutbr.fit.interlockSim.objects.cells.InOut(
+			"B",
+			true,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+		)
+	val trackBlock =
+		cz.vutbr.fit.interlockSim.objects.tracks
+			.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 
-		val pA = Point(1, 1)
-		val pB = Point(5, 5)
-		context.putCell(pA, inA)
-		context.putCell(pB, outB)
-		context.joinCells(pA, pB, trackBlock)
-		return context
-	}
+	val pA = Point(1, 1)
+	val pB = Point(5, 5)
+	editingContext.putCell(pA, inA)
+	editingContext.putCell(pB, outB)
+	editingContext.joinCells(pA, pB, trackBlock)
 
-	/**
-	 * Creates a linear track with a semaphore between two InOut points.
-	 * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5).
-	 *
-	 * @return configured context with semaphore
-	 */
-	fun buildLinearTrackWithSemaphore(): DefaultContext {
-		val context = getKoin().get<XMLContextFactory>().createEmptyContext()
-		val inA =
-			cz.vutbr.fit.interlockSim.objects.cells.InOut(
-				"A",
-				false,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-			)
-		val rs1 =
-			cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
-				false,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1
-			)
-		val outB =
-			cz.vutbr.fit.interlockSim.objects.cells.InOut(
-				"B",
-				true,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
-			)
-		val trackBlock =
-			cz.vutbr.fit.interlockSim.objects.tracks
-				.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+	// Convert to simulation context
+	return factory.createContext(editingContext) as DefaultSimulationContext
+}
 
-		val pA = Point(1, 1)
-		val r1 = Point(4, 2)
-		val pB = Point(5, 5)
-		context.putCell(pA, inA)
-		context.putCell(r1, rs1)
-		context.putCell(pB, outB)
-		context.joinCells(r1, pB, trackBlock)
-		context.joinCells(pA, r1, trackBlock)
-		return context
-	}
+/**
+ * Creates a linear track with a semaphore between two InOut points.
+ * InOut "A" at (1,1), Semaphore at (4,2), InOut "B" at (5,5).
+ *
+ * @return configured context with semaphore
+ */
+fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
+	val factory = getKoin().get<XMLContextFactory>()
+	val editingContext = factory.createEmptyContext()
+	val inA =
+		cz.vutbr.fit.interlockSim.objects.cells.InOut(
+			"A",
+			false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+		)
+	val rs1 =
+		cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
+			false,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1
+		)
+	val outB =
+		cz.vutbr.fit.interlockSim.objects.cells.InOut(
+			"B",
+			true,
+			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+		)
+	val trackBlock =
+		cz.vutbr.fit.interlockSim.objects.tracks
+			.SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 
-	/**
-	 * Creates a minimal context with two InOut elements (entry and exit).
-	 * Updated to comply with strict validation requiring minimum 2 InOut elements.
-	 *
-	 * @return context with two InOut elements
-	 */
-	fun buildMinimal(): DefaultContext {
-		return getKoin().get<TestContextBuilder>()
-			.withInOut("A", 1, 1, true)  // entry point
-			.withInOut("B", 2, 1, false)  // exit point
-			.build()
-	}
+	val pA = Point(1, 1)
+	val r1 = Point(4, 2)
+	val pB = Point(5, 5)
+	editingContext.putCell(pA, inA)
+	editingContext.putCell(r1, rs1)
+	editingContext.putCell(pB, outB)
+	editingContext.joinCells(r1, pB, trackBlock)
+	editingContext.joinCells(pA, r1, trackBlock)
+
+	// Convert to simulation context
+	return factory.createContext(editingContext) as DefaultSimulationContext
+}
+
+/**
+ * Creates a minimal context with two InOut elements (entry and exit).
+ * Updated to comply with strict validation requiring minimum 2 InOut elements.
+ *
+ * @return context with two InOut elements
+ */
+fun buildMinimal(): DefaultSimulationContext =
+	getKoin()
+		.get<TestContextBuilder>()
+		.withInOut("A", 1, 1, true) // entry point
+		.withInOut("B", 2, 1, false) // exit point
+		.build()

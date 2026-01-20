@@ -13,12 +13,14 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -89,14 +91,15 @@ class Train :
 		val terminated: Condition = Condition { terminated() }
 
 		final override fun actions() {
-			var where: PathSeparator = timetable.getIn()
-			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
+			val staticInOut = timetable.getIn()
+			requireSimulationNotNull(staticInOut) { "PathSeparator from timetable.getIn() must not be null" }
+			var where: PathSeparator = context.getInOuts().first { it.staticRef === staticInOut }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
 				next = context.getNextTrackSection(where, current)
 				if (next == null) {
-					if (where is InOut) break
+					if (where is DynamicInOut) break
 					context.stop()
 					passivate()
 					continue // Restart loop after passivation to re-check for next track section
@@ -115,7 +118,7 @@ class Train :
 
 				position.state -= nextLength
 				totalLenghtOfPreviousBlocks += nextLength
-				where = next!!.getSecondEnd(where)
+				where = context.toDynamic(next!!.getSecondEnd(where))
 				requireSimulationNotNull(where) { "PathSeparator from getSecondEnd() must not be null" }
 				current = next
 				onNext = false
@@ -172,7 +175,7 @@ class Train :
 
 	private inner class Front : Site() {
 		private fun semaphoreAction(
-			semaphore: RailSemaphore,
+			semaphore: DynamicRailSemaphore,
 			separator: PathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
@@ -181,28 +184,28 @@ class Train :
 			requireSimulation(context.isSeparatorInDirection(separator as OrientedPathSeparator, next, current)) {
 				"Separator must be in direction, semaphore: $semaphore"
 			}
-			requireSimulationNotNull(semaphore.getSignal()) { "Semaphore signal must not be null" }
+			requireSimulationNotNull(semaphore.signal) { "Semaphore signal must not be null" }
 			logger.info {
 				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
-					"${semaphore.getName()}, " +
-					"signal=${semaphore.getSignal()}, velocity=${getVelocity()} m/s"
+					"${semaphore.name}, " +
+					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
 			val path: Path? = context.pathToNextSemaphore(separator, next!!)
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			if (semaphore.getSignal() == RailSemaphore.Signal.STOP) {
+			if (semaphore.signal == Signal.STOP) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
 				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 				fireStop()
-				context.report(semaphore.getSignal().toString(), this@Train, ReportType.TRAIN_EVENTS)
+				context.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
-				context.report("OK " + semaphore.getSignal(), this@Train, ReportType.TRAIN_EVENTS)
+				context.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 				fireStart(semaphore, context.pathToNextSemaphore(separator, next!!)) // znovu najit
-			} else if (semaphore.getSignal().isAllowing() && velocity.state <= maxAbsError) {
+			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
 				fireStart(semaphore, path)
 			} else {
@@ -210,7 +213,7 @@ class Train :
 				accelerateToSignal(semaphore, path)
 			}
 			hold(1.0)
-			semaphore.setSignal(RailSemaphore.Signal.STOP)
+			semaphore.signal = Signal.STOP
 		}
 
 		// pro ucely ladeni - moznost ze si vlak sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
@@ -247,9 +250,9 @@ class Train :
 // 			});
 // 		}
 
-		private fun allowingSignal(semaphore: RailSemaphore): Condition =
+		private fun allowingSignal(semaphore: DynamicRailSemaphore): Condition =
 			Condition {
-				val allowing: Boolean = semaphore.getSignal().isAllowing()
+				val allowing: Boolean = semaphore.signal.isAllowing()
 				allowing
 			}
 
@@ -263,7 +266,7 @@ class Train :
 		}
 
 		private fun fireStart(
-			semaphore: RailSemaphore,
+			semaphore: DynamicRailSemaphore,
 			path: Path?
 		) {
 			accelerateToSignal(semaphore, path)
@@ -275,15 +278,20 @@ class Train :
 
 		@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 		private fun accelerateToSignal(
-			semaphore: RailSemaphore,
+			semaphore: DynamicRailSemaphore,
 			path: Path?
 		) {
 			requireSimulationNotNull(path) { "Path must not be null in accelerate method" }
-			val thisSignal: Signal = semaphore.getSignal()
+			val thisSignal: Signal = semaphore.signal
 			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-			val nextSemaphore: RailSemaphore = path!!.getLastPathSemaphore()
-			val nextSignal: Signal = nextSemaphore.getSignal()
+			val lastSeparator = path!!.getLast()
+			val nextSemaphore: DynamicRailSemaphore = when (lastSeparator) {
+				is DynamicRailSemaphore -> lastSeparator
+				is DynamicInOut -> lastSeparator.outSemaphore
+				else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
+			}
+			val nextSignal: Signal = nextSemaphore.signal
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			pathToSemaphore = path
 
@@ -313,25 +321,42 @@ class Train :
 					"entering block $next, leaving block $current"
 			}
 
-			if (where is RailSemaphore &&
+			if (where is DynamicRailSemaphore &&
 				next != null &&
 				context.isSeparatorInDirection(where, next, current)
 			) {
-				val semaphore: RailSemaphore = where
+				val semaphore: DynamicRailSemaphore = where
 				semaphoreAction(semaphore, semaphore, current, next)
-			} else if (where == timetable.getIn() && next != null) {
+			} else if (where is DynamicInOut && where == timetable.getIn() && next != null) {
 				requireSimulationNotNull(getAcceleration()) { "Acceleration must not be null at timetable entry" }
-				semaphoreAction((where as InOut).getInSemaphore(), where, current, next)
+				semaphoreAction(where.inSemaphore, where, current, next)
 			} else {
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				pathToSemaphore?.removeFirst()
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				pathToSemaphore?.removeFirst()
 			}
-			requireSimulation(pathToSemaphore?.getFirst() == where) {
-				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
+			// Check if path first element matches current position
+			// Skip validation when at exit InOut (train leaving network, next == null)
+			val isExitInOut = where is DynamicInOut && where == timetable.getOut() && next == null
+			if (isExitInOut) {
+				logger.info {
+					"${jDisco.Process.time()} SKIP_VALIDATION: Train $number at exit InOut, " +
+						"where=$where, timetable.getOut()=${timetable.getOut()}, next=$next"
+				}
 			}
-			if (next != null) next.enter(this@Train)
+			if (!isExitInOut) {
+				val pathFirst = pathToSemaphore?.getFirst()
+				requireSimulation(pathFirst == where) {
+					"Path to semaphore first element must match current position: where=$where, pathFirst=$pathFirst"
+				}
+			}
+			if (next != null) {
+				requireSimulation(next is TrackFacility) {
+					"TrackSection must implement TrackFacility: ${next.javaClass.name}"
+				}
+				context.toDynamic(next as TrackFacility).enter(this@Train)
+			}
 		}
 	}
 
@@ -346,14 +371,19 @@ class Train :
 			logger.debug {
 				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
-			if (where == timetable.getIn()) {
+			if (where is DynamicInOut && where == timetable.getIn()) {
 				fromHome = true
 				start()
 			}
 
-			if (current != null) current.leave(this@Train)
+			if (current != null) {
+				requireSimulation(current is TrackFacility) {
+					"TrackSection must implement TrackFacility: ${current.javaClass.name}"
+				}
+				context.toDynamic(current as TrackFacility).leave(this@Train)
+			}
 			if (next == null &&
-				where != timetable.getOut()
+				!(where is DynamicInOut && where == timetable.getOut())
 			) {
 				context.report("ends in wrong out", this@Train, ReportType.TRAIN_EVENTS)
 			}
@@ -552,7 +582,8 @@ class Train :
 	override fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout: InOut = timetable.getIn()
-		val worker: InOutWorker = context.getWorkerFor(inout)
+		val dynamicInOut: DynamicInOut = context.getInOuts().first { it.staticRef === inout }
+		val worker: InOutWorker = context.getWorkerFor(dynamicInOut)
 		logger.debug { "Train $number approved for movement from ${inout.getName()} to ${timetable.getOut().getName()}" }
 		worker.enterTrain(this)
 		context.report("approved ${inout.getName()}->${timetable.getOut().getName()}", this, ReportType.TRAIN_EVENTS)

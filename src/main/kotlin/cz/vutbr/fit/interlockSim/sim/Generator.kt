@@ -31,7 +31,7 @@ open class Generator(
 		}
 	}
 
-	protected var random = Random()
+	protected var random = Random(0)
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
@@ -43,11 +43,11 @@ open class Generator(
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
 		logger.debug {
-			"Generating random timetable: from ${inOutsList[0].getName()} to ${inOutsList[1].getName()}, " +
+			"Generating random timetable: from ${inOutsList[0].name} to ${inOutsList[1].name}, " +
 				"arrival at $timeIn, departure at $timeOut"
 		}
 
-		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
+		return Timetable(inOutsList[0].staticRef, inOutsList[1].staticRef, Time(timeIn), Time(timeOut), 40.0)
 	}
 
 	override fun iteration() {

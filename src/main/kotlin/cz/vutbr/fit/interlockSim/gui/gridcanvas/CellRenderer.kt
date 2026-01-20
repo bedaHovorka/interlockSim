@@ -12,6 +12,9 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -108,12 +111,44 @@ abstract class CellRenderer(
 		g.transform = transform
 	}
 
+	// Protected helper methods for common static cell rendering logic
+	protected fun drawStaticRailSwitch(
+		g: Graphics2D,
+		cell: RailSwitch
+	) {
+		drawLine(g, cell.getSpatialType())
+		val segments = cell.getBranchSegments().toTypedArray()
+		drawSegments(g, *segments)
+	}
+
+	protected fun drawStaticRailSemaphore(
+		g: Graphics2D,
+		cell: RailSemaphore
+	) {
+		drawLine(g, cell.getSpatialType())
+		drawTriangle(g, cell)
+	}
+
+	protected fun drawStaticTrackBlockPart(
+		g: Graphics2D,
+		cell: TrackBlockPart
+	) {
+		drawSegments(g, *cell.getSegments())
+	}
+
+	protected fun drawStaticInOut(
+		g: Graphics2D,
+		cell: InOut
+	) {
+		drawSegments(g, cell.direction())
+		g.fillOval(getCellWidth() / 4, getCellHeight() / 4, getCellWidth() / 2, getCellHeight() / 2)
+	}
+
 	// Render cell using reflection to find appropriate draw method
 	fun draw(
 		g: Graphics2D,
 		cell: Cell
 	) {
-
 		try {
 			// Use reflection to find and invoke the specific draw method for this cell type
 			val method = javaClass.getMethod("draw", Graphics2D::class.java, cell.javaClass)
@@ -123,7 +158,7 @@ abstract class CellRenderer(
 		}
 	}
 
-	// Abstract draw methods for different cell types - to be implemented by subclasses
+	// Abstract draw methods for static cell types - to be implemented by subclasses
 	abstract fun draw(
 		g: Graphics2D,
 		cell: RailSwitch
@@ -142,6 +177,22 @@ abstract class CellRenderer(
 	abstract fun draw(
 		g: Graphics2D,
 		cell: InOut
+	)
+
+	// Abstract draw methods for dynamic cell types - to be implemented by subclasses
+	abstract fun draw(
+		g: Graphics2D,
+		cell: DynamicRailSwitch
+	)
+
+	abstract fun draw(
+		g: Graphics2D,
+		cell: DynamicRailSemaphore
+	)
+
+	abstract fun draw(
+		g: Graphics2D,
+		cell: DynamicInOut
 	)
 
 	fun getCellHeight(): Int = cellHeight

@@ -16,7 +16,10 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
@@ -24,8 +27,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
 import java.io.File
 
 /**
@@ -77,8 +78,8 @@ class ContextInitializationTest : KoinTestBase() {
 				.withMessage("Should be EditingContext instance")
 				.isInstanceOf(EditingContext::class)
 			assertThat(context)
-				.withMessage("Should also be DefaultContext for grid access")
-				.isInstanceOf(DefaultContext::class)
+				.withMessage("Should be DefaultEditingContext implementation")
+				.isInstanceOf(DefaultEditingContext::class)
 		}
 
 		/**
@@ -184,7 +185,10 @@ class ContextInitializationTest : KoinTestBase() {
 				.isNotNull()
 
 			// Railway context: Should have entry and exit InOut points
-			val grid = context.getRailWayNetGrid()
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to access all cells without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
@@ -212,9 +216,10 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("nonexistent/path/does-not-exist.xml")
 
 			// Act & Assert
-			assertk.assertFailure {
-				this@ContextInitializationTest.factory.createContext(xmlFile)
-			}.isInstanceOf(Exception::class)
+			assertk
+				.assertFailure {
+					this@ContextInitializationTest.factory.createContext(xmlFile)
+				}.isInstanceOf(Exception::class)
 		}
 
 		/**
@@ -230,22 +235,23 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/invalid-malformed-xml.xml")
 
 			// Act & Assert
-			assertk.assertFailure {
-				this@ContextInitializationTest.factory.createContext(xmlFile)
-			}.isInstanceOf(Exception::class)
+			assertk
+				.assertFailure {
+					this@ContextInitializationTest.factory.createContext(xmlFile)
+				}.isInstanceOf(Exception::class)
 		}
 	}
 
 	@Nested
 	@DisplayName("Context State Validation")
 	inner class ContextStateTests {
-		private lateinit var linearTrackContext: DefaultContext
+		private lateinit var linearTrackContext: DefaultSimulationContext
 
 		@BeforeEach
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile)
+			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile) as DefaultSimulationContext
 		}
 
 		/**
@@ -282,7 +288,10 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("context initialized with correct InOut points")
 		fun context_hasInOutPoints() {
 			// Arrange & Act
-			val grid = linearTrackContext.getRailWayNetGrid()
+			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+			// Cast to Cell grid to access all cells without ClassCastException
+			@Suppress("UNCHECKED_CAST")
+			val grid = linearTrackContext.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
 			val inOutPoints = mutableListOf<InOut>()
 
@@ -387,7 +396,7 @@ class ContextInitializationTest : KoinTestBase() {
 
 			// Railway context: Default settings should be applicable
 			assertThat(emptyContext)
-				.prop(EditingContext::currentMaxSpeed)
+				.prop(DefaultSimulationContext::currentMaxSpeed)
 				.withMessage("Empty context should have max speed setting")
 				.isGreaterThan(0.0)
 		}

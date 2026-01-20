@@ -1,0 +1,152 @@
+@startuml context-transformation
+!theme plain
+skinparam shadowing false
+skinparam linetype ortho
+
+title Context Transformation Flow
+
+participant "GUI Editor" as GUI
+participant "EditingContext" as Editing
+participant "ContextTransformer" as Transformer
+participant "GridTransformer" as GridTrans
+participant "SimulationContext" as Simulation
+participant "jDisco Engine" as jDisco
+
+== Phase 1: Railway Network Editing ==
+
+GUI -> Editing: createEmptyContext()
+activate Editing
+Editing -> Editing: Initialize grid (Array2DMap<Cell>)
+Editing -> Editing: Initialize graph (ExtendedUnorientedGraph)
+GUI <-- Editing: EditingContext
+deactivate Editing
+
+GUI -> Editing: putCell(point, RailSwitch)
+activate Editing
+Editing -> Editing: Add NodeCell to grid
+Editing -> Editing: Update reverse table
+GUI <-- Editing: Success
+deactivate Editing
+
+GUI -> Editing: joinCells(from, to, TrackBlock)
+activate Editing
+Editing -> Editing: Create TrackBlockPart cells
+Editing -> Editing: Update graph edges
+Editing -> Editing: Record line keys
+GUI <-- Editing: Success
+deactivate Editing
+
+note over GUI, Editing
+    **Editing Phase:**
+    - Mutable railway network
+    - Static NodeCell objects (RailSwitch, RailSemaphore, InOut)
+    - TrackBlockPart for intermediate segments
+    - Graph structure for pathfinding
+end note
+
+== Phase 2: Transformation to Simulation ==
+
+GUI -> Transformer: createSimulationContext(editingContext)
+activate Transformer
+
+Transformer -> Transformer: Validate network completeness
+note right: Check all paths connected,\nsemaphores configured, etc.
+
+Transformer -> GridTrans: transformGrid(editingContext.grid)
+activate GridTrans
+
+GridTrans -> GridTrans: Create new Array2DMap<Cell>
+loop for each cell in editing grid
+    alt cell is NodeCell (RailSwitch/RailSemaphore/InOut)
+        GridTrans -> GridTrans: Create DynamicPathSeparator wrapper
+        note right
+            Static → Dynamic mapping:
+            - RailSwitch → DynamicRailSwitch
+            - RailSemaphore → DynamicRailSemaphore
+            - InOut → DynamicInOut
+        end note
+    else cell is TrackBlockPart
+        GridTrans -> GridTrans: Copy TrackBlockPart unchanged
+    end
+    GridTrans -> GridTrans: Put in new grid at same Point
+end
+
+Transformer <-- GridTrans: Transformed grid with dynamic wrappers
+deactivate GridTrans
+
+Transformer -> Transformer: Create DefaultSimulationContext
+Transformer -> Transformer: Copy graph structure
+Transformer -> Transformer: Transfer track blocks and InOuts
+Transformer -> Transformer: Initialize dynamic maps
+
+Transformer -> Simulation: new DefaultSimulationContext(cols, rows, factory)
+activate Simulation
+Simulation -> Simulation: Set cells (transformed grid)
+Simulation -> Simulation: Set graph (copied)
+Simulation -> Simulation: Initialize dynamicMap, trackMap
+Transformer <-- Simulation: SimulationContext instance
+deactivate Simulation
+
+GUI <-- Transformer: SimulationContext
+deactivate Transformer
+
+note over Transformer, Simulation
+    **Transformation Guarantees:**
+    - One-way: Editing → Simulation (no reverse)
+    - Immutable network after transformation
+    - Static objects wrapped by dynamic wrappers
+    - Identity preserved (wrapper.equals(static))
+    - Grid structure and Point mappings preserved
+end note
+
+== Phase 3: Simulation Execution ==
+
+GUI -> Simulation: run()
+activate Simulation
+
+Simulation -> Simulation: processFactory.createMainProcess(this)
+note right: Factory creates Generator or custom LoopProcess
+
+Simulation -> Simulation: processFactory.createInOutWorker(this, inOut)
+note right: Factory creates InOutWorker for each InOut
+
+Simulation -> jDisco: Activate main process
+activate jDisco
+note right: jDisco discrete event simulation begins
+
+Simulation -> Simulation: toDynamic(RailSwitch) → DynamicRailSwitch
+note right: Lazy wrapper creation and caching
+
+jDisco -> Simulation: Get/set dynamic state (semaphore signals, switch conf)
+Simulation -> Simulation: Update DynamicPathSeparator wrappers
+
+note over Simulation, jDisco
+    **Simulation Phase:**
+    - Immutable railway network structure
+    - Mutable dynamic state (signals, switches, trains)
+    - Dynamic wrappers manage state
+    - jDisco manages time and events
+end note
+
+... Simulation runs until endTime ...
+
+GUI -> Simulation: stop()
+Simulation -> jDisco: Deactivate processes
+jDisco --> Simulation: Stopped
+deactivate jDisco
+
+Simulation -> Simulation: Report statistics
+GUI <-- Simulation: Simulation results
+deactivate Simulation
+
+== Post-Simulation ==
+
+note over GUI, Simulation
+    **After Simulation:**
+    - SimulationContext is discarded
+    - To run again, transform from editing context again
+    - No way to convert simulation back to editing
+    - Editing context remains unchanged and reusable
+end note
+
+@enduml

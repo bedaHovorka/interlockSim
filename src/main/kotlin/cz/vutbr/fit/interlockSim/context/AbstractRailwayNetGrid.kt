@@ -17,42 +17,45 @@ import java.util.WeakHashMap
 /**
  * Implementation of {@link RailwayNetGrid}
  *
+ * @param T the type of cells stored in this grid (must extend [Cell])
  */
-abstract class AbstractRailwayNetGrid(
+abstract class AbstractRailwayNetGrid<out T : Cell>(
 	cols: Int,
 	rows: Int
-) : RailwayNetGrid {
+) : RailwayNetGrid<T> {
 	// Use private backing fields to avoid property getter clash
 	private val _cols: Int = cols
 	private val _rows: Int = rows
 
-	private val reverseTable: MutableMap<Cell, Point> = WeakHashMap()
-	private val cells: Array2DMap<Cell> = Array2DMap()
+	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = WeakHashMap()
+	private val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
 
-	protected fun getCells(): Array2DMap<Cell> = cells
+	protected fun getCells(): Array2DMap<@UnsafeVariance T> = cells
 
-	protected fun getReverseTable(): MutableMap<Cell, Point> = reverseTable
+	protected fun getReverseTable(): MutableMap<@UnsafeVariance T, Point> = reverseTable
 
 	@Synchronized
 	override fun getCellAt(
 		x: Int,
 		y: Int
-	): Cell? {
+	): T? {
 		if (x < 0 || y < 0 || x >= _cols || y >= _rows) throw IndexOutOfBoundsException("Grid bounds")
 		return cells.get(x, y)
 	}
 
-	override operator fun get(point: Point): Cell? = getCellAt(point.x, point.y)
+	override operator fun get(point: Point): T? = getCellAt(point.x, point.y)
 
 	// Implement interface methods
 	override fun getCols(): Int = _cols
 
 	override fun getRows(): Int = _rows
 
-	override fun iterator(): kotlin.collections.Iterator<Map.Entry<Point, Cell>> {
+	override fun iterator(): kotlin.collections.Iterator<Map.Entry<Point, T>> {
 		// Build entries from cells and return an immutable iterator
 		return cells.entries.toList().iterator()
 	}
 
-	override fun getLocation(value: Cell): Point? = reverseTable[value]
+	override fun getLocation(value: @UnsafeVariance T): Point? = reverseTable[value]
+
+	override fun containsKey(point: Point): Boolean = cells.containsKey(point)
 }

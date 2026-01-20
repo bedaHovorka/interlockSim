@@ -21,7 +21,7 @@ import java.util.AbstractSet
 class DefaultRailWayNetGrid(
 	cols: Int,
 	rows: Int
-) : AbstractRailwayNetGrid(cols, rows) {
+) : AbstractRailwayNetGrid<Cell>(cols, rows) {
 	private inner class KeySet(
 		private val set: Set<Map.Entry<Point, Cell>>
 	) : AbstractSet<Point>() {
@@ -123,7 +123,7 @@ class DefaultRailWayNetGrid(
 	 * @return true if point is present
 	 */
 	@Synchronized
-	fun containsKey(newPoint: Point): Boolean {
+	override fun containsKey(newPoint: Point): Boolean {
 		if (getCells().containsKey(newPoint)) {
 			requireValidState(getReverseTable().containsValue(newPoint)) {
 				"Inconsistent grid state: point $newPoint in cells but not in reverse table"

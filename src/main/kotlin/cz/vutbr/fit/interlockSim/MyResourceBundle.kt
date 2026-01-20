@@ -19,7 +19,6 @@ private val BASE = "resource" + File.separatorChar
  * Resources
  */
 class MyResourceBundle : ListResourceBundle() {
-
 	override fun getContents(): Array<Array<Any>>? {
 		// Returns null as resources are loaded via getFile() and getSchema() methods instead
 		return null

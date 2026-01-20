@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
 
@@ -24,7 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
  */
 class MockNodeCell(
 	private val name: String
-) : NodeCell(SpatialType.HORIZONTAL) {
+) : NodeCell(SpatialType.HORIZONTAL), DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Segment?,
 		to: Segment?
@@ -42,9 +43,7 @@ class MockNodeCell(
 
 	override fun getFollowingSegment(from: Segment?): Segment? = null
 
-	override fun possibleFollowers(from: Segment): Set<Segment> {
-		return emptySet()
-	}
+	override fun possibleFollowers(from: Segment): Set<Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = 80.0
 

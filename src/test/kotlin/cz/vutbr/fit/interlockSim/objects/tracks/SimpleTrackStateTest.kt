@@ -23,7 +23,10 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Comprehensive unit tests for SimpleTrack state machine.
+ * Comprehensive unit tests for Track state machine via DynamicTrack wrapper.
+ *
+ * **Phase 1 Update (Issue #100.2):** Tests now use DynamicTrack wrapper to access
+ * dynamic state, while SimpleTrackBlock provides only static configuration.
  *
  * Tests the critical railway track state management: FREE -> RESERVED -> OCCUPIED -> FREE
  * This is a CRITICAL safety component that prevents collisions and ensures proper interlocking.
@@ -49,11 +52,17 @@ import org.junit.jupiter.api.Test
  * - Invalid transitions (4 tests)
  * - State query methods (4 tests)
  */
-@DisplayName("SimpleTrack State Management")
+@DisplayName("Track State Management (via DynamicTrack)")
 class SimpleTrackStateTest {
 	// Mock NodeCell for track endpoints (NodeCell implements PathSeparator)
 	private lateinit var end1: MockNodeCell
 	private lateinit var end2: MockNodeCell
+
+	// Static track configuration (immutable)
+	private lateinit var staticTrack: SimpleTrackBlock
+
+	// Dynamic track wrapper for state management
+	private lateinit var track: DynamicTrack
 
 	// Mock TrackOccupant for enter/leave operations
 	private lateinit var mockOccupant: TrackOccupant
@@ -65,6 +74,12 @@ class SimpleTrackStateTest {
 		end1 = MockNodeCell("End1")
 		end2 = MockNodeCell("End2")
 
+		// Create static track configuration
+		staticTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+
+		// Wrap with DynamicTrack for state management
+		track = DynamicTrack(staticTrack)
+
 		// Create mock TrackOccupant implementations
 		mockOccupant = MockTrackOccupant("Train1")
 		otherOccupant = MockTrackOccupant("Train2")
@@ -75,71 +90,64 @@ class SimpleTrackStateTest {
 	inner class StateTransitionTests {
 		@Test
 		fun `new track is in FREE state`() {
-			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-
 			// Act & Assert
-			assertThat(track.getState())
+			assertThat(track.state)
 				.isEqualTo(TrackFacility.State.FREE)
 		}
 
 		@Test
 		fun `track transitions FREE to RESERVED on reserve`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(track.state).isEqualTo(TrackFacility.State.FREE)
 
 			// Act
 			track.setUpPath(end1)
 
 			// Assert
-			assertThat(track.getState())
+			assertThat(track.state)
 				.isEqualTo(TrackFacility.State.RESERVED)
 		}
 
 		@Test
 		fun `track transitions RESERVED to OCCUPIED on train entry`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(track.state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Act
 			track.enter(mockOccupant)
 
 			// Assert
-			assertThat(track.getState())
+			assertThat(track.state)
 				.isEqualTo(TrackFacility.State.OCCUPIED)
 		}
 
 		@Test
 		fun `track transitions OCCUPIED to FREE on train exit`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
 			track.enter(mockOccupant)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.OCCUPIED)
+			assertThat(track.state).isEqualTo(TrackFacility.State.OCCUPIED)
 
 			// Act
 			track.leave(mockOccupant)
 
 			// Assert
-			assertThat(track.getState())
+			assertThat(track.state)
 				.isEqualTo(TrackFacility.State.FREE)
 		}
 
 		@Test
 		fun `track can transition RESERVED to FREE on cancel`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
-			assertThat(track.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(track.state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Act
 			track.cancelPathSetup(end1)
 
 			// Assert
-			assertThat(track.getState())
+			assertThat(track.state)
 				.isEqualTo(TrackFacility.State.FREE)
 		}
 	}
@@ -150,50 +158,50 @@ class SimpleTrackStateTest {
 		@Test
 		fun `cannot reserve already reserved track`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
 
 			// Act & Assert - should throw TrackOperationException
-			assertk.assertFailure {
-				track.setUpPath(end2) // Try to reserve from different end
-			}.isInstanceOf(TrackOperationException::class)
+			assertk
+				.assertFailure {
+					track.setUpPath(end2) // Try to reserve from different end
+				}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
 		fun `cannot reserve occupied track`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
 			track.enter(mockOccupant)
 
 			// Act & Assert - should throw TrackOperationException
-			assertk.assertFailure {
-				track.setUpPath(end2) // Try to reserve occupied track
-			}.isInstanceOf(TrackOperationException::class)
+			assertk
+				.assertFailure {
+					track.setUpPath(end2) // Try to reserve occupied track
+				}.isInstanceOf(TrackOperationException::class)
 		}
 
 		@Test
 		fun `cannot occupy unreserved track`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			// Track is still in FREE state - never reserved
 
 			// Act & Assert - should throw SimulationException due to validation in enter()
-			assertk.assertFailure {
-				track.enter(mockOccupant) // Try to enter without reservation
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk
+				.assertFailure {
+					track.enter(mockOccupant) // Try to enter without reservation
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
 		fun `cannot free track that is not occupied`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			// Track is FREE
 
 			// Act & Assert - should throw SimulationException due to validation in leave()
-			assertk.assertFailure {
-				track.leave(mockOccupant) // Try to leave when not occupied
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk
+				.assertFailure {
+					track.leave(mockOccupant) // Try to leave when not occupied
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 	}
 
@@ -202,9 +210,6 @@ class SimpleTrackStateTest {
 	inner class StateQueryTests {
 		@Test
 		fun `isFreeFrom returns true only when FREE`() {
-			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-
 			// Act & Assert - FREE state
 			assertThat(track.isFreeFrom(end1))
 				.isEqualTo(true)
@@ -227,9 +232,6 @@ class SimpleTrackStateTest {
 
 		@Test
 		fun `isSetUpPath returns true only when RESERVED`() {
-			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-
 			// Act & Assert - FREE state
 			assertThat(track.isSetUpPath(end1))
 				.isEqualTo(false)
@@ -256,20 +258,20 @@ class SimpleTrackStateTest {
 		@Test
 		fun `getTrackOccupant returns null when FREE`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			// Track is FREE
 
 			// Act & Assert - Track is FREE, occupant should be null
 			// Note: getTrackOccupant() throws exception that track must be OCCUPIED
 			// This test verifies that calling it on FREE track fails
-			assertk.assertFailure {
-				track.getTrackOccupant()
-			}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertk
+				.assertFailure {
+					track.getTrackOccupant()
+				}.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
 		}
 
 		@Test
 		fun `getTrackOccupant returns train when OCCUPIED`() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 			track.setUpPath(end1)
 			track.enter(mockOccupant)
 

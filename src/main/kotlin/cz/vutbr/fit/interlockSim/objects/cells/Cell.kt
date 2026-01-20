@@ -85,7 +85,6 @@ interface Cell {
 			requireValidState(from != tr) { "Transformed point must be different from original: segment=$this" }
 			return tr
 		}
-
 	}
 
 	/**

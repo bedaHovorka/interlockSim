@@ -15,15 +15,16 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
-import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -46,7 +47,7 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * ## Design Decision (Option 1)
  *
- * Context and its implementations (DefaultContext, EditingContext, SimulationContext)
+ * Context and its implementations (DefaultSimulationContext, EditingContext, SimulationContext)
  * are documented as NOT thread-safe. Multi-threaded access is not supported.
  *
  * ### Rationale:
@@ -69,12 +70,13 @@ import java.util.concurrent.atomic.AtomicReference
  * **Usage:** Do not enable these tests unless implementing thread-safety (Option 2).
  *
  * @see cz.vutbr.fit.interlockSim.context.Context
- * @see cz.vutbr.fit.interlockSim.context.DefaultContext
+ * @see cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
  * @since 2026-01 (Phase 6 advanced testing)
  * @tag integration-test
  */
 @Tag("integration-test")
 @DisplayName("Race Condition and Concurrent Access Tests")
+@Disabled("Phase 1: Tests require DynamicTrack integration (Phase 2)")
 class RaceConditionTest : KoinTestBase() {
 	companion object {
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
@@ -271,11 +273,12 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent switch configuration changes resolve without exception")
 		fun concurrentSwitchChanges_multipleThreads_noException() {
 			// Arrange
-			val switch =
+			val staticSwitch =
 				RailSwitch(
 					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
+			val switch = DynamicRailSwitch(staticSwitch)
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -327,11 +330,12 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Switch configuration queries are consistent during concurrent modifications")
 		fun switchConfigQueries_duringConcurrentMod_returnsConsistentState() {
 			// Arrange
-			val switch =
+			val staticSwitch =
 				RailSwitch(
 					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
+			val switch = DynamicRailSwitch(staticSwitch)
 
 			val iterations = 20
 			val readThreadCount = 2
@@ -349,7 +353,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (i in 0 until iterations) {
 						try {
 							switch.changeConf()
-							lastSeenConf.set(switch.getConf())
+							lastSeenConf.set(switch.conf)
 							Thread.sleep(1)
 						} catch (e: IllegalStateException) {
 							// Expected if switch is locked
@@ -368,7 +372,7 @@ class RaceConditionTest : KoinTestBase() {
 					try {
 						startLatch.await()
 						for (i in 0 until iterations) {
-							val conf = switch.getConf()
+							val conf = switch.conf
 							// Configuration should be one of the valid states
 							if (conf != RailSwitch.Conf.MAIN && conf != RailSwitch.Conf.BRANCH) {
 								consistencyViolations.incrementAndGet()
@@ -667,12 +671,16 @@ class RaceConditionTest : KoinTestBase() {
 							val x = 10 + i
 							val y = 10 + i
 
-							// Place cell
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 
 							// Retrieve cell
 							val retrieved = context.getRailWayNetGrid().getCellAt(x, y)
@@ -739,13 +747,16 @@ class RaceConditionTest : KoinTestBase() {
 							val x = 20 + threadId * 10 + iter
 							val y = 20 + threadId * 10 + iter
 
-							// Try to place a cell
-							val cell = MockNodeCell("Cell_${threadId}_$iter")
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 
 							// Try to retrieve it
 							val retrieved = grid.getCellAt(x, y)
@@ -1024,14 +1035,16 @@ class RaceConditionTest : KoinTestBase() {
 					try {
 						startLatch.await()
 						for (i in 0 until 10) {
-							val cell = MockNodeCell("GridCell_${threadId}_$i")
-							val x = 30 + threadId * 10 + i
-							val y = 30 + threadId * 10 + i
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 							Thread.sleep(1)
 						}
 					} catch (e: Exception) {

@@ -19,12 +19,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 
 /**
  * Context testing
@@ -32,7 +32,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
  */
 class ContextTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private val context: DefaultContext by lazy { factory.createEmptyContext() }
+	private lateinit var context: SimulationContext
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
 	private val tl: SimpleTrackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -40,14 +40,19 @@ class ContextTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
+		// Build network using editing context
+		val editingContext = factory.createEmptyContext()
 		val pA = Point(1, 1)
 		val r1 = Point(4, 2)
 		val pB = Point(5, 5)
-		context.putCell(pA, inA)
-		context.putCell(pB, outB)
-		context.putCell(r1, rs1)
-		context.joinCells(r1, pB, tl)
-		context.joinCells(pA, r1, tl)
+		editingContext.putCell(pA, inA)
+		editingContext.putCell(pB, outB)
+		editingContext.putCell(r1, rs1)
+		editingContext.joinCells(r1, pB, tl)
+		editingContext.joinCells(pA, r1, tl)
+
+		// Convert to simulation context for testing
+		context = factory.createContext(editingContext)
 	}
 
 	/**
@@ -103,14 +108,19 @@ class ContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun testPathToNextSemaphore() {
+		// Get Dynamic wrappers for InOut objects (simulation context uses Dynamic wrappers)
+		val inOuts = context.getInOuts()
+		val dynamicInA = inOuts.find { it.name == "A" }!!
+		val dynamicOutB = inOuts.find { it.name == "B" }!!
+
 		val arrayPath = ArrayPath(context)
-		arrayPath.add(inA)
+		arrayPath.add(dynamicInA)
 		arrayPath.add(tl)
-		arrayPath.add(outB)
-		val pathFromInA = context.pathToNextSemaphore(inA, tl)
+		arrayPath.add(dynamicOutB)
+		val pathFromInA = context.pathToNextSemaphore(dynamicInA, tl)
 		assertThat(pathFromInA).isNotNull()
 		assertThat(arrayPath.equalsWithElements(pathFromInA!!)).isTrue()
-		val pathFromOutB = context.pathToNextSemaphore(outB, tl)
+		val pathFromOutB = context.pathToNextSemaphore(dynamicOutB, tl)
 		assertThat(pathFromOutB).isNotNull()
 		assertThat(arrayPath.reversePath().equalsWithElements(pathFromOutB!!)).isTrue()
 		// Note: Null parameter checks from Java version are now handled by Kotlin's type system at compile time
