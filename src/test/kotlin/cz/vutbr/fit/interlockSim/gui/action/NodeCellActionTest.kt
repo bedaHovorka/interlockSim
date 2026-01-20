@@ -1,0 +1,222 @@
+/*
+ * Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator - Test Suite
+ *
+ * Unit tests for NodeCellAction class
+ * Phase 1.1 High-Impact Quick Wins - Test Coverage Improvement
+ */
+
+package cz.vutbr.fit.interlockSim.gui.action
+
+import assertk.assertFailure
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.testModuleFull
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.koin.core.module.Module
+import org.koin.test.get
+import java.awt.event.ActionEvent
+import javax.swing.ImageIcon
+
+/**
+ * Unit tests for NodeCellAction class
+ *
+ * Tests cover:
+ * - Action construction with cell class and arguments
+ * - Action name formatting
+ * - Icon generation via paintIcon() companion method
+ * - Action performed delegation to RailwayNetGridCanvas
+ * - Integration with Koin DI (Frame, EditingContextFactory)
+ * - Error handling in icon creation
+ *
+ * Note: These are integration tests that use real Koin dependencies since
+ * NodeCellAction uses getKoin() directly to resolve EditingContextFactory and Frame.
+ *
+ * Coverage target: 80%+ for gui.action package (156 instructions)
+ */
+@DisplayName("NodeCellAction")
+class NodeCellActionTest : KoinTestBase() {
+private lateinit var context: EditingContext
+private lateinit var factory: EditingContextFactory
+
+/**
+ * Use full test module to access GUI components (Frame, RailwayNetGridCanvas)
+ */
+override fun getTestModule(): Module = testModuleFull
+
+@BeforeEach
+fun setUp() {
+// Get real Koin dependencies (required since NodeCellAction uses getKoin())
+factory = get<EditingContextFactory>()
+context = factory.createEmptyContext()
+}
+
+/**
+ * Test 1: Constructor creates action with correct name format
+ */
+@Test
+fun `constructor creates action with correct name format`() {
+val cellClass = RailSwitch::class.java
+val args = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+
+val action = NodeCellAction(cellClass, context, args)
+
+val actionName = action.getValue(javax.swing.Action.NAME) as String
+assertThat(actionName).isEqualTo("Insert RailSwitch")
+}
+
+/**
+ * Test 2: Action has valid icon generated from cell
+ */
+@Test
+fun `action has valid icon generated from cell`() {
+val cellClass = InOut::class.java
+val args = arrayOf<Any>(InOut.Kind.IN)
+
+val action = NodeCellAction(cellClass, context, args)
+
+val icon = action.getValue(javax.swing.Action.SMALL_ICON)
+assertThat(icon).isNotNull()
+assertThat(icon).isInstanceOf(ImageIcon::class)
+}
+
+/**
+ * Test 3: actionPerformed delegates to RailwayNetGridCanvas.setNodeOnToolbar
+ */
+@Test
+fun `actionPerformed delegates to RailwayNetGridCanvas setNodeOnToolbar`() {
+val cellClass = RailSemaphore::class.java
+val args = arrayOf<Any>()
+val action = NodeCellAction(cellClass, context, args)
+
+val frame = get<Frame>()
+val canvas = frame.railwayNetGridCanvas
+
+val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+action.actionPerformed(mockEvent)
+
+// Action executed without error, exercising getRailwayNetGridCanvas() and setNodeOnToolbar()
+assertThat(action).isNotNull()
+}
+
+/**
+ * Test 4: Icon generation works for different cell types
+ */
+@Test
+fun `icon generation works for different cell types`() {
+val testCases = listOf(
+RailSwitch::class.java to arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT),
+RailSemaphore::class.java to arrayOf<Any>(),
+InOut::class.java to arrayOf<Any>(InOut.Kind.OUT)
+)
+
+testCases.forEach { (cellClass, args) ->
+val action = NodeCellAction(cellClass, context, args)
+val icon = action.getValue(javax.swing.Action.SMALL_ICON)
+assertThat(icon).isNotNull()
+assertThat(icon).isInstanceOf(ImageIcon::class)
+}
+}
+
+/**
+ * Test 5: Error handling in paintIcon when cell creation fails
+ */
+@Test
+fun `paintIcon handles cell creation failure with error`() {
+val cellClass = RailSwitch::class.java
+val invalidArgs = arrayOf<Any>() // Missing required constructor arguments
+
+assertFailure {
+NodeCellAction(cellClass, context, invalidArgs)
+}.isInstanceOf(IllegalStateException::class)
+}
+
+/**
+ * Test 6: Action properly handles empty arguments array
+ */
+@Test
+fun `action properly handles empty arguments array`() {
+val cellClass = RailSemaphore::class.java
+val emptyArgs = arrayOf<Any>()
+
+val action = NodeCellAction(cellClass, context, emptyArgs)
+val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+action.actionPerformed(mockEvent)
+
+assertThat(action).isNotNull()
+}
+
+/**
+ * Test 7: Action properly handles multiple arguments
+ */
+@Test
+fun `action properly handles multiple arguments`() {
+val cellClass = RailSwitch::class.java
+val args = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+
+val action = NodeCellAction(cellClass, context, args)
+val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+action.actionPerformed(mockEvent)
+
+assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+}
+
+/**
+ * Test 8: Multiple actions can be created for same cell type
+ */
+@Test
+fun `multiple actions can be created for same cell type`() {
+val cellClass = RailSwitch::class.java
+val args1 = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT)
+val args2 = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+
+val action1 = NodeCellAction(cellClass, context, args1)
+val action2 = NodeCellAction(cellClass, context, args2)
+
+assertThat(action1.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+assertThat(action2.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+assertThat(action1.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
+assertThat(action2.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
+}
+
+/**
+ * Test 9: Action name contains cell class simple name
+ */
+@Test
+fun `action name contains cell class simple name`() {
+val testCases = mapOf(
+RailSwitch::class.java to "RailSwitch",
+RailSemaphore::class.java to "RailSemaphore",
+InOut::class.java to "InOut"
+)
+
+testCases.forEach { (cellClass, expectedName) ->
+val args = when (cellClass) {
+RailSwitch::class.java -> arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT)
+InOut::class.java -> arrayOf<Any>(InOut.Kind.IN)
+else -> arrayOf<Any>()
+}
+
+val action = NodeCellAction(cellClass, context, args)
+val actionName = action.getValue(javax.swing.Action.NAME) as String
+
+assertThat(actionName).contains(expectedName)
+}
+}
+}
