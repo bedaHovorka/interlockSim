@@ -70,15 +70,20 @@ class XMLContextFactory :
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
+	/**
+	 * Internal editing context used during XML parsing.
+	 * Extends DefaultEditingContext to support editing operations (putCell, hardJoin, etc.)
+	 * during construction. After parsing, it's converted to DefaultSimulationContext.
+	 */
 	private inner class XMLContext(
 		cols: Int,
 		rows: Int
-	) : DefaultSimulationContext(cols, rows, processFactory) {
-		// No additional implementation needed
+	) : cz.vutbr.fit.interlockSim.context.DefaultEditingContext(cols, rows) {
+		// No additional implementation needed - supports editing during XML parsing
 	}
 
 	private inner class Handler : DefaultHandler() {
-		private var context: XMLContext? = null
+		private var editingContext: XMLContext? = null
 		private var ended: Boolean = false
 		private var netElementDepth: Int = 0
 
@@ -104,11 +109,11 @@ class XMLContextFactory :
 				}
 				val cols = getInt(uri!!, attributes!!, X)
 				val rows = getInt(uri, attributes, Y)
-				context = XMLContext(cols, rows)
+				editingContext = XMLContext(cols, rows)
 				return
 			}
 
-			val ctx = context ?: throw SAXException("Context not initialized")
+			val ctx = editingContext ?: throw SAXException("Context not initialized")
 			val clazz = classification(localName!!)
 
 			if (NodeCell::class.java.isAssignableFrom(clazz)) {
@@ -259,18 +264,28 @@ class XMLContextFactory :
 
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
-			val ctx = context ?: throw SAXException("Context not initialized")
-			val inOuts = ctx.getInOuts()
-			if (inOuts.size < 2) {
+			val ctx = editingContext ?: throw SAXException("Context not initialized")
+			// Access protected inouts field from BaseContext (inherited via DefaultEditingContext)
+			val inOutsCount = ctx.inouts.size
+			if (inOutsCount < 2) {
 				throw SAXException(
 					"Railway network must have at least 2 InOut elements (entry and exit points). " +
-						"Found: ${inOuts.size}"
+						"Found: $inOutsCount"
 				)
 			}
 			ended = true
 		}
 
-		fun getContext(): DefaultSimulationContext? = if (ended) context else null
+		/**
+		 * Returns the parsed context as a DefaultSimulationContext.
+		 * Converts the editing context (used during parsing) to a simulation context.
+		 */
+		fun getContext(): DefaultSimulationContext? = 
+			if (ended && editingContext != null) {
+				DefaultSimulationContext.fromEditingContext(editingContext!!, processFactory)
+			} else {
+				null
+			}
 	}
 
 	private var validator: Validator? = null
@@ -525,7 +540,8 @@ class XMLContextFactory :
 	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
 
 	override fun createContext(editingContext: EditingContext): SimulationContext {
-		return Util.assertInstanceOf(DefaultSimulationContext::class.java, editingContext) // zatim
+		// Convert EditingContext to SimulationContext using the factory method
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
 	@Throws(Exception::class)
