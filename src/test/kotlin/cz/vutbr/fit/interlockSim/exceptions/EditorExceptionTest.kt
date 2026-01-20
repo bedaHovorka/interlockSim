@@ -12,9 +12,7 @@ package cz.vutbr.fit.interlockSim.exceptions
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
-import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
@@ -53,7 +51,7 @@ class EditorExceptionTest {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(null)
 		}
@@ -66,7 +64,7 @@ class EditorExceptionTest {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(testObj)
 		}
@@ -118,7 +116,7 @@ class EditorExceptionTest {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(null)
 		}
@@ -131,7 +129,7 @@ class EditorExceptionTest {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.ERROR)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(testObj)
 		}
@@ -347,7 +345,7 @@ class EditorExceptionTest {
 		@Test
 		fun `stack trace is preserved`() {
 			// Act
-			val exception = EditorException(testMessage, testCause, null)
+			val exception = EditorException(testMessage)
 
 			// Assert
 			assertThat(exception.stackTrace).isNotNull()
@@ -388,7 +386,8 @@ class EditorExceptionTest {
 			val result = exception.getObject()
 
 			// Assert
-			assertThat(result).isInstanceOf(TestData::class)
+			assertThat(result).isNotNull()
+			assertThat(result).isInstanceOf<TestData>()
 			assertThat((result as TestData).value).isEqualTo(42)
 		}
 
@@ -491,7 +490,7 @@ class EditorExceptionTest {
 
 			// Assert
 			assertThat(result).isEqualTo(innerException)
-			assertThat(result).isInstanceOf(EditorException::class)
+			assertThat(result).isInstanceOf<EditorException>()
 		}
 
 		@Test

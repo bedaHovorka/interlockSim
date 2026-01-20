@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested

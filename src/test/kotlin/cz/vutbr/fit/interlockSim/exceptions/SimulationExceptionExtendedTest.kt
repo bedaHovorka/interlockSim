@@ -61,7 +61,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(null)
 			assertThat(exception.getTime()).isNotNull()
@@ -75,7 +75,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(null)
 			assertThat(exception.getObject()).isEqualTo(testObj)
 			assertThat(exception.getTime()).isNotNull()
@@ -89,7 +89,7 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 			// Assert
 			assertThat(exception).isNotNull()
 			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-			assertThat(exception.message).isEmpty()
+			assertThat(exception.message).isEqualTo("")
 			assertThat(exception.cause).isEqualTo(testCause)
 			assertThat(exception.getObject()).isEqualTo(testObj)
 			assertThat(exception.getTime()).isNotNull()
