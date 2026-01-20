@@ -237,6 +237,12 @@ open class DefaultSimulationContext(
 			// Cast editingContext to BaseContext to access protected inouts
 			if (editingContext is DefaultEditingContext) {
 				context.inouts.addAll(editingContext.getInOutsList())
+			} else {
+				throw SimulationException(
+					"Cannot create DefaultSimulationContext from unsupported EditingContext " +
+						"implementation: ${editingContext::class.qualifiedName}. " +
+						"Expected DefaultEditingContext to copy InOut elements."
+				)
 			}
 
 			// Copy configuration properties
