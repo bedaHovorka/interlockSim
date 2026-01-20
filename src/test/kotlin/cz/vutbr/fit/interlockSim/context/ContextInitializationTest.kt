@@ -78,8 +78,8 @@ class ContextInitializationTest : KoinTestBase() {
 				.withMessage("Should be EditingContext instance")
 				.isInstanceOf(EditingContext::class)
 			assertThat(context)
-				.withMessage("Should also be DefaultSimulationContext for grid access")
-				.isInstanceOf(DefaultSimulationContext::class)
+				.withMessage("Should be DefaultEditingContext implementation")
+				.isInstanceOf(DefaultEditingContext::class)
 		}
 
 		/**
@@ -396,7 +396,7 @@ class ContextInitializationTest : KoinTestBase() {
 
 			// Railway context: Default settings should be applicable
 			assertThat(emptyContext)
-				.prop(EditingContext::currentMaxSpeed)
+				.prop(DefaultSimulationContext::currentMaxSpeed)
 				.withMessage("Empty context should have max speed setting")
 				.isGreaterThan(0.0)
 		}

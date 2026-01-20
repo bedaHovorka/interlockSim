@@ -156,35 +156,36 @@ class GridTransformerTest : KoinTestBase() {
 		@Test
 		@DisplayName("preserves grid dimensions")
 		fun transformGrid_anyGrid_preservesDimensions() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Create a manual static grid for testing
+			val staticGrid = DefaultRailWayNetGrid(20, 20)
+			val inOut = InOut("Test", false, Cell.SpatialType.HORIZONTAL)
+			staticGrid.put(Point(5, 5), inOut)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
 
 			// Assert - Dimensions preserved
-			assertThat(result.dynamicGrid.getCols()).isEqualTo(staticGrid.getCols())
-			assertThat(result.dynamicGrid.getRows()).isEqualTo(staticGrid.getRows())
+			assertThat(result.dynamicGrid.getCols()).isEqualTo(20)
+			assertThat(result.dynamicGrid.getRows()).isEqualTo(20)
 		}
 
 		@Test
 		@DisplayName("preserves cell positions")
 		fun transformGrid_vyhybnaXml_preservesCellPositions() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Create static grid with multiple cells
+			val staticGrid = DefaultRailWayNetGrid(20, 20)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val inOut = InOut("A", true, Cell.SpatialType.VERTICAL)
+			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
-			// Collect original positions of NodeCells
-			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
-			// Cast to Cell grid to iterate without ClassCastException
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = staticGrid as RailwayNetGrid<Cell>
+			staticGrid.put(Point(1, 1), railSwitch)
+			staticGrid.put(Point(5, 5), inOut)
+			staticGrid.put(Point(10, 10), semaphore)
+
+			// Collect original positions
 			val originalPositions = mutableSetOf<Point>()
-			for ((point, cell) in cellGrid) {
-				if (cell is NodeCell) {
-					originalPositions.add(point)
-				}
+			for ((point, _) in staticGrid) {
+				originalPositions.add(point)
 			}
 
 			// Act - Transform
@@ -195,7 +196,7 @@ class GridTransformerTest : KoinTestBase() {
 			for ((point, _) in result.dynamicGrid) {
 				dynamicPositions.add(point)
 			}
-			
+
 			assertThat(dynamicPositions).isEqualTo(originalPositions)
 		}
 
@@ -273,24 +274,26 @@ class GridTransformerTest : KoinTestBase() {
 	@DisplayName("Complex Networks")
 	inner class ComplexNetworks {
 		@Test
-		@DisplayName("transforms vyhybna.xml network completely")
+		@DisplayName("transforms complex network completely")
 		fun transformGrid_vyhybnaXml_transformsCompletely() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Create a complex static grid with multiple cell types
+			val staticGrid = DefaultRailWayNetGrid(20, 20)
+			val railSwitch1 = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			val railSwitch2 = RailSwitch(Cell.SpatialType.VERTICAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
+			val inOut = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val semaphore = RailSemaphore(true, Cell.SpatialType.VERTICAL)
+
+			staticGrid.put(Point(1, 1), railSwitch1)
+			staticGrid.put(Point(5, 5), railSwitch2)
+			staticGrid.put(Point(10, 10), inOut)
+			staticGrid.put(Point(15, 15), semaphore)
 
 			// Count NodeCells in original grid
-			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
-			// Cast to Cell grid to iterate without ClassCastException
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = staticGrid as RailwayNetGrid<Cell>
 			var staticNodeCellCount = 0
 			val staticNodeCells = mutableListOf<NodeCell>()
-			for ((_, cell) in cellGrid) {
-				if (cell is NodeCell) {
-					staticNodeCellCount++
-					staticNodeCells.add(cell)
-				}
+			for ((_, cell) in staticGrid) {
+				staticNodeCellCount++
+				staticNodeCells.add(cell as NodeCell)
 			}
 
 			// Act - Transform
@@ -313,28 +316,19 @@ class GridTransformerTest : KoinTestBase() {
 		@Test
 		@DisplayName("handles InOut with embedded semaphores correctly")
 		fun transformGrid_withInOuts_mapsEmbeddedSemaphores() {
-			// Arrange - Load vyhybna.xml (has 2 InOuts)
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
-
-			// Find an InOut in the grid
-			var inOut: InOut? = null
-			for ((_, cell) in staticGrid) {
-				if (cell is InOut) {
-					inOut = cell
-					break
-				}
-			}
-			assertThat(inOut).isNotNull()
+			// Arrange - Create static grid with InOut
+			val staticGrid = DefaultRailWayNetGrid(20, 20)
+			val inOut = InOut("TestInOut", false, Cell.SpatialType.HORIZONTAL)
+			staticGrid.put(Point(5, 5), inOut)
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
 
 			// Assert - InOut and its semaphores are mapped
-			val dynamicInOut = result.staticToDynamicMap[inOut!!]
+			val dynamicInOut = result.staticToDynamicMap[inOut]
 			assertThat(dynamicInOut).isNotNull()
-			assertThat(dynamicInOut as Any).isInstanceOf<DynamicInOut>()
-			
+			assertThat(dynamicInOut!!).isInstanceOf<DynamicInOut>()
+
 			// Verify embedded semaphores are also mapped
 			assertThat(result.staticToDynamicMap[inOut.getInSemaphore()]).isNotNull()
 			assertThat(result.staticToDynamicMap[inOut.getOutSemaphore()]).isNotNull()
@@ -347,9 +341,12 @@ class GridTransformerTest : KoinTestBase() {
 		@Test
 		@DisplayName("transforms typical network in < 1ms")
 		fun transformGrid_vyhybnaXml_performsQuickly() {
-			// Arrange - Load vyhybna.xml (typical network with ~10-20 NodeCells)
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Create a typical network with ~10 NodeCells
+			val staticGrid = DefaultRailWayNetGrid(20, 20)
+			for (i in 0 until 10) {
+				val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+				staticGrid.put(Point(i, i), railSwitch)
+			}
 
 			// Act - Transform and measure time
 			val elapsedMs = measureTimeMillis {

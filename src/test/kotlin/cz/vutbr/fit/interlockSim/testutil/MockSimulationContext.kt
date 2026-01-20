@@ -198,7 +198,9 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 }
 
 fun createMockSimulationContext(): MockSimulationContext {
-	val defaultContext = contextFactory().createEmptyContext() as DefaultSimulationContext
+	val factory = contextFactory()
+	val editingContext = factory.createEmptyContext()
+	val defaultContext = factory.createContext(editingContext) as DefaultSimulationContext
 	return MockSimulationContext(defaultContext)
 }
 

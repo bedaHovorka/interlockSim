@@ -48,7 +48,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("empty context has no tracks in graph")
 		fun emptyContext_hasNoTracks() {
 			// Arrange
-			val context = factory.createEmptyContext() as DefaultSimulationContext
+			val context = factory.createEmptySimulationContext()
 
 			// Act - get the graph
 			val graph = context.getGraph()
@@ -66,7 +66,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic creates wrapper lazily for unmapped track")
 		fun toDynamic_unmappedTrack_createsLazily() {
 			// Arrange
-			val context = factory.createEmptyContext() as DefaultSimulationContext
+			val context = factory.createEmptySimulationContext()
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			val contextWithTracks = factory.createContext(xmlFile) as DefaultSimulationContext
 

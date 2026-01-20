@@ -4,6 +4,14 @@
 **Issue:** Divide DefaultContext to Editing and Simulation Implementation  
 **Status:** ✅ COMPLETE (Phase 2 complete, Phase 3 context split also complete)
 
+## Architecture Diagrams
+
+For detailed visual architecture, see:
+- [Factory Pattern Integration](diagrams/factory-pattern.svg) - Shows factory relationships and DI
+- [Context Class Hierarchy](diagrams/context-hierarchy.svg) - Shows context inheritance structure
+
+![Factory Pattern](diagrams/factory-pattern.png)
+
 ## What Was Accomplished
 
 ### Problem Solved

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -28,19 +29,53 @@ import java.util.EnumSet
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
  *
- * ## Type Parameter
+ * ## Architecture
  *
- * **Grid parameterization temporary compromise**: SimulationContext extends EditingContext to allow
- * DefaultSimulationContext to extend DefaultEditingContext during the transition period.
- * This will be changed in future when BaseContext is introduced.
+ * SimulationContext extends [Context]<[Cell]> for architectural separation, following
+ * the Interface Segregation Principle. The network structure is immutable once simulation
+ * starts - editing operations are NOT supported during simulation.
  *
- * The grid stores dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
- * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) created during transformation
- * from editing context. These wrappers maintain references to static objects via `staticRef`
- * property for identity preservation.
+ * DefaultSimulationContext extends BaseContext directly and does NOT implement EditingContext.
+ * Editing operations (putCell, removeCell, etc.) are only available through [EditingContext].
+ *
+ * Dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) are created during
+ * transformation from editing context. These wrappers maintain references to static
+ * objects via `staticRef` property for identity preservation.
  *
  * The simulation context is created from an editing context using `GridTransformer` to convert
  * static NodeCell instances to their dynamic wrapper counterparts.
+ *
+ * ## Immutability Contract
+ *
+ * **Network structure is immutable after initialization.**
+ *
+ * Once a SimulationContext is created (via factory method or initialization in run()),
+ * the railway network structure is frozen:
+ * - No cells can be added or removed
+ * - No track blocks can be created or destroyed
+ * - No cells can be moved
+ * - No network topology changes allowed
+ *
+ * This immutability is enforced at runtime:
+ * - [BaseContext.freeze] is called after network initialization
+ * - Attempts to modify frozen context throw [UnsupportedOperationException]
+ * - Clear error messages guide users to use [EditingContext] for modifications
+ *
+ * ### Rationale
+ *
+ * Immutability ensures simulation correctness:
+ * - Pre-computed paths remain valid throughout simulation
+ * - Dynamic wrapper mappings stay consistent
+ * - Simulation physics assumptions hold (fixed track lengths, etc.)
+ * - No undefined behavior from runtime topology changes
+ *
+ * ### Usage
+ *
+ * - Build networks with [EditingContext] (putCell, joinCells, etc.)
+ * - Convert to [SimulationContext] via factory (network freezes at this point)
+ * - Run simulation with immutable network structure
+ * - To modify network: create new EditingContext, make changes, convert to new SimulationContext
  *
  * ## Thread Safety
  *
@@ -54,9 +89,10 @@ import java.util.EnumSet
  * @see Context
  * @see EditingContext
  * @see DynamicPathSeparator
+ * @see BaseContext.freeze
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : EditingContext {
+interface SimulationContext : Context<Cell> {
 	/**
 	 * simulation reporting types
 	 */

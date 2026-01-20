@@ -32,7 +32,7 @@ import org.koin.test.inject
  */
 class ContextTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
-	private val context: DefaultSimulationContext by lazy { factory.createEmptyContext() as DefaultSimulationContext }
+	private lateinit var context: SimulationContext
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
 	private val tl: SimpleTrackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -40,14 +40,19 @@ class ContextTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
+		// Build network using editing context
+		val editingContext = factory.createEmptyContext()
 		val pA = Point(1, 1)
 		val r1 = Point(4, 2)
 		val pB = Point(5, 5)
-		context.putCell(pA, inA)
-		context.putCell(pB, outB)
-		context.putCell(r1, rs1)
-		context.joinCells(r1, pB, tl)
-		context.joinCells(pA, r1, tl)
+		editingContext.putCell(pA, inA)
+		editingContext.putCell(pB, outB)
+		editingContext.putCell(r1, rs1)
+		editingContext.joinCells(r1, pB, tl)
+		editingContext.joinCells(pA, r1, tl)
+
+		// Convert to simulation context for testing
+		context = factory.createContext(editingContext)
 	}
 
 	/**

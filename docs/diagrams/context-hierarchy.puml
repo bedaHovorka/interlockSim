@@ -1,0 +1,185 @@
+@startuml context-hierarchy
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+
+title Context Class Hierarchy
+
+package "Core Interfaces" {
+    interface "Context<C : Cell>" as Context {
+        + getCols(): Int
+        + getRows(): Int
+        + getRailWayNetGrid(): RailwayNetGrid<C>
+        + getGraph(): ExtendedUnorientedGraph
+        + getInouts(): Set<InOut>
+        + getTrackBlocks(): Set<TrackBlock>
+        + addPropertyChangeListener(listener)
+        + removePropertyChangeListener(listener)
+    }
+
+    interface EditingContext {
+        {abstract} EditingContext extends Context<NodeCell>
+        --
+        + putCell(point, cell: NodeCell)
+        + removeCell(point)
+        + moveCell(from, to)
+        + joinCells(from, to, block)
+        + removeLine(block)
+        + setCurrentMaxSpeed(speed)
+        + setCurrentTrackLength(length)
+        + setCurrentNameString(name)
+    }
+
+    interface SimulationContext {
+        {abstract} SimulationContext extends Context<Cell>
+        {abstract} Does NOT extend EditingContext
+        --
+        + run()
+        + stop()
+        + errorStop(error)
+        + toDynamic(separator): DynamicPathSeparator
+        + toDynamic(track): DynamicTrack
+        + getWorkerFor(inOut): InOutWorker
+        + report()
+    }
+
+    note right of SimulationContext
+        **Architecture Note:**
+        SimulationContext does NOT
+        extend EditingContext.
+        
+        Railway network is immutable
+        during simulation.
+        
+        Transformation from editing
+        to simulation is one-way via
+        GridTransformer.
+    end note
+}
+
+package "Abstract Base" {
+    abstract class BaseContext {
+        {abstract} Non-parameterized base class
+        --
+        # cells: Array2DMap<Cell>
+        # graph: ExtendedUnorientedGraph
+        # pcs: PropertyChangeSupport
+        # inouts: Set<InOut>
+        # trackBlocks: Set<TrackBlock>
+        --
+        # currentMaxSpeed: Double
+        # currentTrackLength: Double
+        # currentNameString: String
+        --
+        + getRailWayNetGrid(): RailwayNetGrid<Cell>
+        + getGraph(): ExtendedUnorientedGraph
+        + getInouts(): Set<InOut>
+        + getTrackBlocks(): Set<TrackBlock>
+    }
+
+    note bottom of BaseContext
+        **Design Rationale:**
+        Not parameterized to avoid
+        variance complexity.
+        
+        Grid stores mixed Cell types:
+        - NodeCell subclasses
+        - TrackBlockPart
+        
+        Subclasses override with
+        covariant return types.
+    end note
+}
+
+package "Concrete Implementations" {
+    class DefaultEditingContext {
+        {static} EDITING ONLY (613 lines)
+        --
+        ~ cells: Array2DMap<Cell>
+        - linesKeys: Map<TrackBlock, Set<Point>>
+        --
+        + putCell(point, cell: NodeCell)
+        + removeCell(point)
+        + moveCell(from, to)
+        + joinCells(from, to, block)
+        + removeLine(block)
+        --
+        + getRailWayNetGrid(): RailwayNetGrid<NodeCell>
+        {method} (covariant return type)
+    }
+
+    class DefaultSimulationContext {
+        {static} SIMULATION (829 lines)
+        --
+        ~ cells: Array2DMap<Cell>
+        - dynamicMap: IdentityHashMap<PathSeparator, DynamicPathSeparator>
+        - trackMap: IdentityHashMap<TrackFacility, DynamicTrack>
+        - processFactory: SimulationProcessFactory
+        - mainProcess: LoopProcess?
+        - workers: Map<InOut, InOutWorker>
+        --
+        + run()
+        + stop()
+        + errorStop(error)
+        + toDynamic(separator): DynamicPathSeparator
+        + toDynamic(track): DynamicTrack
+        + getWorkerFor(inOut): InOutWorker
+        + setMainProcess(process)
+        --
+        + getRailWayNetGrid(): RailwayNetGrid<Cell>
+        {method} (inherited from base)
+    }
+
+    class DefaultContext {
+        {static} DEPRECATED WRAPPER (74 lines)
+        --
+        <<deprecated>>
+        "Use DefaultSimulationContext"
+        --
+        {method} Extends DefaultSimulationContext
+        {method} for backward compatibility
+    }
+
+    note right of DefaultContext
+        **Backward Compatibility:**
+        @Deprecated(
+            message = "Use DefaultSimulationContext",
+            replaceWith = ReplaceWith(...)
+        )
+        
+        Allows existing code to
+        continue working with
+        deprecation warnings.
+    end note
+}
+
+' Inheritance relationships
+Context <|-- EditingContext
+Context <|-- SimulationContext
+Context <|.. BaseContext
+BaseContext <|-- DefaultEditingContext
+BaseContext <|-- DefaultSimulationContext
+EditingContext <|.. DefaultEditingContext
+SimulationContext <|.. DefaultSimulationContext
+DefaultSimulationContext <|-- DefaultContext
+
+note bottom of DefaultEditingContext
+    **Editing Context:**
+    - Mutable railway network
+    - Add/remove/move cells
+    - Join cells with track blocks
+    - No simulation dependencies
+    - No sim/ package imports
+end note
+
+note bottom of DefaultSimulationContext
+    **Simulation Context:**
+    - Immutable railway network
+    - Runs discrete event simulation
+    - Manages dynamic wrappers
+    - Uses SimulationProcessFactory
+    - Extends base, NOT editing
+end note
+
+@enduml

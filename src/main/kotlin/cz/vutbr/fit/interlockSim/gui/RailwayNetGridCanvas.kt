@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
@@ -41,6 +42,17 @@ import javax.swing.SwingConstants
 /**
  * Main GUI component for rendering and editing railway elements in a grid.
  * Implements both visual rendering and interaction handling (mouse events, scrolling).
+ *
+ * ## Context Type Handling
+ *
+ * This component supports both [EditingContext] and [SimulationContext] without assuming
+ * inheritance relationship between them (preparation for Issue #153.5).
+ *
+ * - Use [setContext] to switch between editing and simulation modes
+ * - Use [getEditingContext] to access EditingContext (only when in EDITING state)
+ * - Use [getSimulationContext] to access SimulationContext (only when in SIMULATION state)
+ *
+ * The state machine ensures type-safe access to the appropriate context type.
  */
 class RailwayNetGridCanvas :
 	JComponent(),
@@ -194,16 +206,26 @@ class RailwayNetGridCanvas :
 	}
 
 	/**
-	 * Switch context and update mouse listeners for the appropriate mode
+	 * Switch context and update mouse listeners for the appropriate mode.
+	 *
+	 * Explicitly handles both EditingContext and SimulationContext without assuming
+	 * inheritance relationship between them (preparation for Issue #153.5).
 	 */
 	fun setContext(newContext: Context<*>) {
 		when (newContext) {
+			is SimulationContext -> {
+				// Handle SimulationContext first (more specific type)
+				state = State.SIMULATION
+				changeListeners(editListener, simulationControlListener)
+			}
 			is EditingContext -> {
+				// Handle EditingContext (base editing functionality)
 				state = State.EDITING
 				changeListeners(simulationControlListener, editListener)
 			}
 			else -> {
-				// Covers SimulationContext and any future context types
+				// Future context types default to simulation mode (read-only)
+				// This provides safe fallback behavior for unknown context types
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
@@ -388,10 +410,45 @@ class RailwayNetGridCanvas :
 		scrollRectToVisible(r)
 	}
 
-	// Context access
+	// Context access methods with type safety
+	/**
+	 * Get the current context as EditingContext.
+	 *
+	 * @return EditingContext if current context is an EditingContext
+	 * @throws IllegalArgumentException if no context is set or context is not an EditingContext
+	 */
 	fun getEditingContext(): EditingContext {
-		// assert state == State.EDITING && context is EditingContext
-		return context as EditingContext
+		val ctx = context
+		require(ctx != null) {
+			"No context is currently set"
+		}
+		require(state == State.EDITING) {
+			"Cannot get EditingContext when in $state state"
+		}
+		require(ctx is EditingContext) {
+			"Current context is not an EditingContext: ${ctx.javaClass.simpleName}"
+		}
+		return ctx
+	}
+
+	/**
+	 * Get the current context as SimulationContext.
+	 *
+	 * @return SimulationContext if current context is a SimulationContext
+	 * @throws IllegalArgumentException if no context is set or context is not a SimulationContext
+	 */
+	fun getSimulationContext(): SimulationContext {
+		val ctx = context
+		require(ctx != null) {
+			"No context is currently set"
+		}
+		require(state == State.SIMULATION) {
+			"Cannot get SimulationContext when in $state state"
+		}
+		require(ctx is SimulationContext) {
+			"Current context is not a SimulationContext: ${ctx.javaClass.simpleName}"
+		}
+		return ctx
 	}
 
 	// Grid display options
