@@ -60,7 +60,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 		mockContext = createMockSimulationContext()
 		// Trigger lazy initialization of dynamic wrappers
 		mockContext.getInOuts()
-		mockInOut = mockk<InOut>()
+		mockInOut = mockk<InOut>(relaxed = true)
 		every { mockInOut.getName() } returns "ENTRY"
 		every { mockInOut.toString() } returns "InOut:ENTRY"
 	}
@@ -75,7 +75,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val path = createMockPath(track1, track2)
 
-			val mockOutOut = mockk<InOut>()
+			val mockOutOut = mockk<InOut>(relaxed = true)
 			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
@@ -97,7 +97,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val pathAhead = createMockPath(track1, track2)
 
-			val mockOutOut = mockk<InOut>()
+			val mockOutOut = mockk<InOut>(relaxed = true)
 			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
@@ -119,7 +119,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 
 			val pathSequence = createMockPath(trackBehind, trackCurrent, trackAhead)
 
-			val mockOutOut = mockk<InOut>()
+			val mockOutOut = mockk<InOut>(relaxed = true)
 			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
@@ -140,7 +140,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val blockedTrack = createMockBlockedTrack("BLOCKED_TRACK", 100.0)
 			val pathBlocked = createMockPath(blockedTrack)
 
-			val mockOutOut = mockk<InOut>()
+			val mockOutOut = mockk<InOut>(relaxed = true)
 			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
@@ -160,7 +160,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track = createMockTrack("TRACK", 100.0)
 			val pathUnblocked = createMockPath(track)
 
-			val mockOutOut = mockk<InOut>()
+			val mockOutOut = mockk<InOut>(relaxed = true)
 			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
@@ -183,9 +183,11 @@ class TrainPathInteractionTest : KoinTestBase() {
 	private fun createMockTrack(
 		name: String,
 		length: Double
-	): SimpleTrack = mockk<SimpleTrack>().apply {
-		every { length() } returns length
-		every { toString() } returns "Track:$name"
+	): SimpleTrack {
+		val mock = mockk<SimpleTrack>(relaxed = true)
+		every { mock.length() } returns length
+		every { mock.toString() } returns "Track:$name"
+		return mock
 	}
 
 	/**
@@ -195,19 +197,23 @@ class TrainPathInteractionTest : KoinTestBase() {
 	private fun createMockBlockedTrack(
 		name: String,
 		length: Double
-	): SimpleTrack = mockk<SimpleTrack>().apply {
-		every { length() } returns length
-		every { toString() } returns "Track:$name"
+	): SimpleTrack {
+		val mock = mockk<SimpleTrack>(relaxed = true)
+		every { mock.length() } returns length
+		every { mock.toString() } returns "Track:$name"
+		return mock
 	}
 
 	/**
 	 * Creates a mock path from tracks.
 	 * Path is always available for train passage.
 	 */
-	private fun createMockPath(vararg tracks: SimpleTrack): Path = mockk<ArrayPath>().apply {
+	private fun createMockPath(vararg tracks: SimpleTrack): Path {
 		val totalLength = tracks.sumOf { it.length() }
-		every { length() } returns totalLength
-		every { toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
+		val mock = mockk<ArrayPath>(relaxed = true)
+		every { mock.length() } returns totalLength
+		every { mock.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
+		return mock
 	}
 
 	/**
@@ -215,7 +221,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 	 * MockK can mock sealed classes, unlike Mockito.
 	 */
 	private fun createMockSemaphore(isAllowing: Boolean): DynamicRailSemaphore {
-		val semaphore = mockk<DynamicRailSemaphore>()
+		val semaphore = mockk<DynamicRailSemaphore>(relaxed = true)
 		val signal = if (isAllowing) Signal.FREE else Signal.STOP
 		every { semaphore.signal } returns signal
 		every { semaphore.toString() } returns "Semaphore:$signal"
