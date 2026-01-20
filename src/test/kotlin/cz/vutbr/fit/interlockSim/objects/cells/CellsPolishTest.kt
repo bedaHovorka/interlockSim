@@ -123,7 +123,9 @@ class CellsPolishTest {
 			// Round-trip conversion should preserve values
 			val testValues = listOf(-5, -1, 0, 1, 5, 10)
 			for (d in testValues) {
-				assertThat(r2d(d2r(d)))
+				val converted = d2r(d)
+				val roundTripped = r2d(converted)
+				assertThat(roundTripped)
 					.withMessage("Round-trip conversion for d=$d")
 					.isEqualTo(d)
 			}

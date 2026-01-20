@@ -172,12 +172,14 @@ open build/reports/jacoco/test/html/index.html
 
 ## Success Criteria
 
-- [x] All 126 new tests compile
-- [ ] All tests pass in CI
-- [ ] cells package coverage ≥ 85%
-- [ ] tracks package coverage ≥ 85%
-- [ ] xml package coverage ≥ 90%
-- [ ] No regression in existing test coverage
+| Criterion | Status |
+|-----------|--------|
+| All 126 new tests compile | ✅ Complete |
+| All tests pass in CI | ⏳ Pending |
+| cells package coverage ≥ 85% | ⏳ Pending |
+| tracks package coverage ≥ 85% | ⏳ Pending |
+| xml package coverage ≥ 90% | ⏳ Pending |
+| No regression in existing test coverage | ⏳ Pending |
 
 ## Next Steps
 
