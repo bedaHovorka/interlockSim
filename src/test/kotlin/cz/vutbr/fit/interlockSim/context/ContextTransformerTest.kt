@@ -18,10 +18,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
@@ -119,18 +121,89 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
+	/**
+	 * Simple Network Transformation Tests
+	 *
+	 * Pattern for Testing Static/Dynamic Separation:
+	 *
+	 * 1. **Grid stores STATIC cells** (not dynamic wrappers)
+	 *    - Grid.getCellAt(x, y) returns the original static object
+	 *    - Use `isSameInstanceAs()` to verify identity preservation
+	 *
+	 * 2. **Dynamic wrappers accessed separately**
+	 *    - PathSeparators: via getInOuts() or toDynamic(separator)
+	 *    - Tracks: via toDynamic(track)
+	 *    - Extract static refs: (wrapper as DynamicType).staticRef
+	 *
+	 * 3. **Why this matters**
+	 *    - Enables stable identity comparisons (===)
+	 *    - Separates immutable configuration from mutable simulation state
+	 *    - Context manages dynamic mapping via IdentityHashMap
+	 *
+	 * See: docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md
+	 */
 	@Nested
 	@DisplayName("Simple Network Transformation")
 	inner class SimpleNetworkTransformation {
-		// TODO: Issue #221 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
-		// @Test
-		// @DisplayName("transforms context with two InOuts")
-		// fun transformContext_twoInOuts_preservesInOuts()
+		@Test
+		@DisplayName("transforms context with two InOuts")
+		fun transformContext_twoInOuts_preservesInOuts() {
+			// Arrange
+			val editingContext = DefaultEditingContext(20, 20)
+			val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(1, 1), inA)
+			editingContext.putCell(Point(10, 10), inB)
 
-		// TODO: Issue #221 - Test expects Dynamic wrappers in grid but implementation doesn't wrap cells in grid
-		// @Test
-		// @DisplayName("transforms context with InOut + RailSwitch")
-		// fun transformContext_inOutAndSwitch_preservesStructure()
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Assert - Grid contains static cells (not dynamic wrappers)
+			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
+			val cellB = simulationContext.getRailWayNetGrid().getCellAt(10, 10)
+			assertThat(cellA).isNotNull()
+			assertThat(cellB).isNotNull()
+			assertThat(cellA).isSameInstanceAs(inA)
+			assertThat(cellB).isSameInstanceAs(inB)
+
+			// Assert - Dynamic wrappers accessed via getInOuts()
+			val inOuts = simulationContext.getInOuts()
+			assertThat(inOuts).hasSize(2)
+
+			// Extract static refs from dynamic wrappers for comparison
+			val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
+			assertThat(staticRefs).containsAll(inA, inB)
+		}
+
+		@Test
+		@DisplayName("transforms context with InOut + RailSwitch")
+		fun transformContext_inOutAndSwitch_preservesStructure() {
+			// Arrange
+			val editingContext = DefaultEditingContext(20, 20)
+			val inOut = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			railSwitch.setName("SW1")
+			editingContext.putCell(Point(1, 1), inOut)
+			editingContext.putCell(Point(5, 5), railSwitch)
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Assert - Grid contains static cells (not dynamic wrappers)
+			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
+			val cellSW = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
+			assertThat(cellA).isNotNull()
+			assertThat(cellSW).isNotNull()
+			assertThat(cellA).isSameInstanceAs(inOut)
+			assertThat(cellSW).isSameInstanceAs(railSwitch)
+
+			// Assert - Dynamic wrappers available via toDynamic() and getInOuts()
+			val inOuts = simulationContext.getInOuts()
+			assertThat(inOuts).hasSize(1)
+
+			// Note: RailSwitch dynamic wrapper accessed via toDynamic() when needed
+			// Grid stores static objects, dynamic state managed separately
+		}
 
 		@Test
 		@DisplayName("transforms context with track connections")
@@ -173,11 +246,24 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
-	// TODO: Issue #221 - Property Preservation tests disabled due to SimulationContext property visibility issues
-	// The following tests need to be fixed to properly access currentMaxSpeed, currentTrackLength, currentNameString
-	// on SimulationContext. The compiler cannot resolve these properties through the interface hierarchy.
+	// NOTE: Property Preservation tests - Issue #168 CLOSED (2026-01-20)
 	//
-	// Tests that were disabled:
+	// Properties (currentMaxSpeed, currentTrackLength, currentNameString) ARE accessible via BaseContext.
+	// These properties exist in BaseContext and are inherited by DefaultSimulationContext.
+	//
+	// To implement these tests:
+	// 1. Set properties on EditingContext before transformation
+	// 2. Transform to SimulationContext
+	// 3. Cast to DefaultSimulationContext or BaseContext to access properties
+	// 4. Verify properties are preserved after transformation
+	//
+	// Example pattern:
+	//   val editingContext = DefaultEditingContext(20, 20)
+	//   editingContext.currentMaxSpeed = 120.0
+	//   val simContext = transformer.createSimulationContext(editingContext, processFactory)
+	//   assertThat((simContext as BaseContext).currentMaxSpeed).isEqualTo(120.0)
+	//
+	// Tests that could be implemented:
 	// - transformContext_preservesMaxSpeed()
 	// - transformContext_preservesTrackLength()
 	// - transformContext_preservesNameString()
@@ -224,15 +310,29 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
-	// TODO: Issue #221 - Complex Network Transformation tests disabled
-	// XMLContextFactory.createContext(File) returns SimulationContext, not EditingContext
-	// These tests try to cast SimulationContext to EditingContext which fails at runtime
+	// NOTE: Complex Network Transformation tests - Issue #168 CLOSED (2026-01-20)
+	//
+	// XMLContextFactory.createContext(File) returns SimulationContext (via Context<*>), not EditingContext.
+	// ContextTransformer is designed to transform EditingContext → SimulationContext.
+	//
+	// These tests cannot be implemented as originally intended because:
+	// 1. ContextTransformer requires EditingContext as input
+	// 2. XMLContextFactory.createContext(File) returns SimulationContext directly
+	// 3. There's no EditingContext to transform
+	//
+	// Alternative approach if needed:
+	// - XMLContextFactory would need a createEditingContext(File) method
+	// - Or test transformation with manually constructed EditingContext (not from XML)
+	// - Or test SimulationContext properties directly without transformation
 	//
 	// Tests that were disabled:
 	// - transformContext_vyhybnaXml_succeeds()
 	// - transformContext_vyhybnaXml_preservesGridDimensions()
 	// - transformContext_vyhybnaXml_preservesGraph()
 	// - transformContext_vyhybnaXml_preservesInOutCount()
+	//
+	// Recommendation: Test XMLContextFactory directly instead of via ContextTransformer.
+	// See XMLContextFactoryTest for comprehensive XML loading tests.
 	//
 	// See: https://github.com/bedaHovorka/interlockSim/issues/168
 
