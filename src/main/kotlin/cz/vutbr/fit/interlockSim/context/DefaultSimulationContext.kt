@@ -222,8 +222,12 @@ open class DefaultSimulationContext(
 				val second = iterator.next()
 
 				// Get the segment extensions for each node
-				val firstExt = doubleton.getValue(first)!!
-				val secondExt = doubleton.getValue(second)!!
+				val firstExt = requireSimulationNotNull(doubleton.getValue(first)) {
+					"Inconsistent graph entry: missing segment for first point $first in Doubleton key $doubleton"
+				}
+				val secondExt = requireSimulationNotNull(doubleton.getValue(second)) {
+					"Inconsistent graph entry: missing segment for second point $second in Doubleton key $doubleton"
+				}
 
 				// Put into the simulation graph
 				simGraph.put(first, firstExt, second, secondExt, trackBlock)
