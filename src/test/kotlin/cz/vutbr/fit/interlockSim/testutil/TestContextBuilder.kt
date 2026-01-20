@@ -161,7 +161,8 @@ class TestContextBuilder {
  * @return configured context with linear track
  */
 fun buildLinearTrack(): DefaultSimulationContext {
-	val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
+	val factory = getKoin().get<XMLContextFactory>()
+	val editingContext = factory.createEmptyContext()
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -180,10 +181,12 @@ fun buildLinearTrack(): DefaultSimulationContext {
 
 	val pA = Point(1, 1)
 	val pB = Point(5, 5)
-	context.putCell(pA, inA)
-	context.putCell(pB, outB)
-	context.joinCells(pA, pB, trackBlock)
-	return context
+	editingContext.putCell(pA, inA)
+	editingContext.putCell(pB, outB)
+	editingContext.joinCells(pA, pB, trackBlock)
+
+	// Convert to simulation context
+	return factory.createContext(editingContext) as DefaultSimulationContext
 }
 
 /**
@@ -193,7 +196,8 @@ fun buildLinearTrack(): DefaultSimulationContext {
  * @return configured context with semaphore
  */
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
-	val context = getKoin().get<XMLContextFactory>().createEmptyContext() as DefaultSimulationContext
+	val factory = getKoin().get<XMLContextFactory>()
+	val editingContext = factory.createEmptyContext()
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -218,12 +222,14 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	val pA = Point(1, 1)
 	val r1 = Point(4, 2)
 	val pB = Point(5, 5)
-	context.putCell(pA, inA)
-	context.putCell(r1, rs1)
-	context.putCell(pB, outB)
-	context.joinCells(r1, pB, trackBlock)
-	context.joinCells(pA, r1, trackBlock)
-	return context
+	editingContext.putCell(pA, inA)
+	editingContext.putCell(r1, rs1)
+	editingContext.putCell(pB, outB)
+	editingContext.joinCells(r1, pB, trackBlock)
+	editingContext.joinCells(pA, r1, trackBlock)
+
+	// Convert to simulation context
+	return factory.createContext(editingContext) as DefaultSimulationContext
 }
 
 /**

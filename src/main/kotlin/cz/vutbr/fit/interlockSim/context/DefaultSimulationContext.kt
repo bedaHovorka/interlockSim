@@ -300,25 +300,66 @@ open class DefaultSimulationContext(
 			val grid = editingContext.getRailWayNetGrid()
 			val cols = grid.getCols()
 			val rows = grid.getRows()
-			
+
 			val context = DefaultSimulationContext(cols, rows, processFactory)
-			
-			// Transform static grid to dynamic grid
-			// Cast to Cell grid for transformation (safe because EditingContext grid contains Cells)
+
+			// Copy cells from editing context grid to simulation context grid
+			// We need to copy all cells (both NodeCell and TrackBlockPart) to preserve the complete network
+			// Cast to Cell grid because EditingContext grid actually contains both NodeCell and TrackBlockPart
 			@Suppress("UNCHECKED_CAST")
 			val cellGrid = grid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
-			
+			val simGrid = context.getGrid()
+			for ((point, cell) in cellGrid) {
+				simGrid.put(point, cell)
+			}
+
+			// Copy the graph from editing context
+			// This ensures all track block connections are preserved
+			val editGraph = editingContext.getGraph()
+			val simGraph = context.getGraph()
+			for (entry in editGraph.entrySet()) {
+				// Each entry has a Doubleton<Point, Segment> key and TrackBlock value
+				val doubleton = entry.key
+				val trackBlock = entry.value
+
+				// Extract the two nodes from the doubleton
+				val iterator = doubleton.iterator()
+				val first = iterator.next()
+				val second = iterator.next()
+
+				// Get the segment extensions for each node
+				val firstExt = doubleton.getValue(first)!!
+				val secondExt = doubleton.getValue(second)!!
+
+				// Put into the simulation graph
+				simGraph.put(first, firstExt, second, secondExt, trackBlock)
+			}
+
+			// Copy InOut elements list
+			// Cast editingContext to BaseContext to access protected inouts
+			if (editingContext is DefaultEditingContext) {
+				context.inouts.addAll(editingContext.getInOutsList())
+			}
+
+			// Copy configuration properties
+			context.currentMaxSpeed = editingContext.currentMaxSpeed
+			context.currentTrackLength = editingContext.currentTrackLength
+			context.currentNameString = editingContext.currentNameString
+
+			// Transform static grid to dynamic grid for wrapper mappings
+			// Use the already-cast cellGrid from above
 			val transformationResult = GridTransformer.transformGrid(cellGrid)
-			
+
 			// Store the transformation map for toDynamic() lookups
 			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
-			
+
 			logger.info {
 				"Created simulation context from editing context: " +
 				"${transformationResult.staticToDynamicMap.size} dynamic wrappers, " +
+				"${context.inouts.size} InOuts, " +
 				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
 			}
-			
+
 			return context
 		}
 	}

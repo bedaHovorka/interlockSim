@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.xml
 
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.Context
+import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -265,8 +266,8 @@ class XMLContextFactory :
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
 			val ctx = editingContext ?: throw SAXException("Context not initialized")
-			// Access protected inouts field from BaseContext (inherited via DefaultEditingContext)
-			val inOutsCount = ctx.inouts.size
+			// Access inouts via public method from BaseContext
+			val inOutsCount = ctx.getInOutsList().size
 			if (inOutsCount < 2) {
 				throw SAXException(
 					"Railway network must have at least 2 InOut elements (entry and exit points). " +
@@ -280,7 +281,7 @@ class XMLContextFactory :
 		 * Returns the parsed context as a DefaultSimulationContext.
 		 * Converts the editing context (used during parsing) to a simulation context.
 		 */
-		fun getContext(): DefaultSimulationContext? = 
+		fun getContext(): DefaultSimulationContext? =
 			if (ended && editingContext != null) {
 				DefaultSimulationContext.fromEditingContext(editingContext!!, processFactory)
 			} else {
@@ -322,6 +323,15 @@ class XMLContextFactory :
 	}
 
 	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
+
+	/**
+	 * Create an empty simulation context (for testing).
+	 * Converts an empty editing context to a simulation context.
+	 */
+	fun createEmptySimulationContext(): DefaultSimulationContext {
+		val editingContext = createEmptyContext()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
 
 	@Throws(ContextCreationException::class)
 	override fun createContext(file: File): Context<*> =
@@ -415,7 +425,7 @@ class XMLContextFactory :
 		context: Context<*>,
 		file: File
 	): Boolean {
-		val xmlContext = Util.assertInstanceOf(DefaultSimulationContext::class.java, context) // zatim
+		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context) // zatim
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		return try {
 			val fileWriter = FileWriter(file)

@@ -245,6 +245,14 @@ abstract class BaseContext(
 	protected fun getLinesKeys(): MutableMap<TrackBlock, Set<Point>> = linesKeys
 
 	/**
+	 * Get the list of InOut elements (entry/exit points) in the railway network.
+	 * Public method for accessing protected inouts field.
+	 *
+	 * @return list of InOut elements
+	 */
+	fun getInOutsList(): List<InOut> = inouts
+
+	/**
 	 * Current name string for train generation.
 	 * Property with custom getter/setter for null handling.
 	 * Open to allow subclass override (DefaultSimulationContext adds random generation).
