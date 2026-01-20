@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer

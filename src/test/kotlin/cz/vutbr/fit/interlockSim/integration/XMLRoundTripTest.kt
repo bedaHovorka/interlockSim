@@ -264,7 +264,8 @@ class XMLRoundTripTest : KoinTestBase() {
 		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(originalContext.getRailWayNetGrid().getRows())
 		
 		// Verify InOuts count
-		assertThat(loadedContext.getInOuts()).hasSize(originalContext.getInOuts().size)
+		val originalInOutCount = originalContext.getInOuts().size
+		assertThat(loadedContext.getInOuts()).hasSize(originalInOutCount)
 		
 		// Verify graph structure (track connections)
 		assertThat(loadedContext.getGraph().size()).isEqualTo(originalContext.getGraph().size())
