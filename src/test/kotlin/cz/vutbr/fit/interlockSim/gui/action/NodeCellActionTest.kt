@@ -21,6 +21,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -73,7 +74,7 @@ context = factory.createEmptyContext()
 @Test
 fun `constructor creates action with correct name format`() {
 val cellClass = RailSwitch::class.java
-val args = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 val action = NodeCellAction(cellClass, context, args)
 
@@ -121,7 +122,7 @@ assertThat(action).isNotNull()
 @Test
 fun `icon generation works for different cell types`() {
 val testCases = listOf(
-RailSwitch::class.java to arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT),
+RailSwitch::class.java to arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE),
 RailSemaphore::class.java to arrayOf<Any>(),
 InOut::class.java to arrayOf<Any>(InOut.Kind.OUT)
 )
@@ -168,7 +169,7 @@ assertThat(action).isNotNull()
 @Test
 fun `action properly handles multiple arguments`() {
 val cellClass = RailSwitch::class.java
-val args = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 val action = NodeCellAction(cellClass, context, args)
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
@@ -183,8 +184,8 @@ assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
 @Test
 fun `multiple actions can be created for same cell type`() {
 val cellClass = RailSwitch::class.java
-val args1 = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT)
-val args2 = arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.RIGHT)
+val args1 = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
+val args2 = arrayOf<Any>(Cell.SpatialType.VERTICAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
 
 val action1 = NodeCellAction(cellClass, context, args1)
 val action2 = NodeCellAction(cellClass, context, args2)
@@ -208,7 +209,7 @@ InOut::class.java to "InOut"
 
 testCases.forEach { (cellClass, expectedName) ->
 val args = when (cellClass) {
-RailSwitch::class.java -> arrayOf<Any>(RailSwitch.Kind.SIMPLE, RailSwitch.Type.LEFT)
+RailSwitch::class.java -> arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
 InOut::class.java -> arrayOf<Any>(InOut.Kind.IN)
 else -> arrayOf<Any>()
 }
