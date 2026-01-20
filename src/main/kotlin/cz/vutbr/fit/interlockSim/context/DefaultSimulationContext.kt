@@ -152,118 +152,12 @@ open class DefaultSimulationContext(
 	private val random: Random = Random(0)
 
 	// ========================================
-	// EditingContext Interface Implementation
+	// Context Interface Implementation
 	// ========================================
-	// Simulation contexts are immutable - editing operations are not supported
-	// These methods are required by SimulationContext : EditingContext interface hierarchy
-	// but should never be called during simulation
-
-	/**
-	 * Get the railway network grid.
-	 *
-	 * **Covariant return type override**: Returns `RailwayNetGrid<NodeCell>` to match
-	 * the EditingContext interface requirement (via SimulationContext : EditingContext).
-	 *
-	 * Even though simulation works with all Cell types internally (including TrackBlockPart),
-	 * the interface contract expects NodeCell to maintain compatibility with EditingContext.
-	 * Internal operations use getInternalGrid() when full Cell access is needed.
-	 *
-	 * @return railway network grid containing node cells
-	 */
-	override fun getRailWayNetGrid(): RailwayNetGrid<NodeCell> {
-		// The grid internally stores Cell (NodeCell + TrackBlockPart), but interface requires NodeCell
-		// This is type-safe because:
-		// 1. Simulation doesn't call putCell (throws UnsupportedOperationException)
-		// 2. Internal operations use getInternalGrid() for full Cell access
-		// 3. External callers through EditingContext interface only see NodeCell operations
-		@Suppress("UNCHECKED_CAST")
-		return getInternalGrid() as RailwayNetGrid<NodeCell>
-	}
-
-	/**
-	 * Not supported in simulation context - network structure is immutable.
-	 * @throws UnsupportedOperationException always
-	 */
-	override fun putCell(key: Point, cell: cz.vutbr.fit.interlockSim.objects.cells.NodeCell) {
-		throw UnsupportedOperationException(
-			"putCell() is not supported in simulation context. " +
-			"Network structure is immutable during simulation. " +
-			"Use EditingContext for building railway networks."
-		)
-	}
-
-	/**
-	 * Not supported in simulation context - network structure is immutable.
-	 * @throws UnsupportedOperationException always
-	 */
-	override fun removeCell(key: Point) {
-		throw UnsupportedOperationException(
-			"removeCell() is not supported in simulation context. " +
-			"Network structure is immutable during simulation. " +
-			"Use EditingContext for modifying railway networks."
-		)
-	}
-
-	/**
-	 * Not supported in simulation context - network structure is immutable.
-	 * @throws UnsupportedOperationException always
-	 */
-	override fun moveCell(from: Point, to: Point) {
-		throw UnsupportedOperationException(
-			"moveCell() is not supported in simulation context. " +
-			"Network structure is immutable during simulation. " +
-			"Use EditingContext for modifying railway networks."
-		)
-	}
-
-	/**
-	 * Not supported in simulation context - network structure is immutable.
-	 * @throws UnsupportedOperationException always
-	 */
-	override fun removeLine(block: TrackBlock) {
-		throw UnsupportedOperationException(
-			"removeLine() is not supported in simulation context. " +
-			"Network structure is immutable during simulation. " +
-			"Use EditingContext for modifying railway networks."
-		)
-	}
-
-	/**
-	 * Not supported in simulation context - network structure is immutable.
-	 * @throws UnsupportedOperationException always
-	 */
-	override fun joinCells(key1: Point, key2: Point, trackBlock: TrackBlock) {
-		throw UnsupportedOperationException(
-			"joinCells() is not supported in simulation context. " +
-			"Network structure is immutable during simulation. " +
-			"Use EditingContext for building railway networks."
-		)
-	}
-
-	// ========================================
-	// Configuration Properties (from EditingContext)
-	// ========================================
-	// These are inherited from BaseContext but need to be exposed as EditingContext interface properties
-
-	/**
-	 * Current maximum speed for path elements.
-	 * Inherited from BaseContext, exposed via EditingContext interface.
-	 */
-	override var currentMaxSpeed: Double
-		get() = super.currentMaxSpeed
-		set(value) {
-			super.currentMaxSpeed = value
-		}
-
-	/**
-	 * Current track length for new track elements.
-	 * Inherited from BaseContext, exposed via EditingContext interface.
-	 */
-	override var currentTrackLength: Double
-		get() = super.currentTrackLength
-		set(value) {
-			super.currentTrackLength = value
-		}
+	// DefaultSimulationContext implements SimulationContext which extends Context<Cell>.
+	// The grid internally stores all Cell types (NodeCell subclasses + TrackBlockPart).
+	// Simulation contexts are immutable - network structure cannot be modified during simulation.
+	// Editing operations are NOT supported and should only be accessed through EditingContext.
 
 	// ========================================
 	// Simulation-Specific Implementation
