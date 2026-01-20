@@ -334,7 +334,6 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@Test
 		@DisplayName("pathToNextSemaphore requires proper semaphore endpoint")
-		@Disabled("Issue #168: pathToNextSemaphore returns null after DefaultSimulationContext refactoring")
 		fun pathToNextSemaphore_validPath_returnsPath() {
 			// pathToNextSemaphore requires:
 			// 1. A starting separator (inA)
@@ -361,7 +360,6 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@Test
 		@DisplayName("pathToNextSemaphore requires multi-section track")
-		@Disabled("Issue #168: pathToNextSemaphore returns null after DefaultSimulationContext refactoring")
 		fun pathToNextSemaphore_returnsValidPath() {
 			// Test documents that pathToNextSemaphore is designed for multi-block tracks
 			// SimpleTrackBlock has only one section, so getNextTrackSection returns null

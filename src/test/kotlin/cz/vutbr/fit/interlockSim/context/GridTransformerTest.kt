@@ -156,11 +156,10 @@ class GridTransformerTest : KoinTestBase() {
 	inner class GridStructurePreservation {
 		@Test
 		@DisplayName("preserves grid dimensions")
-		@Disabled("Issue #168: Refactoring changed DefaultSimulationContext to not extend DefaultEditingContext")
 		fun transformGrid_anyGrid_preservesDimensions() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Load vyhybna.xml as EditingContext first
+			val editingContext = factory.createEditingContext(VYHYBNA_XML)
+			val staticGrid = editingContext.getRailWayNetGrid()
 
 			// Act - Transform
 			val result = GridTransformer.transformGrid(staticGrid)
@@ -172,11 +171,10 @@ class GridTransformerTest : KoinTestBase() {
 
 		@Test
 		@DisplayName("preserves cell positions")
-		@Disabled("Issue #168: Refactoring changed DefaultSimulationContext to not extend DefaultEditingContext")
 		fun transformGrid_vyhybnaXml_preservesCellPositions() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Load vyhybna.xml as EditingContext first
+			val editingContext = factory.createEditingContext(VYHYBNA_XML)
+			val staticGrid = editingContext.getRailWayNetGrid()
 
 			// Collect original positions of NodeCells
 			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
@@ -277,11 +275,10 @@ class GridTransformerTest : KoinTestBase() {
 	inner class ComplexNetworks {
 		@Test
 		@DisplayName("transforms vyhybna.xml network completely")
-		@Disabled("Issue #168: Refactoring changed DefaultSimulationContext to not extend DefaultEditingContext")
 		fun transformGrid_vyhybnaXml_transformsCompletely() {
-			// Arrange - Load vyhybna.xml
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Load vyhybna.xml as EditingContext first
+			val editingContext = factory.createEditingContext(VYHYBNA_XML)
+			val staticGrid = editingContext.getRailWayNetGrid()
 
 			// Count NodeCells in original grid
 			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
@@ -316,11 +313,10 @@ class GridTransformerTest : KoinTestBase() {
 
 		@Test
 		@DisplayName("handles InOut with embedded semaphores correctly")
-		@Disabled("Issue #168: Refactoring changed DefaultSimulationContext to not extend DefaultEditingContext")
 		fun transformGrid_withInOuts_mapsEmbeddedSemaphores() {
-			// Arrange - Load vyhybna.xml (has 2 InOuts)
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Load vyhybna.xml (has 2 InOuts) as EditingContext first
+			val editingContext = factory.createEditingContext(VYHYBNA_XML)
+			val staticGrid = editingContext.getRailWayNetGrid()
 
 			// Find an InOut in the grid
 			var inOut: InOut? = null
@@ -351,11 +347,10 @@ class GridTransformerTest : KoinTestBase() {
 	inner class Performance {
 		@Test
 		@DisplayName("transforms typical network in < 1ms")
-		@Disabled("Issue #168: Refactoring changed DefaultSimulationContext to not extend DefaultEditingContext")
 		fun transformGrid_vyhybnaXml_performsQuickly() {
-			// Arrange - Load vyhybna.xml (typical network with ~10-20 NodeCells)
-			val context = factory.createContext(VYHYBNA_XML) as DefaultEditingContext
-			val staticGrid = context.getRailWayNetGrid()
+			// Arrange - Load vyhybna.xml (typical network with ~10-20 NodeCells) as EditingContext first
+			val editingContext = factory.createEditingContext(VYHYBNA_XML)
+			val staticGrid = editingContext.getRailWayNetGrid()
 
 			// Act - Transform and measure time
 			val elapsedMs = measureTimeMillis {
