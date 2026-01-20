@@ -304,9 +304,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 			val curvedTrack = SimpleTrackBlock(
 				end1,
 				MockNodeCell("End2"),
-				length = 150.0,
-				maxSpeedForward = 45.0, // curve speed limit
-				maxSpeedBackward = 45.0
+				150.0, // length
+				45.0, // maxSpeed1 - curve speed limit
+				45.0  // maxSpeed2
 			)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
