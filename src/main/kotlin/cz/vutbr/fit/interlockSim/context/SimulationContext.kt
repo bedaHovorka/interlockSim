@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
+import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -30,12 +31,12 @@ import java.util.EnumSet
  *
  * ## Architecture
  *
- * SimulationContext extends EditingContext to maintain interface compatibility, but
- * implementations should NOT support editing operations during simulation. The network
- * structure is immutable once simulation starts.
+ * SimulationContext extends [Context]<[Cell]> for architectural separation, following
+ * the Interface Segregation Principle. The network structure is immutable once simulation
+ * starts - editing operations are NOT supported during simulation.
  *
- * DefaultSimulationContext extends BaseContext directly and provides unsupported
- * operation stubs for editing methods (putCell, removeCell, etc.).
+ * DefaultSimulationContext extends BaseContext directly and does NOT implement EditingContext.
+ * Editing operations (putCell, removeCell, etc.) are only available through [EditingContext].
  *
  * Dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
  * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) are created during
@@ -59,7 +60,7 @@ import java.util.EnumSet
  * @see DynamicPathSeparator
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : EditingContext {
+interface SimulationContext : Context<Cell> {
 	/**
 	 * simulation reporting types
 	 */

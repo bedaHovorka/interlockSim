@@ -27,7 +27,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrackWithSemaphore
 import cz.vutbr.fit.interlockSim.testutil.buildMinimal
@@ -70,68 +69,11 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			context = factory.createEmptySimulationContext()
 		}
 
-		@Test
-		@DisplayName("putCell throws UnsupportedOperationException - simulation is immutable")
-		fun putCell_throwsUnsupportedOperation() {
-			// Arrange
-			val position = Point(5, 5)
-			val inOut = InOut("A", false, SpatialType.HORIZONTAL)
-
-			// Act & Assert
-			assertThatThrownBy { context.putCell(position, inOut) }
-				.isInstanceOf(UnsupportedOperationException::class.java)
-		}
-
-		@Test
-		@DisplayName("removeCell throws UnsupportedOperationException - simulation is immutable")
-		fun removeCell_throwsUnsupportedOperation() {
-			// Arrange
-			val position = Point(5, 5)
-
-			// Act & Assert
-			assertThatThrownBy { context.removeCell(position) }
-				.isInstanceOf(UnsupportedOperationException::class.java)
-		}
-
-		@Test
-		@DisplayName("moveCell throws UnsupportedOperationException - simulation is immutable")
-		fun moveCell_throwsUnsupportedOperation() {
-			// Arrange
-			val from = Point(5, 5)
-			val to = Point(6, 6)
-
-			// Act & Assert
-			assertThatThrownBy { context.moveCell(from, to) }
-				.isInstanceOf(UnsupportedOperationException::class.java)
-		}
-
-		@Test
-		@DisplayName("removeLine throws UnsupportedOperationException - simulation is immutable")
-		fun removeLine_throwsUnsupportedOperation() {
-			// Arrange
-			val inOut1 = InOut("A", false, SpatialType.HORIZONTAL)
-			val inOut2 = InOut("B", true, SpatialType.HORIZONTAL)
-			val trackBlock = SimpleTrackBlock(inOut1, inOut2, 100.0, 50.0)
-
-			// Act & Assert
-			assertThatThrownBy { context.removeLine(trackBlock) }
-				.isInstanceOf(UnsupportedOperationException::class.java)
-		}
-
-		@Test
-		@DisplayName("joinCells throws UnsupportedOperationException - simulation is immutable")
-		fun joinCells_throwsUnsupportedOperation() {
-			// Arrange
-			val key1 = Point(5, 5)
-			val key2 = Point(7, 7)
-			val inOut1 = InOut("A", false, SpatialType.HORIZONTAL)
-			val inOut2 = InOut("B", true, SpatialType.HORIZONTAL)
-			val trackBlock = SimpleTrackBlock(inOut1, inOut2, 100.0, 50.0)
-
-			// Act & Assert
-			assertThatThrownBy { context.joinCells(key1, key2, trackBlock) }
-				.isInstanceOf(UnsupportedOperationException::class.java)
-		}
+		// Note: Editing operation tests removed after Issue #153.5
+		// SimulationContext no longer inherits from EditingContext,
+		// so editing methods (putCell, removeCell, moveCell, removeLine, joinCells)
+		// are not available on SimulationContext. This enforces architectural
+		// separation and Interface Segregation Principle.
 
 		@Test
 		@DisplayName("getRailWayNetGrid returns grid for read-only access")
@@ -461,7 +403,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert
 			assertThat(context)
-				.prop(EditingContext::currentMaxSpeed)
+				.prop(DefaultSimulationContext::currentMaxSpeed)
 				.isEqualTo(newSpeed)
 		}
 
@@ -476,7 +418,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert
 			assertThat(context)
-				.prop(EditingContext::currentTrackLength)
+				.prop(DefaultSimulationContext::currentTrackLength)
 				.isEqualTo(newLength)
 		}
 
@@ -491,7 +433,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert
 			assertThat(context)
-				.prop(EditingContext::currentNameString)
+				.prop(DefaultSimulationContext::currentNameString)
 				.isEqualTo(name)
 		}
 	}

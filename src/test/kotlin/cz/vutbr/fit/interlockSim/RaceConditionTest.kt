@@ -671,12 +671,16 @@ class RaceConditionTest : KoinTestBase() {
 							val x = 10 + i
 							val y = 10 + i
 
-							// Place cell
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 
 							// Retrieve cell
 							val retrieved = context.getRailWayNetGrid().getCellAt(x, y)
@@ -743,13 +747,16 @@ class RaceConditionTest : KoinTestBase() {
 							val x = 20 + threadId * 10 + iter
 							val y = 20 + threadId * 10 + iter
 
-							// Try to place a cell
-							val cell = MockNodeCell("Cell_${threadId}_$iter")
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 
 							// Try to retrieve it
 							val retrieved = grid.getCellAt(x, y)
@@ -1028,14 +1035,16 @@ class RaceConditionTest : KoinTestBase() {
 					try {
 						startLatch.await()
 						for (i in 0 until 10) {
-							val cell = MockNodeCell("GridCell_${threadId}_$i")
-							val x = 30 + threadId * 10 + i
-							val y = 30 + threadId * 10 + i
+							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
+							// This test would need to use EditingContext instead.
+							// Commented out since test is already @Disabled
+							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
 									.Point(x, y),
 								cell
 							)
+							*/
 							Thread.sleep(1)
 						}
 					} catch (e: Exception) {

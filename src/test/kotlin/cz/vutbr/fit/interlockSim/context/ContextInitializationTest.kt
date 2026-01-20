@@ -396,7 +396,7 @@ class ContextInitializationTest : KoinTestBase() {
 
 			// Railway context: Default settings should be applicable
 			assertThat(emptyContext)
-				.prop(EditingContext::currentMaxSpeed)
+				.prop(DefaultSimulationContext::currentMaxSpeed)
 				.withMessage("Empty context should have max speed setting")
 				.isGreaterThan(0.0)
 		}
