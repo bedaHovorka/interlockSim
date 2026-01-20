@@ -14,12 +14,12 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.`when`
 
 /**
  * Unit tests for Timetable class.
@@ -46,13 +46,13 @@ class TimetableTest {
 	@BeforeEach
 	fun setUp() {
 		// Create mock InOut objects for testing
-		mockInPoint = mock(InOut::class.java)
-		`when`(mockInPoint.getName()).thenReturn("ENTRY_POINT")
-		`when`(mockInPoint.toString()).thenReturn("InOut:ENTRY_POINT")
+		mockInPoint = mockk<InOut>()
+		every { mockInPoint.getName() } returns "ENTRY_POINT"
+		every { mockInPoint.toString() } returns "InOut:ENTRY_POINT"
 
-		mockOutPoint = mock(InOut::class.java)
-		`when`(mockOutPoint.getName()).thenReturn("EXIT_POINT")
-		`when`(mockOutPoint.toString()).thenReturn("InOut:EXIT_POINT")
+		mockOutPoint = mockk<InOut>()
+		every { mockOutPoint.getName() } returns "EXIT_POINT"
+		every { mockOutPoint.toString() } returns "InOut:EXIT_POINT"
 	}
 
 	@Nested

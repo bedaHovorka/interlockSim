@@ -32,7 +32,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
+import io.mockk.*
 
 /**
  * Unit tests for deadlock detection and prevention in railway simulation.
@@ -581,9 +581,9 @@ class DeadlockDetectionTest : KoinTestBase() {
 	// ==================== Helper Methods ====================
 
 	private fun createMockInOut(name: String): InOut {
-		val inOut = mock(InOut::class.java)
-		`when`(inOut.getName()).thenReturn(name)
-		`when`(inOut.toString()).thenReturn("InOut:$name")
+		val inOut = mockk<InOut>()
+		every { inOut.getName() } returns name
+		every { inOut.toString() } returns "InOut:$name"
 		return inOut
 	}
 
@@ -592,10 +592,10 @@ class DeadlockDetectionTest : KoinTestBase() {
 		length: Double,
 		maxSpeed: Double = 20.0
 	): SimpleTrack {
-		val track = mock(SimpleTrack::class.java)
-		`when`(track.length()).thenReturn(length)
-		`when`(track.maxSpeed(any())).thenReturn(maxSpeed)
-		`when`(track.toString()).thenReturn("Track:$name")
+		val track = mockk<SimpleTrack>()
+		every { track.length() } returns length
+		every { track.maxSpeed(any()) } returns maxSpeed
+		every { track.toString() } returns "Track:$name"
 		return track
 	}
 
@@ -603,9 +603,9 @@ class DeadlockDetectionTest : KoinTestBase() {
 		name: String,
 		length: Double
 	): SimpleTrack {
-		val track = mock(SimpleTrack::class.java)
-		`when`(track.length()).thenReturn(length)
-		`when`(track.toString()).thenReturn("Track:$name[RESERVED]")
+		val track = mockk<SimpleTrack>()
+		every { track.length() } returns length
+		every { track.toString() } returns "Track:$name[RESERVED]"
 		return track
 	}
 
@@ -613,17 +613,17 @@ class DeadlockDetectionTest : KoinTestBase() {
 		name: String,
 		length: Double
 	): SimpleTrack {
-		val track = mock(SimpleTrack::class.java)
-		`when`(track.length()).thenReturn(length)
-		`when`(track.toString()).thenReturn("Track:$name[OCCUPIED]")
+		val track = mockk<SimpleTrack>()
+		every { track.length() } returns length
+		every { track.toString() } returns "Track:$name[OCCUPIED]"
 		return track
 	}
 
 	private fun createMockPath(vararg tracks: SimpleTrack): ArrayPath {
-		val path = mock(ArrayPath::class.java)
+		val path = mockk<ArrayPath>()
 		val totalLength = tracks.sumOf { it.length() }
-		`when`(path.length()).thenReturn(totalLength)
-		`when`(path.toString()).thenReturn("Path[${tracks.size} segments, ${totalLength}m]")
+		every { path.length() } returns totalLength
+		every { path.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
 		return path
 	}
 
@@ -639,8 +639,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 	}
 
 	private fun createMockSwitch(name: String): RailSwitch {
-		val switch = mock(RailSwitch::class.java)
-		`when`(switch.toString()).thenReturn("Switch:$name")
+		val switch = mockk<RailSwitch>()
+		every { switch.toString() } returns "Switch:$name"
 		return switch
 	}
 }

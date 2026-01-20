@@ -20,11 +20,12 @@ import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
 
 /**
  * Unit tests for {@link Train}.
@@ -197,7 +198,7 @@ class TrainTest : KoinTestBase() {
 	// ==================== Helper Methods ====================
 
 	/**
-	 * Creates a timetable with specified train length for testing using Mockito.
+	 * Creates a timetable with specified train length for testing using MockK.
 	 * This allows tests to run without complex InOut setup.
 	 *
 	 * @param length the train length to set in the timetable
@@ -205,13 +206,13 @@ class TrainTest : KoinTestBase() {
 	 */
 	private fun createTimetableWithLength(length: Double): Timetable {
 		// Mock InOut objects needed for timetable
-		val mockInOut = mock(InOut::class.java)
-		`when`(mockInOut.getName()).thenReturn("MOCK_IN")
-		`when`(mockInOut.toString()).thenReturn("InOut:MOCK_IN")
+		val mockInOut = mockk<InOut>()
+		every { mockInOut.getName() } returns "MOCK_IN"
+		every { mockInOut.toString() } returns "InOut:MOCK_IN"
 
-		val mockOutOut = mock(InOut::class.java)
-		`when`(mockOutOut.getName()).thenReturn("MOCK_OUT")
-		`when`(mockOutOut.toString()).thenReturn("InOut:MOCK_OUT")
+		val mockOutOut = mockk<InOut>()
+		every { mockOutOut.getName() } returns "MOCK_OUT"
+		every { mockOutOut.toString() } returns "InOut:MOCK_OUT"
 
 		// Create timetable with mocked InOuts and specified length
 		return Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), length)

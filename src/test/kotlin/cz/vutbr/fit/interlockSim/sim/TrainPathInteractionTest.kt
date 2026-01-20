@@ -22,12 +22,12 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.*
 
 /**
  * Unit tests for Train path following and reservation.
@@ -60,9 +60,9 @@ class TrainPathInteractionTest : KoinTestBase() {
 		mockContext = createMockSimulationContext()
 		// Trigger lazy initialization of dynamic wrappers
 		mockContext.getInOuts()
-		mockInOut = mock(InOut::class.java)
-		`when`(mockInOut.getName()).thenReturn("ENTRY")
-		`when`(mockInOut.toString()).thenReturn("InOut:ENTRY")
+		mockInOut = mockk<InOut>(relaxed = true)
+		every { mockInOut.getName() } returns "ENTRY"
+		every { mockInOut.toString() } returns "InOut:ENTRY"
 	}
 
 	@Nested
@@ -75,8 +75,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val path = createMockPath(track1, track2)
 
-			val mockOutOut = mock(InOut::class.java)
-			`when`(mockOutOut.getName()).thenReturn("EXIT")
+			val mockOutOut = mockk<InOut>(relaxed = true)
+			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -97,8 +97,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val pathAhead = createMockPath(track1, track2)
 
-			val mockOutOut = mock(InOut::class.java)
-			`when`(mockOutOut.getName()).thenReturn("EXIT")
+			val mockOutOut = mockk<InOut>(relaxed = true)
+			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -119,8 +119,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 
 			val pathSequence = createMockPath(trackBehind, trackCurrent, trackAhead)
 
-			val mockOutOut = mock(InOut::class.java)
-			`when`(mockOutOut.getName()).thenReturn("EXIT")
+			val mockOutOut = mockk<InOut>(relaxed = true)
+			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -140,8 +140,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val blockedTrack = createMockBlockedTrack("BLOCKED_TRACK", 100.0)
 			val pathBlocked = createMockPath(blockedTrack)
 
-			val mockOutOut = mock(InOut::class.java)
-			`when`(mockOutOut.getName()).thenReturn("EXIT")
+			val mockOutOut = mockk<InOut>(relaxed = true)
+			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -154,15 +154,14 @@ class TrainPathInteractionTest : KoinTestBase() {
 		}
 
 		@Test
-		@Disabled("Mockito cannot mock sealed class DynamicRailSemaphore. See Issue #217 for MockK migration.")
 		fun `train handles path becoming available - proceeds`() {
 			// Arrange: Create a path that initially blocks but becomes free
 			val semaphore = createMockSemaphore(true) // Initially allowing
 			val track = createMockTrack("TRACK", 100.0)
 			val pathUnblocked = createMockPath(track)
 
-			val mockOutOut = mock(InOut::class.java)
-			`when`(mockOutOut.getName()).thenReturn("EXIT")
+			val mockOutOut = mockk<InOut>(relaxed = true)
+			every { mockOutOut.getName() } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -184,11 +183,12 @@ class TrainPathInteractionTest : KoinTestBase() {
 	private fun createMockTrack(
 		name: String,
 		length: Double
-	): SimpleTrack =
-		mock(SimpleTrack::class.java).apply {
-			`when`(this.length()).thenReturn(length)
-			`when`(this.toString()).thenReturn("Track:$name")
-		}
+	): SimpleTrack {
+		val mock = mockk<SimpleTrack>(relaxed = true)
+		every { mock.length() } returns length
+		every { mock.toString() } returns "Track:$name"
+		return mock
+	}
 
 	/**
 	 * Creates a mock blocked track that reports as not free.
@@ -197,31 +197,34 @@ class TrainPathInteractionTest : KoinTestBase() {
 	private fun createMockBlockedTrack(
 		name: String,
 		length: Double
-	): SimpleTrack =
-		mock(SimpleTrack::class.java).apply {
-			`when`(this.length()).thenReturn(length)
-			`when`(this.toString()).thenReturn("Track:$name")
-		}
+	): SimpleTrack {
+		val mock = mockk<SimpleTrack>(relaxed = true)
+		every { mock.length() } returns length
+		every { mock.toString() } returns "Track:$name"
+		return mock
+	}
 
 	/**
 	 * Creates a mock path from tracks.
 	 * Path is always available for train passage.
 	 */
-	private fun createMockPath(vararg tracks: SimpleTrack): Path =
-		mock(ArrayPath::class.java).apply {
-			val totalLength = tracks.sumOf { it.length() }
-			`when`(this.length()).thenReturn(totalLength)
-			`when`(this.toString()).thenReturn("Path[${tracks.size} segments, ${totalLength}m]")
-		}
+	private fun createMockPath(vararg tracks: SimpleTrack): Path {
+		val totalLength = tracks.sumOf { it.length() }
+		val mock = mockk<ArrayPath>(relaxed = true)
+		every { mock.length() } returns totalLength
+		every { mock.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
+		return mock
+	}
 
 	/**
 	 * Creates a mock semaphore with allowing/stop signal.
+	 * MockK can mock sealed classes, unlike Mockito.
 	 */
 	private fun createMockSemaphore(isAllowing: Boolean): DynamicRailSemaphore {
-		val semaphore = mock(DynamicRailSemaphore::class.java)
+		val semaphore = mockk<DynamicRailSemaphore>(relaxed = true)
 		val signal = if (isAllowing) Signal.FREE else Signal.STOP
-		`when`(semaphore.signal).thenReturn(signal)
-		`when`(semaphore.toString()).thenReturn("Semaphore:$signal")
+		every { semaphore.signal } returns signal
+		every { semaphore.toString() } returns "Semaphore:$signal"
 		return semaphore
 	}
 }

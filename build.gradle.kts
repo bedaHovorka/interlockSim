@@ -49,6 +49,7 @@ val junitPlatformVersion: String by project
 val junitJupiterVersion: String by project
 val assertkVersion: String by project
 val mockitoVersion: String by project
+val mockkVersion: String by project
 val koinVersion: String by project
 val javaVersion: String by project
 val kotlinVersion: String by project
@@ -114,8 +115,9 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion") // JUnit platform launcher
     testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion") // JUnit platform console
     testImplementation("com.willowtreeapps.assertk:assertk:$assertkVersion") // AssertK for Kotlin tests
-    testImplementation("org.mockito:mockito-core:$mockitoVersion") // Mocking framework
-    testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion") // Mockito-JUnit integration
+    testImplementation("io.mockk:mockk:$mockkVersion") // MockK mocking framework for Kotlin
+    testImplementation("org.mockito:mockito-core:$mockitoVersion") // Mockito (being phased out)
+    testImplementation("org.mockito:mockito-junit-jupiter:$mockitoVersion") // Mockito-JUnit integration (being phased out)
     testImplementation("io.insert-koin:koin-test:$koinVersion") // Koin testing support
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion") // Koin JUnit 5 integration
 }
@@ -531,7 +533,8 @@ tasks.register("printConfig") {
             |  Logback: $logbackVersion
             |  JUnit: $junitJupiterVersion
             |  AssertK: $assertkVersion
-            |  Mockito: $mockitoVersion
+            |  MockK: $mockkVersion
+            |  Mockito: $mockitoVersion (being phased out - replaced by MockK)
             |
             |Build Outputs:
             |  Classes: build/classes/java/main

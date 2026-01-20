@@ -30,7 +30,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.mockito.Mockito.mock
+import io.mockk.mockk
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,8 +58,8 @@ class SimulationExceptionTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		mockContext = createMockSimulationContext()
-		mockTrack = mock(SimpleTrack::class.java)
-		mockSeparator = mock(PathSeparator::class.java)
+		mockTrack = mockk<SimpleTrack>()
+		mockSeparator = mockk<PathSeparator>()
 	}
 
 	// ==================== SimulationException Tests ====================
@@ -351,8 +351,8 @@ class SimulationExceptionTest : KoinTestBase() {
 		@Test
 		fun `multiple track operations can have different exceptions`() {
 			// Arrange
-			val track1 = mock(SimpleTrack::class.java)
-			val track2 = mock(SimpleTrack::class.java)
+			val track1 = mockk<SimpleTrack>()
+			val track2 = mockk<SimpleTrack>()
 			val exception1 = TrackOperationException(track1)
 			val exception2 = TrackOperationException(track2)
 
@@ -488,8 +488,8 @@ class SimulationExceptionTest : KoinTestBase() {
 		@Test
 		fun `multiple path separators can have different exceptions`() {
 			// Arrange
-			val separator1 = mock(PathSeparator::class.java)
-			val separator2 = mock(PathSeparator::class.java)
+			val separator1 = mockk<PathSeparator>()
+			val separator2 = mockk<PathSeparator>()
 			val exception1 = PathSeparatorChangeException(separator1)
 			val exception2 = PathSeparatorChangeException(separator2)
 
@@ -636,7 +636,7 @@ class SimulationExceptionTest : KoinTestBase() {
 		fun `track operation exception preserves full context`() {
 			// Arrange
 			val cause = Exception("Track failure")
-			val track = mock(SimpleTrack::class.java)
+			val track = mockk<SimpleTrack>()
 			val exception = TrackOperationException(testMessage, cause, track)
 
 			// Act
@@ -654,7 +654,7 @@ class SimulationExceptionTest : KoinTestBase() {
 		fun `path separator exception preserves full context`() {
 			// Arrange
 			val cause = Exception("Path failure")
-			val separator = mock(PathSeparator::class.java)
+			val separator = mockk<PathSeparator>()
 			val exception = PathSeparatorChangeException(testMessage, cause, separator)
 
 			// Act
