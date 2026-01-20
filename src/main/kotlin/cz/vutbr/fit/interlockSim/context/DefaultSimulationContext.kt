@@ -806,7 +806,9 @@ open class DefaultSimulationContext(
 				val staticResult = next.getSecondEnd(staticSeparator)
 				// Grid parameterization: Convert static result to dynamic wrapper before adding to path
 				separator = toDynamic(staticResult)
-				logger.trace { "Grid parameterization: Converted separator from track to dynamic: ${separator.javaClass.simpleName}" }
+				logger.trace {
+					"Grid parameterization: Converted separator from track to dynamic: ${separator.javaClass.simpleName}"
+				}
 				previous = next
 				next = getNextTrackSection(separator, next)
 
