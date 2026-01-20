@@ -264,6 +264,10 @@ open class DefaultSimulationContext(
 				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
 			}
 
+			// Freeze the context to prevent modifications after creation
+			// Simulation context has immutable network structure
+			context.freeze()
+
 			return context
 		}
 	}
@@ -737,6 +741,10 @@ open class DefaultSimulationContext(
 		logger.info {
 			"Simulation initialization complete: ${staticToDynamicMap.size} dynamic wrappers created"
 		}
+
+		// Freeze the context to prevent runtime modifications after initialization
+		// Based on architectural decision: simulation context has immutable network structure
+		freeze()
 
 		// Use factory to create main process if not already set
 		if (mainProcess == null) {
