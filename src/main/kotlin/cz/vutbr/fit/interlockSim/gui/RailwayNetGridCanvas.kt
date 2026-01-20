@@ -224,7 +224,8 @@ class RailwayNetGridCanvas :
 				changeListeners(simulationControlListener, editListener)
 			}
 			else -> {
-				// Future context types default to simulation mode
+				// Future context types default to simulation mode (read-only)
+				// This provides safe fallback behavior for unknown context types
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
 			}
@@ -414,14 +415,17 @@ class RailwayNetGridCanvas :
 	 * Get the current context as EditingContext.
 	 *
 	 * @return EditingContext if current context is an EditingContext
-	 * @throws IllegalStateException if current context is not an EditingContext
+	 * @throws IllegalArgumentException if no context is set or context is not an EditingContext
 	 */
 	fun getEditingContext(): EditingContext {
+		require(context != null) {
+			"No context is currently set"
+		}
 		require(state == State.EDITING) {
 			"Cannot get EditingContext when in $state state"
 		}
 		require(context is EditingContext) {
-			"Current context is not an EditingContext: ${context?.javaClass?.simpleName}"
+			"Current context is not an EditingContext: ${context.javaClass.simpleName}"
 		}
 		return context as EditingContext
 	}
@@ -430,14 +434,17 @@ class RailwayNetGridCanvas :
 	 * Get the current context as SimulationContext.
 	 *
 	 * @return SimulationContext if current context is a SimulationContext
-	 * @throws IllegalStateException if current context is not a SimulationContext
+	 * @throws IllegalArgumentException if no context is set or context is not a SimulationContext
 	 */
 	fun getSimulationContext(): SimulationContext {
+		require(context != null) {
+			"No context is currently set"
+		}
 		require(state == State.SIMULATION) {
 			"Cannot get SimulationContext when in $state state"
 		}
 		require(context is SimulationContext) {
-			"Current context is not a SimulationContext: ${context?.javaClass?.simpleName}"
+			"Current context is not a SimulationContext: ${context.javaClass.simpleName}"
 		}
 		return context as SimulationContext
 	}
