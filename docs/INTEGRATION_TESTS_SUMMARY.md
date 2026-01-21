@@ -176,7 +176,7 @@ The integration tests focus on:
 @Tag("integration-test")
 class TestSuiteNameTest : KoinTestBase() {
     private val dependency: Dependency by inject()
-    
+
     @Test
     @DisplayName("descriptive test name")
     fun testMethod() {
