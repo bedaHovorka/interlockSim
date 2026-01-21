@@ -13,11 +13,9 @@ package cz.vutbr.fit.interlockSim.objects.paths
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.hasSize
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore

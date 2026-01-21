@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
