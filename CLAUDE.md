@@ -133,6 +133,8 @@ The project follows Gradle standard directory layout:
 - `src/main/java/` - Main source code
 - `src/test/java/` - Test source code
 - `src/main/resources/` - Resource files (XML schemas, examples)
+- `docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
+- `docs/` - Project documentation
 - `build/classes/java/main/` - Compiled main classes
 - `build/classes/java/test/` - Compiled test classes
 - `build/libs/` - JAR output directory
@@ -272,6 +274,20 @@ If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
    # Wayland uses a different socket location
    export DISPLAY=:0
    # Or set XDG_SESSION_TYPE=x11 to force X11 session
+   ```
+
+6. **For Fedora with SELinux (Fedora 43+):**
+   ```bash
+   # If you encounter AVC denial errors, configure SELinux:
+   # See docs/FEDORA_DOCKER_X11_SETUP.md for detailed instructions
+
+   # Option 1: Use pre-generated policy (fastest)
+   sudo semodule -i docker-x11/docker-x11-complete.pp
+
+   # Option 2: Generate from audit log
+   xhost +local:docker
+   sudo ausearch -c 'java' --raw | sudo audit2allow -M docker-x11-complete
+   sudo semodule -i docker-x11-complete.pp
    ```
 
 ### Artifacts

@@ -1,0 +1,19 @@
+
+module docker-x11-final 1.0;
+
+require {
+	type container_t;
+	type xdm_var_run_t;
+	type xserver_t;
+	class unix_stream_socket connectto;
+	class file { open read };
+}
+
+#============= container_t ==============
+
+#!!!! This avc is allowed in the current policy
+allow container_t xdm_var_run_t:file read;
+allow container_t xdm_var_run_t:file open;
+
+#!!!! This avc is allowed in the current policy
+allow container_t xserver_t:unix_stream_socket connectto;
