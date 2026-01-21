@@ -770,18 +770,100 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Stop the simulation
+	 *
+	 * Terminates all simulation processes (workers and main process) and cleans up resources.
+	 * Does not exit the JVM, allowing the simulation to be stopped and restarted.
+	 *
+	 * Exception safety: Ensures all workers and main process are terminated even if some
+	 * terminations fail. Collects all exceptions and throws them after cleanup is complete.
 	 */
 	override fun stop() {
 		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
+		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
+
+		val exceptions = mutableListOf<Throwable>()
+
+		// Terminate all InOut workers (continue even if some fail)
 		for (worker in workers.values) {
-			worker.terminate()
+			try {
+				worker.terminate()
+			} catch (e: Throwable) {
+				logger.error(e) { "Failed to terminate worker: ${e.message}" }
+				exceptions.add(e)
+			}
 		}
-		mainProcess?.terminate()
-		System.exit(0) // TODO: Remove System.exit - use proper termination handling
+
+		// Terminate main simulation process (always attempt, even if workers failed)
+		try {
+			mainProcess?.terminate()
+		} catch (e: Throwable) {
+			logger.error(e) { "Failed to terminate main process: ${e.message}" }
+			exceptions.add(e)
+		}
+
+		// Report success or throw collected exceptions
+		if (exceptions.isEmpty()) {
+			logger.info { "Simulation stopped successfully" }
+		} else {
+			val message = "Simulation stopped with ${exceptions.size} error(s) during cleanup"
+			logger.warn { message }
+			// Throw the first exception with all others as suppressed exceptions
+			val primaryException = exceptions.first()
+			exceptions.drop(1).forEach { primaryException.addSuppressed(it) }
+			throw primaryException
+		}
 	}
 
 	/**
-	 * Stop simulation with error reporting
+	 * Stop simulation with error reporting.
+	 *
+	 * This method is called by simulation processes (e.g., [InOutWorker]) when a fatal
+	 * error occurs during simulation execution, such as:
+	 * - Track operation failures (path setup, state transitions)
+	 * - Unexpected exceptions in simulation logic
+	 * - Resource access errors
+	 *
+	 * ## Behavior
+	 *
+	 * 1. **Graceful shutdown**: Calls [stop] to terminate all simulation processes
+	 * 2. **Error reporting**: Prints stack trace to stderr for debugging
+	 * 3. **No JVM exit**: Does not call `System.exit()` - allows JVM to continue running
+	 *
+	 * ## Lifecycle
+	 *
+	 * After `errorStop()`:
+	 * - All simulation processes (workers, main process) are terminated
+	 * - Simulation cannot be resumed (must create new context)
+	 * - JVM continues running (can create new simulations, run tests, etc.)
+	 *
+	 * ## Historical Note
+	 *
+	 * Prior to Issue #190 (2026-01-21), `stop()` called `System.exit(0)`, which meant
+	 * `errorStop()` also exited the JVM. This prevented:
+	 * - Running multiple simulations in same JVM session
+	 * - Proper unit testing of simulation lifecycle
+	 * - Graceful error recovery in applications
+	 *
+	 * The current implementation enables these use cases while still providing
+	 * clear error reporting for simulation failures.
+	 *
+	 * ## Usage Example
+	 *
+	 * ```kotlin
+	 * // InOutWorker error handling (from InOutWorker.kt:71, 99)
+	 * try {
+	 *     path.setUpPath(separator)
+	 * } catch (e: TrackOperationException) {
+	 *     logger.error(e) { "Path setup failed" }
+	 *     env.errorStop(e) // Stop simulation, report error, don't crash JVM
+	 *     return
+	 * }
+	 * ```
+	 *
+	 * @param error The error that caused simulation termination
+	 * @throws Throwable If [stop] fails during cleanup (re-throws with suppressed exceptions)
+	 * @see stop
+	 * @see InOutWorker Path setup error handling at InOutWorker.kt:71, 99
 	 */
 	override fun errorStop(error: Throwable) {
 		stop()

@@ -185,8 +185,22 @@ interface SimulationEnvironment {
 	fun stop()
 
 	/**
-	 * Stop simulation due to error.
+	 * Stop simulation due to error with diagnostic reporting.
+	 *
+	 * Called by simulation processes when fatal errors occur during execution.
+	 * Performs graceful shutdown and reports the error for debugging.
+	 *
+	 * ## Behavior
+	 * - Stops all simulation processes (equivalent to [stop])
+	 * - Prints error stack trace to stderr
+	 * - Does **NOT** exit JVM (allows continued execution)
+	 *
+	 * ## Post-Conditions
+	 * - Simulation cannot be resumed (must create new context)
+	 * - JVM continues running (can run new simulations, tests, etc.)
+	 *
 	 * @param error The error that caused termination
+	 * @see stop Normal simulation termination
 	 */
 	fun errorStop(error: Throwable)
 
