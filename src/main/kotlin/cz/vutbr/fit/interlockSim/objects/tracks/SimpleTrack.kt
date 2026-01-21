@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
@@ -50,7 +51,7 @@ abstract class SimpleTrack(
 	private val ends: Array<PathSeparator>
 
 	init {
-		if (length < MIN_LENGTH || maxSpeed1 < PathElement.MINIMAL_MAX_SPEED || maxSpeed2 < PathElement.MINIMAL_MAX_SPEED) {
+		if (length < MIN_LENGTH || maxSpeed1 < MINIMAL_MAX_SPEED || maxSpeed2 < MINIMAL_MAX_SPEED) {
 			throw IllegalArgumentException("length or maxspeed is very small")
 		}
 		ends = arrayOf(end1, end2)
