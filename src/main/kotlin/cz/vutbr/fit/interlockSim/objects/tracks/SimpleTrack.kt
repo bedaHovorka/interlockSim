@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.IdentityHashMap
