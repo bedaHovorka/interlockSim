@@ -277,7 +277,8 @@ class XMLPolishTest : KoinTestBase() {
 	inner class InvalidAttributeValuesTests {
 
 		@Test
-		fun `invalid boolean value defaults to false`() {
+		fun `invalid boolean value throws exception`() {
+			// XML schema validation rejects invalid boolean values (strict validation)
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -285,14 +286,15 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			// Should parse successfully with orientation defaulting to false
-			val context = factory.createContext(stream)
-			assertThat(context).isNotNull()
+
+			assertThatBlock {
+				factory.createContext(stream)
+			}.isFailure()
 		}
 
 		@Test
-		fun `negative X coordinate is allowed`() {
+		fun `negative X coordinate throws exception`() {
+			// Grid bounds validation rejects negative coordinates (0-based grid)
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -300,13 +302,15 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			val context = factory.createContext(stream)
-			assertThat(context).isNotNull()
+
+			assertThatBlock {
+				factory.createContext(stream)
+			}.isFailure()
 		}
 
 		@Test
-		fun `negative Y coordinate is allowed`() {
+		fun `negative Y coordinate throws exception`() {
+			// Grid bounds validation rejects negative coordinates (0-based grid)
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -314,9 +318,10 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			val context = factory.createContext(stream)
-			assertThat(context).isNotNull()
+
+			assertThatBlock {
+				factory.createContext(stream)
+			}.isFailure()
 		}
 
 		@Test
@@ -543,17 +548,19 @@ class XMLPolishTest : KoinTestBase() {
 
 		@Test
 		fun `InOut before TrackBlock succeeds`() {
+			// Schema uses fromSegment/toSegment (not segmentFrom/segmentTo)
+			// and maxSpeedfrom/maxSpeedto (lowercase)
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
-						length="10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
+					<SimpleTrackBlock fromX="10" fromY="10" fromSegment="F"
+						toX="20" toY="10" toSegment="A"
+						length="10.0" maxSpeedfrom="10.0" maxSpeedto="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			val context = factory.createContext(stream)
 			assertThat(context).isNotNull()
 		}

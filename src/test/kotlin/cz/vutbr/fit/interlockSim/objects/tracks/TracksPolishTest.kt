@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathElement
 import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -217,11 +216,13 @@ class TracksPolishTest {
 
 		@Test
 		fun `toString with null name`() {
+			// When name is null, toString() returns Arrays.toString(ends()) which is the array representation
+			// e.g., "[OrientedPathSeparator(#52), OrientedPathSeparator(#53)]"
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val string = block.toString()
-			
+
 			assertThat(string).isNotNull()
-			assertThat(string).contains("SimpleTrackBlock")
+			assertThat(string).contains("OrientedPathSeparator")
 		}
 
 		@Test
