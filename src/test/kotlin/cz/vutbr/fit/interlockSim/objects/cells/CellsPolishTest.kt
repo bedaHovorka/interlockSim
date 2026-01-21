@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
@@ -23,7 +22,6 @@ import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.util.EnumSet
 
 /**
  * Test coverage polish for cells package - targeting 85%+ coverage.
@@ -318,15 +316,15 @@ class CellsPolishTest {
 		@Test
 		fun `RailSwitch with different types`() {
 			// Test creation with different switch types
-			val simple = RailSwitch(true, SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE)
-			assertThat(simple.type).isEqualTo(RailSwitch.Type.SIMPLE)
+			val simple = RailSwitch(SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
+			assertThat(simple.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_TRUE)
 		}
 
 		@Test
 		fun `RailSwitch getFollowingSegment returns valid segments`() {
-			val railSwitch = RailSwitch(true, SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE)
+			val railSwitch = RailSwitch(SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
 			val joins = railSwitch.joins()
-			
+
 			// Should have 3 segments for a SIMPLE switch
 			assertThat(joins).hasSize(3)
 		}
@@ -339,14 +337,14 @@ class CellsPolishTest {
 		@Test
 		fun `InOut with empty name`() {
 			val inOut = InOut("", true, SpatialType.HORIZONTAL)
-			assertThat(inOut.name).isEmpty()
+			assertThat(inOut.getName()).isEmpty()
 		}
 
 		@Test
 		fun `InOut with long name`() {
 			val longName = "A".repeat(100)
 			val inOut = InOut(longName, true, SpatialType.HORIZONTAL)
-			assertThat(inOut.name).isEqualTo(longName)
+			assertThat(inOut.getName()).isEqualTo(longName)
 		}
 
 		@Test

@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.xml
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -438,9 +439,10 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 			
-			val context = factory.createContext(stream)
+			val context = factory.createContext(stream) as SimulationContext
 			assertThat(context).isNotNull()
-			assertThat(context.getInOuts()).hasSize(2)
+			val inOuts = context.getInOuts()
+			assertThat(inOuts as Collection<*>).hasSize(2)
 		}
 
 		@Test
@@ -454,9 +456,10 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 			
-			val context = factory.createContext(stream)
+			val context = factory.createContext(stream) as SimulationContext
 			assertThat(context).isNotNull()
-			assertThat(context.getInOuts()).hasSize(3)
+			val inOuts = context.getInOuts()
+			assertThat(inOuts as Collection<*>).hasSize(3)
 		}
 	}
 
