@@ -36,6 +36,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
@@ -308,6 +309,8 @@ class XMLContextFactory :
 	}
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
+
 		private const val ROOT_ELEMENT_NAME = "net"
 		private const val ATR_ORIENT_NAME = "orientation"
 		private const val ATR_LENGTH = "length"
@@ -358,12 +361,97 @@ class XMLContextFactory :
 	@Throws(ContextCreationException::class)
 	override fun createContext(stream: InputStream): Context<*> = createContext(InputStreamReader(stream))
 
+	/**
+	 * Generates XML representation of a Context.
+	 * Accepts any Context type (EditingContext or SimulationContext) but only saves
+	 * the static network structure (nodes, tracks, connections, grid dimensions).
+	 * Dynamic simulation state (train positions, semaphore states) is NOT saved.
+	 *
+	 * @param context The context to serialize
+	 * @return XML string matching data.xsd schema
+	 * @throws IOException if serialization fails
+	 */
+	private fun generateXML(context: Context<*>): String {
+		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context)
+		val railwayNetGrid = xmlContext.getRailWayNetGrid()
+		val builder = StringBuilder()
+
+		// XML declaration and DOCTYPE
+		builder.append("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
+		builder.append(ROOT_ELEMENT_NAME).append(">\n")
+
+		// Root element with grid dimensions
+		builder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
+		appendAttribute(builder, X, railwayNetGrid.getCols())
+		appendAttribute(builder, Y, railwayNetGrid.getRows())
+		builder.append(">\n")
+
+		// Save all NodeCells from the grid (including isolated nodes)
+		// Use LinkedHashSet to avoid duplicates while preserving insertion order
+		val allNodes = linkedSetOf<Point>()
+
+		// Add all nodes from the graph (nodes with connections)
+		allNodes.addAll(xmlContext.getGraph().nodeSet())
+
+		// Add any isolated NodeCells from the grid that aren't in the graph
+		// Grid parameterization: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
+		// Cast to Cell grid to iterate without ClassCastException
+		@Suppress("UNCHECKED_CAST")
+		val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
+		for (entry in cellGrid) {
+			val point = entry.key
+			val cell = entry.value
+			if (cell is NodeCell) {
+				allNodes.add(point)
+			}
+		}
+
+		// Write all nodes to XML
+		for (p in allNodes) {
+			val cell = railwayNetGrid[p]
+			if (cell is NodeCell) {
+				val tag = tagFor(p, cell)
+				spacing(tag, 1)
+				builder.append(tag)
+			}
+		}
+
+		// Write all track blocks (edges in the graph)
+		for (entry in xmlContext.getGraph().entrySet()) {
+			val key = entry.key
+			val value = entry.value
+			val keyIterator = key.iterator()
+			check(keyIterator.hasNext()) { "Doubleton should have at least one element" }
+			val p1 = keyIterator.next()
+			check(keyIterator.hasNext()) { "Doubleton should have two elements" }
+			val p2 = keyIterator.next()
+
+			val tag = tagFor(p1, p2, key, value)
+			spacing(tag, 1)
+			builder.append(tag)
+		}
+
+		// Close root element
+		builder.append("</").append(ROOT_ELEMENT_NAME).append(">\n")
+
+		return builder.toString()
+	}
+
 	override fun saveContext(
 		context: Context<*>,
 		stream: OutputStream
 	): Boolean {
-		// TODO: Implement XML serialization - see issue #61 (relates to Goal 5)
-		return false
+		return try {
+			val xml = generateXML(context)
+			// Use UTF-8 encoding for consistent XML output
+			stream.write(xml.toByteArray(Charsets.UTF_8))
+			stream.flush()
+			true
+		} catch (e: IOException) {
+			// Log error and return false (do not throw to allow caller to handle gracefully)
+			logger.error(e) { "Failed to save context to output stream" }
+			false
+		}
 	}
 
 	private fun appendAttribute(
@@ -425,67 +513,15 @@ class XMLContextFactory :
 		context: Context<*>,
 		file: File
 	): Boolean {
-		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context) // zatim
-		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		return try {
-			val fileWriter = FileWriter(file)
-			val stringBuilder = StringBuilder("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
-			stringBuilder.append(ROOT_ELEMENT_NAME).append(">\n")
-			stringBuilder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
-			appendAttribute(stringBuilder, X, railwayNetGrid.getCols())
-			appendAttribute(stringBuilder, Y, railwayNetGrid.getRows())
-			stringBuilder.append(">\n")
-			fileWriter.write(stringBuilder.toString())
-
-			// Save all NodeCells from the grid (including isolated nodes)
-			// Use LinkedHashSet to avoid duplicates while preserving insertion order
-			val allNodes = linkedSetOf<Point>()
-
-			// Add all nodes from the graph (nodes with connections)
-			allNodes.addAll(xmlContext.getGraph().nodeSet())
-
-			// Add any isolated NodeCells from the grid that aren't in the graph
-			// Grid parameterization: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
-			// Cast to Cell grid to iterate without ClassCastException
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
-			for (entry in cellGrid) {
-				val point = entry.key
-				val cell = entry.value
-				if (cell is NodeCell) {
-					allNodes.add(point)
-				}
+			val xml = generateXML(context)
+			FileWriter(file).use { writer ->
+				writer.write(xml)
 			}
-
-			// Write all nodes to XML
-			for (p in allNodes) {
-				val cell = railwayNetGrid[p]
-				if (cell is NodeCell) {
-					val builder = tagFor(p, cell)
-					spacing(builder, 1)
-					fileWriter.write(builder.toString())
-				}
-			}
-
-			for (entry in xmlContext.getGraph().entrySet()) {
-				val key = entry.key
-				val value = entry.value
-				val keyIterator = key.iterator()
-				check(keyIterator.hasNext()) { "Doubleton should have at least one element" }
-				val p1 = keyIterator.next()
-				check(keyIterator.hasNext()) { "Doubleton should have two elements" }
-				val p2 = keyIterator.next()
-
-				val builder = tagFor(p1, p2, key, value)
-				spacing(builder, 1)
-				fileWriter.write(builder.toString())
-			}
-
-			fileWriter.write("</" + ROOT_ELEMENT_NAME + ">\n")
-			fileWriter.close()
 			true
 		} catch (e: IOException) {
-			check(false) { "Failed to save context: $e" }
+			// Log error and return false (do not throw to allow caller to handle gracefully)
+			logger.error(e) { "Failed to save context to file: ${file.absolutePath}" }
 			false
 		}
 	}
