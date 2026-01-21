@@ -301,6 +301,7 @@ abstract class BaseContext(
 		if (!frozen) {
 			frozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
+			changeSupport.firePropertyChange("frozen", false, true)
 		}
 	}
 

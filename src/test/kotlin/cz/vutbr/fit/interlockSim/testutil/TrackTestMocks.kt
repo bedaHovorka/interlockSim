@@ -24,7 +24,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
  * This mock provides minimal implementation for track testing.
  */
 class MockNodeCell(
-	private val name: String
+	private val name: String,
+	private val speed: Double = 80.0
 ) : NodeCell(SpatialType.HORIZONTAL), DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Segment?,
@@ -45,7 +46,7 @@ class MockNodeCell(
 
 	override fun possibleFollowers(from: Segment): Set<Segment> = emptySet()
 
-	override fun allowedSpeed(): Double = 80.0
+	override fun allowedSpeed(): Double = speed
 
 	override fun joins(): Set<Segment> {
 		// Return the two segments that join for HORIZONTAL type

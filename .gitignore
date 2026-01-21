@@ -68,3 +68,6 @@ Thumbs.db
 
 # Phase 0: Baseline outputs (regenerate with ./capture-golden-outputs.sh)
 # Only track metadata (README, analysis, checksums), not 22MB of .log files
+
+# Claude Code configuration (local settings and skills)
+.claude/
