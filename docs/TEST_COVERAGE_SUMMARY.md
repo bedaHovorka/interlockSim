@@ -123,8 +123,8 @@ This document summarizes the test coverage improvements made to the `context` pa
 
 ## Test Statistics
 
-**Total new test files:** 4  
-**Total new tests:** 62  
+**Total new test files:** 4
+**Total new tests:** 62
 **Lines of code:** ~1,800 lines across all 4 files
 
 ## Test Organization
