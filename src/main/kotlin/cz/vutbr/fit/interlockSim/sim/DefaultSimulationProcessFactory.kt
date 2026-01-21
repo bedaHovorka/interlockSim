@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -53,12 +53,12 @@ class DefaultSimulationProcessFactory : SimulationProcessFactory {
 	 * - Managing simulation timing
 	 * - Coordinating overall simulation flow
 	 *
-	 * @param context The simulation context
+	 * @param env The simulation environment (accepts SimulationContext via subtyping)
 	 * @return Generator process instance
 	 */
-	override fun createMainProcess(context: SimulationContext): LoopProcess {
+	override fun createMainProcess(env: SimulationEnvironment): LoopProcess {
 		logger.debug { "Creating main Generator process for simulation" }
-		return Generator(context)
+		return Generator(env)
 	}
 
 	/**
@@ -69,15 +69,15 @@ class DefaultSimulationProcessFactory : SimulationProcessFactory {
 	 * - Waiting for path availability
 	 * - Coordinating with interlocking system
 	 *
-	 * @param context The simulation context
+	 * @param env The simulation environment (accepts SimulationContext via subtyping)
 	 * @param inOut The InOut point to create worker for
 	 * @return InOutWorker process instance
 	 */
 	override fun createInOutWorker(
-		context: SimulationContext,
+		env: SimulationEnvironment,
 		inOut: DynamicInOut
 	): InOutWorker {
 		logger.debug { "Creating InOutWorker for InOut: ${inOut.name}" }
-		return InOutWorker(context, inOut)
+		return InOutWorker(env, inOut)
 	}
 }

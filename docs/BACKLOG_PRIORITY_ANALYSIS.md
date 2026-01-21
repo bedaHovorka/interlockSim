@@ -1,8 +1,20 @@
 # Backlog Priority Analysis by Dependency Impact
 
 **Generated:** 2026-01-21
+**Last Updated:** 2026-01-21 (Post-#94 Completion)
 **Analysis Type:** Dependency-based prioritization
 **Scope:** Set B (Backlog milestone, 30 issues) → Set X (All open issues, 56 issues)
+
+---
+
+## 🎉 Update: Issue #94 Complete!
+
+**PR #254 merged:** Simulation decoupling complete, **18 issues now unblocked** (32% of all open work)
+
+**Next High-Priority Issues:**
+- **#61 (XML save)** - Unblocks 4 issues (7% of open work)
+- **#210 (Context transformation)** - Unblocks 3 issues (5% of open work)
+- **#91 (Circular dependencies)** - Unblocks 3 issues (5% of open work)
 
 ---
 
@@ -11,22 +23,22 @@
 This analysis prioritizes the 30 Backlog issues based on how many other open issues each one helps/unblocks.
 
 **Key Findings:**
-- **Top issue (#94)** unblocks 18 issues (32% of all open issues)
-- **Top 4 issues** (#94, #61, #210, #91) help 28 issues (50% of all open issues)
+- ✅ **#94 COMPLETE** - Unblocked 18 issues (32% of all open issues) - **DONE!**
+- **Top 3 remaining issues** (#61, #210, #91) help 10 issues (18% of all open issues)
 - **60% of backlog** (18 issues) are standalone improvements with no direct dependencies
 
-**Strategic Recommendation:** Focus on **#94 (Decouple simulation)** first to unblock entire Goal 7 milestone, then tackle **#61 (XML save)** and **#210 (Context transformation)** for balanced progress.
+**Strategic Recommendation:** ✅ **#94 COMPLETE**. Now focus on **#61 (XML save)** and **#210 (Context transformation)** for continued progress. Goal 7 milestone (#187-200) now ready to begin.
 
 ---
 
 ## Priority Ranking Table
 
-| Rank | Issue # | Title | Impact | Helped Issues | Effort | Tier |
-|------|---------|-------|--------|---------------|--------|------|
-| 1 | #94 | Decouple simulation classes from SimulationContext | 🔥🔥🔥 | **18 issues** | MEDIUM-HIGH | 1 |
-| 2 | #61 | XMLContextFactory: Implement saveContext() | 🟠🟠 | **4 issues** | MEDIUM | 2 |
-| 3 | #210 | Simplify Context Transformation Process | 🟠🟠 | **3 issues** | MEDIUM | 2 |
-| 4 | #91 | Refactor circular dependency (cells/paths/tracks) | 🟠🟠 | **3 issues** | HIGH | 2 |
+| Rank | Issue # | Title | Impact | Helped Issues | Effort | Tier | Status |
+|------|---------|-------|--------|---------------|--------|------|--------|
+| ~~1~~ | ~~#94~~ | ~~Decouple simulation classes from SimulationContext~~ | ~~🔥🔥🔥~~ | ~~**18 issues**~~ | ~~MEDIUM-HIGH~~ | ~~1~~ | ✅ **COMPLETE** |
+| 1 | #61 | XMLContextFactory: Implement saveContext() | 🟠🟠 | **4 issues** | MEDIUM | 2 | 🔵 OPEN |
+| 2 | #210 | Simplify Context Transformation Process | 🟠🟠 | **3 issues** | MEDIUM | 2 | 🔵 OPEN |
+| 3 | #91 | Refactor circular dependency (cells/paths/tracks) | 🟠🟠 | **3 issues** | HIGH | 2 | 🔵 OPEN |
 | 5 | #216 | Migrate performance tests to JMH benchmarks | 🟡 | **2 issues** | LOW | 3 |
 | 6 | #247 | Fix disabled integration tests | 🟡 | **2 issues** | MEDIUM | 3 |
 | 7 | #79 | Enhance test coverage for InOut validation | 🟡 | **2 issues** | LOW | 3 |
@@ -40,31 +52,33 @@ This analysis prioritizes the 30 Backlog issues based on how many other open iss
 
 ## Tier 1: High Impact (10+ issues helped)
 
-### #94: Decouple simulation classes from SimulationContext
-**Impact: 18 issues helped (32% of X)**
+### ~~#94: Decouple simulation classes from SimulationContext~~ ✅ **COMPLETE**
+**Impact: 18 issues unblocked (32% of X)**
 
-**Direct dependencies:**
-- **Goal 7 Milestone** (#187-200): All 14 issues require simulation decoupling
+**Status:** ✅ **MERGED** (PR #254, 2026-01-21)
+
+**Completion Summary:**
+- ✅ SimulationEnvironment facade interface created (11 methods)
+- ✅ SimulationContext extends SimulationEnvironment (Liskov substitution)
+- ✅ Simulation classes migrated: Train, InOutWorker, Generator, Interlocking
+- ✅ All 1321 tests passing, zero regressions
+- ✅ Single-commit implementation (clean, focused)
+
+**Unblocked Issues:**
+- ✅ **Goal 7 Milestone** (#187-200): All 14 issues now ready to implement
   - #187: Goal 7: Simulation Speed Control (root issue)
   - #188: Phase 1.1: Core SimulationRunner Implementation
   - #189: Phase 1.2: Main.kt and Frame.kt Integration
   - #190: Phase 1.3: Remove System.exit from DefaultSimulationContext
   - #191-200: Subsequent phases
-- #215: Add Type-Safe Dynamic References in ShuntingLoop
-- #214: Pre-Wrap All Tracks at Initialization
+- ✅ #215: Add Type-Safe Dynamic References in ShuntingLoop
+- ✅ #214: Pre-Wrap All Tracks at Initialization
+- ✅ #188: Phase 1.1: Core SimulationRunner Implementation
+- ✅ #190: Phase 1.3: Remove System.exit
 
-**Why critical:**
-- Unblocks entire Goal 7 milestone (simulation speed control 0.1x-100x)
-- Currently `sim/` classes tightly coupled to concrete SimulationContext
-- Blocks testability, extensibility, and GUI integration
-- Requires SimulationEnvironment interface abstraction
+**Delivered:** 2026-01-21 (1 day, ahead of 2-3 day estimate)
 
-**Constraints:**
-- `sim/` package has restricted modification rules (CLAUDE.md)
-- Must coordinate with jDisco migration planning
-- All 662 tests must pass after changes
-
-**Effort:** MEDIUM-HIGH (2-3 days)
+**Retrospective:** See [Issue #94 comment](https://github.com/bedaHovorka/interlockSim/issues/94#issuecomment-3778010481)
 
 ---
 
@@ -191,22 +205,21 @@ This analysis prioritizes the 30 Backlog issues based on how many other open iss
 
 ## Recommended Implementation Strategies
 
-### Option A: Maximum Impact (Aggressive)
+### Option A: Maximum Impact (Aggressive) - ✅ **IN PROGRESS**
 **Goal:** Unblock maximum work as fast as possible
 
-**Phase 1:** #94 (Decouple simulation) → 18 issues unblocked
-**Phase 2:** #61 (XML save) + #210 (Context transformation) → +7 issues
+**Phase 1:** ✅ #94 (Decouple simulation) → 18 issues unblocked - **COMPLETE!**
+**Phase 2:** #61 (XML save) + #210 (Context transformation) → +7 issues - **NEXT**
 **Phase 3:** Continue with dependent issues (#211, #213, #214, #215)
 
 **Total Impact:** 25+ issues unblocked with 3 foundational issues
 
-**Pros:**
-- Fastest path to unblock Goal 7 milestone
-- Maximum parallelization opportunity for future work
+**Progress:** ✅ Phase 1 complete (18 issues unblocked)
 
-**Cons:**
-- #94 is complex (sim/ restrictions, jDisco considerations)
-- High risk if #94 encounters blockers
+**Next Actions:**
+- Start #61 (XML save) - 4 issues unblocked
+- Start #210 (Context transformation) - 3 issues unblocked
+- Begin Goal 7 implementation (#190, #188, #187)
 
 ---
 
@@ -268,12 +281,12 @@ This analysis prioritizes the 30 Backlog issues based on how many other open iss
 ## Dependency Graph
 
 ```
-High-Impact Issues:
-  #94 ───┬──→ Goal 7 (#187-200) [14 issues]
-         ├──→ #190 (Remove System.exit)
-         ├──→ #188 (SimulationRunner)
-         ├──→ #215 (Type-Safe references)
-         └──→ #214 (Pre-wrap tracks)
+✅ COMPLETE:
+  #94 ───┬──→ ✅ Goal 7 (#187-200) [14 issues] - UNBLOCKED
+         ├──→ ✅ #190 (Remove System.exit) - READY
+         ├──→ ✅ #188 (SimulationRunner) - READY
+         ├──→ ✅ #215 (Type-Safe references) - READY
+         └──→ ✅ #214 (Pre-wrap tracks) - READY
 
 Medium-Impact Issues:
   #61 ───┬──→ #248 (XML context properties)
@@ -376,22 +389,25 @@ Progress % = (Unblocked Issues / 56 Total Open Issues) × 100
 ```
 
 ### Milestones
-- **25% Progress:** Complete #94 (18 issues unblocked)
-- **50% Progress:** Complete #94 + #61 + #210 (25 issues unblocked)
-- **75% Progress:** Complete top 10 backlog issues (38 issues unblocked)
+- ✅ **32% Progress:** #94 complete (18 issues unblocked) - **ACHIEVED!**
+- **39% Progress:** Complete #61 (4 more issues unblocked) - **NEXT**
+- **45% Progress:** Complete #210 (3 more issues unblocked)
+- **50% Progress:** Complete #91 (3 more issues unblocked)
 
 ---
 
 ## Conclusion
 
-**Key Insight:** Focus beats breadth. Implementing just **#94** unblocks 32% of all open work. Adding **#61** and **#210** reaches 44-50% with only 3 issues completed.
+**Key Insight:** Focus beats breadth. ✅ **#94 is complete** - 32% of all open work unblocked! Adding **#61** and **#210** will reach 45% with only 3 issues completed.
 
 **Recommended Next Steps:**
-1. Review this analysis with team
-2. Choose implementation strategy (A, B, or C)
-3. Assign #94 to experienced developer
-4. Track progress weekly using success metrics
-5. Re-evaluate priorities after completing top 4 issues
+1. ✅ ~~Review this analysis with team~~ - **COMPLETE**
+2. ✅ ~~Choose implementation strategy (A, B, or C)~~ - **Option A selected, Phase 1 complete**
+3. ✅ ~~Assign #94 to experienced developer~~ - **#94 COMPLETE!**
+4. **Begin Goal 7 implementation** - #190 (Remove System.exit) → #188 (SimulationRunner) → #187
+5. **Start #61 (XML save)** - 4 issues unblocked
+6. **Start #210 (Context transformation)** - 3 issues unblocked
+7. Track progress weekly using success metrics
 
 ---
 
@@ -406,4 +422,18 @@ Progress % = (Unblocked Issues / 56 Total Open Issues) × 100
 - Effort estimates are approximate (actual may vary)
 - Assumes issues can be completed independently (some may require coordination)
 
-**Last Updated:** 2026-01-21
+**Last Updated:** 2026-01-21 (Post-#94 Completion)
+
+---
+
+## 🎉 Milestone Achievement
+
+**Date:** 2026-01-21
+**Achievement:** Issue #94 Complete - 18 issues unblocked (32% progress)
+
+**Next Targets:**
+- #61 (XML save) - 4 issues
+- #210 (Context transformation) - 3 issues
+- Goal 7 milestone (#187-200) - Begin implementation
+
+**Team Status:** Option A (Maximum Impact) - Phase 1 complete, Phase 2 ready to start

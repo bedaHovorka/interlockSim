@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.paths.Path
@@ -26,7 +26,7 @@ import jDisco.Process
  *
  */
 class InOutWorker(
-	private val context: SimulationContext,
+	private val env: SimulationEnvironment,
 	private val inOut: DynamicInOut
 ) : LoopProcess() {
 	companion object {
@@ -35,7 +35,7 @@ class InOutWorker(
 
 	private val queqe = Head()
 	private var myIdle = true
-	private val next: TrackSection? = context.getNextTrackSection(inOut, null)
+	private val next: TrackSection? = env.getNextTrackSection(inOut, null)
 	private var path: Path? = null // cesta k naskedujicimu semaforu - pokud existuje
 
 	private val pathFree: Condition =
@@ -46,7 +46,7 @@ class InOutWorker(
 				// Related to interlocking validation (Goal 4) - see LONG_TERM_GOALS.md
 				// Local variable for smart cast since next is mutable property
 				val nextLocal = next
-				path = if (nextLocal != null) context.pathToNextSemaphore(inOut, nextLocal) else null
+				path = if (nextLocal != null) env.pathToNextSemaphore(inOut, nextLocal) else null
 				return try {
 					val pathExists = path != null
 					val isFree = pathExists && path?.isFreeFrom(inOut) ?: false
@@ -68,7 +68,7 @@ class InOutWorker(
 							"path check failed: ${e.message}"
 					}
 					logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
-					context.errorStop(e)
+					env.errorStop(e)
 					false
 				}
 			}
@@ -78,7 +78,7 @@ class InOutWorker(
 		while (!queqe.empty()) {
 			myIdle = false
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
-			context.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
+			env.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
 			waitUntil(pathFree)
 			val first = queqe.first() as Link
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
@@ -96,10 +96,10 @@ class InOutWorker(
 						"path setup failed for $first: ${e.message}"
 				}
 				logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
-				context.errorStop(e)
+				env.errorStop(e)
 				return
 			}
-			context.report("Path reserved for $first", inOut, ReportType.NODE_EVENTS)
+			env.report("Path reserved for $first", inOut, ReportType.NODE_EVENTS)
 
 			// cekej na odchod vlaku z fronty
 			logger.debug { "InOutWorker ${inOut.name} waiting for train $first to leave queue" }

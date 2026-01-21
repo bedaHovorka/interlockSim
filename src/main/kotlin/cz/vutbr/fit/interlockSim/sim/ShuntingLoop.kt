@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
@@ -94,7 +95,7 @@ class ShuntingLoop : Interlocking {
 	}
 
 	private inner class InnerGenerator(
-		context: SimulationContext
+		context: SimulationEnvironment
 	) : Generator(context) {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.offer(train)
@@ -123,46 +124,46 @@ class ShuntingLoop : Interlocking {
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val B: InOut = elementAt(InOut::class.java, 30, 8)
-		val A: InOut = elementAt(InOut::class.java, 11, 8)
-		val zA: RailSemaphore = elementAt("zA", RailSemaphore::class.java, 14, 8)
-		val doA1: RailSemaphore = elementAt("doA1", RailSemaphore::class.java, 16, 8)
-		val doB1: RailSemaphore = elementAt("doB1", RailSemaphore::class.java, 25, 8)
-		val zB: RailSemaphore = elementAt("zB", RailSemaphore::class.java, 27, 8)
-		val doA2: RailSemaphore = elementAt("doA2", RailSemaphore::class.java, 17, 9)
-		val doB2: RailSemaphore = elementAt("doB2", RailSemaphore::class.java, 24, 9)
-		val vA: RailSwitch = elementAt("vA", RailSwitch::class.java, 15, 8)
-		val vB: RailSwitch = elementAt("vB", RailSwitch::class.java, 26, 8)
+		val B: InOut = elementAt(context, InOut::class.java, 30, 8)
+		val A: InOut = elementAt(context, InOut::class.java, 11, 8)
+		val zA: RailSemaphore = elementAt(context, "zA", RailSemaphore::class.java, 14, 8)
+		val doA1: RailSemaphore = elementAt(context, "doA1", RailSemaphore::class.java, 16, 8)
+		val doB1: RailSemaphore = elementAt(context, "doB1", RailSemaphore::class.java, 25, 8)
+		val zB: RailSemaphore = elementAt(context, "zB", RailSemaphore::class.java, 27, 8)
+		val doA2: RailSemaphore = elementAt(context, "doA2", RailSemaphore::class.java, 17, 9)
+		val doB2: RailSemaphore = elementAt(context, "doB2", RailSemaphore::class.java, 24, 9)
+		val vA: RailSwitch = elementAt(context, "vA", RailSwitch::class.java, 15, 8)
+		val vB: RailSwitch = elementAt(context, "vB", RailSwitch::class.java, 26, 8)
 
-		val k1: SimpleTrackBlock = getBlock("k1", doA1, doB1)
-		val k2: SimpleTrackBlock = getBlock("k2", doA2, doB2)
-		val kA: SimpleTrackBlock = getBlock("kA", A, zA)
-		val kB: SimpleTrackBlock = getBlock("kB", B, zB)
+		val k1: SimpleTrackBlock = getBlock(context, "k1", doA1, doB1)
+		val k2: SimpleTrackBlock = getBlock(context, "k2", doA2, doB2)
+		val kA: SimpleTrackBlock = getBlock(context, "kA", A, zA)
+		val kB: SimpleTrackBlock = getBlock(context, "kB", B, zB)
 
 		// usporadani znalostni pro jednoduche rizeni
-		constructPath(zA, vA, doA1, k1, doB1)
-		constructPath(doA1, vA, zA, kA, A)
-		constructPath(zA, vA, doA2, k2, doB2)
-		constructPath(doA2, vA, zA, kA, A)
-		constructPath(zB, vB, doB1, k1, doA1)
-		constructPath(doB1, vB, zB, kB, B)
-		constructPath(zB, vB, doB2, k2, doA2)
-		constructPath(doB2, vB, zB, kB, B)
+		constructPath(context, zA, vA, doA1, k1, doB1)
+		constructPath(context, doA1, vA, zA, kA, A)
+		constructPath(context, zA, vA, doA2, k2, doB2)
+		constructPath(context, doA2, vA, zA, kA, A)
+		constructPath(context, zB, vB, doB1, k1, doA1)
+		constructPath(context, doB1, vB, zB, kB, B)
+		constructPath(context, zB, vB, doB2, k2, doA2)
+		constructPath(context, doB2, vB, zB, kB, B)
 		Collections.addAll(innerTrackBlocks, k1, k2)
 		staticOuterTrackblocks[kB] = zB
 		staticOuterTrackblocks[kA] = zA
 	}
 
-	private fun constructPath(vararg elements: PathElement): ArrayPath {
+	private fun constructPath(context: SimulationContext, vararg elements: PathElement): ArrayPath {
 		val arrayPath = ArrayPath(context)
 		try {
 			for (i in elements.indices) {
 				if (elements[i] is RailSwitch) {
 					val prev: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i - 1])
 					val next: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i + 1])
-					arrayPath.addLast(getBlock(switchName(elements[i]), prev, elements[i] as Cell))
+					arrayPath.addLast(getBlock(context, switchName(elements[i]), prev, elements[i] as Cell))
 					arrayPath.addLast(elements[i])
-					arrayPath.addLast(getBlock(switchName(elements[i]), next, elements[i] as Cell))
+					arrayPath.addLast(getBlock(context, switchName(elements[i]), next, elements[i] as Cell))
 				} else {
 					arrayPath.addLast(elements[i])
 				}
@@ -184,6 +185,7 @@ class ShuntingLoop : Interlocking {
 		Util.assertInstanceOf(RailSwitch::class.java, el).getName() + "-around"
 
 	private fun <T : Cell> elementAt(
+		context: SimulationContext,
 		clazz: Class<T>,
 		x: Int,
 		y: Int
@@ -194,17 +196,19 @@ class ShuntingLoop : Interlocking {
 	}
 
 	private fun <T : NodeCell> elementAt(
+		context: SimulationContext,
 		name: String,
 		clazz: Class<T>,
 		x: Int,
 		y: Int
 	): T {
-		val elementAt: T = elementAt(clazz, x, y)
+		val elementAt: T = elementAt(context, clazz, x, y)
 		elementAt.setName(name)
 		return elementAt
 	}
 
 	private fun getBlock(
+		context: SimulationContext,
 		name: String,
 		cell1: Cell,
 		cell2: Cell
@@ -223,7 +227,7 @@ class ShuntingLoop : Interlocking {
 		// Convert static objects to Dynamic* wrappers (now available after simulation initialization)
 		paths = mutableMapOf()
 		for ((staticSem, pathList) in staticPaths) {
-			val dynamicSem = context.toDynamic(staticSem) as DynamicRailSemaphore
+			val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
 			val dynamicPaths = mutableListOf<Path>()
 			for (path in pathList) {
 				val dynamicPath = convertPathToDynamic(path)
@@ -233,21 +237,22 @@ class ShuntingLoop : Interlocking {
 		}
 
 		outerTrackblocks = staticOuterTrackblocks.mapValues { (_, staticSem) ->
-			context.toDynamic(staticSem) as DynamicRailSemaphore
+			env.toDynamic(staticSem) as DynamicRailSemaphore
 		}.toMutableMap()
 
-		context.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
+		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
 		// activate(RealTimeSynch())
 		activate(generator)
 	}
 
 	private fun convertPathToDynamic(staticPath: Path): Path {
+		val context = env as SimulationContext
 		val dynamicPath = ArrayPath(context)
 		for (element in staticPath) {
 			val dynamicElement = when (element) {
-				is RailSemaphore -> context.toDynamic(element)
-				is RailSwitch -> context.toDynamic(element)
-				is InOut -> context.toDynamic(element)  // Use toDynamic for consistency
+				is RailSemaphore -> env.toDynamic(element)
+				is RailSwitch -> env.toDynamic(element)
+				is InOut -> env.toDynamic(element)  // Use toDynamic for consistency
 				is SimpleTrackBlock -> element  // Track blocks remain static in path - wrapped on-demand by AbstractPath
 				else -> element
 			}
@@ -273,7 +278,7 @@ class ShuntingLoop : Interlocking {
 	private fun checkBothEnds(block: SimpleTrackBlock) {
 		for (sep in block.ends()) {
 			val railSem = Util.assertInstanceOf(RailSemaphore::class.java, sep)
-			val dynamicSem = context.toDynamic(railSem) as DynamicRailSemaphore
+			val dynamicSem = env.toDynamic(railSem) as DynamicRailSemaphore
 			if (checkOneEnd(block, dynamicSem)) return
 		}
 	}
@@ -325,7 +330,7 @@ class ShuntingLoop : Interlocking {
 		to: DynamicRailSemaphore
 	): Boolean {
 // 		 je v bloku vlak?
-		val dynamicBlock = context.toDynamic(block)
+		val dynamicBlock = env.toDynamic(block)
 		if (dynamicBlock.state == TrackFacility.State.FREE) return false
 		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
 			// Compare using static references to avoid Dynamic wrapper identity issues

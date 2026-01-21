@@ -310,7 +310,13 @@ Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_
 **Context system:**
 - `Context<out C : Cell>` - Base abstraction for railway network configuration (parameterized over cell type)
 - `EditingContext : Context<NodeCell>` - Interface for editing operations on railway network
-- `SimulationContext : Context<Cell>` - Interface for simulation execution (separate from EditingContext, follows Interface Segregation Principle)
+- `SimulationEnvironment` - Facade interface for simulation operations (11 methods):
+  - **Purpose**: Decouples sim/ classes from full SimulationContext contract
+  - **Benefits**: Simpler test doubles, DSOL migration readiness, clear simulation process contract
+  - **Method groups**: Network queries (4), dynamic state management (3), simulation control (4)
+  - **Used by**: Train, InOutWorker, Generator (fully), Interlocking (base class)
+  - **Special case**: ShuntingLoop uses SimulationContext (needs getGraph/getRailWayNetGrid during initialization)
+- `SimulationContext : Context<Cell>, SimulationEnvironment` - Interface for simulation execution (separate from EditingContext, follows Interface Segregation Principle)
 - `RailwayNetGrid<out T : Cell>` - Parameterized grid interface for type-safe cell access
 - `AbstractRailwayNetGrid<out T : Cell>` - Parameterized base implementation using `Array2DMap<T>`
 - `BaseContext` - Abstract base class with shared infrastructure (257 lines):
@@ -354,6 +360,15 @@ Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_
   - ContextTransformer factory for editing→simulation transformation
   - All 927 tests passing, zero regressions
   - See `docs/CONTEXT_INHERITANCE_INCOMPATIBILITY.md` and `docs/ISSUE_153_RETROSPECTIVE.md`
+
+- **Issue #94 (2026-01-21):** SimulationEnvironment interface decoupling:
+  - Created SimulationEnvironment facade interface with 11 essential simulation methods
+  - SimulationContext now extends SimulationEnvironment (Liskov substitution)
+  - Updated simulation classes: Train, InOutWorker, Generator, Interlocking use SimulationEnvironment
+  - ShuntingLoop hybrid approach: accepts SimulationContext (needs getGraph/getRailWayNetGrid for initialization)
+  - Factory pattern: SimulationProcessFactory signatures updated to accept SimulationEnvironment
+  - All 1321 tests passing, zero behavior changes
+  - Enables future DSOL/Kalasim migration via adapter pattern
 
 **Factory Pattern (Phase 2, 2026-01-14):**
 DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
