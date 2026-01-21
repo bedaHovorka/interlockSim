@@ -77,7 +77,8 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has correct default close operation")
 	fun frameHasCorrectDefaultCloseOperation() {
 		runOnEDT {
-			assertThat(frame.defaultCloseOperation).isEqualTo(JFrame.EXIT_ON_CLOSE)
+			// Changed to DO_NOTHING_ON_CLOSE to allow unsaved changes handling (Issue #259)
+			assertThat(frame.defaultCloseOperation).isEqualTo(JFrame.DO_NOTHING_ON_CLOSE)
 		}
 	}
 

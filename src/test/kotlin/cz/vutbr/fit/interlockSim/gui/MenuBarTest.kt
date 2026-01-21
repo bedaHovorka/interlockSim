@@ -191,9 +191,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun saveActionHasCorrectText() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			val saveItem = fileMenu.getItem(0) as JMenuItem
-			
-			assertThat(saveItem.text).isEqualTo("Save as...")
+			// Changed: Now "Open..." is at index 0, "Save" at index 1, "Save as..." at index 2 (Issue #258, #259)
+			val saveAsItem = fileMenu.getItem(2) as JMenuItem
+
+			assertThat(saveAsItem.text).isEqualTo("Save as...")
 		}
 	}
 
