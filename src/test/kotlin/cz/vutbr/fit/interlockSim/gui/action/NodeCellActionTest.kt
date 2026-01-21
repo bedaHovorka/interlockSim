@@ -110,8 +110,18 @@ val canvas = frame.railwayNetGridCanvas
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
-// Action executed without error, exercising getRailwayNetGridCanvas() and setNodeOnToolbar()
-assertThat(action).isNotNull()
+// Verify setNodeOnToolbar was called with correct arguments using reflection
+val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
+toolbarCellClassField.isAccessible = true
+val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
+
+val toolbarArgsField = canvas.javaClass.getDeclaredField("toolbarArgs")
+toolbarArgsField.isAccessible = true
+val actualArgs = toolbarArgsField.get(canvas) as? Array<*>
+
+assertThat(actualCellClass).isEqualTo(cellClass)
+assertThat(actualArgs).isNotNull()
+assertThat(actualArgs!!.size).isEqualTo(args.size)
 }
 
 /**
@@ -155,10 +165,18 @@ val cellClass = RailSemaphore::class.java
 val args = arrayOf<Any>(false, Cell.SpatialType.VERTICAL)
 
 val action = NodeCellAction(cellClass, context, args)
+val frame = get<Frame>()
+val canvas = frame.railwayNetGridCanvas
+
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
-assertThat(action).isNotNull()
+// Verify toolbar state was updated using reflection
+val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
+toolbarCellClassField.isAccessible = true
+val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
+
+assertThat(actualCellClass).isEqualTo(cellClass)
 }
 
 /**
@@ -170,10 +188,20 @@ val cellClass = RailSwitch::class.java
 val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 val action = NodeCellAction(cellClass, context, args)
+val frame = get<Frame>()
+val canvas = frame.railwayNetGridCanvas
+
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
+// Verify toolbar state and icon
 assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+
+val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
+toolbarCellClassField.isAccessible = true
+val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
+
+assertThat(actualCellClass).isEqualTo(cellClass)
 }
 
 /**
