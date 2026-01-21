@@ -109,11 +109,21 @@ class MenuBar : JMenuBar() {
 	 * Performs the actual save operation to the specified file.
 	 * Updates modification tracker on success.
 	 *
-	 * TODO Issue #258: Add validation before saving
-	 * - Validate the context before writing to disk
-	 * - Show ValidationDialog if there are errors/warnings
-	 * - Ask user if they want to proceed despite errors
-	 * - This prevents creating invalid railway network files
+	 * DEFERRED: Save-time validation (Issue #258)
+	 * Decision: Defer to follow-up issue for comprehensive validation framework
+	 *
+	 * Rationale:
+	 * - Current implementation: Editor allows opening/editing any file (including broken ones)
+	 * - Save validation would be inconsistent without load validation
+	 * - Comprehensive solution requires:
+	 *   1. Define validation rules (structural, safety, configuration)
+	 *   2. Implement validators for each category
+	 *   3. Add validation on both load AND save
+	 *   4. Support warnings (allow save) vs errors (block save)
+	 *   5. Provide user choice dialog for warnings
+	 *
+	 * Current behavior: Saves all files without validation
+	 * Future enhancement: Track in separate issue for comprehensive validation system
 	 *
 	 * @return true if save succeeded, false otherwise
 	 */
@@ -129,12 +139,8 @@ class MenuBar : JMenuBar() {
 			frame.modificationTracker.setCurrentFile(file)
 			frame.modificationTracker.markClean()
 
-			JOptionPane.showMessageDialog(
-				this,
-				"Railway network saved successfully to:\n${file.absolutePath}",
-				"Save Successful",
-				JOptionPane.INFORMATION_MESSAGE
-			)
+			// Show non-intrusive success message in status bar
+			frame.statusBar.showTemporaryMessage("✓ Saved: ${file.name}", 5000)
 		} else {
 			JOptionPane.showMessageDialog(
 				this,

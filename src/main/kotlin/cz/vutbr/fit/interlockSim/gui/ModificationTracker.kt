@@ -90,11 +90,31 @@ class ModificationTracker(
 
 	/**
 	 * Handles property change events from EditingContext.
-	 * Sets dirty flag on any modification event.
+	 * Sets dirty flag on structural modification events.
+	 *
+	 * Event Coverage (ContextChangeListener):
+	 * - CELL_ADDED: ✓ Marks dirty (structural change)
+	 * - CELL_REMOVED: ✓ Marks dirty (structural change)
+	 * - JOIN_CREATED: ✓ Marks dirty (structural change)
+	 * - TRACK_BLOCK_REMOVED: ✓ Marks dirty (structural change)
+	 * - JOIN_FAILED: ✗ Ignored (failed operation, no actual change)
+	 * - CONTEXT_CHANGED: ✗ Ignored (generic event, too broad for dirty tracking)
+	 *
+	 * Rationale:
+	 * - Only track events that represent successful structural modifications
+	 * - Failed operations (JOIN_FAILED) don't modify the network
+	 * - Generic notifications (CONTEXT_CHANGED) are informational only
+	 *
+	 * Future extensions (as needed):
+	 * - Configuration changes (maxSpeed, trackLength): Could mark dirty
+	 * - Cell property modifications: Could mark dirty
+	 * - InOut list modifications: Could mark dirty
 	 */
 	override fun propertyChange(evt: PropertyChangeEvent) {
 		when (evt.propertyName) {
 			CELL_ADDED, CELL_REMOVED, JOIN_CREATED, TRACK_BLOCK_REMOVED -> markDirty()
+			// Explicitly ignore JOIN_FAILED (failed operation, no change)
+			// Explicitly ignore CONTEXT_CHANGED (generic event)
 		}
 	}
 

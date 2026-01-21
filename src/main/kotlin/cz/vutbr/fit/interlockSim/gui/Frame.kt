@@ -26,7 +26,7 @@ import javax.swing.JScrollPane
  */
 class Frame : JFrame(PROGRAM_FULL_NAME) {
 	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
-	private val statusBar: StatusBar = StatusBar()
+	internal val statusBar: StatusBar = StatusBar()
 
 	/**
 	 * Tracks modification state for unsaved changes warning.
@@ -95,8 +95,16 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Handles window closing event.
 	 * Shows confirmation dialog if there are unsaved changes.
+	 *
+	 * Thread safety: Ensures execution on EDT for Swing component access.
 	 */
 	private fun handleWindowClosing() {
+		// Defensive programming: ensure we're on the Event Dispatch Thread
+		if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+			javax.swing.SwingUtilities.invokeLater { handleWindowClosing() }
+			return
+		}
+
 		if (modificationTracker.isDirty()) {
 			val result =
 				JOptionPane.showConfirmDialog(
