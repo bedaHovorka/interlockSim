@@ -142,7 +142,8 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		editingContext.currentNameString = "Transformation Test"
 		
 		// Verify editing context is mutable (not frozen)
-		assertThat(editingContext.isFrozen()).isEqualTo(false)
+		val isFrozen = editingContext.isFrozen()
+		assertThat(isFrozen).isEqualTo(false)
 		
 		// Phase 2: Transform to simulation context
 		val simulationContext: SimulationContext = transformer.createSimulationContext(
@@ -155,12 +156,15 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(simulationContext).isInstanceOf<DefaultSimulationContext>()
 		
 		// Verify simulation context is immutable (frozen)
-		assertThat(simulationContext.isFrozen()).isTrue()
-		
+		val simContextBase = simulationContext as BaseContext
+		val simContextFrozen = simContextBase.isFrozen()
+		assertThat(simContextFrozen).isTrue()
+
 		// Phase 3: Verify structure preservation
 		assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(30)
 		assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(30)
-		assertThat(simulationContext.getInOuts()).hasSize(2)
+		val simContextInOuts: Collection<*> = simulationContext.getInOuts()
+		assertThat(simContextInOuts).hasSize(2)
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
 		
 		// Phase 4: Verify property preservation
@@ -198,8 +202,11 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		
 		// Phase 2: Verify initialization
 		assertThat(simulationContext).isNotNull()
-		assertThat(simulationContext.isFrozen()).isTrue()
-		assertThat(simulationContext.getInOuts()).hasSize(2)
+		val simContextBase2 = simulationContext as BaseContext
+		val simFrozen = simContextBase2.isFrozen()
+		assertThat(simFrozen).isTrue()
+		val simInOuts: Collection<*> = simulationContext.getInOuts()
+		assertThat(simInOuts).hasSize(2)
 		
 		// Phase 3: Verify configuration access
 		val simBase = simulationContext as BaseContext
@@ -251,7 +258,9 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		
 		// Phase 2: Transform to simulation context
 		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
-		assertThat(originalContext.isFrozen()).isTrue()
+		val originalCtxBase = originalContext as BaseContext
+		val origFrozen = originalCtxBase.isFrozen()
+		assertThat(origFrozen).isTrue()
 		
 		// Phase 3: Serialize to XML
 		val xmlFile = File(tempDir, "lifecycle-test.xml")
@@ -266,7 +275,9 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// Phase 5: Verify structure integrity after round-trip
 		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(45)
 		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(45)
-		assertThat(loadedContext.getInOuts()).hasSize(2)
+		val loadedSimContext = loadedContext as SimulationContext
+		val loadedInOuts: Collection<*> = loadedSimContext.getInOuts()
+		assertThat(loadedInOuts).hasSize(2)
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
 		
 		// Phase 6: Verify properties preserved
@@ -283,9 +294,9 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(cellA).isNotNull()
 		assertThat(cellSem).isNotNull()
 		assertThat(cellB).isNotNull()
-		assertThat(cellA).isInstanceOf<InOut>()
-		assertThat(cellSem).isInstanceOf<RailSemaphore>()
-		assertThat(cellB).isInstanceOf<InOut>()
+		assertThat(cellA as Any).isInstanceOf(InOut::class)
+		assertThat(cellSem as Any).isInstanceOf(RailSemaphore::class)
+		assertThat(cellB as Any).isInstanceOf(InOut::class)
 		
 		// Phase 8: Verify loaded context is also frozen
 		assertThat(loadedContext.isFrozen()).isTrue()

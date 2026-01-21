@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -105,7 +106,9 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		// Step 5: Verify network integrity
 		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(50)
 		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(50)
-		assertThat(loadedContext.getInOuts()).hasSize(2)
+		val loadedSimCtx = loadedContext as SimulationContext
+		val loadedInOuts: Collection<*> = loadedSimCtx.getInOuts()
+		assertThat(loadedInOuts).hasSize(2)
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
 		
 		// Step 6: Verify properties are preserved (cast to BaseContext to access properties)
@@ -159,13 +162,16 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(cellB).isNotNull()
 		
 		// Verify InOuts are accessible
-		assertThat(simulationContext.getInOuts()).hasSize(2)
+		val simCtxInOuts: Collection<*> = simulationContext.getInOuts()
+		assertThat(simCtxInOuts).hasSize(2)
 		
 		// Verify graph structure is preserved
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
 		
 		// Verify simulation context is frozen (immutable)
-		assertThat(simulationContext.isFrozen()).isTrue()
+		val simContextBase = simulationContext as BaseContext
+		val simFrozen = simContextBase.isFrozen()
+		assertThat(simFrozen).isTrue()
 	}
 
 	/**
@@ -179,9 +185,11 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		val context = xmlFactory.createContext(
 			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
 		)
-		
+
 		assertThat(context).isNotNull()
-		assertThat(context.getInOuts()).hasSize(2)
+		val contextSimCtx = context as SimulationContext
+		val contextInOuts: Collection<*> = contextSimCtx.getInOuts()
+		assertThat(contextInOuts).hasSize(2)
 		
 		// Verify that the context supports property change listeners
 		val listener = object : PropertyChangeListener {

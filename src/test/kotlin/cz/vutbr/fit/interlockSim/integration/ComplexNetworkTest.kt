@@ -11,13 +11,12 @@ package cz.vutbr.fit.interlockSim.integration
 
 import assertk.assertThat
 import assertk.assertions.hasSize
-import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -109,7 +108,7 @@ class ComplexNetworkTest : KoinTestBase() {
 		// Verify switch is accessible
 		val switchCell = simContext.getRailWayNetGrid().getCellAt(30, 30)
 		assertThat(switchCell).isNotNull()
-		assertThat(switchCell).isInstanceOf<RailSwitch>()
+		assertThat(switchCell as Any).isInstanceOf(RailSwitch::class)
 	}
 
 	/**
@@ -205,8 +204,8 @@ class ComplexNetworkTest : KoinTestBase() {
 		val j2 = simContext.getRailWayNetGrid().getCellAt(40, 15)
 		assertThat(j1).isNotNull()
 		assertThat(j2).isNotNull()
-		assertThat(j1).isInstanceOf<RailSemaphore>()
-		assertThat(j2).isInstanceOf<RailSemaphore>()
+		assertThat(j1 as Any).isInstanceOf(RailSemaphore::class)
+		assertThat(j2 as Any).isInstanceOf(RailSemaphore::class)
 	}
 
 	/**
@@ -255,8 +254,8 @@ class ComplexNetworkTest : KoinTestBase() {
 		val sw2 = simContext.getRailWayNetGrid().getCellAt(30, 35)
 		assertThat(sw1).isNotNull()
 		assertThat(sw2).isNotNull()
-		assertThat(sw1).isInstanceOf<RailSwitch>()
-		assertThat(sw2).isInstanceOf<RailSwitch>()
+		assertThat(sw1 as Any).isInstanceOf(RailSwitch::class)
+		assertThat(sw2 as Any).isInstanceOf(RailSwitch::class)
 	}
 
 	/**
@@ -274,13 +273,15 @@ class ComplexNetworkTest : KoinTestBase() {
 		
 		// Verify complex network topology
 		assertThat(simContext).isNotNull()
-		assertThat(simContext.getInOuts()).hasSize(2)
+		val simContextTyped = simContext as SimulationContext
+		val inOuts: Collection<*> = simContextTyped.getInOuts()
+		assertThat(inOuts).hasSize(2)
 		assertThat(simContext.getGraph().size()).isGreaterThan(0)
-		
+
 		// Verify network has switches (for priority handling)
 		var switchCount = 0
 		var semaphoreCount = 0
-		
+
 		for (x in 0 until simContext.getRailWayNetGrid().getCols()) {
 			for (y in 0 until simContext.getRailWayNetGrid().getRows()) {
 				val cell = simContext.getRailWayNetGrid().getCellAt(x, y)
@@ -290,13 +291,13 @@ class ComplexNetworkTest : KoinTestBase() {
 				}
 			}
 		}
-		
+
 		// Vyhybna has multiple switches and semaphores
 		assertThat(switchCount).isGreaterThan(0)
 		assertThat(semaphoreCount).isGreaterThan(0)
-		
+
 		// Verify InOut points are properly configured
-		val inOuts = simContext.getInOuts()
-		assertThat(inOuts).hasSize(2)
+		val inOutsFinal: Collection<*> = simContextTyped.getInOuts()
+		assertThat(inOutsFinal).hasSize(2)
 	}
 }

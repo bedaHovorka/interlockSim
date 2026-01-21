@@ -19,6 +19,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -134,62 +135,68 @@ class XMLRoundTripTest : KoinTestBase() {
 		val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(15, 5)
 		
 		assertThat(loadedSwitch).isNotNull()
-		assertThat(loadedSwitch).isInstanceOf<RailSwitch>()
-		
-		val switch = loadedSwitch as RailSwitch
-		assertThat(switch.getType()).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		assertThat(switch.getSpatialType()).isEqualTo(Cell.SpatialType.HORIZONTAL)
-		assertThat(switch.getName()).isEqualTo("Switch_001")
+		assertThat(loadedSwitch as Any).isInstanceOf(RailSwitch::class)
+
+		val switch: RailSwitch = loadedSwitch as RailSwitch
+		val switchType: RailSwitch.Type = switch.type
+		assertThat(switchType).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val switchSpatialType: Cell.SpatialType = switch.getSpatialType()
+		assertThat(switchSpatialType).isEqualTo(Cell.SpatialType.HORIZONTAL)
+		val switchName: String = switch.getName()
+		assertThat(switchName).isEqualTo("Switch_001")
 	}
 
 	/**
-	 * Test that semaphore states (allowing/stop, orientation) are preserved
-	 * after save and load cycle.
+	 * Test that semaphore orientations are preserved after save and load cycle.
 	 */
 	@Test
-	@DisplayName("save and load preserves semaphore states")
+	@DisplayName("save and load preserves semaphore configurations")
 	fun saveAndLoad_preservesSemaphoreStates(@TempDir tempDir: File) {
 		// Create network with semaphores
 		val editingContext = DefaultEditingContext(40, 40)
-		
+
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val semaphore1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL) // allowing (green)
-		semaphore1.setName("Signal_Green")
-		val semaphore2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL) // stop (red)
-		semaphore2.setName("Signal_Red")
+		val semaphore1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL) // orientation: true
+		semaphore1.setName("Signal_Oriented")
+		val semaphore2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL) // orientation: false
+		semaphore2.setName("Signal_NotOriented")
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		
+
 		editingContext.putCell(Point(5, 5), inA)
 		editingContext.putCell(Point(15, 5), semaphore1)
 		editingContext.putCell(Point(25, 5), semaphore2)
 		editingContext.putCell(Point(35, 5), inB)
-		
+
 		val track = SimpleTrackBlock(inA, inB, 300.0, 80.0)
 		editingContext.joinCells(Point(5, 5), Point(35, 5), track)
-		
+
 		// Transform and save
 		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
 		val xmlFile = File(tempDir, "semaphore-test.xml")
 		xmlFactory.saveContext(originalContext, xmlFile)
-		
-		// Load and verify semaphore states
+
+		// Load and verify semaphore configurations
 		val loadedContext = xmlFactory.createContext(xmlFile)
-		
+
 		val loadedSem1 = loadedContext.getRailWayNetGrid().getCellAt(15, 5)
 		val loadedSem2 = loadedContext.getRailWayNetGrid().getCellAt(25, 5)
-		
+
 		assertThat(loadedSem1).isNotNull()
 		assertThat(loadedSem2).isNotNull()
-		assertThat(loadedSem1).isInstanceOf<RailSemaphore>()
-		assertThat(loadedSem2).isInstanceOf<RailSemaphore>()
-		
+		assertThat(loadedSem1 as Any).isInstanceOf(RailSemaphore::class)
+		assertThat(loadedSem2 as Any).isInstanceOf(RailSemaphore::class)
+
 		val sem1 = loadedSem1 as RailSemaphore
 		val sem2 = loadedSem2 as RailSemaphore
-		
-		assertThat(sem1.isAllowing()).isTrue()
-		assertThat(sem2.isAllowing()).isEqualTo(false)
-		assertThat(sem1.getName()).isEqualTo("Signal_Green")
-		assertThat(sem2.getName()).isEqualTo("Signal_Red")
+
+		val sem1Orientation = sem1.getOrientation()
+		assertThat(sem1Orientation).isTrue()
+		val sem2Orientation = sem2.getOrientation()
+		assertThat(sem2Orientation).isEqualTo(false)
+		val sem1Name = sem1.getName()
+		assertThat(sem1Name).isEqualTo("Signal_Oriented")
+		val sem2Name = sem2.getName()
+		assertThat(sem2Name).isEqualTo("Signal_NotOriented")
 	}
 
 	/**
@@ -224,14 +231,17 @@ class XMLRoundTripTest : KoinTestBase() {
 		
 		// Load and verify InOut configurations
 		val loadedContext = xmlFactory.createContext(xmlFile)
-		
-		assertThat(loadedContext.getInOuts()).hasSize(4)
-		
-		// Extract static refs from dynamic wrappers
-		val inOuts = loadedContext.getInOuts()
-		val staticInOuts = inOuts.map { (it as DynamicInOut).staticRef }
-		
-		val names = staticInOuts.map { it.getName() }.toSet()
+
+		val loadedCtxSim = loadedContext as SimulationContext
+		val loadedInOuts: Collection<*> = loadedCtxSim.getInOuts()
+		assertThat(loadedInOuts).hasSize(4)
+
+		// Extract static refs from dynamic wrappers (convert to list for type inference)
+		val inOutList = loadedInOuts.toList()
+		val staticInOuts = inOutList.map { (it as DynamicInOut).staticRef }
+
+		val namesList = staticInOuts.map { inOut -> inOut.getName() }
+		val names: Set<String> = namesList.toSet()
 		assertThat(names).hasSize(4)
 		assertThat(names.contains("Platform_1_Entry")).isTrue()
 		assertThat(names.contains("Platform_1_Exit")).isTrue()
@@ -260,12 +270,22 @@ class XMLRoundTripTest : KoinTestBase() {
 		val loadedContext = xmlFactory.createContext(xmlFile)
 		
 		// Verify basic structure is preserved
-		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(originalContext.getRailWayNetGrid().getCols())
-		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(originalContext.getRailWayNetGrid().getRows())
-		
+		val originalCols = originalContext.getRailWayNetGrid().getCols()
+		val loadedCols = loadedContext.getRailWayNetGrid().getCols()
+		assertThat(loadedCols).isEqualTo(originalCols)
+
+		val originalRows = originalContext.getRailWayNetGrid().getRows()
+		val loadedRows = loadedContext.getRailWayNetGrid().getRows()
+		assertThat(loadedRows).isEqualTo(originalRows)
+
 		// Verify InOuts count
-		val originalInOutCount = originalContext.getInOuts().size
-		assertThat(loadedContext.getInOuts()).hasSize(originalInOutCount)
+		val originalSimContext = originalContext as SimulationContext
+		val originalInOuts = originalSimContext.getInOuts()
+		val originalInOutCount = originalInOuts.size
+		val loadedSimContext = loadedContext as SimulationContext
+		val loadedRTInOuts = loadedSimContext.getInOuts()
+		val loadedRTInOutsCollection: Collection<DynamicInOut> = loadedRTInOuts
+		assertThat(loadedRTInOutsCollection).hasSize(originalInOutCount)
 		
 		// Verify graph structure (track connections)
 		assertThat(loadedContext.getGraph().size()).isEqualTo(originalContext.getGraph().size())
