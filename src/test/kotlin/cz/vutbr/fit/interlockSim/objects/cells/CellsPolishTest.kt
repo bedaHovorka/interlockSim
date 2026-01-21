@@ -140,7 +140,7 @@ class CellsPolishTest {
 		fun `arr2set with single element`() {
 			val segments = arrayOf(Segment.A)
 			val result = arr2set(segments)
-			assertThat(result).containsExactly(Segment.A)
+			assertThat(result).containsExactlyInAnyOrder(Segment.A)
 		}
 
 		@Test
@@ -155,7 +155,7 @@ class CellsPolishTest {
 		fun `arr2set with duplicate elements removes duplicates`() {
 			val segments = arrayOf(Segment.A, Segment.B, Segment.A)
 			val result = arr2set(segments)
-			assertThat(result).containsExactly(Segment.A, Segment.B)
+			assertThat(result).containsExactlyInAnyOrder(Segment.A, Segment.B)
 		}
 
 		@Test
@@ -171,7 +171,7 @@ class CellsPolishTest {
 			val cell = InOut("test", true, SpatialType.HORIZONTAL)
 			val joins = cell.joins()
 			assertThat(joins).hasSize(2)
-			assertThat(joins).containsExactly(Segment.A, Segment.F)
+			assertThat(joins).containsExactlyInAnyOrder(Segment.A, Segment.F)
 		}
 
 		@Test
@@ -179,7 +179,7 @@ class CellsPolishTest {
 			val cell = InOut("test", true, SpatialType.VERTICAL)
 			val joins = cell.joins()
 			assertThat(joins).hasSize(2)
-			assertThat(joins).containsExactly(Segment.C, Segment.H)
+			assertThat(joins).containsExactlyInAnyOrder(Segment.C, Segment.H)
 		}
 	}
 
@@ -232,7 +232,7 @@ class CellsPolishTest {
 			val trackBlock = SimpleTrackBlock(sep1, sep2, 100.0, 30.0, 30.0)
 			val part = TrackBlockPart(trackBlock, arrayOf(Segment.A, Segment.F))
 			val joins = part.joins()
-			assertThat(joins).containsExactly(Segment.A, Segment.F)
+			assertThat(joins).containsExactlyInAnyOrder(Segment.A, Segment.F)
 		}
 
 		@Test
