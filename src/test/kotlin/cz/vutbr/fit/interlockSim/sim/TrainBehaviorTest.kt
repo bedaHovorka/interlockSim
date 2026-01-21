@@ -19,7 +19,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import jDisco.Process
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -28,50 +27,47 @@ import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
 /**
- * Integration tests for Train behavior during simulation.
+ * Configuration and physics validation tests for Train behavior.
  *
- * These tests validate train movement, acceleration, deceleration, and interaction
- * with railway infrastructure (semaphores, tracks) through actual jDisco simulation
- * runs. Tests focus on Train.Motor, Train.Front, and Train.Site inner classes.
+ * These tests validate train configuration, initial state, and physics constants
+ * without running the jDisco simulation event loop. For full simulation execution
+ * tests that validate runtime behavior, see SimulationExecutionTest.
  *
  * Coverage Goals:
- * - Train.Motor: Acceleration/deceleration physics and speed control
- * - Train.Front: Movement through semaphores and track sections
- * - Train.Site: Position tracking and distance calculations
- * - Train main class: Integration of motor, front, and tail coordination
+ * - Train construction and initialization
+ * - Initial state validation (velocity=0, acceleration=0, position=0)
+ * - Physics constants (MAXIMAL_ACCELERATION=4, MINIMAL_DECELERATION=-3)
+ * - Timetable storage and train length configuration
+ * - Motor, Front, and Tail initialization
+ * - Distance calculation formulas (stopping distance, acceleration time)
  *
- * Test Strategy (Conservative jDisco testing):
- * - Run actual simulations with jDisco Process framework
- * - Validate train states (velocity, acceleration, position) after simulation steps
- * - Test through Train's public API (getVelocity(), getAcceleration(), distanceToSemaphore())
- * - Use vyhybna.xml for realistic railway network
- * - Avoid mocking jDisco internals
- * - Focus on observable train behavior, not internal jDisco scheduling
+ * Test Strategy:
+ * - Validate object construction and initialization
+ * - Verify physics constants and formulas are correctly documented
+ * - Check initial state (train at rest)
+ * - Test configuration through Train's public API
+ * - No jDisco simulation execution (no context.run() or Head.run())
+ * - No Process.activate() calls (tests configuration, not runtime)
  *
- * Physics Validation:
+ * Physics Documentation:
  * - Kinematic equations: v² = u² + 2as
  * - Acceleration: a = (v² - u²) / (2s)
  * - Limits: MAXIMAL_ACCELERATION = 4 m/s², MINIMAL_DECELERATION = -3 m/s²
- * - Tolerance: 1e-6 meters, 1e-9 seconds (per KOTLIN_MIGRATION_STATUS.md)
+ * - Stopping distance: s = -u² / (2a)
+ * - Acceleration time: t = (v - u) / a
  *
  * Railway Context:
- * These tests validate realistic train operations including:
- * - Smooth acceleration from standstill
- * - Controlled deceleration approaching signals
- * - Maintaining speed limits on track sections
- * - Stopping and waiting at red semaphores
- * - Resuming movement when signals clear
+ * These tests validate that trains are correctly configured before simulation
+ * begins, including proper initialization of motor physics, timetable data,
+ * and initial state at rest.
  *
- * **DISABLED: Tests call Process.activate() without running simulation, causing infinite hangs.**
- * These tests need to be rewritten to either:
- * 1. Actually run the jDisco simulation with Head.run() or context.run()
- * 2. Test without calling Process.activate() (test setup/configuration only)
+ * For full simulation integration tests that run context.run(), see:
+ * @see SimulationExecutionTest
  *
- * @since 2026-01-20 (Issue #xxx: Conservative simulation tests for 45% coverage)
+ * @since 2026-01-20 (Issue #247: Re-enable disabled integration tests)
  */
 @Tag("integration-test")
-@DisplayName("Train Behavior")
-@org.junit.jupiter.api.Disabled("Process.activate() without Head.run() causes infinite hang - needs rewrite")
+@DisplayName("Train Behavior - Configuration Tests")
 class TrainBehaviorTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 	private lateinit var context: SimulationContext
@@ -95,10 +91,10 @@ class TrainBehaviorTest : KoinTestBase() {
 	@DisplayName("Train Acceleration")
 	inner class TrainAccelerationTests {
 		/**
-		 * Test: Train accelerates to track speed limit
+		 * Test: Train initializes at rest with zero velocity
 		 *
-		 * Scenario: Train starting from rest should accelerate up to the track's
-		 * maximum permitted speed, respecting MAXIMAL_ACCELERATION limit (4 m/s²).
+		 * Scenario: Train starting from rest should have velocity=0 and
+		 * acceleration=0, ready for simulation to begin.
 		 *
 		 * Physics: From v² = u² + 2as, with u=0, v=target, distance available:
 		 * acceleration a = v² / (2s)
@@ -108,23 +104,18 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * and reach line speed efficiently for schedule adherence.
 		 */
 		@Test
-		fun `train accelerates to track speed limit`() {
-			// Arrange - Create train with timetable
+		fun `train initializes at rest with zero velocity`() {
+			// Arrange & Act
 			val inOuts = context.getInOuts().toList()
 			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
 			val train = Train(context, timetable)
 
-			// Verify initial state: train at rest
+			// Assert - Verify initial state: train at rest
+			assertThat(train).isNotNull()
 			assertThat(train.getVelocity()).isEqualTo(0.0)
 			assertThat(train.getAcceleration()).isEqualTo(0.0)
-
-			// Act - Activate train process
-			Process.activate(train)
-
-			// Assert - Train is activated and ready for simulation
-			// Motor will apply acceleration when train starts moving
+			// Motor will apply acceleration when simulation starts
 			// Acceleration limited by MAXIMAL_ACCELERATION = 4 m/s²
-			assertThat(train).isNotNull()
 		}
 
 		/**

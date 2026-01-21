@@ -15,14 +15,12 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import jDisco.Process
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -31,43 +29,37 @@ import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
 /**
- * End-to-end simulation scenario tests.
+ * Configuration and setup tests for simulation scenarios.
  *
- * These tests validate complete simulation scenarios using the jDisco framework
- * to exercise Train, Generator, InOutWorker, and ShuntingLoop classes. Tests
- * focus on realistic railway operations rather than testing jDisco internals.
+ * These tests validate that simulation components (Generator, Train, InOutWorker, Semaphore)
+ * are correctly configured and initialized. They do NOT run the jDisco simulation
+ * event loop - for full simulation execution tests, see SimulationExecutionTest.
  *
  * Coverage Goals:
- * - Train.Front: Execute train movement through semaphores and track sections
- * - Train.Motor: Exercise acceleration, deceleration, and speed control
- * - Train.Site: Validate position tracking and distance calculations
- * - Generator: Test train creation at scheduled intervals
- * - InOutWorker: Test train arrival and departure handling
- * - ShuntingLoop: Exercise full shunting loop operational scenarios
+ * - Generator: Configuration, train list initialization, InOut associations
+ * - InOutWorker: Queue initialization, worker-InOut relationships
+ * - Train: Construction, initial state, timetable storage, physics constants
+ * - Semaphore: Signal references, initial states, path connections
  *
- * Test Strategy (Conservative jDisco testing - see CLAUDE.md):
- * - Run actual simulations with jDisco Process framework
- * - Use vyhybna.xml configuration for realistic railway network
- * - Validate simulation state after execution (time, train positions, track states)
- * - Test through public APIs and observable simulation effects
- * - Avoid mocking jDisco internals (Process, Head, Link, Condition)
- * - Focus on integration testing, not unit testing of simulation algorithms
+ * Test Strategy:
+ * - Validate object construction and initialization
+ * - Check configuration parameters and initial states
+ * - Verify relationships (InOut to Worker, Train to Timetable)
+ * - Test through public APIs without Process.activate()
+ * - No jDisco simulation execution (no context.run() or Head.run())
  *
  * Railway Context:
- * These tests simulate realistic railway operations including train scheduling,
- * interlocking coordination, and shunting operations. Tests validate that the
- * simulation correctly models train physics, signaling, and track reservations.
+ * These tests validate that railway simulation components are correctly configured
+ * before simulation begins. Tests ensure that generators, workers, trains, and signals
+ * are properly initialized with valid timetables, queues, and network references.
  *
- * **DISABLED: Tests call Process.activate() without running simulation, causing infinite hangs.**
- * These tests need to be rewritten to either:
- * 1. Actually run the jDisco simulation with Head.run() or context.run()
- * 2. Test without calling Process.activate() (test setup/configuration only)
+ * For full simulation integration tests that run context.run(), see:
+ * @see SimulationExecutionTest
  *
- * @since 2026-01-20 (Issue #xxx: Conservative simulation tests for 45% coverage)
+ * @since 2026-01-20 (Issue #247: Re-enable disabled integration tests)
  */
 @Tag("integration-test")
-@DisplayName("Simulation Scenarios")
-@org.junit.jupiter.api.Disabled("Process.activate() without Head.run() causes infinite hang - needs rewrite")
+@DisplayName("Simulation Scenarios - Configuration Tests")
 class SimulationScenarioTest : KoinTestBase() {
 	private val factory: XMLContextFactory by inject()
 	private lateinit var context: SimulationContext
@@ -91,87 +83,68 @@ class SimulationScenarioTest : KoinTestBase() {
 	@DisplayName("Generator and Train Creation")
 	inner class GeneratorTrainCreationTests {
 		/**
-		 * Test: Generator creates trains at intervals
+		 * Test: Generator is configured correctly for train creation
 		 *
-		 * Scenario: Generator should create Train instances and add them to its
-		 * trains list. After simulation runs for sufficient time, multiple trains
-		 * should have been created.
+		 * Scenario: Generator should be constructed with valid trains list
+		 * and proper configuration. This tests setup, not runtime behavior.
 		 *
-		 * Railway Context: Real railway traffic generators create trains according
-		 * to a timetable to maintain service frequency.
+		 * Railway Context: Real railway traffic generators must be properly
+		 * configured before simulation begins.
 		 */
 		@Test
-		fun `generator creates trains at correct intervals`() {
-			// Arrange
+		fun `generator is configured correctly for train creation`() {
+			// Arrange & Act
 			val generator = Generator(context, shuffleInOuts = false)
-			val simulationTime = 60.0 // 60 seconds
 
-			// Act - Activate generator (simulation would run in full test)
-			Process.activate(generator)
-
-			// Assert - Generator should have created trains
-			assertThat(generator.trains)
-				.isNotNull()
-			assertThat(generator.trains.size)
-				.isGreaterThan(0)
-
-			// Verify trains have proper timetables
-			for (train in generator.trains) {
-				assertThat(train).isNotNull()
-				assertThat(train.getLength()).isGreaterThan(0.0)
-			}
+			// Assert - Generator should be constructed with empty trains list
+			assertThat(generator).isNotNull()
+			assertThat(generator.trains).isNotNull()
+			// No trains created until simulation runs
+			assertThat(generator.trains).isEqualTo(emptyList())
 		}
 
 		/**
-		 * Test: Generator shuffles InOuts when configured
+		 * Test: Generator accepts shuffle configuration
 		 *
-		 * Scenario: When shuffleInOuts=true, generator should randomize train
-		 * origins and destinations rather than always using the same route.
+		 * Scenario: Generator should accept both shuffled and non-shuffled
+		 * configurations without error.
 		 *
-		 * Railway Context: Real traffic patterns vary - trains don't always
-		 * take the same route through a junction.
+		 * Railway Context: Real traffic patterns may vary based on operational needs.
 		 */
 		@Test
-		fun `generator shuffles InOuts for train variety`() {
-			// Arrange
+		fun `generator accepts shuffle configuration`() {
+			// Arrange & Act
 			val generatorShuffled = Generator(context, shuffleInOuts = true)
 			val generatorFixed = Generator(context, shuffleInOuts = false)
 
-			// Both generators should be valid
+			// Assert - Both generators should be constructed successfully
 			assertThat(generatorShuffled).isNotNull()
 			assertThat(generatorFixed).isNotNull()
 
-			// Verify trains list is accessible
+			// Verify trains list is accessible in both cases
 			assertThat(generatorShuffled.trains).isNotNull()
 			assertThat(generatorFixed.trains).isNotNull()
 		}
 
 		/**
-		 * Test: Multiple trains created during simulation
+		 * Test: Generator initializes with context and configuration
 		 *
-		 * Scenario: Over longer simulation time, generator should create
-		 * multiple trains according to its exponential inter-arrival distribution.
+		 * Scenario: Generator should be constructed with context reference
+		 * and configuration parameter stored correctly.
 		 *
-		 * Railway Context: Train service frequency must be maintained to meet
-		 * passenger/freight demand.
+		 * Railway Context: Generators need context for network access during train creation.
 		 */
 		@Test
-		fun `multiple trains created during extended simulation`() {
-			// Arrange
+		fun `generator initializes with context and configuration`() {
+			// Arrange & Act
 			val generator = Generator(context, shuffleInOuts = false)
-			val simulationTime = 120.0 // 120 seconds - longer run
 
-			// Act - Activate generator (simulation would run in full test)
-			Process.activate(generator)
+			// Assert - Generator should be constructed successfully
+			assertThat(generator).isNotNull()
 
-			// Assert - Should have created multiple trains
-			assertThat(generator.trains.size)
-				.isGreaterThanOrEqualTo(2)
-
-			// Verify all trains are valid
-			for (train in generator.trains) {
-				assertThat(train.getLength()).isEqualTo(40.0) // Generator creates 40m trains
-			}
+			// Verify trains list is initialized (empty before simulation)
+			assertThat(generator.trains).isNotNull()
+			assertThat(generator.trains).isEqualTo(emptyList())
 		}
 	}
 
@@ -182,80 +155,78 @@ class SimulationScenarioTest : KoinTestBase() {
 	@DisplayName("InOutWorker Operations")
 	inner class InOutWorkerOperationsTests {
 		/**
-		 * Test: InOutWorker handles train arrival correctly
+		 * Test: Context provides InOut points for worker initialization
 		 *
-		 * Scenario: When train arrives at InOut entry point, InOutWorker should
-		 * add it to the queue and wait for path to be free before approving entry.
+		 * Scenario: Context should provide InOut points that will be used
+		 * to create InOutWorkers when simulation runs.
 		 *
-		 * Railway Context: Real interlocking systems queue trains at entry points
-		 * and only admit them when safe paths are available.
+		 * Railway Context: Real interlocking systems need entry/exit points
+		 * to manage train arrivals and departures.
 		 */
 		@Test
-		fun `InOutWorker handles train arrival correctly`() {
-			// Arrange - Get first InOut and its worker
-			val inOut = context.getInOuts().first()
-			val worker = context.getWorkerFor(inOut)
+		fun `context provides InOut points for worker initialization`() {
+			// Arrange & Act - Get InOut points from context
+			val inOuts = context.getInOuts().toList()
 
-			// Verify worker is properly initialized
-			assertThat(worker).isNotNull()
-			assertThat(worker.getQueqe()).isNotNull()
+			// Assert - Verify InOut points exist
+			assertThat(inOuts).isNotNull()
+			assertThat(inOuts.size).isGreaterThan(0)
 
-			// Verify queue starts empty
-			assertThat(worker.getQueqe().empty()).isTrue()
+			// Workers will be created for these InOuts when run() is called
+			for (inOut in inOuts) {
+				assertThat(inOut).isNotNull()
+			}
 		}
 
 		/**
-		 * Test: InOutWorker handles train departure correctly
+		 * Test: Context provides multiple InOut points for entry and exit
 		 *
-		 * Scenario: After train completes its journey and reaches exit InOut,
-		 * it should be removed from the system and queue should update.
+		 * Scenario: Context should provide separate InOut points for train
+		 * entry and exit operations.
 		 *
-		 * Railway Context: Real systems track train departures to free up
-		 * capacity for next arrivals.
+		 * Railway Context: Real systems need separate entry and exit points
+		 * to manage train flow through the network.
 		 */
 		@Test
-		fun `InOutWorker handles train departure correctly`() {
-			// Arrange
+		fun `context provides multiple InOut points for entry and exit`() {
+			// Arrange & Act
 			val inOuts = context.getInOuts().toList()
+
+			// Assert - Should have at least 2 InOut points (entry and exit)
+			assertThat(inOuts.size).isGreaterThanOrEqualTo(2)
+
+			// Verify both InOut points exist
 			val entryInOut = inOuts[0]
 			val exitInOut = inOuts[1]
 
-			// Get workers for both InOuts
-			val entryWorker = context.getWorkerFor(entryInOut)
-			val exitWorker = context.getWorkerFor(exitInOut)
+			assertThat(entryInOut).isNotNull()
+			assertThat(exitInOut).isNotNull()
 
-			// Verify both workers exist
-			assertThat(entryWorker).isNotNull()
-			assertThat(exitWorker).isNotNull()
-
-			// Verify queues are accessible
-			assertThat(entryWorker.getQueqe().empty()).isTrue()
-			assertThat(exitWorker.getQueqe().empty()).isTrue()
+			// Workers will be created for these InOuts when run() is called
 		}
 
 		/**
-		 * Test: InOutWorker waits for path to clear
+		 * Test: Train can be created with timetable referencing InOut points
 		 *
-		 * Scenario: When track is occupied, InOutWorker should not approve
-		 * new train entry until path is free.
+		 * Scenario: Train should be constructible with a timetable that
+		 * references entry and exit InOut points.
 		 *
-		 * Railway Context: Safety-critical - trains must wait for clear path
-		 * to prevent collisions.
+		 * Railway Context: Trains need timetables specifying their route
+		 * from entry to exit point.
 		 */
 		@Test
-		fun `InOutWorker waits for path to clear before approval`() {
-			// Arrange - Create train with mock timetable
+		fun `train can be created with timetable referencing InOut points`() {
+			// Arrange - Create train with timetable
 			val inOuts = context.getInOuts().toList()
 			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
 			val train = Train(context, mockTimetable)
 
-			// Verify train is created
+			// Assert - Verify train is created successfully
 			assertThat(train).isNotNull()
 			assertThat(train.getVelocity()).isEqualTo(0.0)
+			assertThat(train.getLength()).isEqualTo(100.0)
 
-			// Verify InOutWorker for entry point exists
-			val worker = context.getWorkerFor(inOuts[0])
-			assertThat(worker).isNotNull()
+			// InOutWorker will be created for entry point when run() is called
 		}
 	}
 
@@ -266,30 +237,24 @@ class SimulationScenarioTest : KoinTestBase() {
 	@DisplayName("Train Movement and Physics")
 	inner class TrainMovementPhysicsTests {
 		/**
-		 * Test: Simulation calculates correct travel time for track length
+		 * Test: Train initializes with correct initial state
 		 *
-		 * Scenario: Train traveling through network should take realistic time
-		 * based on track lengths and speed limits.
+		 * Scenario: Train should be constructed with velocity=0, acceleration=0
+		 * at rest before simulation begins.
 		 *
-		 * Railway Context: Travel time = distance / average speed, accounting
-		 * for acceleration and deceleration phases.
+		 * Railway Context: Trains begin at rest at entry points.
 		 */
 		@Test
-		fun `simulation calculates correct travel time for track length`() {
-			// Arrange - Create simple train with known timetable
+		fun `train initializes with correct initial state`() {
+			// Arrange & Act
 			val inOuts = context.getInOuts().toList()
 			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
 			val train = Train(context, mockTimetable)
 
-			// Verify initial conditions
+			// Assert - Verify initial conditions: train at rest
+			assertThat(train).isNotNull()
 			assertThat(train.getVelocity()).isEqualTo(0.0)
 			assertThat(train.getAcceleration()).isEqualTo(0.0)
-
-			// Act - Activate train (but don't run full simulation to keep test fast)
-			Process.activate(train)
-
-			// Assert - Train is activated and ready
-			assertThat(train).isNotNull()
 		}
 
 		/**
