@@ -110,14 +110,9 @@ val canvas = frame.railwayNetGridCanvas
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
-// Verify setNodeOnToolbar was called with correct arguments using reflection
-val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
-toolbarCellClassField.isAccessible = true
-val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
-
-val toolbarArgsField = canvas.javaClass.getDeclaredField("toolbarArgs")
-toolbarArgsField.isAccessible = true
-val actualArgs = toolbarArgsField.get(canvas) as? Array<*>
+// Verify setNodeOnToolbar was called with correct arguments
+val actualCellClass = canvas.getToolbarCellClass()
+val actualArgs = canvas.getToolbarArgs()
 
 assertThat(actualCellClass).isEqualTo(cellClass)
 assertThat(actualArgs).isNotNull()
@@ -171,10 +166,8 @@ val canvas = frame.railwayNetGridCanvas
 val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
 action.actionPerformed(mockEvent)
 
-// Verify toolbar state was updated using reflection
-val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
-toolbarCellClassField.isAccessible = true
-val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
+// Verify toolbar state was updated
+val actualCellClass = canvas.getToolbarCellClass()
 
 assertThat(actualCellClass).isEqualTo(cellClass)
 }
@@ -197,9 +190,7 @@ action.actionPerformed(mockEvent)
 // Verify toolbar state and icon
 assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
 
-val toolbarCellClassField = canvas.javaClass.getDeclaredField("toolbarCellClass")
-toolbarCellClassField.isAccessible = true
-val actualCellClass = toolbarCellClassField.get(canvas) as? Class<*>
+val actualCellClass = canvas.getToolbarCellClass()
 
 assertThat(actualCellClass).isEqualTo(cellClass)
 }

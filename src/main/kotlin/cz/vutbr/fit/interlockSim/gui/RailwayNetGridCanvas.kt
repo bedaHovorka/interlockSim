@@ -467,6 +467,11 @@ class RailwayNetGridCanvas :
 		toolbarCellClass = cellClass
 	}
 
+	// Internal test accessors for toolbar state
+	internal fun getToolbarCellClass(): Class<out NodeCell>? = toolbarCellClass
+
+	internal fun getToolbarArgs(): Array<Any?>? = toolbarArgs
+
 	// PropertyChangeListener for context updates
 	override fun propertyChange(evt: PropertyChangeEvent) {
 		val newValue = evt.newValue
