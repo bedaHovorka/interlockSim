@@ -91,7 +91,10 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 	 */
 	fun time(): Double = currentTime
 
-	override fun getWorkerFor(inOut: DynamicInOut): InOutWorker = workers[inOut]!!
+	override fun getWorkerFor(inOut: DynamicInOut): InOutWorker {
+		// Delegate to the underlying context to get the actual InOutWorker
+		return delegate.getWorkerFor(inOut)
+	}
 
 	override fun getInOuts(): Collection<DynamicInOut> {
 		// Delegate to the real context to get DynamicInOut wrappers
