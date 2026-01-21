@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
+import kotlin.test.assertFailsWith
 
 /**
  * Comprehensive tests for grid operations in DefaultEditingContext
@@ -75,10 +76,8 @@ class GridOperationsTest : KoinTestBase() {
 			val secondCell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
 
 			// Assert - Cell was replaced
-			assertThat(firstCell).isNotNull()
-			assertThat(firstCell).isInstanceOf<InOut>()
-			assertThat(secondCell).isNotNull()
-			assertThat(secondCell).isInstanceOf<RailSemaphore>()
+			assertThat(firstCell).isNotNull().isInstanceOf(InOut::class)
+			assertThat(secondCell).isNotNull().isInstanceOf(RailSemaphore::class)
 			assertThat(secondCell).isSameInstanceAs(semaphore1)
 		}
 
@@ -94,8 +93,7 @@ class GridOperationsTest : KoinTestBase() {
 
 			// Assert
 			val cell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
-			assertThat(cell).isNotNull()
-			assertThat(cell).isInstanceOf<InOut>()
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 		}
 
 		@Test
@@ -110,8 +108,7 @@ class GridOperationsTest : KoinTestBase() {
 
 			// Assert
 			val cell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
-			assertThat(cell).isNotNull()
-			assertThat(cell).isInstanceOf<InOut>()
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 		}
 
 		@Test
@@ -332,12 +329,10 @@ class GridOperationsTest : KoinTestBase() {
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(10, 10), outB)
 
-			// Act - Try to join with zero/negative length
-			val trackBlock = SimpleTrackBlock(inA, outB, -100.0, 80.0)
-			context.joinCells(Point(1, 1), Point(10, 10), trackBlock)
-
-			// Assert - Operation should fail but not throw
-			// (Implementation detail: join might fail silently via property change event)
+			// Act & Assert - Creating track block with invalid length throws IllegalArgumentException
+			assertFailsWith<IllegalArgumentException> {
+				SimpleTrackBlock(inA, outB, -100.0, 80.0)
+			}
 		}
 
 		@Test

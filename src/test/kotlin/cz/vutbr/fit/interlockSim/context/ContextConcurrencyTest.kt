@@ -403,8 +403,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 
 			// Assert - Context works correctly in single-threaded usage
 			context.putCell(Point(5, 5), inA)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isInstanceOf<InOut>()
+			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(InOut::class)
 
 			// Documentation check: Classes should have @NotThreadSafe annotation or equivalent
 			// This is verified by code review and documentation, not runtime checks

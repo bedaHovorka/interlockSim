@@ -455,7 +455,9 @@ open class DefaultEditingContext(
 				)
 			}
 		}
-		if (nodeCell is InOut) inouts.add(nodeCell as InOut)
+		if (nodeCell is InOut && !inouts.contains(nodeCell as InOut)) {
+			inouts.add(nodeCell as InOut)
+		}
 		getChangeSupport().firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
 		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
 	}
@@ -474,6 +476,7 @@ open class DefaultEditingContext(
 				val set = getLinesKeys()[tl]
 				if (set != null) grid.keySet().removeAll(set)
 			}
+			if (cell is InOut) inouts.remove(cell as InOut)
 			getChangeSupport().firePropertyChange(
 				ContextChangeListener.CELL_REMOVED,
 				null,

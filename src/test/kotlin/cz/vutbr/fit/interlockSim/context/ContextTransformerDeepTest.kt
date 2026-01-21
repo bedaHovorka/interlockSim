@@ -102,8 +102,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 
 			// Assert - Switch preserved in grid
 			val switchCell = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
-			assertThat(switchCell).isNotNull()
-			assertThat(switchCell).isInstanceOf<RailSwitch>()
+			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
 		}
 
 		@Test
@@ -148,7 +147,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 		@Test
 		@DisplayName("transform handles circular path references")
 		fun transform_handlesCircularPathReferences() {
-			// Arrange - Create a simple loop
+			// Arrange - Create a simple network with track connection
 			val editingContext = DefaultEditingContext(30, 30)
 
 			val inOut1 = InOut("IO1", true, Cell.SpatialType.HORIZONTAL)
@@ -157,17 +156,20 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			editingContext.putCell(Point(5, 5), inOut1)
 			editingContext.putCell(Point(15, 5), inOut2)
 
-			// Create bidirectional connection (if possible in the model)
+			// Create track connection
 			val trackBlock = SimpleTrackBlock(inOut1, inOut2, 100.0, 80.0)
 			editingContext.joinCells(Point(5, 5), Point(15, 5), trackBlock)
+
+			// Verify graph has edges (join succeeded)
+			val graphSizeAfterJoin = editingContext.getGraph().size()
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
-			// Assert - Network transformed without infinite loops
-			assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
+			// Assert - Network transformed preserving structure
+			assertThat(simulationContext.getGraph().size()).isEqualTo(graphSizeAfterJoin)
 			assertThat(simulationContext.getInOuts()).hasSize(2)
-			assertThat(simulationContext.isFrozen()).isTrue()
+			assertThat((simulationContext as DefaultSimulationContext).isFrozen()).isTrue()
 		}
 
 		@Test
@@ -191,8 +193,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 
 			// Assert - Switch preserved with correct state
 			val switchCell = simulationContext.getRailWayNetGrid().getCellAt(10, 5)
-			assertThat(switchCell).isNotNull()
-			assertThat(switchCell).isInstanceOf<RailSwitch>()
+			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
 			assertThat((switchCell as RailSwitch).getName()).isEqualTo("SW1")
 		}
 	}
@@ -222,10 +223,8 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - All semaphores preserved
-			assertThat(simulationContext.getRailWayNetGrid().getCellAt(5, 5)).isNotNull()
-			assertThat(simulationContext.getRailWayNetGrid().getCellAt(10, 5)).isNotNull()
-			assertThat(simulationContext.getRailWayNetGrid().getCellAt(5, 5)).isInstanceOf<RailSemaphore>()
-			assertThat(simulationContext.getRailWayNetGrid().getCellAt(10, 5)).isInstanceOf<RailSemaphore>()
+			assertThat(simulationContext.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(RailSemaphore::class)
+			assertThat(simulationContext.getRailWayNetGrid().getCellAt(10, 5)).isNotNull().isInstanceOf(RailSemaphore::class)
 		}
 
 		@Test
