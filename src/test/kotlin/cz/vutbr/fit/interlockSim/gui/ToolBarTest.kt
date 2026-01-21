@@ -41,10 +41,12 @@ class ToolBarTest : AbstractFrameTestBase() {
 	@BeforeEach
 	override fun setUp() {
 		super.setUp()
-		
+
 		// Create Frame and ToolBar on EDT
 		runOnEDT {
-			frame = Frame()
+			// Get Frame from Koin (singleton) instead of creating new instance
+			// This ensures ToolBar's GridSwitch accesses the same Frame instance
+			frame = org.koin.mp.KoinPlatform.getKoin().get<Frame>()
 			frames.add(frame)
 			toolBar = ToolBar()
 		}
