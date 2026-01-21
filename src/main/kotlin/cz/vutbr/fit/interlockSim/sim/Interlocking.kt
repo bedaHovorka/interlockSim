@@ -9,13 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 
 /**
  * Control facility
  */
 abstract class Interlocking(
-	protected val context: SimulationContext
+	protected val env: SimulationEnvironment
 ) : LoopProcess() {
 	// GOAL 2: Automatic Path Finding with Dijkstra algorithm
 	// Future: Implement automatic route calculation from entry to exit

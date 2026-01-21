@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Random
 
@@ -17,7 +17,7 @@ import jDisco.Random
  * Testing Generator
  */
 open class Generator(
-	protected val context: SimulationContext,
+	protected val env: SimulationEnvironment,
 	protected val shuffleInOuts: Boolean = true
 ) : LoopProcess() {
 	companion object {
@@ -36,7 +36,7 @@ open class Generator(
 	private var i = 0
 
 	private fun generateRandomTimetable(): Timetable {
-		val inOutsList = context.getInOuts().toMutableList()
+		val inOutsList = env.getInOuts().toMutableList()
 		if (shuffleInOuts) {
 			inOutsList.shuffle(random)
 		}
@@ -51,7 +51,7 @@ open class Generator(
 	}
 
 	override fun iteration() {
-		val train = Train(context, generateRandomTimetable())
+		val train = Train(env, generateRandomTimetable())
 		logger.debug { "Generator: creating and placing train (total trains: ${trains.size + 1})" }
 		placeTrain(train)
 		trains.add(train)

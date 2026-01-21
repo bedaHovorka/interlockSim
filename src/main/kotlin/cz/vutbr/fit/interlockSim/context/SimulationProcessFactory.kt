@@ -22,22 +22,28 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
  * - Testing without concrete simulation dependencies
  * - Future migration from jDisco to DSOL/Kalasim
  *
- * ## Design Decision
+ * ## Design Decision (Issue #94)
  *
  * This interface is placed in the context package (not sim/) because:
  * - It's an abstraction used by contexts
  * - Only the implementation needs knowledge of concrete sim/ classes
  * - Follows Dependency Inversion Principle
  *
+ * **Factory methods accept [SimulationEnvironment] instead of [SimulationContext].**
+ * This decouples simulation processes from the full context interface, providing
+ * only the 11 methods they actually need (network queries, dynamic state, control).
+ *
  * ## Future Migration
  *
  * When migrating from jDisco to DSOL/Kalasim:
  * 1. Create new factory implementation with DSOL/Kalasim classes
- * 2. Update DI configuration to use new factory
- * 3. All context code continues to work unchanged
+ * 2. Implement DSOLSimulationEnvironment adapter
+ * 3. Update DI configuration to use new factory
+ * 4. All simulation process classes (Train, etc.) work unchanged
  *
  * @see DefaultSimulationContext
  * @see SimulationContext
+ * @see SimulationEnvironment
  */
 interface SimulationProcessFactory {
 	/**
@@ -46,10 +52,10 @@ interface SimulationProcessFactory {
 	 * The main process is responsible for generating trains and managing
 	 * the overall simulation flow. Default implementation creates a Generator.
 	 *
-	 * @param context The simulation context
+	 * @param env The simulation environment (subset of SimulationContext)
 	 * @return Main process for the simulation (e.g., Generator)
 	 */
-	fun createMainProcess(context: SimulationContext): LoopProcess
+	fun createMainProcess(env: SimulationEnvironment): LoopProcess
 
 	/**
 	 * Create worker process for an InOut point.
@@ -57,12 +63,12 @@ interface SimulationProcessFactory {
 	 * Each InOut (entry/exit point) needs a worker process to handle
 	 * trains entering and leaving the railway network.
 	 *
-	 * @param context The simulation context
+	 * @param env The simulation environment (subset of SimulationContext)
 	 * @param inOut The InOut point to create worker for
 	 * @return Worker process for the InOut
 	 */
 	fun createInOutWorker(
-		context: SimulationContext,
+		env: SimulationEnvironment,
 		inOut: DynamicInOut
 	): InOutWorker
 }

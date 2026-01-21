@@ -367,18 +367,18 @@ class GeneratorTest : KoinTestBase() {
 		 * The Generator stores the context in a protected field for use by subclasses.
 		 */
 		@Test
-		fun `generator has protected context field`() {
+		fun `generator has protected env field`() {
 			// Arrange
 			val generator = Generator(mockContext, shuffleInOuts = false)
 
 			// Act
-			val contextField = Generator::class.java.getDeclaredField("context")
-			contextField.isAccessible = true
-			val contextValue = contextField.get(generator)
+			val envField = Generator::class.java.getDeclaredField("env")
+			envField.isAccessible = true
+			val envValue = envField.get(generator)
 
 			// Assert
-			assertThat(contextValue).isNotNull()
-			assertThat(contextValue).isEqualTo(mockContext)
+			assertThat(envValue).isNotNull()
+			assertThat(envValue).isEqualTo(mockContext)
 		}
 	}
 

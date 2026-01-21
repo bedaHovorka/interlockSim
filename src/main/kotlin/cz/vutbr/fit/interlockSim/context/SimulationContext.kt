@@ -12,18 +12,10 @@ package cz.vutbr.fit.interlockSim.context
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import java.util.EnumSet
 
 /**
@@ -92,7 +84,7 @@ import java.util.EnumSet
  * @see BaseContext.freeze
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : Context<Cell> {
+interface SimulationContext : Context<Cell>, SimulationEnvironment {
 	/**
 	 * simulation reporting types
 	 */
@@ -133,17 +125,6 @@ interface SimulationContext : Context<Cell> {
 	}
 
 	/**
-	 * Object come from <code>current</code> to <code>separator</code> and need know, how continue
-	 * @param separator
-	 * @param current
-	 * @return next section in aPath
-	 */
-	fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection?
-
-	/**
 	 * Runs the simulation
 	 * @throws EmptyContextException Context must not be empty
 	 * @throws SimulationException if simulation failed
@@ -151,56 +132,8 @@ interface SimulationContext : Context<Cell> {
 	fun run()
 
 	/**
-	 * stops the simulation with error
-	 * @param error
-	 */
-	fun errorStop(error: Throwable)
-
-	/**
-	 * stops the simulation
-	 * @throws SimulationException if the simulation didn't stop correctly
-	 *
-	 */
-	fun stop()
-
-	/**
-	 *
-	 * @param separator start of path
-	 * @param next first section
-	 * @return a path with all elements, or null if no path found
-	 */
-	fun pathToNextSemaphore(
-		separator: PathSeparator,
-		next: TrackSection
-	): Path?
-
-	/**
-	 * Reporting - if report type is allowed
-	 * @param report
-	 * @param obj this object report message
-	 * @param type
-	 */
-	fun report(
-		report: CharSequence,
-		obj: Any,
-		type: ReportType
-	)
-
-	/**
-	 *
-	 * @param types
-	 */
-	fun addReportTypes(vararg types: ReportType)
-
-	/**
-	 * @param type
-	 * @return true if is the type now reporting
-	 */
-	fun isReporting(type: ReportType): Boolean
-
-	/**
-	 *
-	 * @param types
+	 * Remove report types from logging.
+	 * @param types Report types to disable
 	 */
 	fun removeReportTypes(vararg types: ReportType)
 
@@ -226,18 +159,6 @@ interface SimulationContext : Context<Cell> {
 
 	/**
 	 * @param separator
-	 * @param next track behind separator
-	 * @param previous track front of separator (if next null previous must not be null)
-	 * @return if separator direct to next!
-	 */
-	fun isSeparatorInDirection(
-		separator: OrientedPathSeparator,
-		next: Track?,
-		previous: Track?
-	): Boolean
-
-	/**
-	 * @param separator
 	 * @param track
 	 * @param secondEndTrack only if track is null is used (must be not null)
 	 * @return segment for track, or null if no following segment exists
@@ -247,32 +168,4 @@ interface SimulationContext : Context<Cell> {
 		track: Track?,
 		secondEndTrack: Track?
 	): Segment?
-
-	/**
-	 * @param inOut
-	 * @return worker
-	 */
-	fun getWorkerFor(inOut: DynamicInOut): InOutWorker
-
-	/**
-	 * @return all inouts in model
-	 */
-	fun getInOuts(): Collection<DynamicInOut>
-
-	/**
-	 * Convert a static PathSeparator to its Dynamic wrapper.
-	 * Used by Train to ensure consistent use of Dynamic wrappers throughout simulation.
-	 * @param separator The separator to convert (static or already Dynamic)
-	 * @return The Dynamic wrapper (either found in map or the input if already dynamic)
-	 * @throws IllegalStateException if the separator is static and not found in the dynamic map
-	 */
-	fun toDynamic(separator: PathSeparator): DynamicPathSeparator
-
-	/**
-	 * Convert a TrackFacility to its DynamicTrack wrapper.
-	 * Used by Train to manage track state (enter/leave) via DynamicTrack wrappers.
-	 * @param track The track facility to wrap
-	 * @return The DynamicTrack wrapper for state operations
-	 */
-	fun toDynamic(track: TrackFacility): DynamicTrack
 }
