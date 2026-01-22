@@ -1,0 +1,153 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.gui.animation
+
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.util.Point
+
+/**
+ * Immutable snapshot of simulation state for animation rendering.
+ *
+ * This data class captures the complete visual state of the railway simulation
+ * at a specific moment in time. It is designed to be thread-safe and immutable,
+ * allowing safe transfer of simulation state from the jDisco simulation thread
+ * to the Swing Event Dispatch Thread (EDT) for rendering.
+ *
+ * ## Threading Model
+ *
+ * - **Captured on:** jDisco simulation thread (via PropertyChangeListener or Reporter)
+ * - **Used on:** Swing EDT (by AnimatedSimulationCellRenderer)
+ * - **Immutability:** All fields are `val` with immutable collections
+ *
+ * ## Usage
+ *
+ * ```kotlin
+ * // On simulation thread:
+ * val state = captureSimulationState(context)
+ *
+ * // Marshal to EDT:
+ * SwingUtilities.invokeLater {
+ *     animationController.updateState(state)
+ * }
+ *
+ * // On EDT during rendering:
+ * val trackState = animationState.trackStates[trackBlock]
+ * val color = when (trackState?.state) {
+ *     State.FREE -> Color.GRAY
+ *     State.RESERVED -> Color.YELLOW
+ *     State.OCCUPIED -> Color.RED
+ *     null -> Color.LIGHT_GRAY // Not tracked
+ * }
+ * ```
+ *
+ * @property simulationTime Current simulation time in seconds
+ * @property trainStates Map of train number to [TrainState] (immutable)
+ * @property trackStates Map of [TrackBlock] to [TrackState] (immutable)
+ * @property signalStates Map of [RailSemaphore] to [SignalState] (immutable)
+ *
+ * @see TrainState
+ * @see TrackState
+ * @see SignalState
+ * @see AnimationController
+ */
+data class AnimationState(
+	val simulationTime: Double,
+	val trainStates: Map<Int, TrainState>,
+	val trackStates: Map<TrackBlock, TrackState>,
+	val signalStates: Map<RailSemaphore, SignalState>
+) {
+	companion object {
+		/**
+		 * Empty animation state representing the beginning of simulation.
+		 *
+		 * All collections are empty, simulation time is 0.0.
+		 * Used as initial state before first update.
+		 */
+		val EMPTY = AnimationState(
+			simulationTime = 0.0,
+			trainStates = emptyMap(),
+			trackStates = emptyMap(),
+			signalStates = emptyMap()
+		)
+	}
+}
+
+/**
+ * Immutable snapshot of a single train's state at a moment in time.
+ *
+ * Captures position, velocity, acceleration, and occupancy information
+ * needed for visual train rendering and animation.
+ *
+ * ## Position Representation
+ *
+ * - **position:** Total distance traveled along the path (meters)
+ * - **frontGridLocation:** Grid coordinates for rendering train front (nullable if not calculable)
+ *
+ * **NOTE FOR MVP:** This class is defined but not populated in initial implementation
+ * due to private Train internals. Will be implemented in future iteration with
+ * public Train API (#201 follow-up).
+ *
+ * @property trainNumber Unique train identifier
+ * @property position Total distance traveled in meters
+ * @property velocity Current velocity in m/s
+ * @property acceleration Current acceleration in m/s²
+ * @property frontGridLocation Grid coordinates for train front rendering (nullable)
+ * @property length Train length in meters
+ */
+data class TrainState(
+	val trainNumber: Int,
+	val position: Double,
+	val velocity: Double,
+	val acceleration: Double,
+	val frontGridLocation: Point?,
+	val length: Double
+)
+
+/**
+ * Immutable snapshot of a track block's state at a moment in time.
+ *
+ * Captures occupancy and reservation status needed for track color rendering.
+ *
+ * ## State Mapping to Colors
+ *
+ * - [TrackFacility.State.FREE] → Gray (available for path setup)
+ * - [TrackFacility.State.RESERVED] → Yellow (path set up, train approaching)
+ * - [TrackFacility.State.OCCUPIED] → Red (train currently on block)
+ *
+ * @property trackBlock Reference to the static track block configuration
+ * @property state Current occupancy state from [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack]
+ */
+data class TrackState(
+	val trackBlock: TrackBlock,
+	val state: TrackFacility.State
+)
+
+/**
+ * Immutable snapshot of a signal's state at a moment in time.
+ *
+ * Captures semaphore signal indication needed for signal color rendering.
+ *
+ * ## Signal Mapping to Colors
+ *
+ * - [Signal.STOP] (Hp0) → Red (train must stop)
+ * - [Signal.ALLOW] (Hp1) → Green (train may proceed)
+ * - [Signal.ALLOW_40] (Hp2) → Yellow (proceed at 40 km/h)
+ * - [Signal.ANNOUNCE] (Vr0/Vr1/Vr2) → Orange/Yellow (advance warning)
+ *
+ * @property semaphore Reference to the static semaphore configuration
+ * @property signal Current signal indication from [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]
+ */
+data class SignalState(
+	val semaphore: RailSemaphore,
+	val signal: Signal
+)
