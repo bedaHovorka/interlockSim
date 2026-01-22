@@ -31,4 +31,11 @@ class ContextCreationException : Exception {
 	 * @param string
 	 */
 	constructor(string: String) : super(string)
+
+	/**
+	 * @see Exception.Exception
+	 * @param message
+	 * @param cause
+	 */
+	constructor(message: String, cause: Throwable?) : super(message, cause)
 }

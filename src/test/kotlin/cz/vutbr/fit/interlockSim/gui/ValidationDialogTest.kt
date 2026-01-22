@@ -244,8 +244,9 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 
 	/**
 	 * Helper method to find a component of specific type.
+	 * Note: Cannot be inline because it's recursive.
 	 */
-	private inline fun <reified T : java.awt.Component> findComponentOfType(
+	private fun <T : java.awt.Component> findComponentOfType(
 		container: java.awt.Container,
 		type: Class<T>,
 		predicate: (T) -> Boolean = { true }
