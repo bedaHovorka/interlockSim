@@ -41,7 +41,7 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Lifecycle
  *
- * 1. **Create:** `AnimationController(context, canvas)`
+ * 1. **Create:** `AnimationController(context, canvas, eventPanel)`
  * 2. **Start:** `start()` - Begins Swing Timer (30 FPS rendering)
  * 3. **Update:** State updates occur automatically via PropertyChangeListener
  * 4. **Stop:** `stop()` - Stops Swing Timer, stops listening
@@ -49,7 +49,8 @@ private val logger = KotlinLogging.logger {}
  * ## Usage
  *
  * ```kotlin
- * val controller = AnimationController(simulationContext, railwayCanvas)
+ * val eventPanel = EventTimelinePanel()
+ * val controller = AnimationController(simulationContext, railwayCanvas, eventPanel)
  * controller.start()
  *
  * // ... simulation runs, state updates automatically ...
@@ -59,13 +60,16 @@ private val logger = KotlinLogging.logger {}
  *
  * @property context Simulation context to observe for state changes
  * @property canvas Component to repaint on each animation frame
+ * @property eventPanel Optional event timeline panel for displaying simulation events
  *
  * @see AnimationState
  * @see AnimationStateCapture
+ * @see EventTimelinePanel
  */
 class AnimationController(
 	private val context: SimulationContext,
-	private val canvas: Component
+	private val canvas: Component,
+	private val eventPanel: EventTimelinePanel? = null
 ) : PropertyChangeListener {
 
 	/**
@@ -175,7 +179,7 @@ class AnimationController(
 	 * **Called on jDisco simulation thread** (not EDT!).
 	 * Marshals state capture and update to EDT via SwingUtilities.invokeLater.
 	 *
-	 * @param evt PropertyChangeEvent (ignored - we always capture full state)
+	 * @param evt PropertyChangeEvent containing simulation reports and state changes
 	 */
 	override fun propertyChange(evt: PropertyChangeEvent?) {
 		// This method executes on jDisco simulation thread!
@@ -185,9 +189,17 @@ class AnimationController(
 
 		logger.trace { "PropertyChange event received from simulation thread: ${evt?.propertyName}" }
 
+		// Extract event information if available
+		val simulationEvent = extractSimulationEvent(evt)
+
 		// Marshal state capture and update to EDT
 		SwingUtilities.invokeLater {
 			captureAndUpdateState()
+
+			// Forward event to timeline panel if available
+			if (simulationEvent != null && eventPanel != null) {
+				eventPanel.addEvent(simulationEvent)
+			}
 		}
 	}
 
@@ -230,6 +242,47 @@ class AnimationController(
 			"State updates must occur on EDT"
 		}
 		currentState = newState
+	}
+
+	/**
+	 * Extract simulation event from PropertyChangeEvent.
+	 *
+	 * This method parses property change events from the simulation context
+	 * and converts them to SimulationEvent instances for the event timeline.
+	 *
+	 * The message from DefaultSimulationContext.report() is already formatted as:
+	 * "[simulationTime] [object] message"
+	 *
+	 * **Called on simulation thread** (not EDT!).
+	 *
+	 * @param evt PropertyChangeEvent from simulation context
+	 * @return SimulationEvent if the event can be parsed, null otherwise
+	 */
+	private fun extractSimulationEvent(evt: PropertyChangeEvent?): SimulationEvent? {
+		if (evt == null) return null
+
+		// Try to extract report type from property name
+		val reportType = try {
+			SimulationContext.ReportType.valueOf(evt.propertyName ?: return null)
+		} catch (e: IllegalArgumentException) {
+			return null
+		}
+
+		// Extract message from new value (format: "time object message")
+		val fullMessage = evt.newValue?.toString() ?: return null
+
+		// Parse simulation time from the beginning of the message
+		val parts = fullMessage.trim().split(Regex("\\s+"), limit = 2)
+		if (parts.isEmpty()) return null
+
+		val simulationTime = parts[0].toDoubleOrNull() ?: 0.0
+		val message = if (parts.size > 1) parts[1] else fullMessage
+
+		return SimulationEvent(
+			simulationTime = simulationTime,
+			eventType = reportType,
+			message = message
+		)
 	}
 
 	companion object {
