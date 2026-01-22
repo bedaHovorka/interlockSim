@@ -27,7 +27,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.koin.core.component.inject
+import org.koin.test.inject
 import java.awt.Component
 import java.awt.Graphics2D
 import java.io.File
@@ -59,6 +59,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
 	private lateinit var mockCanvas: Component
+	private val processFactory: SimulationProcessFactory by inject()
 
 	@BeforeEach
 	fun setup() {
@@ -68,7 +69,6 @@ class AnimationIntegrationTest : KoinTestBase() {
 		assertThat(resourcePath).isNotNull()
 
 		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		val processFactory: SimulationProcessFactory by inject()
 		simulationContext = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Create mock canvas (minimal Swing component)

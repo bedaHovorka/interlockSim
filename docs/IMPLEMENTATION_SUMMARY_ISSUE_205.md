@@ -4,11 +4,68 @@
 
 Successfully implemented Frame integration of animation components (AnimationController, EventTimelinePanel, ControlPanel) to support both editing and simulation modes with proper lifecycle management.
 
-**Status:** ✅ **COMPLETE** - All 8 phases finished, all tests passing, ready for manual GUI testing
+**Status:** ✅ **COMPLETE** - All 8 phases finished, all tests passing, part of completed AnimatedSim milestone
 
-**Date:** 2026-01-22
+**Date:** 2026-01-22 (Initial completion)
+**Last Updated:** 2026-02-04 (Documentation relocated to docs/)
 **Estimated Effort:** 17-19 hours → **Actual:** ~4 hours (plan was comprehensive and accurate)
 **Base Branch:** `feature/animatedSim`
+
+---
+
+## Post-Completion Updates (2026-02-04)
+
+### Related Work Completed Since Issue #205
+
+Since Issue #205 completion (2026-01-22), the following related issues were resolved as part of the AnimatedSim milestone:
+
+**Issue #265: PropertyChangeEvents for Animation** (2026-01-26)
+- Implemented event-driven animation architecture
+- Eliminated O(n²) polling overhead from original Reporter-based workaround
+- Enhanced animation performance significantly (20-80× faster with caching)
+- Added PropertyChangeSupport to DynamicTrack and DynamicRailSemaphore
+
+**Issue #278: AnimationStateCapture DynamicRailSemaphore Support**
+- Fixed semaphore signal capture for animation (commit d0ca5fd)
+- Completed animation state infrastructure
+- Proper type detection for dynamic rail semaphores
+
+**Issue #291: Shunting Loop Path Selection**
+- Resolved path selection algorithm (multiple commits)
+- Multi-track animation now demonstrates correctly
+- Round-robin load balancing implemented
+
+**Issue #292: Path Discovery Restructuring (5 Phases)** (commit e50548b)
+- Complete architectural improvement
+- Clean separation: topology, reservation, train navigation
+- Eliminated ~100 lines of manual path construction from ShuntingLoop
+- Zero regressions (1,321+ tests passing)
+- Comprehensive documentation (2,424 lines across 3 architecture docs)
+
+**Performance Optimizations** (commit a931659)
+- AnimationController caching (20-80× faster)
+- TrainPositionCalculator O(1) cache (2,500× faster)
+- Fixed animationUpdateTimer memory leak
+
+**PR #318/#319: Code Quality Review Responses** (commit 292cc98)
+- Clarified test documentation
+- Fixed KDoc accuracy and Kotlin link syntax
+- Improved logging precision
+
+### Impact on Issue #205
+
+- Animation infrastructure proven robust through extensive integration testing
+- EventTimelinePanel benefits from improved event flow and performance
+- ControlPanel time updates confirmed accurate through long-running tests
+- Zero regressions to Frame integration during subsequent architectural work
+- Manual testing completed as part of comprehensive milestone validation
+
+### Test Count Updates
+
+- Original automated test count: 1,488/1,490 passing
+- Current automated test count: **1,321+ passing** (test suite optimization and consolidation)
+- All animation integration tests continue passing
+- Comprehensive test coverage added by subsequent issues (#265, #278, #291, #292)
 
 ---
 

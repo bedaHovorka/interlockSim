@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.koin.core.component.inject
+import org.koin.test.inject
 import java.io.File
 
 /**
@@ -34,6 +34,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 	private lateinit var context: SimulationContext
 	private lateinit var calculator: TrainPositionCalculator
+	private val processFactory: SimulationProcessFactory by inject()
 
 	/**
 	 * Load vyhybna.xml test configuration.
@@ -45,7 +46,6 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(resourcePath).isNotNull()
 
 		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
-		val processFactory: SimulationProcessFactory by inject()
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get separator position cache from context (performance optimization)
