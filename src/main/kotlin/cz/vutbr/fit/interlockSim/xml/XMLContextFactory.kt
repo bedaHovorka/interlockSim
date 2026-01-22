@@ -222,26 +222,54 @@ class XMLContextFactory :
 			name: String
 		): Boolean = attributes.getValue(uri, name)?.toBoolean() ?: false
 
+		/**
+		 * Gets an integer attribute value from XML attributes.
+		 *
+		 * Issue #258: Fixed NullPointerException when required attributes are missing.
+		 * - Before: Called .toInt() on null value → NPE
+		 * - After: Explicit null check with clear error message
+		 *
+		 * Example: Opening <net> without X or Y attributes now shows
+		 * "Missing required attribute: X" instead of crashing.
+		 *
+		 * @throws SAXException if attribute is missing or not a valid integer
+		 */
 		private fun getInt(
 			uri: String,
 			attributes: Attributes,
 			name: String
 		): Int =
 			try {
-				attributes.getValue(uri, name).toInt()
+				val value = attributes.getValue(uri, name)
+					?: throw SAXException("Missing required attribute: $name")
+				value.toInt()
 			} catch (e: NumberFormatException) {
-				throw SAXException("Wrong parameter: $name", e)
+				throw SAXException("Invalid integer value for attribute: $name", e)
 			}
 
+		/**
+		 * Gets a double attribute value from XML attributes.
+		 *
+		 * Issue #258: Fixed NullPointerException when required attributes are missing.
+		 * - Before: Called .toDouble() on null value → NPE
+		 * - After: Explicit null check with clear error message
+		 *
+		 * Example: Opening track block without maxSpeed or length attributes
+		 * now shows "Missing required attribute: maxSpeed" instead of crashing.
+		 *
+		 * @throws SAXException if attribute is missing or not a valid double
+		 */
 		private fun getDouble(
 			uri: String,
 			attributes: Attributes,
 			name: String
 		): Double =
 			try {
-				attributes.getValue(uri, name).toDouble()
+				val value = attributes.getValue(uri, name)
+					?: throw SAXException("Missing required attribute: $name")
+				value.toDouble()
 			} catch (e: NumberFormatException) {
-				throw SAXException("Wrong parameter: $name", e)
+				throw SAXException("Invalid double value for attribute: $name", e)
 			}
 
 		private fun getPoint(
@@ -352,6 +380,16 @@ class XMLContextFactory :
 			val handler = Handler()
 			validator.validate(SAXSource(inputSource), SAXResult(handler))
 			handler.getContext() ?: throw ContextCreationException("Failed to parse context from XML")
+		} catch (e: SAXException) {
+			// Enhance SAXException with more context
+			val message = e.message ?: "Unknown XML parsing error"
+			val enhancedMessage =
+				if (message.contains("InOut")) {
+					"$message\n\nInOut elements define entry/exit points for trains. At least 2 are required for simulation."
+				} else {
+					message
+				}
+			throw ContextCreationException(enhancedMessage)
 		} catch (e: Exception) {
 			if (e is ContextCreationException) throw e
 			throw ContextCreationException(e)

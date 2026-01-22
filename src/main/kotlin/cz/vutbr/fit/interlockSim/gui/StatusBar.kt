@@ -66,4 +66,27 @@ class StatusBar :
 			newValue != null -> text = newValue.toString()
 		}
 	}
+
+	/**
+	 * Shows a temporary message in the status bar.
+	 * The message will be displayed for the specified duration, then cleared.
+	 *
+	 * @param message The message to display
+	 * @param durationMs Duration in milliseconds (default: 3000ms = 3 seconds)
+	 */
+	fun showTemporaryMessage(
+		message: String,
+		durationMs: Long = 3000
+	) {
+		val originalText = text
+		text = message
+
+		// Use Swing Timer to restore original text after duration
+		val timer =
+			javax.swing.Timer(durationMs.toInt()) {
+				text = originalText
+			}
+		timer.isRepeats = false
+		timer.start()
+	}
 }

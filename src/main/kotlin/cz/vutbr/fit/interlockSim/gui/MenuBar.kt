@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.event.ActionEvent
+import java.io.File
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
 import javax.swing.JMenu
@@ -23,19 +24,160 @@ import javax.swing.JOptionPane
  * Application menu bar with File and Help menus
  */
 class MenuBar : JMenuBar() {
-	private inner class SaveAction : AbstractAction("Save as...") {
+	private val saveAction = SaveAction()
+	private val saveAsAction = SaveAsAction()
+
+	/**
+	 * Opens a railway network file from disk into the EDITOR.
+	 *
+	 * Issue #258: Validation behavior for editor mode:
+	 * - EDITOR MODE: Show WARNING only, allow opening files with validation errors
+	 *   (Users need to be able to open broken files to fix them)
+	 * - SIMULATION MODE: BLOCK invalid XML from transforming to simulation context
+	 *   (Invalid configurations must not be allowed to run simulations)
+	 * - If file cannot be loaded (malformed/unparseable XML), show simple error
+	 * - Validation will occur on SAVE to prevent creating invalid files
+	 *
+	 * Current implementation: If XML is malformed (unparseable), shows error and
+	 * doesn't open. For future enhancement, could show ValidationDialog with warnings
+	 * for validation errors but still allow editing.
+	 */
+	private inner class OpenAction : AbstractAction("Open...") {
 		override fun actionPerformed(e: ActionEvent) {
 			val fileChooser = JFileChooser(System.getProperty("user.dir"))
-			var returnValue = JFileChooser.CANCEL_OPTION
+			fileChooser.dialogTitle = "Open Railway Network"
 
-			while (returnValue != JFileChooser.APPROVE_OPTION) {
-				returnValue = fileChooser.showSaveDialog(this@MenuBar)
-				if (returnValue == JFileChooser.CANCEL_OPTION) return
+			val returnValue = fileChooser.showOpenDialog(this@MenuBar)
+			if (returnValue != JFileChooser.APPROVE_OPTION) return
+
+			val selectedFile: File = fileChooser.selectedFile
+
+			try {
+				// Try to load the context from the selected file
+				val editingContextFactory = getKoin().get<EditingContextFactory>()
+				val context = editingContextFactory.createContext(selectedFile)
+
+				// Success - update the frame with the loaded context
+				val frame = getKoin().get<Frame>()
+				frame.setContext(context)
+
+				// Update modification tracker with loaded file
+				frame.modificationTracker.setCurrentFile(selectedFile)
+				frame.modificationTracker.markClean()
+			} catch (exception: Exception) {
+				// Issue #258: Failed to load file - show simple error, don't block with validation dialog
+				// This allows the editor to remain open so user can create a new file or try another file
+				JOptionPane.showMessageDialog(
+					this@MenuBar,
+					"Failed to open file: ${exception.message}\n\n" +
+						"The file may be malformed or contain invalid data.",
+					"Cannot Open File",
+					JOptionPane.ERROR_MESSAGE
+				)
 			}
+		}
+	}
 
-			val editingContextFactory = getKoin().get<EditingContextFactory>()
-			val editingContext = getKoin().get<Frame>().railwayNetGridCanvas.getEditingContext()
-			editingContextFactory.saveContext(editingContext, fileChooser.selectedFile)
+	private inner class SaveAction : AbstractAction("Save") {
+		override fun actionPerformed(e: ActionEvent) {
+			val frame = getKoin().get<Frame>()
+			val currentFile = frame.modificationTracker.getCurrentFile()
+
+			if (currentFile != null) {
+				// Save to current file
+				performSave(currentFile)
+			} else {
+				// No current file - delegate to "Save as..."
+				saveAsAction.actionPerformed(e)
+			}
+		}
+	}
+
+	private inner class SaveAsAction : AbstractAction("Save as...") {
+		override fun actionPerformed(e: ActionEvent) {
+			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			fileChooser.dialogTitle = "Save Railway Network"
+
+			val returnValue = fileChooser.showSaveDialog(this@MenuBar)
+			if (returnValue != JFileChooser.APPROVE_OPTION) return
+
+			performSave(fileChooser.selectedFile)
+		}
+	}
+
+	/**
+	 * Performs the actual save operation to the specified file.
+	 * Updates modification tracker on success.
+	 *
+	 * DEFERRED: Save-time validation (Issue #258)
+	 * Decision: Defer to follow-up issue for comprehensive validation framework
+	 *
+	 * Rationale:
+	 * - Current implementation: Editor allows opening/editing any file (including broken ones)
+	 * - Save validation would be inconsistent without load validation
+	 * - Comprehensive solution requires:
+	 *   1. Define validation rules (structural, safety, configuration)
+	 *   2. Implement validators for each category
+	 *   3. Add validation on both load AND save
+	 *   4. Support warnings (allow save) vs errors (block save)
+	 *   5. Provide user choice dialog for warnings
+	 *
+	 * Current behavior: Saves all files without validation
+	 * Future enhancement: Track in separate issue for comprehensive validation system
+	 *
+	 * @return true if save succeeded, false otherwise
+	 */
+	private fun performSave(file: File): Boolean {
+		val editingContextFactory = getKoin().get<EditingContextFactory>()
+		val frame = getKoin().get<Frame>()
+		val editingContext = frame.railwayNetGridCanvas.getEditingContext()
+
+		val success = editingContextFactory.saveContext(editingContext, file)
+
+		if (success) {
+			// Update modification tracker
+			frame.modificationTracker.setCurrentFile(file)
+			frame.modificationTracker.markClean()
+
+			// Show non-intrusive success message in status bar
+			frame.statusBar.showTemporaryMessage("✓ Saved: ${file.name}", 5000)
+		} else {
+			JOptionPane.showMessageDialog(
+				this,
+				"Failed to save railway network to file: ${file.absolutePath}",
+				"Save Failed",
+				JOptionPane.ERROR_MESSAGE
+			)
+		}
+
+		return success
+	}
+
+	/**
+	 * Triggers the save action programmatically.
+	 * Used by Frame when handling window close with unsaved changes.
+	 *
+	 * @return true if save succeeded (or was cancelled), false if save failed
+	 */
+	fun triggerSave(): Boolean {
+		val frame = getKoin().get<Frame>()
+		val currentFile = frame.modificationTracker.getCurrentFile()
+
+		return if (currentFile != null) {
+			// Save to current file
+			performSave(currentFile)
+		} else {
+			// Show save dialog
+			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			fileChooser.dialogTitle = "Save Railway Network"
+
+			val returnValue = fileChooser.showSaveDialog(this)
+			if (returnValue == JFileChooser.APPROVE_OPTION) {
+				performSave(fileChooser.selectedFile)
+			} else {
+				// User cancelled - don't exit, stay in editor
+				false
+			}
 		}
 	}
 
@@ -61,7 +203,9 @@ class MenuBar : JMenuBar() {
 
 	private fun fileMenu(): JMenu {
 		val menu = JMenu("File")
-		menu.add(SaveAction())
+		menu.add(OpenAction())
+		menu.add(saveAction)
+		menu.add(saveAsAction)
 		menu.addSeparator()
 		menu.add(ExitAction())
 		return menu
@@ -72,7 +216,13 @@ class MenuBar : JMenuBar() {
 		menu.add(
 			InfoAction(
 				"Usage",
-				"<html>Left mouse inserts nodes and joins them. <br> Middle deletes them <br> Right mouse - popup menu</html>"
+				"<html><b>File Operations:</b><br>" +
+					"- Open: Load railway network from XML file<br>" +
+					"- Save as...: Save railway network to XML file<br>" +
+					"<br><b>Editing:</b><br>" +
+					"- Left mouse: Insert nodes and join them<br>" +
+					"- Middle mouse: Delete nodes<br>" +
+					"- Right mouse: Popup menu</html>"
 			)
 		)
 		menu.add(
