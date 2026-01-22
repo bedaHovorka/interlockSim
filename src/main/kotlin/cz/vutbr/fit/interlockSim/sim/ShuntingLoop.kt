@@ -61,6 +61,8 @@ class ShuntingLoop : Interlocking {
 	private val staticOuterTrackblocks: MutableMap<SimpleTrackBlock, RailSemaphore> = mutableMapOf()
 	// Converted in startAction()
 	private lateinit var outerTrackblocks: MutableMap<SimpleTrackBlock, DynamicRailSemaphore>
+	// Cache for static→dynamic semaphore mapping (eliminates redundant type casts)
+	private val semaphoreCache: MutableMap<RailSemaphore, DynamicRailSemaphore> = mutableMapOf()
 	private val endTime: Long
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -223,21 +225,54 @@ class ShuntingLoop : Interlocking {
 		return assertInstanceOf
 	}
 
-	override fun startAction() {
-		// Convert static objects to Dynamic* wrappers (now available after simulation initialization)
-		paths = mutableMapOf()
-		for ((staticSem, pathList) in staticPaths) {
-			val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
-			val dynamicPaths = mutableListOf<Path>()
-			for (path in pathList) {
-				val dynamicPath = convertPathToDynamic(path)
-				dynamicPaths.add(dynamicPath)
+	/**
+	 * Pre-build cache of static→dynamic semaphore mappings.
+	 * Eliminates need for repeated toDynamic() calls and type casting.
+	 *
+	 * This method performs all type casts once during initialization,
+	 * improving type safety and performance during simulation execution.
+	 */
+	private fun buildSemaphoreCache() {
+		// Cache all semaphores from staticPaths
+		for (staticSem in staticPaths.keys) {
+			if (staticSem !in semaphoreCache) {
+				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
+				semaphoreCache[staticSem] = dynamicSem
 			}
-			paths[dynamicSem] = dynamicPaths
 		}
 
+		// Cache all semaphores from staticOuterTrackblocks
+		for (staticSem in staticOuterTrackblocks.values) {
+			if (staticSem !in semaphoreCache) {
+				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
+				semaphoreCache[staticSem] = dynamicSem
+			}
+		}
+
+		// Cache all semaphores from innerTrackBlocks endpoints
+		for (block in innerTrackBlocks) {
+			for (sep in block.ends()) {
+				if (sep is RailSemaphore && sep !in semaphoreCache) {
+					val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
+					semaphoreCache[sep] = dynamicSem
+				}
+			}
+		}
+	}
+
+	override fun startAction() {
+		// Build cache of all semaphores used in this simulation
+		buildSemaphoreCache()
+
+		// Convert static objects to Dynamic* wrappers using cached typed references (NO CASTS)
+		paths = staticPaths.mapKeys { (staticSem, _) ->
+			semaphoreCache[staticSem]!!
+		}.mapValues { (_, pathList) ->
+			pathList.map { convertPathToDynamic(it) }.toMutableList()
+		}.toMutableMap()
+
 		outerTrackblocks = staticOuterTrackblocks.mapValues { (_, staticSem) ->
-			env.toDynamic(staticSem) as DynamicRailSemaphore
+			semaphoreCache[staticSem]!!  // NO CAST - Cached lookup
 		}.toMutableMap()
 
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
@@ -278,7 +313,7 @@ class ShuntingLoop : Interlocking {
 	private fun checkBothEnds(block: SimpleTrackBlock) {
 		for (sep in block.ends()) {
 			val railSem = Util.assertInstanceOf(RailSemaphore::class.java, sep)
-			val dynamicSem = env.toDynamic(railSem) as DynamicRailSemaphore
+			val dynamicSem = semaphoreCache[railSem]!!  // NO CAST - Cached lookup
 			if (checkOneEnd(block, dynamicSem)) return
 		}
 	}
