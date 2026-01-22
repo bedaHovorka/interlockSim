@@ -671,6 +671,51 @@ class Train :
 		return length // pozdeji soucet vagonu
 	}
 
+	/**
+	 * Get train number for identification and rendering.
+	 *
+	 * Each train is assigned a unique sequential number starting from 1.
+	 * Used for train overlay rendering and identification in animation.
+	 *
+	 * @return Unique train number
+	 * @since 2026-01-22 (Issue #203)
+	 */
+	fun getNumber(): Int = number
+
+	/**
+	 * Get the track section where the train's front is currently located.
+	 *
+	 * Used for train position interpolation in animation rendering.
+	 * Returns null if train has not yet started moving.
+	 *
+	 * @return Current track section for train front, or null
+	 * @since 2026-01-22 (Issue #203)
+	 */
+	fun getFrontSection(): TrackSection? = front.getFrontSection()
+
+	/**
+	 * Get the distance traveled by the train's front along current track section.
+	 *
+	 * Used for train position interpolation in animation rendering.
+	 * Returns position within the current section (0.0 to section length).
+	 *
+	 * @return Distance along current section in meters
+	 * @since 2026-01-22 (Issue #203)
+	 */
+	fun getFrontPosition(): Double = front.getPosition()
+
+	/**
+	 * Get the total distance traveled by the train's front since departure.
+	 *
+	 * Includes all previously completed sections plus position in current section.
+	 * Used for train progress tracking and animation.
+	 *
+	 * @return Total distance traveled in meters
+	 * @since 2026-01-22 (Issue #203)
+	 */
+	fun getTotalDistance(): Double = front.getTotalDistance()
+
+	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
 
 	override fun start(): Train {
