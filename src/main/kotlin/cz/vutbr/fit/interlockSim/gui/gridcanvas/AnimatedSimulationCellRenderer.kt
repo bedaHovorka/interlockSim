@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import java.awt.Graphics2D
@@ -144,5 +145,96 @@ class AnimatedSimulationCellRenderer(
 
 		// Delegate to parent for geometry rendering
 		super.draw(g, cell)
+	}
+
+	/**
+	 * Draw a train overlay on the canvas.
+	 *
+	 * Trains are rendered as blue circles with white ID numbers overlaid on top
+	 * of the grid cells. This method should be called after all grid cells have
+	 * been rendered.
+	 *
+	 * ## Visual Design
+	 *
+	 * - **Train body:** Blue circle (6x6 pixels) at interpolated grid position
+	 * - **Train ID:** White text centered in the circle
+	 * - **Multiple trains:** Positioned at different grid locations (no overlap if on different sections)
+	 *
+	 * ## Coordinate System
+	 *
+	 * The graphics context should already be translated so that (0,0) represents
+	 * the pixel coordinates for grid cell (0,0). Train grid locations from
+	 * [TrainState.frontGridLocation] are converted to pixel coordinates using
+	 * cell width and height.
+	 *
+	 * @param g Graphics context for rendering (must be Graphics2D)
+	 * @param trainState Immutable train state snapshot with position and ID
+	 * @param cellWidth Width of each grid cell in pixels
+	 * @param cellHeight Height of each grid cell in pixels
+	 */
+	fun drawTrain(
+		g: Graphics2D,
+		trainState: TrainState,
+		cellWidth: Int,
+		cellHeight: Int
+	) {
+		val gridLocation = trainState.frontGridLocation ?: return
+
+		// Convert grid coordinates to pixel coordinates (center of cell)
+		val pixelX = gridLocation.x * cellWidth + cellWidth / 2
+		val pixelY = gridLocation.y * cellHeight + cellHeight / 2
+
+		// Train body: blue circle
+		g.color = AnimationColors.TRAIN_BODY
+		val trainSize = 6 // 6x6 pixel circle
+		g.fillOval(
+			pixelX - trainSize / 2,
+			pixelY - trainSize / 2,
+			trainSize,
+			trainSize
+		)
+
+		// Train ID: white text
+		g.color = AnimationColors.TRAIN_ID
+		val idText = trainState.trainNumber.toString()
+		val fontMetrics = g.fontMetrics
+		val textWidth = fontMetrics.stringWidth(idText)
+		val textHeight = fontMetrics.ascent
+
+		// Center text in the circle
+		g.drawString(
+			idText,
+			pixelX - textWidth / 2,
+			pixelY + textHeight / 2 - 1 // Adjust for baseline
+		)
+	}
+
+	/**
+	 * Draw all trains as overlays on the canvas.
+	 *
+	 * Renders all trains from the current animation state on top of the grid cells.
+	 * This method should be called after all grid cells have been rendered.
+	 *
+	 * ## Multiple Train Handling
+	 *
+	 * Trains at different grid locations render without overlap. Trains at the
+	 * same grid location (rare, usually during transition between cells) will
+	 * overlap, with the last-rendered train on top.
+	 *
+	 * @param g Graphics context for rendering (must be Graphics2D)
+	 * @param cellWidth Width of each grid cell in pixels
+	 * @param cellHeight Height of each grid cell in pixels
+	 */
+	fun drawAllTrains(
+		g: Graphics2D,
+		cellWidth: Int,
+		cellHeight: Int
+	) {
+		val state = animationController.getCurrentState()
+
+		// Render each train
+		for ((_, trainState) in state.trainStates) {
+			drawTrain(g, trainState, cellWidth, cellHeight)
+		}
 	}
 }
