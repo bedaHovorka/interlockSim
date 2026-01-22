@@ -686,10 +686,10 @@ fun getGridPosition(train: Train): Point? {
 2. ✅ Implement Issue #206 (exampleGui command, 2-3 days)
 3. ✅ Implement Issue #207 (real-time sync, 1-2 days)
 4. ✅ Polish documentation (#208, 1 day)
-5. ✅ Execute comprehensive manual testing (#209 - MUST BE LAST, 2-3 hours)
+5. ✅ Execute comprehensive manual testing (#273 - MUST BE LAST, 2-3 hours)
 
-**Note on Issue #209:**
-Based on PR #268 review, a new issue should be created for manual testing and quality verification. This MUST be implemented last because:
+**Note on Issue #273:**
+Based on PR #268 review, issue #273 was created for manual testing and quality verification. This MUST be implemented last because:
 - Requires all other issues (#206-#208) complete
 - Tests the integrated system end-to-end
 - Verifies no regressions introduced
@@ -698,7 +698,7 @@ Based on PR #268 review, a new issue should be created for manual testing and qu
 - Includes code quality verification (detektStrict passing)
 - Final quality gate before milestone closure
 
-See `ANIMATED_SIM_MILESTONE_PREP.md` for complete issue #209 specification.
+See `ANIMATED_SIM_MILESTONE_PREP.md` for complete issue #273 specification.
 
 ---
 
@@ -731,8 +731,8 @@ See `ANIMATED_SIM_MILESTONE_PREP.md` for complete issue #209 specification.
 
 **UPDATE 2026-01-22 (Post-PR #268 Review):**
 - Issues #201-#205: ✅ COMPLETE
-- Progress: 5/9 issues (including recommended #209) - 55.6% complete
+- Progress: 5/9 issues (including recommended #273) - 55.6% complete
 - Technical debt documented: #265 (HIGH), #266 (MEDIUM)
 - Build: 1488+ tests passing, zero regressions
 - Status: On track for 2026-01-29 deadline
-- Next: Issues #206-#208, then #209 (manual testing LAST), then technical debt cleanup
+- Next: Issues #206-#208, then #273 (manual testing LAST), then technical debt cleanup
