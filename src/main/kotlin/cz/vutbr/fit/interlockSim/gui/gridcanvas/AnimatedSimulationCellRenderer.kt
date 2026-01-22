@@ -1,0 +1,148 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.gui.gridcanvas
+
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import java.awt.Graphics2D
+
+/**
+ * Cell renderer for animated simulation with state-based coloring.
+ *
+ * Extends [SimulationCellRenderer] to add visual animation state from [AnimationController],
+ * rendering railway track blocks and semaphore signals with colors based on their current state:
+ *
+ * ## Track Block Colors (standard railway convention)
+ * - **FREE** → Gray (0x808080) - Available for path setup
+ * - **RESERVED** → Yellow (0xFFFF00) - Path set up, train approaching
+ * - **OCCUPIED** → Red (0xFF0000) - Train currently on block
+ *
+ * ## Semaphore Signal Colors (standard railway convention)
+ * - **STOP** (Hp0) → Red (0xFF0000) - Train must stop
+ * - **S40** (Hp2) → Yellow (0xFFFF00) - Proceed at 40 km/h
+ * - **All other allowing signals** (S30, S60, S80, S100, FREE) → Green (0x00FF00) - Proceed
+ *
+ * ## Architecture
+ *
+ * This renderer overrides the draw() methods for [TrackBlockPart] and [DynamicRailSemaphore]
+ * to inject state-based colors before delegating to the parent class for geometry rendering.
+ *
+ * The rendering pipeline:
+ * ```
+ * 1. AnimationController captures state from SimulationContext (jDisco thread)
+ * 2. State marshaled to EDT via SwingUtilities.invokeLater
+ * 3. Swing Timer triggers repaint() at 30 FPS (on EDT)
+ * 4. This renderer queries AnimationController.getCurrentState() (on EDT)
+ * 5. Color set via Graphics2D.color based on state
+ * 6. Parent renderer draws geometry with the set color
+ * ```
+ *
+ * ## Thread Safety
+ *
+ * All state reads happen on Swing EDT:
+ * - [AnimationController.getCurrentState] is EDT-confined
+ * - Graphics2D operations are inherently EDT-only
+ * - No synchronization needed (single-threaded rendering)
+ *
+ * ## Performance
+ *
+ * - **Color lookup:** O(1) HashMap operations per cell
+ * - **Frame budget:** 33ms for 30 FPS
+ * - **Expected overhead:** ~20μs for 100 cells (0.06% of frame budget)
+ *
+ * ## Usage
+ *
+ * ```kotlin
+ * val animationController = AnimationController(simulationContext, canvas)
+ * val renderer = AnimatedSimulationCellRenderer(cellWidth, cellHeight, animationController)
+ * canvas.setCellRenderer(renderer)
+ * animationController.start()
+ * ```
+ *
+ * @property cellWidth Width of each grid cell in pixels
+ * @property cellHeight Height of each grid cell in pixels
+ * @property animationController Controller providing current animation state
+ *
+ * @see AnimationController
+ * @see AnimationColors
+ * @see SimulationCellRenderer
+ *
+ * @since 2026-01-22 (Issue #202)
+ */
+class AnimatedSimulationCellRenderer(
+	cellWidth: Int,
+	cellHeight: Int,
+	private val animationController: AnimationController
+) : SimulationCellRenderer(cellWidth, cellHeight) {
+
+	/**
+	 * Render track block part with occupancy state coloring.
+	 *
+	 * Queries the current animation state to determine the track block's state
+	 * (FREE/RESERVED/OCCUPIED) and sets the graphics color accordingly before
+	 * delegating to the parent renderer for geometry drawing.
+	 *
+	 * **Fallback behavior:** If the track block state is not available in the
+	 * animation state (e.g., during initialization or for untracked blocks),
+	 * uses [AnimationColors.DEFAULT_TRACK] (light gray).
+	 *
+	 * @param g Graphics context for rendering
+	 * @param cell Track block part cell to render
+	 */
+	override fun draw(
+		g: Graphics2D,
+		cell: TrackBlockPart
+	) {
+		val state = animationController.getCurrentState()
+		val trackBlock = cell.getTrackBlock()
+		val trackState = state.trackStates[trackBlock]
+
+		// Set color based on track state (or default if not available)
+		g.color = trackState?.let {
+			AnimationColors.forTrackState(it.state)
+		} ?: AnimationColors.DEFAULT_TRACK
+
+		// Delegate to parent for geometry rendering
+		super.draw(g, cell)
+	}
+
+	/**
+	 * Render semaphore signal with signal state coloring.
+	 *
+	 * Queries the current animation state to determine the semaphore's signal
+	 * (STOP/S40/allowing) and sets the graphics color accordingly before
+	 * delegating to the parent renderer for geometry drawing.
+	 *
+	 * **Fallback behavior:** If the signal state is not available in the
+	 * animation state (e.g., during initialization or for untracked semaphores),
+	 * uses [AnimationColors.DEFAULT_SIGNAL] (light gray).
+	 *
+	 * @param g Graphics context for rendering
+	 * @param cell Dynamic rail semaphore cell to render
+	 */
+	override fun draw(
+		g: Graphics2D,
+		cell: DynamicRailSemaphore
+	) {
+		val state = animationController.getCurrentState()
+		val staticSemaphore = cell.staticRef
+		val signalState = state.signalStates[staticSemaphore]
+
+		// Set color based on signal state (or default if not available)
+		g.color = signalState?.let {
+			AnimationColors.forSignal(it.signal)
+		} ?: AnimationColors.DEFAULT_SIGNAL
+
+		// Delegate to parent for geometry rendering
+		super.draw(g, cell)
+	}
+}
