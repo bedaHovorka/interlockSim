@@ -474,9 +474,10 @@ Implementation:
 3. On-demand dynamic wrappers (current approach)
 
 **Create these issues POST-DEADLINE:**
-1. NEW: Add PropertyChangeEvents to dynamic state (HIGH priority)
-2. Revisit #215 when cleaning up animation code (MEDIUM priority)
-3. Consider #214 only if performance profiling shows need (LOW priority)
+1. **#265: Add PropertyChangeEvents to dynamic state** (HIGH priority) - Created 2026-01-22
+2. **#266: Add public Train API** (MEDIUM priority) - Created 2026-01-22
+3. Revisit #215 when cleaning up animation code (MEDIUM priority)
+4. Consider #214 only if performance profiling shows need (LOW priority)
 
 **Key Insight:**
 The AnimatedSim milestone is well-designed to work with existing code. The backlog issues would make it *cleaner* but not *easier* within a 7-day deadline. Ship the MVP, then iterate on quality.
@@ -486,3 +487,9 @@ The AnimatedSim milestone is well-designed to work with existing code. The backl
 **Analysis Confidence:** HIGH (98%)
 **Recommendation:** START IMMEDIATELY, SKIP BACKLOG WORK
 **Technical Debt:** Acceptable for MVP, document for future cleanup
+
+**UPDATE 2026-01-22:**
+- Issue #201 (Animation Infrastructure) ✅ COMPLETE
+- Technical debt documented: #265 (PropertyChangeEvents), #266 (Train API)
+- Build: 1420 tests passing, zero regressions
+- Status: Ready for #202 (Enhanced Cell Rendering)
