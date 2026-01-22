@@ -9,11 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 
 /**
  * Dynamic wrapper for InOut separating static and dynamic properties.
@@ -83,11 +85,23 @@ class DynamicInOut(
 
 	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
 
+	/**
+	 * Implementation of isSwitch() for DynamicInOut.
+	 * Returns false since this is an InOut point, not a switch.
+	 */
+	override fun isSwitch(): Boolean = false
+
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		if (from == null) return staticRef.direction()
 		requireSimulation(from === staticRef.direction()) { "Invalid segment: $from, expected: ${staticRef.direction()}" }
 		return null
 	}
+
+	/**
+	 * Implementation of asRailSemaphore() for DynamicInOut.
+	 * Returns the output semaphore of the static InOut reference.
+	 */
+	override fun asRailSemaphore(): RailSemaphore = staticRef.getOutSemaphore()
 
 	/**
 	 * Hash code based on the static object (stable hash code).

@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
  * @author beda

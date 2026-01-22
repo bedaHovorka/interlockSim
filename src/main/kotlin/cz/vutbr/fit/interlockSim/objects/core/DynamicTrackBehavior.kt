@@ -7,10 +7,9 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks
+package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
  * Interface for dynamic (mutable) track behavior during simulation.

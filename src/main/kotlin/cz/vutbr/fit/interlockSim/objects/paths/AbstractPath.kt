@@ -9,23 +9,24 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.conflict
+import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.Track
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -45,12 +46,9 @@ abstract class AbstractPath protected constructor(
 	Path {
 	override fun getLastPathSemaphore(): RailSemaphore {
 		val last = getLast()
-		// Handle Dynamic wrappers
-		if (last is DynamicRailSemaphore) return last.staticRef
-		if (last is DynamicInOut) return last.staticRef.getOutSemaphore()
-		// Fallback for static types (shouldn't happen in simulation context)
-		if (last is RailSemaphore) return last
-		return Util.assertInstanceOf(InOut::class.java, last).getOutSemaphore()
+		// Use polymorphic method - no instanceof checks needed!
+		// Works for RailSemaphore, InOut, DynamicRailSemaphore, and DynamicInOut
+		return last.asRailSemaphore()
 	}
 
 	override fun maxSpeed(sep: PathSeparator?): Double {
@@ -271,7 +269,8 @@ abstract class AbstractPath protected constructor(
 		val iterator = getIterator(getSecondEnd(sep))
 		while (iterator.hasNext()) {
 			val element = iterator.next()
-			if (element is DynamicRailSwitch) {
+			// Use polymorphic method instead of instanceof check
+			if (element is DynamicPathSeparator && element.isSwitch()) {
 				previousSwitch = element
 			} else if (element is OrientedPathSeparator && element is DynamicPathSeparator) {
 				if (previousTrack == null) continue

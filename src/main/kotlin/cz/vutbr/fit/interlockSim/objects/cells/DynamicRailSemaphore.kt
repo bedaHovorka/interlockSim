@@ -9,11 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.anti
+
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -80,6 +84,12 @@ sealed class DynamicRailSemaphore(
 
 	override fun allowedSpeed(): Double = signal.allowedSpeed()
 
+	/**
+	 * Implementation of isSwitch() for DynamicRailSemaphore.
+	 * Returns false since this is a semaphore, not a switch.
+	 */
+	override fun isSwitch(): Boolean = false
+
 	@Throws(PathSeparatorChangeException::class)
 	private fun checkPathSegments(
 		from: Cell.Segment?,
@@ -92,6 +102,12 @@ sealed class DynamicRailSemaphore(
 	}
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = staticRef.getFollowingSegment(from)
+
+	/**
+	 * Implementation of asRailSemaphore() for DynamicRailSemaphore.
+	 * Returns the static reference since the dynamic wrapper represents the same semaphore.
+	 */
+	override fun asRailSemaphore(): RailSemaphore = staticRef
 
 	/**
 	 * Equality based on the static object (stable identity).

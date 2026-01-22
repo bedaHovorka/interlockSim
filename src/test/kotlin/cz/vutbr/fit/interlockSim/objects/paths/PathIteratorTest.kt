@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.hasSize
@@ -17,7 +18,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase

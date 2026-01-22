@@ -9,7 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
  * Node managed by dispatcher (if is in main graph)

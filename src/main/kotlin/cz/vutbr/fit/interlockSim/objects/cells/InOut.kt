@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import java.util.EnumSet
 
@@ -57,4 +60,10 @@ class InOut(
 	 * @return semaphore on output
 	 */
 	fun getOutSemaphore(): RailSemaphore = outSemaphore
+
+	/**
+	 * Implementation of asRailSemaphore() for InOut.
+	 * Returns the output semaphore since InOut acts as an exit point.
+	 */
+	override fun asRailSemaphore(): RailSemaphore = outSemaphore
 }

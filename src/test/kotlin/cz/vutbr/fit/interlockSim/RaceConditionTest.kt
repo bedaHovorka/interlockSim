@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -275,7 +276,7 @@ class RaceConditionTest : KoinTestBase() {
 			// Arrange
 			val staticSwitch =
 				RailSwitch(
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
+					cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
 			val switch = DynamicRailSwitch(staticSwitch)
@@ -332,7 +333,7 @@ class RaceConditionTest : KoinTestBase() {
 			// Arrange
 			val staticSwitch =
 				RailSwitch(
-					cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL,
+					cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL,
 					RailSwitch.Type.SIMPLE_RIGHT_FALSE
 				)
 			val switch = DynamicRailSwitch(staticSwitch)

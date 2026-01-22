@@ -7,9 +7,8 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.paths
+package cz.vutbr.fit.interlockSim.objects.core
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 
 /**
  * "Oddelovac oddilu (i automaticky řízené prvky) uzel cesty z pohledu vlaku"

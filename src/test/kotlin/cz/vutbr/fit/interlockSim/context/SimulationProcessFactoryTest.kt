@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -70,7 +71,7 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 			InOut(
 				"TestInOut",
 				false,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+				cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 			)
 		val inSem = createDynamicInstance(staticInOut.getInSemaphore())
 		val outSem = createConstantInstance(staticInOut.getOutSemaphore(), Signal.FREE)

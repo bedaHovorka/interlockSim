@@ -9,12 +9,17 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.core.d2r
+import cz.vutbr.fit.interlockSim.objects.core.r2d
+import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point

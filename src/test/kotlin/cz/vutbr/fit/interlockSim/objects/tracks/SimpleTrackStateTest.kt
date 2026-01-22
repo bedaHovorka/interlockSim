@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo

@@ -9,11 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -101,6 +103,12 @@ class DynamicRailSwitch(
 		requireSimulationNotNull(double1) { "Speed for configuration must not be null: speeds=${staticRef.speeds}" }
 		return double1!!.toDouble()
 	}
+
+	/**
+	 * Implementation of isSwitch() for DynamicRailSwitch.
+	 * Returns true since this is a switch.
+	 */
+	override fun isSwitch(): Boolean = true
 
 	override fun setUpPath(
 		from: Cell.Segment?,

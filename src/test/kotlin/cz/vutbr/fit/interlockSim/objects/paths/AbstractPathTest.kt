@@ -10,13 +10,14 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -890,6 +891,8 @@ private class MockNodeCell(
 	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = 80.0
+
+	override fun isSwitch(): Boolean = false // Mock as non-switch by default
 
 	override fun joins(): Set<Cell.Segment> {
 		// Return the two segments that join for HORIZONTAL type

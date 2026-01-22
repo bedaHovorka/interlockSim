@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import java.util.EnumSet
 
 /**

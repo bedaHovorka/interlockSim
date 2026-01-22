@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks
+package cz.vutbr.fit.interlockSim.objects.core
 
 /**
  *

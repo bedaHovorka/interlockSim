@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertThat
 import assertk.assertions.containsOnly
 import assertk.assertions.isEmpty
@@ -17,13 +19,13 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
@@ -68,14 +70,14 @@ private class MockTrackBlock : TrackBlock {
 
 	override fun ends(): Array<PathSeparator> = emptyArray()
 
-	override fun getState(): cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State =
-		cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility.State.FREE
+	override fun getState(): cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State =
+		cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
 
-	override fun enter(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+	override fun enter(occupant: cz.vutbr.fit.interlockSim.objects.core.TrackOccupant) {}
 
-	override fun leave(occupant: cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant) {}
+	override fun leave(occupant: cz.vutbr.fit.interlockSim.objects.core.TrackOccupant) {}
 
-	override fun getTrackOccupant(): cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant =
+	override fun getTrackOccupant(): cz.vutbr.fit.interlockSim.objects.core.TrackOccupant =
 		throw UnsupportedOperationException("Mock implementation")
 }
 

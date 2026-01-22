@@ -7,9 +7,8 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks
+package cz.vutbr.fit.interlockSim.objects.core
 
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
 
 /**
  * object in Track

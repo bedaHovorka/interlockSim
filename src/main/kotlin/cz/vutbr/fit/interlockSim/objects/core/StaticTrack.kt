@@ -7,10 +7,8 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.tracks
+package cz.vutbr.fit.interlockSim.objects.core
 
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
 
 /**
  * Interface for static (immutable) track properties.

@@ -9,10 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.tracks.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
@@ -131,7 +132,7 @@ abstract class BaseContext(
 	 * Inherited from EditingContext interface.
 	 * Open to allow subclass override if needed.
 	 */
-	open var currentMaxSpeed: Double = cz.vutbr.fit.interlockSim.objects.paths.PathElement.COMMON_MAX_SPEED
+	open var currentMaxSpeed: Double = cz.vutbr.fit.interlockSim.objects.core.PathElement.COMMON_MAX_SPEED
 
 	/**
 	 * Current track length for new track elements.
