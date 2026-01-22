@@ -329,10 +329,17 @@ class RailwayNetGridCanvas :
 	/**
 	 * Paint all cells in the railway grid
 	 *
-	 * ## Animation Rendering (Issue #202)
+	 * ## Animation Rendering (Issue #202, #203)
 	 *
 	 * When in simulation mode with animation enabled, uses [AnimatedSimulationCellRenderer]
-	 * for state-based color rendering. Falls back to static renderer otherwise.
+	 * for state-based color rendering and train overlays. Falls back to static renderer otherwise.
+	 *
+	 * ## Rendering Order
+	 *
+	 * 1. Grid cells (tracks, signals, switches) - bottom layer
+	 * 2. Train overlays - top layer (only in animation mode)
+	 * 3. Grid lines (if enabled) - guide layer
+	 * 4. Selected cell highlight (if any) - interaction feedback
 	 */
 	private fun paint(g: Graphics2D) {
 		if (context == null) return
@@ -342,6 +349,7 @@ class RailwayNetGridCanvas :
 		// otherwise use static renderer from state enum
 		val renderer = animatedRenderer ?: state.cellRenderer
 
+		// Render all grid cells (bottom layer)
 		val grid = context!!.getRailWayNetGrid()
 		for (entry in grid) {
 			val key = entry.key
@@ -357,6 +365,14 @@ class RailwayNetGridCanvas :
 			cancelClip(g)
 		}
 
+		// Render train overlays (top layer, only in animation mode)
+		val animRenderer = animatedRenderer
+		if (animRenderer is AnimatedSimulationCellRenderer) {
+			cancelClip(g)
+			animRenderer.drawAllTrains(g, CELL_WIDTH, CELL_HEIGHT)
+		}
+
+		// Render grid lines and selection highlight
 		if (showGrid) paintGrid(g)
 		if (selectedKey != null) paintMarkSelected(g)
 	}
