@@ -46,8 +46,11 @@ class Main {
 
 	fun loadGui(args: Array<String>) {
 		try {
-			frame.setContext(createContext(args))
-			frame.setVisible(true)
+			val context = createContext(args)
+			javax.swing.SwingUtilities.invokeLater {
+				frame.setContext(context)
+				frame.setVisible(true)
+			}
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Context creation failed" }
 		}
