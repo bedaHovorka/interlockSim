@@ -14,6 +14,8 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.AnimatedSimulationCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
@@ -198,6 +200,10 @@ class RailwayNetGridCanvas :
 	private var toolbarArgs: Array<Any?>? = null
 	private var selectedKey: cz.vutbr.fit.interlockSim.util.Point? = null
 
+	// Animation support (Issue #202)
+	private var animationController: AnimationController? = null
+	private var animatedRenderer: CellRenderer? = null
+
 	init {
 		background = Color.BLACK
 		autoscrolls = true
@@ -210,13 +216,25 @@ class RailwayNetGridCanvas :
 	 *
 	 * Explicitly handles both EditingContext and SimulationContext without assuming
 	 * inheritance relationship between them (preparation for Issue #153.5).
+	 *
+	 * ## Animation Support (Issue #202)
+	 *
+	 * When switching to [SimulationContext], this method creates and starts an
+	 * [AnimationController] for 30 FPS animated rendering with state-based colors.
+	 * The controller is automatically stopped when switching away from simulation mode.
 	 */
 	fun setContext(newContext: Context<*, *>) {
+		// Stop any existing animation controller
+		stopAnimation()
+
 		when (newContext) {
 			is SimulationContext -> {
 				// Handle SimulationContext first (more specific type)
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
+
+				// Create and start animation infrastructure (Issue #202)
+				startAnimation(newContext)
 			}
 			is EditingContext -> {
 				// Handle EditingContext (base editing functionality)
@@ -231,6 +249,43 @@ class RailwayNetGridCanvas :
 			}
 		}
 		changeContext(newContext)
+	}
+
+	/**
+	 * Start animation controller for simulation mode (Issue #202).
+	 *
+	 * Creates [AnimationController] and [AnimatedSimulationCellRenderer] for
+	 * state-based animated rendering at 30 FPS.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun startAnimation(simulationContext: SimulationContext) {
+		// Create animation controller
+		animationController = AnimationController(simulationContext, this)
+
+		// Create animated renderer with state-based coloring
+		animatedRenderer = AnimatedSimulationCellRenderer(
+			CELL_WIDTH,
+			CELL_HEIGHT,
+			animationController!!
+		)
+
+		// Start animation loop (30 FPS rendering)
+		animationController?.start()
+	}
+
+	/**
+	 * Stop animation controller if running (Issue #202).
+	 *
+	 * Cleans up animation resources when switching away from simulation mode
+	 * or when switching between different simulation contexts.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun stopAnimation() {
+		animationController?.stop()
+		animationController = null
+		animatedRenderer = null
 	}
 
 	// Change mouse listeners based on mode
@@ -273,10 +328,19 @@ class RailwayNetGridCanvas :
 
 	/**
 	 * Paint all cells in the railway grid
+	 *
+	 * ## Animation Rendering (Issue #202)
+	 *
+	 * When in simulation mode with animation enabled, uses [AnimatedSimulationCellRenderer]
+	 * for state-based color rendering. Falls back to static renderer otherwise.
 	 */
 	private fun paint(g: Graphics2D) {
 		if (context == null) return
 		cancelClip(g)
+
+		// Use animated renderer if available (simulation mode with animation),
+		// otherwise use static renderer from state enum
+		val renderer = animatedRenderer ?: state.cellRenderer
 
 		val grid = context!!.getRailWayNetGrid()
 		for (entry in grid) {
@@ -288,7 +352,7 @@ class RailwayNetGridCanvas :
 
 			g.translate(x, y)
 			g.clipRect(0, 0, CELL_WIDTH + 1, CELL_HEIGHT + 1)
-			state.cellRenderer?.draw(g, cell)
+			renderer?.draw(g, cell)
 			g.translate(-x, -y)
 			cancelClip(g)
 		}
