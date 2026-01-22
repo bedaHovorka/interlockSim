@@ -1178,6 +1178,10 @@ open class DefaultSimulationContext(
 		buf.insert(0, ' ')
 		buf.insert(0, jDisco.Process.time())
 		simulationLogger.info { buf }
+
+		// Fire property change event for animation event timeline
+		// Property name = report type name, new value = formatted message
+		getChangeSupport().firePropertyChange(type.name, null, buf.toString())
 	}
 
 	/**
