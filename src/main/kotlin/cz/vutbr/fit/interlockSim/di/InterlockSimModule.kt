@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -269,12 +270,34 @@ val guiModule: Module =
 	}
 
 /**
+ * Animation module
+ *
+ * Manages animation infrastructure for animated GUI simulation.
+ * Provides animation state capture utility.
+ *
+ * NOTE: AnimationController is NOT provided here because it requires
+ * specific context and canvas instances (use direct instantiation).
+ *
+ * @see cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+ * @see cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
+ */
+val animationModule: Module =
+	module {
+		// AnimationStateCapture is a stateless object singleton
+		single { AnimationStateCapture }
+
+		// AnimationController is NOT a singleton - it depends on specific
+		// SimulationContext and Component instances, which vary per use case.
+		// Instantiate directly: AnimationController(context, canvas)
+	}
+
+/**
  * Main application module - combines all sub-modules
  *
  * This is the module that gets passed to startKoin()
  *
- * NOTE: guiModule is NOT included by default to prevent Frame initialization overhead.
- * Load guiModule explicitly when GUI is needed (see Main.kt for conditional loading).
+ * NOTE: guiModule and animationModule are NOT included by default to prevent overhead.
+ * Load them explicitly when GUI is needed (see Main.kt for conditional loading).
  */
 val interlockSimModule: Module =
 	module {
@@ -286,7 +309,7 @@ val interlockSimModule: Module =
 			editingModule,
 			simulationModule,
 			navigationModule // Navigation services (Issue #294)
-			// NOTE: guiModule is NOT included by default
-			// Load it explicitly when GUI is needed (edit mode)
+			// NOTE: guiModule and animationModule are NOT included by default
+			// Load them explicitly when GUI is needed (edit mode, animated sim mode)
 		)
 	}

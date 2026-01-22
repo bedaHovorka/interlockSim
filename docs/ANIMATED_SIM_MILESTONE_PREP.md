@@ -292,6 +292,8 @@ Before starting AnimatedSim milestone, verify these foundations are ready:
 - ❌ #62 (Bidirectional Trains) - Feature creep, do AFTER milestone
 
 **What to Do AFTER Milestone (2026-01-30+):**
+- **#265 (PropertyChangeEvents)** - HIGH priority: Add events to DynamicTrack/DynamicRailSemaphore for event-driven animation
+- **#266 (Train public API)** - MEDIUM priority: Enable train state capture and overlay rendering
 - #62 (Bidirectional trains) - Enhances animation demos
 - #215 (Type-Safe references) - Cleaner animation code
 - #214 (Pre-wrap tracks) - Consistency improvement
@@ -302,3 +304,5 @@ Before starting AnimatedSim milestone, verify these foundations are ready:
 **Deadline:** 2026-01-29 (7 days remaining)
 **Recommendation Confidence:** HIGH (95%)
 **Key Insight:** Don't let perfect be the enemy of good. Ship the MVP on time, improve later.
+
+**UPDATE 2026-01-22:** Issue #201 (Animation Infrastructure) completed successfully. Technical debt documented in #265 and #266.
