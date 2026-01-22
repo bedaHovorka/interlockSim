@@ -182,6 +182,13 @@ open class DefaultSimulationContext(
 		 * This method creates a new simulation context with dynamic wrapper mappings
 		 * for PathSeparators (InOut, RailSemaphore, RailSwitch).
 		 *
+		 * The transformation process is broken down into 5 distinct phases:
+		 * 1. Copy grid cells (NodeCell and TrackBlockPart)
+		 * 2. Copy graph structure (track block connections)
+		 * 3. Copy InOut elements list
+		 * 4. Copy configuration properties
+		 * 5. Create dynamic wrapper mappings
+		 *
 		 * @param editingContext The editing context with static network configuration
 		 * @param processFactory Factory for creating simulation processes
 		 * @return New simulation context with transformed grid
@@ -197,21 +204,61 @@ open class DefaultSimulationContext(
 
 			val context = DefaultSimulationContext(cols, rows, processFactory)
 
-			// Copy cells from editing context grid to simulation context grid
+			// Orchestrate transformation phases
+			copyGridCells(editingContext, context)
+			copyGraphStructure(editingContext, context)
+			copyInOutList(editingContext, context)
+			copyConfiguration(editingContext, context)
+			createDynamicMappings(editingContext, context)
+			validateTransformation(editingContext, context)
+
+			// Freeze the context to prevent modifications after creation
+			// Simulation context has immutable network structure
+			context.freeze()
+
+			return context
+		}
+
+		/**
+		 * Copy all cells from editing grid to simulation grid.
+		 * Preserves NodeCell and TrackBlockPart cells.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun copyGridCells(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
 			// We need to copy all cells (both NodeCell and TrackBlockPart) to preserve the complete network
 			// Cast to Cell grid because EditingContext grid actually contains both NodeCell and TrackBlockPart
+			val sourceGrid = editingContext.getRailWayNetGrid()
 			@Suppress("UNCHECKED_CAST")
-			val cellGrid = grid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
-			val simGrid = context.getGrid()
+			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
+			val targetGrid = simulationContext.getGrid()
+
 			for ((point, cell) in cellGrid) {
-				simGrid.put(point, cell)
+				targetGrid.put(point, cell)
 			}
 
-			// Copy the graph from editing context
+			logger.debug { "Copied ${cellGrid.count()} cells to simulation grid" }
+		}
+
+		/**
+		 * Copy graph structure (track block connections) from editing to simulation context.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun copyGraphStructure(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
 			// This ensures all track block connections are preserved
-			val editGraph = editingContext.getGraph()
-			val simGraph = context.getGraph()
-			for (entry in editGraph.entrySet()) {
+			val sourceGraph = editingContext.getGraph()
+			val targetGraph = simulationContext.getGraph()
+
+			for (entry in sourceGraph.entrySet()) {
 				// Each entry has a Doubleton<Point, Segment> key and TrackBlock value
 				val doubleton = entry.key
 				val trackBlock = entry.value
@@ -230,37 +277,92 @@ open class DefaultSimulationContext(
 				}
 
 				// Put into the simulation graph
-				simGraph.put(first, firstExt, second, secondExt, trackBlock)
+				targetGraph.put(first, firstExt, second, secondExt, trackBlock)
 			}
 
-			// Copy InOut elements list
+			logger.debug { "Copied ${sourceGraph.size()} graph entries" }
+		}
+
+		/**
+		 * Copy InOut elements list from editing to simulation context.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun copyInOutList(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
 			// Use interface method getInOuts() instead of type-checking for LSP compliance
-			context.inouts.addAll(editingContext.getInOuts())
+			simulationContext.inouts.addAll(editingContext.getInOuts())
+			logger.debug { "Copied ${editingContext.getInOuts().size} InOut elements" }
+		}
 
-			// Copy configuration properties
-			context.currentMaxSpeed = editingContext.currentMaxSpeed
-			context.currentTrackLength = editingContext.currentTrackLength
-			context.currentNameString = editingContext.currentNameString
+		/**
+		 * Copy configuration properties from editing to simulation context.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun copyConfiguration(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
+			simulationContext.currentMaxSpeed = editingContext.currentMaxSpeed
+			simulationContext.currentTrackLength = editingContext.currentTrackLength
+			simulationContext.currentNameString = editingContext.currentNameString
 
+			logger.debug {
+				"Copied configuration: speed=${editingContext.currentMaxSpeed}, " +
+				"length=${editingContext.currentTrackLength}, " +
+				"name=${editingContext.currentNameString}"
+			}
+		}
+
+		/**
+		 * Create dynamic wrapper mappings using GridTransformer.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun createDynamicMappings(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
 			// Transform static grid to dynamic grid for wrapper mappings
-			// Use the already-cast cellGrid from above
+			val sourceGrid = editingContext.getRailWayNetGrid()
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.cells.Cell>
+
 			val transformationResult = GridTransformer.transformGrid(cellGrid)
 
 			// Store the transformation map for toDynamic() lookups
-			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
+			simulationContext.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
+
+			logger.debug { "Created ${transformationResult.staticToDynamicMap.size} dynamic wrappers" }
+		}
+
+		/**
+		 * Validate transformation completeness and correctness.
+		 * Logs summary statistics about the transformation.
+		 *
+		 * @param editingContext Source editing context
+		 * @param simulationContext Target simulation context
+		 */
+		private fun validateTransformation(
+			editingContext: EditingContext,
+			simulationContext: DefaultSimulationContext
+		) {
+			val grid = editingContext.getRailWayNetGrid()
+			val cols = grid.getCols()
+			val rows = grid.getRows()
 
 			logger.info {
 				"Created simulation context from editing context: " +
-				"${transformationResult.staticToDynamicMap.size} dynamic wrappers, " +
-				"${context.inouts.size} InOuts, " +
+				"${simulationContext.staticToDynamicMap.size} dynamic wrappers, " +
+				"${simulationContext.inouts.size} InOuts, " +
 				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
 			}
-
-			// Freeze the context to prevent modifications after creation
-			// Simulation context has immutable network structure
-			context.freeze()
-
-			return context
 		}
 	}
 
