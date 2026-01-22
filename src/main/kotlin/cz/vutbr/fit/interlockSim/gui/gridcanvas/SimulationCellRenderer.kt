@@ -25,7 +25,7 @@ import java.awt.Graphics2D
  * NOTE (Issue #153): Future enhancement will add animation support for simulation context.
  * Current implementation renders static configuration with basic dynamic state indicators.
  */
-class SimulationCellRenderer(
+open class SimulationCellRenderer(
 	cellWidth: Int,
 	cellHeight: Int
 ) : CellRenderer(cellWidth, cellHeight) {
