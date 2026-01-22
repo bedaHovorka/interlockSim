@@ -55,6 +55,20 @@ import javax.swing.SwingConstants
  * - Use [getSimulationContext] to access SimulationContext (only when in SIMULATION state)
  *
  * The state machine ensures type-safe access to the appropriate context type.
+ *
+ * ## Animation and Event Logging (Issue #205)
+ *
+ * When in simulation mode, this component integrates with:
+ * - [cz.vutbr.fit.interlockSim.gui.animation.AnimationController] - 30 FPS rendering and state management
+ * - [cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel] - Event logging display (optional)
+ *
+ * Use [setEventTimelinePanel] before calling [setContext] with a [SimulationContext] to enable
+ * event logging. Events are forwarded from AnimationController to the panel via PropertyChangeListener.
+ *
+ * Use [getAnimationController] to access the current animation state (e.g., for time display updates).
+ *
+ * @see setEventTimelinePanel
+ * @see getAnimationController
  */
 class RailwayNetGridCanvas :
 	JComponent(),
@@ -204,6 +218,9 @@ class RailwayNetGridCanvas :
 	private var animationController: AnimationController? = null
 	private var animatedRenderer: CellRenderer? = null
 
+	// Event timeline integration (Issue #205)
+	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
+
 	init {
 		background = Color.BLACK
 		autoscrolls = true
@@ -260,8 +277,8 @@ class RailwayNetGridCanvas :
 	 * **Must be called from EDT.**
 	 */
 	private fun startAnimation(simulationContext: SimulationContext) {
-		// Create animation controller
-		animationController = AnimationController(simulationContext, this)
+		// Create animation controller with event timeline integration (Issue #205)
+		animationController = AnimationController(simulationContext, this, eventTimelinePanel)
 
 		// Create animated renderer with state-based coloring
 		animatedRenderer = AnimatedSimulationCellRenderer(
@@ -287,6 +304,33 @@ class RailwayNetGridCanvas :
 		animationController = null
 		animatedRenderer = null
 	}
+
+	/**
+	 * Set the event timeline panel for event logging during simulation (Issue #205).
+	 *
+	 * This panel receives simulation events (path settings, train movements, etc.)
+	 * from the [AnimationController]. Must be called before switching to simulation mode
+	 * to ensure events are properly logged.
+	 *
+	 * **Must be called from EDT.**
+	 *
+	 * @param panel The event timeline panel to receive events, or null to disable event logging
+	 */
+	fun setEventTimelinePanel(panel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel?) {
+		eventTimelinePanel = panel
+	}
+
+	/**
+	 * Get the current animation controller if running (Issue #205).
+	 *
+	 * Used by [cz.vutbr.fit.interlockSim.gui.Frame] to access animation state
+	 * for time display updates in [cz.vutbr.fit.interlockSim.gui.animation.ControlPanel].
+	 *
+	 * **Must be called from EDT.**
+	 *
+	 * @return The current animation controller, or null if not in simulation mode
+	 */
+	fun getAnimationController(): AnimationController? = animationController
 
 	// Change mouse listeners based on mode
 	private fun changeListeners(
