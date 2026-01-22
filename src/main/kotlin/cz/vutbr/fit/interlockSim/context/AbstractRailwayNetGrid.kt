@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
 import java.util.WeakHashMap

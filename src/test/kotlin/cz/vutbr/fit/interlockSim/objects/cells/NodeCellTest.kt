@@ -10,6 +10,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull

@@ -14,10 +14,10 @@ import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory

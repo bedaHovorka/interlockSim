@@ -15,7 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock

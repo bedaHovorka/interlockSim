@@ -7,9 +7,8 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.paths
+package cz.vutbr.fit.interlockSim.objects.core
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 
 /**
  * orientovany prvek
@@ -26,4 +25,16 @@ interface OrientedPathSeparator : PathSeparator {
 	 * @return direction segment
 	 */
 	fun direction(): Cell.Segment
+
+	/**
+	 * Returns the semaphore for this path separator.
+	 * Eliminates instanceof checks in AbstractPath.getLastPathSemaphore().
+	 *
+	 * For RailSemaphore: returns self
+	 * For InOut: returns the output semaphore
+	 * For Dynamic wrappers: delegates to static reference
+	 *
+	 * @return the RailSemaphore instance associated with this separator
+	 */
+	fun asRailSemaphore(): cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 }

@@ -10,11 +10,11 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import java.util.EnumSet
 

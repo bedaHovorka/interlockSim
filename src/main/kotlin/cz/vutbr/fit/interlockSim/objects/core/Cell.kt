@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.cells
+package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point

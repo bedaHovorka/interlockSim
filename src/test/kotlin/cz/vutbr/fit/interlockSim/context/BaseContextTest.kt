@@ -15,7 +15,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase

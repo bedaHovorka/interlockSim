@@ -18,7 +18,7 @@ import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch

@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasPopupMenu
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.SimulationCellRenderer
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock

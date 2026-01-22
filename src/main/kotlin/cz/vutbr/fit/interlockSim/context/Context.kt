@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -29,7 +29,7 @@ import java.beans.PropertyChangeListener
  *          - The grid stores mixed cell types: [cz.vutbr.fit.interlockSim.objects.cells.NodeCell]
  *            subclasses (RailSwitch, RailSemaphore, InOut) and
  *            [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] (intermediate track segments)
- *          - During simulation, [cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator]
+ *          - During simulation, [cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator]
  *            wrappers are maintained separately via [SimulationContext.toDynamic] methods,
  *            not stored in the grid
  *

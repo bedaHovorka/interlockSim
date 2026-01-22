@@ -9,12 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import io.mockk.mockk

@@ -15,7 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory

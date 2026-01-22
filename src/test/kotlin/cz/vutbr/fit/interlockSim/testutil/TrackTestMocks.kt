@@ -10,12 +10,12 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
-import cz.vutbr.fit.interlockSim.objects.paths.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 
 /**
  * Mock implementation of NodeCell for testing track endpoints.
@@ -47,6 +47,8 @@ class MockNodeCell(
 	override fun possibleFollowers(from: Segment): Set<Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = speed
+
+	override fun isSwitch(): Boolean = false // Mock as non-switch by default
 
 	override fun joins(): Set<Segment> {
 		// Return the two segments that join for HORIZONTAL type

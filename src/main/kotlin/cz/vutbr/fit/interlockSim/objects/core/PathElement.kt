@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.objects.paths
+package cz.vutbr.fit.interlockSim.objects.core
 
 /**
  * Element of {@link Path}

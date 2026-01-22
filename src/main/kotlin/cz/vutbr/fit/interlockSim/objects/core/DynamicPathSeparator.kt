@@ -1,7 +1,6 @@
-package cz.vutbr.fit.interlockSim.objects.paths
+package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
 
 /**
  * Path separator in simulation, which can change its configuration during simulation
@@ -39,4 +38,14 @@ interface DynamicPathSeparator : PathSeparator {
 	 * @return segment reprezents element configuration (dynamic)
 	 */
 	fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
+
+	/**
+	 * Returns true if this is a switch (RailSwitch), false for semaphores/InOut.
+	 * Eliminates instanceof checks in AbstractPath for switch-specific logic.
+	 *
+	 * Used for path speed calculation where switches may affect allowed speed.
+	 *
+	 * @return true if this is a RailSwitch, false otherwise
+	 */
+	fun isSwitch(): Boolean
 }

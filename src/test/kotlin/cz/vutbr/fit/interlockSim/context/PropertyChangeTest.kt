@@ -14,7 +14,7 @@ import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase

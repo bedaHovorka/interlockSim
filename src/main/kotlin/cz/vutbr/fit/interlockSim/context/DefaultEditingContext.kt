@@ -9,18 +9,18 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.objects.cells.anti
-import cz.vutbr.fit.interlockSim.objects.cells.conflict
-import cz.vutbr.fit.interlockSim.objects.cells.segmentFor
+import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.putMulti

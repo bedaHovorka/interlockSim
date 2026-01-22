@@ -10,11 +10,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName

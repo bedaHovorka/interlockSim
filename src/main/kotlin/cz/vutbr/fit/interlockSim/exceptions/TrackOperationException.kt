@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.vutbr.fit.interlockSim.objects.tracks.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 
 /**
  * Exception thrown when a track operation fails.

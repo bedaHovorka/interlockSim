@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -17,8 +18,8 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage

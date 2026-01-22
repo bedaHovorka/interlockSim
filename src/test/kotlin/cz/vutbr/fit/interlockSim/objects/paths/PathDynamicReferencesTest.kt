@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -17,7 +19,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.tracks.Track
+import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName

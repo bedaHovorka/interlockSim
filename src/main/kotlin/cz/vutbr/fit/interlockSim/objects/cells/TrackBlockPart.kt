@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells // jinde?
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 

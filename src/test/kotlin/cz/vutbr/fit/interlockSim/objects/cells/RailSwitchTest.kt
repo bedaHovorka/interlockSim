@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEmpty
@@ -16,7 +17,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import org.junit.jupiter.api.BeforeEach

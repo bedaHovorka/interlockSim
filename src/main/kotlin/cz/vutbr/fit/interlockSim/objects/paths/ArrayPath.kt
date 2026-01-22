@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.util.Util
 

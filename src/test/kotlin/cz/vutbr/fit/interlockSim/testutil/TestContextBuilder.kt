@@ -14,6 +14,7 @@
 
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -64,7 +65,7 @@ class TestContextBuilder {
 			cz.vutbr.fit.interlockSim.objects.cells.InOut(
 				name,
 				!isEntry, // orientation is inverted for exit points
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+				cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 			)
 		editingContext.putCell(position, inOut)
 		return this
@@ -87,7 +88,7 @@ class TestContextBuilder {
 		val semaphore =
 			cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
 				isAllowing,
-				cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+				cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 			)
 		editingContext.putCell(position, semaphore)
 		return this
@@ -167,13 +168,13 @@ fun buildLinearTrack(): DefaultSimulationContext {
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
 			false,
-			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 		)
 	val outB =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"B",
 			true,
-			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 		)
 	val trackBlock =
 		cz.vutbr.fit.interlockSim.objects.tracks
@@ -202,18 +203,18 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
 			false,
-			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 		)
 	val rs1 =
 		cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore(
 			false,
-			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.DIAGONAL1
+			cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.DIAGONAL1
 		)
 	val outB =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"B",
 			true,
-			cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType.HORIZONTAL
+			cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
 		)
 	val trackBlock =
 		cz.vutbr.fit.interlockSim.objects.tracks

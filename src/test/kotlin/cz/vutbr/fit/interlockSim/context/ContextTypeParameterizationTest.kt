@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock

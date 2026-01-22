@@ -14,7 +14,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
@@ -56,7 +56,7 @@ class ContextTest : KoinTestBase() {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.context.SimulationContext#getNextTrackBlock(cz.vutbr.fit.interlockSim.objects.cells.NodeCell, cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock)}.
+	 * Test method for {@link cz.vutbr.fit.interlockSim.context.SimulationContext#getNextTrackBlock(cz.vutbr.fit.interlockSim.objects.cells.NodeCell, cz.vutbr.fit.interlockSim.objects.core.TrackBlock)}.
 	 */
 	@Test
 	fun testGetNextTrackBlock() {
@@ -92,7 +92,7 @@ class ContextTest : KoinTestBase() {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.context.SimulationContext#isSeparatorInDirection(cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator, cz.vutbr.fit.interlockSim.objects.tracks.Track, cz.vutbr.fit.interlockSim.objects.tracks.Track)}
+	 * Test method for {@link cz.vutbr.fit.interlockSim.context.SimulationContext#isSeparatorInDirection(cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator, cz.vutbr.fit.interlockSim.objects.core.Track, cz.vutbr.fit.interlockSim.objects.core.Track)}
 	 */
 	@Test
 	fun testIsSeparatorInDirection() {

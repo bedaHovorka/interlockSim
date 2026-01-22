@@ -10,8 +10,8 @@
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.objects.cells.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import java.awt.BasicStroke
 import java.awt.Graphics2D
 import java.lang.Math.round

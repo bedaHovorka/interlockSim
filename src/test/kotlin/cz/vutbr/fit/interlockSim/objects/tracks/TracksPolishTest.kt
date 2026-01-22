@@ -9,15 +9,18 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.paths.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.PathElement
-import cz.vutbr.fit.interlockSim.objects.paths.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
