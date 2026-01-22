@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.sim.Train
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -30,10 +31,11 @@ private val logger = KotlinLogging.logger {}
  * DynamicRailSemaphore) in the simulation thread. To safely render on the Swing EDT,
  * we create immutable snapshots that can be transferred between threads.
  *
- * ## MVP Limitations
+ * ## Train State Capture (Issue #203)
  *
- * - Train state capture is NOT implemented (requires public Train API - future work)
- * - Focus on track and semaphore state only (sufficient for initial animation)
+ * - Trains are collected from occupied track blocks (via TrackOccupant interface)
+ * - Grid positions calculated via linear interpolation along track sections
+ * - Uses new public Train API: getNumber(), getFrontSection(), getFrontPosition()
  *
  * ## Usage
  *
@@ -51,9 +53,9 @@ object AnimationStateCapture {
 	 * Capture complete simulation state as immutable snapshot.
 	 *
 	 * Queries simulation context for:
+	 * - All active trains and their positions (via occupied track blocks)
 	 * - All track blocks and their occupancy states
 	 * - All semaphores and their signal indications
-	 * - (Trains deferred to future iteration - requires public API)
 	 *
 	 * **Thread Safety:** This method accesses simulation objects. It should be
 	 * called from a thread-safe context (typically after marshaling to EDT via
@@ -67,7 +69,7 @@ object AnimationStateCapture {
 		return try {
 			AnimationState(
 				simulationTime = captureSimulationTime(),
-				trainStates = emptyMap(), // TODO: Implement when Train API is public
+				trainStates = captureTrainStates(context),
 				trackStates = captureTrackStates(context),
 				signalStates = captureSignalStates(context)
 			)
@@ -86,6 +88,82 @@ object AnimationStateCapture {
 	 */
 	private fun captureSimulationTime(): Double {
 		return jDisco.Process.time()
+	}
+
+	/**
+	 * Capture state of all active trains in simulation.
+	 *
+	 * Collects trains by iterating over all track blocks and finding occupied tracks.
+	 * Each occupied track has a train (TrackOccupant) that we capture state from.
+	 *
+	 * Uses [TrainPositionCalculator] to calculate grid positions for train rendering.
+	 *
+	 * @param context Simulation context to query
+	 * @return Map of train number to [TrainState]
+	 */
+	private fun captureTrainStates(context: SimulationContext): Map<Int, TrainState> {
+		val graph = context.getGraph()
+		val trains = mutableSetOf<Train>()
+
+		// Collect all trains from occupied track blocks
+		for (node in graph.nodeSet()) {
+			if (node is TrackBlock) {
+				val dynamicTrack = context.toDynamic(node as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
+				val occupant = dynamicTrack.occupant
+
+				// Check if occupant is a Train
+				if (occupant is Train) {
+					trains.add(occupant)
+				}
+			}
+		}
+
+		logger.trace { "Capturing state for ${trains.size} active trains" }
+
+		// Create position calculator for grid location interpolation
+		val positionCalculator = TrainPositionCalculator(context)
+
+		return trains.associate { train ->
+			train.getNumber() to captureTrainState(train, positionCalculator)
+		}
+	}
+
+	/**
+	 * Capture state of a single train.
+	 *
+	 * Captures position, velocity, acceleration, and calculates grid location
+	 * for rendering via linear interpolation along the current track section.
+	 *
+	 * @param train Train to capture state from
+	 * @param positionCalculator Calculator for grid position interpolation
+	 * @return Immutable train state snapshot
+	 */
+	private fun captureTrainState(
+		train: Train,
+		positionCalculator: TrainPositionCalculator
+	): TrainState {
+		val trainNumber = train.getNumber()
+		val position = train.getTotalDistance()
+		val velocity = train.getVelocity()
+		val acceleration = train.getAcceleration()
+		val length = train.getLength()
+
+		// Calculate grid location for train front
+		val currentSection = train.getFrontSection()
+		val frontPosition = train.getFrontPosition()
+		val frontGridLocation = positionCalculator.calculateTrainGridLocation(
+			currentSection = currentSection,
+			distanceAlongSection = frontPosition
+		)
+
+		return TrainState(
+			trainNumber = trainNumber,
+			position = position,
+			velocity = velocity,
+			acceleration = acceleration,
+			frontGridLocation = frontGridLocation,
+			length = length
+		)
 	}
 
 	/**

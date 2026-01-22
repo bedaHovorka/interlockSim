@@ -16,10 +16,11 @@ import java.awt.Color
 /**
  * Centralized color scheme for railway animation rendering.
  *
- * Provides standard railway signaling colors for track block states and semaphore signals,
+ * Provides standard railway signaling colors for track block states, semaphore signals, and trains,
  * following conventional railway color coding:
  * - Track states: Gray (free), Yellow (reserved), Red (occupied)
  * - Signals: Red (stop), Yellow (limited speed), Green (full speed)
+ * - Trains: Blue (body), White (ID text)
  *
  * All colors are defined as sRGB values following standard railway conventions.
  *
@@ -29,9 +30,10 @@ import java.awt.Color
  * ```kotlin
  * val trackColor = AnimationColors.forTrackState(TrackFacility.State.OCCUPIED)  // Red
  * val signalColor = AnimationColors.forSignal(Signal.STOP)                     // Red
+ * val trainBodyColor = AnimationColors.TRAIN_BODY                              // Blue
  * ```
  *
- * @since 2026-01-22 (Issue #202)
+ * @since 2026-01-22 (Issue #202, #203)
  */
 object AnimationColors {
 	// ========== Track Block State Colors ==========
@@ -63,6 +65,14 @@ object AnimationColors {
 
 	/** Default signal color when state is unknown - Light gray */
 	val DEFAULT_SIGNAL: Color = Color(0xC0, 0xC0, 0xC0)
+
+	// ========== Train Colors ==========
+
+	/** Train body color - Blue */
+	val TRAIN_BODY: Color = Color(0x00, 0x00, 0xFF)
+
+	/** Train ID text color - White */
+	val TRAIN_ID: Color = Color(0xFF, 0xFF, 0xFF)
 
 	/**
 	 * Returns the rendering color for a track facility state.
