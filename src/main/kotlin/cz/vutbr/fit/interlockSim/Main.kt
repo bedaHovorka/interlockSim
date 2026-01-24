@@ -53,7 +53,7 @@ class Main {
 		}
 	}
 
-	fun createContext(args: Array<String>): Context<*> {
+	fun createContext(args: Array<String>): Context<*, *> {
 		if (args.size > 1) {
 			val userDir = File(".").canonicalFile
 			val file = File(args[1]).canonicalFile
@@ -77,7 +77,7 @@ class Main {
 				is SimulationContext -> rawContext
 				is EditingContext -> simulationContextFactory.createContext(rawContext)
 				else -> throw ContextCreationException(
-					"Unexpected context type: ${rawContext.javaClass.name}"
+					"Unexpected context type: ${rawContext::class.java.name}"
 				)
 			}
 			context.addReportTypes(*ReportType.values())

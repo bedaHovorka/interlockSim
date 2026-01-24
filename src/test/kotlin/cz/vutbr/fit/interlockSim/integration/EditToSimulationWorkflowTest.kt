@@ -110,7 +110,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
 		
 		// Step 6: Verify context is accessible (NOTE: properties not preserved - see issue #248)
-		val loadedBaseContext = loadedContext as BaseContext
+		val loadedBaseContext = loadedContext as BaseContext<*>
 		assertThat(loadedBaseContext.currentMaxSpeed).isNotNull()
 		assertThat(loadedBaseContext.currentTrackLength).isNotNull()
 		assertThat(loadedBaseContext.currentNameString).isNotNull()
@@ -170,7 +170,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
 		
 		// Verify simulation context is frozen (immutable)
-		val simContextBase = simulationContext as BaseContext
+		val simContextBase = simulationContext as BaseContext<*>
 		val simFrozen = simContextBase.isFrozen()
 		assertThat(simFrozen).isTrue()
 	}
@@ -194,7 +194,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		
 		// Verify that the context supports property access
 		// NOTE: Property change events are not yet implemented - see issue #249
-		val baseContext = context as BaseContext
+		val baseContext = context as BaseContext<*>
 
 		// Verify property setters work
 		baseContext.currentMaxSpeed = 100.0
@@ -235,7 +235,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 		// Verify properties are copied to simulation context
-		val simBase = simulationContext as BaseContext
+		val simBase = simulationContext as BaseContext<*>
 		assertThat(simBase.currentMaxSpeed).isEqualTo(150.0)
 		assertThat(simBase.currentTrackLength).isEqualTo(200.0)
 		assertThat(simBase.currentNameString).isEqualTo("Test Railway")

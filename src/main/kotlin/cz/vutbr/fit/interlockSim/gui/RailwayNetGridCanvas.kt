@@ -190,7 +190,7 @@ class RailwayNetGridCanvas :
 
 	// Instance variables
 	private var showGrid: Boolean = false
-	private var context: Context<*>? = null
+	private var context: Context<*, *>? = null
 	private val editListener = GridMouseEditListener()
 	private val simulationControlListener = GridMouseSimulationControlListener()
 	private var state = State.EDITING
@@ -211,7 +211,7 @@ class RailwayNetGridCanvas :
 	 * Explicitly handles both EditingContext and SimulationContext without assuming
 	 * inheritance relationship between them (preparation for Issue #153.5).
 	 */
-	fun setContext(newContext: Context<*>) {
+	fun setContext(newContext: Context<*, *>) {
 		when (newContext) {
 			is SimulationContext -> {
 				// Handle SimulationContext first (more specific type)
@@ -253,7 +253,7 @@ class RailwayNetGridCanvas :
 	}
 
 	// Update context and recalculate display
-	private fun changeContext(cont: Context<*>) {
+	private fun changeContext(cont: Context<*, *>) {
 		if (context != null) {
 			context!!.removePropertyChangeListener(this)
 		}
@@ -355,7 +355,7 @@ class RailwayNetGridCanvas :
 	}
 
 	@Deprecated("Use setContext instead")
-	fun setSimulation(context: Context<*>) {
+	fun setSimulation(context: Context<*, *>) {
 		setContext(context)
 	}
 

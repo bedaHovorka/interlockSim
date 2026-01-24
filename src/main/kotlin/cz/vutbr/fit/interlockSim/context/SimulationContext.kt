@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import java.util.EnumSet
 
 /**
@@ -23,20 +23,21 @@ import java.util.EnumSet
  *
  * ## Architecture
  *
- * SimulationContext extends [Context]<[Cell]> for architectural separation, following
- * the Interface Segregation Principle. The network structure is immutable once simulation
- * starts - editing operations are NOT supported during simulation.
+ * SimulationContext extends `Context<Cell, DynamicTrackBlock>` for architectural separation,
+ * following the Interface Segregation Principle. The network structure is immutable once
+ * simulation starts - editing operations are NOT supported during simulation.
  *
- * DefaultSimulationContext extends BaseContext directly and does NOT implement EditingContext.
- * Editing operations (putCell, removeCell, etc.) are only available through [EditingContext].
+ * DefaultSimulationContext extends `BaseContext<DynamicTrackBlock>` directly and does NOT
+ * implement EditingContext. Editing operations (putCell, removeCell, etc.) are only available
+ * through [EditingContext].
  *
  * Dynamic wrappers ([DynamicInOut], [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch],
- * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]) are created during
- * transformation from editing context. These wrappers maintain references to static
- * objects via `staticRef` property for identity preservation.
+ * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore], [DynamicTrackBlock]) are
+ * created during transformation from editing context. These wrappers maintain references to
+ * static objects via `staticRef` property for identity preservation.
  *
- * The simulation context is created from an editing context using `GridTransformer` to convert
- * static NodeCell instances to their dynamic wrapper counterparts.
+ * The simulation context is created from an editing context using transformation methods to
+ * convert static objects to their dynamic wrapper counterparts.
  *
  * ## Immutability Contract
  *
@@ -84,7 +85,7 @@ import java.util.EnumSet
  * @see BaseContext.freeze
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface SimulationContext : Context<Cell>, SimulationEnvironment {
+interface SimulationContext : Context<Cell, DynamicTrackBlock>, SimulationEnvironment {
 	/**
 	 * simulation reporting types
 	 */
@@ -138,14 +139,16 @@ interface SimulationContext : Context<Cell>, SimulationEnvironment {
 	fun removeReportTypes(vararg types: ReportType)
 
 	/**
-	 * @param nodeCell
-	 * @param current from, for determine direction
-	 * @return block, which follow depending on node configuration, or null if no following block exists
+	 * Get the next track block following the given node cell.
+	 *
+	 * @param nodeCell The node cell to query
+	 * @param current The current track block (for determining direction), or null
+	 * @return The next DynamicTrackBlock, or null if no following block exists
 	 */
 	fun getNextTrackBlock(
 		nodeCell: NodeCell,
-		current: TrackBlock?
-	): TrackBlock?
+		current: DynamicTrackBlock?
+	): DynamicTrackBlock?
 
 	/**
 	 * @param separator

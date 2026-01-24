@@ -18,9 +18,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
+import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -415,6 +418,226 @@ class ContextTransformerTest : KoinTestBase() {
 			// Assert - Interface method returns correct list
 			assertThat(inOuts).hasSize(1)
 			assertThat(inOuts).contains(inOut)
+		}
+	}
+
+	/**
+	 * Tests for Issue #277: Graph Parameterization with Dynamic Wrappers
+	 *
+	 * Verifies that the context transformation correctly wraps all TrackBlocks
+	 * in DynamicTrackBlock wrappers and provides type-safe graph access.
+	 */
+	@Nested
+	@DisplayName("Graph Parameterization (Issue #277)")
+	inner class GraphParameterization {
+
+		@Test
+		@DisplayName("wraps all TrackBlocks in DynamicTrackBlock")
+		fun transformContext_wrapsAllTrackBlocks() {
+			// Arrange - Create editing context with track blocks
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), semaphore)
+			editingContext.putCell(Point(25, 5), inB)
+
+			val track1 = SimpleTrackBlock(inA, semaphore, 100.0, 80.0)
+			val track2 = SimpleTrackBlock(semaphore, inB, 100.0, 80.0)
+
+			editingContext.joinCells(Point(5, 5), Point(15, 5), track1)
+			editingContext.joinCells(Point(15, 5), Point(25, 5), track2)
+
+			// Act - Transform to simulation context
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Assert - All graph entries are DynamicTrackBlock
+			val graph = simulationContext.getGraph()
+			for (entry in graph.entrySet()) {
+				assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
+			}
+		}
+
+		@Test
+		@DisplayName("preserves graph edge count during transformation")
+		fun transformContext_preservesEdgeCount() {
+			// Arrange - Create editing context with multiple track blocks
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val semaphore1 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val semaphore2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), semaphore1)
+			editingContext.putCell(Point(25, 5), semaphore2)
+			editingContext.putCell(Point(35, 5), inB)
+
+			val track1 = SimpleTrackBlock(inA, semaphore1, 100.0, 80.0)
+			val track2 = SimpleTrackBlock(semaphore1, semaphore2, 100.0, 80.0)
+			val track3 = SimpleTrackBlock(semaphore2, inB, 100.0, 80.0)
+
+			editingContext.joinCells(Point(5, 5), Point(15, 5), track1)
+			editingContext.joinCells(Point(15, 5), Point(25, 5), track2)
+			editingContext.joinCells(Point(25, 5), Point(35, 5), track3)
+
+			val originalEdgeCount = editingContext.getGraph().size()
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+			val transformedEdgeCount = simulationContext.getGraph().size()
+
+			// Assert - Edge count preserved
+			assertThat(transformedEdgeCount).isEqualTo(originalEdgeCount)
+			assertThat(transformedEdgeCount).isEqualTo(3)
+		}
+
+		@Test
+		@DisplayName("preserves graph node count during transformation")
+		fun transformContext_preservesNodeCount() {
+			// Arrange - Create editing context with multiple nodes
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), semaphore)
+			editingContext.putCell(Point(25, 5), railSwitch)
+			editingContext.putCell(Point(35, 5), inB)
+
+			val track1 = SimpleTrackBlock(inA, semaphore, 100.0, 80.0)
+			val track2 = SimpleTrackBlock(semaphore, railSwitch, 100.0, 80.0)
+			val track3 = SimpleTrackBlock(railSwitch, inB, 100.0, 80.0)
+
+			editingContext.joinCells(Point(5, 5), Point(15, 5), track1)
+			editingContext.joinCells(Point(15, 5), Point(25, 5), track2)
+			editingContext.joinCells(Point(25, 5), Point(35, 5), track3)
+
+			val originalNodeCount = editingContext.getGraph().nodeSet().size
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+			val transformedNodeCount = simulationContext.getGraph().nodeSet().size
+
+			// Assert - Node count preserved
+			assertThat(transformedNodeCount).isEqualTo(originalNodeCount)
+			assertThat(transformedNodeCount).isEqualTo(4)
+		}
+
+		@Test
+		@DisplayName("staticRef points to original TrackBlock")
+		fun transformedBlock_staticRefPointsToOriginal() {
+			// Arrange
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val originalBlock = SimpleTrackBlock(inA, inB, 100.0, 80.0)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), inB)
+			editingContext.joinCells(Point(5, 5), Point(15, 5), originalBlock)
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Get the dynamic block from simulation graph
+			val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
+
+			// Assert - Is DynamicTrackBlock and staticRef points to original
+			assertThat(dynamicBlock).isNotNull()
+			assertThat(dynamicBlock!!).isInstanceOf(DynamicTrackBlock::class)
+			assertThat(dynamicBlock.staticRef).isSameInstanceAs(originalBlock)
+		}
+
+		@Test
+		@DisplayName("dynamic blocks preserve static block properties")
+		fun dynamicBlock_preservesStaticProperties() {
+			// Arrange
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val originalBlock = SimpleTrackBlock(inA, inB, 150.0, 90.0)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), inB)
+			editingContext.joinCells(Point(5, 5), Point(15, 5), originalBlock)
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+			val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
+				as DynamicTrackBlock
+
+			// Assert - Properties delegated correctly
+			assertThat(dynamicBlock.length()).isEqualTo(150.0)
+			assertThat(dynamicBlock.ends()).hasSize(2)
+			assertThat(dynamicBlock.ends().toList()).contains(inA)
+			assertThat(dynamicBlock.ends().toList()).contains(inB)
+		}
+
+		@Test
+		@DisplayName("simulation graph returns DynamicTrackBlock without casts")
+		fun simulationGraph_typeSafeAccess() {
+			// Arrange
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), inB)
+			editingContext.joinCells(Point(5, 5), Point(15, 5), track)
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+
+			// Assert - Type-safe graph access (compile-time verified)
+			val graph = simulationContext.getGraph()
+			val block = graph.get(Point(5, 5), Point(15, 5))!! // Returns DynamicTrackBlock
+
+			assertThat(block).isNotNull()
+			assertThat(block.length()).isEqualTo(100.0)
+		}
+
+		@Test
+		@DisplayName("dynamic blocks have initial FREE state")
+		fun dynamicBlock_initialStateIsFree() {
+			// Arrange
+			val editingContext = factory.createEmptyContext()
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
+
+			editingContext.putCell(Point(5, 5), inA)
+			editingContext.putCell(Point(15, 5), inB)
+			editingContext.joinCells(Point(5, 5), Point(15, 5), track)
+
+			// Act
+			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
+			val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
+				as DynamicTrackBlock
+
+			// Assert - Initial state is FREE
+			assertThat(dynamicBlock.getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(dynamicBlock.occupant).isNull()
+			assertThat(dynamicBlock.reservedFrom).isNull()
+		}
+
+		@Test
+		@DisplayName("complex network (vyhybna.xml) has all blocks wrapped")
+		fun vyhybnaXml_allBlocksAreWrapped() {
+			// Arrange - Load vyhybna.xml which creates SimulationContext directly
+			val simulationContext = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val graph = simulationContext.getGraph()
+
+			// Assert - All graph entries are DynamicTrackBlock
+			assertThat(graph.size()).isGreaterThan(0)
+			for (entry in graph.entrySet()) {
+				assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
+			}
 		}
 	}
 }

@@ -67,7 +67,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		)
 	}
 
-	fun setContext(context: Context<*>) {
+	fun setContext(context: Context<*, *>) {
 		context.addPropertyChangeListener(statusBar)
 		railwayNetGridCanvas.setContext(context)
 

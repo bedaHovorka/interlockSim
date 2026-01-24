@@ -25,7 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -163,8 +163,8 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,
-		current: TrackBlock?
-	): TrackBlock? {
+		current: DynamicTrackBlock?
+	): DynamicTrackBlock? {
 		// Check if node is in grid before delegating
 		if (delegate.getRailWayNetGrid().getLocation(nodeCell) == null) {
 			// Node not in grid - return null (graceful handling for tests)
