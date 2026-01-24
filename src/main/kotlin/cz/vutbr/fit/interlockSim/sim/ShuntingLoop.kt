@@ -211,6 +211,8 @@ class ShuntingLoop(
 		}
 		// nove vlaky a inouty
 		approveTrains()
+		// Polling interval: 1.0s (matches baseline timing)
+		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)

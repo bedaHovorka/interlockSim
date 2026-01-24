@@ -106,14 +106,23 @@ object AnimationStateCapture {
 		val trains = mutableSetOf<Train>()
 
 		// Collect all trains from occupied track blocks
-		// Graph edges are TrackBlock instances
-		for (trackBlock in graph.values()) {
-			val dynamicTrack = context.toDynamic(trackBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
+		// Graph edges are DynamicTrackBlock instances after Issue #277
+		for (graphBlock in graph.values()) {
+			// Extract static block from DynamicTrackBlock wrapper
+			val staticTrackFacility = if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
+				graphBlock.staticRef as cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+			} else {
+				graphBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+			}
+
+			// Get DynamicTrack wrapper with mutable state
+			val dynamicTrack = context.toDynamic(staticTrackFacility)
 			val occupant = dynamicTrack.occupant
 
 			// Check if occupant is a Train
 			if (occupant is Train) {
 				trains.add(occupant)
+				logger.trace { "Found train #${occupant.getNumber()} in block ${System.identityHashCode(staticTrackFacility)}" }
 			}
 		}
 
@@ -171,19 +180,29 @@ object AnimationStateCapture {
 	 * Iterates over graph edges (TrackBlock instances) and captures their
 	 * dynamic state via toDynamic() wrapper.
 	 *
+	 * **Map Key:** Uses STATIC TrackBlock (staticRef) as key for renderer lookup compatibility.
+	 * After Issue #277, graph contains DynamicTrackBlock wrappers, but cells store static blocks.
+	 *
 	 * @param context Simulation context to query
-	 * @return Map of [TrackBlock] to [TrackState]
+	 * @return Map of [TrackBlock] (static) to [TrackState]
 	 */
 	private fun captureTrackStates(context: SimulationContext): Map<TrackBlock, TrackState> {
 		val graph = context.getGraph()
 
-		// Graph edges are TrackBlock instances
+		// Graph edges are DynamicTrackBlock instances after Issue #277
 		val trackBlocks = graph.values()
 
 		logger.trace { "Capturing state for ${trackBlocks.count()} track blocks" }
 
-		return trackBlocks.associate { trackBlock ->
-			trackBlock to captureTrackState(trackBlock, context)
+		return trackBlocks.associate { graphBlock ->
+			// Extract static block from DynamicTrackBlock wrapper
+			val staticBlock = if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
+				graphBlock.staticRef as TrackBlock
+			} else {
+				graphBlock as TrackBlock
+			}
+			// Use static block as both key and parameter
+			staticBlock to captureTrackState(staticBlock, context)
 		}
 	}
 
@@ -192,18 +211,24 @@ object AnimationStateCapture {
 	 *
 	 * Uses dynamic wrapper to access current occupancy state.
 	 *
-	 * @param trackBlock Track block to capture state from
+	 * @param staticTrackBlock Static track block (extracted from graph's DynamicTrackBlock wrapper)
 	 * @param context Simulation context (for dynamic wrapper access)
 	 * @return Immutable track state snapshot
 	 */
-	private fun captureTrackState(trackBlock: TrackBlock, context: SimulationContext): TrackState {
-		// Access dynamic wrapper to get current state
-		// TrackBlock extends Track which extends TrackFacility
-		val dynamicTrack = context.toDynamic(trackBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
+	private fun captureTrackState(staticTrackBlock: TrackBlock, context: SimulationContext): TrackState {
+		// Access DynamicTrack wrapper via toDynamic() to get current state
+		// This returns the canonical DynamicTrack instance with mutable state
+		val dynamicTrack = context.toDynamic(staticTrackBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
+
+		val capturedState = dynamicTrack.state
+		logger.trace {
+			"Captured track state: block@${System.identityHashCode(staticTrackBlock)} " +
+			"(${staticTrackBlock.toString().take(15)}), state=$capturedState"
+		}
 
 		return TrackState(
-			trackBlock = trackBlock,
-			state = dynamicTrack.state
+			trackBlock = staticTrackBlock,  // Use static block as key for renderer lookup
+			state = capturedState
 		)
 	}
 
@@ -224,14 +249,14 @@ object AnimationStateCapture {
 		val grid = context.getRailWayNetGrid()
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
-		// Iterate grid to find all RailSemaphore cells (static) and convert to dynamic
+		// Iterate grid to find all semaphore cells
+		// After grid transformation, cells are already dynamic wrappers
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y)
-				if (cell is RailSemaphore) {
-					// Convert static RailSemaphore to dynamic wrapper
-					val dynamicSemaphore = context.toDynamic(cell) as DynamicRailSemaphore
-					semaphores.add(dynamicSemaphore)
+				if (cell is DynamicRailSemaphore) {
+					// Cell is already a dynamic wrapper
+					semaphores.add(cell)
 				}
 			}
 		}
