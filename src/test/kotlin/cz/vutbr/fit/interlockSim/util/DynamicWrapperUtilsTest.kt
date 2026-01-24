@@ -49,8 +49,42 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("unwrapping is idempotent - unwrapping twice returns same result")
-		fun idempotent() {
+		@DisplayName("unwraps DynamicRailSemaphore to static RailSemaphore")
+		fun unwrapDynamicRailSemaphore() {
+			val context: SimulationContext = buildMinimal()
+
+			// Get a dynamic InOut and access its semaphore
+			val dynamicInOut = context.getInOuts().first()
+			val dynamicSemaphore = dynamicInOut.inSemaphore
+			assertThat(dynamicSemaphore).isNotNull()
+
+			// Unwrap to static reference
+			val result = DynamicWrapperUtils.unwrapToStatic(dynamicSemaphore)
+
+			// Verify it's the same static object
+			assertThat(result).isSameInstanceAs(dynamicSemaphore.staticRef)
+		}
+
+		@Test
+		@DisplayName("passthrough - returns static object unchanged when already static")
+		fun passthroughStaticObject() {
+			val context: SimulationContext = buildMinimal()
+
+			// Get a static InOut reference
+			val dynamicInOut = context.getInOuts().first()
+			val staticInOut = dynamicInOut.staticRef
+			assertThat(staticInOut).isNotNull()
+
+			// Unwrap should return the same object (passthrough)
+			val result = DynamicWrapperUtils.unwrapToStatic(staticInOut)
+
+			// Verify it's the exact same instance
+			assertThat(result).isSameInstanceAs(staticInOut)
+		}
+
+		@Test
+		@DisplayName("idempotent - unwrapping DynamicInOut twice returns same result")
+		fun idempotentDynamicInOut() {
 			val context: SimulationContext = buildMinimal()
 			val dynamicInOut = context.getInOuts().first()
 
@@ -58,6 +92,33 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 			val result2 = DynamicWrapperUtils.unwrapToStatic(result1)
 
 			assertThat(result1).isSameInstanceAs(result2)
+		}
+
+		@Test
+		@DisplayName("idempotent - unwrapping DynamicRailSemaphore twice returns same result")
+		fun idempotentDynamicRailSemaphore() {
+			val context: SimulationContext = buildMinimal()
+			val dynamicSemaphore = context.getInOuts().first().inSemaphore
+
+			val result1 = DynamicWrapperUtils.unwrapToStatic(dynamicSemaphore)
+			val result2 = DynamicWrapperUtils.unwrapToStatic(result1)
+
+			assertThat(result1).isSameInstanceAs(result2)
+		}
+
+		@Test
+		@DisplayName("idempotent - unwrapping static object multiple times returns same result")
+		fun idempotentStaticObject() {
+			val context: SimulationContext = buildMinimal()
+			val staticInOut = context.getInOuts().first().staticRef
+
+			val result1 = DynamicWrapperUtils.unwrapToStatic(staticInOut)
+			val result2 = DynamicWrapperUtils.unwrapToStatic(result1)
+			val result3 = DynamicWrapperUtils.unwrapToStatic(result2)
+
+			assertThat(result1).isSameInstanceAs(staticInOut)
+			assertThat(result2).isSameInstanceAs(staticInOut)
+			assertThat(result3).isSameInstanceAs(staticInOut)
 		}
 	}
 }
