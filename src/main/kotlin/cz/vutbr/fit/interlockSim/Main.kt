@@ -169,6 +169,11 @@ class Main {
 			// Add all report types for event timeline visibility
 			context.addReportTypes(*ReportType.values())
 
+			// Initialize dynamic mapping BEFORE AnimationController accesses tracks
+			// This ensures all TrackBlocks and internal TrackSections are mapped
+			// before AnimationController.start() calls toDynamic() during state capture
+			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.initializeDynamicMapping()
+
 			// Launch GUI on EDT
 			javax.swing.SwingUtilities.invokeLater {
 				frame.setContext(context)
