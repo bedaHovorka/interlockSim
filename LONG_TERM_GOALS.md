@@ -675,6 +675,39 @@ Critical Path 3: Analytics Chain
 
 ---
 
+## Architectural Debt and Technical Refactoring
+
+The following architectural improvements should be addressed as part of the jDisco migration cleanup. These are technical debt items that don't add new user-facing features but improve code quality, type safety, and maintainability.
+
+### Graph Dynamic Wrapper Parameterization (Issue #277)
+
+**Problem:**
+The `extendedUnorientedGraph` field in `BaseContext` uses static `TrackBlock` type for both editing and simulation contexts, violating the static/dynamic separation pattern. This creates type safety issues and requires fragile two-step access patterns.
+
+**Current workaround:**
+- Dynamic wrappers stored in separate `staticTrackToDynamicMap`
+- Graph structure accessed separately from dynamic state
+- Risk of accidentally using static object instead of dynamic wrapper
+
+**Solution:**
+Parameterize `BaseContext` with track type following grid parameterization pattern (Issue #131):
+- `DefaultEditingContext : BaseContext<TrackBlock>` (static)
+- `DefaultSimulationContext : BaseContext<DynamicTrackBlock>` (dynamic)
+- Single-step access to dynamic state through graph
+
+**Prerequisites:**
+- jDisco → DSOL/Kalasim migration complete
+- Simulation test coverage >70%
+- All simulation processes use `SimulationEnvironment` interface
+
+**Estimated effort:** 2-3 weeks
+
+**Priority:** Medium (architectural consistency, not blocking features)
+
+**Related issues:** #131 (Grid Parameterization), #100 (Static/Dynamic Separation), #153 (BaseContext Composition), #94 (SimulationEnvironment)
+
+---
+
 ## Resource Requirements
 
 ### Team Composition
