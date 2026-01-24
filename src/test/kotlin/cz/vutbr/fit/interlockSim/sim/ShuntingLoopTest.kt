@@ -266,6 +266,174 @@ class ShuntingLoopTest : KoinTestBase() {
 		}
 	}
 
+	@Nested
+	@DisplayName("Real-time synchronization parameter tests")
+	inner class RealTimeSyncTests {
+		private lateinit var validContext: SimulationContext
+
+		@BeforeEach
+		fun setUpValidContext() {
+			val simContext = createMockSimulationContext(shuntingXml())
+			validContext = simContext
+		}
+
+		@Test
+		fun constructor_enableRealTimeSync_true_succeeds() {
+			// GUI mode: real-time synchronization enabled
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_enableRealTimeSync_false_succeeds() {
+			// Console mode: real-time synchronization disabled (default)
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = false)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_enableRealTimeSync_default_succeeds() {
+			// Default behavior: real-time synchronization disabled
+			val shuntingLoop = ShuntingLoop(validContext, 60L)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_enableRealTimeSync_withSpeedMultiplier_succeeds() {
+			// GUI mode with 2x speed
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 2.0
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+	}
+
+	@Nested
+	@DisplayName("Speed multiplier parameter tests")
+	inner class SpeedMultiplierTests {
+		private lateinit var validContext: SimulationContext
+
+		@BeforeEach
+		fun setUpValidContext() {
+			val simContext = createMockSimulationContext(shuntingXml())
+			validContext = simContext
+		}
+
+		@Test
+		fun constructor_speedMultiplier_halfSpeed_succeeds() {
+			// 0.5x speed (half speed)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 0.5
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_normalSpeed_succeeds() {
+			// 1.0x speed (normal/real-time)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 1.0
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_doubleSpeed_succeeds() {
+			// 2.0x speed (double speed)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 2.0
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_fiveTimesSpeed_succeeds() {
+			// 5.0x speed (five times speed)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 5.0
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_default_succeeds() {
+			// Default speed multiplier is 1.0
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_verySmall_succeeds() {
+			// Very slow speed (0.1x)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 0.1
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_veryLarge_succeeds() {
+			// Very fast speed (10.0x)
+			val shuntingLoop = ShuntingLoop(
+				validContext,
+				60L,
+				enableRealTimeSync = true,
+				speedMultiplier = 10.0
+			)
+			assertThat(shuntingLoop).isNotNull()
+		}
+
+		@Test
+		fun constructor_speedMultiplier_zero_throwsException() {
+			// Zero speed multiplier is invalid
+			assertThatBlock {
+				ShuntingLoop(
+					validContext,
+					60L,
+					enableRealTimeSync = true,
+					speedMultiplier = 0.0
+				)
+			}
+				.withMessage("Speed multiplier must be positive")
+				.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
+		}
+
+		@Test
+		fun constructor_speedMultiplier_negative_throwsException() {
+			// Negative speed multiplier is invalid
+			assertThatBlock {
+				ShuntingLoop(
+					validContext,
+					60L,
+					enableRealTimeSync = true,
+					speedMultiplier = -1.0
+				)
+			}
+				.withMessage("Speed multiplier must be positive")
+				.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
+		}
+	}
+
 	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {

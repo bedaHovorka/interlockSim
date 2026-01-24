@@ -210,8 +210,12 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of all semaphores in simulation.
 	 *
-	 * Iterates over grid to find all DynamicRailSemaphore cells and captures their
-	 * dynamic signal state.
+	 * Iterates over grid to find all RailSemaphore cells (static), converts them
+	 * to dynamic wrappers using context.toDynamic(), and captures their signal state.
+	 *
+	 * Note: SimulationContext grid contains static cells. Dynamic wrappers are obtained
+	 * via toDynamic() method which looks up the staticToDynamicMap created during
+	 * context initialization.
 	 *
 	 * @param context Simulation context to query
 	 * @return Map of [RailSemaphore] to [SignalState]
@@ -220,12 +224,14 @@ object AnimationStateCapture {
 		val grid = context.getRailWayNetGrid()
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
-		// Iterate grid to find all DynamicRailSemaphore cells (simulation grid has dynamic wrappers)
+		// Iterate grid to find all RailSemaphore cells (static) and convert to dynamic
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore) {
-					semaphores.add(cell)
+				if (cell is RailSemaphore) {
+					// Convert static RailSemaphore to dynamic wrapper
+					val dynamicSemaphore = context.toDynamic(cell) as DynamicRailSemaphore
+					semaphores.add(dynamicSemaphore)
 				}
 			}
 		}
