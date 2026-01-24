@@ -377,13 +377,9 @@ class Train :
 			logger.debug {
 				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
-		logger.info {
-			"TAIL_DEBUG: Train $number: where=$where, timetable.getIn()=${timetable.getIn()}, " +
-			"whereIsD InOut=${where is DynamicInOut}, fromHome=$fromHome"
-		}
 			if (where is DynamicInOut && where.staticRef == timetable.getIn()) {
 				fromHome = true
-			logger.info { "TAIL_DEBUG: Train $number: Condition TRUE! Setting fromHome=true" }
+				logger.debug { "Train $number tail reached starting InOut, activating train" }
 				start()
 			}
 
@@ -401,12 +397,8 @@ class Train :
 		}
 
 		override fun start(): Site {
-			logger.info { "TAIL_DEBUG: Train $number Tail.start() called, fromHome=$fromHome" }
 			val result = if (fromHome) super.start() else this
-			logger.info {
-			"TAIL_DEBUG: Train $number Tail.start() returning: " +
-			"${if (result === this) "this (no activation)" else "super.start() (activated)"}"
-		}
+			logger.trace { "Train $number Tail.start(): ${if (result === this) "not activated" else "activated"}" }
 			return result
 		}
 	}

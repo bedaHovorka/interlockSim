@@ -242,7 +242,7 @@ class ShuntingLoop : Interlocking {
 			if (staticSem !in semaphoreCache) {
 				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
 				semaphoreCache[staticSem] = dynamicSem
-				logger.debug { "Cached semaphore from staticPaths: ${staticSem.getName()} -> ${dynamicSem.name}" }
+				logger.trace { "Cached semaphore from staticPaths: ${staticSem.getName()} -> ${dynamicSem.name}" }
 			}
 		}
 
@@ -251,7 +251,7 @@ class ShuntingLoop : Interlocking {
 			if (staticSem !in semaphoreCache) {
 				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
 				semaphoreCache[staticSem] = dynamicSem
-				logger.debug { "Cached semaphore from staticOuterTrackblocks: ${staticSem.getName()} -> ${dynamicSem.name}" }
+				logger.trace { "Cached semaphore from staticOuterTrackblocks: ${staticSem.getName()} -> ${dynamicSem.name}" }
 			}
 		}
 
@@ -263,7 +263,7 @@ class ShuntingLoop : Interlocking {
 						if (sep !in semaphoreCache) {
 							val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
 							semaphoreCache[sep] = dynamicSem
-							logger.debug { "Cached semaphore from innerTrackBlocks: ${sep.getName()} -> ${dynamicSem.name}" }
+							logger.trace { "Cached semaphore from innerTrackBlocks: ${sep.getName()} -> ${dynamicSem.name}" }
 						}
 					}
 					is InOut -> {
