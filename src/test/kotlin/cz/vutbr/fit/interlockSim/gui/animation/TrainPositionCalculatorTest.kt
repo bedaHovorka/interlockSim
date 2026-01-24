@@ -13,11 +13,15 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.context.ContextTransformer
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 import java.io.File
 
 /**
@@ -30,6 +34,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 	private lateinit var context: SimulationContext
 	private lateinit var calculator: TrainPositionCalculator
+	private val processFactory: SimulationProcessFactory by inject()
 
 	/**
 	 * Load vyhybna.xml test configuration.
@@ -40,7 +45,8 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 		assertThat(resourcePath).isNotNull()
 
-		context = xmlFactory.createContext(File(resourcePath!!.path)) as SimulationContext
+		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
+		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 		calculator = TrainPositionCalculator(context)
 	}
 

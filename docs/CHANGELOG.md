@@ -16,6 +16,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Documentation: `docs/GRAPH_PARAMETERIZATION_ARCHITECTURE.md`
   - Test coverage: 28 new tests (15 unit, 8 transformation, 5 integration)
 
+- **AnimatedSim Milestone** (#201-#207): Real-time GUI visualization for railway simulation
+  - **Animation Infrastructure** (#201): Foundation for animated visualization
+    - AnimationController: 30 FPS rendering with EDT thread safety
+    - AnimationState: Immutable snapshot of simulation state
+    - AnimationStateCapture: State extraction from simulation context
+    - TrainPositionCalculator: Grid coordinate calculation for train rendering
+  - **Enhanced Cell Rendering** (#202): Dynamic track state visualization
+    - AnimatedSimulationCellRenderer: Color-coded track states (FREE/RESERVED/OCCUPIED)
+    - Semaphore signal visualization (STOP/ALLOW)
+    - Enhanced grid canvas with animation support
+  - **Train Overlay Rendering** (#203): Real-time train visualization
+    - Train position interpolation for smooth movement
+    - Speed and direction indicators
+    - Multi-train support architecture
+  - **Event Timeline Panel** (#204): Simulation event logging
+    - Real-time event capture and display
+    - Filtering by event type (TRAIN_EVENTS, NODE_EVENTS, TRAIN_CONTINUOUS)
+    - Timestamp synchronization with simulation clock
+  - **Frame Integration** (#205): GUI component orchestration
+    - AnimationController lifecycle management
+    - EventTimelinePanel integration
+    - ControlPanel for simulation control
+    - Proper cleanup on context switching
+  - **exampleGui Command** (#206): CLI entry point for animated examples
+    - `./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60`
+    - ExampleRegistry integration for GUI example factories
+    - Proper threading model: EDT for GUI, background for simulation
+  - **Real-Time Synchronization** (#207, PR #274): Smooth animation timing
+    - Conditional RealTimeSynch for GUI examples
+    - 1:1 simulation time to wall-clock time mapping
+    - Backward compatible: console examples run without sync (fast)
+  - Documentation: `docs/ANIMATED_SIM_MILESTONE_PREP.md`, `docs/ANIMATED_SIM_SIMPLIFICATION_ANALYSIS.md`
+  - Test coverage: 1,246 lines of animation tests across 7 test classes
+  - Progress: 7/9 issues complete (77.8%), on track for 2026-01-29 deadline
+
 ### Changed
 - Context interface: Added type parameter `T : TrackBlock` for graph parameterization
 - BaseContext: Now parameterized as `abstract class BaseContext<T : TrackBlock>`

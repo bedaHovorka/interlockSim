@@ -14,7 +14,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.ContextTransformer
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.AnimatedSimulationCellRenderer
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -24,6 +27,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 import java.awt.Component
 import java.awt.Graphics2D
 import java.io.File
@@ -55,6 +59,7 @@ class AnimationIntegrationTest : KoinTestBase() {
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
 	private lateinit var mockCanvas: Component
+	private val processFactory: SimulationProcessFactory by inject()
 
 	@BeforeEach
 	fun setup() {
@@ -63,8 +68,8 @@ class AnimationIntegrationTest : KoinTestBase() {
 		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 		assertThat(resourcePath).isNotNull()
 
-		val context = xmlFactory.createContext(File(resourcePath!!.path))
-		simulationContext = context as SimulationContext
+		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
+		simulationContext = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Create mock canvas (minimal Swing component)
 		mockCanvas = mockk<Component>(relaxed = true)
