@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -59,6 +60,8 @@ class ShuntingLoop : Interlocking {
 	private lateinit var outerTrackblocks: MutableMap<SimpleTrackBlock, DynamicRailSemaphore>
 	// Cache for static→dynamic semaphore mapping (eliminates redundant type casts)
 	private val semaphoreCache: MutableMap<RailSemaphore, DynamicRailSemaphore> = mutableMapOf()
+	// Reverse mapping: internal semaphore -> parent InOut (for InOut semaphores only)
+	private val semaphoreToInOut: MutableMap<RailSemaphore, InOut> = mutableMapOf()
 	private val endTime: Long
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -147,9 +150,13 @@ class ShuntingLoop : Interlocking {
 		constructPath(context, doB1, vB, zB, kB, B)
 		constructPath(context, zB, vB, doB2, k2, doA2)
 		constructPath(context, doB2, vB, zB, kB, B)
-		Collections.addAll(innerTrackBlocks, k1, k2)
-		staticOuterTrackblocks[kB] = zB
-		staticOuterTrackblocks[kA] = zA
+		// CRITICAL: All blocks that trains pass through must be monitored
+		// kB and kA are entry/exit blocks - trains pass through them in BOTH directions
+		// so they need to be checked from both ends (innerTrackBlocks)
+		Collections.addAll(innerTrackBlocks, k1, k2, kB, kA)
+		// Outer trackblocks removed - all blocks now in innerTrackBlocks
+		// staticOuterTrackblocks[kB] = zB  // REMOVED - kB now in innerTrackBlocks
+		// staticOuterTrackblocks[kA] = zA  // REMOVED - kA now in innerTrackBlocks
 	}
 
 	private fun constructPath(context: SimulationContext, vararg elements: PathElement): ArrayPath {
@@ -252,10 +259,28 @@ class ShuntingLoop : Interlocking {
 		// Cache all semaphores from innerTrackBlocks endpoints
 		for (block in innerTrackBlocks) {
 			for (sep in block.ends()) {
-				if (sep is RailSemaphore && sep !in semaphoreCache) {
-					val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
-					semaphoreCache[sep] = dynamicSem
-					logger.debug { "Cached semaphore from innerTrackBlocks: ${sep.getName()} -> ${dynamicSem.name}" }
+				when (sep) {
+					is RailSemaphore -> {
+						if (sep !in semaphoreCache) {
+							val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
+							semaphoreCache[sep] = dynamicSem
+							logger.debug { "Cached semaphore from innerTrackBlocks: ${sep.getName()} -> ${dynamicSem.name}" }
+						}
+					}
+					is InOut -> {
+						// For InOut, cache the semaphore returned by asRailSemaphore()
+						// This handles the direction-specific semaphore selection
+						val railSem = sep.asRailSemaphore()
+						if (railSem !in semaphoreCache) {
+							val dynamicSem = env.toDynamic(railSem) as DynamicRailSemaphore
+							semaphoreCache[railSem] = dynamicSem
+							// Store reverse mapping for later use in checkOneEnd()
+							semaphoreToInOut[railSem] = sep
+							logger.debug {
+								"Cached InOut semaphore: ${sep.getName()} -> ${railSem.getName()} -> ${dynamicSem.name}"
+							}
+						}
+					}
 				}
 			}
 		}
@@ -355,7 +380,9 @@ class ShuntingLoop : Interlocking {
 
 	private fun checkBothEnds(block: SimpleTrackBlock) {
 		for (sep in block.ends()) {
-			val railSem = Util.assertInstanceOf(RailSemaphore::class.java, sep)
+			// Use polymorphic asRailSemaphore() to handle both RailSemaphore and InOut
+			// InOut has two semaphores (in/out) - asRailSemaphore() chooses the appropriate one
+			val railSem = (sep as OrientedPathSeparator).asRailSemaphore()
 			val dynamicSem = semaphoreCache[railSem]
 				?: throw IllegalStateException(
 					"Semaphore ${railSem.getName()} not in cache during runtime lookup in checkBothEnds! " +
@@ -443,7 +470,9 @@ class ShuntingLoop : Interlocking {
 		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
 			// Use static separator for both getSecondEnd AND isSetUpPath
 			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
-			val staticSecondEnd = block.getSecondEnd(to.staticRef)
+			// If to.staticRef is an internal semaphore from InOut, use the parent InOut instead
+			val blockEnd = semaphoreToInOut[to.staticRef] ?: to.staticRef
+			val staticSecondEnd = block.getSecondEnd(blockEnd)
 			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
 				return trySetupPaths(to)
 			}
