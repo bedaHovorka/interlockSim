@@ -95,7 +95,8 @@ class DynamicTrack(
 	 */
 	fun enter(newOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${staticRef.hashCode()} ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
+			"${Process.time()} Block ${staticRef.hashCode()} " +
+			"(${staticRef.toString().take(20)}) ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
 		}
 		if (occupant != null) {
 			logger.error {
@@ -121,7 +122,8 @@ class DynamicTrack(
 	 */
 	fun leave(leavingOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${staticRef.hashCode()} EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
+			"${Process.time()} Block ${staticRef.hashCode()} " +
+			"(${staticRef.toString().take(20)}) EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
 		}
 		requireSimulation(occupant === leavingOccupant) {
 			"Track occupant mismatch on leave"

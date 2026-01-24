@@ -124,7 +124,7 @@ class Train :
 
 				position.state -= nextLength
 				totalLenghtOfPreviousBlocks += nextLength
-				where = env.toDynamic(next!!.getSecondEnd(where))
+				where = next!!.getSecondEnd(where)
 				requireSimulationNotNull(where) { "PathSeparator from getSecondEnd() must not be null" }
 				current = next
 				onNext = false
@@ -333,7 +333,7 @@ class Train :
 			) {
 				val semaphore: DynamicRailSemaphore = where
 				semaphoreAction(semaphore, semaphore, current, next)
-			} else if (where is DynamicInOut && where == timetable.getIn() && next != null) {
+			} else if (where is DynamicInOut && where.staticRef == timetable.getIn() && next != null) {
 				requireSimulationNotNull(getAcceleration()) { "Acceleration must not be null at timetable entry" }
 				semaphoreAction(where.inSemaphore, where, current, next)
 			} else {
@@ -377,8 +377,13 @@ class Train :
 			logger.debug {
 				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
-			if (where is DynamicInOut && where == timetable.getIn()) {
+		logger.info {
+			"TAIL_DEBUG: Train $number: where=$where, timetable.getIn()=${timetable.getIn()}, " +
+			"whereIsD InOut=${where is DynamicInOut}, fromHome=$fromHome"
+		}
+			if (where is DynamicInOut && where.staticRef == timetable.getIn()) {
 				fromHome = true
+			logger.info { "TAIL_DEBUG: Train $number: Condition TRUE! Setting fromHome=true" }
 				start()
 			}
 
@@ -395,7 +400,15 @@ class Train :
 			}
 		}
 
-		override fun start(): Site = if (fromHome) super.start() else this
+		override fun start(): Site {
+			logger.info { "TAIL_DEBUG: Train $number Tail.start() called, fromHome=$fromHome" }
+			val result = if (fromHome) super.start() else this
+			logger.info {
+			"TAIL_DEBUG: Train $number Tail.start() returning: " +
+			"${if (result === this) "this (no activation)" else "super.start() (activated)"}"
+		}
+			return result
+		}
 	}
 
 	private inner class LengthChecker : ContinuousInvariantChecker() {
