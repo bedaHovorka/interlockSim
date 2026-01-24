@@ -100,10 +100,14 @@ class ExampleRegistry {
 	}
 
 	/**
-	 * Creates a shunting loop simulation example for GUI mode (Issue #206).
+	 * Creates a shunting loop simulation example for GUI mode (Issue #206, #207).
 	 *
-	 * This example is identical to [createShuntingLoopExample] but designed for display
+	 * This example is similar to [createShuntingLoopExample] but designed for display
 	 * in the animated Frame with AnimationController, EventTimelinePanel, and ControlPanel.
+	 *
+	 * **Real-Time Synchronization (Issue #207):**
+	 * This GUI example enables real-time synchronization (1x speed) for smooth animation.
+	 * The console example runs at maximum speed without synchronization.
 	 *
 	 * **Threading Model:**
 	 * The simulation runs on a background thread (jDisco simulation thread), while the
@@ -131,7 +135,8 @@ class ExampleRegistry {
 			val time = args[2].toLong()
 			// Initialize dynamic wrapper map by calling getInOuts()
 			context.getInOuts()
-			context.setMainProcess(ShuntingLoop(context, time))
+			// Enable real-time synchronization for GUI mode with 1x speed multiplier
+			context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, speedMultiplier = 1.0))
 			context
 		}
 	}

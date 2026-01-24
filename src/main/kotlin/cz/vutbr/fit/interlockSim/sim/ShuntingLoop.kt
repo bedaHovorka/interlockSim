@@ -64,6 +64,8 @@ class ShuntingLoop : Interlocking {
 	// Cache for static→dynamic semaphore mapping (eliminates redundant type casts)
 	private val semaphoreCache: MutableMap<RailSemaphore, DynamicRailSemaphore> = mutableMapOf()
 	private val endTime: Long
+	private val enableRealTimeSync: Boolean
+	private val speedMultiplier: Double
 
 	private inner class RealTimeSynch : LoopProcess() {
 		private var presvihnuto: Double = 0.0
@@ -75,7 +77,8 @@ class ShuntingLoop : Interlocking {
 
 		override fun iteration() {
 			val endTime: Long = System.currentTimeMillis()
-			val sleepTime: Long = 1000 - (endTime - beginTime)
+			val targetInterval = (1000.0 / speedMultiplier).toLong()
+			val sleepTime: Long = targetInterval - (endTime - beginTime)
 			if (sleepTime > 10) {
 				try {
 					Thread.sleep(sleepTime)
@@ -114,11 +117,20 @@ class ShuntingLoop : Interlocking {
 	}
 
 	/**
-	 * @param context
-	 * @param endTime when simulation schould stop
+	 * @param context The simulation context
+	 * @param endTime When simulation should stop (simulation time units)
+	 * @param enableRealTimeSync If true, activates real-time synchronization for GUI display
+	 * @param speedMultiplier Speed multiplier for real-time sync (1.0 = real-time, 2.0 = 2x speed, 0.5 = half speed)
 	 */
-	constructor(context: SimulationContext, endTime: Long) : super(context) {
+	constructor(
+		context: SimulationContext,
+		endTime: Long,
+		enableRealTimeSync: Boolean = false,
+		speedMultiplier: Double = 1.0
+	) : super(context) {
 		this.endTime = endTime
+		this.enableRealTimeSync = enableRealTimeSync
+		this.speedMultiplier = speedMultiplier
 		generator = InnerGenerator(context)
 
 		requireSimulation(context.getGraph().size() > 0) {
@@ -276,7 +288,12 @@ class ShuntingLoop : Interlocking {
 		}.toMutableMap()
 
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
-		// activate(RealTimeSynch())
+
+		// Conditionally activate real-time synchronization for GUI mode
+		if (enableRealTimeSync) {
+			activate(RealTimeSynch())
+		}
+
 		activate(generator)
 	}
 
