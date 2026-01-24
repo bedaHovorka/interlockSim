@@ -463,6 +463,25 @@ val runExample by tasks.registering(JavaExec::class) {
 }
 
 /**
+ * Task: runExampleGui (Issue #206)
+ * Run animated GUI example with visualization
+ * Usage: ./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60
+ */
+val runExampleGui by tasks.registering(JavaExec::class) {
+    group = "application"
+    description = "Run animated GUI example (use -PexampleName and -PendTime)"
+
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set(application.mainClass.get())
+
+    // Get parameters from project properties
+    val exampleName = project.findProperty("exampleName") as String? ?: "shuntingLoop"
+    val endTime = project.findProperty("endTime") as String? ?: "60"
+
+    args = listOf("exampleGui", exampleName, endTime)
+}
+
+/**
  * Task: runSimFromXml
  * Run simulation from XML file
  * Usage: ./gradlew runSimFromXml -PxmlFile=path/to/file.xml
@@ -549,7 +568,8 @@ tasks.register("printConfig") {
             |  ./gradlew shadowJar       - Create uber JAR
             |  ./gradlew runSim          - Run simulation example
             |  ./gradlew runEditor       - Run GUI editor
-            |  ./gradlew runExample      - Run custom example
+            |  ./gradlew runExample      - Run console-based example
+            |  ./gradlew runExampleGui   - Run animated GUI example (Issue #206)
             |  ./gradlew javadoc         - Generate JavaDoc
             |  ./gradlew dependencies    - Show dependency tree
             |
