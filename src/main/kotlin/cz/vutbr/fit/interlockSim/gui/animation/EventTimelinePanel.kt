@@ -98,6 +98,10 @@ class EventTimelinePanel : JPanel() {
 		// Configure auto-scroll behavior
 		val caret = eventTextArea.caret as DefaultCaret
 		caret.updatePolicy = DefaultCaret.ALWAYS_UPDATE
+
+		// Set preferred size to prevent panel from growing too large
+		// and pushing the canvas out of view (Issue: grid disappears when "Train Updates" enabled)
+		preferredSize = java.awt.Dimension(400, 150)
 	}
 
 	/**

@@ -106,15 +106,14 @@ object AnimationStateCapture {
 		val trains = mutableSetOf<Train>()
 
 		// Collect all trains from occupied track blocks
-		for (node in graph.nodeSet()) {
-			if (node is TrackBlock) {
-				val dynamicTrack = context.toDynamic(node as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
-				val occupant = dynamicTrack.occupant
+		// Graph edges are TrackBlock instances
+		for (trackBlock in graph.values()) {
+			val dynamicTrack = context.toDynamic(trackBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
+			val occupant = dynamicTrack.occupant
 
-				// Check if occupant is a Train
-				if (occupant is Train) {
-					trains.add(occupant)
-				}
+			// Check if occupant is a Train
+			if (occupant is Train) {
+				trains.add(occupant)
 			}
 		}
 
@@ -169,7 +168,7 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of all track blocks in simulation.
 	 *
-	 * Iterates over graph to find all TrackBlock instances and captures their
+	 * Iterates over graph edges (TrackBlock instances) and captures their
 	 * dynamic state via toDynamic() wrapper.
 	 *
 	 * @param context Simulation context to query
@@ -177,16 +176,11 @@ object AnimationStateCapture {
 	 */
 	private fun captureTrackStates(context: SimulationContext): Map<TrackBlock, TrackState> {
 		val graph = context.getGraph()
-		val trackBlocks = mutableSetOf<TrackBlock>()
 
-		// Collect all TrackBlock instances from graph nodes
-		for (node in graph.nodeSet()) {
-			if (node is TrackBlock) {
-				trackBlocks.add(node)
-			}
-		}
+		// Graph edges are TrackBlock instances
+		val trackBlocks = graph.values()
 
-		logger.trace { "Capturing state for ${trackBlocks.size} track blocks" }
+		logger.trace { "Capturing state for ${trackBlocks.count()} track blocks" }
 
 		return trackBlocks.associate { trackBlock ->
 			trackBlock to captureTrackState(trackBlock, context)
@@ -216,7 +210,7 @@ object AnimationStateCapture {
 	/**
 	 * Capture state of all semaphores in simulation.
 	 *
-	 * Iterates over grid to find all RailSemaphore cells and captures their
+	 * Iterates over grid to find all DynamicRailSemaphore cells and captures their
 	 * dynamic signal state.
 	 *
 	 * @param context Simulation context to query
@@ -224,13 +218,13 @@ object AnimationStateCapture {
 	 */
 	private fun captureSignalStates(context: SimulationContext): Map<RailSemaphore, SignalState> {
 		val grid = context.getRailWayNetGrid()
-		val semaphores = mutableListOf<RailSemaphore>()
+		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
-		// Iterate grid to find all RailSemaphore cells
+		// Iterate grid to find all DynamicRailSemaphore cells (simulation grid has dynamic wrappers)
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y)
-				if (cell is RailSemaphore) {
+				if (cell is DynamicRailSemaphore) {
 					semaphores.add(cell)
 				}
 			}
@@ -238,28 +232,24 @@ object AnimationStateCapture {
 
 		logger.trace { "Capturing state for ${semaphores.size} semaphores" }
 
-		return semaphores.associate { semaphore ->
-			semaphore to captureSignalState(semaphore, context)
+		return semaphores.associate { dynamicSemaphore ->
+			dynamicSemaphore.staticRef to captureSignalState(dynamicSemaphore)
 		}
 	}
 
 	/**
 	 * Capture state of a single semaphore.
 	 *
-	 * Uses dynamic wrapper to access current signal indication.
+	 * Extracts current signal indication from dynamic wrapper.
 	 *
-	 * @param semaphore Semaphore to capture state from
-	 * @param context Simulation context (for dynamic wrapper access)
+	 * @param dynamicSemaphore Dynamic semaphore wrapper with current state
 	 * @return Immutable signal state snapshot
 	 */
-	private fun captureSignalState(semaphore: RailSemaphore, context: SimulationContext): SignalState {
-		// Access dynamic wrapper to get current signal
-		// Note: Type cast is acceptable for MVP (per team meeting decision)
-		val dynamicSemaphore = context.toDynamic(semaphore) as DynamicRailSemaphore
+	private fun captureSignalState(dynamicSemaphore: DynamicRailSemaphore): SignalState {
 		val signal = dynamicSemaphore.signal
 
 		return SignalState(
-			semaphore = semaphore,
+			semaphore = dynamicSemaphore.staticRef,
 			signal = signal
 		)
 	}
