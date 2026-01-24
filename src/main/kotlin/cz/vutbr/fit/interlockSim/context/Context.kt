@@ -22,7 +22,7 @@ import java.beans.PropertyChangeListener
  *
  * Point is used as Pair of integers
  *
- * ## Type Parameter
+ * ## Type Parameters
  *
  * @param C The type of cells stored in the railway network grid. Must extend [Cell].
  *          - Both [EditingContext] and [SimulationContext] use [Cell] as the grid type
@@ -33,7 +33,12 @@ import java.beans.PropertyChangeListener
  *            wrappers are maintained separately via [SimulationContext.toDynamic] methods,
  *            not stored in the grid
  *
- * The type parameter provides compile-time type safety for grid access operations.
+ * @param T The type of track blocks stored in the railway network graph. Must extend [TrackBlock].
+ *          - [EditingContext] uses static [TrackBlock] (editing-time configuration)
+ *          - [SimulationContext] uses [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock]
+ *            (simulation-time state + configuration)
+ *
+ * The type parameters provide compile-time type safety for both grid and graph access operations.
  *
  * ## Thread Safety
  *
@@ -66,7 +71,7 @@ import java.beans.PropertyChangeListener
  *
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface Context<out C : Cell> {
+interface Context<out C : Cell, T : TrackBlock> {
 	/**
 	 * get grid, which is graphic representation of model
 	 * @return grid with cells of type C
@@ -74,10 +79,15 @@ interface Context<out C : Cell> {
 	fun getRailWayNetGrid(): RailwayNetGrid<C>
 
 	/**
-	 * ...
-	 * @return graph
+	 * Get the extended unoriented graph of track blocks.
+	 *
+	 * Returns parameterized graph based on context type:
+	 * - [EditingContext]: `ExtendedUnorientedGraph<Point, TrackBlock, Segment>`
+	 * - [SimulationContext]: `ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>`
+	 *
+	 * @return graph representing track block connectivity with type-safe access
 	 */
-	fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment>
+	fun getGraph(): ExtendedUnorientedGraph<Point, T, Segment>
 
 	/**
 	 * Add a listener for context changes.

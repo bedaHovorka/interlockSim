@@ -16,9 +16,12 @@ import cz.vutbr.fit.interlockSim.util.Point
 /**
  * Interface to shared functions of inner data model, which is allowed by editing
  *
- * ## Type Parameter
+ * ## Type Parameters
  *
- * EditingContext specializes Context to use [NodeCell] as the cell type.
+ * EditingContext specializes Context to use:
+ * - [NodeCell] as the cell type
+ * - [TrackBlock] as the track block type (static configuration)
+ *
  * While editing operations via [putCell] only accept [NodeCell] and its
  * subtypes (InOut, RailSwitch, RailSemaphore), the grid also contains
  * [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart] cells that are
@@ -27,6 +30,9 @@ import cz.vutbr.fit.interlockSim.util.Point
  * The grid returns [RailwayNetGrid]<[NodeCell]>, containing NodeCell subclasses.
  * TrackBlockPart instances are stored internally but not exposed through the
  * parameterized interface.
+ *
+ * The graph returns `ExtendedUnorientedGraph<Point, TrackBlock, Segment>` with
+ * static track block configuration (no dynamic simulation state).
  *
  * ## Thread Safety
  *
@@ -39,7 +45,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context<NodeCell> {
+interface EditingContext : Context<NodeCell, TrackBlock> {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key

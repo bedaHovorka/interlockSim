@@ -387,7 +387,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - Cast to access configuration properties
-			val simContextBase = simulationContext as BaseContext
+			val simContextBase = simulationContext as BaseContext<*>
 			assertThat(simContextBase.currentMaxSpeed).isEqualTo(150.0)
 		}
 
@@ -405,7 +405,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - Cast to access configuration properties
-			val simContextBase = simulationContext as BaseContext
+			val simContextBase = simulationContext as BaseContext<*>
 			assertThat(simContextBase.currentTrackLength).isEqualTo(750.0)
 		}
 
@@ -423,7 +423,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - Cast to access configuration properties
-			val simContextBase = simulationContext as BaseContext
+			val simContextBase = simulationContext as BaseContext<*>
 			assertThat(simContextBase.currentNameString).isEqualTo("TestNetwork")
 		}
 

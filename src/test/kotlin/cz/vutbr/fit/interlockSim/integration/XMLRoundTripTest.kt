@@ -90,7 +90,7 @@ class XMLRoundTripTest : KoinTestBase() {
 		
 		// Load and verify structure (NOTE: properties not preserved - see issue #248)
 		val loadedContext = xmlFactory.createContext(xmlFile)
-		val loadedBase = loadedContext as BaseContext
+		val loadedBase = loadedContext as BaseContext<*>
 
 		// Verify context loads successfully and has default property values
 		assertThat(loadedBase.currentMaxSpeed).isNotNull()

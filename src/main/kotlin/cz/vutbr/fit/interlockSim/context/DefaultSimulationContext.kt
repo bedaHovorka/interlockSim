@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -48,7 +49,7 @@ import java.util.EnumSet
 import java.util.IdentityHashMap
 
 /**
- * Default implementation of {@link SimulationContext} that extends {@link BaseContext}.
+ * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
  *
  * Provides simulation-specific operations without editing capabilities:
  * - Running discrete event simulations using jDisco framework
@@ -56,24 +57,26 @@ import java.util.IdentityHashMap
  * - Path finding for train navigation (pathToNextSemaphore)
  * - Simulation reporting and event logging
  * - Train name generation
- * - Dynamic wrapper management (PathSeparator and TrackFacility wrappers)
+ * - Dynamic wrapper management (PathSeparator and TrackBlock wrappers)
  *
- * This class extends {@link BaseContext} directly, separating simulation from editing concerns.
+ * This class extends `BaseContext<DynamicTrackBlock>`, using dynamic track block wrappers
+ * that separate static configuration from runtime simulation state. The graph stores
+ * [DynamicTrackBlock] instances for type-safe, single-step access to dynamic state.
  * Simulation contexts are immutable - network structure cannot be modified during simulation.
  * It uses {@link SimulationProcessFactory} to create simulation processes,
  * decoupling from concrete simulation class implementations.
  *
  * ## Architecture
  *
- * **BaseContext** provides:
- * - Grid and graph storage (immutable during simulation)
+ * **BaseContext<DynamicTrackBlock>** provides:
+ * - Grid and graph storage (immutable during simulation, graph stores DynamicTrackBlock)
  * - Property change notification
  * - Configuration management (maxSpeed, trackLength, nameString)
  * - InOut list management
  *
  * **DefaultSimulationContext** adds:
  * - Simulation execution (run, stop, errorStop)
- * - Dynamic wrapper mappings (static to dynamic conversion)
+ * - Dynamic wrapper mappings (PathSeparator wrappers, backward-compatible TrackFacility access)
  * - Path operations (pathToNextSemaphore, navigation methods)
  * - Simulation reporting and logging
  * - Process and worker management
@@ -113,7 +116,7 @@ open class DefaultSimulationContext(
 	 * Decouples context from concrete simulation class implementations.
 	 */
 	private val processFactory: SimulationProcessFactory
-) : BaseContext(cols, rows), SimulationContext {
+) : BaseContext<DynamicTrackBlock>(cols, rows), SimulationContext {
 
 	/**
 	 * Set of allowed report types for simulation output
@@ -246,23 +249,30 @@ open class DefaultSimulationContext(
 		}
 
 		/**
-		 * Copy graph structure (track block connections) from editing to simulation context.
+		 * Copy graph structure (track block connections) from editing to simulation context,
+		 * wrapping static TrackBlock instances in DynamicTrackBlock wrappers.
 		 *
-		 * @param editingContext Source editing context
-		 * @param simulationContext Target simulation context
+		 * This is the core of Issue #277: Instead of copying static TrackBlock objects directly,
+		 * we create DynamicTrackBlock wrappers for type-safe access to dynamic simulation state.
+		 *
+		 * @param editingContext Source editing context (graph contains static TrackBlock)
+		 * @param simulationContext Target simulation context (graph will contain DynamicTrackBlock)
 		 */
 		private fun copyGraphStructure(
 			editingContext: EditingContext,
 			simulationContext: DefaultSimulationContext
 		) {
-			// This ensures all track block connections are preserved
+			// Source graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment>
 			val sourceGraph = editingContext.getGraph()
+			// Target graph: ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
 			val targetGraph = simulationContext.getGraph()
+
+			var wrappedCount = 0
 
 			for (entry in sourceGraph.entrySet()) {
 				// Each entry has a Doubleton<Point, Segment> key and TrackBlock value
 				val doubleton = entry.key
-				val trackBlock = entry.value
+				val staticTrackBlock = entry.value
 
 				// Extract the two nodes from the doubleton
 				val iterator = doubleton.iterator()
@@ -277,11 +287,23 @@ open class DefaultSimulationContext(
 					"Inconsistent graph entry: missing segment for second point $second in Doubleton key $doubleton"
 				}
 
-				// Put into the simulation graph
-				targetGraph.put(first, firstExt, second, secondExt, trackBlock)
+				// ===== KEY CHANGE FOR ISSUE #277 =====
+				// Wrap static TrackBlock in DynamicTrackBlock wrapper
+				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock)
+
+				// Put dynamic wrapper into the simulation graph (type-safe)
+				targetGraph.put(first, firstExt, second, secondExt, dynamicTrackBlock)
+				wrappedCount++
+
+				logger.trace {
+					"Wrapped TrackBlock ${System.identityHashCode(staticTrackBlock)} -> " +
+						"DynamicTrackBlock ${System.identityHashCode(dynamicTrackBlock)}"
+				}
 			}
 
-			logger.debug { "Copied ${sourceGraph.size()} graph entries" }
+			logger.debug {
+				"Copied ${sourceGraph.size()} graph entries, created $wrappedCount DynamicTrackBlock wrappers"
+			}
 		}
 
 		/**
@@ -400,9 +422,9 @@ open class DefaultSimulationContext(
 			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
 		} else {
 			val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
-			val trackBlock: TrackBlock = Util.assertInstanceOf(TrackBlock::class.java, track)
+			val trackBlock: DynamicTrackBlock = Util.assertInstanceOf(DynamicTrackBlock::class.java, track)
 			// Match Java 1:1: return directly (inner method should not return null here)
-			getSegment(nodeCell, trackBlock as TrackBlock?)
+			getSegment(nodeCell, trackBlock)
 		}
 	}
 
@@ -413,12 +435,14 @@ open class DefaultSimulationContext(
 		separator: DynamicPathSeparator,
 		section: TrackSection
 	): Segment? {
-		val trackBlock = section.getTrackBlock()
-		if (trackBlock.isInnerElement(separator)) {
-			return trackBlock.getJoin(separator, section)
+		val staticBlock = section.getTrackBlock()
+		if (staticBlock.isInnerElement(separator)) {
+			return staticBlock.getJoin(separator, section)
 		}
 		val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
-		return getSegment(nodeCell, trackBlock as TrackBlock?)
+		// Look up DynamicTrackBlock wrapper for the static block from TrackSection
+		val dynamicTrackBlock = getDynamicWrapper(staticBlock)
+		return getSegment(nodeCell, dynamicTrackBlock)
 	}
 
 	/**
@@ -426,18 +450,18 @@ open class DefaultSimulationContext(
 	 */
 	private fun getSegment(
 		node: NodeCell,
-		current: TrackBlock?
+		current: DynamicTrackBlock?
 	): Segment? {
 		val location = getLocation(node)
 		return getSegment(location, current)
 	}
 
 	/**
-	 * Get segment at a location for a track block
+	 * Get segment at a location for a dynamic track block
 	 */
 	private fun getSegment(
 		location: Point,
-		current: TrackBlock?
+		current: DynamicTrackBlock?
 	): Segment? {
 		if (current != null) {
 			requireSimulation(getGraph().get(location).contains(current)) {
@@ -461,8 +485,8 @@ open class DefaultSimulationContext(
 	 */
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,
-		current: TrackBlock?
-	): TrackBlock? {
+		current: DynamicTrackBlock?
+	): DynamicTrackBlock? {
 		// Extract static NodeCell if it's a Dynamic wrapper (for location/graph operations)
 		val staticNodeCell = CellUtilities.assertNodeCell(nodeCell)
 		val location = getLocation(staticNodeCell)
@@ -486,23 +510,44 @@ open class DefaultSimulationContext(
 	}
 
 	/**
+	 * Helper method to look up DynamicTrackBlock wrapper for a static TrackBlock.
+	 * TrackSection objects belong to the static structure, so calling getTrackBlock()
+	 * on them returns static TrackBlock objects. This method looks up the corresponding
+	 * DynamicTrackBlock wrapper from the simulation graph.
+	 */
+	private fun getDynamicWrapper(staticBlock: TrackBlock): DynamicTrackBlock? {
+		// Search through all graph edges to find the dynamic wrapper for this static block
+		for (entry in getGraph().entrySet()) {
+			val dynamicBlock = entry.value
+			if (dynamicBlock.staticRef === staticBlock) {
+				return dynamicBlock
+			}
+		}
+		return null  // No wrapper found
+	}
+
+	/**
 	 * Get the next track section from a path separator
 	 */
 	override fun getNextTrackSection(
 		separator: PathSeparator,
 		current: TrackSection?
 	): TrackSection? {
-		var trackBlock: TrackBlock? = null
+		var trackBlock: DynamicTrackBlock? = null
 		if (current != null) {
-			trackBlock = current.getTrackBlock()
-			requireSimulation(trackBlock != null) { "TrackBlock cannot be null for current track section" }
-			val nextTrackSection = trackBlock?.getNextTrackSection(separator, current)
+			// TrackSection belongs to static structure, so getTrackBlock() returns static TrackBlock
+			// DynamicTrackBlock.getNextTrackSection() delegates to static block, so we can use it directly
+			val staticBlock = current.getTrackBlock()
+			requireSimulation(staticBlock != null) { "TrackBlock cannot be null for current track section" }
+			val nextTrackSection = staticBlock.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				logger.trace {
 					"getNextTrackSection: found next section within same block from $separator"
 				}
 				return nextTrackSection
 			}
+			// Look up DynamicTrackBlock wrapper from graph for use in getNextTrackBlock call below
+			trackBlock = getDynamicWrapper(staticBlock)
 		}
 
 		// z dalsi TrackBlock
@@ -1012,9 +1057,9 @@ open class DefaultSimulationContext(
 			// Static separator - need to get segment differently
 			val staticNodeCell = CellUtilities.assertNodeCell(separator)
 			if (previous != null) {  // Changed: check previous first!
-				getSegment(staticNodeCell, previous as? TrackBlock)
+				getSegment(staticNodeCell, previous as? DynamicTrackBlock)
 			} else {
-				getSegment(staticNodeCell, next as? TrackBlock)
+				getSegment(staticNodeCell, next as? DynamicTrackBlock)
 			}
 		}
 		// Allow null segment for InOut (both static and Dynamic wrapper)

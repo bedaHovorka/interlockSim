@@ -16,7 +16,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -26,12 +25,9 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State
-import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
-import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Collections
@@ -216,11 +212,13 @@ class ShuntingLoop : Interlocking {
 		cell2: Cell
 	): SimpleTrackBlock {
 		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val graph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> = context.getGraph()
+		val graph = context.getGraph()  // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
 		val block = graph.get(point1, point2) ?: throw IllegalArgumentException("Cannot get block between cells")
-		val assertInstanceOf: SimpleTrackBlock = Util.assertInstanceOf(SimpleTrackBlock::class.java, block)
+		// In simulation context, block is DynamicTrackBlock wrapping a SimpleTrackBlock
+		val dynamicBlock = block as DynamicTrackBlock
+		val assertInstanceOf: SimpleTrackBlock = Util.assertInstanceOf(SimpleTrackBlock::class.java, dynamicBlock.staticRef)
 		assertInstanceOf.setName(name)
 		return assertInstanceOf
 	}

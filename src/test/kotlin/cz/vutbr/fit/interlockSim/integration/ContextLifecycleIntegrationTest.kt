@@ -156,7 +156,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(simulationContext).isInstanceOf<DefaultSimulationContext>()
 		
 		// Verify simulation context is immutable (frozen)
-		val simContextBase = simulationContext as BaseContext
+		val simContextBase = simulationContext as BaseContext<*>
 		val simContextFrozen = simContextBase.isFrozen()
 		assertThat(simContextFrozen).isTrue()
 
@@ -168,7 +168,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
 		
 		// Phase 4: Verify property preservation
-		val simBase = simulationContext as BaseContext
+		val simBase = simulationContext as BaseContext<*>
 		assertThat(simBase.currentMaxSpeed).isEqualTo(90.0)
 		assertThat(simBase.currentTrackLength).isEqualTo(200.0)
 		assertThat(simBase.currentNameString).isEqualTo("Transformation Test")
@@ -202,14 +202,14 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		
 		// Phase 2: Verify initialization
 		assertThat(simulationContext).isNotNull()
-		val simContextBase2 = simulationContext as BaseContext
+		val simContextBase2 = simulationContext as BaseContext<*>
 		val simFrozen = simContextBase2.isFrozen()
 		assertThat(simFrozen).isTrue()
 		val simInOuts: Collection<*> = simulationContext.getInOuts()
 		assertThat(simInOuts).hasSize(2)
 		
 		// Phase 3: Verify configuration access
-		val simBase = simulationContext as BaseContext
+		val simBase = simulationContext as BaseContext<*>
 		assertThat(simBase.currentMaxSpeed).isNotNull()
 		assertThat(simBase.currentTrackLength).isNotNull()
 		
@@ -259,7 +259,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		
 		// Phase 2: Transform to simulation context
 		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
-		val originalCtxBase = originalContext as BaseContext
+		val originalCtxBase = originalContext as BaseContext<*>
 		val origFrozen = originalCtxBase.isFrozen()
 		assertThat(origFrozen).isTrue()
 		
@@ -282,7 +282,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
 
 		// Phase 6: Verify properties (NOTE: XML serialization doesn't preserve these - see issue #248)
-		val loadedBase = loadedContext as BaseContext
+		val loadedBase = loadedContext as BaseContext<*>
 		// Properties will have default values after XML load
 		assertThat(loadedBase.currentMaxSpeed).isNotNull()
 		assertThat(loadedBase.currentTrackLength).isNotNull()

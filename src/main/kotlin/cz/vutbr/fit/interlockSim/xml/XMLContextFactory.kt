@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Doubleton
@@ -365,7 +366,7 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(file: File): Context<*> =
+	override fun createContext(file: File): Context<*, *> =
 		try {
 			createContext(FileReader(file))
 		} catch (e: FileNotFoundException) {
@@ -397,7 +398,7 @@ class XMLContextFactory :
 	}
 
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): Context<*> = createContext(InputStreamReader(stream))
+	override fun createContext(stream: InputStream): Context<*, *> = createContext(InputStreamReader(stream))
 
 	/**
 	 * Generates XML representation of a Context.
@@ -409,7 +410,7 @@ class XMLContextFactory :
 	 * @return XML string matching data.xsd schema
 	 * @throws IOException if serialization fails
 	 */
-	private fun generateXML(context: Context<*>): String {
+	private fun generateXML(context: Context<*, *>): String {
 		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context)
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		val builder = StringBuilder()
@@ -476,7 +477,7 @@ class XMLContextFactory :
 	}
 
 	override fun saveContext(
-		context: Context<*>,
+		context: Context<*, *>,
 		stream: OutputStream
 	): Boolean {
 		return try {
@@ -548,7 +549,7 @@ class XMLContextFactory :
 	}
 
 	override fun saveContext(
-		context: Context<*>,
+		context: Context<*, *>,
 		file: File
 	): Boolean {
 		return try {
@@ -583,15 +584,18 @@ class XMLContextFactory :
 		value: TrackBlock
 	): StringBuilder {
 		val builder = StringBuilder()
-		val clazz = value.javaClass
+		// Unwrap DynamicTrackBlock to get the static block for XML serialization
+		// (DynamicTrackBlock is a runtime wrapper, not part of the XML schema)
+		val staticBlock = if (value is DynamicTrackBlock) value.staticRef else value
+		val clazz = staticBlock.javaClass
 		beginOfTag(builder, clazz)
 		appendAttribute(builder, FROM, p1)
 		appendAttribute(builder, TO, p2)
 		appendAttribute(builder, FROM, key.getValue(p1)!!)
 		appendAttribute(builder, TO, key.getValue(p2)!!)
-		appendAttribute(builder, ATR_LENGTH, value.length())
-		appendAttribute(builder, ATR_MAX_SPEED + FROM, value.maxSpeed(value.ends()[0]))
-		appendAttribute(builder, ATR_MAX_SPEED + TO, value.maxSpeed(value.ends()[1]))
+		appendAttribute(builder, ATR_LENGTH, staticBlock.length())
+		appendAttribute(builder, ATR_MAX_SPEED + FROM, staticBlock.maxSpeed(staticBlock.ends()[0]))
+		appendAttribute(builder, ATR_MAX_SPEED + TO, staticBlock.maxSpeed(staticBlock.ends()[1]))
 		closingEndOfTag(builder)
 		return builder
 	}

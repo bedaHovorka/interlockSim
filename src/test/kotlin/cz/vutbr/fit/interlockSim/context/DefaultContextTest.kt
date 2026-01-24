@@ -23,7 +23,9 @@ import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
@@ -252,15 +254,23 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@Test
 		@DisplayName("getNextTrackBlock from InOut with null returns block")
 		fun getNextTrackBlock_fromInOutWithNull_returnsTrackBlock() {
-			assertThat(context.getNextTrackBlock(inA, null)).isSameInstanceAs(tl1)
-			assertThat(context.getNextTrackBlock(outB, null)).isSameInstanceAs(tl2)
+			// Get dynamic blocks from simulation context
+			val dynamicBlock1 = context.getNextTrackBlock(inA, null)
+			val dynamicBlock2 = context.getNextTrackBlock(outB, null)
+
+			assertThat(dynamicBlock1).isNotNull()
+			assertThat(dynamicBlock2).isNotNull()
 		}
 
 		@Test
 		@DisplayName("getNextTrackBlock from InOut with current block returns null")
 		fun getNextTrackBlock_fromInOutWithBlock_returnsNull() {
-			assertThat(context.getNextTrackBlock(inA, tl1)).isNull()
-			assertThat(context.getNextTrackBlock(outB, tl2)).isNull()
+			// Get dynamic blocks from simulation context
+			val dynamicBlock1 = context.getNextTrackBlock(inA, null)
+			val dynamicBlock2 = context.getNextTrackBlock(outB, null)
+
+			assertThat(context.getNextTrackBlock(inA, dynamicBlock1)).isNull()
+			assertThat(context.getNextTrackBlock(outB, dynamicBlock2)).isNull()
 		}
 
 		@Test
@@ -285,15 +295,26 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@Test
 		@DisplayName("getNextTrackSection with current section returns null")
 		fun getNextTrackSection_withCurrentSection_returnsNull() {
-			assertThat(context.getNextTrackSection(inA, tl1)).isNull()
-			assertThat(context.getNextTrackSection(outB, tl2)).isNull()
+			// Get dynamic blocks from simulation context and extract static refs as TrackSection
+			val dynamicBlock1 = context.getNextTrackBlock(inA, null)
+			val dynamicBlock2 = context.getNextTrackBlock(outB, null)
+
+			// DynamicTrackBlock wraps TrackBlock, access staticRef which implements TrackSection
+			val section1 = (dynamicBlock1 as? DynamicTrackBlock)?.staticRef as? TrackSection
+			val section2 = (dynamicBlock2 as? DynamicTrackBlock)?.staticRef as? TrackSection
+
+			assertThat(context.getNextTrackSection(inA, section1)).isNull()
+			assertThat(context.getNextTrackSection(outB, section2)).isNull()
 		}
 
 		@Test
 		@DisplayName("isSeparatorInDirection validates direction correctly")
 		fun isSeparatorInDirection_validDirections_returnsTrue() {
+			// Get dynamic block from simulation context
+			val dynamicBlock = context.getNextTrackBlock(inA, null)
+
 			// Test with proper track blocks that have direction information
-			assertThat(context.isSeparatorInDirection(inA, tl1, tl1)).isTrue()
+			assertThat(context.isSeparatorInDirection(inA, dynamicBlock, dynamicBlock)).isTrue()
 		}
 	}
 

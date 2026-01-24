@@ -24,7 +24,7 @@ interface ContextFactory {
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-	fun createContext(file: File): Context<*>
+	fun createContext(file: File): Context<*, *>
 
 	/**
 	 * create context from stream
@@ -32,7 +32,7 @@ interface ContextFactory {
 	 * @return context
 	 * @throws ContextCreationException if source is wrong
 	 */
-	fun createContext(stream: InputStream): Context<*>
+	fun createContext(stream: InputStream): Context<*, *>
 
 	/**
 	 * save context to file
@@ -41,7 +41,7 @@ interface ContextFactory {
 	 * @return if save was success
 	 */
 	fun saveContext(
-		context: Context<*>,
+		context: Context<*, *>,
 		file: File
 	): Boolean
 
@@ -52,7 +52,7 @@ interface ContextFactory {
 	 * @return if save was success
 	 */
 	fun saveContext(
-		context: Context<*>,
+		context: Context<*, *>,
 		stream: OutputStream
 	): Boolean
 }

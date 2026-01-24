@@ -37,18 +37,25 @@ import java.util.IdentityHashMap
  *
  * ## Design Rationale
  *
- * **Non-parameterized BaseContext**: This class is intentionally NOT parameterized with a type parameter.
- * The grid stores mixed Cell types: [cz.vutbr.fit.interlockSim.objects.cells.NodeCell] subclasses
- * (RailSwitch, RailSemaphore, InOut) and [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart]
- * (intermediate track segments). Using a type parameter would require `@UnsafeVariance` annotations
- * throughout the codebase and create variance complexity without benefits.
+ * **Parameterized BaseContext**: This class is parameterized with type parameter `T` that extends [TrackBlock].
+ * The type parameter allows different contexts to use different track block representations:
+ * - [DefaultEditingContext]: uses static `TrackBlock` (editing-time configuration)
+ * - [DefaultSimulationContext]: uses `DynamicTrackBlock` (simulation-time state + configuration)
+ *
+ * **Grid remains non-parameterized**: The grid stores mixed Cell types: [cz.vutbr.fit.interlockSim.objects.cells.NodeCell]
+ * subclasses (RailSwitch, RailSemaphore, InOut) and [cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart]
+ * (intermediate track segments). Grid parameterization is handled separately via covariant return types.
+ *
+ * **Graph is now parameterized**: Following the same pattern as grid parameterization (Issue #131),
+ * the graph now uses the type parameter `T` for type-safe access to track blocks.
  *
  * **Covariant Return Types**:
  * - [BaseContext.getRailWayNetGrid] returns `RailwayNetGrid<Cell>` (full mixed cell grid)
  * - [DefaultEditingContext] overrides it to return `RailwayNetGrid<NodeCell>` (editing operates on node cells)
  * - [DefaultSimulationContext] inherits the base `RailwayNetGrid<Cell>` implementation without override
+ * - [BaseContext.getGraph] returns `ExtendedUnorientedGraph<Point, T, Segment>` (parameterized graph)
  *
- * This approach provides compile-time type safety without variance complexity while keeping the base
+ * This approach provides compile-time type safety for graph access while keeping the base
  * context usable in both editing and simulation scenarios.
  *
  * ## Separation of Concerns
@@ -93,12 +100,13 @@ import java.util.IdentityHashMap
  * - **DO** use external synchronization if multi-threaded access is unavoidable
  * - **DO** keep all Context operations within the editing/simulation thread
  *
+ * @param T The track block type: [TrackBlock] for editing, [DynamicTrackBlock] for simulation
  * @see Context
  * @see DefaultEditingContext
  * @see DefaultSimulationContext
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-abstract class BaseContext(
+abstract class BaseContext<T : TrackBlock>(
 	cols: Int,
 	rows: Int
 ) {
@@ -110,16 +118,17 @@ abstract class BaseContext(
 	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
 
 	/**
-	 * Graph representing track blocks and their connections
+	 * Graph representing track blocks and their connections.
+	 * Parameterized with type T to support both static (editing) and dynamic (simulation) track blocks.
 	 */
-	private val extendedUnorientedGraph: ExtendedUnorientedGraph<Point, TrackBlock, Segment> =
-		HashMapGraph<Point, TrackBlock, Segment>()
+	private val extendedUnorientedGraph: ExtendedUnorientedGraph<Point, T, Segment> =
+		HashMapGraph<Point, T, Segment>()
 
 	/**
 	 * Maps track blocks to their line cell keys for removal tracking.
 	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
 	 */
-	private val linesKeys: MutableMap<TrackBlock, Set<Point>> = IdentityHashMap<TrackBlock, Set<Point>>()
+	private val linesKeys: MutableMap<T, Set<Point>> = IdentityHashMap<T, Set<Point>>()
 
 	/**
 	 * List of entry/exit points in the railway network.
@@ -206,9 +215,13 @@ abstract class BaseContext(
 	/**
 	 * Get the extended unoriented graph of track blocks.
 	 *
-	 * @return graph representing track block connectivity
+	 * Returns parameterized graph based on context type:
+	 * - [DefaultEditingContext]: `ExtendedUnorientedGraph<Point, TrackBlock, Segment>`
+	 * - [DefaultSimulationContext]: `ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>`
+	 *
+	 * @return graph representing track block connectivity with type-safe access
 	 */
-	open fun getGraph(): ExtendedUnorientedGraph<Point, TrackBlock, Segment> = extendedUnorientedGraph
+	open fun getGraph(): ExtendedUnorientedGraph<Point, T, Segment> = extendedUnorientedGraph
 
 	/**
 	 * Add a listener for context changes.
@@ -253,7 +266,7 @@ abstract class BaseContext(
 	 *
 	 * @return map of track blocks to their intermediate cell keys
 	 */
-	protected fun getLinesKeys(): MutableMap<TrackBlock, Set<Point>> = linesKeys
+	protected fun getLinesKeys(): MutableMap<T, Set<Point>> = linesKeys
 
 	/**
 	 * Get the list of InOut elements (entry/exit points) in the railway network.

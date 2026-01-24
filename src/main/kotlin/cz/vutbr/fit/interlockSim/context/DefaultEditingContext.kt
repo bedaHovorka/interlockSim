@@ -32,7 +32,7 @@ import kotlin.math.sqrt
 /**
  * Default implementation of {@link EditingContext}.
  *
- * Extends [BaseContext] and adds editing-specific operations:
+ * Extends [BaseContext] with static [TrackBlock] type and adds editing-specific operations:
  * - Grid operations: adding, removing, moving cells
  * - Track block management: joining cells, creating track sections
  * - Track block connectivity: Bresenham line algorithm for intermediate cells
@@ -43,8 +43,8 @@ import kotlin.math.sqrt
  *
  * ## Architecture
  *
- * **BaseContext** provides:
- * - Grid and graph storage
+ * **BaseContext<TrackBlock>** provides:
+ * - Grid and graph storage (graph stores static TrackBlock)
  * - Property change notification
  * - Configuration management (maxSpeed, trackLength, nameString)
  * - InOut list management
@@ -77,7 +77,7 @@ import kotlin.math.sqrt
 open class DefaultEditingContext(
 	cols: Int,
 	rows: Int
-) : BaseContext(cols, rows), EditingContext {
+) : BaseContext<TrackBlock>(cols, rows), EditingContext {
 	companion object {
 		/**
 		 * Logger for general class operations.
