@@ -150,13 +150,12 @@ class ShuntingLoop : Interlocking {
 		constructPath(context, doB1, vB, zB, kB, B)
 		constructPath(context, zB, vB, doB2, k2, doA2)
 		constructPath(context, doB2, vB, zB, kB, B)
-		// CRITICAL: All blocks that trains pass through must be monitored
-		// kB and kA are entry/exit blocks - trains pass through them in BOTH directions
-		// so they need to be checked from both ends (innerTrackBlocks)
-		Collections.addAll(innerTrackBlocks, k1, k2, kB, kA)
-		// Outer trackblocks removed - all blocks now in innerTrackBlocks
-		// staticOuterTrackblocks[kB] = zB  // REMOVED - kB now in innerTrackBlocks
-		// staticOuterTrackblocks[kA] = zA  // REMOVED - kA now in innerTrackBlocks
+		// Block organization matches baseline (working version):
+		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
+		// - staticOuterTrackblocks: entry/exit blocks with one InOut end (kB, kA)
+		Collections.addAll(innerTrackBlocks, k1, k2)
+		staticOuterTrackblocks[kB] = zB
+		staticOuterTrackblocks[kA] = zA
 	}
 
 	private fun constructPath(context: SimulationContext, vararg elements: PathElement): ArrayPath {
@@ -373,19 +372,21 @@ class ShuntingLoop : Interlocking {
 		}
 		// nove vlaky a inouty
 		approveTrains()
+		// Polling interval: 1.0s (matches baseline timing)
+		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
 	}
 
 	private fun checkBothEnds(block: SimpleTrackBlock) {
+		// Inner blocks (k1, k2) have RailSemaphore ends only, no InOut
+		// Check both semaphore endpoints to see if path needs to be reserved
 		for (sep in block.ends()) {
-			// Use polymorphic asRailSemaphore() to handle both RailSemaphore and InOut
-			// InOut has two semaphores (in/out) - asRailSemaphore() chooses the appropriate one
 			val railSem = (sep as OrientedPathSeparator).asRailSemaphore()
 			val dynamicSem = semaphoreCache[railSem]
 				?: throw IllegalStateException(
-					"Semaphore ${railSem.getName()} not in cache during runtime lookup in checkBothEnds! " +
+					"Semaphore ${railSem.getName()} not in cache! " +
 						"Block: ${block.hashCode()}, " +
 						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
 				)
@@ -454,29 +455,62 @@ class ShuntingLoop : Interlocking {
 		block: SimpleTrackBlock,
 		to: DynamicRailSemaphore
 	): Boolean {
-// 		 je v bloku vlak?
 		val dynamicBlock = env.toDynamic(block)
-		if (dynamicBlock.state == TrackFacility.State.FREE) return false
-		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
-			// Compare using static references to avoid Dynamic wrapper identity issues
+		val blockState = dynamicBlock.state
+
+		logger.info {
+			"${time()} CHECK_ONE_END: block=${block.toString().take(20)}, to=${to.name}, state=$blockState"
+		}
+
+		if (blockState == TrackFacility.State.FREE) return false
+
+		// PRE-RESERVE: When block is RESERVED, reserve next path segment immediately
+		// This prevents race condition where train enters block before next polling cycle
+		if (blockState == TrackFacility.State.RESERVED) {
+			// Get the other end of the block from the 'to' semaphore
+			val staticSecondEnd = block.getSecondEnd(to.staticRef)
+			val isSetUp = dynamicBlock.isSetUpPath(staticSecondEnd)
+			logger.info {
+				"${time()} PRE_RESERVE_CHECK: block=${block.toString().take(20)} RESERVED, " +
+					"to=${to.name}, secondEnd=$staticSecondEnd, " +
+					"isSetUp=$isSetUp, reservedFrom=${dynamicBlock.reservedFrom}"
+			}
+			if (isSetUp) {
+				logger.info {
+					"${time()} PRE_RESERVE: Reserving continuation path to ${to.name}"
+				}
+				return trySetupPaths(to)
+			}
+			return false
+		}
+
+		// OCCUPIED: Reserve path when train is in block (backup)
+		if (blockState == TrackFacility.State.OCCUPIED) {
 			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
+			val nextSemName = when (nextSem) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.name
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.name
+				else -> nextSem.toString()
+			}
+			// Extract static reference for comparison
 			val nextSemStatic = when (nextSem) {
 				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
 				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
 				else -> nextSem
 			}
-			if (nextSemStatic != to.staticRef) return false
-			return trySetupPaths(to)
-		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
-			// Use static separator for both getSecondEnd AND isSetUpPath
-			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
-			// If to.staticRef is an internal semaphore from InOut, use the parent InOut instead
-			val blockEnd = semaphoreToInOut[to.staticRef] ?: to.staticRef
-			val staticSecondEnd = block.getSecondEnd(blockEnd)
-			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
-				return trySetupPaths(to)
+			val match = nextSemStatic === to.staticRef
+			logger.info {
+				"${time()} OCCUPIED_CHECK: block=${block.toString().take(20)}, to=${to.name}, " +
+					"train's nextSem=$nextSemName, match=$match, " +
+					"nextStatic@${System.identityHashCode(nextSemStatic)}, " +
+					"toStatic@${System.identityHashCode(to.staticRef)}"
 			}
+			// Use identity comparison on static references
+			if (nextSemStatic !== to.staticRef) return false
+			logger.info { "Block occupied, train heading to ${to.name}, reserving next path" }
+			return trySetupPaths(to)
 		}
+
 		return false
 	}
 

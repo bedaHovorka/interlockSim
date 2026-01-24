@@ -178,7 +178,32 @@ class DynamicTrack(
 		requireSimulationNotNull(sep) { "Path separator must not be null" }
 		val isSetUp: Boolean
 		if (state == TrackFacility.State.RESERVED) {
-			isSetUp = sep === reservedFrom
+			// Unwrap Dynamic wrappers to get static references for comparison
+			// sep might be static (from block.getSecondEnd()) or dynamic (from path setup)
+			// reservedFrom might be static or dynamic as well
+			val sepStatic = when (sep) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> sep.staticRef
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> sep.staticRef
+				else -> sep
+			}
+			// Store in local variable to avoid smart cast issues with mutable property
+			val reservedFromLocal = reservedFrom
+			val reservedFromStatic = when (reservedFromLocal) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> reservedFromLocal.staticRef
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> reservedFromLocal.staticRef
+				else -> reservedFromLocal
+			}
+
+			// Use identity comparison on static references
+			isSetUp = sepStatic === reservedFromStatic
+
+			if (!isSetUp) {
+				logger.debug {
+					"${Process.time()} Track ${staticRef.hashCode()} isSetUpPath: NO MATCH " +
+						"sep=$sep (static=$sepStatic, id=${System.identityHashCode(sepStatic)}), " +
+						"from=$reservedFrom (static=$reservedFromStatic, id=${System.identityHashCode(reservedFromStatic)})"
+				}
+			}
 		} else {
 			requireSimulation(reservedFrom == null) {
 				"From separator must be null when state is not RESERVED"

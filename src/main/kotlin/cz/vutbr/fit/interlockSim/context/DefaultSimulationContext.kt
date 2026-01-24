@@ -1134,19 +1134,19 @@ open class DefaultSimulationContext(
 		next: Track?,
 		previous: Track?
 	): Boolean {
-		// Try to use Dynamic wrapper if available, otherwise use static OrientedNodeCell
-		// CRITICAL FIX: Use PREVIOUS track (where train is coming FROM) to check if semaphore
-		// is "in direction". This checks if the train is approaching the semaphore from its
-		// facing direction, not if the train is going toward a track in that direction.
+		// Get segment from separator based on next/previous tracks
+		// Uses NEXT track (where train is going TO) to check direction
+		// This matches baseline behavior and ensures correct path termination
 		val segment = if (separator is DynamicPathSeparator) {
-			getSegment(separator, previous, next)  // Swapped: previous first!
+			// Dynamic separator - use Dynamic API
+			getSegment(separator, next, previous)
 		} else {
-			// Static separator - need to get segment differently
-			val staticNodeCell = CellUtilities.assertNodeCell(separator)
-			if (previous != null) {  // Changed: check previous first!
-				getSegment(staticNodeCell, previous as? DynamicTrackBlock)
+			// Static separator - extract node cell and use static API
+			val nodeCell = CellUtilities.assertNodeCell(separator)
+			if (next != null) {
+				getSegment(nodeCell, next as? DynamicTrackBlock)
 			} else {
-				getSegment(staticNodeCell, next as? DynamicTrackBlock)
+				null
 			}
 		}
 		// Allow null segment for InOut (both static and Dynamic wrapper)
@@ -1193,20 +1193,19 @@ open class DefaultSimulationContext(
 				}
 				previous = next
 				next = getNextTrackSection(separator, next)
-
-				// Check if we've reached the final semaphore AFTER getting next section
-				// This ensures we have proper next/previous values for direction check
-				if (separator is OrientedPathSeparator) {
-					// Direction check for oriented semaphores
-					if (isSeparatorInDirection(separator, next, previous)) {
-						// Add dynamic separator to path
-						path.add(separator)
-						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
-						return path
-					}
-				}
 			} else {
 				break
+			}
+			// Check if we've reached the final semaphore AFTER getting next section
+			// This check is outside the if block to match baseline behavior
+			if (separator is OrientedPathSeparator) {
+				// Direction check for oriented semaphores
+				if (isSeparatorInDirection(separator, next, previous)) {
+					// Add dynamic separator to path
+					path.add(separator)
+					logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
+					return path
+				}
 			}
 		} while (next != null)
 		logger.debug { "pathToNextSemaphore: no path found from $sep" }
