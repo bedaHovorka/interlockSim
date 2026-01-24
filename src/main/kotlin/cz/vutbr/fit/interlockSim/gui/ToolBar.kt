@@ -109,4 +109,16 @@ class ToolBar : JToolBar() {
 		buttonGroup.add(toggleButton)
 		add(toggleButton)
 	}
+
+	/**
+	 * Enable or disable all editing tools in the toolbar.
+	 *
+	 * @param enabled true to enable tools, false to disable them
+	 */
+	fun setToolsEnabled(enabled: Boolean) {
+		for (i in 0 until componentCount) {
+			val component = getComponent(i)
+			component.isEnabled = enabled
+		}
+	}
 }

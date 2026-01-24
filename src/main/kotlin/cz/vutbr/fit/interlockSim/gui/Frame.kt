@@ -94,6 +94,7 @@ import javax.swing.Timer
 class Frame : JFrame(PROGRAM_FULL_NAME) {
 	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	internal val statusBar: StatusBar = StatusBar()
+	private val toolBar: ToolBar = ToolBar()
 
 	// Animation UI components (Issue #205)
 	private val controlPanel: ControlPanel = ControlPanel()
@@ -118,7 +119,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Create north container with ToolBar + ControlPanel (Issue #205)
 		val northContainer = JPanel()
 		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
-		northContainer.add(ToolBar())
+		northContainer.add(toolBar)
 		controlPanel.isVisible = false  // Initially hidden (shown only in simulation mode)
 		northContainer.add(controlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
@@ -152,6 +153,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Hides StatusBar
 	 * - Shows EventTimelinePanel (if created)
 	 * - Shows ControlPanel
+	 * - Disables editing ToolBar
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -171,6 +173,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		controlPanel.isVisible = true
 		controlPanel.updateStatus("Running")
 
+		// Disable editing toolbar in simulation mode
+		toolBar.setToolsEnabled(false)
+
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -181,6 +186,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Shows StatusBar
 	 * - Hides EventTimelinePanel
 	 * - Hides ControlPanel
+	 * - Enables editing ToolBar
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -198,6 +204,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Hide ControlPanel
 		controlPanel.isVisible = false
+
+		// Enable editing toolbar in editing mode
+		toolBar.setToolsEnabled(true)
 
 		contentPane.revalidate()
 		contentPane.repaint()
