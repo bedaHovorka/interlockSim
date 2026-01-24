@@ -344,7 +344,7 @@ class Train :
 			}
 			// Check if path first element matches current position
 			// Skip validation when at exit InOut (train leaving network, next == null)
-			val isExitInOut = where is DynamicInOut && where == timetable.getOut() && next == null
+			val isExitInOut = where is DynamicInOut && where.staticRef == timetable.getOut() && next == null
 			if (isExitInOut) {
 				logger.info {
 					"${jDisco.Process.time()} SKIP_VALIDATION: Train $number at exit InOut, " +
@@ -394,7 +394,7 @@ class Train :
 				env.toDynamic(current as TrackFacility).leave(this@Train)
 			}
 			if (next == null &&
-				!(where is DynamicInOut && where == timetable.getOut())
+				!(where is DynamicInOut && where.staticRef == timetable.getOut())
 			) {
 				env.report("ends in wrong out", this@Train, ReportType.TRAIN_EVENTS)
 			}

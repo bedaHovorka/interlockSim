@@ -114,16 +114,23 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `simulation completes within expected time bounds`() {
 		// Given: Simulation context
+		logger.info { "TEST: Loading context..." }
 		val context = loadVyhybnaContext()
+		logger.info { "TEST: Context loaded" }
 
 		// CRITICAL: Initialize dynamic wrapper map before creating ShuntingLoop
+		logger.info { "TEST: Calling getInOuts()..." }
 		context.getInOuts()
+		logger.info { "TEST: getInOuts() completed" }
 
 		// When: Run simulation for 30 time units (short test for performance verification)
+		logger.info { "TEST: Creating ShuntingLoop..." }
 		context.setMainProcess(ShuntingLoop(context, 30L))
+		logger.info { "TEST: ShuntingLoop created, starting simulation..." }
 		val startWallTime = System.currentTimeMillis()
 		context.run()
 		val endWallTime = System.currentTimeMillis()
+		logger.info { "TEST: Simulation completed!" }
 
 		// Then: Simulation should complete quickly (wall-clock time)
 		val wallTimeSeconds = (endWallTime - startWallTime) / 1000.0
