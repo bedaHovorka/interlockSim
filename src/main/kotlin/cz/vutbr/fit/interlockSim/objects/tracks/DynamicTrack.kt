@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
 
@@ -95,7 +96,8 @@ class DynamicTrack(
 	 */
 	fun enter(newOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${staticRef.hashCode()} ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
+			"${Process.time()} Block ${staticRef.hashCode()} " +
+			"(${staticRef.toString().take(20)}) ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
 		}
 		if (occupant != null) {
 			logger.error {
@@ -121,7 +123,8 @@ class DynamicTrack(
 	 */
 	fun leave(leavingOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} Block ${staticRef.hashCode()} EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
+			"${Process.time()} Block ${staticRef.hashCode()} " +
+			"(${staticRef.toString().take(20)}) EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
 		}
 		requireSimulation(occupant === leavingOccupant) {
 			"Track occupant mismatch on leave"
@@ -176,7 +179,24 @@ class DynamicTrack(
 		requireSimulationNotNull(sep) { "Path separator must not be null" }
 		val isSetUp: Boolean
 		if (state == TrackFacility.State.RESERVED) {
-			isSetUp = sep === reservedFrom
+			// Unwrap Dynamic wrappers to get static references for comparison
+			// sep might be static (from block.getSecondEnd()) or dynamic (from path setup)
+			// reservedFrom might be static or dynamic as well
+			val sepStatic = DynamicWrapperUtils.unwrapToStatic(sep)
+			// Store in local variable to avoid smart cast issues with mutable property
+			val reservedFromLocal = reservedFrom
+			val reservedFromStatic = DynamicWrapperUtils.unwrapToStatic(reservedFromLocal)
+
+			// Use identity comparison on static references
+			isSetUp = sepStatic === reservedFromStatic
+
+			if (!isSetUp) {
+				logger.debug {
+					"${Process.time()} Track ${staticRef.hashCode()} isSetUpPath: NO MATCH " +
+						"sep=$sep (static=$sepStatic, id=${System.identityHashCode(sepStatic)}), " +
+						"from=$reservedFrom (static=$reservedFromStatic, id=${System.identityHashCode(reservedFromStatic)})"
+				}
+			}
 		} else {
 			requireSimulation(reservedFrom == null) {
 				"From separator must be null when state is not RESERVED"

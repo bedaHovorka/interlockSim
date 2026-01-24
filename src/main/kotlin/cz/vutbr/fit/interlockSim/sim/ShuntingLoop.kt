@@ -25,9 +25,11 @@ import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Collections
@@ -59,6 +61,8 @@ class ShuntingLoop : Interlocking {
 	private lateinit var outerTrackblocks: MutableMap<SimpleTrackBlock, DynamicRailSemaphore>
 	// Cache for static→dynamic semaphore mapping (eliminates redundant type casts)
 	private val semaphoreCache: MutableMap<RailSemaphore, DynamicRailSemaphore> = mutableMapOf()
+	// Reverse mapping: internal semaphore -> parent InOut (for InOut semaphores only)
+	private val semaphoreToInOut: MutableMap<RailSemaphore, InOut> = mutableMapOf()
 	private val endTime: Long
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -147,6 +151,9 @@ class ShuntingLoop : Interlocking {
 		constructPath(context, doB1, vB, zB, kB, B)
 		constructPath(context, zB, vB, doB2, k2, doA2)
 		constructPath(context, doB2, vB, zB, kB, B)
+		// Block organization matches baseline (working version):
+		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
+		// - staticOuterTrackblocks: entry/exit blocks with one InOut end (kB, kA)
 		Collections.addAll(innerTrackBlocks, k1, k2)
 		staticOuterTrackblocks[kB] = zB
 		staticOuterTrackblocks[kA] = zA
@@ -236,6 +243,7 @@ class ShuntingLoop : Interlocking {
 			if (staticSem !in semaphoreCache) {
 				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
 				semaphoreCache[staticSem] = dynamicSem
+				logger.trace { "Cached semaphore from staticPaths: ${staticSem.getName()} -> ${dynamicSem.name}" }
 			}
 		}
 
@@ -244,34 +252,96 @@ class ShuntingLoop : Interlocking {
 			if (staticSem !in semaphoreCache) {
 				val dynamicSem = env.toDynamic(staticSem) as DynamicRailSemaphore
 				semaphoreCache[staticSem] = dynamicSem
+				logger.trace { "Cached semaphore from staticOuterTrackblocks: ${staticSem.getName()} -> ${dynamicSem.name}" }
 			}
 		}
 
 		// Cache all semaphores from innerTrackBlocks endpoints
 		for (block in innerTrackBlocks) {
 			for (sep in block.ends()) {
-				if (sep is RailSemaphore && sep !in semaphoreCache) {
-					val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
-					semaphoreCache[sep] = dynamicSem
+				when (sep) {
+					is RailSemaphore -> {
+						if (sep !in semaphoreCache) {
+							val dynamicSem = env.toDynamic(sep) as DynamicRailSemaphore
+							semaphoreCache[sep] = dynamicSem
+							logger.trace { "Cached semaphore from innerTrackBlocks: ${sep.getName()} -> ${dynamicSem.name}" }
+						}
+					}
+					is InOut -> {
+						// For InOut, cache the semaphore returned by asRailSemaphore()
+						// This handles the direction-specific semaphore selection
+						val railSem = sep.asRailSemaphore()
+						if (railSem !in semaphoreCache) {
+							val dynamicSem = env.toDynamic(railSem) as DynamicRailSemaphore
+							semaphoreCache[railSem] = dynamicSem
+							// Store reverse mapping for later use in checkOneEnd()
+							semaphoreToInOut[railSem] = sep
+							logger.debug {
+								"Cached InOut semaphore: ${sep.getName()} -> ${railSem.getName()} -> ${dynamicSem.name}"
+							}
+						}
+					}
 				}
 			}
 		}
+
+		logger.info { "Semaphore cache built: ${semaphoreCache.size} semaphores cached" }
+	}
+
+	/**
+	 * Validates that all required semaphores are present in the cache.
+	 * This catches configuration errors early before simulation runs.
+	 */
+	private fun validateSemaphoreCacheCompleteness() {
+		// Validate all staticPaths keys are cached
+		for (staticSem in staticPaths.keys) {
+			requireSimulation(staticSem in semaphoreCache) {
+				"Semaphore ${staticSem.getName()} from staticPaths not in cache! " +
+					"Cache contains: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+			}
+		}
+
+		// Validate all staticOuterTrackblocks values are cached
+		for (staticSem in staticOuterTrackblocks.values) {
+			requireSimulation(staticSem in semaphoreCache) {
+				"Semaphore ${staticSem.getName()} from staticOuterTrackblocks not in cache! " +
+					"Cache contains: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+			}
+		}
+
+		logger.info { "Semaphore cache validation passed: all ${semaphoreCache.size} semaphores are properly cached" }
 	}
 
 	override fun startAction() {
 		// Build cache of all semaphores used in this simulation
 		buildSemaphoreCache()
 
+		// Validate cache completeness before converting to dynamic paths
+		validateSemaphoreCacheCompleteness()
+
 		// Convert static objects to Dynamic* wrappers using cached typed references (NO CASTS)
 		paths = staticPaths.mapKeys { (staticSem, _) ->
-			semaphoreCache[staticSem]!!
+			semaphoreCache[staticSem]
+				?: throw IllegalStateException(
+					"Semaphore ${staticSem.getName()} not in cache during paths conversion! " +
+						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+				)
 		}.mapValues { (_, pathList) ->
 			pathList.map { convertPathToDynamic(it) }.toMutableList()
 		}.toMutableMap()
 
 		outerTrackblocks = staticOuterTrackblocks.mapValues { (_, staticSem) ->
-			semaphoreCache[staticSem]!!  // NO CAST - Cached lookup
+			semaphoreCache[staticSem]
+				?: throw IllegalStateException(
+					"Semaphore ${staticSem.getName()} not in cache during outerTrackblocks conversion! " +
+						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+				)
 		}.toMutableMap()
+
+		logger.info {
+			"Dynamic paths initialized: ${paths.size} semaphore entries, " +
+				"${outerTrackblocks.size} outer trackblocks"
+		}
 
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
 		// activate(RealTimeSynch())
@@ -303,15 +373,24 @@ class ShuntingLoop : Interlocking {
 		}
 		// nove vlaky a inouty
 		approveTrains()
+		// Polling interval: 1.0s (matches baseline timing)
+		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
 	}
 
 	private fun checkBothEnds(block: SimpleTrackBlock) {
+		// Inner blocks (k1, k2) have RailSemaphore ends only, no InOut
+		// Check both semaphore endpoints to see if path needs to be reserved
 		for (sep in block.ends()) {
-			val railSem = Util.assertInstanceOf(RailSemaphore::class.java, sep)
-			val dynamicSem = semaphoreCache[railSem]!!  // NO CAST - Cached lookup
+			val railSem = (sep as OrientedPathSeparator).asRailSemaphore()
+			val dynamicSem = semaphoreCache[railSem]
+				?: throw IllegalStateException(
+					"Semaphore ${railSem.getName()} not in cache! " +
+						"Block: ${block.hashCode()}, " +
+						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+				)
 			if (checkOneEnd(block, dynamicSem)) return
 		}
 	}
@@ -337,8 +416,23 @@ class ShuntingLoop : Interlocking {
 		logger.debug { "Attempting to setup paths from semaphore: ${sem.name}" }
 		val pathList = paths[sem]
 		if (pathList == null) {
-			logger.warn {
-				"No paths found for semaphore: ${sem.name}, available keys: ${paths.keys.map { it.name }}"
+			// Enhanced diagnostics to debug wrapper instance identity issues
+			val staticRef = sem.staticRef
+			logger.error {
+				"CRITICAL: No paths found for semaphore: ${sem.name}\n" +
+					"  Dynamic wrapper: ${System.identityHashCode(sem)}\n" +
+					"  Static reference: ${staticRef.getName()} (identity: ${System.identityHashCode(staticRef)})\n" +
+					"  Available path keys (${paths.size}):\n" +
+					paths.keys.joinToString("\n") { key ->
+						"    - ${key.name} (wrapper identity: ${System.identityHashCode(key)}, " +
+							"static identity: ${System.identityHashCode(key.staticRef)})"
+					} +
+					"\n  Semaphore cache entries (${semaphoreCache.size}):\n" +
+					semaphoreCache.entries.joinToString("\n") { (static, dynamic) ->
+						"    - ${static.getName()} -> ${dynamic.name} " +
+							"(static identity: ${System.identityHashCode(static)}, " +
+							"wrapper identity: ${System.identityHashCode(dynamic)})"
+					}
 			}
 			return false
 		}
@@ -362,27 +456,58 @@ class ShuntingLoop : Interlocking {
 		block: SimpleTrackBlock,
 		to: DynamicRailSemaphore
 	): Boolean {
-// 		 je v bloku vlak?
 		val dynamicBlock = env.toDynamic(block)
-		if (dynamicBlock.state == TrackFacility.State.FREE) return false
-		if (dynamicBlock.state == TrackFacility.State.OCCUPIED) {
-			// Compare using static references to avoid Dynamic wrapper identity issues
-			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
-			val nextSemStatic = when (nextSem) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
-				else -> nextSem
-			}
-			if (nextSemStatic != to.staticRef) return false
-			return trySetupPaths(to)
-		} else if (dynamicBlock.state == TrackFacility.State.RESERVED) {
-			// Use static separator for both getSecondEnd AND isSetUpPath
-			// (SimpleTrack uses identity comparison, so Dynamic wrappers would fail the check)
+		val blockState = dynamicBlock.state
+
+		logger.info {
+			"${time()} CHECK_ONE_END: block=${block.toString().take(20)}, to=${to.name}, state=$blockState"
+		}
+
+		if (blockState == TrackFacility.State.FREE) return false
+
+		// PRE-RESERVE: When block is RESERVED, reserve next path segment immediately
+		// This prevents race condition where train enters block before next polling cycle
+		if (blockState == TrackFacility.State.RESERVED) {
+			// Get the other end of the block from the 'to' semaphore
 			val staticSecondEnd = block.getSecondEnd(to.staticRef)
-			if (dynamicBlock.isSetUpPath(staticSecondEnd)) {
+			val isSetUp = dynamicBlock.isSetUpPath(staticSecondEnd)
+			logger.info {
+				"${time()} PRE_RESERVE_CHECK: block=${block.toString().take(20)} RESERVED, " +
+					"to=${to.name}, secondEnd=$staticSecondEnd, " +
+					"isSetUp=$isSetUp, reservedFrom=${dynamicBlock.reservedFrom}"
+			}
+			if (isSetUp) {
+				logger.info {
+					"${time()} PRE_RESERVE: Reserving continuation path to ${to.name}"
+				}
 				return trySetupPaths(to)
 			}
+			return false
 		}
+
+		// OCCUPIED: Reserve path when train is in block (backup)
+		if (blockState == TrackFacility.State.OCCUPIED) {
+			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
+			val nextSemName = when (nextSem) {
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.name
+				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.name
+				else -> nextSem.toString()
+			}
+			// Extract static reference for comparison
+			val nextSemStatic = DynamicWrapperUtils.unwrapToStatic(nextSem)
+			val match = nextSemStatic === to.staticRef
+			logger.info {
+				"${time()} OCCUPIED_CHECK: block=${block.toString().take(20)}, to=${to.name}, " +
+					"train's nextSem=$nextSemName, match=$match, " +
+					"nextStatic@${System.identityHashCode(nextSemStatic)}, " +
+					"toStatic@${System.identityHashCode(to.staticRef)}"
+			}
+			// Use identity comparison on static references
+			if (nextSemStatic !== to.staticRef) return false
+			logger.info { "Block occupied, train heading to ${to.name}, reserving next path" }
+			return trySetupPaths(to)
+		}
+
 		return false
 	}
 

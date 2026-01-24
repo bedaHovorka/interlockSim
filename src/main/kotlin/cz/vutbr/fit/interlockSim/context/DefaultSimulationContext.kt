@@ -362,7 +362,39 @@ open class DefaultSimulationContext(
 			// Store the transformation map for toDynamic() lookups
 			simulationContext.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
 
+			// DIAGNOSTIC: Log semaphore mappings from GridTransformer
+			transformationResult.staticToDynamicMap.entries
+				.filter { it.key is InOut }
+				.forEach { (inout, dynamicInOut) ->
+					if (inout is InOut && dynamicInOut is DynamicInOut) {
+						logger.debug {
+							"GridTransformer mapped InOut ${inout.getName()}: " +
+							"inSem@${System.identityHashCode(inout.getInSemaphore())} -> " +
+							"${System.identityHashCode(dynamicInOut.inSemaphore)}, " +
+							"outSem@${System.identityHashCode(inout.getOutSemaphore())} -> " +
+							"${System.identityHashCode(dynamicInOut.outSemaphore)}"
+						}
+					}
+				}
+
 			logger.debug { "Created ${transformationResult.staticToDynamicMap.size} dynamic wrappers" }
+		}
+
+		/**
+		 * Validate that all InOut elements have corresponding dynamic wrappers.
+		 * This ensures GridTransformer correctly created wrappers for all InOuts.
+		 *
+		 * @param simulationContext Target simulation context
+		 * @throws IllegalStateException if any InOut is missing from staticToDynamicMap
+		 */
+		private fun validateInOutMappings(simulationContext: DefaultSimulationContext) {
+			for (inout in simulationContext.inouts) {
+				require(simulationContext.staticToDynamicMap.containsKey(inout)) {
+					"InOut $inout not found in staticToDynamicMap after GridTransformer. " +
+					"This indicates InOut is in inouts list but not in grid."
+				}
+			}
+			logger.debug { "Validated ${simulationContext.inouts.size} InOut mappings" }
 		}
 
 		/**
@@ -379,6 +411,9 @@ open class DefaultSimulationContext(
 			val grid = editingContext.getRailWayNetGrid()
 			val cols = grid.getCols()
 			val rows = grid.getRows()
+
+			// Validate InOut wrapper mappings
+			validateInOutMappings(simulationContext)
 
 			logger.info {
 				"Created simulation context from editing context: " +
@@ -646,7 +681,7 @@ open class DefaultSimulationContext(
 		for (trackBlock in graph.values()) {
 			// TrackBlock extends TrackFacility, so we can safely cast
 			val trackFacility = trackBlock as TrackFacility
-			
+
 			// Skip if already mapped
 			if (staticTrackToDynamicMap.containsKey(trackFacility)) {
 				logger.trace { "Skipping TrackBlock ${trackFacility.hashCode()} - already mapped" }
@@ -829,7 +864,7 @@ open class DefaultSimulationContext(
 			return separator
 		}
 
-		// Use static-to-dynamic map for conversions
+		// Use static-to-dynamic map for conversions (SINGLETON PATTERN - same wrapper instance every time)
 		val dynamic = staticToDynamicMap[separator]
 			?: throw IllegalStateException(
 				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
@@ -837,7 +872,14 @@ open class DefaultSimulationContext(
 					"This indicates the separator was not registered during initialization. " +
 					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
 			)
-		logger.trace { "toDynamic: converted static ${separator.javaClass.simpleName} to ${dynamic.javaClass.simpleName}" }
+
+		// Verify singleton behavior: same static object always returns same wrapper instance
+		logger.trace {
+			"toDynamic: converted static ${separator.javaClass.simpleName} " +
+				"(identity: ${System.identityHashCode(separator)}) to " +
+				"${dynamic.javaClass.simpleName} (identity: ${System.identityHashCode(dynamic)})"
+		}
+
 		return dynamic
 	}
 
@@ -1021,19 +1063,34 @@ open class DefaultSimulationContext(
 	/**
 	 * Get list of entry/exit points (dynamic wrappers for simulation)
 	 *
-	 * Returns the dynamic InOut wrappers. Creates them lazily if not yet initialized.
-	 * These wrappers separate static properties (name, position) from dynamic state (signal states).
+	 * Returns the dynamic InOut wrappers that were created during context initialization
+	 * by GridTransformer. These wrappers separate static properties (name, position) from
+	 * dynamic state (signal states).
+	 *
+	 * **Prerequisites:** This method requires GridTransformer.transform() or initializeDynamicMapping()
+	 * to have been called first. Both methods ensure all InOut wrappers and their embedded
+	 * semaphores are mapped in staticToDynamicMap.
+	 *
+	 * **Wrapper Identity:** This method retrieves existing wrappers from staticToDynamicMap
+	 * to preserve wrapper identity (singleton guarantee). It never creates new wrappers.
+	 * Creating duplicate wrappers causes path progression failures because train navigation
+	 * compares wrapper instances for equality.
+	 *
+	 * @return Collection of DynamicInOut wrappers (one per InOut in the network)
+	 * @throws IllegalStateException if any InOut is missing from staticToDynamicMap
 	 */
 	override fun getInOuts(): Collection<DynamicInOut> {
-		// Lazy initialization: create dynamic wrappers if not yet created
+		// Lazy initialization: retrieve existing dynamic wrappers from staticToDynamicMap
 		if (dynamicInOuts == null) {
 			dynamicInOuts = inouts.map {
-				val dynamic = createDynamic(it)
-				staticToDynamicMap[it] = dynamic
-				// Map InOut's semaphores (use putIfAbsent to avoid conflicts)
-				staticToDynamicMap.putIfAbsent(it.getInSemaphore(), dynamic.inSemaphore)
-				staticToDynamicMap.putIfAbsent(it.getOutSemaphore(), dynamic.outSemaphore)
-				dynamic
+				// Use existing wrapper from staticToDynamicMap (created by GridTransformer or initializeDynamicMapping)
+				// GridTransformer.transform() already mapped InOut's embedded semaphores (inSemaphore, outSemaphore)
+				// using putIfAbsent(), so all necessary mappings are guaranteed to exist
+				staticToDynamicMap[it] as? DynamicInOut
+					?: throw IllegalStateException(
+						"InOut wrapper not found in staticToDynamicMap: $it. " +
+						"GridTransformer.transform() or initializeDynamicMapping() must be called first."
+					)
 			}.toMutableList()
 		}
 		return dynamicInOuts!!
@@ -1047,19 +1104,19 @@ open class DefaultSimulationContext(
 		next: Track?,
 		previous: Track?
 	): Boolean {
-		// Try to use Dynamic wrapper if available, otherwise use static OrientedNodeCell
-		// CRITICAL FIX: Use PREVIOUS track (where train is coming FROM) to check if semaphore
-		// is "in direction". This checks if the train is approaching the semaphore from its
-		// facing direction, not if the train is going toward a track in that direction.
+		// Get segment from separator based on next/previous tracks
+		// Uses NEXT track (where train is going TO) to check direction
+		// This matches baseline behavior and ensures correct path termination
 		val segment = if (separator is DynamicPathSeparator) {
-			getSegment(separator, previous, next)  // Swapped: previous first!
+			// Dynamic separator - use Dynamic API
+			getSegment(separator, next, previous)
 		} else {
-			// Static separator - need to get segment differently
-			val staticNodeCell = CellUtilities.assertNodeCell(separator)
-			if (previous != null) {  // Changed: check previous first!
-				getSegment(staticNodeCell, previous as? DynamicTrackBlock)
+			// Static separator - extract node cell and use static API
+			val nodeCell = CellUtilities.assertNodeCell(separator)
+			if (next != null) {
+				getSegment(nodeCell, next as? DynamicTrackBlock)
 			} else {
-				getSegment(staticNodeCell, next as? DynamicTrackBlock)
+				null
 			}
 		}
 		// Allow null segment for InOut (both static and Dynamic wrapper)
@@ -1106,20 +1163,19 @@ open class DefaultSimulationContext(
 				}
 				previous = next
 				next = getNextTrackSection(separator, next)
-
-				// Check if we've reached the final semaphore AFTER getting next section
-				// This ensures we have proper next/previous values for direction check
-				if (separator is OrientedPathSeparator) {
-					// Direction check for oriented semaphores
-					if (isSeparatorInDirection(separator, next, previous)) {
-						// Add dynamic separator to path
-						path.add(separator)
-						logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
-						return path
-					}
-				}
 			} else {
 				break
+			}
+			// Check if we've reached the final semaphore AFTER getting next section
+			// This check is outside the if block to match baseline behavior
+			if (separator is OrientedPathSeparator) {
+				// Direction check for oriented semaphores
+				if (isSeparatorInDirection(separator, next, previous)) {
+					// Add dynamic separator to path
+					path.add(separator)
+					logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
+					return path
+				}
 			}
 		} while (next != null)
 		logger.debug { "pathToNextSemaphore: no path found from $sep" }
