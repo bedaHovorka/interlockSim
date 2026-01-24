@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
 import jDisco.Continuous
@@ -99,7 +100,7 @@ class Train :
 		final override fun actions() {
 			val staticInOut = timetable.getIn()
 			requireSimulationNotNull(staticInOut) { "PathSeparator from timetable.getIn() must not be null" }
-			var where: PathSeparator = env.getInOuts().first { it.staticRef === staticInOut }
+			var where: PathSeparator = env.getInOuts().first { DynamicWrapperUtils.unwrapToStatic(it) === staticInOut }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
@@ -593,7 +594,7 @@ class Train :
 	override fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout: InOut = timetable.getIn()
-		val dynamicInOut: DynamicInOut = env.getInOuts().first { it.staticRef === inout }
+		val dynamicInOut: DynamicInOut = env.getInOuts().first { DynamicWrapperUtils.unwrapToStatic(it) === inout }
 		val worker: InOutWorker = env.getWorkerFor(dynamicInOut)
 		logger.debug { "Train $number approved for movement from ${inout.getName()} to ${timetable.getOut().getName()}" }
 		worker.enterTrain(this)

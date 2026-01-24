@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
 
@@ -181,18 +182,10 @@ class DynamicTrack(
 			// Unwrap Dynamic wrappers to get static references for comparison
 			// sep might be static (from block.getSecondEnd()) or dynamic (from path setup)
 			// reservedFrom might be static or dynamic as well
-			val sepStatic = when (sep) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> sep.staticRef
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> sep.staticRef
-				else -> sep
-			}
+			val sepStatic = DynamicWrapperUtils.unwrapToStatic(sep)
 			// Store in local variable to avoid smart cast issues with mutable property
 			val reservedFromLocal = reservedFrom
-			val reservedFromStatic = when (reservedFromLocal) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> reservedFromLocal.staticRef
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> reservedFromLocal.staticRef
-				else -> reservedFromLocal
-			}
+			val reservedFromStatic = DynamicWrapperUtils.unwrapToStatic(reservedFromLocal)
 
 			// Use identity comparison on static references
 			isSetUp = sepStatic === reservedFromStatic

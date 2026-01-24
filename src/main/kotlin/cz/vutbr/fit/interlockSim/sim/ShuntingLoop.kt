@@ -29,6 +29,7 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Collections
@@ -493,11 +494,7 @@ class ShuntingLoop : Interlocking {
 				else -> nextSem.toString()
 			}
 			// Extract static reference for comparison
-			val nextSemStatic = when (nextSem) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.staticRef
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.staticRef
-				else -> nextSem
-			}
+			val nextSemStatic = DynamicWrapperUtils.unwrapToStatic(nextSem)
 			val match = nextSemStatic === to.staticRef
 			logger.info {
 				"${time()} OCCUPIED_CHECK: block=${block.toString().take(20)}, to=${to.name}, " +

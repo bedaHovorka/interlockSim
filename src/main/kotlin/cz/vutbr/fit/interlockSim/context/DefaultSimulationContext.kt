@@ -1067,8 +1067,12 @@ open class DefaultSimulationContext(
 	 * by GridTransformer. These wrappers separate static properties (name, position) from
 	 * dynamic state (signal states).
 	 *
-	 * CRITICAL: This method must NOT create new wrappers. It retrieves existing wrappers
-	 * from staticToDynamicMap to preserve wrapper identity (singleton guarantee).
+	 * **Prerequisites:** This method requires GridTransformer.transform() or initializeDynamicMapping()
+	 * to have been called first. Both methods ensure all InOut wrappers and their embedded
+	 * semaphores are mapped in staticToDynamicMap.
+	 *
+	 * **Wrapper Identity:** This method retrieves existing wrappers from staticToDynamicMap
+	 * to preserve wrapper identity (singleton guarantee). It never creates new wrappers.
 	 * Creating duplicate wrappers causes path progression failures because train navigation
 	 * compares wrapper instances for equality.
 	 *
@@ -1079,48 +1083,14 @@ open class DefaultSimulationContext(
 		// Lazy initialization: retrieve existing dynamic wrappers from staticToDynamicMap
 		if (dynamicInOuts == null) {
 			dynamicInOuts = inouts.map {
-				// Use existing wrapper from staticToDynamicMap (created by GridTransformer)
-				val dynamic = staticToDynamicMap[it] as? DynamicInOut
+				// Use existing wrapper from staticToDynamicMap (created by GridTransformer or initializeDynamicMapping)
+				// GridTransformer.transform() already mapped InOut's embedded semaphores (inSemaphore, outSemaphore)
+				// using putIfAbsent(), so all necessary mappings are guaranteed to exist
+				staticToDynamicMap[it] as? DynamicInOut
 					?: throw IllegalStateException(
 						"InOut wrapper not found in staticToDynamicMap: $it. " +
-						"GridTransformer should have created this wrapper during initialization."
+						"GridTransformer.transform() or initializeDynamicMapping() must be called first."
 					)
-
-				// CRITICAL FIX: Ensure semaphore mappings exist even if getInOuts() called before run()
-				// This handles the case where Generator constructor calls getInOuts() before
-				// initializeDynamicMapping() runs. Uses put() to force-update mappings.
-				val inSemStatic = it.getInSemaphore()
-				val outSemStatic = it.getOutSemaphore()
-
-				// Check if mappings already exist (from GridTransformer)
-				val existingInSemMapping = staticToDynamicMap[inSemStatic]
-				val existingOutSemMapping = staticToDynamicMap[outSemStatic]
-
-				// CRITICAL: Verify we're not overwriting with different instances!
-				if (existingInSemMapping != null && existingInSemMapping !== dynamic.inSemaphore) {
-					logger.error {
-						"WRAPPER IDENTITY VIOLATION: getInOuts() would overwrite inSemaphore mapping! " +
-						"InOut=${it.getName()}, " +
-						"existing@${System.identityHashCode(existingInSemMapping)} != " +
-						"new@${System.identityHashCode(dynamic.inSemaphore)}"
-					}
-					throw IllegalStateException("Semaphore wrapper identity violation detected!")
-				}
-				if (existingOutSemMapping != null && existingOutSemMapping !== dynamic.outSemaphore) {
-					logger.error {
-						"WRAPPER IDENTITY VIOLATION: getInOuts() would overwrite outSemaphore mapping! " +
-						"InOut=${it.getName()}, " +
-						"existing@${System.identityHashCode(existingOutSemMapping)} != " +
-						"new@${System.identityHashCode(dynamic.outSemaphore)}"
-					}
-					throw IllegalStateException("Semaphore wrapper identity violation detected!")
-				}
-
-				// Safe to set (either doesn't exist, or is same instance)
-				staticToDynamicMap[inSemStatic] = dynamic.inSemaphore
-				staticToDynamicMap[outSemStatic] = dynamic.outSemaphore
-
-				dynamic
 			}.toMutableList()
 		}
 		return dynamicInOuts!!
