@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import java.awt.Graphics2D
 
@@ -142,6 +144,47 @@ class AnimatedSimulationCellRenderer(
 		g.color = signalState?.let {
 			AnimationColors.forSignal(it.signal)
 		} ?: AnimationColors.DEFAULT_SIGNAL
+
+		// Delegate to parent for geometry rendering
+		super.draw(g, cell)
+	}
+
+	/**
+	 * Render static InOut (entry/exit point) with light gray color.
+	 *
+	 * InOut cells represent connections to the external railway network.
+	 * Rendered in light gray for consistency.
+	 *
+	 * @param g Graphics context for rendering
+	 * @param cell Static InOut cell to render
+	 */
+	override fun draw(
+		g: Graphics2D,
+		cell: InOut
+	) {
+		// Set color to light gray for InOut cells
+		g.color = AnimationColors.DEFAULT_TRACK
+
+		// Delegate to parent for geometry rendering
+		super.draw(g, cell)
+	}
+
+	/**
+	 * Render InOut (entry/exit point) with light gray color.
+	 *
+	 * InOut cells represent connections to the external railway network
+	 * and do not have dynamic state (no occupation tracking). They are
+	 * rendered in light gray to distinguish them from track blocks.
+	 *
+	 * @param g Graphics context for rendering
+	 * @param cell Dynamic InOut cell to render
+	 */
+	override fun draw(
+		g: Graphics2D,
+		cell: DynamicInOut
+	) {
+		// Set color to light gray for InOut cells
+		g.color = AnimationColors.DEFAULT_TRACK
 
 		// Delegate to parent for geometry rendering
 		super.draw(g, cell)
