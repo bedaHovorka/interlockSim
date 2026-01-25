@@ -162,9 +162,10 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			logger.info(e) { "Exception caught during edit mode test: ${e.javaClass.name}: ${e.message}" }
 			// Check if it's a GUI-related exception (mode was recognized)
 			// OR if it's any exception caused by GUI initialization failure (e.g., NullPointerException from Frame)
-			val isGuiRelated = isGuiRelatedException(e) ||
-				e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
-				e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
+			val isGuiRelated =
+				isGuiRelatedException(e) ||
+					e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
+					e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
 			assertThat(isGuiRelated).isTrue()
 		}
 	}
@@ -194,9 +195,10 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			logger.info(e) { "Exception caught during edit mode test: ${e.javaClass.name}: ${e.message}" }
 			// Check if it's a GUI-related exception (mode was recognized)
 			// OR if it's any exception caused by GUI initialization failure (e.g., NullPointerException from Frame)
-			val isGuiRelated = isGuiRelatedException(e) ||
-				e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
-				e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
+			val isGuiRelated =
+				isGuiRelatedException(e) ||
+					e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
+					e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
 			assertThat(isGuiRelated).isTrue()
 		}
 	}
@@ -225,9 +227,10 @@ class MainEditModeTest : AbstractFrameTestBase() {
 			logger.info(e) { "Exception caught during edit mode test: ${e.javaClass.name}: ${e.message}" }
 			// Verify that exception is GUI-related (mode was recognized), not mode-selection-related
 			// OR if it's any exception caused by GUI initialization failure (e.g., NullPointerException from Frame)
-			val isGuiRelated = isGuiRelatedException(e) ||
-				e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
-				e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
+			val isGuiRelated =
+				isGuiRelatedException(e) ||
+					e.cause?.let { isGuiRelatedException(Exception(it.message)) } == true ||
+					e.stackTrace.any { it.className.contains("Frame") || it.className.contains("gui") }
 			assertThat(isGuiRelated).isTrue()
 		}
 	}

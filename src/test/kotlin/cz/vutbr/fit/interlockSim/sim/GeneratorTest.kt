@@ -70,7 +70,7 @@ class GeneratorTest : KoinTestBase() {
 			get<TestContextBuilder>()
 				.withInOut("IN1", 0, 0, isEntry = true)
 				.withInOut("OUT1", 1, 0, isEntry = false)
-		val delegateContext = contextBuilder.build()
+		val delegateContext = contextBuilder.buildSimulationContext()
 		mockContext = MockSimulationContext(delegateContext)
 	}
 

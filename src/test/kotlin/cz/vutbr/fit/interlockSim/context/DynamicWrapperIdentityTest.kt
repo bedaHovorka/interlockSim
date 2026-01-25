@@ -6,7 +6,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
@@ -27,13 +26,15 @@ import java.io.InputStream
  */
 @DisplayName("Dynamic Wrapper Identity Tests (PR #95 Regression)")
 class DynamicWrapperIdentityTest : KoinTestBase() {
-
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: throw IllegalStateException("vyhybna.xml not found in resources")
-		return factory.createContext(xmlStream) as DefaultSimulationContext
+		val xmlStream: InputStream =
+			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				?: throw IllegalStateException("vyhybna.xml not found in resources")
+		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 	}
 
 	/**

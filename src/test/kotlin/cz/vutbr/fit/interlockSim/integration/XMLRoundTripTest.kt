@@ -17,15 +17,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.BaseContext
-import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
@@ -57,8 +54,6 @@ import java.io.File
 @Tag("integration-test")
 class XMLRoundTripTest : KoinTestBase() {
 	private val xmlFactory: XMLContextFactory by inject()
-	private val transformer: ContextTransformer by inject()
-	private val processFactory: SimulationProcessFactory by inject()
 
 	/**
 	 * Test that all network properties (maxSpeed, trackLength, nameString) are
@@ -66,28 +61,29 @@ class XMLRoundTripTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("save and load preserves all network properties")
-	fun saveAndLoad_preservesAllNetworkProperties(@TempDir tempDir: File) {
+	fun saveAndLoad_preservesAllNetworkProperties(
+		@TempDir tempDir: File
+	) {
 		// Create network with specific properties
 		val editingContext = DefaultEditingContext(40, 40)
-		
+
 		val inA = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("Exit", true, Cell.SpatialType.HORIZONTAL)
 		editingContext.putCell(Point(5, 5), inA)
 		editingContext.putCell(Point(35, 5), inB)
-		
+
 		val track = SimpleTrackBlock(inA, inB, 400.0, 90.0)
 		editingContext.joinCells(Point(5, 5), Point(35, 5), track)
-		
+
 		// Set distinctive property values
 		editingContext.currentMaxSpeed = 125.5
 		editingContext.currentTrackLength = 400.0
 		editingContext.currentNameString = "Property Test Network"
-		
+
 		// Transform and save
-		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
 		val xmlFile = File(tempDir, "properties-test.xml")
-		xmlFactory.saveContext(originalContext, xmlFile)
-		
+		xmlFactory.saveContext(editingContext, xmlFile)
+
 		// Load and verify structure (NOTE: properties not preserved - see issue #248)
 		val loadedContext = xmlFactory.createContext(xmlFile)
 		val loadedBase = loadedContext as BaseContext<*>
@@ -104,37 +100,38 @@ class XMLRoundTripTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("save and load preserves switch configurations")
-	fun saveAndLoad_preservesSwitchConfigurations(@TempDir tempDir: File) {
+	fun saveAndLoad_preservesSwitchConfigurations(
+		@TempDir tempDir: File
+	) {
 		// Create network with railway switch
 		val editingContext = DefaultEditingContext(40, 40)
-		
+
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		railSwitch.setName("Switch_001")
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 		val inC = InOut("C", true, Cell.SpatialType.HORIZONTAL)
-		
+
 		editingContext.putCell(Point(5, 5), inA)
 		editingContext.putCell(Point(15, 5), railSwitch)
 		editingContext.putCell(Point(25, 5), inB)
 		editingContext.putCell(Point(25, 10), inC)
-		
+
 		val trackASwitch = SimpleTrackBlock(inA, railSwitch, 100.0, 80.0)
 		val trackSwitchB = SimpleTrackBlock(railSwitch, inB, 100.0, 80.0)
 		val trackSwitchC = SimpleTrackBlock(railSwitch, inC, 100.0, 60.0)
 		editingContext.joinCells(Point(5, 5), Point(15, 5), trackASwitch)
 		editingContext.joinCells(Point(15, 5), Point(25, 5), trackSwitchB)
 		editingContext.joinCells(Point(15, 5), Point(25, 10), trackSwitchC)
-		
+
 		// Transform and save
-		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
 		val xmlFile = File(tempDir, "switch-test.xml")
-		xmlFactory.saveContext(originalContext, xmlFile)
-		
+		xmlFactory.saveContext(editingContext, xmlFile)
+
 		// Load and verify switch configuration
 		val loadedContext = xmlFactory.createContext(xmlFile)
 		val loadedSwitch = loadedContext.getRailWayNetGrid().getCellAt(15, 5)
-		
+
 		assertThat(loadedSwitch).isNotNull()
 		assertThat(loadedSwitch as Any).isInstanceOf(RailSwitch::class)
 
@@ -153,7 +150,9 @@ class XMLRoundTripTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("save and load preserves semaphore configurations")
-	fun saveAndLoad_preservesSemaphoreStates(@TempDir tempDir: File) {
+	fun saveAndLoad_preservesSemaphoreStates(
+		@TempDir tempDir: File
+	) {
 		// Create network with semaphores
 		val editingContext = DefaultEditingContext(40, 40)
 
@@ -175,9 +174,8 @@ class XMLRoundTripTest : KoinTestBase() {
 		editingContext.joinCells(Point(5, 5), Point(35, 5), track)
 
 		// Transform and save
-		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
 		val xmlFile = File(tempDir, "semaphore-test.xml")
-		xmlFactory.saveContext(originalContext, xmlFile)
+		xmlFactory.saveContext(editingContext, xmlFile)
 
 		// Load and verify semaphore configurations
 		val loadedContext = xmlFactory.createContext(xmlFile)
@@ -210,42 +208,40 @@ class XMLRoundTripTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("save and load preserves InOut configurations")
-	fun saveAndLoad_preservesInOutConfigurations(@TempDir tempDir: File) {
+	fun saveAndLoad_preservesInOutConfigurations(
+		@TempDir tempDir: File
+	) {
 		// Create network with multiple InOut points
 		val editingContext = DefaultEditingContext(50, 50)
-		
+
 		val entryA = InOut("Platform_1_Entry", false, Cell.SpatialType.HORIZONTAL)
 		val exitA = InOut("Platform_1_Exit", true, Cell.SpatialType.HORIZONTAL)
 		val entryB = InOut("Platform_2_Entry", false, Cell.SpatialType.VERTICAL)
 		val exitB = InOut("Platform_2_Exit", true, Cell.SpatialType.VERTICAL)
-		
+
 		editingContext.putCell(Point(5, 10), entryA)
 		editingContext.putCell(Point(45, 10), exitA)
 		editingContext.putCell(Point(25, 5), entryB)
 		editingContext.putCell(Point(25, 45), exitB)
-		
+
 		val trackH = SimpleTrackBlock(entryA, exitA, 400.0, 100.0)
 		val trackV = SimpleTrackBlock(entryB, exitB, 400.0, 80.0)
 		editingContext.joinCells(Point(5, 10), Point(45, 10), trackH)
 		editingContext.joinCells(Point(25, 5), Point(25, 45), trackV)
-		
-		// Transform and save
-		val originalContext = transformer.createSimulationContext(editingContext, processFactory)
-		val xmlFile = File(tempDir, "inout-test.xml")
-		xmlFactory.saveContext(originalContext, xmlFile)
-		
-		// Load and verify InOut configurations
-		val loadedContext = xmlFactory.createContext(xmlFile)
 
-		val loadedCtxSim = loadedContext as SimulationContext
-		val loadedInOuts: Collection<*> = loadedCtxSim.getInOuts()
+		// Transform and save
+		val xmlFile = File(tempDir, "inout-test.xml")
+		xmlFactory.saveContext(editingContext, xmlFile)
+
+		// Load and verify InOut configurations
+		val loadedContext = xmlFactory.createContext(xmlFile) as EditingContext
+
+		val loadedInOuts = loadedContext.getInOuts()
 		assertThat(loadedInOuts).hasSize(4)
 
 		// Extract static refs from dynamic wrappers (convert to list for type inference)
-		val inOutList = loadedInOuts.toList()
-		val staticInOuts = inOutList.map { (it as DynamicInOut).staticRef }
 
-		val namesList = staticInOuts.map { inOut -> inOut.getName() }
+		val namesList = loadedInOuts.map { inOut -> inOut.getName() }
 		val names: Set<String> = namesList.toSet()
 		assertThat(names).hasSize(4)
 		assertThat(names.contains("Platform_1_Entry")).isTrue()
@@ -260,20 +256,23 @@ class XMLRoundTripTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("round trip with complex network topology")
-	fun roundTrip_complexNetworkTopology(@TempDir tempDir: File) {
+	fun roundTrip_complexNetworkTopology(
+		@TempDir tempDir: File
+	) {
 		// Load the complex vyhybna.xml network
-		val originalContext = xmlFactory.createContext(
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		)
-		
+		val originalContext =
+			xmlFactory.createContext(
+				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			) as EditingContext
+
 		// Save to file
 		val xmlFile = File(tempDir, "vyhybna-roundtrip.xml")
 		xmlFactory.saveContext(originalContext, xmlFile)
 		assertThat(xmlFile.exists()).isTrue()
-		
+
 		// Load back
-		val loadedContext = xmlFactory.createContext(xmlFile)
-		
+		val loadedContext = xmlFactory.createContext(xmlFile) as EditingContext
+
 		// Verify basic structure is preserved
 		val originalCols = originalContext.getRailWayNetGrid().getCols()
 		val loadedCols = loadedContext.getRailWayNetGrid().getCols()
@@ -284,18 +283,15 @@ class XMLRoundTripTest : KoinTestBase() {
 		assertThat(loadedRows).isEqualTo(originalRows)
 
 		// Verify InOuts count
-		val originalSimContext = originalContext as SimulationContext
-		val originalInOuts = originalSimContext.getInOuts()
+		val originalInOuts = originalContext.getInOuts()
 		val originalInOutCount = originalInOuts.size
-		val loadedSimContext = loadedContext as SimulationContext
-		val loadedRTInOuts = loadedSimContext.getInOuts()
-		val loadedRTInOutsCollection: Collection<DynamicInOut> = loadedRTInOuts
-		assertThat(loadedRTInOutsCollection).hasSize(originalInOutCount)
-		
+		val loadedRTInOuts = loadedContext.getInOuts()
+		assertThat(loadedRTInOuts).hasSize(originalInOutCount)
+
 		// Verify graph structure (track connections)
 		assertThat(loadedContext.getGraph().size()).isEqualTo(originalContext.getGraph().size())
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
-		
+
 		// Verify at least one switch exists (vyhybna has switches)
 		var foundSwitch = false
 		for (x in 0 until loadedContext.getRailWayNetGrid().getCols()) {
@@ -309,7 +305,7 @@ class XMLRoundTripTest : KoinTestBase() {
 			if (foundSwitch) break
 		}
 		assertThat(foundSwitch).isTrue()
-		
+
 		// Verify at least one semaphore exists
 		var foundSemaphore = false
 		for (x in 0 until loadedContext.getRailWayNetGrid().getCols()) {

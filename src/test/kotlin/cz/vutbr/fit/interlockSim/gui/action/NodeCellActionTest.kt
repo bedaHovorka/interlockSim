@@ -22,10 +22,10 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.AbstractFrameTestBase
 import cz.vutbr.fit.interlockSim.gui.Frame
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -67,174 +67,177 @@ class NodeCellActionTest : AbstractFrameTestBase() {
 	}
 
 /**
- * Test 1: Constructor creates action with correct name format
- */
-@Test
-fun `constructor creates action with correct name format`() {
-val cellClass = RailSwitch::class.java
-val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+	 * Test 1: Constructor creates action with correct name format
+	 */
+	@Test
+	fun `constructor creates action with correct name format`() {
+		val cellClass = RailSwitch::class.java
+		val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
-val action = NodeCellAction(cellClass, context, args)
+		val action = NodeCellAction(cellClass, context, args)
 
-val actionName = action.getValue(javax.swing.Action.NAME) as String
-assertThat(actionName).isEqualTo("Insert RailSwitch")
-}
-
-/**
- * Test 2: Action has valid icon generated from cell
- */
-@Test
-fun `action has valid icon generated from cell`() {
-val cellClass = InOut::class.java
-val args = arrayOf<Any>("Entry", true, Cell.SpatialType.HORIZONTAL)
-
-val action = NodeCellAction(cellClass, context, args)
-
-val icon = action.getValue(javax.swing.Action.SMALL_ICON)
-assertThat(icon).isNotNull()
-assertThat(icon).isInstanceOf(ImageIcon::class)
-}
+		val actionName = action.getValue(javax.swing.Action.NAME) as String
+		assertThat(actionName).isEqualTo("Insert RailSwitch")
+	}
 
 /**
- * Test 3: actionPerformed delegates to RailwayNetGridCanvas.setNodeOnToolbar
- */
-@Test
-fun `actionPerformed delegates to RailwayNetGridCanvas setNodeOnToolbar`() {
-val cellClass = RailSemaphore::class.java
-val args = arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
-val action = NodeCellAction(cellClass, context, args)
+	 * Test 2: Action has valid icon generated from cell
+	 */
+	@Test
+	fun `action has valid icon generated from cell`() {
+		val cellClass = InOut::class.java
+		val args = arrayOf<Any>("Entry", true, Cell.SpatialType.HORIZONTAL)
 
-val frame = get<Frame>()
-val canvas = frame.railwayNetGridCanvas
+		val action = NodeCellAction(cellClass, context, args)
 
-val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
-action.actionPerformed(mockEvent)
+		val icon = action.getValue(javax.swing.Action.SMALL_ICON)
+		assertThat(icon).isNotNull()
+		assertThat(icon).isInstanceOf(ImageIcon::class)
+	}
+
+/**
+	 * Test 3: actionPerformed delegates to RailwayNetGridCanvas.setNodeOnToolbar
+	 */
+	@Test
+	fun `actionPerformed delegates to RailwayNetGridCanvas setNodeOnToolbar`() {
+		val cellClass = RailSemaphore::class.java
+		val args = arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
+		val action = NodeCellAction(cellClass, context, args)
+
+		val frame = get<Frame>()
+		val canvas = frame.railwayNetGridCanvas
+
+		val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+		action.actionPerformed(mockEvent)
 
 // Verify setNodeOnToolbar was called with correct arguments
-val actualCellClass = canvas.getToolbarCellClass()
-val actualArgs = canvas.getToolbarArgs()
+		val actualCellClass = canvas.getToolbarCellClass()
+		val actualArgs = canvas.getToolbarArgs()
 
-assertThat(actualCellClass).isEqualTo(cellClass)
-assertThat(actualArgs).isNotNull()
-assertThat(actualArgs!!.size).isEqualTo(args.size)
-}
-
-/**
- * Test 4: Icon generation works for different cell types
- */
-@Test
-fun `icon generation works for different cell types`() {
-val testCases = listOf(
-RailSwitch::class.java to arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE),
-RailSemaphore::class.java to arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL),
-InOut::class.java to arrayOf<Any>("Exit", false, Cell.SpatialType.HORIZONTAL)
-)
-
-testCases.forEach { (cellClass, args) ->
-val action = NodeCellAction(cellClass, context, args)
-val icon = action.getValue(javax.swing.Action.SMALL_ICON)
-assertThat(icon).isNotNull()
-assertThat(icon).isInstanceOf(ImageIcon::class)
-}
-}
+		assertThat(actualCellClass).isEqualTo(cellClass)
+		assertThat(actualArgs).isNotNull()
+		assertThat(actualArgs!!.size).isEqualTo(args.size)
+	}
 
 /**
- * Test 5: Error handling in paintIcon when cell creation fails
- */
-@Test
-fun `paintIcon handles cell creation failure with error`() {
-val cellClass = RailSwitch::class.java
-val invalidArgs = arrayOf<Any>() // Missing required constructor arguments
+	 * Test 4: Icon generation works for different cell types
+	 */
+	@Test
+	fun `icon generation works for different cell types`() {
+		val testCases =
+			listOf(
+				RailSwitch::class.java to arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE),
+				RailSemaphore::class.java to arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL),
+				InOut::class.java to arrayOf<Any>("Exit", false, Cell.SpatialType.HORIZONTAL)
+			)
 
-assertFailure {
-NodeCellAction(cellClass, context, invalidArgs)
-}.isInstanceOf(IllegalStateException::class)
-}
+		testCases.forEach { (cellClass, args) ->
+			val action = NodeCellAction(cellClass, context, args)
+			val icon = action.getValue(javax.swing.Action.SMALL_ICON)
+			assertThat(icon).isNotNull()
+			assertThat(icon).isInstanceOf(ImageIcon::class)
+		}
+	}
 
 /**
- * Test 6: Action properly handles RailSemaphore with required arguments
- */
-@Test
-fun `action properly handles RailSemaphore with required arguments`() {
-val cellClass = RailSemaphore::class.java
-val args = arrayOf<Any>(false, Cell.SpatialType.VERTICAL)
+	 * Test 5: Error handling in paintIcon when cell creation fails
+	 */
+	@Test
+	fun `paintIcon handles cell creation failure with error`() {
+		val cellClass = RailSwitch::class.java
+		val invalidArgs = arrayOf<Any>() // Missing required constructor arguments
 
-val action = NodeCellAction(cellClass, context, args)
-val frame = get<Frame>()
-val canvas = frame.railwayNetGridCanvas
+		assertFailure {
+			NodeCellAction(cellClass, context, invalidArgs)
+		}.isInstanceOf(IllegalStateException::class)
+	}
 
-val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
-action.actionPerformed(mockEvent)
+/**
+	 * Test 6: Action properly handles RailSemaphore with required arguments
+	 */
+	@Test
+	fun `action properly handles RailSemaphore with required arguments`() {
+		val cellClass = RailSemaphore::class.java
+		val args = arrayOf<Any>(false, Cell.SpatialType.VERTICAL)
+
+		val action = NodeCellAction(cellClass, context, args)
+		val frame = get<Frame>()
+		val canvas = frame.railwayNetGridCanvas
+
+		val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+		action.actionPerformed(mockEvent)
 
 // Verify toolbar state was updated
-val actualCellClass = canvas.getToolbarCellClass()
+		val actualCellClass = canvas.getToolbarCellClass()
 
-assertThat(actualCellClass).isEqualTo(cellClass)
-}
+		assertThat(actualCellClass).isEqualTo(cellClass)
+	}
 
 /**
- * Test 7: Action properly handles multiple arguments
- */
-@Test
-fun `action properly handles multiple arguments`() {
-val cellClass = RailSwitch::class.java
-val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+	 * Test 7: Action properly handles multiple arguments
+	 */
+	@Test
+	fun `action properly handles multiple arguments`() {
+		val cellClass = RailSwitch::class.java
+		val args = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
-val action = NodeCellAction(cellClass, context, args)
-val frame = get<Frame>()
-val canvas = frame.railwayNetGridCanvas
+		val action = NodeCellAction(cellClass, context, args)
+		val frame = get<Frame>()
+		val canvas = frame.railwayNetGridCanvas
 
-val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
-action.actionPerformed(mockEvent)
+		val mockEvent = ActionEvent(action, ActionEvent.ACTION_PERFORMED, "")
+		action.actionPerformed(mockEvent)
 
 // Verify toolbar state and icon
-assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+		assertThat(action.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
 
-val actualCellClass = canvas.getToolbarCellClass()
+		val actualCellClass = canvas.getToolbarCellClass()
 
-assertThat(actualCellClass).isEqualTo(cellClass)
-}
-
-/**
- * Test 8: Multiple actions can be created for same cell type
- */
-@Test
-fun `multiple actions can be created for same cell type`() {
-val cellClass = RailSwitch::class.java
-val args1 = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
-val args2 = arrayOf<Any>(Cell.SpatialType.VERTICAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
-
-val action1 = NodeCellAction(cellClass, context, args1)
-val action2 = NodeCellAction(cellClass, context, args2)
-
-assertThat(action1.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
-assertThat(action2.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
-assertThat(action1.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
-assertThat(action2.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
-}
+		assertThat(actualCellClass).isEqualTo(cellClass)
+	}
 
 /**
- * Test 9: Action name contains cell class simple name
- */
-@Test
-fun `action name contains cell class simple name`() {
-val testCases = mapOf(
-RailSwitch::class.java to "RailSwitch",
-RailSemaphore::class.java to "RailSemaphore",
-InOut::class.java to "InOut"
-)
+	 * Test 8: Multiple actions can be created for same cell type
+	 */
+	@Test
+	fun `multiple actions can be created for same cell type`() {
+		val cellClass = RailSwitch::class.java
+		val args1 = arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
+		val args2 = arrayOf<Any>(Cell.SpatialType.VERTICAL, RailSwitch.Type.SIMPLE_RIGHT_TRUE)
 
-testCases.forEach { (cellClass, expectedName) ->
-val args = when (cellClass) {
-RailSwitch::class.java -> arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
-InOut::class.java -> arrayOf<Any>("Station", true, Cell.SpatialType.HORIZONTAL)
-else -> arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
-}
+		val action1 = NodeCellAction(cellClass, context, args1)
+		val action2 = NodeCellAction(cellClass, context, args2)
 
-val action = NodeCellAction(cellClass, context, args)
-val actionName = action.getValue(javax.swing.Action.NAME) as String
+		assertThat(action1.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+		assertThat(action2.getValue(javax.swing.Action.SMALL_ICON)).isNotNull()
+		assertThat(action1.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
+		assertThat(action2.getValue(javax.swing.Action.NAME)).isEqualTo("Insert RailSwitch")
+	}
 
-assertThat(actionName).contains(expectedName)
-}
-}
+/**
+	 * Test 9: Action name contains cell class simple name
+	 */
+	@Test
+	fun `action name contains cell class simple name`() {
+		val testCases =
+			mapOf(
+				RailSwitch::class.java to "RailSwitch",
+				RailSemaphore::class.java to "RailSemaphore",
+				InOut::class.java to "InOut"
+			)
+
+		testCases.forEach { (cellClass, expectedName) ->
+			val args =
+				when (cellClass) {
+					RailSwitch::class.java -> arrayOf<Any>(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
+					InOut::class.java -> arrayOf<Any>("Station", true, Cell.SpatialType.HORIZONTAL)
+					else -> arrayOf<Any>(true, Cell.SpatialType.HORIZONTAL)
+				}
+
+			val action = NodeCellAction(cellClass, context, args)
+			val actionName = action.getValue(javax.swing.Action.NAME) as String
+
+			assertThat(actionName).contains(expectedName)
+		}
+	}
 }

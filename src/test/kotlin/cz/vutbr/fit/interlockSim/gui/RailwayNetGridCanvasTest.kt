@@ -15,11 +15,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -42,7 +43,9 @@ import java.util.concurrent.TimeUnit
  * - Integration test tagging
  */
 class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
+
 	private lateinit var canvas: RailwayNetGridCanvas
 	private lateinit var editingContext: EditingContext
 	private lateinit var simulationContext: SimulationContext
@@ -56,13 +59,13 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas = RailwayNetGridCanvas()
 
 			// Create a simple editing context with one InOut node
-			editingContext = factory.createEmptyContext()
+			editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, SpatialType.HORIZONTAL)
 			val pA = Point(5, 5)
 			editingContext.putCell(pA, inA)
 
 			// Create simulation context from editing context
-			simulationContext = factory.createContext(editingContext)
+			simulationContext = simulationContextFactory.createContext(editingContext)
 		}
 	}
 
@@ -286,15 +289,17 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setContext(editingContext)
 
 			// When: Getting status for empty cell
-			val mouseEvent = java.awt.event.MouseEvent(
-				canvas,
-				java.awt.event.MouseEvent.MOUSE_MOVED,
-				System.currentTimeMillis(),
-				0,
-				0, 0, // Position (0,0) - empty
-				0,
-				false
-			)
+			val mouseEvent =
+				java.awt.event.MouseEvent(
+					canvas,
+					java.awt.event.MouseEvent.MOUSE_MOVED,
+					System.currentTimeMillis(),
+					0,
+					0,
+					0, // Position (0,0) - empty
+					0,
+					false
+				)
 			val status = canvas.getStatus(mouseEvent)
 
 			// Then: Status should be empty string
@@ -316,15 +321,17 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			// When: Getting status for cell position
 			val x = cellPoint.x * RailwayNetGridCanvas.getCellWidth()
 			val y = cellPoint.y * RailwayNetGridCanvas.getCellHeight()
-			val mouseEvent = java.awt.event.MouseEvent(
-				canvas,
-				java.awt.event.MouseEvent.MOUSE_MOVED,
-				System.currentTimeMillis(),
-				0,
-				x, y,
-				0,
-				false
-			)
+			val mouseEvent =
+				java.awt.event.MouseEvent(
+					canvas,
+					java.awt.event.MouseEvent.MOUSE_MOVED,
+					System.currentTimeMillis(),
+					0,
+					x,
+					y,
+					0,
+					false
+				)
 			val status = canvas.getStatus(mouseEvent)
 
 			// Then: Status should contain cell info
@@ -374,11 +381,12 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// When: Getting block increment for horizontal scroll
 			val visibleRect = java.awt.Rectangle(0, 0, 800, 600)
-			val increment = canvas.getScrollableBlockIncrement(
-				visibleRect,
-				javax.swing.SwingConstants.HORIZONTAL,
-				1
-			)
+			val increment =
+				canvas.getScrollableBlockIncrement(
+					visibleRect,
+					javax.swing.SwingConstants.HORIZONTAL,
+					1
+				)
 
 			// Then: Increment should be less than viewport width
 			assertThat(increment).isEqualTo(visibleRect.width - 35) // MAX_UNIT_INCREMENT = 35
@@ -395,11 +403,12 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// When: Getting unit increment
 			val visibleRect = java.awt.Rectangle(0, 0, 800, 600)
-			val increment = canvas.getScrollableUnitIncrement(
-				visibleRect,
-				javax.swing.SwingConstants.HORIZONTAL,
-				1 // Forward direction
-			)
+			val increment =
+				canvas.getScrollableUnitIncrement(
+					visibleRect,
+					javax.swing.SwingConstants.HORIZONTAL,
+					1 // Forward direction
+				)
 
 			// Then: Increment should be positive
 			assertThat(increment > 0).isEqualTo(true)
@@ -416,12 +425,13 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// When: Property change with Point value
 			val point = java.awt.Point(5, 5)
-			val event = java.beans.PropertyChangeEvent(
-				editingContext,
-				"cell",
-				null,
-				point
-			)
+			val event =
+				java.beans.PropertyChangeEvent(
+					editingContext,
+					"cell",
+					null,
+					point
+				)
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)
@@ -438,12 +448,13 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setContext(editingContext)
 
 			// When: Property change with non-Point value
-			val event = java.beans.PropertyChangeEvent(
-				editingContext,
-				"property",
-				null,
-				"value"
-			)
+			val event =
+				java.beans.PropertyChangeEvent(
+					editingContext,
+					"property",
+					null,
+					"value"
+				)
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)

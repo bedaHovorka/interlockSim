@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.core
 
-
 /**
  * orientovany prvek
  * "ma nejaky vyznam a ten plati jen v jednom smeru jizdy"

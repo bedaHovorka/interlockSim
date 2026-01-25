@@ -10,18 +10,16 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -44,7 +42,8 @@ import org.koin.test.inject
  * @since 2026-01-22
  */
 class ContextTransformationPhasesTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -57,13 +56,13 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `copyGridCells copies all cells correctly`() {
 		// Arrange - Build editing context with cells
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(3, 3), semaphore)
 		editingContext.putCell(Point(5, 5), outB)
 
 		// Act - Transform to simulation context (which calls copyGridCells internally)
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - All cells copied
 		val grid = simulationContext.getRailWayNetGrid()
@@ -79,7 +78,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `copyGraphStructure copies all graph entries correctly`() {
 		// Arrange - Build editing context with graph entries
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(3, 3), semaphore)
 		editingContext.putCell(Point(5, 5), outB)
@@ -90,7 +89,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 		val originalGraphSize = editingContext.getGraph().size()
 
 		// Act - Transform to simulation context (which calls copyGraphStructure internally)
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - All graph entries copied
 		val graph = simulationContext.getGraph()
@@ -104,7 +103,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `copyInOutList copies all InOut elements correctly`() {
 		// Arrange - Build editing context with InOut elements
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -112,7 +111,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 		val originalInOutCount = editingContext.getInOuts().size
 
 		// Act - Transform to simulation context (which calls copyInOutList internally)
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - All InOut elements copied
 		val inOuts = simulationContext.getInOuts()
@@ -126,13 +125,13 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `copyConfiguration copies all properties correctly`() {
 		// Arrange - Build editing context with custom properties
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.currentMaxSpeed = 120.0
 		editingContext.currentTrackLength = 750.0
 		editingContext.currentNameString = "TestConfig"
 
 		// Act - Transform to simulation context (which calls copyConfiguration internally)
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Assert - All properties copied
 		assertThat(simulationContext.currentMaxSpeed).isEqualTo(120.0)
@@ -146,7 +145,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `createDynamicMappings creates dynamic wrappers correctly`() {
 		// Arrange - Build editing context with PathSeparators (InOut, RailSemaphore)
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(3, 3), semaphore)
 		editingContext.putCell(Point(5, 5), outB)
@@ -156,7 +155,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 		editingContext.joinCells(Point(3, 3), Point(5, 5), track2)
 
 		// Act - Transform to simulation context (which calls createDynamicMappings internally)
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Assert - Dynamic wrappers created (for InOut and RailSemaphore)
 		// Note: We can't directly access staticToDynamicMap (it's private), but we can test toDynamic()
@@ -176,7 +175,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `validateTransformation completes without errors`() {
 		// Arrange - Build editing context
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -184,7 +183,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 
 		// Act - Transform to simulation context (which calls validateTransformation internally)
 		// Should not throw any exceptions
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Transformation completed successfully
 		assertThat(simulationContext).isNotNull()
@@ -200,7 +199,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `fromEditingContext orchestrates all phases correctly`() {
 		// Arrange - Build complete network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.currentMaxSpeed = 100.0
 		editingContext.currentTrackLength = 600.0
 		editingContext.currentNameString = "TestNetwork"
@@ -213,7 +212,7 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 		editingContext.joinCells(Point(3, 3), Point(5, 5), track2)
 
 		// Act - Transform to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Assert - All phases completed successfully
 		// 1. Grid cells copied (includes NodeCell and TrackBlockPart cells added by joinCells)
@@ -238,10 +237,10 @@ class ContextTransformationPhasesTest : KoinTestBase() {
 	@Test
 	fun `empty editing context transforms without errors`() {
 		// Arrange - Empty editing context
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 
 		// Act - Transform to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Assert - Empty simulation context created
 		assertThat(simulationContext).isNotNull()

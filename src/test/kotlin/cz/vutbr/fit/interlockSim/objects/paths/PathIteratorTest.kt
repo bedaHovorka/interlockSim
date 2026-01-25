@@ -10,7 +10,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.hasSize
@@ -18,8 +17,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -404,11 +404,12 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator processes all elements exactly once`() {
 			// Arrange
-			val elements = listOf(
-				MockNodeCell("End1"),
-				SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
-				MockNodeCell("End2")
-			)
+			val elements =
+				listOf(
+					MockNodeCell("End1"),
+					SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
+					MockNodeCell("End2")
+				)
 
 			val path = ArrayPath(mockContext)
 			elements.forEach { path.addLast(it) }
@@ -489,11 +490,12 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `multiple iterators can traverse complete path independently`() {
 			// Arrange
-			val elements = listOf(
-				MockNodeCell("End1"),
-				SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
-				MockNodeCell("End2")
-			)
+			val elements =
+				listOf(
+					MockNodeCell("End1"),
+					SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
+					MockNodeCell("End2")
+				)
 
 			val path = ArrayPath(mockContext)
 			elements.forEach { path.addLast(it) }

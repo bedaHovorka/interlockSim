@@ -9,15 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.anti
-
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -39,7 +37,8 @@ private val logger = KotlinLogging.logger {}
  */
 sealed class DynamicRailSemaphore(
 	val staticRef: RailSemaphore
-) : OrientedPathSeparator by staticRef, DynamicPathSeparator {
+) : OrientedPathSeparator by staticRef,
+	DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
 	// spatialType is already available via PathSeparator delegation (getSpatialType())
@@ -206,7 +205,6 @@ private class ConstantSemaphore(
 	static: RailSemaphore,
 	signal: Signal
 ) : DynamicRailSemaphore(static) {
-
 	override var signal: Signal = signal
 		set(_) {
 			// Ignore changes: constant semaphore signal must not change
@@ -214,7 +212,9 @@ private class ConstantSemaphore(
 		}
 }
 
-private class DefaultDynamicSemaphore(static: RailSemaphore) : DynamicRailSemaphore(static)
+private class DefaultDynamicSemaphore(
+	static: RailSemaphore
+) : DynamicRailSemaphore(static)
 
 /**
  * @param speed
@@ -254,6 +254,4 @@ fun createConstantInstance(
  * @param static static rail semaphore
  * @return dynamic rail semaphore
  */
-fun createDynamicInstance(
-	static: RailSemaphore
-): DynamicRailSemaphore = DefaultDynamicSemaphore(static)
+fun createDynamicInstance(static: RailSemaphore): DynamicRailSemaphore = DefaultDynamicSemaphore(static)

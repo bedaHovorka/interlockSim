@@ -46,7 +46,10 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Get Frame from Koin (singleton) instead of creating new instance
 			// This ensures ToolBar's GridSwitch accesses the same Frame instance
-			frame = org.koin.mp.KoinPlatform.getKoin().get<Frame>()
+			frame =
+				org.koin.mp.KoinPlatform
+					.getKoin()
+					.get<Frame>()
 			frames.add(frame)
 			toolBar = ToolBar()
 		}
@@ -192,9 +195,10 @@ class ToolBarTest : AbstractFrameTestBase() {
 	fun toolbarHasSeparatorsBetweenButtonGroups() {
 		runOnEDT {
 			// Count separators
-			val separatorCount = toolBar.components.count {
-				it.javaClass.simpleName.contains("Separator")
-			}
+			val separatorCount =
+				toolBar.components.count {
+					it.javaClass.simpleName.contains("Separator")
+				}
 			
 			// Should have at least 3 separators (semaphores, switches, inout, grid)
 			assertThat(separatorCount).isGreaterThan(0)

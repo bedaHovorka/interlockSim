@@ -10,11 +10,11 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -142,18 +142,15 @@ class RailSemaphoreTest : KoinTestBase() {
 					.withInOut("OUT", 2, 0, false)
 					.withConnection(0, 0, 1, 0, 100.0, 20.0)
 					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.build()
+					.buildSimulationContext()
 
 			// Get the semaphore from context
-			val semaphoreFromContext =
+			val dynSemaphore =
 				context
 					.getRailWayNetGrid()
-					.getCellAt(1, 0) as RailSemaphore
+					.getCellAt(1, 0) as DynamicRailSemaphore
 
 			context.addPropertyChangeListener(listener)
-
-			// Create dynamic instance
-			val dynSemaphore = createDynamicInstance(semaphoreFromContext)
 
 			// Act
 			dynSemaphore.signal = Signal.FREE
@@ -197,21 +194,16 @@ class RailSemaphoreTest : KoinTestBase() {
 					.withInOut("OUT", 2, 0, false)
 					.withConnection(0, 0, 1, 0, 100.0, 20.0)
 					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.build()
+					.buildSimulationContext()
 
 			// Act
-			val staticSemaphore =
+			val dynSemaphore =
 				context
 					.getRailWayNetGrid()
-					.getCellAt(1, 0) as? RailSemaphore
+					.getCellAt(1, 0) as DynamicRailSemaphore
 
 			// Assert - semaphore should exist at the specified location
-			assertThat(staticSemaphore != null)
-				.withMessage("semaphore should be associated with track position (1,0)")
-				.isTrue()
-
-			val dynSemaphore = createDynamicInstance(staticSemaphore!!)
-			assertThat(dynSemaphore.signal)
+			assertThat(dynSemaphore::signal)
 				.withMessage("semaphore should have initial STOP signal")
 				.isEqualTo(Signal.STOP)
 		}
@@ -226,14 +218,12 @@ class RailSemaphoreTest : KoinTestBase() {
 					.withInOut("OUT", 2, 0, false)
 					.withConnection(0, 0, 1, 0, 100.0, 20.0)
 					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.build()
+					.buildSimulationContext()
 
-			val staticSemaphore =
+			val dynSemaphore =
 				context
 					.getRailWayNetGrid()
-					.getCellAt(1, 0) as RailSemaphore
-
-			val dynSemaphore = createDynamicInstance(staticSemaphore)
+					.getCellAt(1, 0) as DynamicRailSemaphore
 
 			// Arrange - set semaphore to STOP (red light)
 			dynSemaphore.signal = Signal.STOP

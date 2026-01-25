@@ -15,13 +15,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -54,7 +53,7 @@ import kotlin.concurrent.thread
  */
 @DisplayName("Context Concurrency")
 class ContextConcurrencyTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -68,7 +67,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("concurrent grid access is thread-safe for reads")
 		fun concurrentGridAccess_reads_isThreadSafe() {
 			// Arrange - Create context with some cells
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(5, 5), inA)
 			context.putCell(Point(10, 10), outB)
 			context.putCell(Point(7, 7), semaphore)
@@ -80,23 +79,24 @@ class ContextConcurrencyTest : KoinTestBase() {
 			val barrier = CyclicBarrier(threadCount)
 
 			// Act - Multiple threads reading concurrently
-			val threads = List(threadCount) { threadIndex ->
-				thread {
-					barrier.await() // Synchronize start
-					repeat(iterations) {
-						try {
-							val cell1 = context.getRailWayNetGrid().getCellAt(5, 5)
-							val cell2 = context.getRailWayNetGrid().getCellAt(10, 10)
-							val cell3 = context.getRailWayNetGrid().getCellAt(7, 7)
-							if (cell1 != null && cell2 != null && cell3 != null) {
-								successCount.incrementAndGet()
+			val threads =
+				List(threadCount) { threadIndex ->
+					thread {
+						barrier.await() // Synchronize start
+						repeat(iterations) {
+							try {
+								val cell1 = context.getRailWayNetGrid().getCellAt(5, 5)
+								val cell2 = context.getRailWayNetGrid().getCellAt(10, 10)
+								val cell3 = context.getRailWayNetGrid().getCellAt(7, 7)
+								if (cell1 != null && cell2 != null && cell3 != null) {
+									successCount.incrementAndGet()
+								}
+							} catch (e: Exception) {
+								// Read failed (expected if not thread-safe)
 							}
-						} catch (e: Exception) {
-							// Read failed (expected if not thread-safe)
 						}
 					}
 				}
-			}
 
 			threads.forEach { it.join(5000) } // Wait up to 5 seconds
 
@@ -110,7 +110,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("concurrent graph queries work on frozen context")
 		fun concurrentGraphQueries_onFrozenContext_work() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(5, 5), inA)
 			context.putCell(Point(6, 5), outB)
 			val trackBlock = SimpleTrackBlock(inA, outB, 100.0, 80.0)
@@ -122,19 +122,20 @@ class ContextConcurrencyTest : KoinTestBase() {
 			val barrier = CyclicBarrier(threadCount)
 
 			// Act - Multiple threads querying graph
-			val threads = List(threadCount) {
-				thread {
-					barrier.await()
-					try {
-						val graphSize = context.getGraph().size()
-						if (graphSize > 0) {
-							successCount.incrementAndGet()
+			val threads =
+				List(threadCount) {
+					thread {
+						barrier.await()
+						try {
+							val graphSize = context.getGraph().size()
+							if (graphSize > 0) {
+								successCount.incrementAndGet()
+							}
+						} catch (e: Exception) {
+							// Query failed
 						}
-					} catch (e: Exception) {
-						// Query failed
 					}
 				}
-			}
 
 			threads.forEach { it.join(5000) }
 
@@ -146,7 +147,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("concurrent InOut list access works on frozen context")
 		fun concurrentInOutListAccess_onFrozenContext_works() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			context.freeze()
@@ -156,19 +157,20 @@ class ContextConcurrencyTest : KoinTestBase() {
 			val barrier = CyclicBarrier(threadCount)
 
 			// Act
-			val threads = List(threadCount) {
-				thread {
-					barrier.await()
-					try {
-						val inOuts = context.getInOuts()
-						if (inOuts.size == 2) {
-							successCount.incrementAndGet()
+			val threads =
+				List(threadCount) {
+					thread {
+						barrier.await()
+						try {
+							val inOuts = context.getInOuts()
+							if (inOuts.size == 2) {
+								successCount.incrementAndGet()
+							}
+						} catch (e: Exception) {
+							// Access failed
 						}
-					} catch (e: Exception) {
-						// Access failed
 					}
 				}
-			}
 
 			threads.forEach { it.join(5000) }
 
@@ -184,20 +186,21 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("property change listeners are thread-safe")
 		fun propertyChangeListeners_areThreadSafe() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val listenerCount = AtomicInteger(0)
 			val barrier = CyclicBarrier(10)
 
 			// Act - Multiple threads adding/removing listeners
-			val threads = List(10) { index ->
-				thread {
-					barrier.await()
-					val listener = PropertyChangeListener { evt -> listenerCount.incrementAndGet() }
-					context.addPropertyChangeListener(listener)
-					Thread.sleep(10) // Small delay
-					context.removePropertyChangeListener(listener)
+			val threads =
+				List(10) { index ->
+					thread {
+						barrier.await()
+						val listener = PropertyChangeListener { evt -> listenerCount.incrementAndGet() }
+						context.addPropertyChangeListener(listener)
+						Thread.sleep(10) // Small delay
+						context.removePropertyChangeListener(listener)
+					}
 				}
-			}
 
 			threads.forEach { it.join(5000) }
 
@@ -209,17 +212,18 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("property change events fire correctly with concurrent listeners")
 		fun propertyChangeEvents_fireCorrectlyWithConcurrentListeners() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val eventCount = AtomicInteger(0)
 			val listenerCount = 10
 
-			val listeners = List(listenerCount) {
-				PropertyChangeListener { evt ->
-					if (evt.propertyName == ContextChangeListener.CELL_ADDED) {
-						eventCount.incrementAndGet()
+			val listeners =
+				List(listenerCount) {
+					PropertyChangeListener { evt ->
+						if (evt.propertyName == ContextChangeListener.CELL_ADDED) {
+							eventCount.incrementAndGet()
+						}
 					}
 				}
-			}
 
 			listeners.forEach { context.addPropertyChangeListener(it) }
 
@@ -239,25 +243,26 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("concurrent modifications cause race conditions")
 		fun concurrentModifications_causeRaceConditions() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val successCount = AtomicInteger(0)
 			val failureCount = AtomicInteger(0)
 			val threadCount = 5
 			val barrier = CyclicBarrier(threadCount)
 
 			// Act - Multiple threads trying to add cells at same location (race condition)
-			val threads = List(threadCount) { index ->
-				thread {
-					barrier.await()
-					try {
-						val cell = InOut("Cell$index", false, SpatialType.HORIZONTAL)
-						context.putCell(Point(10, 10), cell) // Same location!
-						successCount.incrementAndGet()
-					} catch (e: Exception) {
-						failureCount.incrementAndGet()
+			val threads =
+				List(threadCount) { index ->
+					thread {
+						barrier.await()
+						try {
+							val cell = InOut("Cell$index", false, SpatialType.HORIZONTAL)
+							context.putCell(Point(10, 10), cell) // Same location!
+							successCount.incrementAndGet()
+						} catch (e: Exception) {
+							failureCount.incrementAndGet()
+						}
 					}
 				}
-			}
 
 			threads.forEach { it.join(5000) }
 
@@ -271,28 +276,29 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("graph modifications are not atomic")
 		fun graphModifications_areNotAtomic() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val successCount = AtomicInteger(0)
 			val threadCount = 5
 			val barrier = CyclicBarrier(threadCount)
 
 			// Act - Multiple threads trying to join cells concurrently
-			val threads = List(threadCount) { index ->
-				thread {
-					barrier.await()
-					try {
-						val inOut1 = InOut("In$index", true, SpatialType.HORIZONTAL)
-						val inOut2 = InOut("Out$index", false, SpatialType.HORIZONTAL)
-						context.putCell(Point(index * 3, 5), inOut1)
-						context.putCell(Point(index * 3 + 2, 5), inOut2)
-						val trackBlock = SimpleTrackBlock(inOut1, inOut2, 100.0, 80.0)
-						context.joinCells(Point(index * 3, 5), Point(index * 3 + 2, 5), trackBlock)
-						successCount.incrementAndGet()
-					} catch (e: Exception) {
-						// Operation failed (race condition or other error)
+			val threads =
+				List(threadCount) { index ->
+					thread {
+						barrier.await()
+						try {
+							val inOut1 = InOut("In$index", true, SpatialType.HORIZONTAL)
+							val inOut2 = InOut("Out$index", false, SpatialType.HORIZONTAL)
+							context.putCell(Point(index * 3, 5), inOut1)
+							context.putCell(Point(index * 3 + 2, 5), inOut2)
+							val trackBlock = SimpleTrackBlock(inOut1, inOut2, 100.0, 80.0)
+							context.joinCells(Point(index * 3, 5), Point(index * 3 + 2, 5), trackBlock)
+							successCount.incrementAndGet()
+						} catch (e: Exception) {
+							// Operation failed (race condition or other error)
+						}
 					}
 				}
-			}
 
 			threads.forEach { it.join(5000) }
 
@@ -309,36 +315,38 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("single writer with multiple readers pattern works")
 		fun singleWriterMultipleReaders_works() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val writerDone = CountDownLatch(1)
 			val readerSuccessCount = AtomicInteger(0)
 			val readerCount = 10
 
 			// Act - One writer thread
-			val writerThread = thread {
-				context.putCell(Point(5, 5), inA)
-				context.putCell(Point(10, 10), outB)
-				context.putCell(Point(7, 7), semaphore)
-				context.freeze()
-				writerDone.countDown()
-			}
+			val writerThread =
+				thread {
+					context.putCell(Point(5, 5), inA)
+					context.putCell(Point(10, 10), outB)
+					context.putCell(Point(7, 7), semaphore)
+					context.freeze()
+					writerDone.countDown()
+				}
 
 			// Multiple reader threads (wait for writer)
-			val readerThreads = List(readerCount) {
-				thread {
-					writerDone.await(5, TimeUnit.SECONDS)
-					try {
-						val cell1 = context.getRailWayNetGrid().getCellAt(5, 5)
-						val cell2 = context.getRailWayNetGrid().getCellAt(10, 10)
-						val cell3 = context.getRailWayNetGrid().getCellAt(7, 7)
-						if (cell1 != null && cell2 != null && cell3 != null) {
-							readerSuccessCount.incrementAndGet()
+			val readerThreads =
+				List(readerCount) {
+					thread {
+						writerDone.await(5, TimeUnit.SECONDS)
+						try {
+							val cell1 = context.getRailWayNetGrid().getCellAt(5, 5)
+							val cell2 = context.getRailWayNetGrid().getCellAt(10, 10)
+							val cell3 = context.getRailWayNetGrid().getCellAt(7, 7)
+							if (cell1 != null && cell2 != null && cell3 != null) {
+								readerSuccessCount.incrementAndGet()
+							}
+						} catch (e: Exception) {
+							// Read failed
 						}
-					} catch (e: Exception) {
-						// Read failed
 					}
 				}
-			}
 
 			writerThread.join(5000)
 			readerThreads.forEach { it.join(5000) }
@@ -352,7 +360,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("frozen context supports concurrent readers")
 		fun frozenContext_supportsConcurrentReaders() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(5, 5), inA)
 			context.putCell(Point(10, 10), outB)
 			context.freeze()
@@ -363,23 +371,24 @@ class ContextConcurrencyTest : KoinTestBase() {
 			val barrier = CyclicBarrier(readerCount)
 
 			// Act - Many concurrent readers
-			val threads = List(readerCount) {
-				thread {
-					barrier.await()
-					repeat(iterations) {
-						try {
-							val cell = context.getRailWayNetGrid().getCellAt(5, 5)
-							val frozen = context.isFrozen()
-							val inOuts = context.getInOuts()
-							if (cell != null && frozen && inOuts.size == 2) {
-								totalSuccessCount.incrementAndGet()
+			val threads =
+				List(readerCount) {
+					thread {
+						barrier.await()
+						repeat(iterations) {
+							try {
+								val cell = context.getRailWayNetGrid().getCellAt(5, 5)
+								val frozen = context.isFrozen()
+								val inOuts = context.getInOuts()
+								if (cell != null && frozen && inOuts.size == 2) {
+									totalSuccessCount.incrementAndGet()
+								}
+							} catch (e: Exception) {
+								// Read failed
 							}
-						} catch (e: Exception) {
-							// Read failed
 						}
 					}
 				}
-			}
 
 			threads.forEach { it.join(10000) }
 
@@ -399,7 +408,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 			// The classes should have clear javadoc/kdoc about NOT being thread-safe
 
 			// Arrange & Act
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			// Assert - Context works correctly in single-threaded usage
 			context.putCell(Point(5, 5), inA)
@@ -413,11 +422,11 @@ class ContextConcurrencyTest : KoinTestBase() {
 		@DisplayName("frozen context is safer for concurrent access than mutable")
 		fun frozenContext_isSaferThanMutable() {
 			// Arrange - Create two contexts
-			val frozenContext = factory.createEmptyContext()
+			val frozenContext = editingContextFactory.createEmptyContext()
 			frozenContext.putCell(Point(5, 5), inA)
 			frozenContext.freeze()
 
-			val mutableContext = factory.createEmptyContext()
+			val mutableContext = editingContextFactory.createEmptyContext()
 			mutableContext.putCell(Point(5, 5), inA)
 
 			// Act - Concurrent reads on frozen vs mutable
@@ -427,29 +436,31 @@ class ContextConcurrencyTest : KoinTestBase() {
 			val frozenBarrier = CyclicBarrier(threadCount)
 			val mutableBarrier = CyclicBarrier(threadCount)
 
-			val frozenThreads = List(threadCount) {
-				thread {
-					frozenBarrier.await()
-					try {
-						val cell = frozenContext.getRailWayNetGrid().getCellAt(5, 5)
-						if (cell != null) frozenSuccessCount.incrementAndGet()
-					} catch (e: Exception) {
-						// Read failed
+			val frozenThreads =
+				List(threadCount) {
+					thread {
+						frozenBarrier.await()
+						try {
+							val cell = frozenContext.getRailWayNetGrid().getCellAt(5, 5)
+							if (cell != null) frozenSuccessCount.incrementAndGet()
+						} catch (e: Exception) {
+							// Read failed
+						}
 					}
 				}
-			}
 
-			val mutableThreads = List(threadCount) {
-				thread {
-					mutableBarrier.await()
-					try {
-						val cell = mutableContext.getRailWayNetGrid().getCellAt(5, 5)
-						if (cell != null) mutableSuccessCount.incrementAndGet()
-					} catch (e: Exception) {
-						// Read failed
+			val mutableThreads =
+				List(threadCount) {
+					thread {
+						mutableBarrier.await()
+						try {
+							val cell = mutableContext.getRailWayNetGrid().getCellAt(5, 5)
+							if (cell != null) mutableSuccessCount.incrementAndGet()
+						} catch (e: Exception) {
+							// Read failed
+						}
 					}
 				}
-			}
 
 			frozenThreads.forEach { it.join(5000) }
 			mutableThreads.forEach { it.join(5000) }

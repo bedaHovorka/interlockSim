@@ -17,10 +17,11 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -49,13 +50,11 @@ import java.util.concurrent.TimeUnit
  * - UTF-8 encoding validation
  * - Large context serialization performance
  *
- * Architectural Decision (from Issue #61):
- * Option A: Accept Context<*> (any type), save static network structure only.
- * Dynamic simulation state (train positions, semaphore states) is NOT saved.
+ * Architectural Decision: Only static objects in xml context
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 class XMLContextFactoryOutputStreamTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	@Nested
 	@DisplayName("Basic OutputStream Serialization")
@@ -64,11 +63,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_minimalNetwork_producesValidXML() {
 			// Load minimal network fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 			val outputStream = ByteArrayOutputStream()
 
 			// Save to OutputStream
-			val success = factory.saveContext(context, outputStream)
+			val success = editingContextFactory.saveContext(context, outputStream)
 
 			// Verify success
 			assertThat(success).isTrue()
@@ -84,13 +83,13 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_emptyContextWithInOuts_producesValidXML() {
 			// Create empty context with minimum required InOuts
-			val emptyContext = factory.createEmptyContext()
+			val emptyContext = editingContextFactory.createEmptyContext()
 			emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
 			emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
 			val outputStream = ByteArrayOutputStream()
 
 			// Save to OutputStream
-			val success = factory.saveContext(context = emptyContext, stream = outputStream)
+			val success = editingContextFactory.saveContext(context = emptyContext, stream = outputStream)
 
 			// Verify success and XML structure
 			assertThat(success).isTrue()
@@ -103,11 +102,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_linearTrack_includesTrackBlocks() {
 			// Load linear track fixture (has SimpleTrackBlock)
 			val xml = getFixtureStream("linear-track.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 			val outputStream = ByteArrayOutputStream()
 
 			// Save to OutputStream
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Verify XML contains track block
 			val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -120,11 +119,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_switchBasic_preservesSwitchType() {
 			// Load switch fixture
 			val xml = getFixtureStream("switch-basic.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 			val outputStream = ByteArrayOutputStream()
 
 			// Save to OutputStream
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Verify XML contains RailSwitch with type
 			val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -136,11 +135,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_semaphoreBasic_preservesOrientation() {
 			// Load semaphore fixture
 			val xml = getFixtureStream("semaphore-basic.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 			val outputStream = ByteArrayOutputStream()
 
 			// Save to OutputStream
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Verify XML contains RailSemaphore with orientation
 			val xmlString = outputStream.toString(Charsets.UTF_8)
@@ -150,13 +149,13 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 
 		@Test
 		fun saveContext_outputStream_flushesData() {
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
 			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Use ByteArrayOutputStream to verify data is flushed
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Verify data is immediately available (not buffered)
 			assertThat(outputStream.size())
@@ -172,15 +171,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveAndLoad_minimalNetwork_preservesStructure() {
 			// Load original fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(originalContext, outputStream)
+			editingContextFactory.saveContext(originalContext, outputStream)
 
 			// Load from InputStream
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream)
+			val loadedContext = editingContextFactory.createContext(inputStream)
 
 			// Verify structure is preserved
 			assertThat(loadedContext).isNotNull()
@@ -200,15 +199,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveAndLoad_linearTrack_preservesTrackBlocks() {
 			// Load fixture with track block
 			val xml = getFixtureStream("linear-track.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(originalContext, outputStream)
+			editingContextFactory.saveContext(originalContext, outputStream)
 
 			// Load from InputStream
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream)
+			val loadedContext = editingContextFactory.createContext(inputStream)
 
 			// Verify cells are preserved
 			val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
@@ -226,36 +225,34 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveAndLoad_switchBasic_preservesSwitchType() {
 			// Load fixture with rail switch
 			val xml = getFixtureStream("switch-basic.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(originalContext, outputStream)
+			editingContextFactory.saveContext(originalContext, outputStream)
 
 			// Load from InputStream
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream)
+			val loadedContext = editingContextFactory.createContext(inputStream)
 
-			// Verify switch is preserved
-			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
+			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10) as RailSwitch
 			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-			val railSwitch = switchCell as RailSwitch
-			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			assertThat(switchCell.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		}
 
 		@Test
 		fun saveAndLoad_emptyGrid_preservesGridSize() {
 			// Load empty grid fixture
 			val xml = getFixtureStream("empty-grid.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(originalContext, outputStream)
+			editingContextFactory.saveContext(originalContext, outputStream)
 
 			// Load from InputStream
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream)
+			val loadedContext = editingContextFactory.createContext(inputStream)
 
 			// Verify grid size is preserved
 			val grid = loadedContext.getRailWayNetGrid()
@@ -267,15 +264,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveAndLoad_rudyUjezd_preservesComplexStructure() {
 			// Load complex fixture
 			val xml = getFixtureStream("rudyUjezd.xml")
-			val originalContext = factory.createContext(xml) as DefaultSimulationContext
+			val originalContext = editingContextFactory.createContext(xml) as EditingContext
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(originalContext, outputStream)
+			editingContextFactory.saveContext(originalContext, outputStream)
 
 			// Load from InputStream
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream) as DefaultSimulationContext
+			val loadedContext = editingContextFactory.createContext(inputStream) as EditingContext
 
 			// Verify grid size
 			assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(100)
@@ -314,15 +311,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_minimalNetwork_produceIdenticalXML() {
 			// Load fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to File
-			factory.saveContext(context, tempFile!!)
+			editingContextFactory.saveContext(context, tempFile!!)
 			val fileContent = tempFile!!.readText()
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 			val streamContent = outputStream.toString(Charsets.UTF_8)
 
 			// Verify outputs are identical
@@ -333,15 +330,15 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_linearTrack_produceIdenticalXML() {
 			// Load fixture with track blocks
 			val xml = getFixtureStream("linear-track.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to File
-			factory.saveContext(context, tempFile!!)
+			editingContextFactory.saveContext(context, tempFile!!)
 			val fileContent = tempFile!!.readText()
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 			val streamContent = outputStream.toString(Charsets.UTF_8)
 
 			// Verify outputs are identical
@@ -352,14 +349,14 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_switchBasic_produceIdenticalXML() {
 			// Load fixture with switch
 			val xml = getFixtureStream("switch-basic.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to both
-			factory.saveContext(context, tempFile!!)
+			editingContextFactory.saveContext(context, tempFile!!)
 			val fileContent = tempFile!!.readText()
 
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 			val streamContent = outputStream.toString(Charsets.UTF_8)
 
 			// Verify identical
@@ -370,14 +367,14 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_emptyGrid_produceIdenticalXML() {
 			// Load empty grid
 			val xml = getFixtureStream("empty-grid.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to both
-			factory.saveContext(context, tempFile!!)
+			editingContextFactory.saveContext(context, tempFile!!)
 			val fileContent = tempFile!!.readText()
 
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 			val streamContent = outputStream.toString(Charsets.UTF_8)
 
 			// Verify identical
@@ -388,14 +385,14 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun outputStreamAndFile_rudyUjezd_produceIdenticalXML() {
 			// Load complex fixture
 			val xml = getFixtureStream("rudyUjezd.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to both
-			factory.saveContext(context, tempFile!!)
+			editingContextFactory.saveContext(context, tempFile!!)
 			val fileContent = tempFile!!.readText()
 
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 			val streamContent = outputStream.toString(Charsets.UTF_8)
 
 			// Verify identical
@@ -409,19 +406,18 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_failingOutputStream_returnsFalse() {
 			// Create context
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
 			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Create OutputStream that throws IOException
-			val failingStream = object : OutputStream() {
-				override fun write(b: Int) {
-					throw java.io.IOException("Simulated write failure")
+			val failingStream =
+				object : OutputStream() {
+					override fun write(b: Int): Unit = throw java.io.IOException("Simulated write failure")
 				}
-			}
 
 			// Attempt to save (should return false)
-			val success = factory.saveContext(context, failingStream)
+			val success = editingContextFactory.saveContext(context, failingStream)
 
 			// Verify failure is handled gracefully
 			assertThat(success).isFalse()
@@ -430,19 +426,18 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_outputStreamThrowsOnFlush_returnsFalse() {
 			// Create context
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), InOut("A", true, Cell.SpatialType.HORIZONTAL))
 			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Create OutputStream that throws IOException on flush
-			val failingStream = object : ByteArrayOutputStream() {
-				override fun flush() {
-					throw java.io.IOException("Simulated flush failure")
+			val failingStream =
+				object : ByteArrayOutputStream() {
+					override fun flush(): Unit = throw java.io.IOException("Simulated flush failure")
 				}
-			}
 
 			// Attempt to save (should return false)
-			val success = factory.saveContext(context, failingStream)
+			val success = editingContextFactory.saveContext(context, failingStream)
 
 			// Verify failure is handled gracefully
 			assertThat(success).isFalse()
@@ -455,13 +450,13 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_usesUTF8Encoding() {
 			// Create context
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), InOut("Entry", true, Cell.SpatialType.HORIZONTAL))
 			context.putCell(Point(2, 1), InOut("Exit", false, Cell.SpatialType.HORIZONTAL))
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Verify UTF-8 encoding by checking byte array
 			val bytes = outputStream.toByteArray()
@@ -479,17 +474,17 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		@Test
 		fun saveContext_specialCharactersInNames_encodedCorrectly() {
 			// Create context with special characters (if names support them)
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), InOut("Entry_A", true, Cell.SpatialType.HORIZONTAL))
 			context.putCell(Point(2, 1), InOut("Exit_B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Save to OutputStream
 			val outputStream = ByteArrayOutputStream()
-			factory.saveContext(context, outputStream)
+			editingContextFactory.saveContext(context, outputStream)
 
 			// Load back to verify round-trip encoding
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
-			val loadedContext = factory.createContext(inputStream)
+			val loadedContext = editingContextFactory.createContext(inputStream)
 
 			// Verify names are preserved
 			val cellA = loadedContext.getRailWayNetGrid().getCellAt(1, 1)
@@ -505,13 +500,13 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_largeContext_completesInReasonableTime() {
 			// Load complex fixture (rudyUjezd is reasonably large)
 			val xml = getFixtureStream("rudyUjezd.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Measure save time
 			val outputStream = ByteArrayOutputStream()
-			val startTime = System.currentTimeMillis()
-			factory.saveContext(context, outputStream)
-			val elapsedTime = System.currentTimeMillis() - startTime
+			val startTime = System.nanoTime()
+			editingContextFactory.saveContext(context, outputStream)
+			val elapsedTime = System.nanoTime() - startTime
 
 			// Verify save completes in reasonable time (< 1 second for rudyUjezd)
 			assertThat(elapsedTime)
@@ -526,12 +521,12 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		fun saveContext_multipleConsecutiveSaves_allSucceed() {
 			// Load fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save 10 times to different OutputStreams
 			for (i in 1..10) {
 				val outputStream = ByteArrayOutputStream()
-				val success = factory.saveContext(context, outputStream)
+				val success = editingContextFactory.saveContext(context, outputStream)
 				assertThat(success)
 					.withMessage("Save #$i should succeed")
 					.isTrue()

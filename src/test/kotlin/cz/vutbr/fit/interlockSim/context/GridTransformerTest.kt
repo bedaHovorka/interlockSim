@@ -17,7 +17,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -25,15 +24,14 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
 import java.io.File
 import kotlin.system.measureTimeMillis
 
@@ -49,8 +47,6 @@ import kotlin.system.measureTimeMillis
  */
 @DisplayName("GridTransformer")
 class GridTransformerTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
-
 	companion object {
 		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 	}
@@ -71,7 +67,7 @@ class GridTransformerTest : KoinTestBase() {
 			assertThat(result.dynamicGrid.getCols()).isEqualTo(10)
 			assertThat(result.dynamicGrid.getRows()).isEqualTo(10)
 			assertThat(result.staticToDynamicMap).hasSize(0)
-			
+
 			// Verify it's a new grid instance
 			assertThat(result.dynamicGrid).isNotSameInstanceAs(staticGrid)
 		}
@@ -92,10 +88,10 @@ class GridTransformerTest : KoinTestBase() {
 			val dynamicCell = result.dynamicGrid.getCellAt(5, 5)
 			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
-			
+
 			val dynamicSwitch = dynamicCell as DynamicRailSwitch
 			assertThat(dynamicSwitch.staticRef).isSameInstanceAs(railSwitch)
-			
+
 			// Verify mapping
 			assertThat(result.staticToDynamicMap).hasSize(1)
 			assertThat(result.staticToDynamicMap[railSwitch]).isSameInstanceAs(dynamicCell)
@@ -117,7 +113,7 @@ class GridTransformerTest : KoinTestBase() {
 			val dynamicCell = result.dynamicGrid.getCellAt(3, 3)
 			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicPathSeparator>()
-			
+
 			// Verify identity preservation via mapping
 			assertThat(result.staticToDynamicMap).hasSize(1)
 			assertThat(result.staticToDynamicMap[railSemaphore]).isSameInstanceAs(dynamicCell)
@@ -138,10 +134,10 @@ class GridTransformerTest : KoinTestBase() {
 			val dynamicCell = result.dynamicGrid.getCellAt(2, 2)
 			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicInOut>()
-			
+
 			val dynamicInOut = dynamicCell as DynamicInOut
 			assertThat(dynamicInOut.staticRef).isSameInstanceAs(inOut)
-			
+
 			// Verify InOut's embedded semaphores are also mapped
 			assertThat(result.staticToDynamicMap).hasSize(3) // InOut + 2 semaphores
 			assertThat(result.staticToDynamicMap[inOut]).isSameInstanceAs(dynamicInOut)
@@ -208,7 +204,7 @@ class GridTransformerTest : KoinTestBase() {
 			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			val trackBlock = SimpleTrackBlock(railSwitch, railSwitch, 100.0, 80.0, 80.0)
 			val trackBlockPart = TrackBlockPart(trackBlock, arrayOf(Cell.Segment.A))
-			
+
 			staticGrid.put(Point(1, 1), railSwitch)
 			staticGrid.put(Point(2, 2), trackBlockPart)
 
@@ -218,7 +214,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Only NodeCell transformed, TrackBlockPart skipped
 			assertThat(result.dynamicGrid.getCellAt(1, 1)).isNotNull()
 			assertThat(result.dynamicGrid.getCellAt(2, 2)).isNull() // Should be null as TrackBlockPart was skipped
-			
+
 			// Only the RailSwitch should be in the mapping
 			assertThat(result.staticToDynamicMap).hasSize(1)
 		}
@@ -243,7 +239,7 @@ class GridTransformerTest : KoinTestBase() {
 			// Assert - Identity preserved via staticRef
 			val dynamicSwitch = result.dynamicGrid.getCellAt(1, 1) as DynamicRailSwitch
 			assertThat(dynamicSwitch.staticRef).isSameInstanceAs(railSwitch)
-			
+
 			val dynamicSemaphore = result.staticToDynamicMap[railSemaphore]
 			assertThat(dynamicSemaphore).isNotNull()
 		}
@@ -263,7 +259,7 @@ class GridTransformerTest : KoinTestBase() {
 			val dynamicCell = result.staticToDynamicMap[railSwitch]
 			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
-			
+
 			// Can verify identity via staticRef
 			val dynamicSwitch = dynamicCell as DynamicRailSwitch
 			assertThat(dynamicSwitch.staticRef).isSameInstanceAs(railSwitch)
@@ -304,9 +300,9 @@ class GridTransformerTest : KoinTestBase() {
 			for ((_, _) in result.dynamicGrid) {
 				dynamicCellCount++
 			}
-			
+
 			assertThat(dynamicCellCount).isEqualTo(staticNodeCellCount)
-			
+
 			// Verify all static NodeCells have mappings
 			for (staticCell in staticNodeCells) {
 				assertThat(result.staticToDynamicMap[staticCell]).isNotNull()
@@ -349,9 +345,10 @@ class GridTransformerTest : KoinTestBase() {
 			}
 
 			// Act - Transform and measure time
-			val elapsedMs = measureTimeMillis {
-				GridTransformer.transformGrid(staticGrid)
-			}
+			val elapsedMs =
+				measureTimeMillis {
+					GridTransformer.transformGrid(staticGrid)
+				}
 
 			// Assert - Transformation completes in < 1ms
 			// Note: Using 5ms threshold to account for CI environment variability
@@ -365,25 +362,27 @@ class GridTransformerTest : KoinTestBase() {
 		fun transformGrid_largeGrid_performsReasonably() {
 			// Arrange - Create large grid with many cells
 			val staticGrid = DefaultRailWayNetGrid(100, 100)
-			
+
 			// Add 100 cells across the grid
 			for (i in 0 until 100) {
 				val x = i % 100
 				val y = i / 100
-				val cell = if (i % 3 == 0) {
-					RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-				} else if (i % 3 == 1) {
-					RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-				} else {
-					InOut("InOut$i", true, Cell.SpatialType.HORIZONTAL)
-				}
+				val cell =
+					if (i % 3 == 0) {
+						RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+					} else if (i % 3 == 1) {
+						RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+					} else {
+						InOut("InOut$i", true, Cell.SpatialType.HORIZONTAL)
+					}
 				staticGrid.put(Point(x, y), cell as Cell)
 			}
 
 			// Act - Transform and measure time
-			val elapsedMs = measureTimeMillis {
-				GridTransformer.transformGrid(staticGrid)
-			}
+			val elapsedMs =
+				measureTimeMillis {
+					GridTransformer.transformGrid(staticGrid)
+				}
 
 			// Assert - Transformation completes in reasonable time
 			assertThat(elapsedMs).isNotNull()

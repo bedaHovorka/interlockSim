@@ -9,18 +9,18 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.anti
-import cz.vutbr.fit.interlockSim.objects.core.conflict
-import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.fail
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test

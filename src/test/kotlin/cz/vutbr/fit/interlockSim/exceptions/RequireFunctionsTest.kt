@@ -63,8 +63,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulation(false) { "Test failure message" }
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Test failure message")
 		}
 
@@ -73,8 +72,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulation(false)
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Simulation requirement failed")
 		}
 
@@ -106,8 +104,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulation(false, lazyMessage)
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Lazy message evaluated")
 
 			assertThat(messageEvaluated).isEqualTo(true)
@@ -126,12 +123,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException with FATAL severity`() {
 			// Act
-			val exception = try {
-				requireSimulation(false, Severity.FATAL) { "Fatal error" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: SimulationException) {
-				e
-			}
+			val exception =
+				try {
+					requireSimulation(false, Severity.FATAL) { "Fatal error" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: SimulationException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(SimulationException::class)
@@ -142,12 +140,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException with ERROR severity`() {
 			// Act
-			val exception = try {
-				requireSimulation(false, Severity.ERROR) { "Error message" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: SimulationException) {
-				e
-			}
+			val exception =
+				try {
+					requireSimulation(false, Severity.ERROR) { "Error message" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: SimulationException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(SimulationException::class)
@@ -158,12 +157,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException with WARN severity`() {
 			// Act
-			val exception = try {
-				requireSimulation(false, Severity.WARN) { "Warning message" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: SimulationException) {
-				e
-			}
+			val exception =
+				try {
+					requireSimulation(false, Severity.WARN) { "Warning message" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: SimulationException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(SimulationException::class)
@@ -176,8 +176,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulation(false, Severity.ERROR)
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Simulation requirement failed")
 		}
 	}
@@ -202,8 +201,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulationNotNull(null) { "Value was null" }
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Value was null")
 		}
 
@@ -212,8 +210,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulationNotNull(null)
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Required value was null")
 		}
 
@@ -262,8 +259,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulationState(false) { "Invalid state message" }
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Invalid state message")
 		}
 
@@ -272,8 +268,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulationState(false)
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("Invalid simulation state")
 		}
 
@@ -310,8 +305,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireEditor(false) { "Test editor failure" }
-			}
-				.isInstanceOf(EditorException::class)
+			}.isInstanceOf(EditorException::class)
 				.hasMessageContaining("Test editor failure")
 		}
 
@@ -320,8 +314,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireEditor(false)
-			}
-				.isInstanceOf(EditorException::class)
+			}.isInstanceOf(EditorException::class)
 				.hasMessageContaining("Editor requirement failed")
 		}
 
@@ -354,12 +347,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws EditorException with FATAL severity`() {
 			// Act
-			val exception = try {
-				requireEditor(false, Severity.FATAL) { "Fatal editor error" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: EditorException) {
-				e
-			}
+			val exception =
+				try {
+					requireEditor(false, Severity.FATAL) { "Fatal editor error" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: EditorException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(EditorException::class)
@@ -370,12 +364,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws EditorException with ERROR severity`() {
 			// Act
-			val exception = try {
-				requireEditor(false, Severity.ERROR) { "Editor error" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: EditorException) {
-				e
-			}
+			val exception =
+				try {
+					requireEditor(false, Severity.ERROR) { "Editor error" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: EditorException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(EditorException::class)
@@ -386,12 +381,13 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws EditorException with WARN severity`() {
 			// Act
-			val exception = try {
-				requireEditor(false, Severity.WARN) { "Editor warning" }
-				throw AssertionError("Expected exception to be thrown")
-			} catch (e: EditorException) {
-				e
-			}
+			val exception =
+				try {
+					requireEditor(false, Severity.WARN) { "Editor warning" }
+					throw AssertionError("Expected exception to be thrown")
+				} catch (e: EditorException) {
+					e
+				}
 
 			// Assert
 			assertThat(exception).isInstanceOf(EditorException::class)
@@ -404,8 +400,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireEditor(false, Severity.ERROR)
-			}
-				.isInstanceOf(EditorException::class)
+			}.isInstanceOf(EditorException::class)
 				.hasMessageContaining("Editor requirement failed")
 		}
 	}
@@ -430,8 +425,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireEditorNotNull(null) { "Editor value was null" }
-			}
-				.isInstanceOf(EditorException::class)
+			}.isInstanceOf(EditorException::class)
 				.hasMessageContaining("Editor value was null")
 		}
 
@@ -440,8 +434,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireEditorNotNull(null)
-			}
-				.isInstanceOf(EditorException::class)
+			}.isInstanceOf(EditorException::class)
 				.hasMessageContaining("Required value was null")
 		}
 
@@ -492,8 +485,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidArgument(false) { "Invalid argument message" }
-			}
-				.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("Invalid argument message")
 		}
 
@@ -502,8 +494,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidArgument(false)
-			}
-				.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("Invalid argument")
 		}
 
@@ -532,8 +523,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidArgument(value >= 0) { "Parameter $paramName must be non-negative, got $value" }
-			}
-				.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf(IllegalArgumentException::class)
 				.hasMessageContaining("speed")
 				.hasMessageContaining("-5")
 				.hasMessageContaining("non-negative")
@@ -554,8 +544,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidState(false) { "Invalid state message" }
-			}
-				.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf(IllegalStateException::class)
 				.hasMessageContaining("Invalid state message")
 		}
 
@@ -564,8 +553,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidState(false)
-			}
-				.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf(IllegalStateException::class)
 				.hasMessageContaining("Invalid state")
 		}
 
@@ -594,8 +582,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireValidState(false) { "Expected state $expectedState but was $currentState" }
-			}
-				.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf(IllegalStateException::class)
 				.hasMessageContaining("RUNNING")
 				.hasMessageContaining("STOPPED")
 		}
@@ -626,33 +613,37 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `different exception types are thrown by different functions`() {
 			// Act - capture different exception types
-			val simulationException = try {
-				requireSimulation(false) { "Simulation error" }
-				throw AssertionError("Expected SimulationException")
-			} catch (e: SimulationException) {
-				e
-			}
+			val simulationException =
+				try {
+					requireSimulation(false) { "Simulation error" }
+					throw AssertionError("Expected SimulationException")
+				} catch (e: SimulationException) {
+					e
+				}
 
-			val editorException = try {
-				requireEditor(false) { "Editor error" }
-				throw AssertionError("Expected EditorException")
-			} catch (e: EditorException) {
-				e
-			}
+			val editorException =
+				try {
+					requireEditor(false) { "Editor error" }
+					throw AssertionError("Expected EditorException")
+				} catch (e: EditorException) {
+					e
+				}
 
-			val argumentException = try {
-				requireValidArgument(false) { "Argument error" }
-				throw AssertionError("Expected IllegalArgumentException")
-			} catch (e: IllegalArgumentException) {
-				e
-			}
+			val argumentException =
+				try {
+					requireValidArgument(false) { "Argument error" }
+					throw AssertionError("Expected IllegalArgumentException")
+				} catch (e: IllegalArgumentException) {
+					e
+				}
 
-			val stateException = try {
-				requireValidState(false) { "State error" }
-				throw AssertionError("Expected IllegalStateException")
-			} catch (e: IllegalStateException) {
-				e
-			}
+			val stateException =
+				try {
+					requireValidState(false) { "State error" }
+					throw AssertionError("Expected IllegalStateException")
+				} catch (e: IllegalStateException) {
+					e
+				}
 
 			// Assert - verify all exceptions are different types
 			assertThat(simulationException).isInstanceOf(SimulationException::class)
@@ -664,7 +655,10 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `complex validation scenarios work correctly`() {
 			// Arrange
-			data class Config(val speed: Int?, val name: String?)
+			data class Config(
+				val speed: Int?,
+				val name: String?
+			)
 
 			val config = Config(speed = 100, name = "TestConfig")
 
@@ -684,8 +678,7 @@ class RequireFunctionsTest : KoinTestBase() {
 			// Act & Assert
 			assertThatThrownBy {
 				requireSimulation(false) { "Error: [test] with {brackets} and \"quotes\"" }
-			}
-				.isInstanceOf(SimulationException::class)
+			}.isInstanceOf(SimulationException::class)
 				.hasMessageContaining("[test]")
 				.hasMessageContaining("{brackets}")
 				.hasMessageContaining("\"quotes\"")

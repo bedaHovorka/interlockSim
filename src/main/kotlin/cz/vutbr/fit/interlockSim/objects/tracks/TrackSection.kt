@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.objects.core.Track
+
 /**
  *
  * tratovy oddil v posloupnosti prvku cesty z pohledu vlaku

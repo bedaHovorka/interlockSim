@@ -81,10 +81,11 @@ class SimulationCellRenderer(
 
 		// Render signal state with color coding
 		val oldColor = g.color
-		g.color = when {
-			cell.signal.isAllowing() -> Color.GREEN
-			else -> Color.RED
-		}
+		g.color =
+			when {
+				cell.signal.isAllowing() -> Color.GREEN
+				else -> Color.RED
+			}
 		drawTriangle(g, staticRef)
 		g.color = oldColor
 

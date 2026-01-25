@@ -4,7 +4,6 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
@@ -20,13 +19,15 @@ import java.io.InputStream
  */
 @DisplayName("InOut Wrapper Creation Test (PR #95 Fix)")
 class InOutWrapperCreationTest : KoinTestBase() {
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private val factory: XMLContextFactory by inject()
-
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: throw IllegalStateException("vyhybna.xml not found in resources")
-		return factory.createContext(xmlStream) as DefaultSimulationContext
+	private fun loadVyhybnaContext(): SimulationContext {
+		val xmlStream: InputStream =
+			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				?: throw IllegalStateException("vyhybna.xml not found in resources")
+		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+		return simulationContextFactory.createContext(editingContext)
 	}
 
 	/**

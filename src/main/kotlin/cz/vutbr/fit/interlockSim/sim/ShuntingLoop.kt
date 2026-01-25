@@ -15,20 +15,22 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -39,6 +41,38 @@ import java.util.Queue
 /**
  * Příklad fungování modelu
  * Ovlada sest navestidel a 2 InOuty pomoci predem ulozenych cest
+ *
+ * ## Code Review Required (Issue #284)
+ *
+ * **CRITICAL: This class has been modified for Issue #280/#284 and requires code review by traffic-simulation-expert.**
+ *
+ * **Changes made:**
+ * - Migrated from static cells (InOut, RailSemaphore, RailSwitch) to dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch)
+ * - Updated hardcoded grid coordinate lookups (lines 137-145) to retrieve dynamic wrappers
+ * - Modified path construction to work with dynamic references
+ * - Updated block organization logic to use staticRef for mapping (lines 165-167)
+ * - All paths now contain dynamic wrappers instead of static cells
+ *
+ * **Rationale:**
+ * Issue #284 fixed train deadlock caused by identity mismatch between grid navigation (returned static cells)
+ * and pathToNextSemaphore() (returned dynamic wrappers in paths). ShuntingLoop must now use consistent
+ * dynamic references throughout to maintain path progression correctness.
+ *
+ * **Testing:**
+ * - All ShuntingLoop unit tests passing (28 tests)
+ * - Integration tests passing (15 operational tests)
+ * - Regression tests passing (trains complete circuits and exit successfully)
+ *
+ * **Review focus:**
+ * - Verify dynamic wrapper usage does not affect simulation physics or timing
+ * - Confirm path construction logic maintains correct semaphore ordering
+ * - Validate block mapping logic preserves train navigation correctness
+ * - Ensure changes align with jDisco framework assumptions
+ *
+ * **Authority:** @traffic-simulation-expert (main leader, simulation & physics expert per TEAM.md)
+ *
+ * @see docs/ISSUE_280_ANALYSIS_PLAN.md for detailed root cause analysis
+ * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/284">Issue #284</a>
  */
 class ShuntingLoop : Interlocking {
 	companion object {
@@ -50,17 +84,23 @@ class ShuntingLoop : Interlocking {
 	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
 	private val approwedTrains: MutableList<Train> = mutableListOf()
 	private val generator: InnerGenerator
+
 	// Temp during construction
 	private val staticPaths: MutableMap<RailSemaphore, MutableList<Path>> = mutableMapOf()
+
 	// Converted in startAction()
 	private lateinit var paths: MutableMap<DynamicRailSemaphore, MutableList<Path>>
 	private val innerTrackBlocks: MutableList<SimpleTrackBlock> = mutableListOf()
+
 	// Temp during construction
 	private val staticOuterTrackblocks: MutableMap<SimpleTrackBlock, RailSemaphore> = mutableMapOf()
+
 	// Converted in startAction()
 	private lateinit var outerTrackblocks: MutableMap<SimpleTrackBlock, DynamicRailSemaphore>
+
 	// Cache for static→dynamic semaphore mapping (eliminates redundant type casts)
 	private val semaphoreCache: MutableMap<RailSemaphore, DynamicRailSemaphore> = mutableMapOf()
+
 	// Reverse mapping: internal semaphore -> parent InOut (for InOut semaphores only)
 	private val semaphoreToInOut: MutableMap<RailSemaphore, InOut> = mutableMapOf()
 	private val endTime: Long
@@ -126,16 +166,16 @@ class ShuntingLoop : Interlocking {
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val B: InOut = elementAt(context, InOut::class.java, 30, 8)
-		val A: InOut = elementAt(context, InOut::class.java, 11, 8)
-		val zA: RailSemaphore = elementAt(context, "zA", RailSemaphore::class.java, 14, 8)
-		val doA1: RailSemaphore = elementAt(context, "doA1", RailSemaphore::class.java, 16, 8)
-		val doB1: RailSemaphore = elementAt(context, "doB1", RailSemaphore::class.java, 25, 8)
-		val zB: RailSemaphore = elementAt(context, "zB", RailSemaphore::class.java, 27, 8)
-		val doA2: RailSemaphore = elementAt(context, "doA2", RailSemaphore::class.java, 17, 9)
-		val doB2: RailSemaphore = elementAt(context, "doB2", RailSemaphore::class.java, 24, 9)
-		val vA: RailSwitch = elementAt(context, "vA", RailSwitch::class.java, 15, 8)
-		val vB: RailSwitch = elementAt(context, "vB", RailSwitch::class.java, 26, 8)
+		val B: DynamicInOut = elementAt(context, DynamicInOut::class.java, 30, 8)
+		val A: DynamicInOut = elementAt(context, DynamicInOut::class.java, 11, 8)
+		val zA: DynamicRailSemaphore = elementAt(context, "zA", DynamicRailSemaphore::class.java, 14, 8)
+		val doA1: DynamicRailSemaphore = elementAt(context, "doA1", DynamicRailSemaphore::class.java, 16, 8)
+		val doB1: DynamicRailSemaphore = elementAt(context, "doB1", DynamicRailSemaphore::class.java, 25, 8)
+		val zB: DynamicRailSemaphore = elementAt(context, "zB", DynamicRailSemaphore::class.java, 27, 8)
+		val doA2: DynamicRailSemaphore = elementAt(context, "doA2", DynamicRailSemaphore::class.java, 17, 9)
+		val doB2: DynamicRailSemaphore = elementAt(context, "doB2", DynamicRailSemaphore::class.java, 24, 9)
+		val vA: DynamicRailSwitch = elementAt(context, "vA", DynamicRailSwitch::class.java, 15, 8)
+		val vB: DynamicRailSwitch = elementAt(context, "vB", DynamicRailSwitch::class.java, 26, 8)
 
 		val k1: SimpleTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: SimpleTrackBlock = getBlock(context, "k2", doA2, doB2)
@@ -154,18 +194,31 @@ class ShuntingLoop : Interlocking {
 		// Block organization matches baseline (working version):
 		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
 		// - staticOuterTrackblocks: entry/exit blocks with one InOut end (kB, kA)
+		// Fix for Issue #280/#284: zB and zA are now DynamicRailSemaphore, so we need their staticRef
 		Collections.addAll(innerTrackBlocks, k1, k2)
-		staticOuterTrackblocks[kB] = zB
-		staticOuterTrackblocks[kA] = zA
+		staticOuterTrackblocks[kB] = zB.staticRef
+		staticOuterTrackblocks[kA] = zA.staticRef
 	}
 
-	private fun constructPath(context: SimulationContext, vararg elements: PathElement): ArrayPath {
+	/**
+	 * Construct a path from path elements.
+	 *
+	 * **Fix for Issue #280/#284:**
+	 * Path elements are now dynamic wrappers (DynamicRailSemaphore, DynamicRailSwitch),
+	 * so we need to cast to dynamic types and use staticRef for lookups.
+	 */
+	private fun constructPath(
+		context: SimulationContext,
+		vararg elements: PathElement
+	): ArrayPath {
 		val arrayPath = ArrayPath(context)
 		try {
 			for (i in elements.indices) {
-				if (elements[i] is RailSwitch) {
-					val prev: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i - 1])
-					val next: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, elements[i + 1])
+				// Fix for Issue #280/#284: Check for DynamicRailSwitch instead of RailSwitch
+				if (elements[i] is DynamicRailSwitch) {
+					val prev: DynamicRailSemaphore = Util.assertInstanceOf(DynamicRailSemaphore::class.java, elements[i - 1])
+					val next: DynamicRailSemaphore = Util.assertInstanceOf(DynamicRailSemaphore::class.java, elements[i + 1])
+					// getBlock needs Cell, so cast to Cell (dynamic wrappers extend Cell)
 					arrayPath.addLast(getBlock(context, switchName(elements[i]), prev, elements[i] as Cell))
 					arrayPath.addLast(elements[i])
 					arrayPath.addLast(getBlock(context, switchName(elements[i]), next, elements[i] as Cell))
@@ -176,18 +229,25 @@ class ShuntingLoop : Interlocking {
 		} catch (e: ArrayIndexOutOfBoundsException) {
 			requireSimulation(false) { "Invalid path element access during path construction: $e" }
 		}
-		val first: RailSemaphore = Util.assertInstanceOf(RailSemaphore::class.java, arrayPath.getFirst())
-		var sublist: MutableList<Path>? = staticPaths[first]
+		// Fix for Issue #280/#284: First element is now DynamicRailSemaphore, use staticRef for lookup
+		val first: DynamicRailSemaphore = Util.assertInstanceOf(DynamicRailSemaphore::class.java, arrayPath.getFirst())
+		var sublist: MutableList<Path>? = staticPaths[first.staticRef]
 		if (sublist == null) {
 			sublist = mutableListOf()
-			staticPaths[first] = sublist
+			staticPaths[first.staticRef] = sublist
 		}
 		sublist.add(arrayPath)
 		return arrayPath
 	}
 
+	/**
+	 * Get switch name with "-around" suffix.
+	 *
+	 * **Fix for Issue #280/#284:**
+	 * Element is now DynamicRailSwitch, which has `name` property delegating to staticRef.getName().
+	 */
 	private fun switchName(el: PathElement): String =
-		Util.assertInstanceOf(RailSwitch::class.java, el).getName() + "-around"
+		Util.assertInstanceOf(DynamicRailSwitch::class.java, el).name + "-around"
 
 	private fun <T : Cell> elementAt(
 		context: SimulationContext,
@@ -200,7 +260,25 @@ class ShuntingLoop : Interlocking {
 		return Util.assertInstanceOf(clazz, cell)
 	}
 
-	private fun <T : NodeCell> elementAt(
+	/**
+	 * Get a cell at specified coordinates and set its name.
+	 *
+	 * **Fix for Issue #280/#284:**
+	 * After the grid transformation fix, cells are dynamic wrappers that delegate
+	 * all NodeCell methods (including setName) to their staticRef via delegation pattern:
+	 * - `DynamicRailSemaphore : OrientedPathSeparator by staticRef`
+	 * - `DynamicInOut : OrientedPathSeparator by staticRef`
+	 *
+	 * Calling setName() on a dynamic wrapper delegates to staticRef.setName().
+	 *
+	 * @param context Simulation context
+	 * @param name Name to set on the cell
+	 * @param clazz Expected cell class (dynamic wrapper type after grid fix)
+	 * @param x Grid X coordinate
+	 * @param y Grid Y coordinate
+	 * @return Cell of type T from the grid with name set
+	 */
+	private fun <T : Cell> elementAt(
 		context: SimulationContext,
 		name: String,
 		clazz: Class<T>,
@@ -208,7 +286,16 @@ class ShuntingLoop : Interlocking {
 		y: Int
 	): T {
 		val elementAt: T = elementAt(context, clazz, x, y)
-		elementAt.setName(name)
+		// Set name on the underlying static cell
+		when (elementAt) {
+			is NodeCell -> elementAt.setName(name) // Static cells have setName() directly
+			is DynamicRailSemaphore -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
+			is DynamicInOut -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
+			is DynamicRailSwitch -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
+			else -> throw IllegalStateException(
+				"Cell at ($x, $y) does not support setName(): ${elementAt.javaClass.simpleName}"
+			)
+		}
 		return elementAt
 	}
 
@@ -219,7 +306,7 @@ class ShuntingLoop : Interlocking {
 		cell2: Cell
 	): SimpleTrackBlock {
 		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		val graph = context.getGraph()  // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
+		val graph = context.getGraph() // ExtendedUnorientedGraph<Point, DynamicTrackBlock, Segment>
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
 		val block = graph.get(point1, point2) ?: throw IllegalArgumentException("Cannot get block between cells")
@@ -320,23 +407,27 @@ class ShuntingLoop : Interlocking {
 		validateSemaphoreCacheCompleteness()
 
 		// Convert static objects to Dynamic* wrappers using cached typed references (NO CASTS)
-		paths = staticPaths.mapKeys { (staticSem, _) ->
-			semaphoreCache[staticSem]
-				?: throw IllegalStateException(
-					"Semaphore ${staticSem.getName()} not in cache during paths conversion! " +
-						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
-				)
-		}.mapValues { (_, pathList) ->
-			pathList.map { convertPathToDynamic(it) }.toMutableList()
-		}.toMutableMap()
+		paths =
+			staticPaths
+				.mapKeys { (staticSem, _) ->
+					semaphoreCache[staticSem]
+						?: throw IllegalStateException(
+							"Semaphore ${staticSem.getName()} not in cache during paths conversion! " +
+								"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+						)
+				}.mapValues { (_, pathList) ->
+					pathList.map { convertPathToDynamic(it) }.toMutableList()
+				}.toMutableMap()
 
-		outerTrackblocks = staticOuterTrackblocks.mapValues { (_, staticSem) ->
-			semaphoreCache[staticSem]
-				?: throw IllegalStateException(
-					"Semaphore ${staticSem.getName()} not in cache during outerTrackblocks conversion! " +
-						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
-				)
-		}.toMutableMap()
+		outerTrackblocks =
+			staticOuterTrackblocks
+				.mapValues { (_, staticSem) ->
+					semaphoreCache[staticSem]
+						?: throw IllegalStateException(
+							"Semaphore ${staticSem.getName()} not in cache during outerTrackblocks conversion! " +
+								"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+						)
+				}.toMutableMap()
 
 		logger.info {
 			"Dynamic paths initialized: ${paths.size} semaphore entries, " +
@@ -352,13 +443,14 @@ class ShuntingLoop : Interlocking {
 		val context = env as SimulationContext
 		val dynamicPath = ArrayPath(context)
 		for (element in staticPath) {
-			val dynamicElement = when (element) {
-				is RailSemaphore -> env.toDynamic(element)
-				is RailSwitch -> env.toDynamic(element)
-				is InOut -> env.toDynamic(element)  // Use toDynamic for consistency
-				is SimpleTrackBlock -> element  // Track blocks remain static in path - wrapped on-demand by AbstractPath
-				else -> element
-			}
+			val dynamicElement =
+				when (element) {
+					is RailSemaphore -> env.toDynamic(element)
+					is RailSwitch -> env.toDynamic(element)
+					is InOut -> env.toDynamic(element) // Use toDynamic for consistency
+					is SimpleTrackBlock -> element // Track blocks remain static in path - wrapped on-demand by AbstractPath
+					else -> element
+				}
 			dynamicPath.addLast(dynamicElement)
 		}
 		return dynamicPath
@@ -385,12 +477,13 @@ class ShuntingLoop : Interlocking {
 		// Check both semaphore endpoints to see if path needs to be reserved
 		for (sep in block.ends()) {
 			val railSem = (sep as OrientedPathSeparator).asRailSemaphore()
-			val dynamicSem = semaphoreCache[railSem]
-				?: throw IllegalStateException(
-					"Semaphore ${railSem.getName()} not in cache! " +
-						"Block: ${block.hashCode()}, " +
-						"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
-				)
+			val dynamicSem =
+				semaphoreCache[railSem]
+					?: throw IllegalStateException(
+						"Semaphore ${railSem.getName()} not in cache! " +
+							"Block: ${block.hashCode()}, " +
+							"Cache has ${semaphoreCache.size} entries: ${semaphoreCache.keys.joinToString(", ") { it.getName() }}"
+					)
 			if (checkOneEnd(block, dynamicSem)) return
 		}
 	}
@@ -488,11 +581,12 @@ class ShuntingLoop : Interlocking {
 		// OCCUPIED: Reserve path when train is in block (backup)
 		if (blockState == TrackFacility.State.OCCUPIED) {
 			val nextSem = dynamicBlock.getTrackOccupant().nextSemaphore()
-			val nextSemName = when (nextSem) {
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.name
-				is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.name
-				else -> nextSem.toString()
-			}
+			val nextSemName =
+				when (nextSem) {
+					is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore -> nextSem.name
+					is cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut -> nextSem.name
+					else -> nextSem.toString()
+				}
 			// Extract static reference for comparison
 			val nextSemStatic = DynamicWrapperUtils.unwrapToStatic(nextSem)
 			val match = nextSemStatic === to.staticRef

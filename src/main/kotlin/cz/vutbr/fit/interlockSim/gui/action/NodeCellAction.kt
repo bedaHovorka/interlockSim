@@ -14,8 +14,8 @@ import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color
 import java.awt.RenderingHints

@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -92,8 +93,8 @@ val editingModule: Module =
  * - ExampleRegistry for managing simulation examples
  *
  * @see SimulationContextFactory
+ * @see DefaultSimulationContextFactory
  * @see SimulationProcessFactory
- * @see XMLContextFactory
  * @see GridTransformer
  * @see ContextTransformer
  */
@@ -111,9 +112,15 @@ val simulationModule: Module =
 		// ContextTransformer is a Kotlin object (singleton), we provide it via Koin for DI consistency
 		single { ContextTransformer }
 
-		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
-		// Bind factory interfaces to the singleton XMLContextFactory instance
-		single<SimulationContextFactory> { get<XMLContextFactory>() }
+		// Factory for creating simulation contexts from files/streams/editing contexts
+		// Singleton as factory is stateless, receives both editing factory and process factory via DI
+		single<SimulationContextFactory> {
+			DefaultSimulationContextFactory(
+				get<EditingContextFactory>(),
+				get<SimulationProcessFactory>()
+			)
+		}
+
 		single<ExampleRegistry> { ExampleRegistry() }
 	}
 

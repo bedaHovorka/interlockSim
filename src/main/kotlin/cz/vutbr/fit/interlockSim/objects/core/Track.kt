@@ -18,4 +18,6 @@ package cz.vutbr.fit.interlockSim.objects.core
  *
  * Note: Track length constants are defined in [StaticTrack.Companion].
  */
-interface Track : StaticTrack, DynamicTrackBehavior
+interface Track :
+	StaticTrack,
+	DynamicTrackBehavior

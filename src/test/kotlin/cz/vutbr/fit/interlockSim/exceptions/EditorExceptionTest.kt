@@ -379,7 +379,9 @@ class EditorExceptionTest {
 		@Test
 		fun `getObject preserves object type`() {
 			// Arrange
-			data class TestData(val value: Int)
+			data class TestData(
+				val value: Int
+			)
 			val data = TestData(42)
 			val exception = EditorException(Severity.ERROR, testMessage, data)
 

@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -19,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import java.util.IdentityHashMap
 
@@ -92,20 +92,21 @@ object GridTransformer {
 			}
 			
 			// Create dynamic wrapper based on cell type
-			val dynamicCell = when (cell) {
-				is RailSwitch -> {
-					DynamicRailSwitch(cell)
+			val dynamicCell =
+				when (cell) {
+					is RailSwitch -> {
+						DynamicRailSwitch(cell)
+					}
+					is RailSemaphore -> {
+						createDynamicInstance(cell)
+					}
+					is InOut -> {
+						createDynamic(cell)
+					}
+					else -> {
+						error("Unknown NodeCell type: ${cell::class.simpleName} at $point")
+					}
 				}
-				is RailSemaphore -> {
-					createDynamicInstance(cell)
-				}
-				is InOut -> {
-					createDynamic(cell)
-				}
-				else -> {
-					error("Unknown NodeCell type: ${cell::class.simpleName} at $point")
-				}
-			}
 			
 			// Add to dynamic grid (DynamicPathSeparator extends Cell, so this is safe)
 			dynamicGrid.put(point, dynamicCell)
@@ -124,7 +125,7 @@ object GridTransformer {
 		
 		return TransformationResult(dynamicGrid, staticToDynamicMap)
 	}
-	
+
 	/**
 	 * Create DynamicInOut wrapper with properly initialized semaphores.
 	 *

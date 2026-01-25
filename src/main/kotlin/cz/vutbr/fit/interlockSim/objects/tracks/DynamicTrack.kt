@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
@@ -97,7 +97,7 @@ class DynamicTrack(
 	fun enter(newOccupant: TrackOccupant) {
 		logger.info {
 			"${Process.time()} Block ${staticRef.hashCode()} " +
-			"(${staticRef.toString().take(20)}) ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
+				"(${staticRef.toString().take(20)}) ENTRY: occupant=$newOccupant, state=$state->OCCUPIED"
 		}
 		if (occupant != null) {
 			logger.error {
@@ -124,7 +124,7 @@ class DynamicTrack(
 	fun leave(leavingOccupant: TrackOccupant) {
 		logger.info {
 			"${Process.time()} Block ${staticRef.hashCode()} " +
-			"(${staticRef.toString().take(20)}) EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
+				"(${staticRef.toString().take(20)}) EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
 		}
 		requireSimulation(occupant === leavingOccupant) {
 			"Track occupant mismatch on leave"

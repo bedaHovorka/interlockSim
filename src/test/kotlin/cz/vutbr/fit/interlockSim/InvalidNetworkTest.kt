@@ -13,8 +13,8 @@ import assertk.assertThat
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.*
 import org.koin.test.inject
 import java.io.ByteArrayInputStream
@@ -48,7 +48,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 @DisplayName("Invalid Network Configuration Tests")
 @Timeout(value = 15, unit = TimeUnit.SECONDS)
 class InvalidNetworkTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	@Nested
 	@DisplayName("Missing Required Elements")
@@ -66,7 +66,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// Strict validation: must reject networks without sufficient InOut elements
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -84,7 +84,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// Strict validation: single InOut is insufficient
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -106,7 +106,7 @@ class InvalidNetworkTest : KoinTestBase() {
 
 			// This may succeed or fail depending on validation level
 			try {
-				val context = factory.createContext(stream)
+				val context = editingContextFactory.createContext(stream)
 				assertThat(context).isNotNull()
 			} catch (e: Exception) {
 				// Also acceptable - network is incomplete
@@ -131,7 +131,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -148,7 +148,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -166,7 +166,7 @@ class InvalidNetworkTest : KoinTestBase() {
 
 			// May throw exception or may accept (depends on implementation)
 			try {
-				val context = factory.createContext(stream)
+				val context = editingContextFactory.createContext(stream)
 				assertThat(context).isNotNull()
 			} catch (e: Exception) {
 				// Also acceptable
@@ -187,7 +187,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// Expected: negative dimensions are invalid
 				assertThat(e).isInstanceOf(Exception::class)
@@ -206,7 +206,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -223,7 +223,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -240,7 +240,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -259,7 +259,7 @@ class InvalidNetworkTest : KoinTestBase() {
 
 			// Coordinates out of grid bounds - may fail during parsing or later
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// Expected: out of bounds validation
 				assertThat(e).isInstanceOf(Exception::class)
@@ -281,7 +281,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -300,7 +300,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 	}
@@ -324,7 +324,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// Expected: track endpoints don't exist
 				assertThat(e).isInstanceOf(Exception::class)
@@ -348,7 +348,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -370,7 +370,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			try {
-				val context = factory.createContext(stream)
+				val context = editingContextFactory.createContext(stream)
 				// May be accepted, but should have warnings in logs
 				assertThat(context).isNotNull()
 			} catch (e: Exception) {
@@ -397,7 +397,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// Expected: negative length is invalid
 				assertThat(e).isInstanceOf(Exception::class)
@@ -422,7 +422,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// May fail - negative speed is questionable
 				assertThat(e).isInstanceOf(Exception::class)
@@ -457,7 +457,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// Disconnected segments are valid XML but create operational issues
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -481,7 +481,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// Single orphaned InOut is valid (though useless)
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -505,7 +505,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// Unreachable switch is valid but unused
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 	}
@@ -521,7 +521,7 @@ class InvalidNetworkTest : KoinTestBase() {
 		fun createContext_emptyStream_throwsException() {
 			val emptyStream = ByteArrayInputStream(ByteArray(0))
 
-			assertThatBlock { factory.createContext(emptyStream) }
+			assertThatBlock { editingContextFactory.createContext(emptyStream) }
 				.isFailure()
 		}
 
@@ -534,7 +534,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val plainText = "This is just plain text, not XML!"
 			val stream = ByteArrayInputStream(plainText.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -550,7 +550,7 @@ class InvalidNetworkTest : KoinTestBase() {
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"""
 			val stream = ByteArrayInputStream(incompleteXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -567,7 +567,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</railway>"""
 			val stream = ByteArrayInputStream(wrongRootXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -586,7 +586,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(nestedXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 		}
 
@@ -603,7 +603,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(invalidDoctypeXML.toByteArray())
 
 			try {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			} catch (e: Exception) {
 				// May fail - DOCTYPE is malformed
 				assertThat(e).isInstanceOf(Exception::class)
@@ -624,7 +624,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(specialCharXML.toByteArray())
 
 			try {
-				val context = factory.createContext(stream)
+				val context = editingContextFactory.createContext(stream)
 				// Special characters in name value might be accepted
 				assertThat(context).isNotNull()
 			} catch (e: Exception) {
@@ -651,7 +651,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(largeGridXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -669,7 +669,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(minGridXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -687,7 +687,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(boundaryXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -708,7 +708,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(extremeLengthXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -729,7 +729,7 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(extremeSpeedXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 
@@ -757,7 +757,7 @@ class InvalidNetworkTest : KoinTestBase() {
 			sb.append("</net>")
 
 			val stream = ByteArrayInputStream(sb.toString().toByteArray())
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 	}

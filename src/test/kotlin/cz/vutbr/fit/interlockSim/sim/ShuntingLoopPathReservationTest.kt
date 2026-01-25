@@ -41,11 +41,9 @@ private val logger = KotlinLogging.logger {}
  */
 @Tag("integration-test")
 class ShuntingLoopPathReservationTest : KoinTestBase() {
-
-	private fun shuntingXml(): InputStream {
-		return javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+	private fun shuntingXml(): InputStream =
+		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			?: throw IllegalStateException("vyhybna.xml not found in resources")
-	}
 
 	/**
 	 * Verifies that ShuntingLoop simulation completes without deadlock.

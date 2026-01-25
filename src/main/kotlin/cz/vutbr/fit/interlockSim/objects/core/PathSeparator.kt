@@ -9,14 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.core
 
-
 /**
  * "Oddelovac oddilu (i automaticky řízené prvky) uzel cesty z pohledu vlaku"
  */
 interface PathSeparator :
 	PathElement,
 	Cell {
-
 	/**
 	 * @param from
 	 * @return following segments - static

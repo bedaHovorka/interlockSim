@@ -73,13 +73,14 @@ class Main {
 		try {
 			// Get context and ensure it's a SimulationContext
 			val rawContext = createContext(args)
-			val context: SimulationContext = when (rawContext) {
-				is SimulationContext -> rawContext
-				is EditingContext -> simulationContextFactory.createContext(rawContext)
-				else -> throw ContextCreationException(
-					"Unexpected context type: ${rawContext::class.java.name}"
-				)
-			}
+			val context: SimulationContext =
+				when (rawContext) {
+					is SimulationContext -> rawContext
+					is EditingContext -> simulationContextFactory.createContext(rawContext)
+					else -> throw ContextCreationException(
+						"Unexpected context type: ${rawContext::class.java.name}"
+					)
+				}
 			context.addReportTypes(*ReportType.values())
 			context.run()
 		} catch (e: ContextCreationException) {

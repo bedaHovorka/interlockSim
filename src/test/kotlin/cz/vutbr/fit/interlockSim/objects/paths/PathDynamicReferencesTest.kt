@@ -9,19 +9,21 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -38,7 +40,8 @@ import java.io.File
 @DisplayName("Path Dynamic References (Phase 7)")
 @Tag("integration-test")
 class PathDynamicReferencesTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	companion object {
 		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -48,7 +51,8 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	@DisplayName("pathToNextSemaphore returns path with dynamic separators")
 	fun pathToNextSemaphore_returnsDynamicSeparators() {
 		// Arrange - Load vyhybna.xml and initialize mappings
-		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+		val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Initialize ALL dynamic mappings (InOuts, RailSemaphores, RailSwitches)
 		// Required because pathToNextSemaphore needs all separators mapped
@@ -61,7 +65,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		// Get first InOut's entry point and initial track section
 		val firstInOut = dynamicInOuts.first()
 		val staticInOut = firstInOut.staticRef
-		
+
 		// Get initial track section from InOut
 		val firstSection = context.getNextTrackSection(staticInOut, null)
 		assertThat(firstSection).isNotNull()
@@ -71,7 +75,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 
 		// Assert - Path should exist and contain dynamic references
 		assertThat(path).isNotNull()
-		
+
 		// Verify all PathSeparators in path are dynamic
 		var separatorCount = 0
 		var trackCount = 0
@@ -82,14 +86,14 @@ class PathDynamicReferencesTest : KoinTestBase() {
 					// Phase 7: All separators in simulation paths must be dynamic
 					assertThat(element)
 						.isInstanceOf(DynamicPathSeparator::class)
-					
+
 					// Log the dynamic type for verification
-					println("Path separator ${separatorCount}: ${element.javaClass.simpleName} (dynamic)")
+					println("Path separator $separatorCount: ${element.javaClass.simpleName} (dynamic)")
 				}
 				is Track -> {
 					trackCount++
 					// Tracks remain static in paths (wrapped on-demand)
-					println("Track ${trackCount}: ${element.javaClass.simpleName}")
+					println("Track $trackCount: ${element.javaClass.simpleName}")
 				}
 			}
 		}
@@ -104,10 +108,11 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	@DisplayName("pathToNextSemaphore handles dynamic input separator")
 	fun pathToNextSemaphore_handlesDynamicInput() {
 		// Arrange - Load configuration
-		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+		val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
-		
+
 		// Get dynamic InOut (already dynamic)
 		val dynamicInOut = dynamicInOuts.first()
 		val firstSection = context.getNextTrackSection(dynamicInOut, null)
@@ -118,7 +123,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 
 		// Assert - Should still work and return dynamic path
 		assertThat(path).isNotNull()
-		
+
 		// Verify first element is dynamic
 		val firstElement = path!!.getFirst()
 		assertThat(firstElement)
@@ -129,10 +134,11 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	@DisplayName("pathToNextSemaphore converts static input to dynamic")
 	fun pathToNextSemaphore_convertsStaticInput() {
 		// Arrange - Load configuration
-		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+		val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
-		
+
 		// Get STATIC InOut reference (before conversion)
 		val dynamicInOut = dynamicInOuts.first()
 		val staticInOut = dynamicInOut.staticRef // Get the static reference
@@ -144,12 +150,12 @@ class PathDynamicReferencesTest : KoinTestBase() {
 
 		// Assert - Should convert input and return dynamic path
 		assertThat(path).isNotNull()
-		
+
 		// Verify first element is dynamic (not static)
 		val firstElement = path!!.getFirst()
 		assertThat(firstElement)
 			.isInstanceOf(DynamicPathSeparator::class)
-		
+
 		// Verify it's NOT the static reference
 		assertThat(firstElement !is InOut)
 			.isTrue()
@@ -163,7 +169,8 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	@DisplayName("path elements iteration returns dynamic separators")
 	fun pathIteration_returnsDynamicSeparators() {
 		// Arrange
-		val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+		val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+		val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		context.initializeDynamicMapping()
 		val dynamicInOuts = context.getInOuts()
 		val firstInOut = dynamicInOuts.first()

@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 

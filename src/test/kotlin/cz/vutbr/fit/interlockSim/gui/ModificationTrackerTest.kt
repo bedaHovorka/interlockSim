@@ -39,10 +39,11 @@ class ModificationTrackerTest {
 	fun setUp() {
 		callbackInvoked = false
 		lastCallbackValue = null
-		tracker = ModificationTracker { isDirty ->
-			callbackInvoked = true
-			lastCallbackValue = isDirty
-		}
+		tracker =
+			ModificationTracker { isDirty ->
+				callbackInvoked = true
+				lastCallbackValue = isDirty
+			}
 	}
 
 	@Test

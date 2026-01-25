@@ -19,8 +19,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
-import org.junit.jupiter.api.*
 import io.mockk.*
+import org.junit.jupiter.api.*
 
 /**
  * Unit tests for {@link Train} state transitions and sensor interactions.
