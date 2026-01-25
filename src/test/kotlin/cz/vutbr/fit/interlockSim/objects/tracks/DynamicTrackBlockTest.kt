@@ -13,6 +13,7 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -40,6 +41,8 @@ class DynamicTrackBlockTest {
 	private lateinit var dynamicBlock2: DynamicTrackBlock
 	private lateinit var semaphore1: PathSeparator
 	private lateinit var semaphore2: PathSeparator
+	private lateinit var dynSemaphore1: DynamicPathSeparator
+	private lateinit var dynSemaphore2: DynamicPathSeparator
 	private lateinit var train: TrackOccupant
 
 	@BeforeEach
@@ -47,14 +50,16 @@ class DynamicTrackBlockTest {
 		// Create path separators for track ends
 		semaphore1 = mockk<PathSeparator>()
 		semaphore2 = mockk<PathSeparator>()
+		dynSemaphore1 = mockk()
+		dynSemaphore2 = mockk()
 
 		// Create static track blocks (immutable configuration)
 		staticBlock1 = SimpleTrackBlock(semaphore1, semaphore2, 100.0, 30.0, 30.0)
 		staticBlock2 = SimpleTrackBlock(semaphore1, semaphore2, 200.0, 40.0, 40.0)
 
 		// Create dynamic wrappers
-		dynamicBlock1 = DynamicTrackBlock(staticBlock1)
-		dynamicBlock2 = DynamicTrackBlock(staticBlock2)
+		dynamicBlock1 = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore1)
+		dynamicBlock2 = DynamicTrackBlock(staticBlock2, dynSemaphore1, dynSemaphore2)
 
 		// Create mock train (occupant)
 		train = mockk<TrackOccupant>()
@@ -72,13 +77,13 @@ class DynamicTrackBlockTest {
 			assertThat(dynamicBlock1.length()).isEqualTo(staticBlock1.length())
 			assertThat(dynamicBlock1.length()).isEqualTo(100.0)
 
-			assertThat(dynamicBlock1.ends()).isEqualTo(staticBlock1.ends())
+			assertThat(dynamicBlock1.staticRef.ends()).isEqualTo(staticBlock1.ends())
 
 			// Verify ends returns the separators used in construction
 			val ends1 = dynamicBlock1.ends()
 			assertThat(ends1).hasSize(2)
-			assertThat(ends1.toList()).contains(semaphore1)
-			assertThat(ends1.toList()).contains(semaphore2)
+			assertThat(ends1.toList()).contains(dynSemaphore1)
+			assertThat(ends1.toList()).contains(dynSemaphore1)
 
 			assertThat(dynamicBlock1.getSecondEnd(semaphore1)).isEqualTo(staticBlock1.getSecondEnd(semaphore1))
 			assertThat(dynamicBlock1.getSecondEnd(semaphore1)).isEqualTo(semaphore2)
@@ -99,8 +104,8 @@ class DynamicTrackBlockTest {
 		@Test
 		@DisplayName("staticRef points to original TrackBlock")
 		fun staticRefAccessible() {
-			assertThat(dynamicBlock1.staticRef).isSameAs(staticBlock1)
-			assertThat(dynamicBlock2.staticRef).isSameAs(staticBlock2)
+			assertThat(dynamicBlock1.staticRef).isSameInstanceAs(staticBlock1)
+			assertThat(dynamicBlock2.staticRef).isSameInstanceAs(staticBlock2)
 		}
 	}
 
@@ -268,7 +273,7 @@ class DynamicTrackBlockTest {
 		@Test
 		@DisplayName("wrappers for same static block are equal")
 		fun sameStaticBlockEquals() {
-			val anotherWrapper1 = DynamicTrackBlock(staticBlock1)
+			val anotherWrapper1 = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2)
 
 			// Same static object → equal
 			assertThat(dynamicBlock1).isEqualTo(anotherWrapper1)
@@ -297,7 +302,7 @@ class DynamicTrackBlockTest {
 		@Test
 		@DisplayName("equals stable across state changes")
 		fun equalsStableAcrossStateChanges() {
-			val anotherWrapper1 = DynamicTrackBlock(staticBlock1)
+			val anotherWrapper1 = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2)
 
 			// Initially equal
 			assertThat(dynamicBlock1).isEqualTo(anotherWrapper1)
@@ -327,7 +332,7 @@ class DynamicTrackBlockTest {
 			assertThat(set).hasSize(1)
 
 			// Add wrapper for same static object → should not increase size
-			val anotherWrapper1 = DynamicTrackBlock(staticBlock1)
+			val anotherWrapper1 = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2)
 			set.add(anotherWrapper1)
 			assertThat(set).hasSize(1)
 

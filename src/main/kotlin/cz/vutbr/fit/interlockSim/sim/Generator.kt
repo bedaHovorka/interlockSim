@@ -47,7 +47,7 @@ open class Generator(
 				"arrival at $timeIn, departure at $timeOut"
 		}
 
-		return Timetable(inOutsList[0].staticRef, inOutsList[1].staticRef, Time(timeIn), Time(timeOut), 40.0)
+		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
 	}
 
 	override fun iteration() {

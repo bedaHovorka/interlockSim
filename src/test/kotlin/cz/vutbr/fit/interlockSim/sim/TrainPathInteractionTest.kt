@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
@@ -53,15 +53,15 @@ import org.junit.jupiter.api.Test
  */
 class TrainPathInteractionTest : KoinTestBase() {
 	private lateinit var mockContext: MockSimulationContext
-	private lateinit var mockInOut: InOut
+	private lateinit var mockInOut: DynamicInOut
 
 	@BeforeEach
 	fun setUp() {
 		mockContext = createMockSimulationContext()
 		// Trigger lazy initialization of dynamic wrappers
 		mockContext.getInOuts()
-		mockInOut = mockk<InOut>(relaxed = true)
-		every { mockInOut.getName() } returns "ENTRY"
+		mockInOut = mockk(relaxed = true)
+		every { mockInOut.name } returns "ENTRY"
 		every { mockInOut.toString() } returns "InOut:ENTRY"
 	}
 
@@ -75,8 +75,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val path = createMockPath(track1, track2)
 
-			val mockOutOut = mockk<InOut>(relaxed = true)
-			every { mockOutOut.getName() } returns "EXIT"
+			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -97,8 +97,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track2 = createMockTrack("TRACK2", 100.0)
 			val pathAhead = createMockPath(track1, track2)
 
-			val mockOutOut = mockk<InOut>(relaxed = true)
-			every { mockOutOut.getName() } returns "EXIT"
+			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -119,8 +119,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 
 			val pathSequence = createMockPath(trackBehind, trackCurrent, trackAhead)
 
-			val mockOutOut = mockk<InOut>(relaxed = true)
-			every { mockOutOut.getName() } returns "EXIT"
+			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
+			every { mockOutOut.name} returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -140,8 +140,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val blockedTrack = createMockBlockedTrack("BLOCKED_TRACK", 100.0)
 			val pathBlocked = createMockPath(blockedTrack)
 
-			val mockOutOut = mockk<InOut>(relaxed = true)
-			every { mockOutOut.getName() } returns "EXIT"
+			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
+			every { mockOutOut.name} returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -160,8 +160,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val track = createMockTrack("TRACK", 100.0)
 			val pathUnblocked = createMockPath(track)
 
-			val mockOutOut = mockk<InOut>(relaxed = true)
-			every { mockOutOut.getName() } returns "EXIT"
+			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)

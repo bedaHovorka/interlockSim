@@ -22,7 +22,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -99,7 +99,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train constructor detects null context`() {
 			// Arrange - Create timetable for test
 			val inOuts = validContext.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 
 			// Act & Assert
 			assertThatBlock {
@@ -144,8 +144,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			val inOuts = validContext.getInOuts().toList()
 			val zeroLengthTimetable =
 				Timetable(
-					inOuts[0].staticRef,
-					inOuts[1].staticRef,
+					inOuts[0],
+					inOuts[1],
 					Time(0.0),
 					Time(60.0),
 					0.0 // Zero length - SIM-005: validation missing
@@ -174,8 +174,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			val inOuts = validContext.getInOuts().toList()
 			val negativeLengthTimetable =
 				Timetable(
-					inOuts[0].staticRef,
-					inOuts[1].staticRef,
+					inOuts[0],
+					inOuts[1],
 					Time(0.0),
 					Time(60.0),
 					-50.0 // Negative length - SIM-005: validation missing
@@ -202,7 +202,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train handles zero distance to semaphore`() {
 			// Arrange
 			val inOuts = validContext.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(validContext, timetable)
 
 			// Before pathToSemaphore is assigned, distanceToSemaphore() returns 0
@@ -550,8 +550,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 	 * Creates a timetable for testing.
 	 */
 	private fun createTimetable(
-		inRef: InOut,
-		outRef: InOut
+		inRef: DynamicInOut,
+		outRef: DynamicInOut
 	): Timetable =
 		Timetable(
 			inRef,

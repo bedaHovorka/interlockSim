@@ -30,7 +30,7 @@ class SimpleTrackBlock :
 	TrackBlock,
 	TrackSection,
 	TrackFacility {
-	private var name: String? = null
+	override var name: String? = null
 
 	/**
 	 * @see SimpleTrack#SimpleTrack(PathSeparator, PathSeparator, Double, Double, Double)
@@ -129,14 +129,6 @@ class SimpleTrackBlock :
 	// Note: SimpleTrack.ends() returns Array<PathSeparator> which should be Array<NodeCell>
 	// based on the constructor (it accepts NodeCell as PathSeparator), but we keep parent signature
 	// The parent ends() method returns Array<PathSeparator> which is correct
-
-	/**
-	 * Setter
-	 * @param name
-	 */
-	fun setName(name: String) {
-		this.name = name
-	}
 
 	override fun toString(): String = if (name == null) Arrays.toString(ends()) else name!!
 }

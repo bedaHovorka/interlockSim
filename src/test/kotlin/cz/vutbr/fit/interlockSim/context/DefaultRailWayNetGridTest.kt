@@ -41,6 +41,8 @@ import org.junit.jupiter.api.Test
  */
 private class MockTrackBlock : TrackBlock {
 	// TrackBlock methods
+	override var name: String? = null
+
 	override fun getNextTrackSection(
 		separator: PathSeparator,
 		current: TrackSection?
@@ -546,11 +548,11 @@ class DefaultRailWayNetGridTest {
 			val nodePoint2 = Point(10, 10)
 			val node1 = InOut("A", false, SpatialType.HORIZONTAL)
 			val node2 = InOut("B", true, SpatialType.HORIZONTAL)
-			
+
 			// Add nodes
 			grid.put(nodePoint1, node1)
 			grid.put(nodePoint2, node2)
-			
+
 			// Add intermediate TrackBlockParts (simulating joinCells)
 			val intermediatePoints =
 				listOf(
@@ -633,7 +635,7 @@ class DefaultRailWayNetGridTest {
 			for (part in parts) {
 				assertThat(grid.getLocation(part)).isNull()
 			}
-			
+
 			// Verify no assertion errors when checking removed points
 			for (point in intermediatePoints) {
 				assertThatCode { grid.containsKey(point) }

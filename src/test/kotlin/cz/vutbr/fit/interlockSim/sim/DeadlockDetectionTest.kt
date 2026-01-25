@@ -14,8 +14,8 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -580,9 +580,9 @@ class DeadlockDetectionTest : KoinTestBase() {
 
 	// ==================== Helper Methods ====================
 
-	private fun createMockInOut(name: String): InOut {
-		val inOut = mockk<InOut>()
-		every { inOut.getName() } returns name
+	private fun createMockInOut(name: String): DynamicInOut {
+		val inOut = mockk<DynamicInOut>()
+		every { inOut.name } returns name
 		every { inOut.toString() } returns "InOut:$name"
 		return inOut
 	}

@@ -15,7 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
@@ -307,12 +307,12 @@ class TrainStateTransitionTest : KoinTestBase() {
 	 */
 	private fun createTimetableWithLength(length: Double): Timetable {
 		// Mock InOut objects needed for timetable
-		val mockInOut = mockk<InOut>()
-		every { mockInOut.getName() } returns "MOCK_IN"
+		val mockInOut = mockk<DynamicInOut>()
+		every { mockInOut.name } returns "MOCK_IN"
 		every { mockInOut.toString() } returns "InOut:MOCK_IN"
 
-		val mockOutOut = mockk<InOut>()
-		every { mockOutOut.getName() } returns "MOCK_OUT"
+		val mockOutOut = mockk<DynamicInOut>()
+		every { mockOutOut.name } returns "MOCK_OUT"
 		every { mockOutOut.toString() } returns "InOut:MOCK_OUT"
 
 		// Create timetable with mocked InOuts and specified length

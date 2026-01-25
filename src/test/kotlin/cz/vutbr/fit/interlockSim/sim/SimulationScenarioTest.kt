@@ -18,7 +18,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.BeforeEach
@@ -218,7 +218,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train can be created with timetable referencing InOut points`() {
 			// Arrange - Create train with timetable
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Assert - Verify train is created successfully
@@ -248,7 +248,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train initializes with correct initial state`() {
 			// Arrange & Act
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Assert - Verify initial conditions: train at rest
@@ -270,7 +270,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train respects track speed limits`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Verify train starts at rest
@@ -293,7 +293,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train acceleration and deceleration are realistic`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Verify initial state
@@ -324,7 +324,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `simulation respects semaphore red signal`() {
 			// Arrange - Train with timetable through network
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Verify train starts at rest
@@ -349,7 +349,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train proceeds through allowing semaphore`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Verify train is ready to move
@@ -373,7 +373,7 @@ class SimulationScenarioTest : KoinTestBase() {
 		fun `train stops at red semaphore and waits for allowing signal`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val mockTimetable = createMockTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val mockTimetable = createMockTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, mockTimetable)
 
 			// Initial velocity should be zero
@@ -406,8 +406,8 @@ class SimulationScenarioTest : KoinTestBase() {
 			// Arrange
 			val mockTimetable =
 				createMockTimetable(
-					context.getInOuts().first().staticRef,
-					context.getInOuts().last().staticRef
+					context.getInOuts().first(),
+					context.getInOuts().last()
 				)
 
 			// Act & Assert - Null context should throw exception
@@ -464,8 +464,8 @@ class SimulationScenarioTest : KoinTestBase() {
 	 * Creates a mock timetable for testing.
 	 */
 	private fun createMockTimetable(
-		inRef: InOut,
-		outRef: InOut
+		inRef: DynamicInOut,
+		outRef: DynamicInOut
 	): Timetable =
 		Timetable(
 			inRef,
@@ -481,8 +481,8 @@ class SimulationScenarioTest : KoinTestBase() {
 	private fun createMockTimetableWithLength(length: Double): Timetable {
 		val inOuts = context.getInOuts().toList()
 		return Timetable(
-			inOuts[0].staticRef,
-			inOuts[1].staticRef,
+			inOuts[0],
+			inOuts[1],
 			Time(0.0),
 			Time(60.0),
 			length

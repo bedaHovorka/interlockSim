@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -63,16 +64,16 @@ private val logger = KotlinLogging.logger {}
  * @property staticRef The static track block object with immutable editing-time properties
  */
 class DynamicTrackBlock(
-	val staticRef: TrackBlock
+	val staticRef: TrackBlock,
+	private val end1: DynamicPathSeparator,
+	private val end2: DynamicPathSeparator,
 ) : TrackBlock by staticRef,
 	TrackSection,
 	TrackFacility {
 	/**
-	 * TrackSection interface implementation.
-	 * DynamicTrackBlock wraps a static TrackBlock, so it returns the static reference.
-	 * This allows DynamicTrackBlock to act as both a TrackBlock and a TrackSection.
+	 * TrackSection interface implementation. Return this
 	 */
-	override fun getTrackBlock(): TrackBlock = staticRef
+	override fun getTrackBlock(): TrackBlock = this
 
 	// ========== Dynamic properties ==========
 
@@ -119,6 +120,17 @@ class DynamicTrackBlock(
 			"TrackBlock occupant should not be null - must call when track is OCCUPIED"
 		}
 		return occupant!!
+	}
+
+	override fun ends(): Array<PathSeparator> = arrayOf(end1, end2)
+
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? {
+		if (current == null) return this
+		if (current == this || current == staticRef) return null
+		throw IllegalArgumentException("dynamictrackblock: current must be only this or null")
 	}
 
 	/**

@@ -327,7 +327,9 @@ open class DefaultSimulationContext(
 
 				// ===== KEY CHANGE FOR ISSUE #277 =====
 				// Wrap static TrackBlock in DynamicTrackBlock wrapper
-				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock)
+				val end1: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[first] as DynamicPathSeparator
+				val end2: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[second] as DynamicPathSeparator
+				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock, end1, end2)
 
 				// Put dynamic wrapper into the simulation graph (type-safe)
 				targetGraph.put(first, firstExt, second, secondExt, dynamicTrackBlock)
@@ -467,13 +469,13 @@ open class DefaultSimulationContext(
 		separator: DynamicPathSeparator,
 		section: TrackSection
 	): Segment? {
-		val staticBlock = section.getTrackBlock()
-		if (staticBlock.isInnerElement(separator)) {
-			return staticBlock.getJoin(separator, section)
+		val block = section.getTrackBlock()
+		if (block.isInnerElement(separator)) {
+			return block.getJoin(separator, section)
 		}
 		val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
 		// Look up DynamicTrackBlock wrapper for the static block from TrackSection
-		val dynamicTrackBlock = getDynamicWrapper(staticBlock)
+		val dynamicTrackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		return getSegment(nodeCell, dynamicTrackBlock)
 	}
 
@@ -568,11 +570,9 @@ open class DefaultSimulationContext(
 	): TrackSection? {
 		var trackBlock: DynamicTrackBlock? = null
 		if (current != null) {
-			// TrackSection belongs to static structure, so getTrackBlock() returns static TrackBlock
-			// DynamicTrackBlock.getNextTrackSection() delegates to static block, so we can use it directly
-			val staticBlock = current.getTrackBlock()
-			requireSimulation(staticBlock != null) { "TrackBlock cannot be null for current track section" }
-			val nextTrackSection = staticBlock.getNextTrackSection(separator, current)
+			val block = current.getTrackBlock()
+			requireSimulation(block != null) { "TrackBlock cannot be null for current track section" }
+			val nextTrackSection = block.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				logger.trace {
 					"getNextTrackSection: found next section within same block from $separator"
@@ -580,7 +580,7 @@ open class DefaultSimulationContext(
 				return nextTrackSection
 			}
 			// Look up DynamicTrackBlock wrapper from graph for use in getNextTrackBlock call below
-			trackBlock = getDynamicWrapper(staticBlock)
+			trackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		}
 
 		// z dalsi TrackBlock
@@ -595,7 +595,7 @@ open class DefaultSimulationContext(
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
 		@Suppress("UNCHECKED_CAST")
-		val result = nextTrackBlock?.getNextTrackSection(nodeCell, null as TrackSection?)
+		val result = nextTrackBlock?.getNextTrackSection(separator, null)
 		logger.trace {
 			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}
