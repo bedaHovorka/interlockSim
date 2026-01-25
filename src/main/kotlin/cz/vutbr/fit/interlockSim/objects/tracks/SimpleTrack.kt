@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import io.github.oshai.kotlinlogging.KotlinLogging

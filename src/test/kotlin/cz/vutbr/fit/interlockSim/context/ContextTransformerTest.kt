@@ -578,8 +578,8 @@ class ContextTransformerTest : KoinTestBase() {
 			// Assert - Properties delegated correctly
 			assertThat(dynamicBlock.length()).isEqualTo(150.0)
 			assertThat(dynamicBlock.ends()).hasSize(2)
-			assertThat(dynamicBlock.ends().toList()).contains(inA)
-			assertThat(dynamicBlock.ends().toList()).contains(inB)
+			assertThat(dynamicBlock.staticRef.ends().toList()).contains(inA)
+			assertThat(dynamicBlock.staticRef.ends().toList()).contains(inB)
 		}
 
 		@Test

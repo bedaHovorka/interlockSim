@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -63,16 +64,16 @@ private val logger = KotlinLogging.logger {}
  * @property staticRef The static track block object with immutable editing-time properties
  */
 class DynamicTrackBlock(
-	val staticRef: TrackBlock
+	val staticRef: TrackBlock,
+	private val end1: DynamicPathSeparator,
+	private val end2: DynamicPathSeparator,
 ) : TrackBlock by staticRef,
 	TrackSection,
 	TrackFacility {
 	/**
-	 * TrackSection interface implementation.
-	 * DynamicTrackBlock wraps a static TrackBlock, so it returns the static reference.
-	 * This allows DynamicTrackBlock to act as both a TrackBlock and a TrackSection.
+	 * TrackSection interface implementation. Return this
 	 */
-	override fun getTrackBlock(): TrackBlock = staticRef
+	override fun getTrackBlock(): TrackBlock = this
 
 	// ========== Dynamic properties ==========
 
@@ -119,6 +120,17 @@ class DynamicTrackBlock(
 			"TrackBlock occupant should not be null - must call when track is OCCUPIED"
 		}
 		return occupant!!
+	}
+
+	override fun ends(): Array<PathSeparator> = arrayOf(end1, end2)
+
+	override fun getNextTrackSection(
+		separator: PathSeparator,
+		current: TrackSection?
+	): TrackSection? {
+		if (current == null) return this
+		if (current == this || current == staticRef) return null
+		throw IllegalArgumentException("dynamictrackblock: current must be only this or null")
 	}
 
 	/**
@@ -189,14 +201,29 @@ class DynamicTrackBlock(
 	 * @throws TrackOperationException if track is not FREE
 	 */
 	override fun setUpPath(sep: PathSeparator) {
+		// Handle idempotent case: block already reserved from same separator
+		// This is needed because paths can contain the same block multiple times
+		// (e.g., switch "around" blocks appear twice in path definition)
+		if (getState() == TrackFacility.State.RESERVED) {
+			if (reservedFrom === sep) {
+				// Already reserved from this separator - idempotent operation, just return
+				logger.debug {
+					"${Process.time()} TrackBlock ${staticRef.hashCode()} already reserved from $sep (idempotent)"
+				}
+				return
+			} else {
+				// Reserved from different separator - this is a conflict!
+				logger.warn {
+					"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation conflict - " +
+						"already reserved from=$reservedFrom, new request from=$sep"
+				}
+				throw TrackOperationException("Block already reserved from different separator", staticRef)
+			}
+		}
+
+		// Normal case: FREE → RESERVED
 		logger.info {
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} RESERVE: from=$sep, state=FREE->RESERVED"
-		}
-		if (getState() != TrackFacility.State.FREE) {
-			logger.warn {
-				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation rejected - " +
-					"state=${getState()}, occupant=$occupant, requested by=$sep"
-			}
 		}
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep

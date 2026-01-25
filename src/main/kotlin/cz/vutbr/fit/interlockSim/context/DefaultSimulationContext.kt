@@ -327,7 +327,9 @@ open class DefaultSimulationContext(
 
 				// ===== KEY CHANGE FOR ISSUE #277 =====
 				// Wrap static TrackBlock in DynamicTrackBlock wrapper
-				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock)
+				val end1: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[first] as DynamicPathSeparator
+				val end2: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[second] as DynamicPathSeparator
+				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock, end1, end2)
 
 				// Put dynamic wrapper into the simulation graph (type-safe)
 				targetGraph.put(first, firstExt, second, secondExt, dynamicTrackBlock)
@@ -467,13 +469,13 @@ open class DefaultSimulationContext(
 		separator: DynamicPathSeparator,
 		section: TrackSection
 	): Segment? {
-		val staticBlock = section.getTrackBlock()
-		if (staticBlock.isInnerElement(separator)) {
-			return staticBlock.getJoin(separator, section)
+		val block = section.getTrackBlock()
+		if (block.isInnerElement(separator)) {
+			return block.getJoin(separator, section)
 		}
 		val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
 		// Look up DynamicTrackBlock wrapper for the static block from TrackSection
-		val dynamicTrackBlock = getDynamicWrapper(staticBlock)
+		val dynamicTrackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		return getSegment(nodeCell, dynamicTrackBlock)
 	}
 
@@ -568,11 +570,9 @@ open class DefaultSimulationContext(
 	): TrackSection? {
 		var trackBlock: DynamicTrackBlock? = null
 		if (current != null) {
-			// TrackSection belongs to static structure, so getTrackBlock() returns static TrackBlock
-			// DynamicTrackBlock.getNextTrackSection() delegates to static block, so we can use it directly
-			val staticBlock = current.getTrackBlock()
-			requireSimulation(staticBlock != null) { "TrackBlock cannot be null for current track section" }
-			val nextTrackSection = staticBlock.getNextTrackSection(separator, current)
+			val block = current.getTrackBlock()
+			requireSimulation(block != null) { "TrackBlock cannot be null for current track section" }
+			val nextTrackSection = block.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				logger.trace {
 					"getNextTrackSection: found next section within same block from $separator"
@@ -580,7 +580,7 @@ open class DefaultSimulationContext(
 				return nextTrackSection
 			}
 			// Look up DynamicTrackBlock wrapper from graph for use in getNextTrackBlock call below
-			trackBlock = getDynamicWrapper(staticBlock)
+			trackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		}
 
 		// z dalsi TrackBlock
@@ -594,8 +594,45 @@ open class DefaultSimulationContext(
 		val nodeCell = if (separator is NodeCell) separator else staticNodeCell
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
+		// CRITICAL FIX (Issue #282): Validate block reservation before allowing navigation
+		// Train navigation follows physical topology based on current switch configuration,
+		// but path reservation only reserves blocks based on switch configuration at setup time.
+		// If switch configuration changes (due to another train's path), trains would navigate
+		// into blocks not reserved by their own path, causing "Wrong state: FREE, expected: RESERVED" errors.
+		//
+		// Solution: Block navigation when block is not properly reserved for this train.
+		//
+		// Allowed cases:
+		// 1. Block is RESERVED from the separator we're navigating from - correct reservation
+		// 2. Block is OCCUPIED - we're following/approaching another train
+		// 3. Initial entry from InOut (current == null) - path setup happens first
+		//
+		// Blocked cases:
+		// - Block is FREE and we're navigating between blocks - block was never reserved!
+		// - Block is RESERVED from a different separator - reserved by different path!
+		if (nextTrackBlock != null && current != null) {
+			val dynamicSeparator = separator as? DynamicPathSeparator
+			val blockState = nextTrackBlock.getState()
+			val reservedFrom = nextTrackBlock.reservedFrom
+
+			// Block is properly reserved if it's RESERVED from the separator we're navigating from
+			val isProperlyReserved = blockState == TrackFacility.State.RESERVED && reservedFrom == dynamicSeparator
+
+			// Block is occupied (we might be following another train or waiting)
+			val isOccupied = blockState == TrackFacility.State.OCCUPIED
+
+			// Allow navigation only if properly reserved or occupied
+			if (!isProperlyReserved && !isOccupied) {
+				logger.info {
+					"getNextTrackSection: blocking navigation from $separator to block ${nextTrackBlock.staticRef.hashCode()} " +
+						"(state=$blockState, reservedFrom=$reservedFrom, expected=$dynamicSeparator)"
+				}
+				return null // Block entry - train will stop at semaphore
+			}
+		}
+
 		@Suppress("UNCHECKED_CAST")
-		val result = nextTrackBlock?.getNextTrackSection(nodeCell, null as TrackSection?)
+		val result = nextTrackBlock?.getNextTrackSection(separator, null)
 		logger.trace {
 			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}

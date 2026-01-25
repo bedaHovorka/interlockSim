@@ -16,7 +16,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import org.junit.jupiter.api.BeforeEach
@@ -107,7 +107,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train initializes at rest with zero velocity`() {
 			// Arrange & Act
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Assert - Verify initial state: train at rest
@@ -134,7 +134,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train acceleration respects physics limits`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Initial state
@@ -164,7 +164,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train achieves target speed within expected time`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Physics calculation for reaching 40 m/s with a=4 m/s²:
@@ -197,7 +197,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train acceleration curve is smooth`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train uses SimpleIntegration for smooth physics:
@@ -234,7 +234,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train decelerates before semaphore`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train.Motor has two deceleration modes:
@@ -261,7 +261,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train deceleration respects physics limits`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Physics constraints documented in Train.kt:
@@ -319,7 +319,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train stops exactly at target location`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Motor.AccelerationStopCondition checks:
@@ -356,7 +356,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train stops at red semaphore`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train.Front.semaphoreAction() implements red signal logic:
@@ -386,7 +386,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train proceeds through green semaphore`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train.Front.accelerateToSignal() handles green signal:
@@ -415,7 +415,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train waits for allowing signal before resuming`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train.Front.allowingSignal() creates Condition:
@@ -443,7 +443,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train distance to semaphore calculated correctly`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// distanceToSemaphore() logic:
@@ -479,7 +479,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train Front tracks position through network`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Site.actions() loop:
@@ -565,7 +565,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train clears track sections as tail passes`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Tail.separatorAction() calls:
@@ -602,7 +602,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train completes journey from entry to exit`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Train lifecycle in actions():
@@ -634,7 +634,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train reports to context during journey`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Reporter (anonymous inner class):
@@ -664,7 +664,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		fun `train terminates cleanly after exit`() {
 			// Arrange
 			val inOuts = context.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(context, timetable)
 
 			// Cleanup sequence in actions():
@@ -686,8 +686,8 @@ class TrainBehaviorTest : KoinTestBase() {
 	 * Creates a timetable for testing.
 	 */
 	private fun createTimetable(
-		inRef: InOut,
-		outRef: InOut
+		inRef: DynamicInOut,
+		outRef: DynamicInOut
 	): Timetable =
 		Timetable(
 			inRef,
@@ -703,8 +703,8 @@ class TrainBehaviorTest : KoinTestBase() {
 	private fun createTimetableWithLength(length: Double): Timetable {
 		val inOuts = context.getInOuts().toList()
 		return Timetable(
-			inOuts[0].staticRef,
-			inOuts[1].staticRef,
+			inOuts[0],
+			inOuts[1],
 			Time(0.0),
 			Time(60.0),
 			length
