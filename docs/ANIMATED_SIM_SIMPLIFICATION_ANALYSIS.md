@@ -736,23 +736,23 @@ See `ANIMATED_SIM_MILESTONE_PREP.md` for complete issue #273 specification.
 
 ---
 
-**UPDATE 2026-01-24 (Issues #206-#207 Complete, #280 Blocker Identified):**
+**UPDATE 2026-01-25 (Issue #280 Resolved, #289 Discovered):**
 - Issues #201-#207: ✅ COMPLETE
-- Progress: 7/9 issues (including recommended #273) - **77.8% complete**
+- Issue #280: ✅ RESOLVED (PR #286, commit b681454, closed 2026-01-25) - Train deadlock blocker fixed
+- Issue #289: 🔴 NEW BUG (train position oscillation) - Visual bug discovered, must fix before #273
+- Progress: 7/9 issues complete (77.8%) - blocker resolved, new visual bug in progress
 - Technical debt documented: #265 (HIGH), #266 (MEDIUM)
 - Build: 1488+ tests passing, zero regressions
-- Bug fixes: Animation initialization timing, visual polish (toolbar/InOut)
-- **🔴 BLOCKER:** Issue #280 discovered post-rebase (visible in exampleGui and develop branch)
-- Status: **On hold pending #280 resolution** - blocker must be fixed before continuing
+- Bug fixes: Animation initialization timing, visual polish (toolbar/InOut), train deadlock (#280)
+- **Current Status:** Blocker resolved, addressing visual animation bug #289 before manual testing
 - Velocity: Issues #206-#207 completed in 2 days vs. estimated 3-4 days (50-100% faster)
 
-**Updated Priority Order:**
-1. 🔴 Issue #280: **BLOCKER** - Fix post-rebase issue (0.5-1 day)
-2. ⏳ Issue #265: Add PropertyChangeEvents to dynamic state (1-2 days, HIGH priority)
-3. ⏳ Issue #278: TBD (priority after #265)
-4. ⏳ Issue #273: Comprehensive manual testing (2-3 hours, SECOND-TO-LAST)
-5. ⏳ Issue #208: Documentation polish (1 day, FINAL STEP)
-6. ✅ Post-milestone: Address remaining technical debt #266 (MEDIUM)
+**Updated Priority Order (2026-01-25):**
+1. ✅ Issue #280: **RESOLVED** (2026-01-25) - Train deadlock fixed in PR #286
+2. 🔴 Issue #289: Train position oscillation bug (NEW, 3-4 hours) - Visual bug, must fix before manual testing
+3. ⏳ Issue #273: Comprehensive manual testing (2-3 hours, SECOND-TO-LAST, after #289)
+4. ⏳ Issue #208: Documentation polish (1 day, FINAL STEP or parallel with #289)
+5. ✅ Post-milestone: Address technical debt #265 (HIGH priority), #266 (MEDIUM)
 
 **Key Success Factors:**
 1. ✅ Zero backlog dependencies strategy proved optimal

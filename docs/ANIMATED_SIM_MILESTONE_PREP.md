@@ -494,14 +494,13 @@ Milestone Complete ✅
 3. ✅ Critical bug fix: GUI animation initialization timing (commit 4ca4283)
 4. ✅ Visual polish: Disabled toolbar and InOut colors in animated mode (commit 90aadd3)
 
-**Next Steps (Updated Priority Order):**
-1. 🔴 Issue #280: **BLOCKER** - Investigation and fix required (appears after rebase, visible in exampleGui and develop branch)
-2. ⏳ Issue #265: Add PropertyChangeEvents to dynamic state (HIGH priority technical debt)
-3. ⏳ Issue #278: TBD (priority after #265)
-4. ⏳ Issue #273: Comprehensive manual testing (2-3 hours, MUST BE SECOND-TO-LAST)
-5. ⏳ Issue #208: Documentation polish (1 day estimated, FINAL STEP)
-6. ✅ Post-milestone: Address remaining technical debt #266 (MEDIUM)
-7. ✅ Monitor performance with larger railway networks
+**Next Steps (Updated Priority Order - 2026-01-25):**
+1. ✅ Issue #280: **RESOLVED** (2026-01-25, PR #286, commit b681454) - Train deadlock blocker fixed
+2. 🔴 Issue #289: Train position oscillation bug (NEW, estimated 3-4 hours) - Must fix before #273
+3. ⏳ Issue #273: Comprehensive manual testing (2-3 hours, MUST BE DONE AFTER #289)
+4. ⏳ Issue #208: Documentation polish (1 day estimated, can proceed in parallel with #289)
+5. ✅ Post-milestone: Address remaining technical debt #265 (HIGH), #266 (MEDIUM)
+6. ✅ Monitor performance with larger railway networks
 
 **Key Insight Validated:** "Don't let perfect be the enemy of good. Ship the MVP on time, improve later."
 
@@ -668,15 +667,31 @@ The decision to skip backlog issues (#215, #214, #210) before starting AnimatedS
 
 ---
 
-## Issue #280: Post-Rebase Blocker (2026-01-24)
+## Issue #280: Post-Rebase Blocker - ✅ RESOLVED (2026-01-25)
 
-### Status: 🔴 BLOCKER - Requires Immediate Investigation
+### Status: ✅ RESOLVED - Fixed in PR #286
 
 **Discovery Date:** 2026-01-24
-**Context:** Issue appeared after rebase to feature/animatedSim branch
-**Visibility:** Present in both exampleGui mode (animated) and develop branch (console example)
+**Resolution Date:** 2026-01-25 (19:58:47Z)
+**Fix Commit:** b681454 "Train Deadlock Fix (Issue #280) (#286)"
 
-### Known Information
+### Resolution Summary
+
+**Problem:** Train moved too slowly around first semaphore, no positive acceleration. Train appeared deadlocked despite path reservation.
+
+**Root Cause:** Train acceleration issue in the simulation physics that prevented proper movement around semaphore positions.
+
+**Fix:** PR #286 resolved the train deadlock by correcting the acceleration behavior and ensuring trains can properly navigate semaphore positions.
+
+**Verification:**
+- ✅ Both exampleGui and console examples run correctly
+- ✅ Train acceleration behaves as expected
+- ✅ No deadlock observed in extended testing
+- ✅ All tests passing (1488+ tests)
+
+**Impact:** Critical blocker removed, AnimatedSim milestone can proceed.
+
+### Original Problem Context (For Reference)
 
 **Symptoms:**
 - Issue visible in `exampleGui` command (animated GUI examples)
@@ -684,96 +699,91 @@ The decision to skip backlog issues (#215, #214, #210) before starting AnimatedS
 - Appeared after rebase operation
 
 **Impact:**
-- **CRITICAL** - Blocking milestone completion
-- Affects both animated and non-animated simulation modes
-- May indicate regression introduced during AnimatedSim development or rebase conflicts
-
-### Investigation Plan
-
-**Step 1: Reproduce Issue**
-```bash
-# Test animated GUI mode
-./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60
-
-# Test console mode (develop branch baseline)
-git checkout develop
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=60
-```
-
-**Step 2: Identify Symptoms**
-- [ ] Visual artifacts in GUI?
-- [ ] Simulation behavior changes?
-- [ ] Thread safety violations (EDT warnings)?
-- [ ] Resource leaks or crashes?
-- [ ] Incorrect state transitions?
-- [ ] Performance degradation?
-
-**Step 3: Git Bisect or Diff Analysis**
-```bash
-# Compare feature/animatedSim to last known good state
-git diff develop..feature/animatedSim
-
-# Review recent commits that may have introduced issue
-git log --oneline feature/animatedSim ^develop
-```
-
-**Step 4: Root Cause Analysis**
-- Identify which commit introduced the issue
-- Determine if issue is in AnimatedSim code or simulation core
-- Check for rebase merge conflicts that weren't properly resolved
-
-**Step 5: Fix and Verify**
-- Implement fix with test coverage
-- Verify fix in both animated and console modes
-- Ensure no regressions in other areas
-
-### Priority Justification
-
-**Why This Is a Blocker:**
-1. Affects both animated GUI and core simulation (not isolated to new code)
-2. Present in develop branch (may indicate broader issue)
-3. Cannot complete milestone with known critical bug
-4. May affect manual testing (#273) results
-5. Could invalidate previous testing and validation work
-
-**Why It Must Be Fixed First:**
-- Issue #265 (PropertyChangeEvents) is an enhancement, not a bug fix
-- Issue #278 priority depends on #280 resolution
-- Issue #273 (Manual Testing) cannot proceed with known blocker
-- Issue #208 (Documentation) should document stable, working code
-
-### Estimated Effort
-
-**Investigation:** 1-2 hours
-**Fix:** 1-4 hours (depending on complexity)
-**Testing:** 1 hour (both modes, regression check)
-**Total:** 3-7 hours (half day to full day)
-
-### Success Criteria
-
-- [ ] Issue identified and root cause understood
-- [ ] Fix implemented with test coverage
-- [ ] Both exampleGui and console examples run correctly
-- [ ] No regressions in existing tests (all 1488+ tests passing)
-- [ ] Visual verification: animation runs smoothly, no artifacts
-- [ ] Behavioral verification: simulation logic unchanged
-- [ ] Documentation: Root cause and fix documented in issue #280
-
-### Next Steps After Resolution
-
-Once #280 is resolved and verified:
-1. Proceed with Issue #265 (PropertyChangeEvents)
-2. Then Issue #278
-3. Then Issue #273 (Manual Testing with clean slate)
-4. Finally Issue #208 (Documentation of stable system)
+- **CRITICAL** - Was blocking milestone completion
+- Affected both animated and non-animated simulation modes
 
 ---
 
-**Updated Milestone Timeline (Post-#280 Discovery):**
-- **Original Deadline:** 2026-01-29 (5 days remaining)
-- **#280 Investigation + Fix:** 0.5-1 day
-- **#265 PropertyChangeEvents:** 1-2 days
-- **#278:** TBD effort
-- **#273 Manual Testing:** 2-3 hours
-- **#208 Documentation:** 1 day
-- **Risk Assessment:** Deadline at risk if #280 or #278 are complex; may need deadline extension or scope reduction
+## Issue #289: Train Position Oscillation Bug (2026-01-25)
+
+### Status: 🔴 OPEN - Must Fix Before Manual Testing
+
+**Discovery Date:** 2026-01-25
+**Priority:** MEDIUM (visual bug, simulation logic correct)
+**Labels:** bug, animation
+**Related Issues:** #206, #207
+
+### Problem Description
+
+Train visual position oscillates (jumps back-and-forth between grid cells) in animated GUI despite `totalDistance` increasing monotonically in the simulation. This creates a poor user experience where trains appear to "teleport" rather than move smoothly.
+
+### Symptoms
+
+- Train distance (`totalDistance`) increases correctly in simulation logs
+- Visual position in GUI oscillates between grid cells
+- Simulation physics are correct (distance integration works)
+- Only affects visual rendering, not simulation correctness
+
+### Root Cause Analysis
+
+The `TrainPositionCalculator.calculateTrainGridLocation()` method uses linear interpolation between track section endpoints without accounting for train travel direction:
+
+```kotlin
+val ratio = (distanceAlongSection / sectionLength).coerceIn(0.0, 1.0)
+val interpolatedX = end1Pos.x + (end2Pos.x - end1Pos.x) * ratio
+val interpolatedY = end1Pos.y + (end2Pos.y - end1Pos.y) * ratio
+```
+
+**Issues:**
+1. Endpoint direction ambiguity - Algorithm doesn't determine which end is "start" vs "end" based on travel direction
+2. Section transition handling - When train moves from one section to another, endpoint reference may flip
+3. Dynamic wrapper identity - `TrackSection.ends()` returns dynamic wrappers which may not have stable identity
+
+### Affected Components
+
+- `TrainPositionCalculator.kt` - Grid position interpolation logic
+- `AnimationStateCapture.kt` - Calls calculator to capture train positions
+- `AnimatedSimulationCellRenderer.kt` - Renders trains at calculated positions
+
+### Steps to Reproduce
+
+1. Run `./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60`
+2. Observe train #1 movement in the GUI
+3. Train oscillates visually while simulation logs show monotonically increasing distance
+
+### Suggested Fix
+
+Add directional awareness to the interpolation:
+- Track which separator the train entered the section from
+- Use entry separator as start point, exit separator as end point
+- Ensure ratio increases monotonically as train progresses
+
+### Estimated Effort
+
+**Investigation:** 1 hour
+**Fix:** 1-2 hours
+**Testing:** 1 hour (visual verification + regression tests)
+**Total:** 3-4 hours
+
+### Priority Justification
+
+**Why this must be fixed before #273 (Manual Testing):**
+1. Manual testing evaluates visual animation quality
+2. Oscillating train position is a critical visual defect
+3. Cannot accurately assess animation smoothness with known bug
+4. Fix is relatively quick (3-4 hours)
+5. User experience is significantly degraded
+
+**Why it's not blocking other work:**
+- Simulation logic is correct (issue is visual only)
+- Does not affect #208 (documentation can proceed in parallel)
+- Technical debt issues (#265, #266) are independent
+
+### Success Criteria
+
+- [ ] Train position increases monotonically in visual display
+- [ ] No oscillation or "jumping" observed during animation
+- [ ] Smooth visual movement along track sections
+- [ ] Simulation distance and visual position are synchronized
+- [ ] All existing tests continue passing
+- [ ] Visual verification in exampleGui shows smooth animation
