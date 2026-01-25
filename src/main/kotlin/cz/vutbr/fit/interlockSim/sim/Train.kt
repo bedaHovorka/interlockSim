@@ -125,8 +125,9 @@ class Train :
 
 				position.state -= nextLength
 				totalLenghtOfPreviousBlocks += nextLength
-				where = next!!.getSecondEnd(where)
-				requireSimulationNotNull(where) { "PathSeparator from getSecondEnd() must not be null" }
+				val staticWhere = next!!.getSecondEnd(where)
+				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
+				where = env.toDynamic(staticWhere)
 				current = next
 				onNext = false
 			}
@@ -379,9 +380,8 @@ class Train :
 			logger.debug {
 				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
-			if (where is DynamicInOut && where.staticRef == timetable.getIn()) {
+			if (where == timetable.getIn()) {
 				fromHome = true
-				logger.debug { "Train $number tail reached starting InOut, activating train" }
 				start()
 			}
 
@@ -392,17 +392,13 @@ class Train :
 				env.toDynamic(current as TrackFacility).leave(this@Train)
 			}
 			if (next == null &&
-				!(where is DynamicInOut && where.staticRef == timetable.getOut())
+				where != timetable.getOut()
 			) {
 				env.report("ends in wrong out", this@Train, ReportType.TRAIN_EVENTS)
 			}
 		}
 
-		override fun start(): Site {
-			val result = if (fromHome) super.start() else this
-			logger.trace { "Train $number Tail.start(): ${if (result === this) "not activated" else "activated"}" }
-			return result
-		}
+		override fun start(): Site = if (fromHome) super.start() else this
 	}
 
 	private inner class LengthChecker : ContinuousInvariantChecker() {
