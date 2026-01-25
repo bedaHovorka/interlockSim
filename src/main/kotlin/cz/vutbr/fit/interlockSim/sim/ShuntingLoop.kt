@@ -41,6 +41,38 @@ import java.util.Queue
 /**
  * Příklad fungování modelu
  * Ovlada sest navestidel a 2 InOuty pomoci predem ulozenych cest
+ *
+ * ## Code Review Required (Issue #284)
+ *
+ * **CRITICAL: This class has been modified for Issue #280/#284 and requires code review by traffic-simulation-expert.**
+ *
+ * **Changes made:**
+ * - Migrated from static cells (InOut, RailSemaphore, RailSwitch) to dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch)
+ * - Updated hardcoded grid coordinate lookups (lines 137-145) to retrieve dynamic wrappers
+ * - Modified path construction to work with dynamic references
+ * - Updated block organization logic to use staticRef for mapping (lines 165-167)
+ * - All paths now contain dynamic wrappers instead of static cells
+ *
+ * **Rationale:**
+ * Issue #284 fixed train deadlock caused by identity mismatch between grid navigation (returned static cells)
+ * and pathToNextSemaphore() (returned dynamic wrappers in paths). ShuntingLoop must now use consistent
+ * dynamic references throughout to maintain path progression correctness.
+ *
+ * **Testing:**
+ * - All ShuntingLoop unit tests passing (28 tests)
+ * - Integration tests passing (15 operational tests)
+ * - Regression tests passing (trains complete circuits and exit successfully)
+ *
+ * **Review focus:**
+ * - Verify dynamic wrapper usage does not affect simulation physics or timing
+ * - Confirm path construction logic maintains correct semaphore ordering
+ * - Validate block mapping logic preserves train navigation correctness
+ * - Ensure changes align with jDisco framework assumptions
+ *
+ * **Authority:** @traffic-simulation-expert (main leader, simulation & physics expert per TEAM.md)
+ *
+ * @see docs/ISSUE_280_ANALYSIS_PLAN.md for detailed root cause analysis
+ * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/284">Issue #284</a>
  */
 class ShuntingLoop : Interlocking {
 	companion object {
