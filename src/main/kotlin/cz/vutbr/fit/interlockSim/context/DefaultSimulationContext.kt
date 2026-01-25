@@ -594,6 +594,43 @@ open class DefaultSimulationContext(
 		val nodeCell = if (separator is NodeCell) separator else staticNodeCell
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
+		// CRITICAL FIX (Issue #282): Validate block reservation before allowing navigation
+		// Train navigation follows physical topology based on current switch configuration,
+		// but path reservation only reserves blocks based on switch configuration at setup time.
+		// If switch configuration changes (due to another train's path), trains would navigate
+		// into blocks not reserved by their own path, causing "Wrong state: FREE, expected: RESERVED" errors.
+		//
+		// Solution: Block navigation when block is not properly reserved for this train.
+		//
+		// Allowed cases:
+		// 1. Block is RESERVED from the separator we're navigating from - correct reservation
+		// 2. Block is OCCUPIED - we're following/approaching another train
+		// 3. Initial entry from InOut (current == null) - path setup happens first
+		//
+		// Blocked cases:
+		// - Block is FREE and we're navigating between blocks - block was never reserved!
+		// - Block is RESERVED from a different separator - reserved by different path!
+		if (nextTrackBlock != null && current != null) {
+			val dynamicSeparator = separator as? DynamicPathSeparator
+			val blockState = nextTrackBlock.getState()
+			val reservedFrom = nextTrackBlock.reservedFrom
+
+			// Block is properly reserved if it's RESERVED from the separator we're navigating from
+			val isProperlyReserved = blockState == TrackFacility.State.RESERVED && reservedFrom == dynamicSeparator
+
+			// Block is occupied (we might be following another train or waiting)
+			val isOccupied = blockState == TrackFacility.State.OCCUPIED
+
+			// Allow navigation only if properly reserved or occupied
+			if (!isProperlyReserved && !isOccupied) {
+				logger.info {
+					"getNextTrackSection: blocking navigation from $separator to block ${nextTrackBlock.staticRef.hashCode()} " +
+						"(state=$blockState, reservedFrom=$reservedFrom, expected=$dynamicSeparator)"
+				}
+				return null // Block entry - train will stop at semaphore
+			}
+		}
+
 		@Suppress("UNCHECKED_CAST")
 		val result = nextTrackBlock?.getNextTrackSection(separator, null)
 		logger.trace {

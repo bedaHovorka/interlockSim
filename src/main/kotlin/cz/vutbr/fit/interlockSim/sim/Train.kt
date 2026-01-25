@@ -199,17 +199,40 @@ class Train :
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			if (semaphore.signal == Signal.STOP) {
+			// CRITICAL FIX (Issue #282): Handle null path when navigation is blocked
+			// If path is null, it means getNextTrackSection() blocked navigation to unreserved blocks.
+			// Treat this as STOP signal: halt the train and wait for a valid path.
+			if (semaphore.signal == Signal.STOP || path == null) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
-				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
+				if (path == null) {
+					logger.info {
+						"Train $number cannot build path from ${semaphore.name} - " +
+							"next block not properly reserved, treating as STOP signal"
+					}
+					env.report("STOP (path blocked)", this@Train, ReportType.TRAIN_EVENTS)
+				} else {
+					logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
+					env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
+				}
 				fireStop()
-				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
-				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
-				fireStart(semaphore, env.pathToNextSemaphore(separator, next!!)) // znovu najit
+
+				// Try to build path again - it might still be blocked
+				val newPath = env.pathToNextSemaphore(separator, next!!)
+				if (newPath != null) {
+					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
+					fireStart(semaphore, newPath)
+				} else {
+					// Path still blocked even with allowing signal - stop simulation to investigate
+					logger.error {
+						"Train $number: semaphore signal is ALLOWING but path is still blocked - " +
+							"this indicates a deadlock or interlocking error"
+					}
+					env.stop()
+				}
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
 				fireStart(semaphore, path)
