@@ -201,14 +201,29 @@ class DynamicTrackBlock(
 	 * @throws TrackOperationException if track is not FREE
 	 */
 	override fun setUpPath(sep: PathSeparator) {
+		// Handle idempotent case: block already reserved from same separator
+		// This is needed because paths can contain the same block multiple times
+		// (e.g., switch "around" blocks appear twice in path definition)
+		if (getState() == TrackFacility.State.RESERVED) {
+			if (reservedFrom === sep) {
+				// Already reserved from this separator - idempotent operation, just return
+				logger.debug {
+					"${Process.time()} TrackBlock ${staticRef.hashCode()} already reserved from $sep (idempotent)"
+				}
+				return
+			} else {
+				// Reserved from different separator - this is a conflict!
+				logger.warn {
+					"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation conflict - " +
+						"already reserved from=$reservedFrom, new request from=$sep"
+				}
+				throw TrackOperationException("Block already reserved from different separator", staticRef)
+			}
+		}
+
+		// Normal case: FREE → RESERVED
 		logger.info {
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} RESERVE: from=$sep, state=FREE->RESERVED"
-		}
-		if (getState() != TrackFacility.State.FREE) {
-			logger.warn {
-				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation rejected - " +
-					"state=${getState()}, occupant=$occupant, requested by=$sep"
-			}
 		}
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep

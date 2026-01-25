@@ -134,12 +134,15 @@ abstract class AbstractPath protected constructor(
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
+		logger.debug { "PATH_RESERVATION_START: from=$sep, pathSize=$size" }
+		var blockCount = 0
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
 			val facility = toTrackFacility(track)
 			facility.setUpPath(separator)
+			blockCount++
 			true
 		}
-		logger.debug { "Path setup from $sep: reserved tracks, length=${length()}" }
+		logger.debug { "PATH_RESERVATION_COMPLETE: from=$sep, reserved $blockCount blocks" }
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {

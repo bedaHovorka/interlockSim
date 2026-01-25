@@ -124,6 +124,7 @@ class Train :
 				val staticWhere = next!!.getSecondEnd(where)
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
+
 				current = next
 				onNext = false
 			}

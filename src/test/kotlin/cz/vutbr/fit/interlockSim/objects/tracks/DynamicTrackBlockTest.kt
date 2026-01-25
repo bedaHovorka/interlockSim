@@ -234,17 +234,31 @@ class DynamicTrackBlockTest {
 		}
 
 		@Test
-		@DisplayName("double reservation throws exception")
+		@DisplayName("double reservation from same separator is idempotent")
 		fun cannotDoubleReserve() {
 			// Reserve once
 			dynamicBlock1.setUpPath(semaphore1)
+			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
-			// Try to reserve again
-			assertFailure { dynamicBlock1.setUpPath(semaphore1) }
+			// Try to reserve again from SAME separator - should succeed (idempotent)
+			dynamicBlock1.setUpPath(semaphore1)
+			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(dynamicBlock1.reservedFrom).isEqualTo(semaphore1)
+		}
+
+		@Test
+		@DisplayName("reservation from different separator throws exception")
+		fun cannotReserveFromDifferentSeparator() {
+			// Reserve from first separator
+			dynamicBlock1.setUpPath(semaphore1)
+			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
+
+			// Try to reserve from DIFFERENT separator - should fail
+			assertFailure { dynamicBlock1.setUpPath(semaphore2) }
 				.isInstanceOf(TrackOperationException::class)
 				.message()
 				.isNotNull()
-				.contains("Wrong state")
+				.contains("Block already reserved from different separator")
 		}
 
 		@Test

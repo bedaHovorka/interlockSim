@@ -206,6 +206,7 @@ class ShuntingLoop : Interlocking {
 		}
 		// Use static semaphore reference as map key (singleton, consistent identity)
 		val first: DynamicRailSemaphore = Util.assertInstanceOf(DynamicRailSemaphore::class.java, arrayPath.getFirst())
+
 		var sublist: MutableList<Path>? = paths[first]
 		if (sublist == null) {
 			sublist = mutableListOf()
@@ -339,7 +340,8 @@ class ShuntingLoop : Interlocking {
 
 	private fun trySetupPaths(sem: DynamicRailSemaphore): Boolean {
 		logger.debug { "Attempting to setup paths from semaphore: ${sem.name}" }
-		for (path in paths[sem]!!) {
+		val pathList = paths[sem]
+		for (path in pathList!!) {
 			// zkusit postavit cestu
 			try {
 				if (path.isSetUpPath(sem) || trySetupPath(path)) {
