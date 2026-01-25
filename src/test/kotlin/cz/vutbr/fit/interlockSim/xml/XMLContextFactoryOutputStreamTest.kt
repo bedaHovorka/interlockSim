@@ -18,9 +18,11 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -236,11 +238,11 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val inputStream = ByteArrayInputStream(outputStream.toByteArray())
 			val loadedContext = factory.createContext(inputStream)
 
-			// Verify switch is preserved
+			// Verify switch is preserved (grid stores dynamic wrappers after issue #284 fix)
 			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
-			assertThat(switchCell).isNotNull().isInstanceOf(RailSwitch::class)
-			val railSwitch = switchCell as RailSwitch
-			assertThat(railSwitch.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			assertThat(switchCell).isNotNull().isInstanceOf(DynamicRailSwitch::class)
+			val dynamicSwitch = switchCell as DynamicRailSwitch
+			assertThat(dynamicSwitch.staticRef.type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		}
 
 		@Test
@@ -414,11 +416,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Create OutputStream that throws IOException
-			val failingStream = object : OutputStream() {
-				override fun write(b: Int) {
-					throw java.io.IOException("Simulated write failure")
+			val failingStream =
+				object : OutputStream() {
+					override fun write(b: Int): Unit = throw java.io.IOException("Simulated write failure")
 				}
-			}
 
 			// Attempt to save (should return false)
 			val success = factory.saveContext(context, failingStream)
@@ -435,11 +436,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			context.putCell(Point(2, 1), InOut("B", false, Cell.SpatialType.HORIZONTAL))
 
 			// Create OutputStream that throws IOException on flush
-			val failingStream = object : ByteArrayOutputStream() {
-				override fun flush() {
-					throw java.io.IOException("Simulated flush failure")
+			val failingStream =
+				object : ByteArrayOutputStream() {
+					override fun flush(): Unit = throw java.io.IOException("Simulated flush failure")
 				}
-			}
 
 			// Attempt to save (should return false)
 			val success = factory.saveContext(context, failingStream)
