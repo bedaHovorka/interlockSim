@@ -10,8 +10,8 @@
 package cz.vutbr.fit.interlockSim.xml
 
 import cz.vutbr.fit.interlockSim.MyResourceBundle
-import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.BaseContext
+import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -20,15 +20,18 @@ import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -161,8 +164,10 @@ class XMLContextFactory :
 				check(from != to) { "from and to points must be different" }
 
 				val railwayNetGrid = ctx.getRailWayNetGrid()
-				val fromNode = CellUtilities.assertNodeCell(railwayNetGrid[from] as Any)
-				val toNode = CellUtilities.assertNodeCell(railwayNetGrid[to] as Any)
+				val fromCell = railwayNetGrid[from] ?: throw SAXException("Cell at 'from' position $from not found")
+				val toCell = railwayNetGrid[to] ?: throw SAXException("Cell at 'to' position $to not found")
+				val fromNode = CellUtilities.assertNodeCell(fromCell)
+				val toNode = CellUtilities.assertNodeCell(toCell)
 
 				val segmentFrom =
 					getEnum(uri, attributes, Segment::class.java, FROM)
@@ -241,8 +246,9 @@ class XMLContextFactory :
 			name: String
 		): Int =
 			try {
-				val value = attributes.getValue(uri, name)
-					?: throw SAXException("Missing required attribute: $name")
+				val value =
+					attributes.getValue(uri, name)
+						?: throw SAXException("Missing required attribute: $name")
 				value.toInt()
 			} catch (e: NumberFormatException) {
 				throw SAXException("Invalid integer value for attribute: $name", e)
@@ -266,8 +272,9 @@ class XMLContextFactory :
 			name: String
 		): Double =
 			try {
-				val value = attributes.getValue(uri, name)
-					?: throw SAXException("Missing required attribute: $name")
+				val value =
+					attributes.getValue(uri, name)
+						?: throw SAXException("Missing required attribute: $name")
 				value.toDouble()
 			} catch (e: NumberFormatException) {
 				throw SAXException("Invalid double value for attribute: $name", e)
@@ -440,7 +447,8 @@ class XMLContextFactory :
 		for (entry in cellGrid) {
 			val point = entry.key
 			val cell = entry.value
-			if (cell is NodeCell) {
+			// Check for both static NodeCell and dynamic wrappers (DynamicInOut, DynamicRailSwitch, DynamicRailSemaphore)
+			if (cell is NodeCell || cell is DynamicInOut || cell is DynamicRailSwitch || cell is DynamicRailSemaphore) {
 				allNodes.add(point)
 			}
 		}
@@ -448,7 +456,8 @@ class XMLContextFactory :
 		// Write all nodes to XML
 		for (p in allNodes) {
 			val cell = railwayNetGrid[p]
-			if (cell is NodeCell) {
+			// Check for both static NodeCell and dynamic wrappers (DynamicInOut, DynamicRailSwitch, DynamicRailSemaphore)
+			if (cell is NodeCell || cell is DynamicInOut || cell is DynamicRailSwitch || cell is DynamicRailSemaphore) {
 				val tag = tagFor(p, cell)
 				spacing(tag, 1)
 				builder.append(tag)
@@ -479,8 +488,8 @@ class XMLContextFactory :
 	override fun saveContext(
 		context: Context<*, *>,
 		stream: OutputStream
-	): Boolean {
-		return try {
+	): Boolean =
+		try {
 			val xml = generateXML(context)
 			// Use UTF-8 encoding for consistent XML output
 			stream.write(xml.toByteArray(Charsets.UTF_8))
@@ -491,7 +500,6 @@ class XMLContextFactory :
 			logger.error(e) { "Failed to save context to output stream" }
 			false
 		}
-	}
 
 	private fun appendAttribute(
 		builder: StringBuilder,
@@ -551,8 +559,8 @@ class XMLContextFactory :
 	override fun saveContext(
 		context: Context<*, *>,
 		file: File
-	): Boolean {
-		return try {
+	): Boolean =
+		try {
 			val xml = generateXML(context)
 			FileWriter(file).use { writer ->
 				writer.write(xml)
@@ -563,7 +571,6 @@ class XMLContextFactory :
 			logger.error(e) { "Failed to save context to file: ${file.absolutePath}" }
 			false
 		}
-	}
 
 	// Helper method to get simple class name
 	private fun classToString(clazz: Class<*>): String = clazz.simpleName
@@ -605,16 +612,24 @@ class XMLContextFactory :
 		cell: Cell
 	): StringBuilder {
 		val builder = StringBuilder()
-		val clazz = cell.javaClass
+		// Unwrap dynamic cells to get the static cell for XML serialization
+		// (Dynamic cells are runtime wrappers, not part of the XML schema)
+		val staticCell = when (cell) {
+			is DynamicInOut -> cell.staticRef
+			is DynamicRailSemaphore -> cell.staticRef
+			is DynamicRailSwitch -> cell.staticRef
+			else -> cell
+		}
+		val clazz = staticCell.javaClass
 		beginOfTag(builder, clazz)
 		appendAttribute(builder, "", key)
-		cell.getSpatialType()?.let { appendAttribute(builder, it) }
-		if (cell is OrientedPathSeparator) {
-			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
+		staticCell.getSpatialType()?.let { appendAttribute(builder, it) }
+		if (staticCell is OrientedPathSeparator) {
+			appendAttribute(builder, ATR_ORIENT_NAME, (staticCell as OrientedPathSeparator).getOrientation().toString())
 		}
 		when (clazz) {
-			RailSwitch::class.java -> appendAttribute(builder, (cell as RailSwitch).type)
-			InOut::class.java -> appendAttribute(builder, NAME, (cell as InOut).getName())
+			RailSwitch::class.java -> appendAttribute(builder, (staticCell as RailSwitch).type)
+			InOut::class.java -> appendAttribute(builder, NAME, (staticCell as InOut).getName())
 		}
 		closingEndOfTag(builder)
 		return builder
