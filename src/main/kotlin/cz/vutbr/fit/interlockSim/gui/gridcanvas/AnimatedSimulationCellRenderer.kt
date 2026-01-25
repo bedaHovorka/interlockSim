@@ -104,8 +104,6 @@ class AnimatedSimulationCellRenderer(
 	 * @param g Graphics context for rendering
 	 * @param cell Track block part cell to render
 	 */
-	private var lookupLogged = false  // Only log once to avoid spam
-
 	override fun draw(
 		g: Graphics2D,
 		cell: TrackBlockPart
@@ -113,21 +111,6 @@ class AnimatedSimulationCellRenderer(
 		val state = animationController.getCurrentState()
 		val trackBlock = cell.getTrackBlock()
 		val trackState = state.trackStates[trackBlock]
-
-		// DEBUG: Log track state lookup (only once)
-		if (!lookupLogged && state.trackStates.isNotEmpty()) {
-			if (trackState == null) {
-				logger.warn {
-					"Track state MISS for block ${System.identityHashCode(trackBlock)} " +
-					"(${trackBlock.toString().take(20)}). " +
-					"Available ${state.trackStates.size} keys: " +
-					state.trackStates.keys.take(3).joinToString { "${System.identityHashCode(it)}" }
-				}
-			} else {
-				logger.info { "Track state HIT for block ${System.identityHashCode(trackBlock)}, state=${trackState.state}" }
-			}
-			lookupLogged = true
-		}
 
 		// Set color based on track state (or default if not available)
 		g.color = trackState?.let {
