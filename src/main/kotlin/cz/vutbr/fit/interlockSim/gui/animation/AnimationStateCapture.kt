@@ -108,21 +108,21 @@ object AnimationStateCapture {
 		// Collect all trains from occupied track blocks
 		// Graph edges are DynamicTrackBlock instances after Issue #277
 		for (graphBlock in graph.values()) {
-			// Extract static block from DynamicTrackBlock wrapper
-			val staticTrackFacility = if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
-				graphBlock.staticRef as cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-			} else {
-				graphBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+			// After Issue #277, graph already contains DynamicTrackBlock instances
+			// with the occupant property - no need to unwrap/rewrap
+			val occupant = when (graphBlock) {
+				is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock -> graphBlock.occupant
+				is cz.vutbr.fit.interlockSim.objects.core.TrackFacility -> {
+					// Fallback for legacy code paths (should not happen after Issue #277)
+					context.toDynamic(graphBlock).occupant
+				}
+				else -> null
 			}
-
-			// Get DynamicTrack wrapper with mutable state
-			val dynamicTrack = context.toDynamic(staticTrackFacility)
-			val occupant = dynamicTrack.occupant
 
 			// Check if occupant is a Train
 			if (occupant is Train) {
 				trains.add(occupant)
-				logger.trace { "Found train #${occupant.getNumber()} in block ${System.identityHashCode(staticTrackFacility)}" }
+				logger.trace { "Found train #${occupant.getNumber()} in block ${System.identityHashCode(graphBlock)}" }
 			}
 		}
 

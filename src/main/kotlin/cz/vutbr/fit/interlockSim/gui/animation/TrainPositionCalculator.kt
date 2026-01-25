@@ -10,9 +10,9 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.math.roundToInt
 
@@ -143,18 +143,38 @@ class TrainPositionCalculator(
 	 *
 	 * Searches the grid to find the cell coordinates of the given PathSeparator.
 	 *
-	 * @param separator PathSeparator to locate in grid
+	 * **Dynamic Wrapper Handling:** The separator parameter may be a dynamic wrapper
+	 * (DynamicRailSemaphore, DynamicInOut) but the grid contains static cells. This method
+	 * unwraps the separator to its static reference before comparison for correct identity matching.
+	 *
+	 * @param separator PathSeparator to locate in grid (can be dynamic or static)
 	 * @return Grid coordinates, or null if not found
 	 */
 	private fun getGridPosition(separator: PathSeparator): Point? {
 		val grid = context.getRailWayNetGrid()
 
+		// Unwrap dynamic wrapper to static reference for comparison with grid cells
+		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
+
 		// Search grid for the separator cell
+		// Note: We search ALL cells because SimulationContext grid contains both NodeCells
+		// (RailSwitch, RailSemaphore, InOut) and TrackBlockPart cells
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y)
-				if (cell is Cell && cell === separator) {
+
+				// Direct identity match
+				if (cell === staticSeparator) {
 					return Point(x, y)
+				}
+
+				// Also check if this is a PathSeparator that equals the target
+				// (handles case where grid might contain different wrapper instances)
+				if (cell is PathSeparator && staticSeparator is PathSeparator) {
+					val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
+					if (unwrappedCell === staticSeparator) {
+						return Point(x, y)
+					}
 				}
 			}
 		}
