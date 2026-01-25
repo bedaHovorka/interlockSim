@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -366,10 +365,7 @@ class Train :
 			}
 
 			if (current != null) {
-				requireSimulation(current is TrackFacility) {
-					"TrackSection must implement TrackFacility: ${current.javaClass.name}"
-				}
-				env.toDynamic(current as TrackFacility).leave(this@Train)
+				current.leave(this@Train)
 			}
 			if (next == null &&
 				where != timetable.getOut()
