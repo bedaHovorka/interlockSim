@@ -15,7 +15,7 @@ import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -35,7 +35,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("unwraps DynamicInOut to static InOut")
 		fun unwrapDynamicInOut() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 
 			// Get a dynamic InOut from the context
 			val dynamicInOut = context.getInOuts().first()
@@ -51,7 +51,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("unwraps DynamicRailSemaphore to static RailSemaphore")
 		fun unwrapDynamicRailSemaphore() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 
 			// Get a dynamic InOut and access its semaphore
 			val dynamicInOut = context.getInOuts().first()
@@ -68,7 +68,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("passthrough - returns static object unchanged when already static")
 		fun passthroughStaticObject() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 
 			// Get a static InOut reference
 			val dynamicInOut = context.getInOuts().first()
@@ -85,7 +85,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("idempotent - unwrapping DynamicInOut twice returns same result")
 		fun idempotentDynamicInOut() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 			val dynamicInOut = context.getInOuts().first()
 
 			val result1 = DynamicWrapperUtils.unwrapToStatic(dynamicInOut)
@@ -97,7 +97,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("idempotent - unwrapping DynamicRailSemaphore twice returns same result")
 		fun idempotentDynamicRailSemaphore() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 			val dynamicSemaphore = context.getInOuts().first().inSemaphore
 
 			val result1 = DynamicWrapperUtils.unwrapToStatic(dynamicSemaphore)
@@ -109,7 +109,7 @@ class DynamicWrapperUtilsTest : KoinTestBase() {
 		@Test
 		@DisplayName("idempotent - unwrapping static object multiple times returns same result")
 		fun idempotentStaticObject() {
-			val context: SimulationContext = buildMinimal()
+			val context: SimulationContext = buildMinimalSimulation()
 			val staticInOut = context.getInOuts().first().staticRef
 
 			val result1 = DynamicWrapperUtils.unwrapToStatic(staticInOut)

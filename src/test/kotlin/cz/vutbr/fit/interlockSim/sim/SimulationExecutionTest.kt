@@ -13,8 +13,8 @@ import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -69,17 +69,18 @@ import org.koin.test.inject
 @Tag("full-simulation")
 @DisplayName("Full Simulation Execution")
 class SimulationExecutionTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	/**
 	 * Helper: Load vyhybna.xml and create DefaultSimulationContext
 	 */
 	private fun createVyhybnaContext(): DefaultSimulationContext {
-		val xml = javaClass.getResourceAsStream(
-			"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-		)
+		val xml =
+			javaClass.getResourceAsStream(
+				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+			)
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
-		return factory.createContext(xml) as DefaultSimulationContext
+		return simulationContextFactory.createContext(xml) as DefaultSimulationContext
 	}
 
 	// ==================== Generator and Train Creation ====================

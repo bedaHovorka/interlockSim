@@ -25,12 +25,12 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import io.mockk.mockk
 import java.util.concurrent.TimeUnit
 
 /**

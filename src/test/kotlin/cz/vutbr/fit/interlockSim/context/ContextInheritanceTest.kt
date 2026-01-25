@@ -15,7 +15,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -48,7 +47,8 @@ import org.koin.test.inject
  * @since 2026-01-20
  */
 class ContextInheritanceTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	/**
 	 * Test 1: DefaultEditingContext extends BaseContext (not DefaultSimulationContext)
@@ -58,7 +58,7 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `DefaultEditingContext extends BaseContext`() {
 		// Arrange & Act
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Assert - Should be DefaultEditingContext which extends BaseContext
 		assertThat(context).isInstanceOf(DefaultEditingContext::class)
@@ -75,7 +75,7 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `DefaultSimulationContext extends BaseContext`() {
 		// Arrange & Act
-		val context = factory.createEmptySimulationContext()
+		val context = simulationContextFactory.createEmptyContext()
 
 		// Assert - Should be DefaultSimulationContext which extends BaseContext
 		assertThat(context).isInstanceOf(DefaultSimulationContext::class)
@@ -93,16 +93,16 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `SimulationContext does NOT extend EditingContext`() {
 		// Arrange & Act
-		val context = factory.createEmptySimulationContext()
+		val context = simulationContextFactory.createEmptyContext()
 
 		// Assert - SimulationContext interface does not extend EditingContext
 		// This is enforced at compile time - if we try to cast, it won't work
 		val simulationContext: SimulationContext = context
-		
+
 		// We cannot cast SimulationContext to EditingContext
 		// This test verifies the type system prevents this
 		assertThat(simulationContext).isInstanceOf(SimulationContext::class)
-		
+
 		// If SimulationContext extended EditingContext, this would work:
 		// val editingContext: EditingContext = simulationContext // This would not compile
 		// Since it doesn't compile, the architecture is correct
@@ -116,12 +116,12 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `SimulationContext instance is not an EditingContext`() {
 		// Arrange & Act
-		val context = factory.createEmptySimulationContext()
+		val context = simulationContextFactory.createEmptyContext()
 
 		// Assert - Cannot treat as EditingContext
 		val isEditingContext = context is EditingContext
 		assertThat(isEditingContext).isFalse()
-		
+
 		// The instance is a SimulationContext, not an EditingContext
 		assertThat(context is SimulationContext).isTrue()
 	}
@@ -134,8 +134,8 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `shared functionality in BaseContext only`() {
 		// Arrange & Act
-		val editingContext = factory.createEmptyContext()
-		val simulationContext = factory.createEmptySimulationContext()
+		val editingContext = editingContextFactory.createEmptyContext()
+		val simulationContext = simulationContextFactory.createEmptyContext()
 
 		// Assert - Both extend BaseContext
 		assertThat(editingContext).isInstanceOf(BaseContext::class)
@@ -167,8 +167,8 @@ class ContextInheritanceTest : KoinTestBase() {
 	@Test
 	fun `no code duplication between contexts - architectural validation`() {
 		// Arrange & Act
-		val editingContext = factory.createEmptyContext() as DefaultEditingContext
-		val simulationContext = factory.createEmptySimulationContext() as DefaultSimulationContext
+		val editingContext = editingContextFactory.createEmptyContext() as DefaultEditingContext
+		val simulationContext = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
 
 		// Assert - EditingContext has editing-specific methods
 		// We can't directly test method existence without reflection, but we can verify
@@ -176,18 +176,18 @@ class ContextInheritanceTest : KoinTestBase() {
 
 		// EditingContext should implement EditingContext interface (with putCell, etc.)
 		assertThat(editingContext).isInstanceOf(EditingContext::class)
-		
+
 		// SimulationContext should implement SimulationContext interface (with run, etc.)
 		assertThat(simulationContext).isInstanceOf(SimulationContext::class)
-		
+
 		// Both should extend BaseContext (shared infrastructure)
 		assertThat(editingContext).isInstanceOf(BaseContext::class)
 		assertThat(simulationContext).isInstanceOf(BaseContext::class)
-		
+
 		// Neither should be an instance of the other's concrete type
 		assertThat(editingContext).isNotInstanceOf(DefaultSimulationContext::class)
 		assertThat(simulationContext).isNotInstanceOf(DefaultEditingContext::class)
-		
+
 		// This architecture ensures:
 		// 1. Shared code in BaseContext (grid, graph, listeners, config)
 		// 2. Editing operations in DefaultEditingContext only

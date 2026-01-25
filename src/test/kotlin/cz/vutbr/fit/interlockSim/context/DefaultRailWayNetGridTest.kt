@@ -9,8 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertThat
 import assertk.assertions.containsOnly
 import assertk.assertions.isEmpty
@@ -19,13 +17,15 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
@@ -41,6 +41,8 @@ import org.junit.jupiter.api.Test
  */
 private class MockTrackBlock : TrackBlock {
 	// TrackBlock methods
+	override var name: String? = null
+
 	override fun getNextTrackSection(
 		separator: PathSeparator,
 		current: TrackSection?
@@ -546,11 +548,11 @@ class DefaultRailWayNetGridTest {
 			val nodePoint2 = Point(10, 10)
 			val node1 = InOut("A", false, SpatialType.HORIZONTAL)
 			val node2 = InOut("B", true, SpatialType.HORIZONTAL)
-			
+
 			// Add nodes
 			grid.put(nodePoint1, node1)
 			grid.put(nodePoint2, node2)
-			
+
 			// Add intermediate TrackBlockParts (simulating joinCells)
 			val intermediatePoints =
 				listOf(
@@ -633,7 +635,7 @@ class DefaultRailWayNetGridTest {
 			for (part in parts) {
 				assertThat(grid.getLocation(part)).isNull()
 			}
-			
+
 			// Verify no assertion errors when checking removed points
 			for (point in intermediatePoints) {
 				assertThatCode { grid.containsKey(point) }

@@ -43,13 +43,14 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 		super.setUp()
 
 		// Create a validation result with errors for testing
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error message",
-			location = "Line 42, Column 10",
-			explanation = "This is a test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error message",
+				location = "Line 42, Column 10",
+				explanation = "This is a test explanation"
+			)
 		validationResult = ValidationResult.error(error)
 	}
 
@@ -149,18 +150,20 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 	@DisplayName("dialog handles multiple errors")
 	fun dialogHandlesMultipleErrors() {
 		runOnEDT {
-			val error1 = ValidationError(
-				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
-				message = "Error 1",
-				explanation = "Explanation 1"
-			)
-			val error2 = ValidationError(
-				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
-				message = "Error 2",
-				explanation = "Explanation 2"
-			)
+			val error1 =
+				ValidationError(
+					category = ErrorCategory.STRUCTURAL,
+					severity = Severity.ERROR,
+					message = "Error 1",
+					explanation = "Explanation 1"
+				)
+			val error2 =
+				ValidationError(
+					category = ErrorCategory.STRUCTURAL,
+					severity = Severity.ERROR,
+					message = "Error 2",
+					explanation = "Explanation 2"
+				)
 			val multiErrorResult = ValidationResult.errors(listOf(error1, error2))
 			val dialog = ValidationDialog(null, multiErrorResult)
 
@@ -176,21 +179,24 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 	@DisplayName("dialog handles warnings")
 	fun dialogHandlesWarnings() {
 		runOnEDT {
-			val error = ValidationError(
-				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
-				message = "Error",
-				explanation = "Error explanation"
-			)
-			val warning = ValidationWarning(
-				message = "Warning message",
-				explanation = "Warning explanation"
-			)
-			val resultWithWarnings = ValidationResult(
-				isValid = false,
-				errors = listOf(error),
-				warnings = listOf(warning)
-			)
+			val error =
+				ValidationError(
+					category = ErrorCategory.STRUCTURAL,
+					severity = Severity.ERROR,
+					message = "Error",
+					explanation = "Error explanation"
+				)
+			val warning =
+				ValidationWarning(
+					message = "Warning message",
+					explanation = "Warning explanation"
+				)
+			val resultWithWarnings =
+				ValidationResult(
+					isValid = false,
+					errors = listOf(error),
+					warnings = listOf(warning)
+				)
 			val dialog = ValidationDialog(null, resultWithWarnings)
 
 			val textArea = findComponentOfType(dialog, JTextArea::class.java)
@@ -238,9 +244,10 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 	/**
 	 * Helper method to find a button by text.
 	 */
-	private fun findButton(container: java.awt.Container, text: String): JButton? {
-		return findComponentOfType(container, JButton::class.java) { it.text == text }
-	}
+	private fun findButton(
+		container: java.awt.Container,
+		text: String
+	): JButton? = findComponentOfType(container, JButton::class.java) { it.text == text }
 
 	/**
 	 * Helper method to find a component of specific type.

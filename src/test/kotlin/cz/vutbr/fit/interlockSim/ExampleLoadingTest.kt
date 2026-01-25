@@ -39,6 +39,7 @@ import org.koin.test.get
 @DisplayName("Example Loading Tests")
 class ExampleLoadingTest : KoinTestBase() {
 	override fun getTestModule(): Module = testModuleFull
+
 	@Nested
 	@DisplayName("Example Registry")
 	inner class ExampleRegistryTests {

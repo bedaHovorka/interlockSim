@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.xml
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -36,7 +38,8 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @DisplayName("XML Package - Coverage Polish Tests")
 class XMLPolishTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Nested
 	@DisplayName("Nested Net Elements - Error Handling")
@@ -53,9 +56,9 @@ class XMLPolishTest : KoinTestBase() {
 					</net>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -70,9 +73,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="20" SpatialType="VERTICAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -80,7 +83,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Invalid Enum Values - Error Handling")
 	inner class InvalidEnumValueTests {
-
 		@Test
 		fun `invalid RailSwitch Type throws exception`() {
 			val xml = """<?xml version="1.0"?>
@@ -91,9 +93,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -106,9 +108,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -119,14 +121,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="INVALID_SEGMENT" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="INVALID_SEGMENT"
+						toX="20" toY="10" segmentTo="A"
 						length="10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -140,9 +142,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -150,7 +152,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Missing Required Attributes - Error Handling")
 	inner class MissingRequiredAttributesTests {
-
 		@Test
 		fun `missing X attribute throws exception`() {
 			val xml = """<?xml version="1.0"?>
@@ -160,9 +161,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -175,9 +176,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -188,14 +189,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -206,14 +207,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						length="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -224,14 +225,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						length="10.0" maxSpeedFrom="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -242,14 +243,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10"
+						toX="20" toY="10" segmentTo="A"
 						length="10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -260,14 +261,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10"
 						length="10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -275,7 +276,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Invalid Attribute Values - Edge Cases")
 	inner class InvalidAttributeValuesTests {
-
 		@Test
 		fun `invalid boolean value throws exception`() {
 			// XML schema validation rejects invalid boolean values (strict validation)
@@ -288,7 +288,7 @@ class XMLPolishTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -304,7 +304,7 @@ class XMLPolishTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -320,7 +320,7 @@ class XMLPolishTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -331,15 +331,15 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						length="0.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			// Should fail due to validation (MIN_LENGTH constraint)
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -350,14 +350,14 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						length="-10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -365,7 +365,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Unknown Element Types - Error Handling")
 	inner class UnknownElementTests {
-
 		@Test
 		fun `unknown element type throws exception`() {
 			val xml = """<?xml version="1.0"?>
@@ -376,9 +375,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -392,9 +391,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -402,7 +401,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("InOut Count Validation")
 	inner class InOutCountValidationTests {
-
 		@Test
 		fun `zero InOuts throws exception`() {
 			val xml = """<?xml version="1.0"?>
@@ -410,9 +408,9 @@ class XMLPolishTest : KoinTestBase() {
 				<net X="100" Y="100">
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 				.message()
 				.isNotNull()
@@ -426,9 +424,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 				.message()
 				.isNotNull()
@@ -443,8 +441,10 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			val context = factory.createContext(stream) as SimulationContext
+
+			val editingContext = editingContextFactory.createContext(stream) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
+
 			assertThat(context).isNotNull()
 			val inOuts = context.getInOuts()
 			assertThat(inOuts as Collection<*>).hasSize(2)
@@ -460,8 +460,10 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="15" Y="15" SpatialType="VERTICAL" orientation="true" name="C"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			val context = factory.createContext(stream) as SimulationContext
+
+			val editingContext = editingContextFactory.createContext(stream) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
+
 			assertThat(context).isNotNull()
 			val inOuts = context.getInOuts()
 			assertThat(inOuts as Collection<*>).hasSize(3)
@@ -471,7 +473,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Malformed XML - Parse Error Handling")
 	inner class MalformedXMLTests {
-
 		@Test
 		fun `unclosed net element throws exception`() {
 			val xml = """<?xml version="1.0"?>
@@ -481,9 +482,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -496,9 +497,9 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</wrongtag>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -506,9 +507,9 @@ class XMLPolishTest : KoinTestBase() {
 		fun `empty XML throws exception`() {
 			val xml = ""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -516,9 +517,9 @@ class XMLPolishTest : KoinTestBase() {
 		fun `XML without root element throws exception`() {
 			val xml = """<?xml version="1.0"?>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 	}
@@ -526,23 +527,22 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Element Ordering and Dependencies")
 	inner class ElementOrderingTests {
-
 		@Test
 		fun `TrackBlock before InOut endpoints fails`() {
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
-					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F" 
-						toX="20" toY="10" segmentTo="A" 
+					<SimpleTrackBlock fromX="10" fromY="10" segmentFrom="F"
+						toX="20" toY="10" segmentTo="A"
 						length="10.0" maxSpeedFrom="10.0" maxSpeedTo="10.0"/>
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			// Should fail because cells at (10,10) and (20,10) don't exist yet
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -561,7 +561,7 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 		}
 	}
@@ -569,7 +569,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Net Grid Size Validation")
 	inner class NetGridSizeTests {
-
 		@Test
 		fun `net with zero X dimension`() {
 			val xml = """<?xml version="1.0"?>
@@ -579,10 +578,10 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			// Grid with X=0 is invalid
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -595,10 +594,10 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
+
 			// Grid with Y=0 is invalid
 			assertThatBlock {
-				factory.createContext(stream)
+				editingContextFactory.createContext(stream)
 			}.isFailure()
 		}
 
@@ -611,8 +610,8 @@ class XMLPolishTest : KoinTestBase() {
 					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
-			
-			val context = factory.createContext(stream)
+
+			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
 			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(500)
 			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(500)

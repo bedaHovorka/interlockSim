@@ -12,12 +12,12 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.action.NodeCellAction
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.SUPPORTED_SIMPLE_SPATIAL_TYPES
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Dimension
 import java.awt.event.ActionEvent

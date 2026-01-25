@@ -18,11 +18,10 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.buildMinimalEditing
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.MethodOrderer
@@ -62,7 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class ConcurrentSaveTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	companion object {
 		private const val TEST_FILE_PREFIX = "concurrent-test-network"
@@ -107,11 +106,11 @@ class ConcurrentSaveTest : KoinTestBase() {
 						startLatch.await()
 
 						// Create unique context for this thread
-						val context = buildMinimal()
+						val context = buildMinimalEditing()
 
 						// Save to unique file
 						val file = File("$TEST_FILE_PREFIX-$threadId.xml")
-						factory.saveContext(context, file)
+						editingContextFactory.saveContext(context, file)
 
 						successCount.incrementAndGet()
 					} catch (e: Exception) {
@@ -143,7 +142,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 			assertThat(file).exists().isFile()
 
 			// Verify file is valid XML by loading it
-			val loaded = factory.createContext(file)
+			val loaded = editingContextFactory.createContext(file)
 			assertThat(loaded).isNotNull()
 			assertThat(loaded.getRailWayNetGrid()).isNotNull()
 		}
@@ -155,7 +154,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	fun concurrentSave_sameFile_handlesGracefully() {
 		// Arrange
 		val targetFile = File("$TEST_FILE_PREFIX-same.xml")
-		val context = buildMinimal()
+		val context = buildMinimalEditing()
 
 		val threadCount = 5
 		val startLatch = CountDownLatch(1)
@@ -170,7 +169,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 				Thread {
 					try {
 						startLatch.await()
-						factory.saveContext(context, targetFile)
+						editingContextFactory.saveContext(context, targetFile)
 						successCount.incrementAndGet()
 					} catch (e: Exception) {
 						exceptions.add(e)
@@ -193,7 +192,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 		assertThat(targetFile).exists().isFile()
 
 		// Most importantly: verify file integrity - should be valid XML
-		val loaded = factory.createContext(targetFile)
+		val loaded = editingContextFactory.createContext(targetFile)
 		assertThat(loaded).isNotNull()
 		assertThat(loaded.getRailWayNetGrid())
 			.withMessage("File should contain valid context data")
@@ -220,7 +219,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 			Thread {
 				try {
 					startLatch.await()
-					factory.saveContext(context, file)
+					editingContextFactory.saveContext(context, file)
 					saveSuccess.incrementAndGet()
 				} catch (e: Exception) {
 					exceptions.add(e)
@@ -264,7 +263,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 
 		// If save succeeded, verify file is valid XML (not corrupted)
 		if (saveSuccess.get() > 0 && file.exists()) {
-			val loaded = factory.createContext(file)
+			val loaded = editingContextFactory.createContext(file)
 			assertThat(loaded).isNotNull()
 			// Should have a valid grid
 			assertThat(loaded.getRailWayNetGrid())
@@ -279,10 +278,10 @@ class ConcurrentSaveTest : KoinTestBase() {
 	fun repeatedConcurrentSaves_maintainsConsistency() {
 		// Arrange
 		val targetFile = File("$TEST_FILE_PREFIX-repeated.xml")
-		val context = buildMinimal()
+		val context = buildMinimalEditing()
 
 		// Save initial file
-		factory.saveContext(context, targetFile)
+		editingContextFactory.saveContext(context, targetFile)
 		val initialChecksum = calculateChecksum(targetFile)
 
 		// Act - Perform multiple concurrent save rounds
@@ -295,7 +294,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 				Thread {
 					try {
 						startLatch.await()
-						factory.saveContext(context, targetFile)
+						editingContextFactory.saveContext(context, targetFile)
 					} catch (e: Exception) {
 						// Ignore for this test
 					} finally {
@@ -310,7 +309,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 
 		// Assert - File should still be valid and consistent
 		assertThat(targetFile).exists().isFile()
-		val loaded = factory.createContext(targetFile)
+		val loaded = editingContextFactory.createContext(targetFile)
 		assertThat(loaded).isNotNull()
 		assertThat(loaded.getRailWayNetGrid()).isNotNull()
 

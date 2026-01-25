@@ -20,19 +20,19 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
+import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -60,7 +60,8 @@ import java.io.File
  */
 @DisplayName("ContextTransformer")
 class ContextTransformerTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 	private val transformer: ContextTransformer by inject()
 	private val processFactory: SimulationProcessFactory by inject()
 
@@ -75,7 +76,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("transforms empty editing context successfully")
 		fun transformContext_emptyContext_succeeds() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Act & Assert - Should not throw
 			assertThatCode {
@@ -101,7 +102,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("transformed context is new instance")
 		fun transformContext_createsNewInstance() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
@@ -114,7 +115,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("transformed context has SimulationContext type")
 		fun transformContext_returnsSimulationContext() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
@@ -162,12 +163,12 @@ class ContextTransformerTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - Grid contains static cells (not dynamic wrappers)
-			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
-			val cellB = simulationContext.getRailWayNetGrid().getCellAt(10, 10)
+			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as DynamicInOut
+			val cellB = simulationContext.getRailWayNetGrid().getCellAt(10, 10) as DynamicInOut
 			assertThat(cellA).isNotNull()
 			assertThat(cellB).isNotNull()
-			assertThat(cellA).isSameInstanceAs(inA)
-			assertThat(cellB).isSameInstanceAs(inB)
+			assertThat(cellA.staticRef).isSameInstanceAs(inA)
+			assertThat(cellB.staticRef).isSameInstanceAs(inB)
 
 			// Assert - Dynamic wrappers accessed via getInOuts()
 			val inOuts = simulationContext.getInOuts()
@@ -193,12 +194,12 @@ class ContextTransformerTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert - Grid contains static cells (not dynamic wrappers)
-			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
-			val cellSW = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
+			val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as DynamicInOut
+			val cellSW = simulationContext.getRailWayNetGrid().getCellAt(5, 5) as DynamicRailSwitch
 			assertThat(cellA).isNotNull()
 			assertThat(cellSW).isNotNull()
-			assertThat(cellA).isSameInstanceAs(inOut)
-			assertThat(cellSW).isSameInstanceAs(railSwitch)
+			assertThat(cellA.staticRef).isSameInstanceAs(inOut)
+			assertThat(cellSW.staticRef).isSameInstanceAs(railSwitch)
 
 			// Assert - Dynamic wrappers available via toDynamic() and getInOuts()
 			val inOuts = simulationContext.getInOuts()
@@ -293,7 +294,7 @@ class ContextTransformerTest : KoinTestBase() {
 			// Assert
 			val inOuts = simulationContext.getInOuts()
 			assertThat(inOuts).hasSize(2)
-			
+
 			// Extract static refs from dynamic wrappers for comparison
 			val staticRefs = inOuts.map { (it as DynamicInOut).staticRef }
 			assertThat(staticRefs).containsAll(inA, inB)
@@ -303,7 +304,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("empty editing context results in empty InOut list")
 		fun transformContext_emptyContext_emptyInOutList() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
@@ -369,7 +370,10 @@ class ContextTransformerTest : KoinTestBase() {
 		 * but provides interface-only access. This simulates a user-defined EditingContext
 		 * subtype to verify that the transformation respects Liskov Substitution Principle.
 		 */
-		private inner class CustomEditingContext(cols: Int, rows: Int) : DefaultEditingContext(cols, rows) {
+		private inner class CustomEditingContext(
+			cols: Int,
+			rows: Int
+		) : DefaultEditingContext(cols, rows) {
 			// Inherits all implementation from DefaultEditingContext
 			// but provides interface-only access for transformation test
 		}
@@ -430,12 +434,11 @@ class ContextTransformerTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Graph Parameterization (Issue #277)")
 	inner class GraphParameterization {
-
 		@Test
 		@DisplayName("wraps all TrackBlocks in DynamicTrackBlock")
 		fun transformContext_wrapsAllTrackBlocks() {
 			// Arrange - Create editing context with track blocks
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -464,7 +467,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("preserves graph edge count during transformation")
 		fun transformContext_preservesEdgeCount() {
 			// Arrange - Create editing context with multiple track blocks
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val semaphore1 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 			val semaphore2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -498,7 +501,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("preserves graph node count during transformation")
 		fun transformContext_preservesNodeCount() {
 			// Arrange - Create editing context with multiple nodes
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
@@ -532,7 +535,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("staticRef points to original TrackBlock")
 		fun transformedBlock_staticRefPointsToOriginal() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val originalBlock = SimpleTrackBlock(inA, inB, 100.0, 80.0)
@@ -557,7 +560,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("dynamic blocks preserve static block properties")
 		fun dynamicBlock_preservesStaticProperties() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val originalBlock = SimpleTrackBlock(inA, inB, 150.0, 90.0)
@@ -568,21 +571,22 @@ class ContextTransformerTest : KoinTestBase() {
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
-			val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
-				as DynamicTrackBlock
+			val dynamicBlock =
+				simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
+					as DynamicTrackBlock
 
 			// Assert - Properties delegated correctly
 			assertThat(dynamicBlock.length()).isEqualTo(150.0)
 			assertThat(dynamicBlock.ends()).hasSize(2)
-			assertThat(dynamicBlock.ends().toList()).contains(inA)
-			assertThat(dynamicBlock.ends().toList()).contains(inB)
+			assertThat(dynamicBlock.staticRef.ends().toList()).contains(inA)
+			assertThat(dynamicBlock.staticRef.ends().toList()).contains(inB)
 		}
 
 		@Test
 		@DisplayName("simulation graph returns DynamicTrackBlock without casts")
 		fun simulationGraph_typeSafeAccess() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
@@ -606,7 +610,7 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("dynamic blocks have initial FREE state")
 		fun dynamicBlock_initialStateIsFree() {
 			// Arrange
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
@@ -617,8 +621,9 @@ class ContextTransformerTest : KoinTestBase() {
 
 			// Act
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
-			val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
-				as DynamicTrackBlock
+			val dynamicBlock =
+				simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
+					as DynamicTrackBlock
 
 			// Assert - Initial state is FREE
 			assertThat(dynamicBlock.getState()).isEqualTo(TrackFacility.State.FREE)
@@ -630,7 +635,8 @@ class ContextTransformerTest : KoinTestBase() {
 		@DisplayName("complex network (vyhybna.xml) has all blocks wrapped")
 		fun vyhybnaXml_allBlocksAreWrapped() {
 			// Arrange - Load vyhybna.xml which creates SimulationContext directly
-			val simulationContext = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val simulationContext = simulationContextFactory.createContext(editingContext)
 			val graph = simulationContext.getGraph()
 
 			// Assert - All graph entries are DynamicTrackBlock

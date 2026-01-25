@@ -70,7 +70,7 @@ class GeneratorTest : KoinTestBase() {
 			get<TestContextBuilder>()
 				.withInOut("IN1", 0, 0, isEntry = true)
 				.withInOut("OUT1", 1, 0, isEntry = false)
-		val delegateContext = contextBuilder.build()
+		val delegateContext = contextBuilder.buildSimulationContext()
 		mockContext = MockSimulationContext(delegateContext)
 	}
 
@@ -506,8 +506,8 @@ class GeneratorTest : KoinTestBase() {
 		// Get first two InOuts from context
 		val inOuts = mockContext.getInOuts().toList()
 		return Timetable(
-			inOuts[0].staticRef,
-			inOuts[1].staticRef,
+			inOuts[0],
+			inOuts[1],
 			Time(0.0),
 			Time(0.0),
 			length

@@ -15,15 +15,12 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
 import jDisco.Continuous
@@ -98,9 +95,8 @@ class Train :
 		val terminated: Condition = Condition { terminated() }
 
 		final override fun actions() {
-			val staticInOut = timetable.getIn()
-			requireSimulationNotNull(staticInOut) { "PathSeparator from timetable.getIn() must not be null" }
-			var where: PathSeparator = env.getInOuts().first { DynamicWrapperUtils.unwrapToStatic(it) === staticInOut }
+			var where: PathSeparator = timetable.getIn()
+			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
@@ -125,8 +121,10 @@ class Train :
 
 				position.state -= nextLength
 				totalLenghtOfPreviousBlocks += nextLength
-				where = next!!.getSecondEnd(where)
-				requireSimulationNotNull(where) { "PathSeparator from getSecondEnd() must not be null" }
+				val staticWhere = next!!.getSecondEnd(where)
+				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
+				where = env.toDynamic(staticWhere)
+
 				current = next
 				onNext = false
 			}
@@ -201,17 +199,40 @@ class Train :
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			if (semaphore.signal == Signal.STOP) {
+			// CRITICAL FIX (Issue #282): Handle null path when navigation is blocked
+			// If path is null, it means getNextTrackSection() blocked navigation to unreserved blocks.
+			// Treat this as STOP signal: halt the train and wait for a valid path.
+			if (semaphore.signal == Signal.STOP || path == null) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
-				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
+				if (path == null) {
+					logger.info {
+						"Train $number cannot build path from ${semaphore.name} - " +
+							"next block not properly reserved, treating as STOP signal"
+					}
+					env.report("STOP (path blocked)", this@Train, ReportType.TRAIN_EVENTS)
+				} else {
+					logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
+					env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
+				}
 				fireStop()
-				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
-				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
-				fireStart(semaphore, env.pathToNextSemaphore(separator, next!!)) // znovu najit
+
+				// Try to build path again - it might still be blocked
+				val newPath = env.pathToNextSemaphore(separator, next!!)
+				if (newPath != null) {
+					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
+					fireStart(semaphore, newPath)
+				} else {
+					// Path still blocked even with allowing signal - stop simulation to investigate
+					logger.error {
+						"Train $number: semaphore signal is ALLOWING but path is still blocked - " +
+							"this indicates a deadlock or interlocking error"
+					}
+					env.stop()
+				}
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
 				fireStart(semaphore, path)
@@ -293,11 +314,12 @@ class Train :
 			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			val lastSeparator = path!!.getLast()
-			val nextSemaphore: DynamicRailSemaphore = when (lastSeparator) {
-				is DynamicRailSemaphore -> lastSeparator
-				is DynamicInOut -> lastSeparator.outSemaphore
-				else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
-			}
+			val nextSemaphore: DynamicRailSemaphore =
+				when (lastSeparator) {
+					is DynamicRailSemaphore -> lastSeparator
+					is DynamicInOut -> lastSeparator.outSemaphore
+					else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
+				}
 			val nextSignal: Signal = nextSemaphore.signal
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			pathToSemaphore = path
@@ -334,36 +356,19 @@ class Train :
 			) {
 				val semaphore: DynamicRailSemaphore = where
 				semaphoreAction(semaphore, semaphore, current, next)
-			} else if (where is DynamicInOut && where.staticRef == timetable.getIn() && next != null) {
+			} else if (where == timetable.getIn() && next != null) {
 				requireSimulationNotNull(getAcceleration()) { "Acceleration must not be null at timetable entry" }
-				semaphoreAction(where.inSemaphore, where, current, next)
+				semaphoreAction((where as DynamicInOut).inSemaphore, where, current, next)
 			} else {
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				pathToSemaphore?.removeFirst()
 				@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				pathToSemaphore?.removeFirst()
 			}
-			// Check if path first element matches current position
-			// Skip validation when at exit InOut (train leaving network, next == null)
-			val isExitInOut = where is DynamicInOut && where.staticRef == timetable.getOut() && next == null
-			if (isExitInOut) {
-				logger.info {
-					"${jDisco.Process.time()} SKIP_VALIDATION: Train $number at exit InOut, " +
-						"where=$where, timetable.getOut()=${timetable.getOut()}, next=$next"
-				}
+			requireSimulation(pathToSemaphore?.getFirst() == where) {
+				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
 			}
-			if (!isExitInOut) {
-				val pathFirst = pathToSemaphore?.getFirst()
-				requireSimulation(pathFirst == where) {
-					"Path to semaphore first element must match current position: where=$where, pathFirst=$pathFirst"
-				}
-			}
-			if (next != null) {
-				requireSimulation(next is TrackFacility) {
-					"TrackSection must implement TrackFacility: ${next.javaClass.name}"
-				}
-				env.toDynamic(next as TrackFacility).enter(this@Train)
-			}
+			if (next != null) next.enter(this@Train)
 		}
 	}
 
@@ -378,30 +383,22 @@ class Train :
 			logger.debug {
 				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
-			if (where is DynamicInOut && where.staticRef == timetable.getIn()) {
+			if (where == timetable.getIn()) {
 				fromHome = true
-				logger.debug { "Train $number tail reached starting InOut, activating train" }
 				start()
 			}
 
 			if (current != null) {
-				requireSimulation(current is TrackFacility) {
-					"TrackSection must implement TrackFacility: ${current.javaClass.name}"
-				}
-				env.toDynamic(current as TrackFacility).leave(this@Train)
+				current.leave(this@Train)
 			}
 			if (next == null &&
-				!(where is DynamicInOut && where.staticRef == timetable.getOut())
+				where != timetable.getOut()
 			) {
 				env.report("ends in wrong out", this@Train, ReportType.TRAIN_EVENTS)
 			}
 		}
 
-		override fun start(): Site {
-			val result = if (fromHome) super.start() else this
-			logger.trace { "Train $number Tail.start(): ${if (result === this) "not activated" else "activated"}" }
-			return result
-		}
+		override fun start(): Site = if (fromHome) super.start() else this
 	}
 
 	private inner class LengthChecker : ContinuousInvariantChecker() {
@@ -583,8 +580,8 @@ class Train :
 		this.length = validatedTimetable.getLength()
 		number = ++count
 		trainPrefix = "Train #$number"
-		val inName = validatedTimetable.getIn().getName()
-		val outName = validatedTimetable.getOut().getName()
+		val inName = validatedTimetable.getIn().name
+		val outName = validatedTimetable.getOut().name
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
@@ -593,12 +590,11 @@ class Train :
 
 	override fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
-		val inout: InOut = timetable.getIn()
-		val dynamicInOut: DynamicInOut = env.getInOuts().first { DynamicWrapperUtils.unwrapToStatic(it) === inout }
-		val worker: InOutWorker = env.getWorkerFor(dynamicInOut)
-		logger.debug { "Train $number approved for movement from ${inout.getName()} to ${timetable.getOut().getName()}" }
+		val inout = timetable.getIn()
+		val worker: InOutWorker = env.getWorkerFor(inout)
+		logger.debug { "Train $number approved for movement from ${inout.name} to ${timetable.getOut().name}" }
 		worker.enterTrain(this)
-		env.report("approved ${inout.getName()}->${timetable.getOut().getName()}", this, ReportType.TRAIN_EVENTS)
+		env.report("approved ${inout.name}->${timetable.getOut().name}", this, ReportType.TRAIN_EVENTS)
 
 		activate(front)
 

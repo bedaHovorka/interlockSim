@@ -9,9 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
@@ -21,6 +18,9 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -39,7 +39,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Tracks Package - Coverage Polish Tests")
 class TracksPolishTest {
-
 	private lateinit var separator1: PathSeparator
 	private lateinit var separator2: PathSeparator
 	private lateinit var occupant: TrackOccupant
@@ -54,7 +53,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("SimpleTrackBlock - UnsupportedOperationException Methods")
 	inner class SimpleTrackBlockUnsupportedMethods {
-
 		@Test
 		fun `getState throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -62,13 +60,15 @@ class TracksPolishTest {
 			assertFailure {
 				block.getState()
 			}.isInstanceOf(UnsupportedOperationException::class)
-				.message().isNotNull().contains("Phase 1" as CharSequence, "DynamicTrack wrapper" as CharSequence)
+				.message()
+				.isNotNull()
+				.contains("Phase 1" as CharSequence, "DynamicTrack wrapper" as CharSequence)
 		}
 
 		@Test
 		fun `isFreeFrom throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.isFreeFrom(separator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -80,7 +80,7 @@ class TracksPolishTest {
 		@Test
 		fun `setUpPath throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.setUpPath(separator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -92,7 +92,7 @@ class TracksPolishTest {
 		@Test
 		fun `isSetUpPath throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.isSetUpPath(separator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -104,7 +104,7 @@ class TracksPolishTest {
 		@Test
 		fun `cancelPathSetup throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.cancelPathSetup(separator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -116,7 +116,7 @@ class TracksPolishTest {
 		@Test
 		fun `enter throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.enter(occupant)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -128,7 +128,7 @@ class TracksPolishTest {
 		@Test
 		fun `leave throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.leave(occupant)
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -140,7 +140,7 @@ class TracksPolishTest {
 		@Test
 		fun `getTrackOccupant throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
+
 			assertFailure {
 				block.getTrackOccupant()
 			}.isInstanceOf(UnsupportedOperationException::class)
@@ -158,14 +158,15 @@ class TracksPolishTest {
 			assertFailure {
 				block.getJoin(separator1, section)
 			}.isInstanceOf(UnsupportedOperationException::class)
-				.message().isNotNull().contains("getJoin" as CharSequence)
+				.message()
+				.isNotNull()
+				.contains("getJoin" as CharSequence)
 		}
 	}
 
 	@Nested
 	@DisplayName("SimpleTrackBlock - Constructor and Properties")
 	inner class SimpleTrackBlockConstructorTests {
-
 		@Test
 		fun `constructor with NodeCell endpoints`() {
 			val cell1 = InOut("A", true, SpatialType.HORIZONTAL)
@@ -211,11 +212,11 @@ class TracksPolishTest {
 
 		@Test
 		fun `setName updates block name`() {
-			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			
-			block.setName("TestBlock")
-			assertThat(block.toString()).contains("TestBlock")
-		}
+            val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
+
+            block.name = "TestBlock"
+            assertThat(block.toString()).contains("TestBlock")
+        }
 
 		@Test
 		fun `toString with null name`() {
@@ -230,18 +231,17 @@ class TracksPolishTest {
 
 		@Test
 		fun `toString with name set`() {
-			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-			block.setName("Block1")
-			
-			val string = block.toString()
-			assertThat(string).contains("Block1")
-		}
+            val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
+            block.name = "Block1"
+
+            val string = block.toString()
+            assertThat(string).contains("Block1")
+        }
 	}
 
 	@Nested
 	@DisplayName("SimpleTrack - MaxSpeed Edge Cases")
 	inner class SimpleTrackMaxSpeedTests {
-
 		@Test
 		fun `maxSpeed returns correct speed for first separator`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 40.0, 50.0)
@@ -257,7 +257,7 @@ class TracksPolishTest {
 		@Test
 		fun `maxSpeed with different speeds from each end`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 60.0)
-			
+
 			assertThat(block.maxSpeed(separator1)).isEqualTo(30.0)
 			assertThat(block.maxSpeed(separator2)).isEqualTo(60.0)
 			assertThat(block.maxSpeed(separator1)).isNotEqualTo(block.maxSpeed(separator2))
@@ -267,12 +267,11 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("DynamicTrack - Equals and Identity")
 	inner class DynamicTrackEqualsTests {
-
 		@Test
 		fun `equals with null returns false`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			assertThat(dynamic == null).isFalse()
 		}
 
@@ -280,7 +279,7 @@ class TracksPolishTest {
 		fun `equals with different type returns false`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			assertThat(dynamic.equals("not a track")).isFalse()
 		}
 
@@ -289,7 +288,7 @@ class TracksPolishTest {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic1 = DynamicTrack(track)
 			val dynamic2 = DynamicTrack(track)
-			
+
 			assertThat(dynamic1).isEqualTo(dynamic2)
 		}
 
@@ -299,7 +298,7 @@ class TracksPolishTest {
 			val track2 = SimpleTrackBlock(separator1, separator2, 200.0, 40.0, 40.0)
 			val dynamic1 = DynamicTrack(track1)
 			val dynamic2 = DynamicTrack(track2)
-			
+
 			assertThat(dynamic1).isNotEqualTo(dynamic2)
 		}
 
@@ -308,7 +307,7 @@ class TracksPolishTest {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic1 = DynamicTrack(track)
 			val dynamic2 = DynamicTrack(track)
-			
+
 			assertThat(dynamic1.hashCode()).isEqualTo(dynamic2.hashCode())
 		}
 	}
@@ -316,16 +315,15 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("DynamicTrack - State Validation")
 	inner class DynamicTrackStateValidation {
-
 		@Test
 		fun `cancelPathSetup from different separator than reserved`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			// Reserve from separator1
 			dynamic.setUpPath(separator1)
 			assertThat(dynamic.isSetUpPath(separator1)).isTrue()
-			
+
 			// Try to cancel from separator2 (should fail)
 			assertFailure {
 				dynamic.cancelPathSetup(separator2)
@@ -336,11 +334,11 @@ class TracksPolishTest {
 		fun `state consistency after enter`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			// Must reserve before entering
 			dynamic.setUpPath(separator1)
 			dynamic.enter(occupant)
-			
+
 			assertThat(dynamic.state).isEqualTo(TrackFacility.State.OCCUPIED)
 			assertThat(dynamic.getTrackOccupant()).isEqualTo(occupant)
 		}
@@ -349,7 +347,7 @@ class TracksPolishTest {
 		fun `reservedFrom is null when FREE`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			assertThat(dynamic.reservedFrom).isNull()
 			assertThat(dynamic.state).isEqualTo(TrackFacility.State.FREE)
 		}
@@ -358,9 +356,9 @@ class TracksPolishTest {
 		fun `reservedFrom is not null when RESERVED`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val dynamic = DynamicTrack(track)
-			
+
 			dynamic.setUpPath(separator1)
-			
+
 			assertThat(dynamic.reservedFrom).isNotNull()
 			assertThat(dynamic.reservedFrom).isEqualTo(separator1)
 			assertThat(dynamic.state).isEqualTo(TrackFacility.State.RESERVED)
@@ -370,12 +368,11 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("AbstractTrack - Second End Resolution")
 	inner class AbstractTrackSecondEndTests {
-
 		@Test
 		fun `ends returns both separators`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 			val ends = track.ends()
-			
+
 			assertThat(ends).hasSize(2)
 			assertThat(ends[0]).isEqualTo(separator1)
 			assertThat(ends[1]).isEqualTo(separator2)
@@ -393,7 +390,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("TrackSection - Boundary Conditions")
 	inner class TrackSectionBoundaryTests {
-
 		@Test
 		fun `TrackSection with single block`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)

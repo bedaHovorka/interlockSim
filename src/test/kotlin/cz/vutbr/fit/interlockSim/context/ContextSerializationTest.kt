@@ -14,11 +14,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -41,7 +40,7 @@ import java.beans.PropertyChangeListener
  */
 @DisplayName("Context Serialization and Freeze")
 class ContextSerializationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -54,7 +53,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("frozen context rejects modifications")
 		fun frozenContext_rejectsModifications() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 
 			// Act
@@ -71,7 +70,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("frozen context allows reads")
 		fun frozenContext_allowsReads() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			context.currentMaxSpeed = 120.0
@@ -96,7 +95,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("freeze is idempotent")
 		fun freeze_isIdempotent() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			assertThat(context.isFrozen()).isFalse()
 
 			// Act - Freeze multiple times
@@ -120,18 +119,19 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("freeze triggers property change event")
 		fun freeze_triggersPropertyChangeEvent() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			var eventFired = false
 			var eventPropertyName: String? = null
 			var eventNewValue: Any? = null
 
-			val listener = PropertyChangeListener { evt ->
-				if (evt.propertyName == "frozen") {
-					eventFired = true
-					eventPropertyName = evt.propertyName
-					eventNewValue = evt.newValue
+			val listener =
+				PropertyChangeListener { evt ->
+					if (evt.propertyName == "frozen") {
+						eventFired = true
+						eventPropertyName = evt.propertyName
+						eventNewValue = evt.newValue
+					}
 				}
-			}
 			context.addPropertyChangeListener(listener)
 
 			// Act
@@ -147,14 +147,15 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("freeze event fired only on first freeze call")
 		fun freeze_eventFiredOnlyOnce() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			var eventCount = 0
 
-			val listener = PropertyChangeListener { evt ->
-				if (evt.propertyName == "frozen") {
-					eventCount++
+			val listener =
+				PropertyChangeListener { evt ->
+					if (evt.propertyName == "frozen") {
+						eventCount++
+					}
 				}
-			}
 			context.addPropertyChangeListener(listener)
 
 			// Act - Freeze multiple times
@@ -174,7 +175,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("configuration properties preserved after freeze")
 		fun configurationProperties_preservedAfterFreeze() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.currentMaxSpeed = 150.0
 			context.currentTrackLength = 750.0
 			context.currentNameString = "FreezeName"
@@ -192,7 +193,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("InOut list preserved after freeze")
 		fun inOutList_preservedAfterFreeze() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			val inOutCountBefore = context.getInOuts().size
@@ -210,7 +211,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("graph structure preserved after freeze")
 		fun graphStructure_preservedAfterFreeze() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(2, 1), outB)
 			val graphSizeBefore = context.getGraph().size()
@@ -227,16 +228,26 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("grid cells preserved after freeze")
 		fun gridCells_preservedAfterFreeze() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
-			val cellCountBefore = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountBefore =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 
 			// Act
 			context.freeze()
 
 			// Assert - Grid unchanged
-			val cellCountAfter = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountAfter =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			assertThat(cellCountAfter).isEqualTo(cellCountBefore)
 			assertThat(cellCountAfter).isEqualTo(2)
 		}
@@ -249,7 +260,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("listeners receive freeze event")
 		fun listeners_receiveFreezeEvent() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val listener1 = TestPropertyChangeListener()
 			val listener2 = TestPropertyChangeListener()
 
@@ -268,7 +279,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("listener added after freeze does not receive freeze event")
 		fun listenerAddedAfterFreeze_doesNotReceiveFreezeEvent() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.freeze()
 
 			// Act - Add listener after freeze
@@ -286,7 +297,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("removed listener does not receive freeze event")
 		fun removedListener_doesNotReceiveFreezeEvent() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val listener = TestPropertyChangeListener()
 			context.addPropertyChangeListener(listener)
 
@@ -306,7 +317,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("unfrozen to frozen transition is one-way")
 		fun unFrozenToFrozen_isOneWay() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			assertThat(context.isFrozen()).isFalse()
 
 			// Act
@@ -323,7 +334,7 @@ class ContextSerializationTest : KoinTestBase() {
 		@DisplayName("new context starts in unfrozen state")
 		fun newContext_startsUnfrozen() {
 			// Arrange & Act
-			val context1 = factory.createEmptyContext()
+			val context1 = editingContextFactory.createEmptyContext()
 			val context2 = DefaultEditingContext(20, 20)
 
 			// Assert - Both start unfrozen

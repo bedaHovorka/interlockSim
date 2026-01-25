@@ -9,13 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage

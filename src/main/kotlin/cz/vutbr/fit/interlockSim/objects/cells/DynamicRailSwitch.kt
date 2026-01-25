@@ -9,11 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -39,7 +38,8 @@ private val logger = KotlinLogging.logger {}
  */
 class DynamicRailSwitch(
 	val staticRef: RailSwitch
-) : PathSeparator by staticRef, DynamicPathSeparator {
+) : PathSeparator by staticRef,
+	DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val type: RailSwitch.Type
 		get() = staticRef.type

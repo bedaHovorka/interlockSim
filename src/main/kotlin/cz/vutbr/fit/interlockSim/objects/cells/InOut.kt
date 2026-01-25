@@ -9,10 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.anti
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import java.util.EnumSet
 
 /**

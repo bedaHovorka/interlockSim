@@ -90,9 +90,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val fileMenu = menuBar.getMenu(0) as JMenu
 			
 			// Get menu items (excluding separators)
-			val menuItems = (0 until fileMenu.itemCount)
-				.map { fileMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until fileMenu.itemCount)
+					.map { fileMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			
 			// Find Save action
 			val saveItem = menuItems.find { it.text == "Save as..." }
@@ -108,9 +109,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val fileMenu = menuBar.getMenu(0) as JMenu
 			
 			// Get menu items (excluding separators)
-			val menuItems = (0 until fileMenu.itemCount)
-				.map { fileMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until fileMenu.itemCount)
+					.map { fileMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			
 			// Find Exit action
 			val exitItem = menuItems.find { it.text == "Exit" }
@@ -126,8 +128,9 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val fileMenu = menuBar.getMenu(0) as JMenu
 			
 			// Count separators
-			val separatorCount = (0 until fileMenu.itemCount)
-				.count { fileMenu.getItem(it) == null }
+			val separatorCount =
+				(0 until fileMenu.itemCount)
+					.count { fileMenu.getItem(it) == null }
 			
 			assertThat(separatorCount).isEqualTo(1)
 		}
@@ -141,9 +144,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val helpMenu = menuBar.getMenu(1) as JMenu
 			
 			// Get menu items
-			val menuItems = (0 until helpMenu.itemCount)
-				.map { helpMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until helpMenu.itemCount)
+					.map { helpMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			
 			// Find Usage action
 			val usageItem = menuItems.find { it.text == "Usage" }
@@ -159,9 +163,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val helpMenu = menuBar.getMenu(1) as JMenu
 			
 			// Get menu items
-			val menuItems = (0 until helpMenu.itemCount)
-				.map { helpMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until helpMenu.itemCount)
+					.map { helpMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			
 			// Find About action
 			val aboutItem = menuItems.find { it.text == "About" }
@@ -177,9 +182,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val helpMenu = menuBar.getMenu(1) as JMenu
 			
 			// Get menu items
-			val menuItems = (0 until helpMenu.itemCount)
-				.map { helpMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until helpMenu.itemCount)
+					.map { helpMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			
 			assertThat(menuItems).hasSize(2)
 		}
@@ -206,9 +212,10 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val fileMenu = menuBar.getMenu(0) as JMenu
 			
 			// Get last item (Exit, after separator)
-			val menuItems = (0 until fileMenu.itemCount)
-				.map { fileMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val menuItems =
+				(0 until fileMenu.itemCount)
+					.map { fileMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			val exitItem = menuItems.last()
 			
 			assertThat(exitItem.text).isEqualTo("Exit")
@@ -224,17 +231,19 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val helpMenu = menuBar.getMenu(1) as JMenu
 			
 			// Verify File menu items are enabled
-			val fileItems = (0 until fileMenu.itemCount)
-				.map { fileMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val fileItems =
+				(0 until fileMenu.itemCount)
+					.map { fileMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			fileItems.forEach { item ->
 				assertThat(item.isEnabled).isEqualTo(true)
 			}
 			
 			// Verify Help menu items are enabled
-			val helpItems = (0 until helpMenu.itemCount)
-				.map { helpMenu.getItem(it) }
-				.filterIsInstance<JMenuItem>()
+			val helpItems =
+				(0 until helpMenu.itemCount)
+					.map { helpMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
 			helpItems.forEach { item ->
 				assertThat(item.isEnabled).isEqualTo(true)
 			}

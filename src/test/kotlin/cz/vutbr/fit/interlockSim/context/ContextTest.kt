@@ -14,14 +14,14 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
@@ -31,7 +31,8 @@ import org.koin.test.inject
  *
  */
 class ContextTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var context: SimulationContext
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
 	private val outB: InOut = InOut("B", true, SpatialType.HORIZONTAL)
@@ -41,7 +42,7 @@ class ContextTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Build network using editing context
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		val pA = Point(1, 1)
 		val r1 = Point(4, 2)
 		val pB = Point(5, 5)
@@ -52,7 +53,7 @@ class ContextTest : KoinTestBase() {
 		editingContext.joinCells(pA, r1, tl)
 
 		// Convert to simulation context for testing
-		context = factory.createContext(editingContext)
+		context = simulationContextFactory.createContext(editingContext)
 	}
 
 	/**
@@ -82,10 +83,10 @@ class ContextTest : KoinTestBase() {
 		// When current is null, getNextTrackSection gets the first track block
 		// and calls getNextTrackSection on it with null, which returns the block itself
 		val nextFromA = context.getNextTrackSection(inA, null)
-		assertThat(nextFromA).isSameInstanceAs(tl)
+		assertThat((nextFromA as DynamicTrackBlock).staticRef).isSameInstanceAs(tl)
 
 		val nextFromB = context.getNextTrackSection(outB, null)
-		assertThat(nextFromB).isSameInstanceAs(tl)
+		assertThat((nextFromB as DynamicTrackBlock).staticRef).isSameInstanceAs(tl)
 
 		// When current is a track section (the SimpleTrackBlock acts as its own section),
 		// SimpleTrackBlock.getNextTrackSection() returns null because it only has one section

@@ -14,13 +14,12 @@ import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -40,7 +39,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @DisplayName("PathSeparator-to-Dynamic Mapping")
 class PathSeparatorDynamicMappingTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val factory: SimulationContextFactory by inject()
 
 	companion object {
 		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -65,7 +64,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			// Get a dynamic InOut (these are guaranteed to be registered)
 			val dynamicInOut = dynamicInOuts.first()
 			val staticInOut = dynamicInOut.staticRef
-			
+
 			// Get the InOut's in semaphore (also registered)
 			val staticInSemaphore = staticInOut.getInSemaphore()
 			val dynamicSemaphore = context.toDynamic(staticInSemaphore)
@@ -85,7 +84,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic throws IllegalStateException for unregistered separator")
 		fun toDynamic_unregisteredSeparator_throwsException() {
 			// Arrange - Empty context with no separators
-			val context = factory.createEmptySimulationContext()
+			val context = factory.createEmptyContext()
 
 			// Create a RailSemaphore that's not registered
 			val unregisteredSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
@@ -107,7 +106,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic error message includes map size and class name")
 		fun toDynamic_unregisteredSeparator_includesDebugInfo() {
 			// Arrange
-			val context = factory.createEmptySimulationContext()
+			val context = factory.createEmptyContext()
 			val unregisteredSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
 			// Act & Assert
@@ -115,8 +114,8 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 				context.toDynamic(unregisteredSemaphore)
 			}.isFailure()
 				.isInstanceOf(IllegalStateException::class)
-				.hasMessageContaining("RailSemaphore")  // Class name
-				.hasMessageContaining("Map contains")    // Map size info
+				.hasMessageContaining("RailSemaphore") // Class name
+				.hasMessageContaining("Map contains") // Map size info
 				.hasMessageContaining("entries")
 		}
 	}
@@ -187,7 +186,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			// Assert - InOut semaphores should be convertible
 			for (dynamicInOut in dynamicInOuts) {
 				val staticInOut = dynamicInOut.staticRef
-				
+
 				// Convert InOut's semaphores
 				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
 				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())

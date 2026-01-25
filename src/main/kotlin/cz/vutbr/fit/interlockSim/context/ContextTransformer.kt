@@ -84,19 +84,20 @@ object ContextTransformer {
 	): SimulationContext {
 		logger.info {
 			"Transforming EditingContext to SimulationContext: " +
-			"grid ${editingContext.getRailWayNetGrid().getCols()}x${editingContext.getRailWayNetGrid().getRows()}, " +
-			"${editingContext.getGraph().size()} track blocks"
+				"grid ${editingContext.getRailWayNetGrid().getCols()}x${editingContext.getRailWayNetGrid().getRows()}, " +
+				"${editingContext.getGraph().size()} track blocks"
 		}
 
-		val simulationContext = DefaultSimulationContext.fromEditingContext(
-			editingContext,
-			processFactory
-		)
+		val simulationContext =
+			DefaultSimulationContext.fromEditingContext(
+				editingContext,
+				processFactory
+			)
 
 		logger.info {
 			"Successfully transformed EditingContext to SimulationContext: " +
-			"${simulationContext.getInOuts().size} InOuts, " +
-			"ready for simulation"
+				"${simulationContext.getInOuts().size} InOuts, " +
+				"ready for simulation"
 		}
 
 		return simulationContext

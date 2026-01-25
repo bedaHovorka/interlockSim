@@ -13,7 +13,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -40,18 +40,18 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Timetable Tests")
 class TimetableTest {
-	private lateinit var mockInPoint: InOut
-	private lateinit var mockOutPoint: InOut
+	private lateinit var mockInPoint: DynamicInOut
+	private lateinit var mockOutPoint: DynamicInOut
 
 	@BeforeEach
 	fun setUp() {
 		// Create mock InOut objects for testing
-		mockInPoint = mockk<InOut>()
-		every { mockInPoint.getName() } returns "ENTRY_POINT"
+		mockInPoint = mockk()
+		every { mockInPoint.name } returns "ENTRY_POINT"
 		every { mockInPoint.toString() } returns "InOut:ENTRY_POINT"
 
-		mockOutPoint = mockk<InOut>()
-		every { mockOutPoint.getName() } returns "EXIT_POINT"
+		mockOutPoint = mockk()
+		every { mockOutPoint.name } returns "EXIT_POINT"
 		every { mockOutPoint.toString() } returns "InOut:EXIT_POINT"
 	}
 

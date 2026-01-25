@@ -9,11 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.IdentityHashMap
 
@@ -67,11 +66,13 @@ abstract class SimpleTrack(
 	override fun maxSpeed(from: PathSeparator?): Double {
 		requireSimulation(isEnd(from!!)) { "Path separator must be an end of this track" }
 		// Extract static separator for map lookup (speeds map uses static keys)
-		val staticFrom = if (from is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
-			cz.vutbr.fit.interlockSim.objects.cells.CellUtilities.assertNodeCell(from)
-		} else {
-			from
-		}
+		val staticFrom =
+			if (from is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
+				cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+					.assertNodeCell(from)
+			} else {
+				from
+			}
 		return speeds[staticFrom]!!
 	}
 }

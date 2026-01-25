@@ -9,36 +9,36 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.core.Track
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -116,8 +116,8 @@ open class DefaultSimulationContext(
 	 * Decouples context from concrete simulation class implementations.
 	 */
 	private val processFactory: SimulationProcessFactory
-) : BaseContext<DynamicTrackBlock>(cols, rows), SimulationContext {
-
+) : BaseContext<DynamicTrackBlock>(cols, rows),
+	SimulationContext {
 	/**
 	 * Set of allowed report types for simulation output
 	 */
@@ -186,12 +186,22 @@ open class DefaultSimulationContext(
 		 * This method creates a new simulation context with dynamic wrapper mappings
 		 * for PathSeparators (InOut, RailSemaphore, RailSwitch).
 		 *
-		 * The transformation process is broken down into 5 distinct phases:
-		 * 1. Copy grid cells (NodeCell and TrackBlockPart)
-		 * 2. Copy graph structure (track block connections)
-		 * 3. Copy InOut elements list
-		 * 4. Copy configuration properties
-		 * 5. Create dynamic wrapper mappings
+		 * The transformation process is broken down into 6 distinct phases:
+		 * 1. Transform static grid to dynamic grid using GridTransformer
+		 * 2. Populate simulation grid with DYNAMIC cells (not static cells)
+		 * 3. Store static→dynamic mapping cache for toDynamic() lookups
+		 * 4. Copy graph structure (track block connections)
+		 * 5. Copy InOut elements list using DYNAMIC wrappers
+		 * 6. Copy configuration properties
+		 *
+		 * **Fix for Issue #280 (sub-issue #284):**
+		 * Previously, copyGridCells() copied STATIC cells to simulation grid, causing
+		 * identity mismatches between grid navigation (returns static cells) and
+		 * pathToNextSemaphore() (returns dynamic wrappers in path). This caused trains
+		 * to deadlock with zero acceleration.
+		 *
+		 * Now, we use GridTransformer.dynamicGrid directly to populate the simulation
+		 * grid with DYNAMIC wrappers, ensuring consistent identity throughout navigation.
 		 *
 		 * @param editingContext The editing context with static network configuration
 		 * @param processFactory Factory for creating simulation processes
@@ -208,12 +218,63 @@ open class DefaultSimulationContext(
 
 			val context = DefaultSimulationContext(cols, rows, processFactory)
 
-			// Orchestrate transformation phases
-			copyGridCells(editingContext, context)
+			// PHASE 1: Transform grid (creates dynamic wrappers)
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = grid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
+			val transformationResult = GridTransformer.transformGrid(cellGrid)
+
+			// PHASE 2: Populate simulation grid with DYNAMIC cells (FIX for #280/#284)
+			// Previously: copyGridCells() copied STATIC cells from editing grid
+			// Now: Use GridTransformer.dynamicGrid for NodeCell wrappers + copy TrackBlockPart from editing grid
+
+			// 2a. Copy all cells from editing grid (both NodeCell and TrackBlockPart)
+			// TrackBlockPart cells are not transformed, so we need to copy them from the original grid
+			for ((point, cell) in cellGrid) {
+				context.getGrid().put(point, cell)
+			}
+			logger.debug { "Copied ${cellGrid.count()} cells from editing grid (includes TrackBlockPart)" }
+
+			// 2b. Overwrite NodeCell positions with DYNAMIC wrappers from GridTransformer
+			// This replaces static NodeCells with dynamic wrappers while preserving TrackBlockPart
+			for ((point, dynamicCell) in transformationResult.dynamicGrid) {
+				context.getGrid().put(point, dynamicCell)
+			}
+			logger.debug { "Overwrote ${transformationResult.dynamicGrid.count()} positions with DYNAMIC NodeCell wrappers" }
+
+			// PHASE 3: Store static→dynamic mapping cache for toDynamic() lookups
+			context.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
+			logger.debug { "Stored ${transformationResult.staticToDynamicMap.size} static→dynamic mappings" }
+
+			// DIAGNOSTIC: Log semaphore mappings from GridTransformer
+			transformationResult.staticToDynamicMap.entries
+				.filter { it.key is InOut }
+				.forEach { (inout, dynamicInOut) ->
+					if (inout is InOut && dynamicInOut is DynamicInOut) {
+						logger.debug {
+							"GridTransformer mapped InOut ${inout.getName()}: " +
+								"inSem@${System.identityHashCode(inout.getInSemaphore())} -> " +
+								"${System.identityHashCode(dynamicInOut.inSemaphore)}, " +
+								"outSem@${System.identityHashCode(inout.getOutSemaphore())} -> " +
+								"${System.identityHashCode(dynamicInOut.outSemaphore)}"
+						}
+					}
+				}
+
+			// PHASE 4: Copy graph structure (existing logic)
 			copyGraphStructure(editingContext, context)
-			copyInOutList(editingContext, context)
+
+			// PHASE 5: Copy InOut list (static InOut instances)
+			// Note: We keep static InOut instances in the inouts list for backward compatibility.
+			// The simulation code uses context.getInOuts() to get the list, then looks up
+			// dynamic wrappers via staticToDynamicMap when needed.
+			// This preserves the existing architecture where inouts list contains static objects.
+			context.inouts.addAll(editingContext.getInOuts())
+			logger.debug { "Copied ${editingContext.getInOuts().size} static InOut elements to inouts list" }
+
+			// PHASE 6: Copy configuration (existing logic)
 			copyConfiguration(editingContext, context)
-			createDynamicMappings(editingContext, context)
+
+			// Validate transformation
 			validateTransformation(editingContext, context)
 
 			// Freeze the context to prevent modifications after creation
@@ -221,31 +282,6 @@ open class DefaultSimulationContext(
 			context.freeze()
 
 			return context
-		}
-
-		/**
-		 * Copy all cells from editing grid to simulation grid.
-		 * Preserves NodeCell and TrackBlockPart cells.
-		 *
-		 * @param editingContext Source editing context
-		 * @param simulationContext Target simulation context
-		 */
-		private fun copyGridCells(
-			editingContext: EditingContext,
-			simulationContext: DefaultSimulationContext
-		) {
-			// We need to copy all cells (both NodeCell and TrackBlockPart) to preserve the complete network
-			// Cast to Cell grid because EditingContext grid actually contains both NodeCell and TrackBlockPart
-			val sourceGrid = editingContext.getRailWayNetGrid()
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
-			val targetGrid = simulationContext.getGrid()
-
-			for ((point, cell) in cellGrid) {
-				targetGrid.put(point, cell)
-			}
-
-			logger.debug { "Copied ${cellGrid.count()} cells to simulation grid" }
 		}
 
 		/**
@@ -280,16 +316,20 @@ open class DefaultSimulationContext(
 				val second = iterator.next()
 
 				// Get the segment extensions for each node
-				val firstExt = requireSimulationNotNull(doubleton.getValue(first)) {
-					"Inconsistent graph entry: missing segment for first point $first in Doubleton key $doubleton"
-				}
-				val secondExt = requireSimulationNotNull(doubleton.getValue(second)) {
-					"Inconsistent graph entry: missing segment for second point $second in Doubleton key $doubleton"
-				}
+				val firstExt =
+					requireSimulationNotNull(doubleton.getValue(first)) {
+						"Inconsistent graph entry: missing segment for first point $first in Doubleton key $doubleton"
+					}
+				val secondExt =
+					requireSimulationNotNull(doubleton.getValue(second)) {
+						"Inconsistent graph entry: missing segment for second point $second in Doubleton key $doubleton"
+					}
 
 				// ===== KEY CHANGE FOR ISSUE #277 =====
 				// Wrap static TrackBlock in DynamicTrackBlock wrapper
-				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock)
+				val end1: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[first] as DynamicPathSeparator
+				val end2: DynamicPathSeparator = simulationContext.getRailWayNetGrid()[second] as DynamicPathSeparator
+				val dynamicTrackBlock = DynamicTrackBlock(staticTrackBlock, end1, end2)
 
 				// Put dynamic wrapper into the simulation graph (type-safe)
 				targetGraph.put(first, firstExt, second, secondExt, dynamicTrackBlock)
@@ -304,21 +344,6 @@ open class DefaultSimulationContext(
 			logger.debug {
 				"Copied ${sourceGraph.size()} graph entries, created $wrappedCount DynamicTrackBlock wrappers"
 			}
-		}
-
-		/**
-		 * Copy InOut elements list from editing to simulation context.
-		 *
-		 * @param editingContext Source editing context
-		 * @param simulationContext Target simulation context
-		 */
-		private fun copyInOutList(
-			editingContext: EditingContext,
-			simulationContext: DefaultSimulationContext
-		) {
-			// Use interface method getInOuts() instead of type-checking for LSP compliance
-			simulationContext.inouts.addAll(editingContext.getInOuts())
-			logger.debug { "Copied ${editingContext.getInOuts().size} InOut elements" }
 		}
 
 		/**
@@ -337,64 +362,39 @@ open class DefaultSimulationContext(
 
 			logger.debug {
 				"Copied configuration: speed=${editingContext.currentMaxSpeed}, " +
-				"length=${editingContext.currentTrackLength}, " +
-				"name=${editingContext.currentNameString}"
+					"length=${editingContext.currentTrackLength}, " +
+					"name=${editingContext.currentNameString}"
 			}
-		}
-
-		/**
-		 * Create dynamic wrapper mappings using GridTransformer.
-		 *
-		 * @param editingContext Source editing context
-		 * @param simulationContext Target simulation context
-		 */
-		private fun createDynamicMappings(
-			editingContext: EditingContext,
-			simulationContext: DefaultSimulationContext
-		) {
-			// Transform static grid to dynamic grid for wrapper mappings
-			val sourceGrid = editingContext.getRailWayNetGrid()
-			@Suppress("UNCHECKED_CAST")
-			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
-
-			val transformationResult = GridTransformer.transformGrid(cellGrid)
-
-			// Store the transformation map for toDynamic() lookups
-			simulationContext.staticToDynamicMap.putAll(transformationResult.staticToDynamicMap)
-
-			// DIAGNOSTIC: Log semaphore mappings from GridTransformer
-			transformationResult.staticToDynamicMap.entries
-				.filter { it.key is InOut }
-				.forEach { (inout, dynamicInOut) ->
-					if (inout is InOut && dynamicInOut is DynamicInOut) {
-						logger.debug {
-							"GridTransformer mapped InOut ${inout.getName()}: " +
-							"inSem@${System.identityHashCode(inout.getInSemaphore())} -> " +
-							"${System.identityHashCode(dynamicInOut.inSemaphore)}, " +
-							"outSem@${System.identityHashCode(inout.getOutSemaphore())} -> " +
-							"${System.identityHashCode(dynamicInOut.outSemaphore)}"
-						}
-					}
-				}
-
-			logger.debug { "Created ${transformationResult.staticToDynamicMap.size} dynamic wrappers" }
 		}
 
 		/**
 		 * Validate that all InOut elements have corresponding dynamic wrappers.
 		 * This ensures GridTransformer correctly created wrappers for all InOuts.
 		 *
+		 * **Fix for Issue #280/#284:**
+		 * The inouts list contains static InOut instances (for backward compatibility),
+		 * but each must have a corresponding DynamicInOut wrapper in staticToDynamicMap.
+		 * This validation ensures the transformation created all required mappings.
+		 *
 		 * @param simulationContext Target simulation context
 		 * @throws IllegalStateException if any InOut is missing from staticToDynamicMap
 		 */
 		private fun validateInOutMappings(simulationContext: DefaultSimulationContext) {
 			for (inout in simulationContext.inouts) {
-				require(simulationContext.staticToDynamicMap.containsKey(inout)) {
-					"InOut $inout not found in staticToDynamicMap after GridTransformer. " +
-					"This indicates InOut is in inouts list but not in grid."
+				val dynamicWrapper = simulationContext.staticToDynamicMap[inout]
+				require(dynamicWrapper != null) {
+					"InOut $inout (${inout.getName()}) not found in staticToDynamicMap after GridTransformer. " +
+						"This indicates InOut is in inouts list but GridTransformer did not create a wrapper for it."
+				}
+				require(dynamicWrapper is DynamicInOut) {
+					"Wrapper for InOut $inout (${inout.getName()}) is not a DynamicInOut. " +
+						"Type: ${dynamicWrapper.javaClass.simpleName}. " +
+						"This indicates GridTransformer created wrong wrapper type."
 				}
 			}
-			logger.debug { "Validated ${simulationContext.inouts.size} InOut mappings" }
+			logger.debug {
+				"Validated ${simulationContext.inouts.size} InOut elements have DynamicInOut wrappers"
+			}
 		}
 
 		/**
@@ -417,9 +417,9 @@ open class DefaultSimulationContext(
 
 			logger.info {
 				"Created simulation context from editing context: " +
-				"${simulationContext.staticToDynamicMap.size} dynamic wrappers, " +
-				"${simulationContext.inouts.size} InOuts, " +
-				"grid: ${cols}x${rows}, graph: ${editingContext.getGraph().size()} track blocks"
+					"${simulationContext.staticToDynamicMap.size} dynamic wrappers, " +
+					"${simulationContext.inouts.size} InOuts, " +
+					"grid: ${cols}x$rows, graph: ${editingContext.getGraph().size()} track blocks"
 			}
 		}
 	}
@@ -449,8 +449,8 @@ open class DefaultSimulationContext(
 	override fun getSegment(
 		separator: DynamicPathSeparator,
 		track: Track
-	): Segment? {
-		return if (track is TrackSection) {
+	): Segment? =
+		if (track is TrackSection) {
 			@Suppress("UNCHECKED_CAST")
 			val section = track as TrackSection
 			// Match Java 1:1: return directly (inner method should not return null here)
@@ -461,7 +461,6 @@ open class DefaultSimulationContext(
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(nodeCell, trackBlock)
 		}
-	}
 
 	/**
 	 * Get pseudo join segment in block for a path separator and track section
@@ -470,13 +469,13 @@ open class DefaultSimulationContext(
 		separator: DynamicPathSeparator,
 		section: TrackSection
 	): Segment? {
-		val staticBlock = section.getTrackBlock()
-		if (staticBlock.isInnerElement(separator)) {
-			return staticBlock.getJoin(separator, section)
+		val block = section.getTrackBlock()
+		if (block.isInnerElement(separator)) {
+			return block.getJoin(separator, section)
 		}
 		val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
 		// Look up DynamicTrackBlock wrapper for the static block from TrackSection
-		val dynamicTrackBlock = getDynamicWrapper(staticBlock)
+		val dynamicTrackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		return getSegment(nodeCell, dynamicTrackBlock)
 	}
 
@@ -529,15 +528,16 @@ open class DefaultSimulationContext(
 
 		// For getFollowingSegment, we need DynamicPathSeparator or OrientedNodeCell
 		// Dynamic* wrappers always have getFollowingSegment, static may not (only OrientedNodeCell does)
-		val followingSegment = when {
-			nodeCell is DynamicPathSeparator -> nodeCell.getFollowingSegment(segment)
-			staticNodeCell is OrientedNodeCell -> staticNodeCell.getFollowingSegment(segment)
-			else -> {
-				// Fall back to possibleFollowers for non-oriented NodeCells (like RailSwitch)
-				val followers = staticNodeCell.possibleFollowers(segment ?: return null)
-				followers.firstOrNull()
+		val followingSegment =
+			when {
+				nodeCell is DynamicPathSeparator -> nodeCell.getFollowingSegment(segment)
+				staticNodeCell is OrientedNodeCell -> staticNodeCell.getFollowingSegment(segment)
+				else -> {
+					// Fall back to possibleFollowers for non-oriented NodeCells (like RailSwitch)
+					val followers = staticNodeCell.possibleFollowers(segment ?: return null)
+					followers.firstOrNull()
+				}
 			}
-		}
 		if (followingSegment == null) return null
 
 		val assignedEdges = getGraph().assignedEdges(location)
@@ -558,7 +558,7 @@ open class DefaultSimulationContext(
 				return dynamicBlock
 			}
 		}
-		return null  // No wrapper found
+		return null // No wrapper found
 	}
 
 	/**
@@ -570,11 +570,9 @@ open class DefaultSimulationContext(
 	): TrackSection? {
 		var trackBlock: DynamicTrackBlock? = null
 		if (current != null) {
-			// TrackSection belongs to static structure, so getTrackBlock() returns static TrackBlock
-			// DynamicTrackBlock.getNextTrackSection() delegates to static block, so we can use it directly
-			val staticBlock = current.getTrackBlock()
-			requireSimulation(staticBlock != null) { "TrackBlock cannot be null for current track section" }
-			val nextTrackSection = staticBlock.getNextTrackSection(separator, current)
+			val block = current.getTrackBlock()
+			requireSimulation(block != null) { "TrackBlock cannot be null for current track section" }
+			val nextTrackSection = block.getNextTrackSection(separator, current)
 			if (nextTrackSection != null) {
 				logger.trace {
 					"getNextTrackSection: found next section within same block from $separator"
@@ -582,7 +580,7 @@ open class DefaultSimulationContext(
 				return nextTrackSection
 			}
 			// Look up DynamicTrackBlock wrapper from graph for use in getNextTrackBlock call below
-			trackBlock = getDynamicWrapper(staticBlock)
+			trackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
 		}
 
 		// z dalsi TrackBlock
@@ -596,8 +594,45 @@ open class DefaultSimulationContext(
 		val nodeCell = if (separator is NodeCell) separator else staticNodeCell
 		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
 
+		// CRITICAL FIX (Issue #282): Validate block reservation before allowing navigation
+		// Train navigation follows physical topology based on current switch configuration,
+		// but path reservation only reserves blocks based on switch configuration at setup time.
+		// If switch configuration changes (due to another train's path), trains would navigate
+		// into blocks not reserved by their own path, causing "Wrong state: FREE, expected: RESERVED" errors.
+		//
+		// Solution: Block navigation when block is not properly reserved for this train.
+		//
+		// Allowed cases:
+		// 1. Block is RESERVED from the separator we're navigating from - correct reservation
+		// 2. Block is OCCUPIED - we're following/approaching another train
+		// 3. Initial entry from InOut (current == null) - path setup happens first
+		//
+		// Blocked cases:
+		// - Block is FREE and we're navigating between blocks - block was never reserved!
+		// - Block is RESERVED from a different separator - reserved by different path!
+		if (nextTrackBlock != null && current != null) {
+			val dynamicSeparator = separator as? DynamicPathSeparator
+			val blockState = nextTrackBlock.getState()
+			val reservedFrom = nextTrackBlock.reservedFrom
+
+			// Block is properly reserved if it's RESERVED from the separator we're navigating from
+			val isProperlyReserved = blockState == TrackFacility.State.RESERVED && reservedFrom == dynamicSeparator
+
+			// Block is occupied (we might be following another train or waiting)
+			val isOccupied = blockState == TrackFacility.State.OCCUPIED
+
+			// Allow navigation only if properly reserved or occupied
+			if (!isProperlyReserved && !isOccupied) {
+				logger.info {
+					"getNextTrackSection: blocking navigation from $separator to block ${nextTrackBlock.staticRef.hashCode()} " +
+						"(state=$blockState, reservedFrom=$reservedFrom, expected=$dynamicSeparator)"
+				}
+				return null // Block entry - train will stop at semaphore
+			}
+		}
+
 		@Suppress("UNCHECKED_CAST")
-		val result = nextTrackBlock?.getNextTrackSection(nodeCell, null as TrackSection?)
+		val result = nextTrackBlock?.getNextTrackSection(separator, null)
 		logger.trace {
 			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}
@@ -607,6 +642,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Run the simulation (jDisco framework integration)
 	 */
+
 	/**
 	 * Initialize static-to-dynamic mapping for all PathSeparators in the network
 	 * Must be called before simulation starts to ensure all separators have Dynamic wrappers
@@ -743,7 +779,7 @@ open class DefaultSimulationContext(
 						staticTrackToDynamicMap[currentSection] = dynamicSection
 						logger.debug {
 							"Mapped internal TrackSection ${System.identityHashCode(currentSection)} " +
-							"within TrackBlock ${System.identityHashCode(trackBlock)}"
+								"within TrackBlock ${System.identityHashCode(trackBlock)}"
 						}
 					} else {
 						logger.trace {
@@ -780,12 +816,36 @@ open class DefaultSimulationContext(
 		val unmappedTracks = mutableListOf<String>()
 
 		// Validate PathSeparators from grid
+		// Fix for Issue #280/#284: Grid now contains dynamic wrappers, not static cells
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val cell = grid.getCellAt(x, y) ?: continue
 
-				if (cell is PathSeparator && cell !in staticToDynamicMap) {
-					unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y)")
+				// Check if cell is a PathSeparator (static or dynamic)
+				when {
+					// Skip non-PathSeparator cells (e.g., TrackBlockPart)
+					cell !is PathSeparator -> continue
+
+					// Dynamic wrapper: check if its staticRef is in the map
+					cell is DynamicPathSeparator -> {
+						val staticRef =
+							when (cell) {
+								is DynamicInOut -> cell.staticRef
+								is DynamicRailSemaphore -> cell.staticRef
+								is DynamicRailSwitch -> cell.staticRef
+								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell.javaClass.simpleName}")
+							}
+						if (staticRef !in staticToDynamicMap) {
+							unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y) - staticRef not mapped")
+						}
+					}
+
+					// Static cell: check if it's in the map directly
+					else -> {
+						if (cell !in staticToDynamicMap) {
+							unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y)")
+						}
+					}
 				}
 			}
 		}
@@ -815,7 +875,7 @@ open class DefaultSimulationContext(
 					if (currentSection is TrackFacility && currentSection !in staticTrackToDynamicMap) {
 						unmappedTracks.add(
 							"TrackSection ${System.identityHashCode(currentSection)} " +
-							"in TrackBlock ${System.identityHashCode(trackBlock)}"
+								"in TrackBlock ${System.identityHashCode(trackBlock)}"
 						)
 					}
 
@@ -826,23 +886,24 @@ open class DefaultSimulationContext(
 		}
 
 		if (unmappedSeparators.isNotEmpty() || unmappedTracks.isNotEmpty()) {
-			val message = buildString {
-				append("Dynamic mapping incomplete!\n")
-				if (unmappedSeparators.isNotEmpty()) {
-					append("Unmapped separators: ${unmappedSeparators.joinToString(", ")}\n")
+			val message =
+				buildString {
+					append("Dynamic mapping incomplete!\n")
+					if (unmappedSeparators.isNotEmpty()) {
+						append("Unmapped separators: ${unmappedSeparators.joinToString(", ")}\n")
+					}
+					if (unmappedTracks.isNotEmpty()) {
+						append("Unmapped tracks: ${unmappedTracks.joinToString(", ")}\n")
+					}
+					append("Separator map: ${staticToDynamicMap.size} entries, ")
+					append("Track map: ${staticTrackToDynamicMap.size} entries.")
 				}
-				if (unmappedTracks.isNotEmpty()) {
-					append("Unmapped tracks: ${unmappedTracks.joinToString(", ")}\n")
-				}
-				append("Separator map: ${staticToDynamicMap.size} entries, ")
-				append("Track map: ${staticTrackToDynamicMap.size} entries.")
-			}
 			throw IllegalStateException(message)
 		}
 
 		logger.info {
 			"Dynamic mapping validation passed: ${staticToDynamicMap.size} separators, " +
-			"${staticTrackToDynamicMap.size} tracks mapped"
+				"${staticTrackToDynamicMap.size} tracks mapped"
 		}
 	}
 
@@ -865,13 +926,14 @@ open class DefaultSimulationContext(
 		}
 
 		// Use static-to-dynamic map for conversions (SINGLETON PATTERN - same wrapper instance every time)
-		val dynamic = staticToDynamicMap[separator]
-			?: throw IllegalStateException(
-				"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
-					"Map contains ${staticToDynamicMap.size} entries. " +
-					"This indicates the separator was not registered during initialization. " +
-					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
-			)
+		val dynamic =
+			staticToDynamicMap[separator]
+				?: throw IllegalStateException(
+					"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
+						"Map contains ${staticToDynamicMap.size} entries. " +
+						"This indicates the separator was not registered during initialization. " +
+						"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+				)
 
 		// Verify singleton behavior: same static object always returns same wrapper instance
 		logger.trace {
@@ -915,7 +977,7 @@ open class DefaultSimulationContext(
 		// Based on assumption: immutable network structure in simulation context
 		// NOTE: getInOuts() might have been called already (e.g., by XMLContextFactory),
 		// so initializeDynamicMapping handles both fresh init and completion of partial init
-		initializeDynamicMapping()  // Maps ALL separators (InOut, RailSemaphore, RailSwitch)
+		initializeDynamicMapping() // Maps ALL separators (InOut, RailSemaphore, RailSwitch)
 
 		// Validate completeness - catch initialization bugs early
 		validateDynamicMapping()
@@ -1082,16 +1144,18 @@ open class DefaultSimulationContext(
 	override fun getInOuts(): Collection<DynamicInOut> {
 		// Lazy initialization: retrieve existing dynamic wrappers from staticToDynamicMap
 		if (dynamicInOuts == null) {
-			dynamicInOuts = inouts.map {
-				// Use existing wrapper from staticToDynamicMap (created by GridTransformer or initializeDynamicMapping)
-				// GridTransformer.transform() already mapped InOut's embedded semaphores (inSemaphore, outSemaphore)
-				// using putIfAbsent(), so all necessary mappings are guaranteed to exist
-				staticToDynamicMap[it] as? DynamicInOut
-					?: throw IllegalStateException(
-						"InOut wrapper not found in staticToDynamicMap: $it. " +
-						"GridTransformer.transform() or initializeDynamicMapping() must be called first."
-					)
-			}.toMutableList()
+			dynamicInOuts =
+				inouts
+					.map {
+						// Use existing wrapper from staticToDynamicMap (created by GridTransformer or initializeDynamicMapping)
+						// GridTransformer.transform() already mapped InOut's embedded semaphores (inSemaphore, outSemaphore)
+						// using putIfAbsent(), so all necessary mappings are guaranteed to exist
+						staticToDynamicMap[it] as? DynamicInOut
+							?: throw IllegalStateException(
+								"InOut wrapper not found in staticToDynamicMap: $it. " +
+									"GridTransformer.transform() or initializeDynamicMapping() must be called first."
+							)
+					}.toMutableList()
 		}
 		return dynamicInOuts!!
 	}
@@ -1107,18 +1171,19 @@ open class DefaultSimulationContext(
 		// Get segment from separator based on next/previous tracks
 		// Uses NEXT track (where train is going TO) to check direction
 		// This matches baseline behavior and ensures correct path termination
-		val segment = if (separator is DynamicPathSeparator) {
-			// Dynamic separator - use Dynamic API
-			getSegment(separator, next, previous)
-		} else {
-			// Static separator - extract node cell and use static API
-			val nodeCell = CellUtilities.assertNodeCell(separator)
-			if (next != null) {
-				getSegment(nodeCell, next as? DynamicTrackBlock)
+		val segment =
+			if (separator is DynamicPathSeparator) {
+				// Dynamic separator - use Dynamic API
+				getSegment(separator, next, previous)
 			} else {
-				null
+				// Static separator - extract node cell and use static API
+				val nodeCell = CellUtilities.assertNodeCell(separator)
+				if (next != null) {
+					getSegment(nodeCell, next as? DynamicTrackBlock)
+				} else {
+					null
+				}
 			}
-		}
 		// Allow null segment for InOut (both static and Dynamic wrapper)
 		if (segment == null && (separator is InOut || separator is DynamicInOut)) return true
 		requireSimulation(segment != null) { "Segment cannot be null for separator $separator" }

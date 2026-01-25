@@ -9,10 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
@@ -21,12 +17,15 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.conflict
-import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -109,35 +108,46 @@ abstract class AbstractPath protected constructor(
 	 * @return DynamicTrack wrapper for state operations
 	 * @throws ClassCastException if track is not a TrackFacility
 	 */
-	private fun toDynamicTrack(track: Track): DynamicTrack {
+	/**
+	 * Ensure track is a TrackFacility (DynamicTrackBlock or DynamicTrack).
+	 *
+	 * **CRITICAL FIX (Issue #282):** Do NOT convert DynamicTrackBlock to DynamicTrack!
+	 * Paths contain DynamicTrackBlock instances from the grid. Converting them to
+	 * DynamicTrack wrappers creates duplicate state - one instance gets reserved,
+	 * another instance gets entered, causing "Wrong state: FREE, expected: RESERVED" errors.
+	 */
+	private fun toTrackFacility(track: Track): TrackFacility {
 		require(track is TrackFacility) {
 			"Track in path must be a TrackFacility, got: ${track::class.simpleName}"
 		}
-		return context.toDynamic(track)
+		return track
 	}
 
 	override fun isFreeFrom(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_FREE_FROM) { track, separator ->
-			toDynamicTrack(track).isFreeFrom(separator)
+			toTrackFacility(track).isFreeFrom(separator)
 		}
 
 	override fun isSetUpPath(sep: PathSeparator): Boolean =
 		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
-			toDynamicTrack(track).isSetUpPath(separator)
+			toTrackFacility(track).isSetUpPath(separator)
 		}
 
 	override fun setUpPath(sep: PathSeparator) {
+		logger.debug { "PATH_RESERVATION_START: from=$sep, pathSize=$size" }
+		var blockCount = 0
 		pathIterating(sep, SET_UP_PATH) { track, separator ->
-			val dynamic = toDynamicTrack(track)
-			dynamic.setUpPath(separator)
+			val facility = toTrackFacility(track)
+			facility.setUpPath(separator)
+			blockCount++
 			true
 		}
-		logger.debug { "Path setup from $sep: reserved tracks, length=${length()}" }
+		logger.debug { "PATH_RESERVATION_COMPLETE: from=$sep, reserved $blockCount blocks" }
 	}
 
 	override fun cancelPathSetup(sep: PathSeparator) {
 		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
-			toDynamicTrack(track).cancelPathSetup(separator)
+			toTrackFacility(track).cancelPathSetup(separator)
 			true
 		}
 	}
@@ -187,7 +197,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is TrackFacility) toDynamicTrack(nextTrack).state else "unknown"}"
+								"state=${if (nextTrack is TrackFacility) toTrackFacility(nextTrack).getState() else "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -218,8 +228,9 @@ abstract class AbstractPath protected constructor(
 		previous: Track?,
 		next: Track
 	): Boolean {
-		val dynamicSeparator = separator as? DynamicPathSeparator
-			?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
+		val dynamicSeparator =
+			separator as? DynamicPathSeparator
+				?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
 		val from = context.getSegment(dynamicSeparator, previous, next)
 		val to = context.getSegment(dynamicSeparator, next, previous)
 		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
@@ -325,33 +336,30 @@ abstract class AbstractPath protected constructor(
 
 	// Dynamic behavior methods for Path (aggregate operations)
 	// These are not typically called on Path directly, but required by interface
-	
+
 	override fun getState(): TrackFacility.State {
 		// Path doesn't have its own state - it's an aggregate
 		// Return FREE as default (paths are not facilities themselves)
 		return TrackFacility.State.FREE
 	}
 
-	override fun enter(occupant: TrackOccupant) {
+	override fun enter(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Enter operation not supported on Path aggregate. " +
-			"Call enter() on individual TrackSection elements."
+				"Call enter() on individual TrackSection elements."
 		)
-	}
 
-	override fun leave(occupant: TrackOccupant) {
+	override fun leave(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Leave operation not supported on Path aggregate. " +
-			"Call leave() on individual TrackSection elements."
+				"Call leave() on individual TrackSection elements."
 		)
-	}
 
-	override fun getTrackOccupant(): TrackOccupant {
+	override fun getTrackOccupant(): TrackOccupant =
 		throw UnsupportedOperationException(
 			"getTrackOccupant not supported on Path aggregate. " +
-			"Query individual TrackSection elements."
+				"Query individual TrackSection elements."
 		)
-	}
 
 	override fun reversePath(): Path {
 		val arrayPath = ArrayPath(getContext())

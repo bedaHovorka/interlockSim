@@ -9,10 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
@@ -41,7 +40,8 @@ class DynamicInOut(
 	val staticRef: InOut,
 	val inSemaphore: DynamicRailSemaphore,
 	val outSemaphore: DynamicRailSemaphore
-) : OrientedPathSeparator by staticRef, DynamicPathSeparator {
+) : OrientedPathSeparator by staticRef,
+	DynamicPathSeparator {
 	// Static properties delegated from wrapped object
 	val name: String
 		get() = staticRef.getName()
@@ -131,7 +131,5 @@ class DynamicInOut(
 	private fun getSemaphoreForWithException(
 		from: Cell.Segment?,
 		to: Cell.Segment?
-	): DynamicRailSemaphore {
-		return getSemaphoreFor(from, to) ?: throw PathSeparatorChangeException(this)
-	}
+	): DynamicRailSemaphore = getSemaphoreFor(from, to) ?: throw PathSeparatorChangeException(this)
 }

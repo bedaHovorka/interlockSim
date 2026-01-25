@@ -20,9 +20,11 @@ import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import assertk.assertions.prop
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -31,12 +33,11 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrackWithSemaphore
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -58,16 +59,17 @@ import org.koin.test.inject
  */
 @DisplayName("DefaultSimulationContext")
 class DefaultSimulationContextTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Nested
 	@DisplayName("Grid Operations - Immutability Enforcement")
 	inner class GridOperationsTests {
-		private lateinit var context: DefaultSimulationContext
+		private lateinit var context: SimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = factory.createEmptySimulationContext()
+			context = simulationContextFactory.createEmptyContext()
 		}
 
 		// Note: Editing operation tests removed after Issue #153.5
@@ -96,7 +98,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = factory.createEmptySimulationContext()
+			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -150,7 +152,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			// Assert - should be a single character A-T
 			assertThat(randomName).isNotNull()
 			assertThat(randomName.length).isEqualTo(1)
-			assertThat(randomName[0]).prop("character code") { it.code }
+			assertThat(randomName[0])
+				.prop("character code") { it.code }
 				.isGreaterThan(64) // 'A' is 65
 		}
 	}
@@ -158,11 +161,11 @@ class DefaultSimulationContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Report Management")
 	inner class ReportManagementTests {
-		private lateinit var context: DefaultSimulationContext
+		private lateinit var context: SimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = factory.createEmptySimulationContext()
+			context = simulationContextFactory.createEmptyContext()
 		}
 
 		@Test
@@ -223,7 +226,9 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		fun setUp() {
 			// Create a multi-block track using EditingContext, then convert to SimulationContext
 			// InOut-A -> RS1 -> RS2 -> InOut-B
-			val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(30, 30)
+			val editingContext =
+				cz.vutbr.fit.interlockSim.context
+					.DefaultEditingContext(30, 30)
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			rs2 = RailSemaphore(false, SpatialType.HORIZONTAL)
@@ -243,11 +248,12 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			editingContext.putCell(pB, outB)
 			editingContext.joinCells(pA, r1, tl1)
 			editingContext.joinCells(r2, pB, tl2)
-			
+
 			// Convert to simulation context
-			val processFactory = org.koin.java.KoinJavaComponent.get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>(
-				cz.vutbr.fit.interlockSim.context.SimulationProcessFactory::class.java
-			)
+			val processFactory =
+				org.koin.java.KoinJavaComponent.get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>(
+					cz.vutbr.fit.interlockSim.context.SimulationProcessFactory::class.java
+				)
 			context = DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 		}
 
@@ -331,7 +337,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		fun setUp() {
 			// Create a simple track: InOut-A -> Semaphore -> InOut-B
 			// Build with editing context first
-			val editingContext = this@DefaultSimulationContextTest.factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 			inA = InOut("A", false, SpatialType.HORIZONTAL)
 			rs1 = RailSemaphore(false, SpatialType.DIAGONAL1)
 			outB = InOut("B", true, SpatialType.HORIZONTAL)
@@ -347,7 +353,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			editingContext.joinCells(pA, r1, tl)
 
 			// Convert to simulation context for testing
-			context = this@DefaultSimulationContextTest.factory.createContext(editingContext)
+			context = this@DefaultSimulationContextTest.simulationContextFactory.createContext(editingContext)
 			// Trigger lazy initialization of dynamic wrappers
 			context.getInOuts()
 		}
@@ -421,7 +427,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultSimulationContextTest.factory.createEmptySimulationContext()
+			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
 		}
 
 		@Test
@@ -473,11 +479,11 @@ class DefaultSimulationContextTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Report Management")
 	inner class ReportManagementTests2 {
-		private lateinit var context: DefaultSimulationContext
+		private lateinit var context: SimulationContext
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultSimulationContextTest.factory.createEmptySimulationContext()
+			context = simulationContextFactory.createEmptyContext()
 		}
 
 		@Test
@@ -524,8 +530,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(InOut::class)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(InOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(DynamicInOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(DynamicInOut::class)
 		}
 
 		@Test
@@ -537,18 +543,18 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			// Assert
 			assertThat(context).isNotNull()
 			val semaphoreCell = context.getRailWayNetGrid().getCellAt(4, 2)
-			assertThat(semaphoreCell).isNotNull().isInstanceOf(RailSemaphore::class)
+			assertThat(semaphoreCell).isNotNull().isInstanceOf(DynamicRailSemaphore::class)
 		}
 
 		@Test
 		@DisplayName("buildMinimal creates single InOut context")
 		fun buildMinimal_createsSingleInOut() {
 			// Act
-			val context = buildMinimal()
+			val context = buildMinimalSimulation()
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(InOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(1, 1)).isNotNull().isInstanceOf(DynamicInOut::class)
 		}
 
 		@Test
@@ -560,13 +566,13 @@ class DefaultSimulationContextTest : KoinTestBase() {
 					.withInOut("Entry", 2, 2, false)
 					.withSemaphore(5, 5, true)
 					.withInOut("Exit", 8, 8, true)
-					.build()
+					.buildSimulationContext()
 
 			// Assert
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(InOut::class)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(RailSemaphore::class)
-			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(InOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(DynamicInOut::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(DynamicRailSemaphore::class)
+			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(DynamicInOut::class)
 		}
 	}
 
@@ -577,7 +583,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUp() {
-			context = this@DefaultSimulationContextTest.factory.createEmptyContext()
+			context = editingContextFactory.createEmptyContext()
 		}
 
 		@Test

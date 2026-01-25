@@ -82,6 +82,7 @@ abstract class AbstractFrameTestBase : KoinTestBase() {
 	 * This ensures Frame is available for GUI tests.
 	 */
 	override fun getTestModule(): Module = testModuleFull
+
 	/**
 	 * List of Frame instances created during test execution.
 	 * Subclasses should add Frame references to this list for automatic disposal.

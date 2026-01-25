@@ -9,15 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 
 /**
  * Timetable of Train
  *
  */
 class Timetable(
-	private val `in`: InOut,
-	private val out: InOut,
+	private val `in`: DynamicInOut,
+	private val out: DynamicInOut,
 	private val inTime: Time,
 	private val outTime: Time,
 	private var length: Double
@@ -27,12 +27,12 @@ class Timetable(
 	/**
 	 * @return start point of train
 	 */
-	fun getIn(): InOut = `in`
+	fun getIn(): DynamicInOut = `in`
 
 	/**
 	 * @return end point of train
 	 */
-	fun getOut(): InOut = out
+	fun getOut(): DynamicInOut = out
 
 	// 	/**
 	// 	 * @return all station in net EXTENSION

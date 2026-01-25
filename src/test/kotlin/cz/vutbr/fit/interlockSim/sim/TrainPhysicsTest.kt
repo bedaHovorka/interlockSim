@@ -15,16 +15,16 @@ import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import io.mockk.every
-import io.mockk.mockk
 
 /**
  * Comprehensive unit tests for Train physics and Motor inner class.
@@ -514,12 +514,12 @@ class TrainPhysicsTest : KoinTestBase() {
 	 * @return configured Timetable instance
 	 */
 	private fun createTimetableWithLength(length: Double): Timetable {
-		val mockInOut = mockk<InOut>()
-		every { mockInOut.getName() } returns "MOCK_IN"
+		val mockInOut = mockk<DynamicInOut>()
+		every { mockInOut.name } returns "MOCK_IN"
 		every { mockInOut.toString() } returns "InOut:MOCK_IN"
 
-		val mockOutOut = mockk<InOut>()
-		every { mockOutOut.getName() } returns "MOCK_OUT"
+		val mockOutOut = mockk<DynamicInOut>()
+		every { mockOutOut.name } returns "MOCK_OUT"
 		every { mockOutOut.toString() } returns "InOut:MOCK_OUT"
 
 		return Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), length)

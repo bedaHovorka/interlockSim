@@ -16,9 +16,9 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -68,7 +68,7 @@ import org.koin.test.inject
 @Tag("integration-test")
 @DisplayName("ShuntingLoop Operational Tests")
 class ShuntingLoopOperationalTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var validContext: SimulationContext
 
 	@BeforeEach
@@ -78,7 +78,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 			javaClass.getResourceAsStream(
 				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 			)
-		val context = factory.createContext(xml) as DefaultSimulationContext
+		val context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		validContext = MockSimulationContext(context)
 	}
 

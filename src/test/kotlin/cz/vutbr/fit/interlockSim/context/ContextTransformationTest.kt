@@ -16,14 +16,13 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -48,7 +47,8 @@ import org.koin.test.inject
  * @since 2026-01-20
  */
 class ContextTransformationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -61,10 +61,10 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `transform empty editing context to simulation context`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert
 		assertThat(simulationContext).isNotNull()
@@ -78,14 +78,14 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `transform simple network editing to simulation`() {
 		// Arrange - Build simple network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Network structure preserved
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
@@ -100,7 +100,7 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `transform complex network editing to simulation`() {
 		// Arrange - Build complex network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		val p1 = Point(1, 1)
 		val p2 = Point(3, 3)
 		val p3 = Point(5, 5)
@@ -113,7 +113,7 @@ class ContextTransformationTest : KoinTestBase() {
 		editingContext.joinCells(p2, p3, track2)
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - All components preserved
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
@@ -130,13 +130,13 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `properties preserved during transformation`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.currentMaxSpeed = 120.0
 		editingContext.currentTrackLength = 750.0
 		editingContext.currentNameString = "TestTransform"
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Properties preserved (simulation context inherits from BaseContext)
 		// Note: These are BaseContext properties, so they should be accessible
@@ -151,7 +151,7 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `graph structure preserved during transformation`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -159,7 +159,7 @@ class ContextTransformationTest : KoinTestBase() {
 		val editingGraphSize = editingContext.getGraph().size()
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Graph size matches
 		assertThat(simulationContext.getGraph().size()).isEqualTo(editingGraphSize)
@@ -171,14 +171,14 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `dynamic mapping created correctly during transformation`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - InOut cells transformed to DynamicInOut
 		val inOuts = simulationContext.getInOuts()
@@ -196,14 +196,14 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `simulation context frozen after transformation`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Simulation context should be frozen
 		// Note: SimulationContext doesn't extend EditingContext, so we can't call freeze/isFrozen directly
@@ -222,27 +222,83 @@ class ContextTransformationTest : KoinTestBase() {
 	@Test
 	fun `multiple transformations work correctly`() {
 		// First transformation
-		val editing1 = factory.createEmptyContext()
+		val editing1 = editingContextFactory.createEmptyContext()
 		editing1.putCell(Point(1, 1), inA)
 		editing1.putCell(Point(5, 5), outB)
 		val trackBlock1 = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editing1.joinCells(Point(1, 1), Point(5, 5), trackBlock1)
-		val sim1 = factory.createContext(editing1)
+		val sim1 = simulationContextFactory.createContext(editing1)
 		assertThat(sim1.getGraph().size()).isGreaterThan(0)
 
 		// Second transformation (new editing context, same structure)
-		val editing2 = factory.createEmptyContext()
+		val editing2 = editingContextFactory.createEmptyContext()
 		val inA2 = InOut("A2", false, SpatialType.HORIZONTAL)
 		val outB2 = InOut("B2", true, SpatialType.HORIZONTAL)
 		editing2.putCell(Point(2, 2), inA2)
 		editing2.putCell(Point(6, 6), outB2)
 		val trackBlock2 = SimpleTrackBlock(inA2, outB2, 1000.0, 80.0)
 		editing2.joinCells(Point(2, 2), Point(6, 6), trackBlock2)
-		val sim2 = factory.createContext(editing2)
+		val sim2 = simulationContextFactory.createContext(editing2)
 		assertThat(sim2.getGraph().size()).isGreaterThan(0)
 
 		// Both simulations should be independent
 		assertThat(sim1.getInOuts().first().name).isEqualTo("A")
 		assertThat(sim2.getInOuts().first().name).isEqualTo("A2")
+	}
+
+	/**
+	 * Test 9: Simulation grid stores DYNAMIC cells, not static cells
+	 *
+	 * **Fix for Issue #280/#284:**
+	 * This test verifies that after transformation, the simulation grid contains
+	 * DynamicInOut wrappers instead of static InOut cells. This prevents identity
+	 * mismatches during train navigation that caused deadlocks.
+	 *
+	 * Before the fix: copyGridCells() copied static cells → grid navigation returned static cells
+	 * After the fix: GridTransformer.dynamicGrid used → grid navigation returns dynamic wrappers
+	 *
+	 * Architecture note: The inouts list contains static InOut instances (for backward
+	 * compatibility), but the GRID contains DynamicInOut wrappers. This is the key fix!
+	 */
+	@Test
+	fun `simulation grid stores dynamic cells not static cells`() {
+		// Arrange - Create editing context with InOut cells
+		val editingContext = editingContextFactory.createEmptyContext()
+		editingContext.putCell(Point(1, 1), inA)
+		editingContext.putCell(Point(5, 5), outB)
+		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
+
+		// Act - Transform to simulation context
+		val simulationContext = simulationContextFactory.createContext(editingContext)
+
+		// Assert - Grid cells are DynamicInOut wrappers, NOT static InOut
+		val grid = simulationContext.getRailWayNetGrid()
+
+		// Check cell at Point(1, 1) - MUST be DynamicInOut in grid
+		val cellAt1 = grid.getCellAt(1, 1)
+		assertThat(cellAt1).isNotNull()
+		assertThat(cellAt1!!).isInstanceOf(DynamicInOut::class)
+		val dynInOut1 = cellAt1 as DynamicInOut
+		assertThat(dynInOut1.staticRef).isNotNull()
+
+		// Check cell at Point(5, 5) - MUST be DynamicInOut in grid
+		val cellAt2 = grid.getCellAt(5, 5)
+		assertThat(cellAt2).isNotNull()
+		assertThat(cellAt2!!).isInstanceOf(DynamicInOut::class)
+		val dynInOut2 = cellAt2 as DynamicInOut
+		assertThat(dynInOut2.staticRef).isNotNull()
+
+		// Architecture note: The internal inouts list contains STATIC InOut instances,
+		// but getInOuts() returns DynamicInOut wrappers (via staticToDynamicMap lookup).
+		// This is the correct behavior - API returns dynamic wrappers for simulation.
+		val inOuts = simulationContext.getInOuts()
+		assertThat(inOuts.size).isEqualTo(2)
+		for (inout in inOuts) {
+			// getInOuts() returns DynamicInOut wrappers
+			assertThat(inout).isInstanceOf(DynamicInOut::class)
+			// Each wrapper has a staticRef to the original InOut
+			assertThat(inout.staticRef).isInstanceOf(InOut::class)
+		}
 	}
 }

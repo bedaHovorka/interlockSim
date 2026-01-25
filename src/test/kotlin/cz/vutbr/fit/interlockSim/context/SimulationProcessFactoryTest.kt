@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -18,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker

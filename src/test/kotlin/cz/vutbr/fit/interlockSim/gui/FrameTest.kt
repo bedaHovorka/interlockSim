@@ -17,7 +17,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -39,13 +39,13 @@ import javax.swing.JScrollPane
  */
 @DisplayName("Frame")
 class FrameTest : AbstractFrameTestBase() {
-	private val xmlFactory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 	private lateinit var frame: Frame
 
 	@BeforeEach
 	override fun setUp() {
 		super.setUp()
-		
+
 		// Create Frame on EDT
 		runOnEDT {
 			frame = Frame()
@@ -120,7 +120,7 @@ class FrameTest : AbstractFrameTestBase() {
 			val centerComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.CENTER)
 			assertThat(centerComponent).isNotNull()
 			assertThat(centerComponent).isInstanceOf(JScrollPane::class)
-			
+
 			// Verify canvas is in scroll pane
 			val scrollPane = centerComponent as JScrollPane
 			assertThat(scrollPane.viewport.view).isInstanceOf(RailwayNetGridCanvas::class)
@@ -155,11 +155,11 @@ class FrameTest : AbstractFrameTestBase() {
 	fun setContextUpdatesCanvasContext() {
 		runOnEDT {
 			// Create a context
-			val context = xmlFactory.createEmptyContext()
-			
+			val context = editingContextFactory.createEmptyContext()
+
 			// Set context on frame
 			frame.setContext(context)
-			
+
 			// Verify canvas received the context
 			val canvasContext = frame.railwayNetGridCanvas.getEditingContext()
 			assertThat(canvasContext).isNotNull()
@@ -173,20 +173,21 @@ class FrameTest : AbstractFrameTestBase() {
 	fun setContextRegistersStatusBarAsPropertyChangeListener() {
 		runOnEDT {
 			// Create a context
-			val context = xmlFactory.createEmptyContext()
-			
+			val context = editingContextFactory.createEmptyContext()
+
 			// Create a test listener to verify registration works
 			var listenerCalled = false
-			val testListener = java.beans.PropertyChangeListener { evt ->
-				listenerCalled = true
-			}
-			
+			val testListener =
+				java.beans.PropertyChangeListener { evt ->
+					listenerCalled = true
+				}
+
 			// Add test listener to verify the mechanism works
 			context.addPropertyChangeListener(testListener)
-			
+
 			// Set context on frame (should register status bar as listener)
 			frame.setContext(context)
-			
+
 			// Verify the context accepts property change listeners
 			// (The actual registration is internal to Frame, we just verify no exception)
 			context.removePropertyChangeListener(testListener)
@@ -210,7 +211,7 @@ class FrameTest : AbstractFrameTestBase() {
 	fun frameLayoutIsConsistent() {
 		runOnEDT {
 			val layout = frame.contentPane.layout as BorderLayout
-			
+
 			// Verify all expected components are present
 			assertThat(layout.getLayoutComponent(BorderLayout.CENTER)).isNotNull()
 			assertThat(layout.getLayoutComponent(BorderLayout.NORTH)).isNotNull()

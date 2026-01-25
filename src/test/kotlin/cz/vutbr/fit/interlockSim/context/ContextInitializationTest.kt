@@ -16,12 +16,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
-import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -51,7 +51,8 @@ import java.io.File
  */
 @DisplayName("Context Initialization")
 class ContextInitializationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Nested
 	@DisplayName("Factory Selection")
@@ -68,7 +69,7 @@ class ContextInitializationTest : KoinTestBase() {
 			// Arrange (factory injected via Koin)
 
 			// Act
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			// Assert
 			assertThat(context)
@@ -91,8 +92,7 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("empty editing context has valid empty grid")
 		fun editingContext_emptyGrid_isValid() {
 			// Arrange
-			val factory = this@ContextInitializationTest.factory
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			// Act
 			val grid = context.getRailWayNetGrid()
@@ -120,11 +120,10 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("simulation context created for sim mode from editing context")
 		fun simulationFactory_createsFromEditingContext() {
 			// Arrange
-			val factory = this@ContextInitializationTest.factory
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Act
-			val simulationContext = factory.createContext(editingContext)
+			val simulationContext = simulationContextFactory.createContext(editingContext)
 
 			// Assert
 			assertThat(simulationContext)
@@ -153,7 +152,7 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml")
 
 			// Act
-			val context = this@ContextInitializationTest.factory.createContext(xmlFile)
+			val context = editingContextFactory.createContext(xmlFile)
 
 			// Assert
 			assertThat(context)
@@ -177,7 +176,7 @@ class ContextInitializationTest : KoinTestBase() {
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
 
 			// Act
-			val context = this@ContextInitializationTest.factory.createContext(xmlFile)
+			val context = editingContextFactory.createContext(xmlFile)
 
 			// Assert
 			assertThat(context)
@@ -218,7 +217,7 @@ class ContextInitializationTest : KoinTestBase() {
 			// Act & Assert
 			assertk
 				.assertFailure {
-					this@ContextInitializationTest.factory.createContext(xmlFile)
+					this@ContextInitializationTest.editingContextFactory.createContext(xmlFile)
 				}.isInstanceOf(Exception::class)
 		}
 
@@ -237,7 +236,7 @@ class ContextInitializationTest : KoinTestBase() {
 			// Act & Assert
 			assertk
 				.assertFailure {
-					this@ContextInitializationTest.factory.createContext(xmlFile)
+					editingContextFactory.createContext(xmlFile)
 				}.isInstanceOf(Exception::class)
 		}
 	}
@@ -251,7 +250,8 @@ class ContextInitializationTest : KoinTestBase() {
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
 			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			linearTrackContext = this@ContextInitializationTest.factory.createContext(xmlFile) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(xmlFile) as EditingContext
+			linearTrackContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 
 		/**
@@ -293,12 +293,12 @@ class ContextInitializationTest : KoinTestBase() {
 			@Suppress("UNCHECKED_CAST")
 			val grid = linearTrackContext.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
-			val inOutPoints = mutableListOf<InOut>()
+			val inOutPoints = mutableListOf<DynamicInOut>()
 
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
 					val cell = grid.getCellAt(x, y)
-					if (cell is InOut) {
+					if (cell is DynamicInOut) {
 						inOutCount++
 						inOutPoints.add(cell)
 					}
@@ -381,7 +381,7 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("empty context has valid initial state")
 		fun emptyContext_hasValidState() {
 			// Arrange & Act
-			val emptyContext = buildMinimal()
+			val emptyContext = buildMinimalSimulation()
 
 			// Assert - Verify basic structure
 			assertThat(emptyContext)
@@ -414,8 +414,8 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("XMLContextFactory uses singleton pattern")
 		fun xmlContextFactory_isSingleton() {
 			// Arrange & Act
-			val factory1 = this@ContextInitializationTest.factory
-			val factory2 = this@ContextInitializationTest.factory
+			val factory1 = this@ContextInitializationTest.editingContextFactory
+			val factory2 = this@ContextInitializationTest.editingContextFactory
 
 			// Assert
 			assertThat(factory1)
@@ -433,14 +433,11 @@ class ContextInitializationTest : KoinTestBase() {
 		@Test
 		@DisplayName("factory creates appropriate context for mode")
 		fun factory_createsContextForMode() {
-			// Arrange
-			val factory = this@ContextInitializationTest.factory
-
 			// Act - Create editing context
-			val editingContext = factory.createEmptyContext()
+			val editingContext = editingContextFactory.createEmptyContext()
 
 			// Convert to simulation context
-			val simulationContext = factory.createContext(editingContext)
+			val simulationContext = simulationContextFactory.createContext(editingContext)
 
 			// Assert
 			assertThat(editingContext)
@@ -461,7 +458,7 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("factory creates independent context instances")
 		fun factory_createsIndependentInstances() {
 			// Arrange
-			val factory = this@ContextInitializationTest.factory
+			val factory = this@ContextInitializationTest.editingContextFactory
 
 			// Act
 			val context1 = factory.createEmptyContext()

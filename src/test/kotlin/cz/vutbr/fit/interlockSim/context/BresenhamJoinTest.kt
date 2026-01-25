@@ -14,14 +14,13 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -36,12 +35,12 @@ import org.koin.test.inject
  */
 @DisplayName("Bresenham Line Algorithm (via joinCells)")
 class BresenhamJoinTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 	private lateinit var context: EditingContext
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext()
+		context = editingContextFactory.createEmptyContext()
 	}
 
 	@Test
@@ -262,8 +261,8 @@ class BresenhamJoinTest : KoinTestBase() {
 		val block2 = SimpleTrackBlock(inA2, inB2, 1000.0, 80.0)
 
 		// Create two separate contexts to test both directions independently
-		val context1 = factory.createEmptyContext()
-		val context2 = factory.createEmptyContext()
+		val context1 = editingContextFactory.createEmptyContext()
+		val context2 = editingContextFactory.createEmptyContext()
 
 		context1.putCell(p1, inA1)
 		context1.putCell(p2, inB1)

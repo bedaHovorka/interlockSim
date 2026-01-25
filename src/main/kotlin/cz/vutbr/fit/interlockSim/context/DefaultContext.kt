@@ -57,10 +57,11 @@ abstract class DefaultContext(
 ) : DefaultSimulationContext(cols, rows, processFactory) {
 	@Deprecated(
 		message = "Use primary constructor DefaultSimulationContext(cols, rows, processFactory)",
-		replaceWith = ReplaceWith(
-			"DefaultSimulationContext(cols, rows, processFactory)",
-			"cz.vutbr.fit.interlockSim.context.DefaultSimulationContext"
-		),
+		replaceWith =
+			ReplaceWith(
+				"DefaultSimulationContext(cols, rows, processFactory)",
+				"cz.vutbr.fit.interlockSim.context.DefaultSimulationContext"
+			),
 		level = DeprecationLevel.WARNING
 	)
 	protected constructor(

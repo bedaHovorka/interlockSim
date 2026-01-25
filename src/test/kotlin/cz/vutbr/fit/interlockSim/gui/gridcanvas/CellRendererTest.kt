@@ -11,13 +11,13 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -31,169 +31,169 @@ import java.awt.image.BufferedImage
  */
 @DisplayName("CellRenderer Static/Dynamic Support")
 class CellRendererTest {
-private lateinit var editorRenderer: EditorCellRenderer
-private lateinit var simulationRenderer: SimulationCellRenderer
-private lateinit var graphics: Graphics2D
+	private lateinit var editorRenderer: EditorCellRenderer
+	private lateinit var simulationRenderer: SimulationCellRenderer
+	private lateinit var graphics: Graphics2D
 
-@BeforeEach
-fun setUp() {
-val cellWidth = 16
-val cellHeight = 16
-editorRenderer = EditorCellRenderer(cellWidth, cellHeight)
-simulationRenderer = SimulationCellRenderer(cellWidth, cellHeight)
+	@BeforeEach
+	fun setUp() {
+		val cellWidth = 16
+		val cellHeight = 16
+		editorRenderer = EditorCellRenderer(cellWidth, cellHeight)
+		simulationRenderer = SimulationCellRenderer(cellWidth, cellHeight)
 
 // Create a dummy Graphics2D for testing
-val image = BufferedImage(cellWidth, cellHeight, BufferedImage.TYPE_INT_ARGB)
-graphics = image.createGraphics()
-}
+		val image = BufferedImage(cellWidth, cellHeight, BufferedImage.TYPE_INT_ARGB)
+		graphics = image.createGraphics()
+	}
 
 // Helper method to create DynamicInOut with required semaphores
-private fun createDynamicInOut(staticInOut: InOut): DynamicInOut {
-val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
-val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
-return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
-}
+	private fun createDynamicInOut(staticInOut: InOut): DynamicInOut {
+		val inSemaphore = createDynamicInstance(staticInOut.getInSemaphore())
+		val outSemaphore = createDynamicInstance(staticInOut.getOutSemaphore())
+		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
+	}
 
-@Test
-fun `EditorCellRenderer can render static RailSwitch`() {
+	@Test
+	fun `EditorCellRenderer can render static RailSwitch`() {
 // Given
-val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, railSwitch)
-}
+		editorRenderer.draw(graphics, railSwitch)
+	}
 
-@Test
-fun `EditorCellRenderer can render static RailSemaphore`() {
+	@Test
+	fun `EditorCellRenderer can render static RailSemaphore`() {
 // Given
-val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, railSemaphore)
-}
+		editorRenderer.draw(graphics, railSemaphore)
+	}
 
-@Test
-fun `EditorCellRenderer can render static InOut`() {
+	@Test
+	fun `EditorCellRenderer can render static InOut`() {
 // Given
-val inOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
+		val inOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, inOut)
-}
+		editorRenderer.draw(graphics, inOut)
+	}
 
-@Test
-fun `EditorCellRenderer can render DynamicRailSwitch`() {
+	@Test
+	fun `EditorCellRenderer can render DynamicRailSwitch`() {
 // Given
-val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-val dynamicSwitch = DynamicRailSwitch(staticSwitch)
+		val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val dynamicSwitch = DynamicRailSwitch(staticSwitch)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, dynamicSwitch)
-}
+		editorRenderer.draw(graphics, dynamicSwitch)
+	}
 
-@Test
-fun `EditorCellRenderer can render DynamicRailSemaphore`() {
+	@Test
+	fun `EditorCellRenderer can render DynamicRailSemaphore`() {
 // Given
-val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-val dynamicSemaphore = createDynamicInstance(staticSemaphore)
+		val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, dynamicSemaphore)
-}
+		editorRenderer.draw(graphics, dynamicSemaphore)
+	}
 
-@Test
-fun `EditorCellRenderer can render DynamicInOut`() {
+	@Test
+	fun `EditorCellRenderer can render DynamicInOut`() {
 // Given
-val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
-val dynamicInOut = createDynamicInOut(staticInOut)
+		val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut = createDynamicInOut(staticInOut)
 
 // When/Then - should not throw exception
-editorRenderer.draw(graphics, dynamicInOut)
-}
+		editorRenderer.draw(graphics, dynamicInOut)
+	}
 
-@Test
-fun `SimulationCellRenderer can render static RailSwitch`() {
+	@Test
+	fun `SimulationCellRenderer can render static RailSwitch`() {
 // Given
-val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, railSwitch)
-}
+		simulationRenderer.draw(graphics, railSwitch)
+	}
 
-@Test
-fun `SimulationCellRenderer can render static RailSemaphore`() {
+	@Test
+	fun `SimulationCellRenderer can render static RailSemaphore`() {
 // Given
-val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, railSemaphore)
-}
+		simulationRenderer.draw(graphics, railSemaphore)
+	}
 
-@Test
-fun `SimulationCellRenderer can render static InOut`() {
+	@Test
+	fun `SimulationCellRenderer can render static InOut`() {
 // Given
-val inOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
+		val inOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, inOut)
-}
+		simulationRenderer.draw(graphics, inOut)
+	}
 
-@Test
-fun `SimulationCellRenderer can render DynamicRailSwitch`() {
+	@Test
+	fun `SimulationCellRenderer can render DynamicRailSwitch`() {
 // Given
-val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-val dynamicSwitch = DynamicRailSwitch(staticSwitch)
+		val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val dynamicSwitch = DynamicRailSwitch(staticSwitch)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, dynamicSwitch)
-}
+		simulationRenderer.draw(graphics, dynamicSwitch)
+	}
 
-@Test
-fun `SimulationCellRenderer can render DynamicRailSemaphore`() {
+	@Test
+	fun `SimulationCellRenderer can render DynamicRailSemaphore`() {
 // Given
-val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-val dynamicSemaphore = createDynamicInstance(staticSemaphore)
+		val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, dynamicSemaphore)
-}
+		simulationRenderer.draw(graphics, dynamicSemaphore)
+	}
 
-@Test
-fun `SimulationCellRenderer can render DynamicInOut`() {
+	@Test
+	fun `SimulationCellRenderer can render DynamicInOut`() {
 // Given
-val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
-val dynamicInOut = createDynamicInOut(staticInOut)
+		val staticInOut = InOut("TestInOut", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut = createDynamicInOut(staticInOut)
 
 // When/Then - should not throw exception
-simulationRenderer.draw(graphics, dynamicInOut)
-}
+		simulationRenderer.draw(graphics, dynamicInOut)
+	}
 
-@Test
-fun `SimulationCellRenderer extracts static reference from dynamic cells`() {
+	@Test
+	fun `SimulationCellRenderer extracts static reference from dynamic cells`() {
 // Given
-val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-val dynamicSwitch = DynamicRailSwitch(staticSwitch)
+		val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val dynamicSwitch = DynamicRailSwitch(staticSwitch)
 
 // When/Then - verify staticRef is accessible
-assertThat(dynamicSwitch.staticRef).isNotNull()
-}
+		assertThat(dynamicSwitch.staticRef).isNotNull()
+	}
 
-@Test
-fun `CellRenderer draw method uses reflection to find correct draw method`() {
+	@Test
+	fun `CellRenderer draw method uses reflection to find correct draw method`() {
 // Given
-val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 // When/Then - should find and invoke the correct draw method
-editorRenderer.draw(graphics, railSwitch as Cell)
-}
+		editorRenderer.draw(graphics, railSwitch as Cell)
+	}
 
-@Test
-fun `CellRenderer draw method works with dynamic cells via reflection`() {
+	@Test
+	fun `CellRenderer draw method works with dynamic cells via reflection`() {
 // Given
-val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-val dynamicSwitch = DynamicRailSwitch(staticSwitch)
+		val staticSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val dynamicSwitch = DynamicRailSwitch(staticSwitch)
 
 // When/Then - should find and invoke the correct draw method for dynamic cell
-editorRenderer.draw(graphics, dynamicSwitch as Cell)
-}
+		editorRenderer.draw(graphics, dynamicSwitch as Cell)
+	}
 }

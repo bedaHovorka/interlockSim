@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.objects.cells.AbstractCell
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
@@ -19,7 +20,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * ## Type Parameters
  *
  * EditingContext specializes Context to use:
- * - [NodeCell] as the cell type
+ * - [AbstractCell] as the cell type
  * - [TrackBlock] as the track block type (static configuration)
  *
  * While editing operations via [putCell] only accept [NodeCell] and its
@@ -45,7 +46,7 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context<NodeCell, TrackBlock> {
+interface EditingContext : Context<AbstractCell, TrackBlock> {
 	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key

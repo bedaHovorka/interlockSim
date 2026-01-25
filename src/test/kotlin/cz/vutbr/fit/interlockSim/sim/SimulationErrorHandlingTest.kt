@@ -17,20 +17,22 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
  * Error handling tests for simulation scenarios.
@@ -63,7 +65,8 @@ import org.koin.test.inject
  */
 @DisplayName("Simulation Error Handling")
 class SimulationErrorHandlingTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var validContext: SimulationContext
 
 	@BeforeEach
@@ -74,7 +77,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 			)
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
-		val loadedContext = factory.createContext(xml) as DefaultSimulationContext
+		val editingContext = editingContextFactory.createContext(xml) as EditingContext
+		val loadedContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		validContext = MockSimulationContext(loadedContext)
 	}
 
@@ -95,14 +99,13 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train constructor detects null context`() {
 			// Arrange - Create timetable for test
 			val inOuts = validContext.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 
 			// Act & Assert
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				Train(null, timetable)
-			}
-				.withMessage("Creating train with null context should throw SimulationException")
+			}.withMessage("Creating train with null context should throw SimulationException")
 				.isFailure()
 				.isInstanceOf(SimulationException::class)
 		}
@@ -121,8 +124,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				Train(validContext, null)
-			}
-				.withMessage("Creating train with null timetable should throw SimulationException")
+			}.withMessage("Creating train with null timetable should throw SimulationException")
 				.isFailure()
 				.isInstanceOf(SimulationException::class)
 		}
@@ -140,13 +142,14 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train allows zero-length configuration`() {
 			// Arrange - Zero-length train (should ideally be invalid)
 			val inOuts = validContext.getInOuts().toList()
-			val zeroLengthTimetable = Timetable(
-				inOuts[0].staticRef,
-				inOuts[1].staticRef,
-				Time(0.0),
-				Time(60.0),
-				0.0 // Zero length - SIM-005: validation missing
-			)
+			val zeroLengthTimetable =
+				Timetable(
+					inOuts[0],
+					inOuts[1],
+					Time(0.0),
+					Time(60.0),
+					0.0 // Zero length - SIM-005: validation missing
+				)
 
 			// Act - Currently allows zero length (not ideal)
 			val train = Train(validContext, zeroLengthTimetable)
@@ -169,13 +172,14 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train allows negative-length configuration`() {
 			// Arrange - Negative-length train (invalid)
 			val inOuts = validContext.getInOuts().toList()
-			val negativeLengthTimetable = Timetable(
-				inOuts[0].staticRef,
-				inOuts[1].staticRef,
-				Time(0.0),
-				Time(60.0),
-				-50.0 // Negative length - SIM-005: validation missing
-			)
+			val negativeLengthTimetable =
+				Timetable(
+					inOuts[0],
+					inOuts[1],
+					Time(0.0),
+					Time(60.0),
+					-50.0 // Negative length - SIM-005: validation missing
+				)
 
 			// Act - Currently allows negative length (not ideal)
 			val train = Train(validContext, negativeLengthTimetable)
@@ -198,7 +202,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		fun `train handles zero distance to semaphore`() {
 			// Arrange
 			val inOuts = validContext.getInOuts().toList()
-			val timetable = createTimetable(inOuts[0].staticRef, inOuts[1].staticRef)
+			val timetable = createTimetable(inOuts[0], inOuts[1])
 			val train = Train(validContext, timetable)
 
 			// Before pathToSemaphore is assigned, distanceToSemaphore() returns 0
@@ -304,8 +308,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				InOutWorker(null!!, inOut)
-			}
-				.withMessage("Creating InOutWorker with null context should throw exception")
+			}.withMessage("Creating InOutWorker with null context should throw exception")
 				.isFailure()
 				.isInstanceOf(NullPointerException::class)
 		}
@@ -323,8 +326,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				InOutWorker(validContext, null!!)
-			}
-				.withMessage("Creating InOutWorker with null InOut should throw exception")
+			}.withMessage("Creating InOutWorker with null InOut should throw exception")
 				.isFailure()
 				.isInstanceOf(NullPointerException::class)
 		}
@@ -394,8 +396,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 			assertThatBlock {
 				@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 				ShuntingLoop(null!!, 60L)
-			}
-				.withMessage("Creating ShuntingLoop with null context should throw exception")
+			}.withMessage("Creating ShuntingLoop with null context should throw exception")
 				.isFailure()
 				.isInstanceOf(NullPointerException::class)
 		}
@@ -439,7 +440,8 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 					"/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml"
 				)
 			requireNotNull(xml) { "linear-track.xml fixture must exist" }
-			val wrongContext = factory.createContext(xml) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(xml) as EditingContext
+			val wrongContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			val mockContext = MockSimulationContext(wrongContext)
 
 			// Act & Assert - Should fail due to hardcoded coordinates
@@ -548,16 +550,14 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 	 * Creates a timetable for testing.
 	 */
 	private fun createTimetable(
-		inRef: InOut,
-		outRef: InOut
-	): Timetable {
-		return Timetable(
+		inRef: DynamicInOut,
+		outRef: DynamicInOut
+	): Timetable =
+		Timetable(
 			inRef,
 			outRef,
 			Time(0.0),
 			Time(60.0),
 			100.0 // 100m train length
 		)
-	}
-
 }
