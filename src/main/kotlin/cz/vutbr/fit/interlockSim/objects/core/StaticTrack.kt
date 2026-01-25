@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.core
 
-
 /**
  * Interface for static (immutable) track properties.
  *

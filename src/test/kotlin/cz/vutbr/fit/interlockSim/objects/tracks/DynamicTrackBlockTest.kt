@@ -9,13 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -65,7 +65,6 @@ class DynamicTrackBlockTest {
 	@Nested
 	@DisplayName("Construction and Property Delegation")
 	inner class ConstructionAndDelegation {
-
 		@Test
 		@DisplayName("delegates static properties to wrapped TrackBlock")
 		fun delegatesStaticProperties() {
@@ -110,7 +109,6 @@ class DynamicTrackBlockTest {
 	@Nested
 	@DisplayName("State Machine Transitions")
 	inner class StateMachineTransitions {
-
 		@Test
 		@DisplayName("FREE to RESERVED via setUpPath")
 		fun freeToReserved() {
@@ -218,7 +216,6 @@ class DynamicTrackBlockTest {
 	@Nested
 	@DisplayName("Invalid Transition Prevention")
 	inner class InvalidTransitions {
-
 		@Test
 		@DisplayName("entering FREE track throws exception")
 		fun cannotEnterFreeTrack() {
@@ -268,7 +265,6 @@ class DynamicTrackBlockTest {
 	@Nested
 	@DisplayName("Identity and Equality")
 	inner class IdentityAndEquality {
-
 		@Test
 		@DisplayName("wrappers for same static block are equal")
 		fun sameStaticBlockEquals() {
@@ -321,7 +317,6 @@ class DynamicTrackBlockTest {
 	@Nested
 	@DisplayName("Additional Functionality")
 	inner class AdditionalFunctionality {
-
 		@Test
 		@DisplayName("can use in hash-based collections")
 		fun hashBasedCollections() {

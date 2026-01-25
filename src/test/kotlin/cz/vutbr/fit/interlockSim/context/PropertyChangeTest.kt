@@ -14,14 +14,13 @@ import assertk.assertions.contains
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -37,13 +36,13 @@ import java.beans.PropertyChangeListener
  */
 @DisplayName("PropertyChange Notification Tests")
 class PropertyChangeTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 	private lateinit var context: EditingContext
 	private lateinit var listener: TestPropertyChangeListener
 
 	@BeforeEach
 	fun setUp() {
-		context = factory.createEmptyContext()
+		context = editingContextFactory.createEmptyContext()
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

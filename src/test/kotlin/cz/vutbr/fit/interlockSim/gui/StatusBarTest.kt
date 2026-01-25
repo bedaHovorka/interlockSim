@@ -100,16 +100,17 @@ class StatusBarTest : KoinTestBase() {
 		statusBar.registerProducer(producer)
 		
 		// Simulate mouse move
-		val mouseEvent = MouseEvent(
-			producer,
-			MouseEvent.MOUSE_MOVED,
-			System.currentTimeMillis(),
-			0,
-			10,
-			20,
-			0,
-			false
-		)
+		val mouseEvent =
+			MouseEvent(
+				producer,
+				MouseEvent.MOUSE_MOVED,
+				System.currentTimeMillis(),
+				0,
+				10,
+				20,
+				0,
+				false
+			)
 		
 		// Trigger mouse moved event
 		producer.fireMouseMove(mouseEvent)
@@ -122,12 +123,13 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("handles property change with CharSequence value")
 	fun handlesPropertyChangeWithCharSequenceValue() {
 		// Create property change event with CharSequence
-		val event = PropertyChangeEvent(
-			this,
-			"status",
-			"old",
-			"New status message"
-		)
+		val event =
+			PropertyChangeEvent(
+				this,
+				"status",
+				"old",
+				"New status message"
+			)
 		
 		// Trigger property change
 		statusBar.propertyChange(event)
@@ -140,12 +142,13 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("handles property change with non-CharSequence value")
 	fun handlesPropertyChangeWithNonCharSequenceValue() {
 		// Create property change event with Integer
-		val event = PropertyChangeEvent(
-			this,
-			"status",
-			null,
-			12345
-		)
+		val event =
+			PropertyChangeEvent(
+				this,
+				"status",
+				null,
+				12345
+			)
 		
 		// Trigger property change
 		statusBar.propertyChange(event)
@@ -161,12 +164,13 @@ class StatusBarTest : KoinTestBase() {
 		statusBar.text = "Initial text"
 		
 		// Create property change event with null new value
-		val event = PropertyChangeEvent(
-			this,
-			"status",
-			"old",
-			null
-		)
+		val event =
+			PropertyChangeEvent(
+				this,
+				"status",
+				"old",
+				null
+			)
 		
 		// Trigger property change
 		statusBar.propertyChange(event)
@@ -179,11 +183,11 @@ class StatusBarTest : KoinTestBase() {
 	 * Test implementation of StatusProducer as a Component.
 	 * This allows us to test the actual mouse listener behavior.
 	 */
-	private inner class TestStatusProducerImpl : Component(), StatusProducer {
-		override fun getStatus(e: MouseEvent): String {
-			return "Test status: ${e.x}, ${e.y}"
-		}
-		
+	private inner class TestStatusProducerImpl :
+		Component(),
+		StatusProducer {
+		override fun getStatus(e: MouseEvent): String = "Test status: ${e.x}, ${e.y}"
+
 		fun fireMouseMove(e: MouseEvent) {
 			// Get all mouse motion listeners and fire event
 			mouseMotionListeners.forEach { listener ->
@@ -196,5 +200,7 @@ class StatusBarTest : KoinTestBase() {
 	 * Mock interface for testing that extends both Component and StatusProducer.
 	 * MockK requires concrete types to mock both interfaces together.
 	 */
-	private abstract class TestStatusProducer : Component(), StatusProducer
+	private abstract class TestStatusProducer :
+		Component(),
+		StatusProducer
 }

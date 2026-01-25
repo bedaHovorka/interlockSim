@@ -15,10 +15,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -69,7 +69,7 @@ import org.koin.test.inject
 @Tag("integration-test")
 @DisplayName("Train Behavior - Configuration Tests")
 class TrainBehaviorTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var context: SimulationContext
 
 	@BeforeEach
@@ -80,7 +80,7 @@ class TrainBehaviorTest : KoinTestBase() {
 				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 			)
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
-		val loadedContext = factory.createContext(xml) as DefaultSimulationContext
+		val loadedContext = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		context = MockSimulationContext(loadedContext)
 	}
 
@@ -688,15 +688,14 @@ class TrainBehaviorTest : KoinTestBase() {
 	private fun createTimetable(
 		inRef: InOut,
 		outRef: InOut
-	): Timetable {
-		return Timetable(
+	): Timetable =
+		Timetable(
 			inRef,
 			outRef,
 			Time(0.0),
 			Time(60.0),
 			100.0 // 100m train length
 		)
-	}
 
 	/**
 	 * Creates a timetable with specified train length.

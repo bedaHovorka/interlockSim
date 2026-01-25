@@ -17,14 +17,13 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -47,7 +46,7 @@ import kotlin.test.assertFailsWith
  */
 @DisplayName("Grid Operations")
 class GridOperationsTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -64,7 +63,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("putCell replaces existing cell correctly")
 		fun putCell_replacesExistingCell() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val point = Point(5, 5)
 
 			// Act - Add first cell
@@ -85,7 +84,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("putCell at boundary (0,0) succeeds")
 		fun putCell_atBoundaryZero_succeeds() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val point = Point(0, 0)
 
 			// Act
@@ -142,7 +141,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("putCell adds InOut to InOut list")
 		fun putCell_addsInOutToList() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			// Act
 			context.putCell(Point(1, 1), inA)
@@ -158,7 +157,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("putCell creates automatic track blocks for adjacent cells")
 		fun putCell_createsAutomaticTrackBlocks() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			// Act - Place two horizontally adjacent InOuts
 			context.putCell(Point(5, 5), inA)
@@ -177,7 +176,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeCell updates graph connections")
 		fun removeCell_updatesGraphConnections() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val point = Point(5, 5)
 			context.putCell(point, inA)
 			context.putCell(Point(6, 5), outB)
@@ -197,7 +196,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeCell on empty cell does nothing")
 		fun removeCell_emptyCell_doesNothing() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val point = Point(5, 5)
 
 			// Act - Remove from empty location (should not throw)
@@ -211,7 +210,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeCell removes InOut from InOut list")
 		fun removeCell_removesInOutFromList() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			assertThat(context.getInOuts()).hasSize(2)
@@ -228,20 +227,30 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeCell removes intermediate track block parts")
 		fun removeCell_removesTrackBlockParts() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(10, 10), outB)
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			context.joinCells(Point(1, 1), Point(10, 10), trackBlock)
 
 			// Count grid cells before removal
-			val cellCountBefore = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountBefore =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 
 			// Act - Remove one endpoint
 			context.removeCell(Point(1, 1))
 
 			// Assert - Intermediate cells should also be removed
-			val cellCountAfter = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountAfter =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			assertThat(cellCountAfter).isEqualTo(1) // Only outB remains
 		}
 	}
@@ -253,7 +262,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("moveCell preserves track connections")
 		fun moveCell_preservesTrackConnections() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val from = Point(5, 5)
 			val to = Point(7, 7)
 			context.putCell(from, inA)
@@ -272,7 +281,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("moveCell to occupied destination does nothing")
 		fun moveCell_occupiedDestination_doesNothing() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val from = Point(5, 5)
 			val to = Point(7, 7)
 			context.putCell(from, inA)
@@ -290,7 +299,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("moveCell from empty source does nothing")
 		fun moveCell_emptySource_doesNothing() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val from = Point(5, 5)
 			val to = Point(7, 7)
 
@@ -306,7 +315,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("moveCell maintains InOut list")
 		fun moveCell_maintainsInOutList() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(5, 5), inA)
 			assertThat(context.getInOuts()).hasSize(1)
 
@@ -325,7 +334,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("joinCells with invalid track length fails gracefully")
 		fun joinCells_invalidTrackLength_failsGracefully() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(10, 10), outB)
 
@@ -339,7 +348,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("joinCells adjacent cells succeeds")
 		fun joinCells_adjacentCells_succeeds() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(5, 5), inA)
 			context.putCell(Point(6, 5), outB)
 
@@ -355,19 +364,29 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("joinCells distant cells creates intermediate parts")
 		fun joinCells_distantCells_createsIntermediateParts() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(10, 10), outB)
 
 			// Count cells before join
-			val cellCountBefore = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountBefore =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 
 			// Act - Join distant cells
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			context.joinCells(Point(1, 1), Point(10, 10), trackBlock)
 
 			// Count cells after join
-			val cellCountAfter = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountAfter =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 
 			// Assert - Intermediate cells created (if join succeeded)
 			// Note: Join might fail if cells are too distant or incompatible
@@ -378,7 +397,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("joinCells with conflicting segments fails")
 		fun joinCells_conflictingSegments_fails() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			// Place cells with incompatible orientations
 			val verticalInOut = InOut("V", false, SpatialType.VERTICAL)
 			val horizontalInOut = InOut("H", false, SpatialType.HORIZONTAL)
@@ -400,20 +419,30 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeLine removes track block and intermediate cells")
 		fun removeLine_removesTrackBlockAndIntermediateCells() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(10, 10), outB)
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			context.joinCells(Point(1, 1), Point(10, 10), trackBlock)
 
-			val cellCountBefore = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountBefore =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			val graphSizeBefore = context.getGraph().size()
 
 			// Act
 			context.removeLine(trackBlock)
 
 			// Assert
-			val cellCountAfter = context.getRailWayNetGrid().iterator().asSequence().count()
+			val cellCountAfter =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			val graphSizeAfter = context.getGraph().size()
 
 			// Graph should have fewer entries
@@ -427,7 +456,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("removeLine on non-existent track does nothing")
 		fun removeLine_nonExistentTrack_doesNothing() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			val trackBlock = SimpleTrackBlock(inA, outB, 100.0, 80.0)
@@ -448,7 +477,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("grid maintains location-to-cell mapping consistency")
 		fun grid_maintainsLocationCellMapping() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			val point = Point(5, 5)
 
 			// Act
@@ -467,13 +496,18 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("grid iterator reflects all cells")
 		fun grid_iteratorReflectsAllCells() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			context.putCell(Point(3, 3), semaphore1)
 
 			// Act
-			val cells = context.getRailWayNetGrid().iterator().asSequence().toList()
+			val cells =
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.toList()
 
 			// Assert - All cells are in the iterator
 			assertThat(cells).hasSize(3)
@@ -483,7 +517,7 @@ class GridOperationsTest : KoinTestBase() {
 		@DisplayName("graph size matches track block count")
 		fun graph_sizeMatchesTrackBlockCount() {
 			// Arrange
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(2, 1), outB)
 			context.putCell(Point(5, 5), inC)

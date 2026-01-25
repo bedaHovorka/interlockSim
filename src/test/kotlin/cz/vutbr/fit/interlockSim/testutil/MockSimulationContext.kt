@@ -15,12 +15,14 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -28,7 +30,6 @@ import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.InputStream
 
@@ -53,7 +54,9 @@ import java.io.InputStream
  * @see SimulationContext
  * @see TestContextBuilder
  */
-class MockSimulationContext(private val delegate: DefaultSimulationContext) : SimulationContext by delegate {
+class MockSimulationContext(
+	private val delegate: DefaultSimulationContext
+) : SimulationContext by delegate {
 	private var currentTime: Double = 0.0
 	private val workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
@@ -149,11 +152,14 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 	): TrackSection? {
 		// Check if node is in grid before delegating
 		// Extract static NodeCell from Dynamic wrapper for grid lookup
-		val staticSeparator = when (separator) {
-			is DynamicPathSeparator -> cz.vutbr.fit.interlockSim.objects.cells.CellUtilities.assertNodeCell(separator)
-			is NodeCell -> separator
-			else -> null
-		}
+		val staticSeparator =
+			when (separator) {
+				is DynamicPathSeparator ->
+					cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+						.assertNodeCell(separator)
+				is NodeCell -> separator
+				else -> null
+			}
 		if (staticSeparator != null && delegate.getRailWayNetGrid().getLocation(staticSeparator) == null) {
 			// Node not in grid - return null (graceful handling for tests)
 			return null
@@ -201,15 +207,15 @@ class MockSimulationContext(private val delegate: DefaultSimulationContext) : Si
 }
 
 fun createMockSimulationContext(): MockSimulationContext {
-	val factory = contextFactory()
-	val editingContext = factory.createEmptyContext()
-	val defaultContext = factory.createContext(editingContext) as DefaultSimulationContext
+	val editingFactory = getKoin().get<EditingContextFactory>()
+	val simulationFactory = getKoin().get<SimulationContextFactory>()
+	val editingContext = editingFactory.createEmptyContext()
+	val defaultContext = simulationFactory.createContext(editingContext) as DefaultSimulationContext
 	return MockSimulationContext(defaultContext)
 }
 
 fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
-	val defaultContext = contextFactory().createContext(xml) as DefaultSimulationContext
+	val simulationFactory = getKoin().get<SimulationContextFactory>()
+	val defaultContext = simulationFactory.createContext(xml) as DefaultSimulationContext
 	return MockSimulationContext(defaultContext)
 }
-
-private fun contextFactory(): XMLContextFactory = getKoin().get<XMLContextFactory>()

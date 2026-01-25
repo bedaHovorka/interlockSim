@@ -35,14 +35,12 @@ data class ValidationResult(
 		/**
 		 * Creates a failed validation result with a single error.
 		 */
-		fun error(error: ValidationError): ValidationResult =
-			ValidationResult(false, listOf(error))
+		fun error(error: ValidationError): ValidationResult = ValidationResult(false, listOf(error))
 
 		/**
 		 * Creates a failed validation result with multiple errors.
 		 */
-		fun errors(errors: List<ValidationError>): ValidationResult =
-			ValidationResult(false, errors)
+		fun errors(errors: List<ValidationError>): ValidationResult = ValidationResult(false, errors)
 	}
 }
 

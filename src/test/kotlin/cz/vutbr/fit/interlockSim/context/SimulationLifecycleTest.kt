@@ -12,12 +12,11 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
@@ -42,7 +41,8 @@ import org.koin.test.inject
  */
 @Tag("integration-test")
 class SimulationLifecycleTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -59,14 +59,14 @@ class SimulationLifecycleTest : KoinTestBase() {
 	@Test
 	fun `simulation context initialization completes without JVM exit`() {
 		// Build minimal network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		assertThat(simulationContext.isFrozen()).isTrue()
 
 		// Before the fix (#190), any call to stop() would call System.exit(0)
@@ -84,19 +84,19 @@ class SimulationLifecycleTest : KoinTestBase() {
 	@Test
 	fun `multiple simulation contexts can be created sequentially`() {
 		// Build first network
-		val editingContext1 = factory.createEmptyContext()
+		val editingContext1 = editingContextFactory.createEmptyContext()
 		editingContext1.putCell(Point(1, 1), inA)
 		editingContext1.putCell(Point(5, 5), outB)
 		val trackBlock1 = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext1.joinCells(Point(1, 1), Point(5, 5), trackBlock1)
 
 		// Create first simulation context
-		val simulationContext1 = factory.createContext(editingContext1) as DefaultSimulationContext
+		val simulationContext1 = simulationContextFactory.createContext(editingContext1) as DefaultSimulationContext
 		assertThat(simulationContext1).isNotNull()
 		assertThat(simulationContext1.isFrozen()).isTrue()
 
 		// Build second network (separate instance)
-		val editingContext2 = factory.createEmptyContext()
+		val editingContext2 = editingContextFactory.createEmptyContext()
 		editingContext2.putCell(Point(1, 1), inA)
 		editingContext2.putCell(Point(5, 5), outB)
 		val trackBlock2 = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -104,7 +104,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 
 		// Create second simulation context
 		// This should work now that System.exit(0) is removed
-		val simulationContext2 = factory.createContext(editingContext2) as DefaultSimulationContext
+		val simulationContext2 = simulationContextFactory.createContext(editingContext2) as DefaultSimulationContext
 		assertThat(simulationContext2).isNotNull()
 		assertThat(simulationContext2.isFrozen()).isTrue()
 
@@ -121,14 +121,14 @@ class SimulationLifecycleTest : KoinTestBase() {
 	@Test
 	fun `stop throws SimulationException when called before run`() {
 		// Build minimal network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Try to stop without starting
 		// Should throw exception due to requireSimulationNotNull check
@@ -191,7 +191,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 		val initialCount = initialThreads.size
 
 		// Build minimal network
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
@@ -201,7 +201,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 		val threadCountsAfterStop = mutableListOf<Int>()
 		repeat(3) { iteration ->
 			// Create new simulation context for each run
-			val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+			val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			// Start simulation (creates jDisco threads)
 			// Note: We don't actually run it, just initialize to see thread creation
@@ -264,7 +264,8 @@ class SimulationLifecycleTest : KoinTestBase() {
 		val threads = arrayOfNulls<Thread>(estimatedSize)
 		val actualSize = rootThreadGroup.enumerate(threads, true)
 
-		return threads.filterNotNull()
+		return threads
+			.filterNotNull()
 			.take(actualSize)
 			.filter { it.isDaemon && it.isAlive }
 	}

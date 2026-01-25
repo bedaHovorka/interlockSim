@@ -15,12 +15,11 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -43,7 +42,8 @@ import org.koin.test.inject
  * @since 2026-01-20
  */
 class BaseContextTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -55,7 +55,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `create empty editing context succeeds`() {
 		// Act
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Assert
 		assertThat(context).isNotNull()
@@ -71,7 +71,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `create empty simulation context succeeds`() {
 		// Act
-		val context = factory.createEmptySimulationContext()
+		val context = simulationContextFactory.createEmptyContext()
 
 		// Assert
 		assertThat(context).isNotNull()
@@ -87,7 +87,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `getRailWayNetGrid returns consistent instance`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Act
 		val grid1 = context.getRailWayNetGrid()
@@ -103,7 +103,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `getGraph returns consistent instance`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Act
 		val graph1 = context.getGraph()
@@ -119,7 +119,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `configuration properties work in editing context`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Act - Set configuration
 		context.currentMaxSpeed = 120.0
@@ -138,7 +138,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `grid stores and retrieves cells correctly`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		val point = Point(5, 5)
 
 		// Act
@@ -157,7 +157,7 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `graph tracks track block connections correctly`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		val p1 = Point(1, 1)
 		val p2 = Point(5, 5)
 		context.putCell(p1, inA)
@@ -178,11 +178,12 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `property change listener registration works`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		var listenerCalled = false
-		val listener = java.beans.PropertyChangeListener { evt ->
-			listenerCalled = true
-		}
+		val listener =
+			java.beans.PropertyChangeListener { evt ->
+				listenerCalled = true
+			}
 
 		// Act
 		context.addPropertyChangeListener(listener)

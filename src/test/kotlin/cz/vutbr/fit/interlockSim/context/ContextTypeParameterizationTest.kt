@@ -12,14 +12,13 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -41,7 +40,8 @@ import org.koin.test.inject
  * @since 2026-01-20
  */
 class ContextTypeParameterizationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -56,7 +56,7 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 	@Test
 	fun `EditingContext returns grid parameterized with NodeCell`() {
 		// Arrange
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 
 		// Act
 		val grid = context.getRailWayNetGrid()
@@ -81,12 +81,12 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 	@Test
 	fun `SimulationContext returns grid parameterized with Cell`() {
 		// Arrange - Build network and transform
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Act
 		val grid = simulationContext.getRailWayNetGrid()
@@ -109,18 +109,18 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 	@Test
 	fun `grid parameterization enforced by type system`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
-		val simulationContext = factory.createEmptySimulationContext()
+		val editingContext = editingContextFactory.createEmptyContext()
+		val simulationContext = simulationContextFactory.createEmptyContext()
 
 		// Act - Get grids with their parameterized types
-		val editingGrid: RailwayNetGrid<NodeCell> = editingContext.getRailWayNetGrid()
-		val simulationGrid: RailwayNetGrid<Cell> = simulationContext.getRailWayNetGrid()
+		val editingGrid = editingContext.getRailWayNetGrid()
+		val simulationGrid = simulationContext.getRailWayNetGrid()
 
 		// Assert - Type assignments work correctly
 		// If these assignments compile and run, the type system is working
 		assertThat(editingGrid).isNotNull()
 		assertThat(simulationGrid).isNotNull()
-		
+
 		// The key guarantee: editingGrid can only return NodeCell or subtypes
 		// simulationGrid can return any Cell (NodeCell or TrackBlockPart)
 		// This is enforced at compile time by Kotlin's type system
@@ -135,14 +135,14 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 	@Test
 	fun `static dynamic separation maintained through transformation`() {
 		// Arrange - Build network with static cells
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act - Transform to simulation (creates dynamic wrappers)
-		val simulationContext = factory.createContext(editingContext)
+		val simulationContext = simulationContextFactory.createContext(editingContext)
 
 		// Assert - Dynamic wrappers maintain references to static cells
 		val inOuts = simulationContext.getInOuts()
@@ -163,8 +163,8 @@ class ContextTypeParameterizationTest : KoinTestBase() {
 	@Test
 	fun `covariant return types work in context hierarchy`() {
 		// Arrange
-		val editingContext = factory.createEmptyContext()
-		val simulationContext = factory.createEmptySimulationContext()
+		val editingContext = editingContextFactory.createEmptyContext()
+		val simulationContext = simulationContextFactory.createEmptyContext()
 
 		// Act - Access grids through interface references
 		val editingContextRef: EditingContext = editingContext

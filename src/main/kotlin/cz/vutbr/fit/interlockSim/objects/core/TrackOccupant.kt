@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.core
 
-
 /**
  * object in Track
  */

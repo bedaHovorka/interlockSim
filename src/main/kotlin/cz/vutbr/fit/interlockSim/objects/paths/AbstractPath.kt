@@ -9,10 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
@@ -21,12 +17,16 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.conflict
-import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -218,8 +218,9 @@ abstract class AbstractPath protected constructor(
 		previous: Track?,
 		next: Track
 	): Boolean {
-		val dynamicSeparator = separator as? DynamicPathSeparator
-			?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
+		val dynamicSeparator =
+			separator as? DynamicPathSeparator
+				?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
 		val from = context.getSegment(dynamicSeparator, previous, next)
 		val to = context.getSegment(dynamicSeparator, next, previous)
 		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
@@ -325,33 +326,30 @@ abstract class AbstractPath protected constructor(
 
 	// Dynamic behavior methods for Path (aggregate operations)
 	// These are not typically called on Path directly, but required by interface
-	
+
 	override fun getState(): TrackFacility.State {
 		// Path doesn't have its own state - it's an aggregate
 		// Return FREE as default (paths are not facilities themselves)
 		return TrackFacility.State.FREE
 	}
 
-	override fun enter(occupant: TrackOccupant) {
+	override fun enter(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Enter operation not supported on Path aggregate. " +
-			"Call enter() on individual TrackSection elements."
+				"Call enter() on individual TrackSection elements."
 		)
-	}
 
-	override fun leave(occupant: TrackOccupant) {
+	override fun leave(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Leave operation not supported on Path aggregate. " +
-			"Call leave() on individual TrackSection elements."
+				"Call leave() on individual TrackSection elements."
 		)
-	}
 
-	override fun getTrackOccupant(): TrackOccupant {
+	override fun getTrackOccupant(): TrackOccupant =
 		throw UnsupportedOperationException(
 			"getTrackOccupant not supported on Path aggregate. " +
-			"Query individual TrackSection elements."
+				"Query individual TrackSection elements."
 		)
-	}
 
 	override fun reversePath(): Path {
 		val arrayPath = ArrayPath(getContext())

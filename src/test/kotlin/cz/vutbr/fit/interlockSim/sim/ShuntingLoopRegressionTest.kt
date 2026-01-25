@@ -3,8 +3,10 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -38,13 +40,15 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("ShuntingLoop Regression Tests (PR #95)")
 @Tag("integration-test")
 class ShuntingLoopRegressionTest : KoinTestBase() {
-
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: throw IllegalStateException("vyhybna.xml not found in resources")
-		return factory.createContext(xmlStream) as DefaultSimulationContext
+		val xmlStream: InputStream =
+			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				?: throw IllegalStateException("vyhybna.xml not found in resources")
+		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 	}
 
 	/**

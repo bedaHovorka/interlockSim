@@ -40,13 +40,14 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("error creates invalid result with single error")
 	fun errorCreatesInvalidResult() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			location = "Line 10",
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				location = "Line 10",
+				explanation = "Test explanation"
+			)
 		val result = ValidationResult.error(error)
 		assertThat(result.isValid).isFalse()
 		assertThat(result.errors).hasSize(1)
@@ -56,18 +57,20 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("errors creates invalid result with multiple errors")
 	fun errorsCreatesInvalidResultWithMultiple() {
-		val error1 = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Error 1",
-			explanation = "Explanation 1"
-		)
-		val error2 = ValidationError(
-			category = ErrorCategory.SAFETY,
-			severity = Severity.ERROR,
-			message = "Error 2",
-			explanation = "Explanation 2"
-		)
+		val error1 =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Error 1",
+				explanation = "Explanation 1"
+			)
+		val error2 =
+			ValidationError(
+				category = ErrorCategory.SAFETY,
+				severity = Severity.ERROR,
+				message = "Error 2",
+				explanation = "Explanation 2"
+			)
 		val result = ValidationResult.errors(listOf(error1, error2))
 		assertThat(result.isValid).isFalse()
 		assertThat(result.errors).hasSize(2)
@@ -78,12 +81,13 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationError format includes emoji")
 	fun validationErrorFormatIncludesEmoji() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				explanation = "Test explanation"
+			)
 		val formatted = error.format()
 		assertThat(formatted).contains("❌")
 	}
@@ -91,12 +95,13 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationError format includes message")
 	fun validationErrorFormatIncludesMessage() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				explanation = "Test explanation"
+			)
 		val formatted = error.format()
 		assertThat(formatted).contains("Test error")
 	}
@@ -104,12 +109,13 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationError format includes explanation")
 	fun validationErrorFormatIncludesExplanation() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				explanation = "Test explanation"
+			)
 		val formatted = error.format()
 		assertThat(formatted).contains("Test explanation")
 	}
@@ -117,13 +123,14 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationError format includes location when present")
 	fun validationErrorFormatIncludesLocation() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			location = "Line 42, Column 10",
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				location = "Line 42, Column 10",
+				explanation = "Test explanation"
+			)
 		val formatted = error.format()
 		assertThat(formatted).contains("Location: Line 42, Column 10")
 	}
@@ -131,13 +138,14 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationError format excludes location when null")
 	fun validationErrorFormatExcludesNullLocation() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			location = null,
-			explanation = "Test explanation"
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				location = null,
+				explanation = "Test explanation"
+			)
 		val formatted = error.format()
 		assertThat(!formatted.contains("Location:"))
 	}
@@ -145,10 +153,11 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationWarning format includes emoji")
 	fun validationWarningFormatIncludesEmoji() {
-		val warning = ValidationWarning(
-			message = "Test warning",
-			explanation = "Warning explanation"
-		)
+		val warning =
+			ValidationWarning(
+				message = "Test warning",
+				explanation = "Warning explanation"
+			)
 		val formatted = warning.format()
 		assertThat(formatted).contains("⚠")
 	}
@@ -156,10 +165,11 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationWarning format includes message")
 	fun validationWarningFormatIncludesMessage() {
-		val warning = ValidationWarning(
-			message = "Test warning",
-			explanation = "Warning explanation"
-		)
+		val warning =
+			ValidationWarning(
+				message = "Test warning",
+				explanation = "Warning explanation"
+			)
 		val formatted = warning.format()
 		assertThat(formatted).contains("Test warning")
 	}
@@ -167,10 +177,11 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationWarning format includes explanation")
 	fun validationWarningFormatIncludesExplanation() {
-		val warning = ValidationWarning(
-			message = "Test warning",
-			explanation = "Warning explanation"
-		)
+		val warning =
+			ValidationWarning(
+				message = "Test warning",
+				explanation = "Warning explanation"
+			)
 		val formatted = warning.format()
 		assertThat(formatted).contains("Warning explanation")
 	}
@@ -214,21 +225,24 @@ class ValidationResultTest {
 	@Test
 	@DisplayName("ValidationResult can have both errors and warnings")
 	fun validationResultCanHaveBothErrorsAndWarnings() {
-		val error = ValidationError(
-			category = ErrorCategory.STRUCTURAL,
-			severity = Severity.ERROR,
-			message = "Test error",
-			explanation = "Error explanation"
-		)
-		val warning = ValidationWarning(
-			message = "Test warning",
-			explanation = "Warning explanation"
-		)
-		val result = ValidationResult(
-			isValid = false,
-			errors = listOf(error),
-			warnings = listOf(warning)
-		)
+		val error =
+			ValidationError(
+				category = ErrorCategory.STRUCTURAL,
+				severity = Severity.ERROR,
+				message = "Test error",
+				explanation = "Error explanation"
+			)
+		val warning =
+			ValidationWarning(
+				message = "Test warning",
+				explanation = "Warning explanation"
+			)
+		val result =
+			ValidationResult(
+				isValid = false,
+				errors = listOf(error),
+				warnings = listOf(warning)
+			)
 		assertThat(result.isValid).isFalse()
 		assertThat(result.errors).hasSize(1)
 		assertThat(result.warnings).hasSize(1)

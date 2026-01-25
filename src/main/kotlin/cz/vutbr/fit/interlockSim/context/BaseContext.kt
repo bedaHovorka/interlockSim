@@ -9,10 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
@@ -110,7 +110,6 @@ abstract class BaseContext<T : TrackBlock>(
 	cols: Int,
 	rows: Int
 ) {
-
 	/**
 	 * PropertyChangeSupport for notifying listeners of context changes.
 	 * Replaces deprecated Observable pattern (Java 21 migration).

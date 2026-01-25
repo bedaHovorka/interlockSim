@@ -10,12 +10,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.anti
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
@@ -61,7 +61,7 @@ class NodeCellTest : KoinTestBase() {
 			get<TestContextBuilder>()
 				.withInOut("InA", 0, 0, true)
 				.withInOut("InB", 1, 0, false)
-				.build()
+				.buildSimulationContext()
 
 		// Retrieve the created nodes
 		val cellA = context.getRailWayNetGrid().getCellAt(0, 0)
@@ -92,7 +92,7 @@ class NodeCellTest : KoinTestBase() {
 				get<TestContextBuilder>()
 					.withInOut("Left", 0, 0, true)
 					.withInOut("Right", 1, 0, false)
-					.build()
+					.buildSimulationContext()
 
 			// Assert
 			// Both nodes should exist in the grid at adjacent positions
@@ -152,7 +152,7 @@ class NodeCellTest : KoinTestBase() {
 					.withInOut("A", 0, 0, true)
 					.withInOut("B", 1, 0, false)
 					.withInOut("C", 2, 0, true)
-					.build()
+					.buildSimulationContext()
 
 			// Act
 			// Get cells from grid
@@ -191,7 +191,7 @@ class NodeCellTest : KoinTestBase() {
 				get<TestContextBuilder>()
 					.withInOut("Start", 0, 0, true)
 					.withInOut("Next", 1, 0, false)
-					.build()
+					.buildSimulationContext()
 
 			// Act
 			val cellStart = context.getRailWayNetGrid().getCellAt(0, 0)
@@ -236,7 +236,7 @@ class NodeCellTest : KoinTestBase() {
 					.withInOut("B", 1, 0, true) // Right
 					.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
 					.withInOut("D", 1, 1, false) // Bottom-right
-					.build()
+					.buildSimulationContext()
 
 			// Act
 			val cellA = context.getRailWayNetGrid().getCellAt(0, 1)
@@ -266,7 +266,7 @@ class NodeCellTest : KoinTestBase() {
 			val context =
 				get<TestContextBuilder>()
 					.withInOut("TestNode", 5, 10, true)
-					.build()
+					.buildSimulationContext()
 
 			// Act
 			val cell = context.getRailWayNetGrid().getCellAt(5, 10)
@@ -290,7 +290,7 @@ class NodeCellTest : KoinTestBase() {
 			val context =
 				get<TestContextBuilder>()
 					.withInOut("FixedNode", 3, 7, true)
-					.build()
+					.buildSimulationContext()
 
 			// Act
 			val cell = context.getRailWayNetGrid().getCellAt(3, 7)

@@ -9,17 +9,17 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.objects.core.anti
-import cz.vutbr.fit.interlockSim.objects.core.conflict
-import cz.vutbr.fit.interlockSim.objects.core.d2r
-import cz.vutbr.fit.interlockSim.objects.core.r2d
-import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.conflict
+import cz.vutbr.fit.interlockSim.objects.core.d2r
+import cz.vutbr.fit.interlockSim.objects.core.r2d
+import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -42,11 +42,9 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Cells Package - Coverage Polish Tests")
 class CellsPolishTest {
-
 	@Nested
 	@DisplayName("Cell Utility Functions - Edge Cases")
 	inner class CellUtilityEdgeCases {
-
 		@Test
 		fun `segmentFor with dx=0 dy=0 returns null`() {
 			// Edge case: origin point has no direction segment
@@ -139,7 +137,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("AbstractCell Utility Methods")
 	inner class AbstractCellUtilityMethods {
-
 		@Test
 		fun `arr2set with single element`() {
 			val segments = arrayOf(Segment.A)
@@ -192,7 +189,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("OrientedNodeCell - Direction Edge Cases")
 	inner class OrientedNodeCellDirectionTests {
-
 		@Test
 		fun `direction returns correct segment for HORIZONTAL orientation true`() {
 			// HORIZONTAL segments: [F, A], orientation=true -> index 1 -> A
@@ -225,7 +221,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("TrackBlockPart - Spatial Type Edge Cases")
 	inner class TrackBlockPartTests {
-
 		@Test
 		fun `getSpatialType returns null for TrackBlockPart`() {
 			val sep1 = mockk<OrientedPathSeparator>()
@@ -261,7 +256,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("Cell Connection Validation")
 	inner class CellConnectionValidation {
-
 		@Test
 		fun `canJoin returns true for compatible segments`() {
 			val cell1 = InOut("A", true, SpatialType.HORIZONTAL)
@@ -302,7 +296,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("RailSemaphore Edge Cases")
 	inner class RailSemaphoreEdgeCases {
-
 		@Test
 		fun `RailSemaphore with all spatial types`() {
 			for (spatialType in SpatialType.values()) {
@@ -324,7 +317,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("RailSwitch Edge Cases")
 	inner class RailSwitchEdgeCases {
-
 		@Test
 		fun `RailSwitch with different types`() {
 			// Test creation with different switch types
@@ -345,7 +337,6 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("InOut Edge Cases")
 	inner class InOutEdgeCases {
-
 		@Test
 		fun `InOut with empty name`() {
 			val inOut = InOut("", true, SpatialType.HORIZONTAL)

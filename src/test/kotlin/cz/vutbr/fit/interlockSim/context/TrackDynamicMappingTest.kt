@@ -18,7 +18,6 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
@@ -36,7 +35,7 @@ import java.io.File
  */
 @DisplayName("Track-to-Dynamic Mapping")
 class TrackDynamicMappingTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val factory: SimulationContextFactory by inject()
 
 	@Nested
 	@DisplayName("Unit Tests - Track Mapping")
@@ -48,7 +47,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("empty context has no tracks in graph")
 		fun emptyContext_hasNoTracks() {
 			// Arrange
-			val context = factory.createEmptySimulationContext()
+			val context = factory.createEmptyContext()
 
 			// Act - get the graph
 			val graph = context.getGraph()
@@ -66,7 +65,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic creates wrapper lazily for unmapped track")
 		fun toDynamic_unmappedTrack_createsLazily() {
 			// Arrange
-			val context = factory.createEmptySimulationContext()
+			val context = factory.createEmptyContext()
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			val contextWithTracks = factory.createContext(xmlFile) as DefaultSimulationContext
 

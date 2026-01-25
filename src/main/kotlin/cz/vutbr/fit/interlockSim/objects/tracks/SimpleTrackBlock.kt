@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
-import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import java.util.Arrays
 
 /**
@@ -77,62 +77,54 @@ class SimpleTrackBlock :
 
 	// PHASE 1 TEMPORARY STUBS - Dynamic behavior removed from SimpleTrack
 	// These will be replaced with DynamicTrack wrapper in Phase 2
-	
-	override fun getState(): TrackFacility.State {
+
+	override fun getState(): TrackFacility.State =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic state removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for state management."
+				"Use DynamicTrack wrapper for state management."
 		)
-	}
 
-	override fun isFreeFrom(sep: PathSeparator): Boolean {
+	override fun isFreeFrom(sep: PathSeparator): Boolean =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for path operations."
+				"Use DynamicTrack wrapper for path operations."
 		)
-	}
 
-	override fun setUpPath(from: PathSeparator) {
+	override fun setUpPath(from: PathSeparator): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for path operations."
+				"Use DynamicTrack wrapper for path operations."
 		)
-	}
 
-	override fun isSetUpPath(from: PathSeparator): Boolean {
+	override fun isSetUpPath(from: PathSeparator): Boolean =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for path operations."
+				"Use DynamicTrack wrapper for path operations."
 		)
-	}
 
-	override fun cancelPathSetup(from: PathSeparator) {
+	override fun cancelPathSetup(from: PathSeparator): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for path operations."
+				"Use DynamicTrack wrapper for path operations."
 		)
-	}
 
-	override fun enter(occupant: TrackOccupant) {
+	override fun enter(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for occupancy operations."
+				"Use DynamicTrack wrapper for occupancy operations."
 		)
-	}
 
-	override fun leave(occupant: TrackOccupant) {
+	override fun leave(occupant: TrackOccupant): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for occupancy operations."
+				"Use DynamicTrack wrapper for occupancy operations."
 		)
-	}
 
-	override fun getTrackOccupant(): TrackOccupant {
+	override fun getTrackOccupant(): TrackOccupant =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
-			"Use DynamicTrack wrapper for occupancy operations."
+				"Use DynamicTrack wrapper for occupancy operations."
 		)
-	}
 
 	// Note: SimpleTrack.ends() returns Array<PathSeparator> which should be Array<NodeCell>
 	// based on the constructor (it accepts NodeCell as PathSeparator), but we keep parent signature

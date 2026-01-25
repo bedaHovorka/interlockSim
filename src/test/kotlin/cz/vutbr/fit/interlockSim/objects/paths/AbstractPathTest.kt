@@ -10,18 +10,18 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -870,7 +870,8 @@ class AbstractPathTest : KoinTestBase() {
  */
 private class MockNodeCell(
 	private val name: String
-) : NodeCell(Cell.SpatialType.HORIZONTAL), DynamicPathSeparator {
+) : NodeCell(Cell.SpatialType.HORIZONTAL),
+	DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Cell.Segment?,
 		to: Cell.Segment?

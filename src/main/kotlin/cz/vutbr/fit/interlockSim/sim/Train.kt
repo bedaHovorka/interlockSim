@@ -18,10 +18,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -293,11 +293,12 @@ class Train :
 			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			val lastSeparator = path!!.getLast()
-			val nextSemaphore: DynamicRailSemaphore = when (lastSeparator) {
-				is DynamicRailSemaphore -> lastSeparator
-				is DynamicInOut -> lastSeparator.outSemaphore
-				else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
-			}
+			val nextSemaphore: DynamicRailSemaphore =
+				when (lastSeparator) {
+					is DynamicRailSemaphore -> lastSeparator
+					is DynamicInOut -> lastSeparator.outSemaphore
+					else -> throw IllegalStateException("Last path separator must be DynamicRailSemaphore or DynamicInOut")
+				}
 			val nextSignal: Signal = nextSemaphore.signal
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 			pathToSemaphore = path

@@ -10,7 +10,6 @@
  */
 package cz.vutbr.fit.interlockSim
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -24,7 +23,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
-import cz.vutbr.fit.interlockSim.testutil.buildMinimal
+import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
@@ -654,7 +653,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent cell operations on context grid are thread-safe")
 		fun concurrentCellOperations_contextGrid_threadSafe() {
 			// Arrange
-			val context = buildMinimal()
+			val context = buildMinimalSimulation()
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(THREAD_COUNT)
 			val exceptions = CopyOnWriteArrayList<Exception>()
@@ -681,7 +680,7 @@ class RaceConditionTest : KoinTestBase() {
 									.Point(x, y),
 								cell
 							)
-							*/
+							 */
 
 							// Retrieve cell
 							val retrieved = context.getRailWayNetGrid().getCellAt(x, y)
@@ -757,7 +756,7 @@ class RaceConditionTest : KoinTestBase() {
 									.Point(x, y),
 								cell
 							)
-							*/
+							 */
 
 							// Try to retrieve it
 							val retrieved = grid.getCellAt(x, y)
@@ -798,7 +797,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent listener registration/removal is thread-safe")
 		fun concurrentListenerOps_threadSafe() {
 			// Arrange
-			val context = buildMinimal()
+			val context = buildMinimalSimulation()
 			val threadCount = 4
 			val iterations = 5
 			val startLatch = CountDownLatch(1)
@@ -1001,7 +1000,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Listeners and grid modifications work correctly concurrently")
 		fun listenersAndGridMods_workConcurrently() {
 			// Arrange
-			val context = buildMinimal()
+			val context = buildMinimalSimulation()
 			val threadCount = 3
 			val listenerOps = ArrayList<java.beans.PropertyChangeListener>()
 			val startLatch = CountDownLatch(1)
@@ -1045,7 +1044,7 @@ class RaceConditionTest : KoinTestBase() {
 									.Point(x, y),
 								cell
 							)
-							*/
+							 */
 							Thread.sleep(1)
 						}
 					} catch (e: Exception) {

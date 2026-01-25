@@ -19,8 +19,9 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -66,7 +67,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 class XMLContextFactoryTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: XMLContextFactory by inject()
 
 	@Nested
 	@DisplayName("Factory instance and initialization")
@@ -74,8 +75,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun factoryInjection_always_returnsSameInstance() {
 			// Access factory multiple times through Koin injection
-			val instance1 = factory
-			val instance2 = factory
+			val instance1 = editingContextFactory
+			val instance2 = editingContextFactory
 
 			assertThat(instance1)
 				.isNotNull()
@@ -85,7 +86,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createEmptyContext_always_returns100x100Grid() {
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -95,7 +96,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createEmptyContext_always_hasEmptyGraph() {
-			val context = factory.createEmptyContext()
+			val context = editingContextFactory.createEmptyContext()
 
 			assertThat(context.getGraph().nodeSet())
 				.withMessage("Empty context should have empty graph")
@@ -110,7 +111,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_minimalNetwork_createsTwoInOuts() {
 			val xml = getFixtureStream("minimal-network.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -126,7 +127,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_linearTrack_createsTwoConnectedInOuts() {
 			val xml = getFixtureStream("linear-track.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val cellA = context.getRailWayNetGrid().getCellAt(10, 10)
@@ -141,7 +142,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_switchBasic_createsRailSwitch() {
 			val xml = getFixtureStream("switch-basic.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val switchCell = context.getRailWayNetGrid().getCellAt(15, 10)
@@ -154,7 +155,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_switchBasic_createsThreeInOuts() {
 			val xml = getFixtureStream("switch-basic.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			val cellIN = context.getRailWayNetGrid().getCellAt(10, 10)
 			val cellOUT_PLUS = context.getRailWayNetGrid().getCellAt(20, 10)
@@ -171,7 +172,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_semaphoreBasic_createsRailSemaphore() {
 			val xml = getFixtureStream("semaphore-basic.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val semaphoreCell = context.getRailWayNetGrid().getCellAt(15, 10)
@@ -184,21 +185,21 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_emptyGrid_createsContextWithMinimalElements() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = factory.createContext(xml) as DefaultSimulationContext
+			val context = editingContextFactory.createContext(xml) as EditingContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
 			assertThat(grid.getCols()).isEqualTo(50)
 			assertThat(grid.getRows()).isEqualTo(50)
 			// Should have 2 InOut elements (minimum required)
-			assertThat((context as DefaultSimulationContext).getInOuts().size).isEqualTo(2)
+			assertThat(context.getInOuts()::size).isEqualTo(2)
 		}
 
 		@Test
 		fun parseXML_emptyGrid_hasNoTracks() {
 			val xml = getFixtureStream("empty-grid.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Grid has InOut nodes but no track connections
 			assertThat(context.getGraph().entrySet().size)
@@ -210,7 +211,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_twoTracksParallel_createsFourInOuts() {
 			val xml = getFixtureStream("two-tracks-parallel.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val cellA1 = context.getRailWayNetGrid().getCellAt(10, 10)
@@ -227,7 +228,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_rudyUjezd_createsValidContext() {
 			val xml = getFixtureStream("rudyUjezd.xml")
 
-			val context = factory.createContext(xml) as DefaultSimulationContext
+			val context = editingContextFactory.createContext(xml) as EditingContext
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -268,15 +269,15 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(s2).isNotNull().isInstanceOf(InOut::class)
 
 			// from each end, there are switches and semaphores leading into the station area and must exist path to each InOut on the other side
-			assertThat(existPath(f1 as InOut, s1 as InOut, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(f1, s2 as InOut, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(f2 as InOut, s1, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(f2, s2, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(f1 as InOut, s1 as InOut, context)).isTrue()
+			assertThat(existPath(f1, s2 as InOut, context)).isTrue()
+			assertThat(existPath(f2 as InOut, s1, context)).isTrue()
+			assertThat(existPath(f2, s2, context)).isTrue()
 			// and back
-			assertThat(existPath(s1, f1, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(s1, f2, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(s2, f1, context as DefaultSimulationContext)).isTrue()
-			assertThat(existPath(s2, f2, context as DefaultSimulationContext)).isTrue()
+			assertThat(existPath(s1, f1, context)).isTrue()
+			assertThat(existPath(s1, f2, context)).isTrue()
+			assertThat(existPath(s2, f1, context)).isTrue()
+			assertThat(existPath(s2, f2, context)).isTrue()
 
 			assertThat(hasInOut).withMessage("Should contain at least one InOut").isTrue()
 			assertThat(hasSwitch).withMessage("Should contain at least one RailSwitch").isTrue()
@@ -290,7 +291,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		private fun existPath(
 			from: InOut,
 			to: InOut,
-			context: DefaultSimulationContext
+			context: EditingContext
 		): Boolean {
 			// Get grid locations for both InOuts
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
@@ -351,7 +352,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_missingGridSize_throwsException() {
 			val xml = getFixtureStream("invalid-missing-grid-size.xml")
 
-			assertThatBlock { factory.createContext(xml) }
+			assertThatBlock { editingContextFactory.createContext(xml) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -360,7 +361,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_missingSpatialType_throwsException() {
 			val xml = getFixtureStream("invalid-missing-spatial-type.xml")
 
-			assertThatBlock { factory.createContext(xml) }
+			assertThatBlock { editingContextFactory.createContext(xml) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -369,7 +370,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_wrongRootElement_throwsException() {
 			val xml = getFixtureStream("invalid-wrong-root-element.xml")
 
-			assertThatBlock { factory.createContext(xml) }
+			assertThatBlock { editingContextFactory.createContext(xml) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -378,7 +379,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun parseXML_malformedXML_throwsException() {
 			val xml = getFixtureStream("invalid-malformed-xml.xml")
 
-			assertThatBlock { factory.createContext(xml) }
+			assertThatBlock { editingContextFactory.createContext(xml) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -387,7 +388,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun createContext_nonExistentFile_throwsException() {
 			val nonExistentFile = File("non-existent-file.xml")
 
-			assertThatBlock { factory.createContext(nonExistentFile) }
+			assertThatBlock { editingContextFactory.createContext(nonExistentFile) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -395,7 +396,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun createContext_nullInputStream_throwsException() {
 			val nullStream: InputStream? = null
-			assertThatBlock { factory.createContext(nullStream!!) }
+			assertThatBlock { editingContextFactory.createContext(nullStream!!) }
 				.isFailure()
 				.isInstanceOf(Exception::class)
 		}
@@ -404,7 +405,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun createContext_emptyInputStream_throwsException() {
 			val emptyStream = ByteArrayInputStream(ByteArray(0))
 
-			assertThatBlock { factory.createContext(emptyStream) }
+			assertThatBlock { editingContextFactory.createContext(emptyStream) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -414,7 +415,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val invalidXML = "This is not XML at all!"
 			val stream = ByteArrayInputStream(invalidXML.toByteArray())
 
-			assertThatBlock { factory.createContext(stream) }
+			assertThatBlock { editingContextFactory.createContext(stream) }
 				.isFailure()
 				.isInstanceOf(ContextCreationException::class)
 		}
@@ -442,10 +443,10 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveContext_minimalNetwork_createsValidFile() {
 			// Load fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Save to file
-			val saved = factory.saveContext(context, tempFile!!)
+			val saved = editingContextFactory.saveContext(context, tempFile!!)
 
 			// Verify file exists and is readable
 			assertThat(tempFile!!).exists().isFile()
@@ -457,13 +458,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveAndLoad_minimalNetwork_preservesStructure() {
 			// Load original fixture
 			val xml = getFixtureStream("minimal-network.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to file
-			factory.saveContext(originalContext, tempFile!!)
+			editingContextFactory.saveContext(originalContext, tempFile!!)
 
 			// Load from file
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 
 			// Verify structure is preserved
 			assertThat(loadedContext).isNotNull()
@@ -487,17 +488,17 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun saveContext_emptyContext_createsValidXML() {
 			// Create empty context
-			val emptyContext = factory.createEmptyContext()
+			val emptyContext = editingContextFactory.createEmptyContext()
 
 			// Add minimum required InOut elements to satisfy validation
 			emptyContext.putCell(Point(1, 1), InOut("ENTRY", true, Cell.SpatialType.HORIZONTAL))
 			emptyContext.putCell(Point(2, 1), InOut("EXIT", false, Cell.SpatialType.HORIZONTAL))
 
 			// Save to file
-			factory.saveContext(emptyContext, tempFile!!)
+			editingContextFactory.saveContext(emptyContext, tempFile!!)
 
 			// Verify file is valid XML by loading it
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 			assertThat(loadedContext).isNotNull()
 		}
 
@@ -505,13 +506,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveAndLoad_emptyGrid_preservesGridSize() {
 			// Load empty grid fixture
 			val xml = getFixtureStream("empty-grid.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to file
-			factory.saveContext(originalContext, tempFile!!)
+			editingContextFactory.saveContext(originalContext, tempFile!!)
 
 			// Load from file
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 
 			// Verify grid size is preserved
 			val grid = loadedContext.getRailWayNetGrid()
@@ -523,13 +524,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveAndLoad_linearTrack_preservesTrackBlocks() {
 			// Load fixture with track block
 			val xml = getFixtureStream("linear-track.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to file
-			factory.saveContext(originalContext, tempFile!!)
+			editingContextFactory.saveContext(originalContext, tempFile!!)
 
 			// Load from file
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 
 			// Verify cells are preserved
 			val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
@@ -542,13 +543,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveAndLoad_switchBasic_preservesSwitchType() {
 			// Load fixture with rail switch
 			val xml = getFixtureStream("switch-basic.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to file
-			factory.saveContext(originalContext, tempFile!!)
+			editingContextFactory.saveContext(originalContext, tempFile!!)
 
 			// Load from file
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 
 			// Verify switch is preserved
 			val switchCell = loadedContext.getRailWayNetGrid().getCellAt(15, 10)
@@ -560,16 +561,16 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun saveContext_overwritesExistingFile() {
 			// Create initial context and save
-			val context1 = factory.createEmptyContext()
-			factory.saveContext(context1, tempFile!!)
+			val context1 = editingContextFactory.createEmptyContext()
+			editingContextFactory.saveContext(context1, tempFile!!)
 
 			// Load a different fixture and save to same file
 			val xml = getFixtureStream("minimal-network.xml")
-			val context2 = factory.createContext(xml)
-			factory.saveContext(context2, tempFile!!)
+			val context2 = editingContextFactory.createContext(xml)
+			editingContextFactory.saveContext(context2, tempFile!!)
 
 			// Verify loaded context matches context2 (not context1)
-			val loadedContext = factory.createContext(tempFile!!)
+			val loadedContext = editingContextFactory.createContext(tempFile!!)
 			val cell = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
 			assertThat(cell)
 				.isNotNull()
@@ -592,7 +593,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(largeGridXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -611,7 +612,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(minimalGridXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -630,7 +631,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(boundaryXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 
 			assertThat(context).isNotNull()
 			val cell = context.getRailWayNetGrid().getCellAt(98, 98)
@@ -649,7 +650,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					"</net>"
 			val stream = ByteArrayInputStream(duplicateNameXML.toByteArray())
 
-			val context = factory.createContext(stream)
+			val context = editingContextFactory.createContext(stream)
 
 			assertThat(context).isNotNull()
 			// Both cells should exist at different positions
@@ -668,7 +669,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the leftmost InOut element (typically main line entry from west/north).
 		 */
-		private fun findMainLineEntry(context: DefaultSimulationContext): InOut? {
+		private fun findMainLineEntry(context: EditingContext): InOut? {
 			var leftmost: InOut? = null
 			var minX = Int.MAX_VALUE
 
@@ -688,7 +689,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds the rightmost InOut element (typically main line exit to east/south).
 		 */
-		private fun findMainLineExit(context: DefaultSimulationContext): InOut? {
+		private fun findMainLineExit(context: EditingContext): InOut? {
 			var rightmost: InOut? = null
 			var maxX = Int.MIN_VALUE
 
@@ -709,7 +710,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all mid-layout InOut points (platforms).
 		 * These are InOuts that are not at the extreme left or right edges.
 		 */
-		private fun findPlatformInOuts(context: DefaultSimulationContext): List<InOut> {
+		private fun findPlatformInOuts(context: EditingContext): List<InOut> {
 			val allInOuts = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				if (entry.value is InOut) {
@@ -744,7 +745,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard access point (mid-area InOut for freight yard).
 		 */
-		private fun findYardAccessPoint(context: DefaultSimulationContext): InOut? {
+		private fun findYardAccessPoint(context: EditingContext): InOut? {
 			// For yard, we look for InOuts in middle Y range
 			val grid = context.getRailWayNetGrid()
 			val midY = grid.getRows() / 2
@@ -764,7 +765,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds yard siding tracks (dead-end InOuts for parking/storage).
 		 */
-		private fun findYardSidings(context: DefaultSimulationContext): List<InOut> {
+		private fun findYardSidings(context: EditingContext): List<InOut> {
 			val sidings = mutableListOf<InOut>()
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -781,7 +782,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Finds switch where multiple lines converge (junction merge point).
 		 */
-		private fun findJunctionMergePoint(context: DefaultSimulationContext): RailSwitch? {
+		private fun findJunctionMergePoint(context: EditingContext): RailSwitch? {
 			// Junction switch typically has connections from 3+ directions
 			for (entry in context.getRailWayNetGrid()) {
 				val cell = entry.value
@@ -824,7 +825,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		 * Finds all signals within specified grid rectangle.
 		 */
 		private fun findSignalsInArea(
-			context: DefaultSimulationContext,
+			context: EditingContext,
 			startX: Int,
 			endX: Int,
 			startY: Int,
@@ -850,10 +851,10 @@ class XMLContextFactoryTest : KoinTestBase() {
 		// Praha Hlavní Nádraží Tests
 
 		@Test
-		fun testPrahaContextLoading() {
+		fun testPragueContextLoading() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
 
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
@@ -872,9 +873,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		fun testPrahaElementComposition() {
+		fun testPragueElementComposition() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml) as DefaultSimulationContext
+			val context = editingContextFactory.createContext(xml) as EditingContext
 			val counts = countElements(context.getRailWayNetGrid())
 
 			// Verify element counts meet thresholds (adjusted for simplified topology)
@@ -890,9 +891,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		fun testPrahaPlatformConnectivity() {
+		fun testPraguePlatformConnectivity() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml) as DefaultSimulationContext
+			val context = editingContextFactory.createContext(xml) as EditingContext
 
 			// Find entry and exit InOuts by orientation
 			val entries = mutableListOf<InOut>() // orientation=false (entries from west/north)
@@ -920,36 +921,36 @@ class XMLContextFactoryTest : KoinTestBase() {
 			if (entries.isNotEmpty() && exits.isNotEmpty()) {
 				val from = entries[0]
 				val to = exits[0]
-				assertThat(existPath(from, to, context as DefaultSimulationContext))
+				assertThat(existPath(from, to, context as DefaultEditingContext))
 					.withMessage("Path should exist from north entry ${from.getName()} to south exit ${to.getName()}")
 					.isTrue()
 			}
 		}
 
 		@Test
-		fun testPrahaSignalPlacement() {
+		fun testPragueSignalPlacement() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml) as DefaultSimulationContext
+			val context = editingContextFactory.createContext(xml) as EditingContext
 			val grid = context.getRailWayNetGrid()
 
 			// Find signals in north throat area (X=1-20)
-			val northSignals = findSignalsInArea(context as DefaultSimulationContext, 1, 20, 0, grid.getRows() - 1)
+			val northSignals = findSignalsInArea(context, 1, 20, 0, grid.getRows() - 1)
 			assertThat(northSignals.size)
 				.withMessage("North throat should have entry signals")
 				.isGreaterThan(3)
 
 			// Find signals in south throat area (X=50-69)
 			val southSignals =
-				findSignalsInArea(context as DefaultSimulationContext, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
+				findSignalsInArea(context, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
 			assertThat(southSignals.size)
 				.withMessage("South throat should have exit signals")
 				.isGreaterThan(3)
 		}
 
 		@Test
-		fun testPrahaMultipleRoutes() {
+		fun testPragueMultipleRoutes() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Find all InOuts
 			val allInOuts = mutableListOf<InOut>()
@@ -966,9 +967,9 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		fun testPrahaBayPlatformTermination() {
+		fun testPragueBayPlatformTermination() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Bay platforms should exist (check for InOuts with "Bay" in name)
 			var foundBayPlatform = false
@@ -990,7 +991,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@Test
 		fun testSwitchSegmentConsistencyPraha() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = factory.createContext(xml)
+			val context = editingContextFactory.createContext(xml)
 
 			// Verify all switches are properly connected
 			for (entry in context.getRailWayNetGrid()) {
@@ -1011,18 +1012,18 @@ class XMLContextFactoryTest : KoinTestBase() {
 		// Serialization Tests
 
 		@Test
-		fun testPrahaSaveLoad() {
+		fun testPragueSaveLoad() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val originalContext = factory.createContext(xml)
+			val originalContext = editingContextFactory.createContext(xml)
 
 			// Save to temp file
 			val tempFile = File.createTempFile("test-praha-", ".xml")
 			tempFile.deleteOnExit()
 
-			factory.saveContext(originalContext, tempFile)
+			editingContextFactory.saveContext(originalContext, tempFile)
 
 			// Reload from file
-			val loadedContext = factory.createContext(tempFile)
+			val loadedContext = editingContextFactory.createContext(tempFile)
 
 			// Verify structure preserved
 			assertThat(loadedContext).isNotNull()
@@ -1042,7 +1043,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Reuses the existPath method from ValidXMLParsingTests for connectivity checking.
 		 */
-		private fun existPath(from: InOut, to: InOut, context: DefaultSimulationContext): Boolean {
+		private fun existPath(from: InOut, to: InOut, context: DefaultEditingContext): Boolean {
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
 			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
 			if (fromLoc == toLoc) return true

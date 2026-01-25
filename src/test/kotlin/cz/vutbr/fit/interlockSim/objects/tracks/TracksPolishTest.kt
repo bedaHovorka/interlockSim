@@ -9,9 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
@@ -21,6 +18,9 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -39,7 +39,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Tracks Package - Coverage Polish Tests")
 class TracksPolishTest {
-
 	private lateinit var separator1: PathSeparator
 	private lateinit var separator2: PathSeparator
 	private lateinit var occupant: TrackOccupant
@@ -54,7 +53,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("SimpleTrackBlock - UnsupportedOperationException Methods")
 	inner class SimpleTrackBlockUnsupportedMethods {
-
 		@Test
 		fun `getState throws UnsupportedOperationException`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -62,7 +60,9 @@ class TracksPolishTest {
 			assertFailure {
 				block.getState()
 			}.isInstanceOf(UnsupportedOperationException::class)
-				.message().isNotNull().contains("Phase 1" as CharSequence, "DynamicTrack wrapper" as CharSequence)
+				.message()
+				.isNotNull()
+				.contains("Phase 1" as CharSequence, "DynamicTrack wrapper" as CharSequence)
 		}
 
 		@Test
@@ -158,14 +158,15 @@ class TracksPolishTest {
 			assertFailure {
 				block.getJoin(separator1, section)
 			}.isInstanceOf(UnsupportedOperationException::class)
-				.message().isNotNull().contains("getJoin" as CharSequence)
+				.message()
+				.isNotNull()
+				.contains("getJoin" as CharSequence)
 		}
 	}
 
 	@Nested
 	@DisplayName("SimpleTrackBlock - Constructor and Properties")
 	inner class SimpleTrackBlockConstructorTests {
-
 		@Test
 		fun `constructor with NodeCell endpoints`() {
 			val cell1 = InOut("A", true, SpatialType.HORIZONTAL)
@@ -241,7 +242,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("SimpleTrack - MaxSpeed Edge Cases")
 	inner class SimpleTrackMaxSpeedTests {
-
 		@Test
 		fun `maxSpeed returns correct speed for first separator`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 40.0, 50.0)
@@ -267,7 +267,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("DynamicTrack - Equals and Identity")
 	inner class DynamicTrackEqualsTests {
-
 		@Test
 		fun `equals with null returns false`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -316,7 +315,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("DynamicTrack - State Validation")
 	inner class DynamicTrackStateValidation {
-
 		@Test
 		fun `cancelPathSetup from different separator than reserved`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -370,7 +368,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("AbstractTrack - Second End Resolution")
 	inner class AbstractTrackSecondEndTests {
-
 		@Test
 		fun `ends returns both separators`() {
 			val track = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
@@ -393,7 +390,6 @@ class TracksPolishTest {
 	@Nested
 	@DisplayName("TrackSection - Boundary Conditions")
 	inner class TrackSectionBoundaryTests {
-
 		@Test
 		fun `TrackSection with single block`() {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)

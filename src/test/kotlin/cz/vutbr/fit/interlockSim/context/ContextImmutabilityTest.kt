@@ -15,13 +15,12 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
 import assertk.assertions.messageContains
-import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
@@ -45,7 +44,8 @@ import org.koin.test.inject
  * @since 2026-01-20
  */
 class ContextImmutabilityTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -57,7 +57,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `editing context starts unfrozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		assertThat(context.isFrozen()).isFalse()
 	}
 
@@ -66,7 +66,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `freeze is idempotent`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		assertThat(context.isFrozen()).isFalse()
 
 		// First freeze
@@ -87,12 +87,13 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `putCell throws when frozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.putCell(Point(1, 1), inA)
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.putCell(Point(1, 1), inA)
+			}
 		assertThat(exception).messageContains("Cannot add cell")
 		assertThat(exception).messageContains("context is frozen")
 		assertThat(exception).messageContains("Use EditingContext")
@@ -103,15 +104,16 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `removeCell throws when frozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		// Add cell first (while unfrozen)
 		context.putCell(Point(1, 1), inA)
 		// Then freeze
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.removeCell(Point(1, 1))
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.removeCell(Point(1, 1))
+			}
 		assertThat(exception).messageContains("Cannot remove cell")
 		assertThat(exception).messageContains("context is frozen")
 		assertThat(exception).messageContains("Use EditingContext")
@@ -122,15 +124,16 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `moveCell throws when frozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		// Add cell first (while unfrozen)
 		context.putCell(Point(1, 1), inA)
 		// Then freeze
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.moveCell(Point(1, 1), Point(2, 2))
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.moveCell(Point(1, 1), Point(2, 2))
+			}
 		assertThat(exception).messageContains("Cannot move cell")
 		assertThat(exception).messageContains("context is frozen")
 		assertThat(exception).messageContains("Use EditingContext")
@@ -141,7 +144,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `joinCells throws when frozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		// Add cells first (while unfrozen)
 		context.putCell(Point(1, 1), inA)
 		context.putCell(Point(5, 5), outB)
@@ -149,9 +152,10 @@ class ContextImmutabilityTest : KoinTestBase() {
 		context.freeze()
 
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.joinCells(Point(1, 1), Point(5, 5), trackBlock)
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.joinCells(Point(1, 1), Point(5, 5), trackBlock)
+			}
 		assertThat(exception).messageContains("Cannot join cells")
 		assertThat(exception).messageContains("context is frozen")
 		assertThat(exception).messageContains("Use EditingContext")
@@ -162,7 +166,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `removeLine throws when frozen`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		// Add cells and join them first (while unfrozen)
 		context.putCell(Point(1, 1), inA)
 		context.putCell(Point(2, 1), outB)
@@ -171,9 +175,10 @@ class ContextImmutabilityTest : KoinTestBase() {
 		// Then freeze
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.removeLine(trackBlock)
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.removeLine(trackBlock)
+			}
 		assertThat(exception).messageContains("Cannot remove track block")
 		assertThat(exception).messageContains("context is frozen")
 		assertThat(exception).messageContains("Use EditingContext")
@@ -185,14 +190,14 @@ class ContextImmutabilityTest : KoinTestBase() {
 	@Test
 	fun `simulation context is frozen after fromEditingContext`() {
 		// Build network with editing context
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Verify simulation context is frozen
 		assertThat(simulationContext.isFrozen()).isTrue()
@@ -207,14 +212,14 @@ class ContextImmutabilityTest : KoinTestBase() {
 	@Test
 	fun `simulation context is frozen after run initialization`() {
 		// Build network with editing context
-		val editingContext = factory.createEmptyContext()
+		val editingContext = editingContextFactory.createEmptyContext()
 		editingContext.putCell(Point(1, 1), inA)
 		editingContext.putCell(Point(5, 5), outB)
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Convert to simulation context
-		val simulationContext = factory.createContext(editingContext) as DefaultSimulationContext
+		val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		// Already frozen from factory method
 		assertThat(simulationContext.isFrozen()).isTrue()
@@ -229,12 +234,12 @@ class ContextImmutabilityTest : KoinTestBase() {
 	@Test
 	fun `editing context remains mutable after another context is frozen`() {
 		// Create first editing context and freeze it
-		val frozenContext = factory.createEmptyContext()
+		val frozenContext = editingContextFactory.createEmptyContext()
 		frozenContext.freeze()
 		assertThat(frozenContext.isFrozen()).isTrue()
 
 		// Create second editing context (completely separate instance)
-		val mutableContext = factory.createEmptyContext()
+		val mutableContext = editingContextFactory.createEmptyContext()
 		assertThat(mutableContext.isFrozen()).isFalse()
 
 		// Second context should be mutable
@@ -252,12 +257,13 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `exception message for putCell is clear and actionable`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.putCell(Point(1, 1), inA)
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.putCell(Point(1, 1), inA)
+			}
 
 		// Verify all key parts of error message
 		assertThat(exception).messageContains("Cannot add cell")
@@ -271,13 +277,14 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `exception message for removeCell is clear and actionable`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		context.putCell(Point(1, 1), inA)
 		context.freeze()
 
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.removeCell(Point(1, 1))
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.removeCell(Point(1, 1))
+			}
 
 		// Verify all key parts of error message
 		assertThat(exception).messageContains("Cannot remove cell")
@@ -291,15 +298,16 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `exception message for joinCells is clear and actionable`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		context.putCell(Point(1, 1), inA)
 		context.putCell(Point(5, 5), outB)
 		context.freeze()
 
 		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-		val exception = assertThrows<UnsupportedOperationException> {
-			context.joinCells(Point(1, 1), Point(5, 5), trackBlock)
-		}
+		val exception =
+			assertThrows<UnsupportedOperationException> {
+				context.joinCells(Point(1, 1), Point(5, 5), trackBlock)
+			}
 
 		// Verify all key parts of error message
 		assertThat(exception).messageContains("Cannot join cells")
@@ -313,7 +321,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `frozen context allows read operations`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		// Add data while unfrozen
 		context.putCell(Point(1, 1), inA)
 		context.putCell(Point(5, 5), outB)
@@ -335,7 +343,7 @@ class ContextImmutabilityTest : KoinTestBase() {
 	 */
 	@Test
 	fun `context allows modifications before freeze`() {
-		val context = factory.createEmptyContext()
+		val context = editingContextFactory.createEmptyContext()
 		assertThat(context.isFrozen()).isFalse()
 
 		// All operations should succeed

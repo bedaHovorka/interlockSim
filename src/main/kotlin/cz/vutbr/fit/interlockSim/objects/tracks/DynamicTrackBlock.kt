@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
 
@@ -64,7 +64,9 @@ private val logger = KotlinLogging.logger {}
  */
 class DynamicTrackBlock(
 	val staticRef: TrackBlock
-) : TrackBlock by staticRef, TrackSection, TrackFacility {
+) : TrackBlock by staticRef,
+	TrackSection,
+	TrackFacility {
 	/**
 	 * TrackSection interface implementation.
 	 * DynamicTrackBlock wraps a static TrackBlock, so it returns the static reference.

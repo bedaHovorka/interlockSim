@@ -20,15 +20,15 @@ import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -56,7 +56,7 @@ import java.io.File
 @DisplayName("Edit to Simulation Workflow")
 @Tag("integration-test")
 class EditToSimulationWorkflowTest : KoinTestBase() {
-	private val xmlFactory: XMLContextFactory by inject()
+	private val editingContextFactory: EditingContextFactory by inject()
 	private val transformer: ContextTransformer by inject()
 	private val processFactory: SimulationProcessFactory by inject()
 
@@ -66,49 +66,51 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 	 */
 	@Test
 	@DisplayName("complete workflow - create network, save, load, simulate")
-	fun completeWorkflow_createSaveLoadSimulate(@TempDir tempDir: File) {
+	fun completeWorkflow_createSaveLoadSimulate(
+		@TempDir tempDir: File
+	) {
 		// Step 1: Create network in editing mode
 		val editingContext = DefaultEditingContext(50, 50)
-		
+
 		// Create a simple railway network with two InOut points and a track
 		val inA = InOut("Entry_A", false, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("Exit_B", true, Cell.SpatialType.HORIZONTAL)
 		val pointA = Point(10, 10)
 		val pointB = Point(40, 10)
-		
+
 		editingContext.putCell(pointA, inA)
 		editingContext.putCell(pointB, inB)
-		
+
 		val trackBlock = SimpleTrackBlock(inA, inB, 500.0, 100.0)
 		editingContext.joinCells(pointA, pointB, trackBlock)
-		
+
 		// Set network properties
 		editingContext.currentMaxSpeed = 120.0
 		editingContext.currentTrackLength = 500.0
 		editingContext.currentNameString = "Test Network"
-		
-		// Step 2: Transform to simulation context
+
+		// Step 2: Save to XML
+		val xmlFile = File(tempDir, "test-network.xml")
+		editingContextFactory.saveContext(editingContext, xmlFile)
+		assertThat(xmlFile.exists()).isTrue()
+
+		// Step 3: Transform to simulation context
 		val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 		assertThat(simulationContext).isNotNull()
 		assertThat(simulationContext).isInstanceOf<DefaultSimulationContext>()
-		
-		// Step 3: Save to XML
-		val xmlFile = File(tempDir, "test-network.xml")
-		xmlFactory.saveContext(simulationContext, xmlFile)
-		assertThat(xmlFile.exists()).isTrue()
-		
+
 		// Step 4: Load from XML
-		val loadedContext = xmlFactory.createContext(xmlFile)
+		val loadedContext = editingContextFactory.createContext(xmlFile)
 		assertThat(loadedContext).isNotNull()
-		
+
 		// Step 5: Verify network integrity
 		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(50)
 		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(50)
-		val loadedSimCtx = loadedContext as SimulationContext
+		val loadedSimCtx = loadedContext as EditingContext
 		val loadedInOuts: Collection<*> = loadedSimCtx.getInOuts()
 		assertThat(loadedInOuts).hasSize(2)
 		assertThat(loadedContext.getGraph().size()).isGreaterThan(0)
-		
+
 		// Step 6: Verify context is accessible (NOTE: properties not preserved - see issue #248)
 		val loadedBaseContext = loadedContext as BaseContext<*>
 		assertThat(loadedBaseContext.currentMaxSpeed).isNotNull()
@@ -125,12 +127,12 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 	fun workflow_editToSimulationTransformation() {
 		// Create network in editing mode
 		val editingContext = DefaultEditingContext(30, 30)
-		
+
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 		val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 		semaphore.setName("Signal_1")
-		
+
 		val pointA = Point(5, 5)
 		val pointSem = Point(15, 5)
 		val pointB = Point(25, 5)
@@ -144,31 +146,31 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 
 		// Add semaphore after track is connected
 		editingContext.putCell(pointSem, semaphore)
-		
+
 		// Transform to simulation context
 		val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
-		
+
 		// Verify transformation succeeded
 		assertThat(simulationContext).isNotNull()
 		assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(30)
 		assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(30)
-		
+
 		// Verify cells are preserved
 		val cellA = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
 		val cellSem = simulationContext.getRailWayNetGrid().getCellAt(15, 5)
 		val cellB = simulationContext.getRailWayNetGrid().getCellAt(25, 5)
-		
+
 		assertThat(cellA).isNotNull()
 		assertThat(cellSem).isNotNull()
 		assertThat(cellB).isNotNull()
-		
+
 		// Verify InOuts are accessible
 		val simCtxInOuts: Collection<*> = simulationContext.getInOuts()
 		assertThat(simCtxInOuts).hasSize(2)
-		
+
 		// Verify graph structure is preserved
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
-		
+
 		// Verify simulation context is frozen (immutable)
 		val simContextBase = simulationContext as BaseContext<*>
 		val simFrozen = simContextBase.isFrozen()
@@ -183,15 +185,16 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 	@DisplayName("workflow - simulation results are observable")
 	fun workflow_simulationResultsAreObservable() {
 		// Load a pre-built network
-		val context = xmlFactory.createContext(
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-		)
+		val context =
+			editingContextFactory.createContext(
+				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+			)
 
 		assertThat(context).isNotNull()
-		val contextSimCtx = context as SimulationContext
-		val contextInOuts: Collection<*> = contextSimCtx.getInOuts()
+		val contextCtx = context as EditingContext
+		val contextInOuts: Collection<*> = contextCtx.getInOuts()
 		assertThat(contextInOuts).hasSize(2)
-		
+
 		// Verify that the context supports property access
 		// NOTE: Property change events are not yet implemented - see issue #249
 		val baseContext = context as BaseContext<*>
@@ -210,16 +213,16 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 	fun workflow_propertyChangeEventsPropagateCorrectly() {
 		// Create editing context with property change support
 		val editingContext = DefaultEditingContext(30, 30)
-		
+
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		
+
 		editingContext.putCell(Point(5, 5), inA)
 		editingContext.putCell(Point(25, 5), inB)
-		
+
 		val trackBlock = SimpleTrackBlock(inA, inB, 200.0, 80.0)
 		editingContext.joinCells(Point(5, 5), Point(25, 5), trackBlock)
-		
+
 		// Change properties in editing context
 		// NOTE: Property change events are not yet implemented - see issue #249
 		editingContext.currentMaxSpeed = 150.0

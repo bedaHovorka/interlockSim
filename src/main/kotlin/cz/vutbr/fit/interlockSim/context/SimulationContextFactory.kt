@@ -24,4 +24,10 @@ interface SimulationContextFactory : ContextFactory {
 	 * @throws ContextCreationException if editing context is invalid
 	 */
 	fun createContext(editingContext: EditingContext): SimulationContext
+
+	/**
+	 * Create an empty simulation context (for testing).
+	 * Converts an empty editing context to a simulation context.
+	 */
+	fun createEmptyContext(): SimulationContext
 }

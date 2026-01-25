@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -21,7 +20,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -47,7 +45,8 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @DisplayName("Cache Validation (PR #276 Review)")
 class CacheValidationTest : KoinTestBase() {
-	private val factory: XMLContextFactory by inject()
+	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
+	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	companion object {
 		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -60,7 +59,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("same wrapper returned for repeated toDynamic calls with same static object")
 		fun repeatedCallsReturnSameInstance() {
 			// Given: Simulation context with mapped separators
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 
 			// When: Getting static reference and calling toDynamic multiple times
 			val dynamicInOut = context.getInOuts().first()
@@ -80,7 +80,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("same wrapper returned for InOut semaphore repeated calls")
 		fun semaphoreRepeatedCallsReturnSameInstance() {
 			// Given: Context with InOut semaphores
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 			val dynamicInOut = context.getInOuts().first()
 			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
 
@@ -99,7 +100,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("toDynamic is identity function for already-dynamic separators")
 		fun alreadyDynamicPassthrough() {
 			// Given: Context with dynamic wrappers
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 			val dynamicInOut = context.getInOuts().first()
 
 			// When: Calling toDynamic on already-dynamic separator
@@ -117,7 +119,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("unmapped InOut throws IllegalStateException")
 		fun unmappedInOutThrowsException() {
 			// Given: Empty context with no separators
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 
 			// When: Creating unmapped InOut
 			val unmappedInOut = InOut("unmapped-inout", true, Cell.SpatialType.HORIZONTAL)
@@ -134,7 +136,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("unmapped RailSemaphore throws IllegalStateException")
 		fun unmappedSemaphoreThrowsException() {
 			// Given: Empty context
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 
 			// When: Creating unmapped semaphore
 			val unmappedSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
@@ -152,7 +154,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("unmapped RailSwitch throws IllegalStateException")
 		fun unmappedSwitchThrowsException() {
 			// Given: Empty context
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 
 			// When: Creating unmapped switch
 			val unmappedSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
@@ -174,7 +176,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("error includes separator class name")
 		fun includesClassName() {
 			// Given: Empty context and unmapped semaphore
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
 			// When/Then: Error message includes class name
@@ -188,7 +190,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("error includes map size information")
 		fun includesMapSize() {
 			// Given: Empty context (map size = 0)
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
 			// When/Then: Error message includes map size
@@ -203,7 +205,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("error includes separator name if available")
 		fun includesSeparatorName() {
 			// Given: Named unmapped separator
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 			unmapped.setName("test-semaphore")
 
@@ -218,7 +220,7 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("error includes initialization prerequisite instructions")
 		fun includesPrerequisiteInstructions() {
 			// Given: Empty context
-			val context = factory.createEmptySimulationContext()
+			val context = simulationContextFactory.createEmptyContext()
 			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
 			// When/Then: Error message mentions initialization prerequisite
@@ -236,7 +238,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("validateDynamicMapping succeeds for complete vyhybna.xml")
 		fun completeVyhybnaValidates() {
 			// Given: Fully initialized context
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 
 			// When: Triggering validation by accessing InOuts
 			val inouts = context.getInOuts()
@@ -249,7 +252,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("all InOut semaphores are mapped after initialization")
 		fun allInOutSemaphoresMapped() {
 			// Given: Context with InOuts
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 
 			// When: Accessing all InOut semaphores
 			for (dynamicInOut in context.getInOuts()) {
@@ -272,7 +276,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("multiple different wrapper types can coexist in cache")
 		fun multipleWrapperTypes() {
 			// Given: Context with multiple separator types
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 
 			// When: Getting different wrapper types
 			val inouts = context.getInOuts()
@@ -291,7 +296,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("cache preserves wrapper identity across different access patterns")
 		fun identityPreservedAcrossAccessPatterns() {
 			// Given: Context with mapped separators
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 
 			// When: Accessing same separator via different paths
 			val fromGetInOuts = context.getInOuts().first()
@@ -305,7 +311,8 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("nested dynamic objects - InOut contains semaphores")
 		fun nestedDynamicObjects() {
 			// Given: Context with InOut containing semaphores
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
+			val context = simulationContextFactory.createContext(editingContext)
 			val dynamicInOut = context.getInOuts().first()
 
 			// When: Accessing nested semaphores

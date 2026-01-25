@@ -15,9 +15,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -310,12 +310,13 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		fun `path handles switch position conflict`() {
 			// Arrange - path through switch
 			val end1 = MockNodeCell("End1")
-			val railSwitch = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = 80.0,
-				branchSpeed = 50.0
-			)
+			val railSwitch =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = 80.0,
+					branchSpeed = 50.0
+				)
 			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
@@ -340,19 +341,21 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		fun `conflicting switch positions prevent path setup`() {
 			// Arrange - path through multiple switches
 			val end1 = MockNodeCell("End1")
-			val switch1 = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = 80.0,
-				branchSpeed = 50.0
-			)
+			val switch1 =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = 80.0,
+					branchSpeed = 50.0
+				)
 			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val switch2 = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_LEFT_FALSE,
-				mainSpeed = 70.0,
-				branchSpeed = 40.0
-			)
+			val switch2 =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_LEFT_FALSE,
+					mainSpeed = 70.0,
+					branchSpeed = 40.0
+				)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -378,12 +381,13 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		fun `switch configuration error leaves path in consistent state`() {
 			// Arrange
 			val end1 = MockNodeCell("End1")
-			val railSwitch = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = 80.0,
-				branchSpeed = 50.0
-			)
+			val railSwitch =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = 80.0,
+					branchSpeed = 50.0
+				)
 			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
@@ -409,12 +413,13 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		fun `switch position validation during setup`() {
 			// Arrange
 			val end1 = MockNodeCell("End1")
-			val railSwitch = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = 80.0,
-				branchSpeed = 50.0
-			)
+			val railSwitch =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = 80.0,
+					branchSpeed = 50.0
+				)
 			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
 			val track2 = SimpleTrackBlock(MockNodeCell("End3"), MockNodeCell("End4"), 100.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)

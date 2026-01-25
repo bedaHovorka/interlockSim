@@ -10,20 +10,13 @@
 package cz.vutbr.fit.interlockSim.xml
 
 import cz.vutbr.fit.interlockSim.MyResourceBundle
-import cz.vutbr.fit.interlockSim.context.BaseContext
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -34,7 +27,6 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.Doubleton
@@ -69,27 +61,13 @@ import kotlin.getValue
  * XML implementation of {@link EditingContextFactory}
  */
 class XMLContextFactory :
-	EditingContextFactory,
-	SimulationContextFactory {
+	EditingContextFactory {
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
-	private val processFactory: SimulationProcessFactory by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
-	/**
-	 * Internal editing context used during XML parsing.
-	 * Extends DefaultEditingContext to support editing operations (putCell, hardJoin, etc.)
-	 * during construction. After parsing, it's converted to DefaultSimulationContext.
-	 */
-	private inner class XMLContext(
-		cols: Int,
-		rows: Int
-	) : cz.vutbr.fit.interlockSim.context.DefaultEditingContext(cols, rows) {
-		// No additional implementation needed - supports editing during XML parsing
-	}
-
 	private inner class Handler : DefaultHandler() {
-		private var editingContext: XMLContext? = null
+		private var editingContext: DefaultEditingContext? = null
 		private var ended: Boolean = false
 		private var netElementDepth: Int = 0
 
@@ -115,7 +93,7 @@ class XMLContextFactory :
 				}
 				val cols = getInt(uri!!, attributes!!, X)
 				val rows = getInt(uri, attributes, Y)
-				editingContext = XMLContext(cols, rows)
+				editingContext = DefaultEditingContext(cols, rows)
 				return
 			}
 
@@ -315,12 +293,11 @@ class XMLContextFactory :
 		}
 
 		/**
-		 * Returns the parsed context as a DefaultSimulationContext.
-		 * Converts the editing context (used during parsing) to a simulation context.
+		 * Returns the parsed context as a DefaultEditingContext.
 		 */
-		fun getContext(): DefaultSimulationContext? =
+		fun getContext(): DefaultEditingContext? =
 			if (ended && editingContext != null) {
-				DefaultSimulationContext.fromEditingContext(editingContext!!, processFactory)
+				editingContext
 			} else {
 				null
 			}
@@ -361,16 +338,7 @@ class XMLContextFactory :
 		private const val DEFAULT_GRID_SIZE = 100
 	}
 
-	override fun createEmptyContext(): EditingContext = XMLContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
-
-	/**
-	 * Create an empty simulation context (for testing).
-	 * Converts an empty editing context to a simulation context.
-	 */
-	fun createEmptySimulationContext(): DefaultSimulationContext {
-		val editingContext = createEmptyContext()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	override fun createEmptyContext(): EditingContext = DefaultEditingContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
 	@Throws(ContextCreationException::class)
 	override fun createContext(file: File): Context<*, *> =
@@ -381,7 +349,7 @@ class XMLContextFactory :
 		}
 
 	@Throws(ContextCreationException::class)
-	private fun createContext(reader: Reader): DefaultSimulationContext {
+	private fun createContext(reader: Reader): DefaultEditingContext {
 		val validator = validator ?: throw ContextCreationException("Validator not initialized")
 		return try {
 			val inputSource = InputSource(reader)
@@ -409,16 +377,15 @@ class XMLContextFactory :
 
 	/**
 	 * Generates XML representation of a Context.
-	 * Accepts any Context type (EditingContext or SimulationContext) but only saves
+	 * Accepts any Context type (only EditingContext) because only saves
 	 * the static network structure (nodes, tracks, connections, grid dimensions).
-	 * Dynamic simulation state (train positions, semaphore states) is NOT saved.
 	 *
 	 * @param context The context to serialize
 	 * @return XML string matching data.xsd schema
 	 * @throws IOException if serialization fails
 	 */
 	private fun generateXML(context: Context<*, *>): String {
-		val xmlContext = Util.assertInstanceOf(BaseContext::class.java, context)
+		val xmlContext = Util.assertInstanceOf(EditingContext::class.java, context)
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		val builder = StringBuilder()
 
@@ -447,8 +414,8 @@ class XMLContextFactory :
 		for (entry in cellGrid) {
 			val point = entry.key
 			val cell = entry.value
-			// Check for both static NodeCell and dynamic wrappers (DynamicInOut, DynamicRailSwitch, DynamicRailSemaphore)
-			if (cell is NodeCell || cell is DynamicInOut || cell is DynamicRailSwitch || cell is DynamicRailSemaphore) {
+			// Check for only static NodeCell
+			if (cell is NodeCell) {
 				allNodes.add(point)
 			}
 		}
@@ -456,8 +423,8 @@ class XMLContextFactory :
 		// Write all nodes to XML
 		for (p in allNodes) {
 			val cell = railwayNetGrid[p]
-			// Check for both static NodeCell and dynamic wrappers (DynamicInOut, DynamicRailSwitch, DynamicRailSemaphore)
-			if (cell is NodeCell || cell is DynamicInOut || cell is DynamicRailSwitch || cell is DynamicRailSemaphore) {
+			// Check for only static NodeCell
+			if (cell is NodeCell) {
 				val tag = tagFor(p, cell)
 				spacing(tag, 1)
 				builder.append(tag)
@@ -591,18 +558,15 @@ class XMLContextFactory :
 		value: TrackBlock
 	): StringBuilder {
 		val builder = StringBuilder()
-		// Unwrap DynamicTrackBlock to get the static block for XML serialization
-		// (DynamicTrackBlock is a runtime wrapper, not part of the XML schema)
-		val staticBlock = if (value is DynamicTrackBlock) value.staticRef else value
-		val clazz = staticBlock.javaClass
+		val clazz = value.javaClass
 		beginOfTag(builder, clazz)
 		appendAttribute(builder, FROM, p1)
 		appendAttribute(builder, TO, p2)
 		appendAttribute(builder, FROM, key.getValue(p1)!!)
 		appendAttribute(builder, TO, key.getValue(p2)!!)
-		appendAttribute(builder, ATR_LENGTH, staticBlock.length())
-		appendAttribute(builder, ATR_MAX_SPEED + FROM, staticBlock.maxSpeed(staticBlock.ends()[0]))
-		appendAttribute(builder, ATR_MAX_SPEED + TO, staticBlock.maxSpeed(staticBlock.ends()[1]))
+		appendAttribute(builder, ATR_LENGTH, value.length())
+		appendAttribute(builder, ATR_MAX_SPEED + FROM, value.maxSpeed(value.ends()[0]))
+		appendAttribute(builder, ATR_MAX_SPEED + TO, value.maxSpeed(value.ends()[1]))
 		closingEndOfTag(builder)
 		return builder
 	}
@@ -612,24 +576,16 @@ class XMLContextFactory :
 		cell: Cell
 	): StringBuilder {
 		val builder = StringBuilder()
-		// Unwrap dynamic cells to get the static cell for XML serialization
-		// (Dynamic cells are runtime wrappers, not part of the XML schema)
-		val staticCell = when (cell) {
-			is DynamicInOut -> cell.staticRef
-			is DynamicRailSemaphore -> cell.staticRef
-			is DynamicRailSwitch -> cell.staticRef
-			else -> cell
-		}
-		val clazz = staticCell.javaClass
+		val clazz = cell.javaClass
 		beginOfTag(builder, clazz)
 		appendAttribute(builder, "", key)
-		staticCell.getSpatialType()?.let { appendAttribute(builder, it) }
-		if (staticCell is OrientedPathSeparator) {
-			appendAttribute(builder, ATR_ORIENT_NAME, (staticCell as OrientedPathSeparator).getOrientation().toString())
+		cell.getSpatialType()?.let { appendAttribute(builder, it) }
+		if (cell is OrientedPathSeparator) {
+			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
 		}
 		when (clazz) {
-			RailSwitch::class.java -> appendAttribute(builder, (staticCell as RailSwitch).type)
-			InOut::class.java -> appendAttribute(builder, NAME, (staticCell as InOut).getName())
+			RailSwitch::class.java -> appendAttribute(builder, (cell as RailSwitch).type)
+			InOut::class.java -> appendAttribute(builder, NAME, (cell as InOut).getName())
 		}
 		closingEndOfTag(builder)
 		return builder
@@ -641,11 +597,6 @@ class XMLContextFactory :
 		builder: StringBuilder,
 		clazz: Class<*>
 	): StringBuilder = builder.append('<').append(classToString(clazz)).append(' ')
-
-	override fun createContext(editingContext: EditingContext): SimulationContext {
-		// Convert EditingContext to SimulationContext using the factory method
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
 
 	@Throws(Exception::class)
 	override fun createNew(

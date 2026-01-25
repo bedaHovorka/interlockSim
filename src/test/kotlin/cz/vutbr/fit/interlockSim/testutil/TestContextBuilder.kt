@@ -14,10 +14,11 @@
 
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.java.KoinJavaComponent.getKoin
 
 /**
@@ -41,9 +42,12 @@ import org.koin.java.KoinJavaComponent.getKoin
  * @see cz.vutbr.fit.interlockSim.context.DefaultEditingContext
  */
 class TestContextBuilder {
-	private val factory: XMLContextFactory by getKoin().inject()
+	private val factory: SimulationContextFactory by getKoin().inject()
+
 	// Use DefaultEditingContext for building the network (supports putCell/joinCells)
-	private val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(30, 30)
+	private val editingContext =
+		cz.vutbr.fit.interlockSim.context
+			.DefaultEditingContext(30, 30)
 
 	/**
 	 * Adds an InOut (entry/exit point) to the context at specified grid position.
@@ -148,10 +152,20 @@ class TestContextBuilder {
 	 *
 	 * @return configured DefaultSimulationContext instance (immutable network structure)
 	 */
-	fun build(): DefaultSimulationContext {
+	fun buildSimulationContext(): DefaultSimulationContext {
 		// Convert editing context to simulation context
 		val processFactory = getKoin().get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
+
+	/**
+	 * Builds and returns the configured editing context.
+	 * Converts the editing context to a editing context using the factory.
+	 *
+	 * @return configured DefaultSimulationContext instance (immutable network structure)
+	 */
+	fun buildEditingContext(): DefaultEditingContext {
+		return editingContext
 	}
 }
 
@@ -162,8 +176,9 @@ class TestContextBuilder {
  * @return configured context with linear track
  */
 fun buildLinearTrack(): DefaultSimulationContext {
-	val factory = getKoin().get<XMLContextFactory>()
-	val editingContext = factory.createEmptyContext()
+	val editingFactory = getKoin().get<EditingContextFactory>()
+	val simulationFactory = getKoin().get<SimulationContextFactory>()
+	val editingContext = editingFactory.createEmptyContext()
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -187,7 +202,7 @@ fun buildLinearTrack(): DefaultSimulationContext {
 	editingContext.joinCells(pA, pB, trackBlock)
 
 	// Convert to simulation context
-	return factory.createContext(editingContext) as DefaultSimulationContext
+	return simulationFactory.createContext(editingContext) as DefaultSimulationContext
 }
 
 /**
@@ -197,8 +212,9 @@ fun buildLinearTrack(): DefaultSimulationContext {
  * @return configured context with semaphore
  */
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
-	val factory = getKoin().get<XMLContextFactory>()
-	val editingContext = factory.createEmptyContext()
+	val editingFactory = getKoin().get<EditingContextFactory>()
+	val simulationFactory = getKoin().get<SimulationContextFactory>()
+	val editingContext = editingFactory.createEmptyContext()
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -230,7 +246,7 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	editingContext.joinCells(pA, r1, trackBlock)
 
 	// Convert to simulation context
-	return factory.createContext(editingContext) as DefaultSimulationContext
+	return simulationFactory.createContext(editingContext) as DefaultSimulationContext
 }
 
 /**
@@ -239,9 +255,17 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
  *
  * @return context with two InOut elements
  */
-fun buildMinimal(): DefaultSimulationContext =
+fun buildMinimalSimulation(): DefaultSimulationContext =
 	getKoin()
 		.get<TestContextBuilder>()
 		.withInOut("A", 1, 1, true) // entry point
 		.withInOut("B", 2, 1, false) // exit point
-		.build()
+		.buildSimulationContext()
+
+fun buildMinimalEditing(): DefaultEditingContext =
+	getKoin()
+		.get<TestContextBuilder>()
+		.withInOut("A", 1, 1, true) // entry point
+		.withInOut("B", 2, 1, false) // exit point
+		.buildEditingContext()
+
