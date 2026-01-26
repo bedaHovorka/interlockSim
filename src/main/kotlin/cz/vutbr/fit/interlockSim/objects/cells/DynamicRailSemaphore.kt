@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.beans.PropertyChangeListener
+import java.beans.PropertyChangeSupport
 
 private val logger = KotlinLogging.logger {}
 
@@ -39,6 +41,12 @@ sealed class DynamicRailSemaphore(
 	val staticRef: RailSemaphore
 ) : OrientedPathSeparator by staticRef,
 	DynamicPathSeparator {
+	/**
+	 * PropertyChangeSupport for notifying listeners of signal state changes.
+	 * Follows the pattern used in BaseContext (Java Beans event model).
+	 */
+	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
 	// spatialType is already available via PathSeparator delegation (getSpatialType())
@@ -52,15 +60,20 @@ sealed class DynamicRailSemaphore(
 	 */
 	open var signal: Signal = Signal.STOP
 		set(newSignal) {
+			val oldSignal = field
 			logger.debug {
-				if (field != newSignal) {
+				if (oldSignal != newSignal) {
 					"Semaphore ${staticRef.getName()} " +
-						"signal change: $field -> $newSignal at t=${jDisco.Process.time()}"
+						"signal change: $oldSignal -> $newSignal at t=${jDisco.Process.time()}"
 				} else {
 					""
 				}
 			}
 			field = newSignal
+			// Fire property change event only if signal actually changed
+			if (oldSignal != newSignal) {
+				changeSupport.firePropertyChange("signal", oldSignal, newSignal)
+			}
 		}
 
 	override fun cancelPathSetup(
@@ -136,6 +149,28 @@ sealed class DynamicRailSemaphore(
 	 * - Proper behavior in hash-based collections
 	 */
 	override fun hashCode(): Int = System.identityHashCode(staticRef)
+
+	/**
+	 * Adds a property change listener to this semaphore.
+	 *
+	 * The listener will be notified when the "signal" property changes.
+	 *
+	 * @param listener The listener to add
+	 * @see PropertyChangeSupport.addPropertyChangeListener
+	 */
+	fun addPropertyChangeListener(listener: PropertyChangeListener) {
+		changeSupport.addPropertyChangeListener(listener)
+	}
+
+	/**
+	 * Removes a property change listener from this semaphore.
+	 *
+	 * @param listener The listener to remove
+	 * @see PropertyChangeSupport.removePropertyChangeListener
+	 */
+	fun removePropertyChangeListener(listener: PropertyChangeListener) {
+		changeSupport.removePropertyChangeListener(listener)
+	}
 
 	/**
 	 * String representation for debugging

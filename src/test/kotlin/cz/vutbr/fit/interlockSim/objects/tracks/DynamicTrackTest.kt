@@ -20,6 +20,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.beans.PropertyChangeEvent
+import java.beans.PropertyChangeListener
 
 /**
  * Tests for DynamicTrack wrapper class
@@ -334,5 +336,203 @@ class DynamicTrackTest {
 		// Verify for second track with different properties
 		assertThat(dynamicTrack2.length).isEqualTo(staticTrack2.length())
 		assertThat(dynamicTrack2.ends).isEqualTo(staticTrack2.ends())
+	}
+
+	// ========== PropertyChangeSupport Tests ==========
+
+	@Test
+	fun `setUpPath fires state and reservedFrom property change events`() {
+		// Given: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+
+		// When: path is set up
+		dynamicTrack1.setUpPath(separator1)
+
+		// Then: two events should be fired
+		assertThat(capturedEvents).hasSize(2)
+
+		// Verify "state" event
+		val stateEvent = capturedEvents.find { it.propertyName == "state" }
+		assertThat(stateEvent).isNotNull()
+		assertThat(stateEvent!!.oldValue).isEqualTo(TrackFacility.State.FREE)
+		assertThat(stateEvent.newValue).isEqualTo(TrackFacility.State.RESERVED)
+
+		// Verify "reservedFrom" event
+		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
+		assertThat(reservedFromEvent).isNotNull()
+		assertThat(reservedFromEvent!!.oldValue).isNull()
+		assertThat(reservedFromEvent.newValue).isSameAs(separator1)
+	}
+
+	@Test
+	fun `enter fires state, occupant, and reservedFrom property change events`() {
+		// Given: track is reserved
+		dynamicTrack1.setUpPath(separator1)
+
+		// And: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+
+		// When: train enters
+		dynamicTrack1.enter(occupant)
+
+		// Then: three events should be fired
+		assertThat(capturedEvents).hasSize(3)
+
+		// Verify "state" event
+		val stateEvent = capturedEvents.find { it.propertyName == "state" }
+		assertThat(stateEvent).isNotNull()
+		assertThat(stateEvent!!.oldValue).isEqualTo(TrackFacility.State.RESERVED)
+		assertThat(stateEvent.newValue).isEqualTo(TrackFacility.State.OCCUPIED)
+
+		// Verify "occupant" event
+		val occupantEvent = capturedEvents.find { it.propertyName == "occupant" }
+		assertThat(occupantEvent).isNotNull()
+		assertThat(occupantEvent!!.oldValue).isNull()
+		assertThat(occupantEvent.newValue).isSameAs(occupant)
+
+		// Verify "reservedFrom" event
+		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
+		assertThat(reservedFromEvent).isNotNull()
+		assertThat(reservedFromEvent!!.oldValue).isSameAs(separator1)
+		assertThat(reservedFromEvent.newValue).isNull()
+	}
+
+	@Test
+	fun `leave fires state and occupant property change events`() {
+		// Given: track is occupied
+		dynamicTrack1.setUpPath(separator1)
+		dynamicTrack1.enter(occupant)
+
+		// And: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+
+		// When: train leaves
+		dynamicTrack1.leave(occupant)
+
+		// Then: two events should be fired
+		assertThat(capturedEvents).hasSize(2)
+
+		// Verify "state" event
+		val stateEvent = capturedEvents.find { it.propertyName == "state" }
+		assertThat(stateEvent).isNotNull()
+		assertThat(stateEvent!!.oldValue).isEqualTo(TrackFacility.State.OCCUPIED)
+		assertThat(stateEvent.newValue).isEqualTo(TrackFacility.State.FREE)
+
+		// Verify "occupant" event
+		val occupantEvent = capturedEvents.find { it.propertyName == "occupant" }
+		assertThat(occupantEvent).isNotNull()
+		assertThat(occupantEvent!!.oldValue).isSameAs(occupant)
+		assertThat(occupantEvent.newValue).isNull()
+	}
+
+	@Test
+	fun `cancelPathSetup fires state and reservedFrom property change events`() {
+		// Given: track is reserved
+		dynamicTrack1.setUpPath(separator1)
+
+		// And: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+
+		// When: path is cancelled
+		dynamicTrack1.cancelPathSetup(separator1)
+
+		// Then: two events should be fired
+		assertThat(capturedEvents).hasSize(2)
+
+		// Verify "state" event
+		val stateEvent = capturedEvents.find { it.propertyName == "state" }
+		assertThat(stateEvent).isNotNull()
+		assertThat(stateEvent!!.oldValue).isEqualTo(TrackFacility.State.RESERVED)
+		assertThat(stateEvent.newValue).isEqualTo(TrackFacility.State.FREE)
+
+		// Verify "reservedFrom" event
+		val reservedFromEvent = capturedEvents.find { it.propertyName == "reservedFrom" }
+		assertThat(reservedFromEvent).isNotNull()
+		assertThat(reservedFromEvent!!.oldValue).isSameAs(separator1)
+		assertThat(reservedFromEvent.newValue).isNull()
+	}
+
+	@Test
+	fun `removePropertyChangeListener stops receiving events`() {
+		// Given: listener is registered and receives events
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+		dynamicTrack1.setUpPath(separator1)
+		assertThat(capturedEvents).isNotEmpty()
+
+		// When: listener is removed
+		capturedEvents.clear()
+		dynamicTrack1.removePropertyChangeListener(testListener)
+		dynamicTrack1.cancelPathSetup(separator1)
+
+		// Then: no events should be received
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `multiple listeners all receive events`() {
+		// Given: two listeners
+		val capturedEvents1 = mutableListOf<PropertyChangeEvent>()
+		val capturedEvents2 = mutableListOf<PropertyChangeEvent>()
+		val testListener1 = PropertyChangeListener { evt -> capturedEvents1.add(evt) }
+		val testListener2 = PropertyChangeListener { evt -> capturedEvents2.add(evt) }
+
+		dynamicTrack1.addPropertyChangeListener(testListener1)
+		dynamicTrack1.addPropertyChangeListener(testListener2)
+
+		// When: state changes
+		dynamicTrack1.setUpPath(separator1)
+
+		// Then: both listeners receive events
+		assertThat(capturedEvents1).hasSize(2)
+		assertThat(capturedEvents2).hasSize(2)
+		assertThat(capturedEvents1[0].propertyName).isEqualTo(capturedEvents2[0].propertyName)
+	}
+
+	@Test
+	fun `listener can be added and removed multiple times`() {
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+
+		// Add listener
+		dynamicTrack1.addPropertyChangeListener(testListener)
+		dynamicTrack1.setUpPath(separator1)
+		assertThat(capturedEvents).hasSize(2)
+
+		// Remove listener
+		capturedEvents.clear()
+		dynamicTrack1.removePropertyChangeListener(testListener)
+		dynamicTrack1.cancelPathSetup(separator1)
+		assertThat(capturedEvents).isEmpty()
+
+		// Re-add listener
+		dynamicTrack1.addPropertyChangeListener(testListener)
+		dynamicTrack1.setUpPath(separator1)
+		assertThat(capturedEvents).hasSize(2)
+	}
+
+	@Test
+	fun `property change events contain correct source object`() {
+		// Given: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicTrack1.addPropertyChangeListener(testListener)
+
+		// When: state changes
+		dynamicTrack1.setUpPath(separator1)
+
+		// Then: all events should have dynamicTrack1 as source
+		capturedEvents.forEach { event ->
+			assertThat(event.source).isSameAs(dynamicTrack1)
+		}
 	}
 }
