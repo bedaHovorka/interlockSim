@@ -18,6 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Process
+import java.beans.PropertyChangeListener
+import java.beans.PropertyChangeSupport
 
 private val logger = KotlinLogging.logger {}
 
@@ -39,6 +41,12 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrack(
 	val staticRef: TrackFacility
 ) {
+	/**
+	 * PropertyChangeSupport for notifying listeners of state changes.
+	 * Follows the pattern used in BaseContext (Java Beans event model).
+	 */
+	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+
 	// Static properties delegated from wrapped object
 	val length: Double
 		get() = staticRef.length()
@@ -108,9 +116,15 @@ class DynamicTrack(
 		requireSimulation(occupant == null) {
 			"Track occupant collision - must be null on entry (shunting not implemented)"
 		}
+		val oldState = state
+		val oldReservedFrom = reservedFrom
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
+		// Fire property change events
+		changeSupport.firePropertyChange("state", oldState, state)
+		changeSupport.firePropertyChange("occupant", null, newOccupant)
+		changeSupport.firePropertyChange("reservedFrom", oldReservedFrom, null)
 	}
 
 	/**
@@ -129,8 +143,13 @@ class DynamicTrack(
 		requireSimulation(occupant === leavingOccupant) {
 			"Track occupant mismatch on leave"
 		}
+		val oldState = state
+		val oldOccupant = occupant
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
+		// Fire property change events
+		changeSupport.firePropertyChange("state", oldState, state)
+		changeSupport.firePropertyChange("occupant", oldOccupant, null)
 	}
 
 	/**
@@ -165,8 +184,12 @@ class DynamicTrack(
 					"state=$state, occupant=$occupant, requested by=$sep"
 			}
 		}
+		val oldState = state
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep
+		// Fire property change events
+		changeSupport.firePropertyChange("state", oldState, state)
+		changeSupport.firePropertyChange("reservedFrom", null, sep)
 	}
 
 	/**
@@ -222,11 +245,16 @@ class DynamicTrack(
 		logger.info {
 			"${Process.time()} Block ${staticRef.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE"
 		}
+		val oldState = state
+		val oldReservedFrom = reservedFrom
 		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
 		if (sep !== reservedFrom) {
 			throw TrackOperationException("wrong end on cancel", staticRef)
 		}
 		reservedFrom = null
+		// Fire property change events
+		changeSupport.firePropertyChange("state", oldState, state)
+		changeSupport.firePropertyChange("reservedFrom", oldReservedFrom, null)
 	}
 
 	// Private helper methods for state transitions
@@ -288,6 +316,31 @@ class DynamicTrack(
 	 * - Proper behavior in hash-based collections
 	 */
 	override fun hashCode(): Int = System.identityHashCode(staticRef)
+
+	/**
+	 * Adds a property change listener to this track.
+	 *
+	 * The listener will be notified when track state changes:
+	 * - "state" property: FREE -> RESERVED -> OCCUPIED -> FREE
+	 * - "occupant" property: changes when train enters/leaves
+	 * - "reservedFrom" property: changes when path is set up/cancelled
+	 *
+	 * @param listener The listener to add
+	 * @see PropertyChangeSupport.addPropertyChangeListener
+	 */
+	fun addPropertyChangeListener(listener: PropertyChangeListener) {
+		changeSupport.addPropertyChangeListener(listener)
+	}
+
+	/**
+	 * Removes a property change listener from this track.
+	 *
+	 * @param listener The listener to remove
+	 * @see PropertyChangeSupport.removePropertyChangeListener
+	 */
+	fun removePropertyChangeListener(listener: PropertyChangeListener) {
+		changeSupport.removePropertyChangeListener(listener)
+	}
 
 	/**
 	 * String representation for debugging
