@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -45,6 +46,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  * - [getNextTrackSection] - Navigate track topology
  * - [pathToNextSemaphore] - Find path to next signal
  * - [isSeparatorInDirection] - Check signal orientation
+ * - [getTrainNavigationService] - Get service for train-specific path navigation
  *
  * **Dynamic State Management:**
  * - [toDynamic] (PathSeparator) - Convert to dynamic wrapper
@@ -127,6 +129,46 @@ interface SimulationEnvironment {
 		next: Track?,
 		previous: Track?
 	): Boolean
+
+	/**
+	 * Get train navigation service for train-specific path following.
+	 *
+	 * The TrainNavigationService provides train-specific path navigation that validates
+	 * block ownership. Unlike [pathToNextSemaphore], it only returns paths through blocks
+	 * RESERVED for the specific train.
+	 *
+	 * ## Use Cases
+	 *
+	 * - Train requests path to next semaphore (only through owned blocks)
+	 * - Train waits when blocks are reserved for different train
+	 * - Train resumes when path becomes available
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * // In Train.Front.semaphoreAction():
+	 * val trainNavService = env.getTrainNavigationService()
+	 * val path = trainNavService.findReservedPathForTrain(
+	 *     trainId = toString(),
+	 *     separator = semaphore,
+	 *     next = next
+	 * )
+	 *
+	 * if (path == null) {
+	 *     // Path not reserved for this train, halt and wait
+	 *     fireStop()
+	 *     waitUntil { trainNavService.isPathReservedForTrain(...) }
+	 * } else {
+	 *     // Path is reserved for us, continue
+	 *     accelerateToSignal(semaphore, path)
+	 * }
+	 * ```
+	 *
+	 * @return TrainNavigationService instance for this simulation context
+	 * @see TrainNavigationService
+	 * @since Issue #295 (Phase 3 of Issue #292)
+	 */
+	fun getTrainNavigationService(): TrainNavigationService
 
 	// ========================================
 	// Dynamic State Management

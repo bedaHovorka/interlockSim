@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -154,6 +155,17 @@ open class DefaultSimulationContext(
 	 * Random number generator for name generation (jDisco)
 	 */
 	private val random: Random = Random(0)
+
+	/**
+	 * Train navigation service for train-specific path following.
+	 * Lazy-initialized on first access to ensure SimulationEnvironment (this) is fully constructed.
+	 * Created via Koin DI with shared PathReservationRegistry instance.
+	 */
+	private val trainNavigationServiceInstance: TrainNavigationService by lazy {
+		org.koin.core.context.GlobalContext.get().get<TrainNavigationService> {
+			org.koin.core.parameter.parametersOf(this as SimulationEnvironment)
+		}
+	}
 
 	// ========================================
 	// Context Interface Implementation
@@ -1316,6 +1328,17 @@ open class DefaultSimulationContext(
 	 */
 	override fun getWorkerFor(inOut: DynamicInOut): InOutWorker =
 		workers[inOut] ?: throw IllegalStateException("No worker found for InOut: $inOut")
+
+	/**
+	 * Get train navigation service for train-specific path following.
+	 *
+	 * Returns the TrainNavigationService instance for this simulation context.
+	 * The service validates train ownership of blocks before returning paths.
+	 *
+	 * @return TrainNavigationService instance
+	 * @see TrainNavigationService
+	 */
+	override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
 
 	/**
 	 * Set the main process for the simulation
