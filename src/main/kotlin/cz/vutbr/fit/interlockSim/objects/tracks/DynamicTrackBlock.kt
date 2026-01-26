@@ -32,6 +32,43 @@ private val logger = KotlinLogging.logger {}
  * - state (FREE/RESERVED/OCCUPIED)
  * - occupant (current train)
  * - reservation direction (which end reserved from)
+ * - trainId (reservation ownership identifier)
+ *
+ * ## TrainId vs Occupant Design (Issue #294)
+ *
+ * This class tracks TWO separate but related concepts:
+ *
+ * 1. **trainId: String?** - Reservation ownership (WHO owns the block)
+ *    - Available during RESERVED and OCCUPIED states
+ *    - Set when path is reserved (before train physically enters)
+ *    - Used for: conflict detection, path release, registry tracking
+ *    - Benefits: Early reservation, registry operations without object references, clearer logging
+ *
+ * 2. **occupant: TrackOccupant?** - Physical presence (WHAT is on the block)
+ *    - Only available during OCCUPIED state
+ *    - Set when train physically enters the block
+ *    - Used for: collision detection, train movement tracking, physics calculations
+ *    - Benefits: Direct reference to train object for state queries
+ *
+ * **Why String-based trainId instead of TrackOccupant?**
+ *
+ * - **Early reservation**: Path can be reserved before train object exists
+ * - **Decoupling**: Registry operations don't need full object graph
+ * - **Atomic operations**: Conflict detection via simple string comparison
+ * - **Path release**: Can release by ID without train object reference
+ * - **Logging clarity**: String IDs more readable than object references in logs
+ * - **Lifecycle independence**: Reservation and occupancy are separate concerns
+ *
+ * **State lifecycle example:**
+ * ```
+ * FREE:     trainId=null,     occupant=null
+ *   ↓ setUpPathWithTrainId("train123", separator)
+ * RESERVED: trainId="train123", occupant=null        // Reserved but not yet occupied
+ *   ↓ enter(trainObject)
+ * OCCUPIED: trainId="train123", occupant=trainObject // Both ownership and presence tracked
+ *   ↓ leave(trainObject)
+ * FREE:     trainId=null,     occupant=null
+ * ```
  *
  * This wrapper uses the static TrackBlock object for:
  * - Stable identity (equals/hashCode based on static object)
@@ -107,26 +144,41 @@ class DynamicTrackBlock(
 		private set
 
 	/**
-	 * Dynamic property: Train identifier
+	 * Dynamic property: Train identifier (reservation ownership)
 	 *
-	 * When state is RESERVED or OCCUPIED, indicates which train owns/occupies the block.
-	 * Null when state is FREE.
+	 * String-based identifier indicating which train owns/reserved the block.
+	 * Separate from `occupant` which tracks physical presence.
 	 *
-	 * ## Usage
+	 * ## When Available
 	 *
-	 * This field enables:
-	 * - Path reservation tracking (which train reserved which blocks)
-	 * - Conflict detection (prevent multiple trains from reserving same block)
-	 * - Path release (find all blocks reserved by a train)
-	 * - Debugging (identify block ownership in logs)
+	 * - **RESERVED**: trainId set, occupant null (path reserved, train not yet present)
+	 * - **OCCUPIED**: trainId set, occupant non-null (train owns and occupies block)
+	 * - **FREE**: trainId null, occupant null
+	 *
+	 * ## Why String, Not TrackOccupant?
+	 *
+	 * Reservation and occupancy are independent concerns:
+	 * - Reservation happens BEFORE train enters (trainId set, occupant null)
+	 * - String ID enables PathReservationRegistry operations without object references
+	 * - Conflict detection via simple string comparison
+	 * - Path release by ID without train object
 	 *
 	 * ## Lifecycle
 	 *
 	 * - FREE → RESERVED: set to train identifier
-	 * - RESERVED → OCCUPIED: remains set to same train identifier
+	 * - RESERVED → OCCUPIED: **remains set** (preserves ownership across state transition)
 	 * - OCCUPIED → FREE: cleared to null
 	 * - RESERVED → FREE: cleared to null (path cancelled)
 	 *
+	 * ## Contrast with Occupant
+	 *
+	 * | Property  | Type            | Available When        | Purpose                        |
+	 * |-----------|-----------------|----------------------|--------------------------------|
+	 * | trainId   | String?         | RESERVED or OCCUPIED | Ownership tracking, registry   |
+	 * | occupant  | TrackOccupant?  | OCCUPIED only        | Physical presence, collision   |
+	 *
+	 * @see occupant for physical train presence tracking
+	 * @see PathReservationRegistry which uses trainId for conflict detection
 	 * @since Issue #294 (Phase 2 of Issue #292)
 	 */
 	var trainId: String? = null
@@ -184,7 +236,12 @@ class DynamicTrackBlock(
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
-		// Note: trainId remains set from reservation phase
+
+		// IMPORTANT: trainId remains set from reservation phase (setUpPathWithTrainId).
+		// This preserves ownership tracking across the RESERVED → OCCUPIED transition.
+		// The train reserved this block earlier (trainId set, occupant null), and now
+		// physically enters it (occupant set, trainId preserved).
+		// trainId will be cleared only on exit (OCCUPIED → FREE).
 	}
 
 	/**
@@ -251,7 +308,7 @@ class DynamicTrackBlock(
 					"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation conflict - " +
 						"already reserved from=$reservedFrom by trainId=$trainId, new request from=$sep by trainId=$reservingTrainId"
 				}
-				throw TrackOperationException("Block already reserved from different separator", staticRef)
+				throw TrackOperationException(DynamicTrackBlockErrors.ALREADY_RESERVED_CONFLICT, staticRef)
 			}
 		}
 

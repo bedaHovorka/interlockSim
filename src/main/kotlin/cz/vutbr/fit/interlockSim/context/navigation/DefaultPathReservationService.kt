@@ -10,9 +10,11 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlockErrors
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -116,6 +118,12 @@ class DefaultPathReservationService(
 				continue
 			}
 
+			// TOCTOU Note: Small window between areAllBlocksFree() check and tryAtomicReservation() use.
+			// This is acceptable because:
+			// - Single-threaded access to simulation state (documented in class KDoc)
+			// - tryAtomicReservation() has rollback logic if state changed
+			// - Worst case: false positive on free check, caught during reservation, try next path
+			//
 			// Step 2c: Attempt atomic reservation with rollback
 			val reservationResult = tryAtomicReservation(trainId, start, blocks)
 			if (reservationResult != null) {
@@ -276,11 +284,18 @@ class DefaultPathReservationService(
 		val seen = mutableSetOf<DynamicTrackBlock>()
 		return path.mapNotNull { section ->
 			val block = section.getTrackBlock()
-			// In SimulationContext, all TrackBlocks are DynamicTrackBlock instances
-			if (block is DynamicTrackBlock && seen.add(block)) {
-				block
-			} else {
-				null
+			when {
+				block is DynamicTrackBlock && seen.add(block) -> block
+				block is DynamicTrackBlock && !seen.add(block) -> null  // Duplicate, expected
+				else -> {
+					// Should never happen in SimulationContext, but log for debugging
+					logger.warn {
+						"extractUniqueBlocks: Unexpected non-DynamicTrackBlock encountered: " +
+							"${block::class.simpleName} from section $section. " +
+							"This indicates a context type mismatch."
+					}
+					null
+				}
 			}
 		}
 	}
@@ -334,15 +349,21 @@ class DefaultPathReservationService(
 			}
 			rollbackReservation(separator, reservedSoFar)
 
-			// Determine failure type
+			// Classify error using typed constants instead of brittle string matching
 			return when {
-				e.message?.contains("already reserved") == true -> {
-					// This shouldn't happen if areAllBlocksFree() worked correctly
-					logger.warn { "tryAtomicReservation: Block became reserved between check and reservation" }
+				e is TrackOperationException &&
+					e.message == DynamicTrackBlockErrors.ALREADY_RESERVED_CONFLICT -> {
+					// TOCTOU race: block became reserved between check and reservation
+					logger.warn {
+						"tryAtomicReservation: Block became reserved between check and reservation (TOCTOU race)"
+					}
 					PathReservationService.ReservationResult.AllPathsBlocked(1)
 				}
 				else -> {
-					logger.warn(e) { "tryAtomicReservation: Unexpected error during reservation" }
+					// Unexpected error (state machine violation, etc.)
+					logger.warn(e) {
+						"tryAtomicReservation: Unexpected error during reservation: ${e::class.simpleName}"
+					}
 					PathReservationService.ReservationResult.AllPathsBlocked(1)
 				}
 			}
