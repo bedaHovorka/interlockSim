@@ -234,7 +234,8 @@ class Train :
 				} else {
 					// Path still not reserved even with allowing signal
 					// This indicates blocks are reserved for different train (not a deadlock)
-					logger.warn {
+					// This is normal coordination behavior in multi-train simulations
+					logger.info {
 						"Train $number: semaphore signal is ALLOWING but path blocks not reserved for this train - " +
 							"waiting for path to become available"
 					}

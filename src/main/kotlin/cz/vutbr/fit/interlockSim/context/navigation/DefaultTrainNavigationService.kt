@@ -119,15 +119,29 @@ class DefaultTrainNavigationService(
 			"isPathReservedForTrain: checking availability for train '$trainId' from $separator via $next"
 		}
 
-		// Use findReservedPathForTrain and convert result to boolean
-		// This reuses the same validation logic without code duplication
-		val path = findReservedPathForTrain(trainId, separator, next)
-		val available = path != null
-
-		logger.trace {
-			"isPathReservedForTrain: path ${if (available) "IS" else "NOT"} available for train '$trainId'"
+		// Step 1: Get candidate path (same as findReservedPathForTrain)
+		val candidatePath = environment.pathToNextSemaphore(separator, next)
+		if (candidatePath == null) {
+			logger.trace { "isPathReservedForTrain: no topological path exists" }
+			return false
 		}
-		return available
+
+		// Step 2: Extract blocks (reuse existing method)
+		val blocks = extractDynamicTrackBlocks(candidatePath)
+
+		// Step 3: Check ownership (early exit on first conflict)
+		for (block in blocks) {
+			val owner = registry.getOwner(block)
+			if (owner != trainId) {
+				logger.trace {
+					"isPathReservedForTrain: block $block not owned by train '$trainId' (owner: ${owner ?: "none"})"
+				}
+				return false  // Early exit on first conflict
+			}
+		}
+
+		logger.trace { "isPathReservedForTrain: path IS available for train '$trainId'" }
+		return true
 	}
 
 	/**

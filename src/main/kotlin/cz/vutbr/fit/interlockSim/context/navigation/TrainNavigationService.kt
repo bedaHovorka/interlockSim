@@ -153,21 +153,21 @@ interface TrainNavigationService {
 	/**
 	 * Check if a path to the next semaphore is currently reserved for the specified train.
 	 *
-	 * This is a read-only check that does NOT build the full path object.
-	 * Useful for conditions and polling without path construction overhead.
+	 * This is a read-only check that validates ownership without modifying state.
+	 *
+	 * ## Performance
+	 *
+	 * This method is optimized for repeated polling scenarios:
+	 * - Validates block ownership without returning the full Path object
+	 * - Early exit on first ownership conflict (avoids checking remaining blocks)
+	 * - Lower memory footprint than findReservedPathForTrain
+	 * - Uses same validation logic to ensure consistency
 	 *
 	 * ## Use Cases
 	 *
 	 * - Condition checks: `waitUntil { service.isPathReservedForTrain(...) }`
 	 * - UI indicators: show green/red based on path availability
 	 * - Polling: check periodically if path has become available
-	 *
-	 * ## Implementation Note
-	 *
-	 * This method can be implemented efficiently by:
-	 * 1. Building candidate path (via pathToNextSemaphore)
-	 * 2. Checking block ownership (same validation as findReservedPathForTrain)
-	 * 3. Returning boolean result (discarding path object)
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param separator Starting point
