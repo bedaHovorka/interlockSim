@@ -21,7 +21,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -29,13 +28,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
+import org.koin.core.parameter.parametersOf
 
 /**
  * Comprehensive test suite for TopologyNavigator.
@@ -54,18 +51,7 @@ import org.koin.core.context.stopKoin
  * Each test builds a specific network topology using TestContextBuilder,
  * then verifies TopologyNavigator navigates correctly based only on static structure.
  */
-class TopologyNavigatorTest {
-	@BeforeEach
-	fun setup() {
-		startKoin {
-			modules(interlockSimModule)
-		}
-	}
-
-	@AfterEach
-	fun tearDown() {
-		stopKoin()
-	}
+class TopologyNavigatorTest : KoinTestBase() {
 
 	// ========================================================================
 	// Linear Path Tests
@@ -89,7 +75,7 @@ class TopologyNavigatorTest {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -121,7 +107,7 @@ class TopologyNavigatorTest {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -150,7 +136,7 @@ class TopologyNavigatorTest {
 				.withInOut("A", 1, 1, true)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -201,7 +187,7 @@ class TopologyNavigatorTest {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator = DefaultTopologyNavigator(editingContext)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
 
 		// Act: Navigate through switch
 		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
@@ -234,7 +220,7 @@ class TopologyNavigatorTest {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0) // block2
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -259,7 +245,7 @@ class TopologyNavigatorTest {
 				.withInOut("A", 1, 1, true)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -291,7 +277,7 @@ class TopologyNavigatorTest {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -320,7 +306,7 @@ class TopologyNavigatorTest {
 				.withInOut("B", 5, 5, false)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -351,7 +337,7 @@ class TopologyNavigatorTest {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -382,7 +368,7 @@ class TopologyNavigatorTest {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -413,7 +399,7 @@ class TopologyNavigatorTest {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -447,7 +433,7 @@ class TopologyNavigatorTest {
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act: Create navigator with EditingContext (proves no simulation dependency)
-		val navigator = DefaultTopologyNavigator(editingContext)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
 		val nextSection = navigator.getNextTrackSection(inOutA, null)
 
 		// Assert: Navigator works in editing context
@@ -467,7 +453,7 @@ class TopologyNavigatorTest {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -492,7 +478,7 @@ class TopologyNavigatorTest {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -548,7 +534,7 @@ class TopologyNavigatorTest {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator = DefaultTopologyNavigator(editingContext)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
 
 		// Act: Navigate through switch from A
 		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
@@ -592,7 +578,7 @@ class TopologyNavigatorTest {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator = DefaultTopologyNavigator(context)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
 		val grid = context.getRailWayNetGrid()
 		val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -653,7 +639,7 @@ class TopologyNavigatorTest {
 		editingContext.joinCells(Point(10, 10), Point(15, 5), trackSwitchToExit2)
 
 		// Act: Create navigator with EDITING context (no simulation)
-		val navigator = DefaultTopologyNavigator(editingContext)
+		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
 
 		// Navigate from entry
 		val firstSection = navigator.getNextTrackSection(entry, null)

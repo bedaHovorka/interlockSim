@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.core.parameter.parametersOf
 import org.koin.test.inject
 import java.io.InputStream
 
@@ -80,8 +81,10 @@ class PathReservationServiceTest : KoinTestBase() {
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		environment = simulationContext
-		navigator = DefaultTopologyNavigator(simulationContext)
-		service = DefaultPathReservationService(navigator, environment)
+
+		// Inject navigator and service using Koin parameter passing
+		navigator = getKoin().get { parametersOf(simulationContext) }
+		service = getKoin().get { parametersOf(navigator, environment) }
 
 		// Get InOut elements
 		val inOuts = simulationContext.getInOuts()

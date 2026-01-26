@@ -482,12 +482,31 @@ Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/Interl
 - **xmlModule** - XML parsing, XMLContextFactory
 - **editingModule** - Editing context factories
 - **simulationModule** - Simulation context factories and SimulationProcessFactory
+- **navigationModule** - Navigation services (TopologyNavigator, PathReservationService, PathReservationRegistry)
 - **guiModule** - Swing components (ready for expansion)
 - **objectsModule** - Domain model (minimal by design)
 - **sim/** - ❌ **EXCLUDED** (wait for jDisco migration, except new factory classes)
 
 **SimulationProcessFactory (2026-01-14):**
 The simulation module now provides `SimulationProcessFactory` as a singleton. This factory abstracts creation of simulation processes (Generator, InOutWorker) following the Factory pattern. Contexts receive the factory via constructor injection, eliminating direct dependencies on concrete sim/ classes.
+
+**navigationModule (2026-01-26, Issue #294):**
+The navigation module provides path finding and reservation services using factory scope:
+- **TopologyNavigator** - Static topology navigation (requires context parameter)
+- **PathReservationRegistry** - Train ownership tracking (fresh instance per simulation)
+- **PathReservationService** - Atomic path reservation (requires navigator + environment parameters)
+
+All services use `factory` scope (NOT singleton) to ensure fresh instances and prevent state bleeding between simulation runs. Services use parameter passing pattern for context-dependent dependencies:
+
+```kotlin
+// TopologyNavigator requires Context parameter
+val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+
+// PathReservationService requires navigator and environment
+val service: PathReservationService = getKoin().get {
+    parametersOf(navigator, environment)
+}
+```
 
 ### Critical DI Rules
 
