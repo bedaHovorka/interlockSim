@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -255,10 +254,10 @@ class DynamicTrackBlockTest {
 
 			// Try to reserve from DIFFERENT separator - should fail
 			assertFailure { dynamicBlock1.setUpPath(semaphore2) }
-				.isInstanceOf(TrackOperationException::class)
+				.isInstanceOf(TrackReservationException.AlreadyReservedConflict::class)
 				.message()
 				.isNotNull()
-				.contains("Block already reserved from different separator")
+				.contains("already reserved from")
 		}
 
 		@Test

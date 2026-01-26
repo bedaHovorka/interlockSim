@@ -32,6 +32,43 @@ private val logger = KotlinLogging.logger {}
  * - state (FREE/RESERVED/OCCUPIED)
  * - occupant (current train)
  * - reservation direction (which end reserved from)
+ * - trainId (reservation ownership identifier)
+ *
+ * ## TrainId vs Occupant Design (Issue #294)
+ *
+ * This class tracks TWO separate but related concepts:
+ *
+ * 1. **trainId: String?** - Reservation ownership (WHO owns the block)
+ *    - Available during RESERVED and OCCUPIED states
+ *    - Set when path is reserved (before train physically enters)
+ *    - Used for: conflict detection, path release, registry tracking
+ *    - Benefits: Early reservation, registry operations without object references, clearer logging
+ *
+ * 2. **occupant: TrackOccupant?** - Physical presence (WHAT is on the block)
+ *    - Only available during OCCUPIED state
+ *    - Set when train physically enters the block
+ *    - Used for: collision detection, train movement tracking, physics calculations
+ *    - Benefits: Direct reference to train object for state queries
+ *
+ * **Why String-based trainId instead of TrackOccupant?**
+ *
+ * - **Early reservation**: Path can be reserved before train object exists
+ * - **Decoupling**: Registry operations don't need full object graph
+ * - **Atomic operations**: Conflict detection via simple string comparison
+ * - **Path release**: Can release by ID without train object reference
+ * - **Logging clarity**: String IDs more readable than object references in logs
+ * - **Lifecycle independence**: Reservation and occupancy are separate concerns
+ *
+ * **State lifecycle example:**
+ * ```
+ * FREE:     trainId=null,     occupant=null
+ *   ↓ setUpPathWithTrainId("train123", separator)
+ * RESERVED: trainId="train123", occupant=null        // Reserved but not yet occupied
+ *   ↓ enter(trainObject)
+ * OCCUPIED: trainId="train123", occupant=trainObject // Both ownership and presence tracked
+ *   ↓ leave(trainObject)
+ * FREE:     trainId=null,     occupant=null
+ * ```
  *
  * This wrapper uses the static TrackBlock object for:
  * - Stable identity (equals/hashCode based on static object)
@@ -106,6 +143,47 @@ class DynamicTrackBlock(
 	var reservedFrom: PathSeparator? = null
 		private set
 
+	/**
+	 * Dynamic property: Train identifier (reservation ownership)
+	 *
+	 * String-based identifier indicating which train owns/reserved the block.
+	 * Separate from `occupant` which tracks physical presence.
+	 *
+	 * ## When Available
+	 *
+	 * - **RESERVED**: trainId set, occupant null (path reserved, train not yet present)
+	 * - **OCCUPIED**: trainId set, occupant non-null (train owns and occupies block)
+	 * - **FREE**: trainId null, occupant null
+	 *
+	 * ## Why String, Not TrackOccupant?
+	 *
+	 * Reservation and occupancy are independent concerns:
+	 * - Reservation happens BEFORE train enters (trainId set, occupant null)
+	 * - String ID enables PathReservationRegistry operations without object references
+	 * - Conflict detection via simple string comparison
+	 * - Path release by ID without train object
+	 *
+	 * ## Lifecycle
+	 *
+	 * - FREE → RESERVED: set to train identifier
+	 * - RESERVED → OCCUPIED: **remains set** (preserves ownership across state transition)
+	 * - OCCUPIED → FREE: cleared to null
+	 * - RESERVED → FREE: cleared to null (path cancelled)
+	 *
+	 * ## Contrast with Occupant
+	 *
+	 * | Property  | Type            | Available When        | Purpose                        |
+	 * |-----------|-----------------|----------------------|--------------------------------|
+	 * | trainId   | String?         | RESERVED or OCCUPIED | Ownership tracking, registry   |
+	 * | occupant  | TrackOccupant?  | OCCUPIED only        | Physical presence, collision   |
+	 *
+	 * @see occupant for physical train presence tracking
+	 * @see PathReservationRegistry which uses trainId for conflict detection
+	 * @since Issue #294 (Phase 2 of Issue #292)
+	 */
+	var trainId: String? = null
+		private set
+
 	// ========== TrackFacility interface implementation (dynamic operations) ==========
 	// Note: state property automatically provides getState() method required by TrackFacility interface
 
@@ -143,7 +221,8 @@ class DynamicTrackBlock(
 	 */
 	override fun enter(newOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} TrackBlock ${staticRef.hashCode()} ENTRY: occupant=$newOccupant, state=${getState()}->OCCUPIED"
+			"${Process.time()} TrackBlock ${staticRef.hashCode()} ENTRY: " +
+				"occupant=$newOccupant, state=${getState()}->OCCUPIED, trainId=$trainId"
 		}
 		if (occupant != null) {
 			logger.error {
@@ -157,6 +236,12 @@ class DynamicTrackBlock(
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
+
+		// IMPORTANT: trainId remains set from reservation phase (setUpPathWithTrainId).
+		// This preserves ownership tracking across the RESERVED → OCCUPIED transition.
+		// The train reserved this block earlier (trainId set, occupant null), and now
+		// physically enters it (occupant set, trainId preserved).
+		// trainId will be cleared only on exit (OCCUPIED → FREE).
 	}
 
 	/**
@@ -169,13 +254,15 @@ class DynamicTrackBlock(
 	 */
 	override fun leave(leavingOccupant: TrackOccupant) {
 		logger.info {
-			"${Process.time()} TrackBlock ${staticRef.hashCode()} EXIT: occupant=$leavingOccupant, state=OCCUPIED->FREE"
+			"${Process.time()} TrackBlock ${staticRef.hashCode()} EXIT: " +
+				"occupant=$leavingOccupant, state=OCCUPIED->FREE, trainId=$trainId"
 		}
 		requireSimulation(occupant === leavingOccupant) {
 			"TrackBlock occupant mismatch on leave"
 		}
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
+		trainId = null
 	}
 
 	/**
@@ -193,14 +280,18 @@ class DynamicTrackBlock(
 	}
 
 	/**
-	 * Reserves the track block for a path
+	 * Reserves the track block for a path with optional train identifier.
 	 *
 	 * Transitions state from FREE to RESERVED.
 	 *
 	 * @param sep The separator the path is being set up from
+	 * @param reservingTrainId Optional train identifier for reservation tracking (Issue #294)
 	 * @throws TrackOperationException if track is not FREE
 	 */
-	override fun setUpPath(sep: PathSeparator) {
+	fun setUpPathWithTrainId(
+		sep: PathSeparator,
+		reservingTrainId: String?
+	) {
 		// Handle idempotent case: block already reserved from same separator
 		// This is needed because paths can contain the same block multiple times
 		// (e.g., switch "around" blocks appear twice in path definition)
@@ -208,25 +299,39 @@ class DynamicTrackBlock(
 			if (reservedFrom === sep) {
 				// Already reserved from this separator - idempotent operation, just return
 				logger.debug {
-					"${Process.time()} TrackBlock ${staticRef.hashCode()} already reserved from $sep (idempotent)"
+					"${Process.time()} TrackBlock ${staticRef.hashCode()} already reserved from $sep (idempotent), trainId=$trainId"
 				}
 				return
 			} else {
 				// Reserved from different separator - this is a conflict!
 				logger.warn {
 					"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation conflict - " +
-						"already reserved from=$reservedFrom, new request from=$sep"
+						"already reserved from=$reservedFrom by trainId=$trainId, new request from=$sep by trainId=$reservingTrainId"
 				}
-				throw TrackOperationException("Block already reserved from different separator", staticRef)
+				throw TrackReservationException.AlreadyReservedConflict(this, reservedFrom!!, sep)
 			}
 		}
 
 		// Normal case: FREE → RESERVED
 		logger.info {
-			"${Process.time()} TrackBlock ${staticRef.hashCode()} RESERVE: from=$sep, state=FREE->RESERVED"
+			"${Process.time()} TrackBlock ${staticRef.hashCode()} RESERVE: " +
+				"from=$sep, state=FREE->RESERVED, trainId=$reservingTrainId"
 		}
-		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
+		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED, "setUpPath")
 		reservedFrom = sep
+		trainId = reservingTrainId
+	}
+
+	/**
+	 * Reserves the track block for a path (TrackFacility interface implementation).
+	 *
+	 * Transitions state from FREE to RESERVED.
+	 *
+	 * @param sep The separator the path is being set up from
+	 * @throws TrackOperationException if track is not FREE
+	 */
+	override fun setUpPath(sep: PathSeparator) {
+		setUpPathWithTrainId(sep, null)
 	}
 
 	/**
@@ -263,13 +368,14 @@ class DynamicTrackBlock(
 	 */
 	override fun cancelPathSetup(sep: PathSeparator) {
 		logger.info {
-			"${Process.time()} TrackBlock ${staticRef.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE"
+			"${Process.time()} TrackBlock ${staticRef.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE, trainId=$trainId"
 		}
-		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
+		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE, "cancelPathSetup")
 		if (sep !== reservedFrom) {
 			throw TrackOperationException("wrong end on cancel", staticRef)
 		}
 		reservedFrom = null
+		trainId = null
 	}
 
 	// ========== Private helper methods for state transitions ==========
@@ -283,17 +389,18 @@ class DynamicTrackBlock(
 		return ok
 	}
 
-	@Throws(TrackOperationException::class)
+	@Throws(TrackReservationException::class)
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
-		to: TrackFacility.State
+		to: TrackFacility.State,
+		operation: String
 	) {
 		if (!stateChange(from, to)) {
 			logger.error {
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} state violation - " +
 					"expected=$from, actual=${getState()}, attempted=$to"
 			}
-			throw TrackOperationException(errorStateMessage(from), staticRef)
+			throw TrackReservationException.InvalidStateTransition(this, getState(), operation)
 		}
 	}
 
@@ -338,5 +445,6 @@ class DynamicTrackBlock(
 	 * String representation for debugging
 	 */
 	override fun toString(): String =
-		"DynamicTrackBlock[staticRef=$staticRef, state=${getState()}, occupant=$occupant, from=$reservedFrom]"
+		"DynamicTrackBlock[staticRef=$staticRef, state=${getState()}, " +
+			"occupant=$occupant, from=$reservedFrom, trainId=$trainId]"
 }
