@@ -188,6 +188,13 @@ class DefaultTopologyNavigator(
 	 * Railway networks can contain loops (e.g., around-the-block routing).
 	 * The algorithm prevents infinite loops by tracking visited separators.
 	 *
+	 * ## Performance Characteristics
+	 *
+	 * - **Time complexity**: O(V + E) where V = number of path separators, E = track connections
+	 * - **Space complexity**: O(V) for visited set and BFS queue
+	 * - **Best case**: O(1) when start == target
+	 * - **Worst case**: O(V + E) when exploring entire network before finding target
+	 *
 	 * @param start The starting path separator
 	 * @param target The target path separator to reach
 	 * @param maxDepth Maximum search depth to prevent runaway exploration
@@ -264,15 +271,7 @@ class DefaultTopologyNavigator(
 		val assignedEdges: java.util.Map<Cell.Segment, out TrackBlock> = context.getGraph().assignedEdges(location)
 
 		// Find the segment that connects to the current block
-		// Use explicit Java Map iterator since Kotlin extensions don't work on Java Map interface
-		val iterator = assignedEdges.entrySet().iterator()
-		while (iterator.hasNext()) {
-			val entry = iterator.next()
-			if (entry.value == current) {
-				return entry.key
-			}
-		}
-		return null
+		return assignedEdges.entries.find { it.value == current }?.key
 	}
 
 	/**

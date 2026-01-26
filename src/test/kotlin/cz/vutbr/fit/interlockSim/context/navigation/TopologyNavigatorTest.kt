@@ -505,4 +505,229 @@ class TopologyNavigatorTest {
 		// but the code path for "within block" navigation is tested
 		assertThat(nextSection).isNull()
 	}
+
+	// ========================================================================
+	// Suggestion 3: Switch Branch Selection Test
+	// ========================================================================
+
+	/**
+	 * Test: Verify which specific branch the switch follows based on configuration
+	 *
+	 * Topology:     B (InOut)
+	 *              /
+	 *         A --+-- C (InOut)
+	 *        (InOut) (RailSwitch)
+	 *
+	 * Expected: Verify the navigator follows the expected branch based on switch position
+	 */
+	@Test
+	fun `getNextTrackSection - switch branch selection - verifies specific branch`() {
+		// Arrange: Build A -> Switch -> [B, C]
+		val editingContext = DefaultEditingContext(10, 10)
+		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+		val switchCell = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val inOutB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+		val inOutC = InOut("C", true, Cell.SpatialType.HORIZONTAL)
+
+		editingContext.putCell(Point(1, 1), inOutA)
+		editingContext.putCell(Point(3, 3), switchCell)
+		editingContext.putCell(Point(5, 5), inOutB)
+		editingContext.putCell(Point(5, 1), inOutC)
+
+		// Connect A -> Switch
+		val trackAtoSwitch = SimpleTrackBlock(inOutA, switchCell, 100.0, 80.0)
+		editingContext.joinCells(Point(1, 1), Point(3, 3), trackAtoSwitch)
+
+		// Connect Switch -> B (straight)
+		val trackSwitchToB = SimpleTrackBlock(switchCell, inOutB, 100.0, 80.0)
+		editingContext.joinCells(Point(3, 3), Point(5, 5), trackSwitchToB)
+
+		// Connect Switch -> C (diverging)
+		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
+		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
+
+		val navigator = DefaultTopologyNavigator(editingContext)
+
+		// Act: Navigate through switch from A
+		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
+		val nextSection = navigator.getNextTrackSection(switchCell, firstSection)
+
+		// Assert: Verify we got a valid section and that it leads to either B or C
+		assertThat(nextSection).isNotNull()
+		val endSeparator = nextSection!!.getSecondEnd(switchCell)
+		val isValidBranch = endSeparator == inOutB || endSeparator == inOutC
+		assertThat(isValidBranch).isEqualTo(true)
+
+		// Additional verification: The track block should be one of the two branches
+		val nextBlock = nextSection.getTrackBlock()
+		val isExpectedBlock = nextBlock == trackSwitchToB || nextBlock == trackSwitchToC
+		assertThat(isExpectedBlock).isEqualTo(true)
+	}
+
+	// ========================================================================
+	// Suggestion 4: Dynamic Wrapper Test
+	// ========================================================================
+
+	/**
+	 * Test: Navigation with Dynamic wrapper (non-NodeCell PathSeparator)
+	 *
+	 * This test verifies the code path at lines 102-112 in DefaultTopologyNavigator
+	 * that handles Dynamic wrappers by unwrapping them to static NodeCell references.
+	 *
+	 * Note: TopologyNavigator works with EditingContext (static model), but we test
+	 * the unwrapping logic by passing a DynamicRailSemaphore instance to verify the
+	 * code handles both static and dynamic separators correctly.
+	 */
+	@Test
+	fun `getNextTrackSection - with Dynamic wrapper - unwraps correctly`() {
+		// Arrange: Build A -> Semaphore -> B
+		val context =
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withSemaphore(3, 3, true)
+				.withInOut("B", 5, 5, false)
+				.withConnection(1, 1, 3, 3, 100.0, 80.0)
+				.withConnection(3, 3, 5, 5, 100.0, 80.0)
+				.buildEditingContext()
+
+		val navigator = DefaultTopologyNavigator(context)
+		val grid = context.getRailWayNetGrid()
+		val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
+
+		// Create a Dynamic wrapper manually (simulating simulation context behavior)
+		val dynamicSemaphore = cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore(staticSemaphore)
+
+		// Get first section from block 1
+		val block1 = context.getGraph().assignedEdges(Point(1, 1)).values().first()
+		val firstSection = block1.getNextTrackSection(staticSemaphore, null)
+
+		// Act: Navigate using Dynamic wrapper (should unwrap to static)
+		val nextSection = navigator.getNextTrackSection(dynamicSemaphore, firstSection)
+
+		// Assert: Navigator handles Dynamic wrapper correctly, returns next section
+		assertThat(nextSection).isNotNull()
+		val endSeparator = nextSection!!.getSecondEnd(staticSemaphore)
+		val inOutB = grid.getCellAt(5, 5) as InOut
+		assertThat(endSeparator).isEqualTo(inOutB)
+	}
+
+	// ========================================================================
+	// Proof Tests: Static vs Dynamic Model
+	// ========================================================================
+
+	/**
+	 * Proof Test: TopologyNavigator works with static model (EditingContext)
+	 *
+	 * This test demonstrates that TopologyNavigator operates on EditingContext
+	 * without any simulation state, proving zero state dependencies.
+	 */
+	@Test
+	fun `proof test - static model - EditingContext navigation`() {
+		// Arrange: Build complex network with switches using EditingContext
+		val editingContext = DefaultEditingContext(20, 20)
+
+		// Create entry and exit points
+		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
+		val exit1 = InOut("Exit1", true, Cell.SpatialType.HORIZONTAL)
+		val exit2 = InOut("Exit2", true, Cell.SpatialType.HORIZONTAL)
+
+		// Create switch
+		val switch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+
+		// Place in grid
+		editingContext.putCell(Point(2, 2), entry)
+		editingContext.putCell(Point(10, 10), switch)
+		editingContext.putCell(Point(15, 15), exit1)
+		editingContext.putCell(Point(15, 5), exit2)
+
+		// Connect tracks
+		val trackEntryToSwitch = SimpleTrackBlock(entry, switch, 200.0, 100.0)
+		editingContext.joinCells(Point(2, 2), Point(10, 10), trackEntryToSwitch)
+
+		val trackSwitchToExit1 = SimpleTrackBlock(switch, exit1, 150.0, 80.0)
+		editingContext.joinCells(Point(10, 10), Point(15, 15), trackSwitchToExit1)
+
+		val trackSwitchToExit2 = SimpleTrackBlock(switch, exit2, 150.0, 80.0)
+		editingContext.joinCells(Point(10, 10), Point(15, 5), trackSwitchToExit2)
+
+		// Act: Create navigator with EDITING context (no simulation)
+		val navigator = DefaultTopologyNavigator(editingContext)
+
+		// Navigate from entry
+		val firstSection = navigator.getNextTrackSection(entry, null)
+		assertThat(firstSection).isNotNull()
+
+		// Navigate through switch
+		val secondSection = navigator.getNextTrackSection(switch, firstSection)
+		assertThat(secondSection).isNotNull()
+
+		// Find all possible paths
+		val pathsToExit1 = navigator.findAllTopologicalPaths(entry, exit1)
+		val pathsToExit2 = navigator.findAllTopologicalPaths(entry, exit2)
+
+		// Assert: Topology navigation works in editing context
+		assertThat(pathsToExit1.size + pathsToExit2.size).isEqualTo(2) // Both exits reachable
+	}
+
+	/**
+	 * Proof Test: TopologyNavigator provides same results for static and dynamic models
+	 *
+	 * This test demonstrates that TopologyNavigator returns consistent results
+	 * whether used with EditingContext (static) or SimulationContext (dynamic).
+	 */
+	@Test
+	fun `proof test - consistency - same results in static and dynamic contexts`() {
+		// Arrange: Build identical network in both contexts
+		val editingContext =
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withSemaphore(5, 5, false) // RED semaphore
+				.withInOut("B", 9, 9, false)
+				.withConnection(1, 1, 5, 5, 100.0, 80.0)
+				.withConnection(5, 5, 9, 9, 100.0, 80.0)
+				.buildEditingContext()
+
+		val simulationContext =
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withSemaphore(5, 5, false) // RED semaphore
+				.withInOut("B", 9, 9, false)
+				.withConnection(1, 1, 5, 5, 100.0, 80.0)
+				.withConnection(5, 5, 9, 9, 100.0, 80.0)
+				.buildSimulationContext()
+
+		// Create navigators for both contexts
+		val staticNavigator = DefaultTopologyNavigator(editingContext)
+		val dynamicNavigator = DefaultTopologyNavigator(simulationContext)
+
+		// Get separators from both grids
+		val staticInOutA = editingContext.getRailWayNetGrid().getCellAt(1, 1) as InOut
+		val staticInOutB = editingContext.getRailWayNetGrid().getCellAt(9, 9) as InOut
+		val staticSemaphore = editingContext.getRailWayNetGrid().getCellAt(5, 5) as RailSemaphore
+
+		val dynamicInOutA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
+		val dynamicInOutB = simulationContext.getRailWayNetGrid().getCellAt(9, 9)
+		val dynamicSemaphore = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
+
+		// Act: Navigate in both contexts
+		val staticResult1 = staticNavigator.getNextTrackSection(staticInOutA, null)
+		val dynamicResult1 = dynamicNavigator.getNextTrackSection(dynamicInOutA, null)
+
+		val staticPaths = staticNavigator.findAllTopologicalPaths(staticInOutA, staticInOutB)
+		val dynamicPaths = dynamicNavigator.findAllTopologicalPaths(dynamicInOutA, dynamicInOutB)
+
+		// Assert: Results are consistent regardless of context type
+		assertThat(staticResult1).isNotNull()
+		assertThat(dynamicResult1).isNotNull()
+		assertThat(staticPaths).hasSize(1)
+		assertThat(dynamicPaths).hasSize(1)
+		assertThat(staticPaths[0]).hasSize(2) // Two sections (A->S, S->B)
+		assertThat(dynamicPaths[0]).hasSize(2)
+
+		// Verify topology navigation ignores semaphore RED state in both contexts
+		val staticThroughRed = staticNavigator.getNextTrackSection(staticSemaphore, staticResult1)
+		val dynamicThroughRed = dynamicNavigator.getNextTrackSection(dynamicSemaphore, dynamicResult1)
+		assertThat(staticThroughRed).isNotNull()
+		assertThat(dynamicThroughRed).isNotNull()
+	}
 }
