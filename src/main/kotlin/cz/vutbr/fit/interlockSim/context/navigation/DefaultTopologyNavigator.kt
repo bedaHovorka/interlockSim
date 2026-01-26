@@ -271,7 +271,13 @@ class DefaultTopologyNavigator(
 		val assignedEdges: java.util.Map<Cell.Segment, out TrackBlock> = context.getGraph().assignedEdges(location)
 
 		// Find the segment that connects to the current block
-		return assignedEdges.entries.find { it.value == current }?.key
+		// Note: Must iterate explicitly because assignedEdges is java.util.Map (not Kotlin Map)
+		for (entry in assignedEdges.entries) {
+			if (entry.value == current) {
+				return entry.key
+			}
+		}
+		return null
 	}
 
 	/**
