@@ -22,9 +22,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultTrainNavigationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
@@ -140,11 +142,12 @@ val simulationModule: Module =
  * - TopologyNavigator for static topology navigation
  * - PathReservationRegistry for tracking train ownership of blocks
  * - PathReservationService for atomic path reservation
+ * - TrainNavigationService for train-specific path following
  *
  * All services use factory scope (NOT singleton) to ensure:
  * - Fresh instances per context (TopologyNavigator)
  * - Isolated state per simulation run (PathReservationRegistry)
- * - Proper dependency injection (PathReservationService)
+ * - Proper dependency injection (PathReservationService, TrainNavigationService)
  *
  * ## Usage Patterns
  *
@@ -159,6 +162,12 @@ val simulationModule: Module =
  *     parametersOf(navigator, environment)
  * }
  *
+ * // TrainNavigationService requires environment parameter
+ * // Registry is shared with PathReservationService
+ * val trainNavService: TrainNavigationService = getKoin().get {
+ *     parametersOf(environment)
+ * }
+ *
  * // PathReservationRegistry created automatically (no parameters)
  * val registry: PathReservationRegistry = getKoin().get()
  * ```
@@ -166,7 +175,8 @@ val simulationModule: Module =
  * @see TopologyNavigator
  * @see PathReservationRegistry
  * @see PathReservationService
- * @since Issue #294 (Phase 2 DI Integration)
+ * @see TrainNavigationService
+ * @since Issue #294 (Phase 2 DI Integration), Issue #295 (Phase 3 TrainNavigationService)
  */
 val navigationModule: Module =
 	module {
@@ -187,6 +197,13 @@ val navigationModule: Module =
 		factory<PathReservationService> { (navigator: TopologyNavigator, environment: SimulationEnvironment) ->
 			val registry: PathReservationRegistry = get()
 			DefaultPathReservationService(navigator, environment, registry)
+		}
+
+		// Factory for TrainNavigationService (requires environment parameter)
+		// Registry is shared with PathReservationService (same instance within simulation)
+		factory<TrainNavigationService> { (environment: SimulationEnvironment) ->
+			val registry: PathReservationRegistry = get()
+			DefaultTrainNavigationService(environment, registry)
 		}
 	}
 

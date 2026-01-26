@@ -195,43 +195,51 @@ class Train :
 					"${semaphore.name}, " +
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
-			val path: Path? = env.pathToNextSemaphore(separator, next!!)
+
+			// Issue #295: Use TrainNavigationService for ownership-validated path finding
+			// Only returns paths through blocks RESERVED for this specific train
+			val trainNavService = env.getTrainNavigationService()
+			val path: Path? = trainNavService.findReservedPathForTrain(toString(), separator, next!!)
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			// CRITICAL FIX (Issue #282): Handle null path when navigation is blocked
-			// If path is null, it means getNextTrackSection() blocked navigation to unreserved blocks.
-			// Treat this as STOP signal: halt the train and wait for a valid path.
+			// ENHANCED FIX (Issue #295): Handle null path when blocks are not reserved for this train
+			// findReservedPathForTrain returns null if:
+			// - No topological path exists, OR
+			// - Blocks are reserved for a different train
+			// Treat this as STOP signal: halt the train and wait for path to become available.
 			if (semaphore.signal == Signal.STOP || path == null) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
 				if (path == null) {
 					logger.info {
-						"Train $number cannot build path from ${semaphore.name} - " +
-							"next block not properly reserved, treating as STOP signal"
+						"Train $number cannot navigate from ${semaphore.name} - " +
+							"blocks not reserved for this train, halting"
 					}
-					env.report("STOP (path blocked)", this@Train, ReportType.TRAIN_EVENTS)
+					env.report("STOP (path not reserved)", this@Train, ReportType.TRAIN_EVENTS)
 				} else {
 					logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 					env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 				}
 				fireStop()
 
-				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				// Wait for allowing signal from semaphore
 				waitUntil(allowingSignal(semaphore))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 
-				// Try to build path again - it might still be blocked
-				val newPath = env.pathToNextSemaphore(separator, next!!)
+				// Try to find reserved path again - blocks may now be available
+				val newPath = trainNavService.findReservedPathForTrain(toString(), separator, next!!)
 				if (newPath != null) {
 					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 					fireStart(semaphore, newPath)
 				} else {
-					// Path still blocked even with allowing signal - stop simulation to investigate
-					logger.error {
-						"Train $number: semaphore signal is ALLOWING but path is still blocked - " +
-							"this indicates a deadlock or interlocking error"
+					// Path still not reserved even with allowing signal
+					// This indicates blocks are reserved for different train (not a deadlock)
+					logger.warn {
+						"Train $number: semaphore signal is ALLOWING but path blocks not reserved for this train - " +
+							"waiting for path to become available"
 					}
-					env.stop()
+					// Continue waiting (train remains stopped, will be reactivated by interlocking)
+					env.report("WAIT (path reserved for other train)", this@Train, ReportType.TRAIN_EVENTS)
 				}
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
