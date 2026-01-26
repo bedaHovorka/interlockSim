@@ -3,6 +3,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.di.editingModule
 import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
+import cz.vutbr.fit.interlockSim.di.navigationModule
 import cz.vutbr.fit.interlockSim.di.objectsModule
 import cz.vutbr.fit.interlockSim.di.simulationModule
 import cz.vutbr.fit.interlockSim.di.utilModule
@@ -25,7 +26,8 @@ val testModuleLightweight: Module =
 			objectsModule,
 			xmlModule,
 			editingModule,
-			simulationModule
+			simulationModule,
+			navigationModule
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection
@@ -61,7 +63,8 @@ val integrationTestModule: Module =
 			objectsModule,
 			xmlModule,
 			editingModule,
-			simulationModule
+			simulationModule,
+			navigationModule
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection

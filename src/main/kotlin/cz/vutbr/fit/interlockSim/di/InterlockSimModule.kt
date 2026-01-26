@@ -12,13 +12,22 @@ package cz.vutbr.fit.interlockSim.di
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
+import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -125,6 +134,63 @@ val simulationModule: Module =
 	}
 
 /**
+ * Navigation module
+ *
+ * Provides navigation services for path finding and reservation:
+ * - TopologyNavigator for static topology navigation
+ * - PathReservationRegistry for tracking train ownership of blocks
+ * - PathReservationService for atomic path reservation
+ *
+ * All services use factory scope (NOT singleton) to ensure:
+ * - Fresh instances per context (TopologyNavigator)
+ * - Isolated state per simulation run (PathReservationRegistry)
+ * - Proper dependency injection (PathReservationService)
+ *
+ * ## Usage Patterns
+ *
+ * Services require context-specific parameters via Koin parameter passing:
+ *
+ * ```kotlin
+ * // TopologyNavigator requires Context parameter
+ * val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+ *
+ * // PathReservationService requires navigator and environment
+ * val service: PathReservationService = getKoin().get {
+ *     parametersOf(navigator, environment)
+ * }
+ *
+ * // PathReservationRegistry created automatically (no parameters)
+ * val registry: PathReservationRegistry = getKoin().get()
+ * ```
+ *
+ * @see TopologyNavigator
+ * @see PathReservationRegistry
+ * @see PathReservationService
+ * @since Issue #294 (Phase 2 DI Integration)
+ */
+val navigationModule: Module =
+	module {
+		// Factory for TopologyNavigator (requires context parameter)
+		// Each context gets its own navigator instance
+		factory<TopologyNavigator> { (context: Context<Cell, out TrackBlock>) ->
+			DefaultTopologyNavigator(context)
+		}
+
+		// Factory for PathReservationRegistry (fresh instance per simulation)
+		// Prevents state bleeding between simulation runs
+		factory<PathReservationRegistry> {
+			PathReservationRegistry()
+		}
+
+		// Factory for PathReservationService (requires navigator + environment parameters)
+		// Registry is created automatically by Koin and injected
+		factory<PathReservationService> { (navigator: TopologyNavigator, environment: SimulationEnvironment) ->
+			val registry: PathReservationRegistry = get()
+			DefaultPathReservationService(navigator, environment, registry)
+		}
+	}
+
+/**
  * GUI module
  *
  * Manages Swing components, editor, UI elements
@@ -152,7 +218,8 @@ val interlockSimModule: Module =
 			objectsModule, // Domain objects (minimal - see design decision)
 			xmlModule,
 			editingModule,
-			simulationModule
+			simulationModule,
+			navigationModule // Navigation services (Issue #294)
 			// NOTE: guiModule is NOT included by default
 			// Load it explicitly when GUI is needed (edit mode)
 		)
