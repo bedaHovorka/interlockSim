@@ -25,7 +25,9 @@ import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.util.Point
@@ -595,7 +597,7 @@ class TopologyNavigatorTest {
 		val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
 
 		// Create a Dynamic wrapper manually (simulating simulation context behavior)
-		val dynamicSemaphore = cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore(staticSemaphore)
+		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
 
 		// Get first section from block 1
 		val block1 = context.getGraph().assignedEdges(Point(1, 1)).values().first()
@@ -705,9 +707,9 @@ class TopologyNavigatorTest {
 		val staticInOutB = editingContext.getRailWayNetGrid().getCellAt(9, 9) as InOut
 		val staticSemaphore = editingContext.getRailWayNetGrid().getCellAt(5, 5) as RailSemaphore
 
-		val dynamicInOutA = simulationContext.getRailWayNetGrid().getCellAt(1, 1)
-		val dynamicInOutB = simulationContext.getRailWayNetGrid().getCellAt(9, 9)
-		val dynamicSemaphore = simulationContext.getRailWayNetGrid().getCellAt(5, 5)
+		val dynamicInOutA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as PathSeparator
+		val dynamicInOutB = simulationContext.getRailWayNetGrid().getCellAt(9, 9) as PathSeparator
+		val dynamicSemaphore = simulationContext.getRailWayNetGrid().getCellAt(5, 5) as PathSeparator
 
 		// Act: Navigate in both contexts
 		val staticResult1 = staticNavigator.getNextTrackSection(staticInOutA, null)

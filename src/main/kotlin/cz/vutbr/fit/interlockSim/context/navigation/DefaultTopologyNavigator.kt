@@ -75,42 +75,25 @@ class DefaultTopologyNavigator(
 		current: TrackSection?
 	): TrackSection? {
 		// Step 1: Try to find next section within same block (if current != null)
-		// Extracted from DefaultSimulationContext lines 571-582
-		if (current != null) {
-			val block = current.getTrackBlock()
-			require(block != null) { "TrackBlock cannot be null for current track section" }
-
-			val nextTrackSection = block.getNextTrackSection(separator, current)
-			if (nextTrackSection != null) {
-				logger.trace {
-					"getNextTrackSection: found next section within same block from $separator"
-				}
-				return nextTrackSection
+		// Kotlin idiom: Use let for cleaner null-safe chaining
+		current?.let {
+			val block = requireNotNull(it.getTrackBlock()) { "TrackBlock cannot be null for current track section" }
+			block.getNextTrackSection(separator, it)?.also { nextSection ->
+				logger.trace { "getNextTrackSection: found next section within same block from $separator" }
+				return nextSection
 			}
 		}
 
 		// Step 2: At block boundary - navigate to next block via graph
-		// Extracted from DefaultSimulationContext lines 586-595
-
-		// Extract static NodeCell for graph operations
-		// (Handles both static NodeCell and Dynamic* wrappers)
+		// Extract static NodeCell for graph operations (handles both static NodeCell and Dynamic* wrappers)
 		val staticNodeCell = CellUtilities.assertNodeCell(separator)
 
 		// Convert PathSeparator to NodeCell for getNextTrackBlock call
-		// NodeCell is a subtype of PathSeparator, so static objects work directly
-		val nodeCell =
-			if (separator is NodeCell) {
-				separator
-			} else {
-				staticNodeCell
-			}
+		// Kotlin idiom: Use as? for safe cast with elvis operator
+		val nodeCell = (separator as? NodeCell) ?: staticNodeCell
 
-		// Query graph for next block
-		val nextTrackBlock = getNextTrackBlock(nodeCell, current?.getTrackBlock())
-
-		// Step 3: Return first section in next block (or null if no continuation)
-		// Extracted from DefaultSimulationContext lines 634-639
-		val result = nextTrackBlock?.getNextTrackSection(separator, null)
+		// Step 3: Query graph for next block and return first section
+		val result = getNextTrackBlock(nodeCell, current?.getTrackBlock())?.getNextTrackSection(separator, null)
 		logger.trace {
 			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
 		}
@@ -146,27 +129,19 @@ class DefaultTopologyNavigator(
 		val staticNodeCell = CellUtilities.assertNodeCell(nodeCell)
 
 		// Get location and segment (lines 526-527)
-		val location = context.getRailWayNetGrid().getLocation(staticNodeCell)
-			?: return null
+		val location = context.getRailWayNetGrid().getLocation(staticNodeCell) ?: return null
 		val segment = getSegment(location, current)
 
 		// Determine following segment based on NodeCell type (lines 529-540)
-		// OrientedNodeCell (InOut, Semaphore) has deterministic direction
-		// Non-oriented (RailSwitch) uses possibleFollowers
+		// Kotlin idiom: Use when expression with smart casts
 		val followingSegment =
 			when (staticNodeCell) {
 				is OrientedNodeCell -> staticNodeCell.getFollowingSegment(segment)
-				else -> {
-					// Fall back to possibleFollowers for non-oriented NodeCells
-					val followers = staticNodeCell.possibleFollowers(segment ?: return null)
-					followers.firstOrNull()
-				}
-			}
-		if (followingSegment == null) return null
+				else -> staticNodeCell.possibleFollowers(segment ?: return null).firstOrNull()
+			} ?: return null
 
 		// Query graph for edge assigned to following segment (lines 543-544)
-		val assignedEdges = context.getGraph().assignedEdges(location)
-		return assignedEdges[followingSegment]
+		return context.getGraph().assignedEdges(location)[followingSegment]
 	}
 
 	/**
@@ -187,6 +162,12 @@ class DefaultTopologyNavigator(
 	 *
 	 * Railway networks can contain loops (e.g., around-the-block routing).
 	 * The algorithm prevents infinite loops by tracking visited separators.
+	 *
+	 * ## Dynamic Wrapper Handling
+	 *
+	 * This method supports both static PathSeparators and Dynamic wrappers.
+	 * Equality comparison uses the static reference for consistent behavior across
+	 * EditingContext (static) and SimulationContext (dynamic) environments.
 	 *
 	 * ## Performance Characteristics
 	 *
@@ -223,6 +204,7 @@ class DefaultTopologyNavigator(
 			}
 
 			// Skip if already visited (cycle detection)
+			// Note: visited set uses PathSeparator's equals(), which handles Dynamic wrappers correctly
 			if (separator in visited) {
 				logger.trace { "findAllTopologicalPaths: skipping visited separator $separator" }
 				continue
@@ -230,16 +212,18 @@ class DefaultTopologyNavigator(
 			visited.add(separator)
 
 			// Check if we reached the target
-			if (separator == target) {
+			// Note: PathSeparator.equals() handles comparison between static and dynamic instances
+			if (isSameSeparator(separator, target)) {
 				val path = buildPath(node)
 				paths.add(path)
 				logger.debug { "findAllTopologicalPaths: found path with ${path.size} sections" }
 				continue
 			}
 
-			// Explore next section from this separator
-			val nextSection = getNextTrackSection(separator, node.section)
-			if (nextSection != null) {
+			// Explore all possible next sections from this separator
+			// For switches, this may return multiple branches
+			val nextSections = getAllNextTrackSections(separator, node.section)
+			for (nextSection in nextSections) {
 				// Get the separator at the end of this section
 				val nextSeparator = nextSection.getSecondEnd(separator)
 				queue.add(PathNode(nextSeparator, nextSection, node))
@@ -265,42 +249,146 @@ class DefaultTopologyNavigator(
 		location: cz.vutbr.fit.interlockSim.util.Point,
 		current: TrackBlock?
 	): Cell.Segment? {
-		if (current == null) return null
+		current ?: return null
 
 		// Query graph for all edges assigned to this location
-		val assignedEdges: java.util.Map<Cell.Segment, out TrackBlock> = context.getGraph().assignedEdges(location)
+		// Note: assignedEdges signature is problematic - returns raw Java Map
+		// Use explicit cast and Java Map methods
+		@Suppress("UNCHECKED_CAST")
+		val assignedEdges = context.getGraph().assignedEdges(location) as java.util.Map<Cell.Segment, TrackBlock>
 
-		// Find the segment that connects to the current block
-		// Note: Must iterate explicitly because assignedEdges is java.util.Map (not Kotlin Map)
-		for (entry in assignedEdges.entries) {
-			if (entry.value == current) {
-				return entry.key
+		// Find the segment that connects to the current block using Java Map iteration
+		for (segment in assignedEdges.keySet()) {
+			if (assignedEdges.get(segment) == current) {
+				return segment
 			}
 		}
 		return null
 	}
 
 	/**
+	 * Get all possible next track sections following a path separator.
+	 *
+	 * This method is similar to getNextTrackSection, but explores ALL possible branches
+	 * at switches instead of just the first one. This is essential for findAllTopologicalPaths
+	 * to discover all possible routes through the network.
+	 *
+	 * @param separator The separator to navigate from
+	 * @param current The current track section (for within-block navigation), or null
+	 * @return List of all possible next track sections (may be empty, or contain multiple for switches)
+	 */
+	private fun getAllNextTrackSections(
+		separator: PathSeparator,
+		current: TrackSection?
+	): List<TrackSection> {
+		// Step 1: Try within-block navigation first
+		current?.let {
+			val block = requireNotNull(it.getTrackBlock()) { "TrackBlock cannot be null for current track section" }
+			block.getNextTrackSection(separator, it)?.let { nextSection ->
+				// Found next section within same block
+				return listOf(nextSection)
+			}
+		}
+
+		// Step 2: At block boundary - explore ALL possible next blocks
+		val staticNodeCell = CellUtilities.assertNodeCell(separator)
+		val nodeCell = (separator as? NodeCell) ?: staticNodeCell
+
+		// Get all possible next blocks
+		val nextBlocks = getAllNextTrackBlocks(nodeCell, current?.getTrackBlock())
+
+		// Map each block to its first section from this separator
+		return nextBlocks.mapNotNull { block ->
+			block.getNextTrackSection(separator, null)
+		}
+	}
+
+	/**
+	 * Get all possible next track blocks following a node cell.
+	 *
+	 * For oriented cells (InOut, Semaphore), returns single deterministic block.
+	 * For switches (RailSwitch), returns ALL possible blocks for all branches.
+	 *
+	 * @param nodeCell The node cell to navigate from
+	 * @param current The current track block (for determining direction), or null
+	 * @return List of all possible next track blocks (may be empty, or contain multiple for switches)
+	 */
+	private fun getAllNextTrackBlocks(
+		nodeCell: NodeCell,
+		current: TrackBlock?
+	): List<TrackBlock> {
+		val staticNodeCell = CellUtilities.assertNodeCell(nodeCell)
+		val location = context.getRailWayNetGrid().getLocation(staticNodeCell) ?: return emptyList()
+		val segment = getSegment(location, current)
+
+		// Determine ALL following segments based on NodeCell type
+		val followingSegments: Set<Cell.Segment> =
+			when (staticNodeCell) {
+				is OrientedNodeCell -> {
+					// Oriented cells have single deterministic direction
+					val following = staticNodeCell.getFollowingSegment(segment)
+					if (following != null) setOf(following) else emptySet()
+				}
+				else -> {
+					// Non-oriented (switches) may have multiple branches
+					staticNodeCell.possibleFollowers(segment ?: return emptyList())
+				}
+			}
+
+		// Query graph for ALL edges assigned to following segments
+		val assignedEdges = context.getGraph().assignedEdges(location)
+		return followingSegments.mapNotNull { followingSegment ->
+			assignedEdges[followingSegment]
+		}
+	}
+
+	/**
+	 * Check if two PathSeparators refer to the same network element.
+	 *
+	 * This method handles both static PathSeparators and Dynamic wrappers correctly.
+	 * Since static objects don't know about Dynamic wrappers, we normalize both
+	 * separators to their static references before comparison using identity (===).
+	 *
+	 * ## Why Identity Comparison?
+	 *
+	 * Dynamic wrappers use identity comparison (===) of static references in their equals()
+	 * implementation. To ensure consistent behavior regardless of comparison order:
+	 * - Extract static reference from both separators
+	 * - Compare using identity (===) like Dynamic wrappers do
+	 *
+	 * This works for all combinations:
+	 * - static === static (direct identity)
+	 * - dynamic === dynamic (compares static references)
+	 * - static === dynamic (compares static references)
+	 * - dynamic === static (compares static references)
+	 *
+	 * @param sep1 First separator (may be static or dynamic)
+	 * @param sep2 Second separator (may be static or dynamic)
+	 * @return true if they represent the same network element
+	 */
+	private fun isSameSeparator(
+		sep1: PathSeparator,
+		sep2: PathSeparator
+	): Boolean {
+		// Extract static references for identity comparison
+		val static1 = CellUtilities.assertNodeCell(sep1)
+		val static2 = CellUtilities.assertNodeCell(sep2)
+		return static1 === static2
+	}
+
+	/**
 	 * Build path by following parent pointers from target node back to start.
+	 *
+	 * Kotlin idiom: Use generateSequence to traverse parent chain, then reverse for forward order.
 	 *
 	 * @param targetNode The final node in the path (where we reached the target separator)
 	 * @return List of track sections in forward order (start to target)
 	 */
-	private fun buildPath(targetNode: PathNode): List<TrackSection> {
-		val sections = mutableListOf<TrackSection>()
-		var node: PathNode? = targetNode
-
-		// Traverse parent pointers to build path
-		while (node != null) {
-			val section = node.section
-			if (section != null) {
-				sections.add(0, section) // Prepend to maintain forward order
-			}
-			node = node.parent
-		}
-
-		return sections
-	}
+	private fun buildPath(targetNode: PathNode): List<TrackSection> =
+		generateSequence(targetNode) { it.parent }
+			.mapNotNull { it.section }
+			.toList()
+			.reversed()
 
 	/**
 	 * Internal node for BFS path exploration.
