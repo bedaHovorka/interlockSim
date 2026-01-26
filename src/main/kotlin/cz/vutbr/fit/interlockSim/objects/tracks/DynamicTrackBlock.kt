@@ -308,7 +308,7 @@ class DynamicTrackBlock(
 					"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} reservation conflict - " +
 						"already reserved from=$reservedFrom by trainId=$trainId, new request from=$sep by trainId=$reservingTrainId"
 				}
-				throw TrackOperationException(DynamicTrackBlockErrors.ALREADY_RESERVED_CONFLICT, staticRef)
+				throw TrackReservationException.AlreadyReservedConflict(this, reservedFrom!!, sep)
 			}
 		}
 
@@ -317,7 +317,7 @@ class DynamicTrackBlock(
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} RESERVE: " +
 				"from=$sep, state=FREE->RESERVED, trainId=$reservingTrainId"
 		}
-		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
+		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED, "setUpPath")
 		reservedFrom = sep
 		trainId = reservingTrainId
 	}
@@ -370,7 +370,7 @@ class DynamicTrackBlock(
 		logger.info {
 			"${Process.time()} TrackBlock ${staticRef.hashCode()} RELEASE: from=$sep, state=RESERVED->FREE, trainId=$trainId"
 		}
-		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE)
+		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.FREE, "cancelPathSetup")
 		if (sep !== reservedFrom) {
 			throw TrackOperationException("wrong end on cancel", staticRef)
 		}
@@ -389,17 +389,18 @@ class DynamicTrackBlock(
 		return ok
 	}
 
-	@Throws(TrackOperationException::class)
+	@Throws(TrackReservationException::class)
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
-		to: TrackFacility.State
+		to: TrackFacility.State,
+		operation: String
 	) {
 		if (!stateChange(from, to)) {
 			logger.error {
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} state violation - " +
 					"expected=$from, actual=${getState()}, attempted=$to"
 			}
-			throw TrackOperationException(errorStateMessage(from), staticRef)
+			throw TrackReservationException.InvalidStateTransition(this, getState(), operation)
 		}
 	}
 

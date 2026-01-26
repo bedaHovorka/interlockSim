@@ -385,6 +385,13 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
 
+**Path Reservation System (Issue #292 Phase 2, 2026-01-26):**
+- `context/navigation/PathReservationService` - Atomic path reservation with all-or-nothing semantics
+- `context/navigation/PathReservationRegistry` - Bidirectional train↔block ownership tracking
+- `context/navigation/TopologyNavigator` - BFS-based static path finding
+- Comprehensive architecture documentation: `docs/PATH_RESERVATION_ARCHITECTURE.md`
+- Features: TOCTOU trade-off analysis, exception hierarchy, atomic operations, Kotlin extensions
+
 **Utilities:**
 - `util/Array2DMap` - Grid data structure with pathfinding extensions
 - `util/Array2DMapExtensions.kt` - Kotlin-idiomatic navigation and spatial query operations (multiplatform-compatible)
@@ -764,6 +771,13 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 
 **Thesis:** LaTeX sources in `text/`, build with `docker compose up text` (outputs to `artifacts/text/bakalarka.pdf`)
 **JavaDoc:** Generate with `./gradlew javadoc` (outputs to `build/docs/javadoc/`)
+
+**Architecture Documentation (docs/):**
+- `PATH_RESERVATION_ARCHITECTURE.md` - Path reservation system design (Issue #292 Phase 2)
+- `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98)
+- `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern (Issue #100)
+- `GRID_PARAMETERIZATION_*.md` - Type-safe grid parameterization (Issue #131)
+- `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions and DI patterns
 
 ## Logging
 

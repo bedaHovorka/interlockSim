@@ -10,11 +10,10 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlockErrors
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
+import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -113,7 +112,7 @@ class DefaultPathReservationService(
 			logger.trace { "reservePath: Path has ${blocks.size} unique block(s)" }
 
 			// Step 2b: Check if all blocks are FREE
-			if (!areAllBlocksFree(blocks)) {
+			if (!blocks.areAllFree()) {
 				logger.debug { "reservePath: Path ${index + 1} blocked (some blocks not FREE)" }
 				continue
 			}
@@ -136,27 +135,24 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// Step 2d: Register ownership in registry
-			try {
-				registry.register(trainId, blocks)
-				logger.info {
-					"reservePath: SUCCESS - Reserved path for $trainId with ${blocks.size} block(s)"
+			// Step 2d: Register ownership in registry (atomic operation)
+			return when (val result = registry.registerAtomic(trainId, blocks)) {
+				is PathReservationRegistry.RegistrationResult.Success -> {
+					// Success - path reserved and registered
+					logger.info {
+						"reservePath: SUCCESS - Reserved path for $trainId with ${blocks.size} block(s)"
+					}
+					PathReservationService.ReservationResult.Success(blocks)
 				}
-				return PathReservationService.ReservationResult.Success(blocks)
-			} catch (e: IllegalStateException) {
-				// Registry conflict - rollback and return conflict result
-				logger.error(e) { "reservePath: Registry conflict during registration" }
-				rollbackReservation(start, blocks)
-				val conflictingBlock = blocks.firstOrNull { registry.isRegistered(it) }
-				return if (conflictingBlock != null) {
+				is PathReservationRegistry.RegistrationResult.Conflict -> {
+					// Registry conflict - rollback block reservations
+					logger.warn {
+						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}"
+					}
+					rollbackReservation(start, blocks)
 					PathReservationService.ReservationResult.Conflict(
-						conflictingBlock,
-						registry.getOwner(conflictingBlock) ?: "unknown"
-					)
-				} else {
-					PathReservationService.ReservationResult.Conflict(
-						blocks.first(),
-						"unknown"
+						result.conflictingBlock,
+						result.existingOwner
 					)
 				}
 			}
@@ -235,7 +231,7 @@ class DefaultPathReservationService(
 
 		for (path in candidatePaths) {
 			val blocks = extractUniqueBlocks(path)
-			if (areAllBlocksFree(blocks)) {
+			if (blocks.areAllFree()) {
 				logger.debug { "isPathAvailable: Found free path with ${blocks.size} block(s)" }
 				return true
 			}
@@ -301,15 +297,6 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * Check if all blocks in a list are FREE.
-	 *
-	 * @param blocks List of blocks to check
-	 * @return true if ALL blocks are FREE, false if any is RESERVED or OCCUPIED
-	 */
-	private fun areAllBlocksFree(blocks: List<DynamicTrackBlock>): Boolean =
-		blocks.all { it.getState() == TrackFacility.State.FREE }
-
-	/**
 	 * Attempt atomic reservation of all blocks in a path.
 	 *
 	 * ## Algorithm
@@ -349,19 +336,27 @@ class DefaultPathReservationService(
 			}
 			rollbackReservation(separator, reservedSoFar)
 
-			// Classify error using typed constants instead of brittle string matching
-			return when {
-				e is TrackOperationException &&
-					e.message == DynamicTrackBlockErrors.ALREADY_RESERVED_CONFLICT -> {
+			// Classify error using type-safe exception hierarchy
+			return when (e) {
+				is TrackReservationException.AlreadyReservedConflict -> {
 					// TOCTOU race: block became reserved between check and reservation
 					logger.warn {
-						"tryAtomicReservation: Block became reserved between check and reservation (TOCTOU race)"
+						"tryAtomicReservation: TOCTOU race detected - " +
+							"Block ${e.block} reserved by ${e.existingSeparator}"
+					}
+					PathReservationService.ReservationResult.AllPathsBlocked(1)
+				}
+				is TrackReservationException.InvalidStateTransition -> {
+					// State machine violation
+					logger.error(e) {
+						"tryAtomicReservation: State machine violation in ${e.block} - " +
+							"${e.operation} from ${e.fromState}"
 					}
 					PathReservationService.ReservationResult.AllPathsBlocked(1)
 				}
 				else -> {
-					// Unexpected error (state machine violation, etc.)
-					logger.warn(e) {
+					// Unexpected error (should not happen)
+					logger.error(e) {
 						"tryAtomicReservation: Unexpected error during reservation: ${e::class.simpleName}"
 					}
 					PathReservationService.ReservationResult.AllPathsBlocked(1)
