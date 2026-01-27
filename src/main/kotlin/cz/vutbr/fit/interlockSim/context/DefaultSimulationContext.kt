@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -120,6 +121,22 @@ open class DefaultSimulationContext(
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
+	 * Koin scope for this simulation context.
+	 * Manages lifecycle of navigation services and ensures one shared PathReservationRegistry
+	 * per context. The context itself is passed as the scope source, allowing services to access it via getSource().
+	 * Scope is closed when context is destroyed via close().
+	 *
+	 * @see navigationModule
+	 * @see close
+	 */
+	override val scope = org.koin.core.context.GlobalContext.get()
+		.createScope(
+			scopeId = System.identityHashCode(this).toString(),
+			qualifier = org.koin.core.qualifier.named<DefaultSimulationContext>(),
+			source = this
+		)
+
+	/**
 	 * Set of allowed report types for simulation output
 	 */
 	private val allowedReportTypes: MutableSet<ReportType> = EnumSet.noneOf(ReportType::class.java)
@@ -159,12 +176,19 @@ open class DefaultSimulationContext(
 	/**
 	 * Train navigation service for train-specific path following.
 	 * Lazy-initialized on first access to ensure SimulationEnvironment (this) is fully constructed.
-	 * Created via Koin DI with shared PathReservationRegistry instance.
+	 * Retrieved from this context's scope, ensuring shared PathReservationRegistry with other services.
 	 */
 	private val trainNavigationServiceInstance: TrainNavigationService by lazy {
-		org.koin.core.context.GlobalContext.get().get<TrainNavigationService> {
-			org.koin.core.parameter.parametersOf(this as SimulationEnvironment)
-		}
+		scope.get<TrainNavigationService>()
+	}
+
+	/**
+	 * Path reservation service for atomic path reservation and ownership tracking.
+	 * Lazy-initialized on first access to ensure SimulationEnvironment (this) is fully constructed.
+	 * Retrieved from this context's scope, ensuring shared PathReservationRegistry and TopologyNavigator.
+	 */
+	private val pathReservationServiceInstance: PathReservationService by lazy {
+		scope.get<PathReservationService>()
 	}
 
 	// ========================================
@@ -1339,6 +1363,18 @@ open class DefaultSimulationContext(
 	 * @see TrainNavigationService
 	 */
 	override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
+
+	/**
+	 * Get path reservation service for atomic path reservation.
+	 *
+	 * Returns the PathReservationService instance for this simulation context.
+	 * The service provides dispatcher logic for finding and reserving free paths
+	 * with atomic all-or-nothing semantics and train ownership tracking.
+	 *
+	 * @return PathReservationService instance
+	 * @see PathReservationService
+	 */
+	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
 
 	/**
 	 * Set the main process for the simulation

@@ -23,7 +23,6 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.core.parameter.parametersOf
 import org.koin.test.inject
 import java.io.InputStream
 
@@ -62,9 +61,9 @@ class PathReservationRegistryTest : KoinTestBase() {
 		val simulationContext =
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-		// Get all blocks from the graph using Koin-injected navigator
+		// Get all blocks from the graph using a navigator
 		val inOuts = simulationContext.getInOuts().toList()
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(simulationContext) }
+		val navigator: TopologyNavigator = simulationContext.scope.get()
 		val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
 
 		blocks =

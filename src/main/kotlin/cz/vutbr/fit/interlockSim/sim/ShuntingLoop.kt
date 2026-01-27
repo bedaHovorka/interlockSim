@@ -30,8 +30,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
-import org.koin.core.parameter.parametersOf
 import java.util.Collections
 import java.util.LinkedList
 import java.util.Queue
@@ -143,7 +141,7 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		generator = InnerGenerator(context)
 
 		// Initialize navigator via Koin DI (Issue #296)
-		navigator = getKoin().get { parametersOf(context) }
+		navigator = context.scope.get()
 
 		requireSimulation(context.getGraph().size() > 0) {
 			"Railway network graph is empty - must be loaded from vyhybna.xml first"

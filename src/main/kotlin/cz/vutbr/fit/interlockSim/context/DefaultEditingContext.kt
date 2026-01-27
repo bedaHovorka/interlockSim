@@ -79,6 +79,21 @@ open class DefaultEditingContext(
 	rows: Int
 ) : BaseContext<TrackBlock>(cols, rows),
 	EditingContext {
+	/**
+	 * Koin scope for this editing context.
+	 * Manages lifecycle of navigation services (TopologyNavigator).
+	 * The context itself is passed as the scope source, allowing services to access it via getSource().
+	 * Scope is closed when context is destroyed via close().
+	 *
+	 * @see navigationModule
+	 * @see close
+	 */
+	override val scope = org.koin.core.context.GlobalContext.get()
+		.createScope(
+			scopeId = System.identityHashCode(this).toString(),
+			qualifier = org.koin.core.qualifier.named<DefaultEditingContext>(),
+			source = this
+		)
 	companion object {
 		/**
 		 * Logger for general class operations.

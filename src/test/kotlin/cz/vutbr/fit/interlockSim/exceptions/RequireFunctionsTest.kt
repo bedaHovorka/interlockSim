@@ -11,7 +11,6 @@
 package cz.vutbr.fit.interlockSim.exceptions
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull

@@ -32,7 +32,6 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
-import org.koin.core.parameter.parametersOf
 
 /**
  * Comprehensive test suite for TopologyNavigator.
@@ -75,7 +74,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -107,7 +106,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -136,7 +135,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withInOut("A", 1, 1, true)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -187,7 +186,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
+		val navigator: TopologyNavigator = editingContext.scope.get()
 
 		// Act: Navigate through switch
 		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
@@ -220,7 +219,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0) // block2
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -245,7 +244,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withInOut("A", 1, 1, true)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -277,7 +276,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -306,7 +305,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withInOut("B", 5, 5, false)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -337,7 +336,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -368,7 +367,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -399,7 +398,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 		val inOutB = grid.getCellAt(5, 5) as InOut
@@ -433,7 +432,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 		// Act: Create navigator with EditingContext (proves no simulation dependency)
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
+		val navigator: TopologyNavigator = editingContext.scope.get()
 		val nextSection = navigator.getNextTrackSection(inOutA, null)
 
 		// Assert: Navigator works in editing context
@@ -453,7 +452,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -478,7 +477,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(1, 1, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
@@ -534,7 +533,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
+		val navigator: TopologyNavigator = editingContext.scope.get()
 
 		// Act: Navigate through switch from A
 		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
@@ -578,7 +577,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 				.withConnection(3, 3, 5, 5, 100.0, 80.0)
 				.buildEditingContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
 		val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
 
@@ -639,7 +638,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 		editingContext.joinCells(Point(10, 10), Point(15, 5), trackSwitchToExit2)
 
 		// Act: Create navigator with EDITING context (no simulation)
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(editingContext) }
+		val navigator: TopologyNavigator = editingContext.scope.get()
 
 		// Navigate from entry
 		val firstSection = navigator.getNextTrackSection(entry, null)
