@@ -70,6 +70,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = simulationContextFactory.createEmptyContext()
+			testContext = context  // Track for cleanup
 		}
 
 		// Note: Editing operation tests removed after Issue #153.5
@@ -99,6 +100,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
+			testContext = context  // Track for cleanup
 		}
 
 		@Test
@@ -166,6 +168,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = simulationContextFactory.createEmptyContext()
+			testContext = context  // Track for cleanup
 		}
 
 		@Test
@@ -255,6 +258,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 					cz.vutbr.fit.interlockSim.context.SimulationProcessFactory::class.java
 				)
 			context = DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+			testContext = context  // Track for cleanup
 		}
 
 		@Test
@@ -354,6 +358,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Convert to simulation context for testing
 			context = this@DefaultSimulationContextTest.simulationContextFactory.createContext(editingContext)
+			testContext = context  // Track for cleanup
 			// Trigger lazy initialization of dynamic wrappers
 			context.getInOuts()
 		}
@@ -428,6 +433,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
+			testContext = context  // Track for cleanup
 		}
 
 		@Test
@@ -484,6 +490,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = simulationContextFactory.createEmptyContext()
+			testContext = context  // Track for cleanup
 		}
 
 		@Test
@@ -584,6 +591,7 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			context = editingContextFactory.createEmptyContext()
+			testContext = context  // Track for cleanup
 		}
 
 		@Test

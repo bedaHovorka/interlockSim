@@ -53,6 +53,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		context = createMockSimulationContext()
+		testContext = context  // Track for cleanup
 		entryInOut = createTestDynamicInOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()

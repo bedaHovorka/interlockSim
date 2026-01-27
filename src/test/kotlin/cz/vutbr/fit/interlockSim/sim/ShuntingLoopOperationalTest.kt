@@ -80,6 +80,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 			)
 		val context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		validContext = MockSimulationContext(context)
+		testContext = context  // Track underlying context for cleanup (MockSimulationContext delegates to it)
 	}
 
 	/**

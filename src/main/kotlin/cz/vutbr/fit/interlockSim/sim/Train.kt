@@ -609,18 +609,13 @@ class Train :
 		// This prevents race condition where Front checks for reserved path before InOutWorker completes
 		val next = env.getNextTrackSection(inout, null)
 		if (next != null) {
-			logger.debug { "Train $number waiting for initial path to be reserved from ${inout.name}" }
 			waitUntil(
 				object : jDisco.Condition {
 					override fun test(): Boolean {
 						// Check if we have any reserved blocks (path has been reserved)
 						val trainNavService = env.getTrainNavigationService()
 						val path = trainNavService.findReservedPathForTrain(this@Train.toString(), inout, next)
-						val hasPath = path != null
-						if (!hasPath) {
-							logger.debug { "Train $number still waiting for path from ${inout.name} (checked at ${jDisco.Process.time()})" }
-						}
-						return hasPath
+						return path != null
 					}
 				}
 			)
