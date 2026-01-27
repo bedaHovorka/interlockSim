@@ -96,7 +96,19 @@ interface SimulationEnvironment {
 	 * @param separator Starting point (semaphore, switch, InOut)
 	 * @param current Current track section (null = start of navigation)
 	 * @return Next track section, or null if no path exists
+	 * @deprecated Use [getTrainNavigationService] or [getPathReservationService] instead.
+	 *   This method mixes static topology navigation with dynamic state concerns.
+	 *   See docs/PATH_DISCOVERY_MIGRATION_GUIDE.md for migration instructions.
+	 * @since Issue #292 Phase 5
 	 */
+	@Deprecated(
+		message = "Use getTrainNavigationService() or getPathReservationService() for path navigation " +
+			"with ownership tracking",
+		replaceWith = ReplaceWith(
+			"getTrainNavigationService().findReservedPathForTrain(trainId, separator, current)"
+		),
+		level = DeprecationLevel.WARNING
+	)
 	fun getNextTrackSection(
 		separator: PathSeparator,
 		current: TrackSection?
@@ -109,7 +121,18 @@ interface SimulationEnvironment {
 	 * @param separator Start of path (must be in direction of travel)
 	 * @param next First track section in path
 	 * @return Path to next semaphore, or null if no path found
+	 * @deprecated Use [getTrainNavigationService] or [getPathReservationService] instead.
+	 *   This method mixes static topology navigation with dynamic block ownership validation,
+	 *   leading to ambiguity about who owns blocks and race conditions. See Issue #291.
+	 *   Use train-specific navigation or dispatcher reservation APIs for clear ownership semantics.
+	 *   See docs/PATH_DISCOVERY_MIGRATION_GUIDE.md for migration instructions.
+	 * @since Issue #292 Phase 5
 	 */
+	@Deprecated(
+		message = "Use getTrainNavigationService().findReservedPathForTrain() for train navigation with ownership tracking",
+		replaceWith = ReplaceWith("getTrainNavigationService().findReservedPathForTrain(trainId, separator, next)"),
+		level = DeprecationLevel.WARNING
+	)
 	fun pathToNextSemaphore(
 		separator: PathSeparator,
 		next: TrackSection
