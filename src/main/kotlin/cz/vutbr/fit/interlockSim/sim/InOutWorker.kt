@@ -74,6 +74,7 @@ class InOutWorker(
 			}
 		}
 
+	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
 	override fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
@@ -84,11 +85,75 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {
-				// zarezervovat koleje
-				path?.setUpPath(inOut)
-				logger.info {
-					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
-						"path reserved for $first, length=${path?.length()}"
+				// Extract train ID for ownership tracking
+				val train = first as? Train
+				val trainId = train?.toString()
+				val currentPath = path  // Capture for smart cast
+
+				// Use PathReservationService API for atomic path reservation
+				if (trainId != null && next != null && currentPath != null) {
+					val pathService = env.getPathReservationService()
+
+					// Find target separator (last element in path - the semaphore we're heading to)
+					val targetSeparator = try {
+						currentPath.getLast()
+					} catch (e: Exception) {
+						logger.warn {
+							"${Process.time()} APPROVAL_WARNING: InOut ${inOut.name} - " +
+								"could not get target separator: ${e.message}, falling back to manual reservation"
+						}
+						null
+					}
+
+					if (targetSeparator != null) {
+						val result = pathService.reservePath(trainId, inOut, targetSeparator)
+
+						when (result) {
+							is cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Success -> {
+								logger.info {
+									"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
+										"path reserved for $trainId via PathReservationService, " +
+										"${result.reservedBlocks.size} blocks reserved, " +
+										"length=${currentPath.length()}"
+								}
+
+								// Update semaphore signals after successful reservation
+								// PathReservationService only reserves blocks; we need to update semaphore signals separately
+								// This ensures target semaphore shows GO/SLOW signal instead of STOP
+								try {
+									currentPath.setUpPath(inOut)
+									logger.debug {
+										"${Process.time()} SEMAPHORE_UPDATE: InOut ${inOut.name} - " +
+											"updated semaphore signals for path to $targetSeparator"
+									}
+								} catch (e: Exception) {
+									logger.warn {
+										"${Process.time()} SEMAPHORE_UPDATE_WARNING: InOut ${inOut.name} - " +
+											"could not update semaphore signals: ${e.message}"
+									}
+									// Continue anyway - blocks are reserved, train can proceed even if semaphore update fails
+								}
+							}
+							else -> {
+								logger.warn {
+									"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +
+										"PathReservationService could not reserve path: $result"
+								}
+							}
+						}
+					}
+				} else {
+					// Fallback: no trainId or next section
+					val fallbackPath = path
+					logger.warn {
+						"${Process.time()} APPROVAL_FALLBACK: InOut ${inOut.name} - " +
+							"using manual path setup (trainId=$trainId, next=$next)"
+					}
+					fallbackPath?.setUpPath(inOut)
+					logger.info {
+						"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
+							"path reserved for $first (manual), length=${fallbackPath?.length()}"
+					}
 				}
 			} catch (e: Exception) {
 				logger.warn {

@@ -199,7 +199,7 @@ class Train :
 			// Issue #295: Use TrainNavigationService for ownership-validated path finding
 			// Only returns paths through blocks RESERVED for this specific train
 			val trainNavService = env.getTrainNavigationService()
-			val path: Path? = trainNavService.findReservedPathForTrain(toString(), separator, next!!)
+			val path: Path? = trainNavService.findReservedPathForTrain(this@Train.toString(), separator, next!!)
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
@@ -227,7 +227,7 @@ class Train :
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 
 				// Try to find reserved path again - blocks may now be available
-				val newPath = trainNavService.findReservedPathForTrain(toString(), separator, next!!)
+				val newPath = trainNavService.findReservedPathForTrain(this@Train.toString(), separator, next!!)
 				if (newPath != null) {
 					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 					fireStart(semaphore, newPath)
@@ -604,6 +604,28 @@ class Train :
 		logger.debug { "Train $number approved for movement from ${inout.name} to ${timetable.getOut().name}" }
 		worker.enterTrain(this)
 		env.report("approved ${inout.name}->${timetable.getOut().name}", this, ReportType.TRAIN_EVENTS)
+
+		// Wait for InOutWorker to reserve initial path before starting Front
+		// This prevents race condition where Front checks for reserved path before InOutWorker completes
+		val next = env.getNextTrackSection(inout, null)
+		if (next != null) {
+			logger.debug { "Train $number waiting for initial path to be reserved from ${inout.name}" }
+			waitUntil(
+				object : jDisco.Condition {
+					override fun test(): Boolean {
+						// Check if we have any reserved blocks (path has been reserved)
+						val trainNavService = env.getTrainNavigationService()
+						val path = trainNavService.findReservedPathForTrain(this@Train.toString(), inout, next)
+						val hasPath = path != null
+						if (!hasPath) {
+							logger.debug { "Train $number still waiting for path from ${inout.name} (checked at ${jDisco.Process.time()})" }
+						}
+						return hasPath
+					}
+				}
+			)
+			logger.info { "Train $number path is reserved, starting Front process" }
+		}
 
 		activate(front)
 
