@@ -117,21 +117,19 @@ class InOutWorker(
 										"length=${currentPath.length()}"
 								}
 
-								// Update semaphore signals after successful reservation
-								// PathReservationService only reserves blocks; we need to update semaphore signals separately
+								// Configure semaphore signal after successful reservation
+								// PathReservationService only reserves blocks; we need to update signals
 								// This ensures target semaphore shows GO/SLOW signal instead of STOP
-								try {
-									currentPath.setUpPath(inOut)
-									logger.debug {
-										"${Process.time()} SEMAPHORE_UPDATE: InOut ${inOut.name} - " +
-											"updated semaphore signals for path to $targetSeparator"
-									}
-								} catch (e: Exception) {
-									logger.warn {
-										"${Process.time()} SEMAPHORE_UPDATE_WARNING: InOut ${inOut.name} - " +
-											"could not update semaphore signals: ${e.message}"
-									}
-									// Continue anyway - blocks are reserved, train can proceed even if semaphore update fails
+								if (result.reservedBlocks.isNotEmpty() &&
+									targetSeparator is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+								) {
+									val semaphore =
+										targetSeparator as cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+									env.configureSemaphoreSignal(
+										semaphore,
+										result.reservedBlocks.first(),
+										currentPath.maxSpeed(inOut)
+									)
 								}
 							}
 							else -> {
@@ -143,17 +141,17 @@ class InOutWorker(
 						}
 					}
 				} else {
-					// Fallback: no trainId or next section
-					val fallbackPath = path
-					logger.warn {
-						"${Process.time()} APPROVAL_FALLBACK: InOut ${inOut.name} - " +
-							"using manual path setup (trainId=$trainId, next=$next)"
+					// Error: no trainId or next section - cannot proceed without ownership tracking
+					logger.error {
+						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
+							"cannot approve train without valid trainId (trainId=$trainId) or target separator"
 					}
-					fallbackPath?.setUpPath(inOut)
-					logger.info {
-						"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
-							"path reserved for $first (manual), length=${fallbackPath?.length()}"
-					}
+					env.errorStop(
+						IllegalStateException(
+							"Train approval requires trainId and valid path target for ownership tracking"
+						)
+					)
+					return
 				}
 			} catch (e: Exception) {
 				logger.warn {

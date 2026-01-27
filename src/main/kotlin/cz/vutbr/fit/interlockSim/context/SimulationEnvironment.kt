@@ -208,6 +208,55 @@ interface SimulationEnvironment {
 	 */
 	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 
+	/**
+	 * Configure semaphore signal appearance after path reservation.
+	 *
+	 * This method separates signal configuration from block reservation logic.
+	 * PathReservationService handles block ownership tracking, while this method
+	 * updates semaphore visual signals (GO/SLOW/STOP) to match the reserved path.
+	 *
+	 * ## Separation of Concerns
+	 *
+	 * - **PathReservationService**: Owns block reservation and ownership tracking
+	 * - **configureSemaphoreSignal**: Owns semaphore visual state updates
+	 *
+	 * This separation allows:
+	 * - Clear API responsibilities
+	 * - Non-fatal signal configuration failures (blocks already reserved)
+	 * - Independent testing of reservation vs signal logic
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * val result = env.getPathReservationService().reservePath(trainId, start, target)
+	 * when (result) {
+	 *     is Success -> {
+	 *         if (result.reservedBlocks.isNotEmpty()) {
+	 *             env.configureSemaphoreSignal(
+	 *                 semaphore = target as DynamicRailSemaphore,
+	 *                 firstBlock = result.reservedBlocks.first(),
+	 *                 allowedSpeed = 40.0
+	 *             )
+	 *         }
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * ## Error Handling
+	 *
+	 * Signal configuration failures are non-fatal - if semaphore update fails,
+	 * blocks remain reserved and trains can proceed. Only logs warning.
+	 *
+	 * @param semaphore The semaphore to configure
+	 * @param firstBlock First reserved block in the path
+	 * @param allowedSpeed Speed limit for the path
+	 */
+	fun configureSemaphoreSignal(
+		semaphore: cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore,
+		firstBlock: cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock,
+		allowedSpeed: Double
+	)
+
 	// ========================================
 	// Dynamic State Management
 	// ========================================
