@@ -42,18 +42,20 @@ class ContextTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Build network using editing context
-		val editingContext = editingContextFactory.createEmptyContext()
-		val pA = Point(1, 1)
-		val r1 = Point(4, 2)
-		val pB = Point(5, 5)
-		editingContext.putCell(pA, inA)
-		editingContext.putCell(pB, outB)
-		editingContext.putCell(r1, rs1)
-		editingContext.joinCells(r1, pB, tl)
-		editingContext.joinCells(pA, r1, tl)
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			val pA = Point(1, 1)
+			val r1 = Point(4, 2)
+			val pB = Point(5, 5)
+			editingContext.putCell(pA, inA)
+			editingContext.putCell(pB, outB)
+			editingContext.putCell(r1, rs1)
+			editingContext.joinCells(r1, pB, tl)
+			editingContext.joinCells(pA, r1, tl)
 
-		// Convert to simulation context for testing
-		context = simulationContextFactory.createContext(editingContext)
+			// Convert to simulation context for testing
+			context = simulationContextFactory.createContext(editingContext)
+			testContext = context  // Track for cleanup
+		} // editing context automatically closed here
 	}
 
 	/**

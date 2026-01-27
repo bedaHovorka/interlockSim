@@ -41,6 +41,7 @@ class BresenhamJoinTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		context = editingContextFactory.createEmptyContext()
+		testContext = context  // Track for cleanup
 	}
 
 	@Test
@@ -261,35 +262,36 @@ class BresenhamJoinTest : KoinTestBase() {
 		val block2 = SimpleTrackBlock(inA2, inB2, 1000.0, 80.0)
 
 		// Create two separate contexts to test both directions independently
-		val context1 = editingContextFactory.createEmptyContext()
-		val context2 = editingContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { context1 ->
+			editingContextFactory.createEmptyContext().use { context2 ->
+				context1.putCell(p1, inA1)
+				context1.putCell(p2, inB1)
+				context2.putCell(p1, inA2)
+				context2.putCell(p2, inB2)
 
-		context1.putCell(p1, inA1)
-		context1.putCell(p2, inB1)
-		context2.putCell(p1, inA2)
-		context2.putCell(p2, inB2)
+				// Act - Join in both directions
+				context1.joinCells(p1, p2, block1)
+				context2.joinCells(p2, p1, block2)
 
-		// Act - Join in both directions
-		context1.joinCells(p1, p2, block1)
-		context2.joinCells(p2, p1, block2)
+				// Assert - Both should create cells (though direction might differ internally)
+				// Count cells in both contexts
+				var count1 = 0
+				var count2 = 0
+				for (x in 3..7) {
+					for (y in 2..5) {
+						if (context1.getRailWayNetGrid().getCellAt(x, y) != null) count1++
+						if (context2.getRailWayNetGrid().getCellAt(x, y) != null) count2++
+					}
+				}
 
-		// Assert - Both should create cells (though direction might differ internally)
-		// Count cells in both contexts
-		var count1 = 0
-		var count2 = 0
-		for (x in 3..7) {
-			for (y in 2..5) {
-				if (context1.getRailWayNetGrid().getCellAt(x, y) != null) count1++
-				if (context2.getRailWayNetGrid().getCellAt(x, y) != null) count2++
-			}
-		}
-
-		assertThat(count1)
-			.withMessage("Expected cells in forward direction")
-			.isGreaterThan(0)
-		assertThat(count2)
-			.withMessage("Expected cells in reverse direction")
-			.isGreaterThan(0)
+				assertThat(count1)
+					.withMessage("Expected cells in forward direction")
+					.isGreaterThan(0)
+				assertThat(count2)
+					.withMessage("Expected cells in reverse direction")
+					.isGreaterThan(0)
+			} // context2 closed
+		} // context1 closed
 	}
 
 	@Test

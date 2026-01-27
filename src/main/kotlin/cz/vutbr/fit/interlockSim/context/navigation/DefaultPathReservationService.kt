@@ -91,21 +91,15 @@ class DefaultPathReservationService(
 		target: PathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
-		logger.debug { "reservePath: trainId=$trainId, start=$start, target=$target, maxDepth=$maxDepth" }
-
 		// Step 1: Find all topologically possible paths
 		val candidatePaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
-			logger.info { "reservePath: No topological path exists from $start to $target" }
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
-		logger.debug { "reservePath: Found ${candidatePaths.size} candidate path(s)" }
-
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
-			logger.debug { "reservePath: Attempting path ${index + 1}/${candidatePaths.size} with ${path.size} sections" }
 
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
 			val blocks = extractUniqueBlocks(path)
@@ -113,7 +107,6 @@ class DefaultPathReservationService(
 
 			// Step 2b: Check if all blocks are FREE
 			if (!blocks.areAllFree()) {
-				logger.debug { "reservePath: Path ${index + 1} blocked (some blocks not FREE)" }
 				continue
 			}
 
@@ -127,7 +120,6 @@ class DefaultPathReservationService(
 			val reservationResult = tryAtomicReservation(trainId, start, blocks)
 			if (reservationResult != null) {
 				// Reservation failed, try next path
-				logger.debug { "reservePath: Path ${index + 1} reservation failed: $reservationResult" }
 				if (reservationResult is PathReservationService.ReservationResult.Conflict) {
 					// Conflict indicates serious error, don't try other paths
 					return reservationResult
@@ -139,9 +131,6 @@ class DefaultPathReservationService(
 			return when (val result = registry.registerAtomic(trainId, blocks)) {
 				is PathReservationRegistry.RegistrationResult.Success -> {
 					// Success - path reserved and registered
-					logger.info {
-						"reservePath: SUCCESS - Reserved path for $trainId with ${blocks.size} block(s)"
-					}
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -159,7 +148,6 @@ class DefaultPathReservationService(
 		}
 
 		// All paths tried, all were blocked
-		logger.info { "reservePath: All ${candidatePaths.size} path(s) blocked" }
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
 	}
 
@@ -175,11 +163,8 @@ class DefaultPathReservationService(
 	 * This operation is idempotent - safe to call multiple times.
 	 */
 	override fun releasePath(trainId: String): List<DynamicTrackBlock> {
-		logger.debug { "releasePath: trainId=$trainId" }
-
 		val blocks = registry.getBlocks(trainId)
 		if (blocks.isEmpty()) {
-			logger.debug { "releasePath: No blocks registered for $trainId" }
 			return emptyList()
 		}
 
@@ -192,7 +177,6 @@ class DefaultPathReservationService(
 			if (reservedFrom != null) {
 				try {
 					block.cancelPathSetup(reservedFrom)
-					logger.trace { "releasePath: Released block $block" }
 				} catch (e: Exception) {
 					logger.warn(e) { "releasePath: Failed to release block $block" }
 				}
@@ -202,7 +186,6 @@ class DefaultPathReservationService(
 		// Unregister from registry
 		registry.unregister(trainId)
 
-		logger.info { "releasePath: Released ${blocks.size} block(s) for $trainId" }
 		return blocks
 	}
 
@@ -220,24 +203,19 @@ class DefaultPathReservationService(
 		target: PathSeparator,
 		maxDepth: Int
 	): Boolean {
-		logger.debug { "isPathAvailable: start=$start, target=$target, maxDepth=$maxDepth" }
-
 		val candidatePaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
-			logger.debug { "isPathAvailable: No topological path exists" }
 			return false
 		}
 
 		for (path in candidatePaths) {
 			val blocks = extractUniqueBlocks(path)
 			if (blocks.areAllFree()) {
-				logger.debug { "isPathAvailable: Found free path with ${blocks.size} block(s)" }
 				return true
 			}
 		}
 
-		logger.debug { "isPathAvailable: All ${candidatePaths.size} path(s) blocked" }
 		return false
 	}
 
@@ -378,7 +356,6 @@ class DefaultPathReservationService(
 		separator: PathSeparator,
 		blocks: List<DynamicTrackBlock>
 	) {
-		logger.debug { "rollbackReservation: Rolling back ${blocks.size} block(s)" }
 		for (block in blocks) {
 			try {
 				// Only rollback if block was actually reserved from this separator

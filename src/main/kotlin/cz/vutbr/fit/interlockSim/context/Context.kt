@@ -124,6 +124,5 @@ interface Context<out C : Cell, T : TrackBlock>: AutoCloseable {
 	 */
 	override fun close() {
 		scope.close()
-		logger.debug { "Closed ${this::class.simpleName} context scope" }
 	}
 }

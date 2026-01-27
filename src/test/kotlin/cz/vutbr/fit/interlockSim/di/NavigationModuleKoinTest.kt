@@ -54,134 +54,121 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 	@Test
 	fun `services within one context share the same registry`() {
-		// Arrange - create one simulation context
-		val context = buildTestContext()
+		buildTestContext().use { context ->
+			// Arrange - create one simulation context
+			// Act - get both navigation services from the context
+			val pathReservationService = context.getPathReservationService()
+			val trainNavigationService = context.getTrainNavigationService()
 
-		// Act - get both navigation services from the context
-		val pathReservationService = context.getPathReservationService()
-		val trainNavigationService = context.getTrainNavigationService()
+			// Reserve path using PathReservationService
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as PathSeparator
+			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			pathReservationService.reservePath("train1", inOutA, inOutB)
 
-		// Reserve path using PathReservationService
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val inOutB = grid.getCellAt(5, 5) as PathSeparator
-		pathReservationService.reservePath("train1", inOutA, inOutB)
+			// Assert - Both services see the same reservation (shared registry)
+			val blocks = pathReservationService.getReservedBlocks("train1")
+			assertThat(blocks.size).isEqualTo(1)
 
-		// Assert - Both services see the same reservation (shared registry)
-		val blocks = pathReservationService.getReservedBlocks("train1")
-		assertThat(blocks.size).isEqualTo(1)
+			// Get the first section from the block to test TrainNavigationService
+			val block = blocks.first()
+			val section = block.getNextTrackSection(inOutA, null)
+			assertThat(section).isNotNull()
 
-		// Get the first section from the block to test TrainNavigationService
-		val block = blocks.first()
-		val section = block.getNextTrackSection(inOutA, null)
-		assertThat(section).isNotNull()
+			// TrainNavigationService should recognize train1's ownership via shared registry
+			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA, section!!)
+			assertThat(path).isNotNull()  // Path found because train1 owns the blocks
 
-		// TrainNavigationService should recognize train1's ownership via shared registry
-		val path = trainNavigationService.findReservedPathForTrain("train1", inOutA, section!!)
-		assertThat(path).isNotNull()  // Path found because train1 owns the blocks
-
-		// Different train should not get a path (not owner)
-		val pathOther = trainNavigationService.findReservedPathForTrain("train2", inOutA, section)
-		assertThat(pathOther).isNull()  // null because train2 doesn't own the blocks
+			// Different train should not get a path (not owner)
+			val pathOther = trainNavigationService.findReservedPathForTrain("train2", inOutA, section)
+			assertThat(pathOther).isNull()  // null because train2 doesn't own the blocks
+		}
 	}
 
 	@Test
 	fun `different contexts have isolated registries`() {
-		// Arrange - create two simulation contexts
-		val context1 = buildTestContext()
-		val context2 = buildTestContext()
+		buildTestContext().use { context1 ->
+			buildTestContext().use { context2 ->
+				// Arrange - create two simulation contexts
+				// Act - reserve path in context1
+				val service1 = context1.getPathReservationService()
+				val grid1 = context1.getRailWayNetGrid()
+				val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
+				val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+				service1.reservePath("train1", inOutA1, inOutB1)
 
-		// Act - reserve path in context1
-		val service1 = context1.getPathReservationService()
-		val grid1 = context1.getRailWayNetGrid()
-		val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
-		val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
-		service1.reservePath("train1", inOutA1, inOutB1)
-
-		// Assert - context2 should not see train1's reservation (different scope)
-		val service2 = context2.getPathReservationService()
-		assertThat(service2.getReservedBlocks("train1")).isEmpty()
-
-		// Clean up
-		context1.close()
-		context2.close()
+				// Assert - context2 should not see train1's reservation (different scope)
+				val service2 = context2.getPathReservationService()
+				assertThat(service2.getReservedBlocks("train1")).isEmpty()
+			}
+		}
 	}
 
 	@Test
 	fun `PathReservationService is functional within scoped context`() {
-		// Arrange - create context
-		val context = buildTestContext()
+		buildTestContext().use { context ->
+			// Arrange - create context
+			// Act - get service from context and use it
+			val service = context.getPathReservationService()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as PathSeparator
+			val inOutB = grid.getCellAt(5, 5) as PathSeparator
 
-		// Act - get service from context and use it
-		val service = context.getPathReservationService()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			val result = service.reservePath("test-train", inOutA, inOutB)
 
-		val result = service.reservePath("test-train", inOutA, inOutB)
-
-		// Assert - service works correctly
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
-		assertThat(service.getReservedBlocks("test-train").size).isEqualTo(1)
-
-		// Clean up
-		context.close()
+			// Assert - service works correctly
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			assertThat(service.getReservedBlocks("test-train").size).isEqualTo(1)
+		}
 	}
 
 	@Test
 	fun `TrainNavigationService is functional within scoped context`() {
-		// Arrange - create context with train
-		val context = buildTestContext()
+		buildTestContext().use { context ->
+			// Arrange - create context with train
+			// Act - reserve path and use train navigation service
+			val pathService = context.getPathReservationService()
+			val trainService = context.getTrainNavigationService()
 
-		// Act - reserve path and use train navigation service
-		val pathService = context.getPathReservationService()
-		val trainService = context.getTrainNavigationService()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as PathSeparator
+			val inOutB = grid.getCellAt(5, 5) as PathSeparator
 
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			pathService.reservePath("train1", inOutA, inOutB)
 
-		pathService.reservePath("train1", inOutA, inOutB)
+			// Assert - train service can find path through reserved blocks
+			val blocks = pathService.getReservedBlocks("train1")
+			assertThat(blocks.size).isEqualTo(1)
 
-		// Assert - train service can find path through reserved blocks
-		val blocks = pathService.getReservedBlocks("train1")
-		assertThat(blocks.size).isEqualTo(1)
+			val section = blocks.first().getNextTrackSection(inOutA, null)
+			assertThat(section).isNotNull()
 
-		val section = blocks.first().getNextTrackSection(inOutA, null)
-		assertThat(section).isNotNull()
-
-		val path = trainService.findReservedPathForTrain("train1", inOutA, section!!)
-		assertThat(path).isNotNull()  // Train service finds path because train1 owns the blocks
-
-		// Clean up
-		context.close()
+			val path = trainService.findReservedPathForTrain("train1", inOutA, section!!)
+			assertThat(path).isNotNull()  // Train service finds path because train1 owns the blocks
+		}
 	}
 
 	@Test
 	fun `closing context cleans up scoped resources`() {
-		// Arrange - create context and use services
-		val context = buildTestContext()
-		val service = context.getPathReservationService()
+		buildTestContext().use { context ->
+			// Arrange - create context and use services
+			val service = context.getPathReservationService()
 
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val inOutB = grid.getCellAt(5, 5) as PathSeparator
-		service.reservePath("train1", inOutA, inOutB)
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as PathSeparator
+			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			service.reservePath("train1", inOutA, inOutB)
 
-		// Verify reservation exists
-		assertThat(service.getReservedBlocks("train1").size).isEqualTo(1)
-
-		// Act - close the context
-		context.close()
+			// Verify reservation exists
+			assertThat(service.getReservedBlocks("train1").size).isEqualTo(1)
+		} // Act - context is automatically closed here
 
 		// Assert - scope is closed (accessing services after close would fail)
 		// We verify that creating a new context gives us a clean slate
-		val newContext = buildTestContext()
-		val newService = newContext.getPathReservationService()
-		assertThat(newService.getReservedBlocks("train1")).isEmpty()
-
-		// Clean up
-		newContext.close()
+		buildTestContext().use { newContext ->
+			val newService = newContext.getPathReservationService()
+			assertThat(newService.getReservedBlocks("train1")).isEmpty()
+		}
 	}
 
 	@Test
@@ -189,27 +176,25 @@ class NavigationModuleKoinTest : KoinTestBase() {
 		// This test verifies that scoped pattern + close()
 		// prevent state from leaking between simulation runs
 
-		// Arrange - create first context and register trains
-		val context1 = buildTestContext()
-		val service1 = context1.getPathReservationService()
-		val grid1 = context1.getRailWayNetGrid()
-		val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
-		val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
-		service1.reservePath("train1", inOutA1, inOutB1)
+		buildTestContext().use { context1 ->
+			// Arrange - create first context and register trains
+			val service1 = context1.getPathReservationService()
+			val grid1 = context1.getRailWayNetGrid()
+			val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
+			val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+			service1.reservePath("train1", inOutA1, inOutB1)
 
-		// Verify registration
-		assertThat(service1.getReservedBlocks("train1").size).isEqualTo(1)
+			// Verify registration
+			assertThat(service1.getReservedBlocks("train1").size).isEqualTo(1)
+		} // Act - first context automatically closed here
 
-		// Act - close first context and create second
-		context1.close()
-		val context2 = buildTestContext()
-		val service2 = context2.getPathReservationService()
+		// Create second context and verify clean state
+		buildTestContext().use { context2 ->
+			val service2 = context2.getPathReservationService()
 
-		// Assert - new context has clean registry (no leakage)
-		assertThat(service2.getReservedBlocks("train1")).isEmpty()
-
-		// Clean up
-		context2.close()
+			// Assert - new context has clean registry (no leakage)
+			assertThat(service2.getReservedBlocks("train1")).isEmpty()
+		}
 	}
 
 	// ========== Helper Methods ==========

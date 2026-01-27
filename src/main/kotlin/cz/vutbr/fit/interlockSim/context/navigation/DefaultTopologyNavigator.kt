@@ -199,7 +199,6 @@ class DefaultTopologyNavigator(
 
 			// Check depth limit
 			if (node.depth >= maxDepth) {
-				logger.debug { "findAllTopologicalPaths: reached max depth $maxDepth at $separator" }
 				continue
 			}
 
@@ -216,7 +215,6 @@ class DefaultTopologyNavigator(
 			if (isSameSeparator(separator, target)) {
 				val path = buildPath(node)
 				paths.add(path)
-				logger.debug { "findAllTopologicalPaths: found path with ${path.size} sections" }
 				continue
 			}
 
@@ -230,7 +228,6 @@ class DefaultTopologyNavigator(
 			}
 		}
 
-		logger.info { "findAllTopologicalPaths: found ${paths.size} path(s) from $start to $target" }
 		return paths
 	}
 
@@ -335,11 +332,6 @@ class DefaultTopologyNavigator(
 						// In this case, explore ALL possible directions (all joins).
 						// PathReservationService will filter and select the valid path.
 						if (segment == null) {
-							logger.debug {
-								"getAllNextTrackBlocks: OrientedNodeCell ${staticNodeCell.javaClass.simpleName} " +
-									"at $location has multiple directions with segment=null, " +
-									"exploring all joins: ${staticNodeCell.joins()}"
-							}
 							staticNodeCell.joins()
 						} else {
 							// If segment is not null but still throws exception, this is a real error
