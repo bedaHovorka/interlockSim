@@ -16,230 +16,216 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isNull
-import cz.vutbr.fit.interlockSim.context.Context
-import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
-import org.koin.core.parameter.parametersOf
-import org.koin.test.inject
 
 /**
- * Integration tests for navigationModule Koin DI configuration.
+ * Integration tests for navigationModule Koin DI configuration with scope-per-context pattern.
  *
  * ## Test Coverage
  *
- * - ✅ TopologyNavigator factory creates fresh instances
- * - ✅ PathReservationRegistry factory creates isolated instances
- * - ✅ PathReservationService receives correct dependencies
- * - ✅ Parameter passing works correctly
- * - ✅ No state leakage between injections
+ * - ✅ Scoped registry shared within one context
+ * - ✅ Different contexts have isolated registries
+ * - ✅ PathReservationService and TrainNavigationService share registry
+ * - ✅ Scope cleanup releases resources
+ * - ✅ No state leakage between contexts
  *
  * ## Design Verification
  *
- * These tests verify the architectural decisions from the DI Integration Plan:
- * - Services use factory scope (NOT singleton)
- * - Fresh instances prevent state bleeding
- * - Parameter passing pattern works as expected
- * - Registry isolation is maintained
+ * These tests verify the scope-per-context architectural pattern:
+ * - Each DefaultSimulationContext creates its own Koin scope
+ * - One PathReservationRegistry per scope (shared by all services in that context)
+ * - Different contexts have isolated registries (no state bleeding)
+ * - Closing context cleans up scoped resources
  *
  * @since Issue #294 (Phase 2 DI Integration)
+ * @since Issue #296 (Phase 4 Scope-per-Context Pattern)
  */
 @Tag("integration-test")
 class NavigationModuleKoinTest : KoinTestBase() {
 	override fun getTestModule(): Module = integrationTestModule
 
-	private val contextBuilder: TestContextBuilder by inject()
-
 	@Test
-	fun `TopologyNavigator factory creates fresh instances`() {
-		// Arrange
+	fun `services within one context share the same registry`() {
+		// Arrange - create one simulation context
 		val context = buildTestContext()
 
-		// Act - get two navigator instances
-		val nav1: TopologyNavigator = getKoin().get { parametersOf(context) }
-		val nav2: TopologyNavigator = getKoin().get { parametersOf(context) }
+		// Act - get both navigation services from the context
+		val pathReservationService = context.getPathReservationService()
+		val trainNavigationService = context.getTrainNavigationService()
 
-		// Assert - factory creates new instances each time
-		assertThat(nav1).isNotSameInstanceAs(nav2)
-		assertThat(nav1).isNotNull()
-		assertThat(nav2).isNotNull()
+		// Reserve path using PathReservationService
+		val grid = context.getRailWayNetGrid()
+		val inOutA = grid.getCellAt(1, 1) as PathSeparator
+		val inOutB = grid.getCellAt(5, 5) as PathSeparator
+		pathReservationService.reservePath("train1", inOutA, inOutB)
+
+		// Assert - Both services see the same reservation (shared registry)
+		val blocks = pathReservationService.getReservedBlocks("train1")
+		assertThat(blocks.size).isEqualTo(1)
+
+		// Get the first section from the block to test TrainNavigationService
+		val block = blocks.first()
+		val section = block.getNextTrackSection(inOutA, null)
+		assertThat(section).isNotNull()
+
+		// TrainNavigationService should recognize train1's ownership via shared registry
+		val path = trainNavigationService.findReservedPathForTrain("train1", inOutA, section!!)
+		assertThat(path).isNotNull()  // Path found because train1 owns the blocks
+
+		// Different train should not get a path (not owner)
+		val pathOther = trainNavigationService.findReservedPathForTrain("train2", inOutA, section)
+		assertThat(pathOther).isNull()  // null because train2 doesn't own the blocks
 	}
 
 	@Test
-	fun `PathReservationRegistry factory creates isolated instances`() {
-		// Act - get two registry instances
-		val reg1: PathReservationRegistry = getKoin().get()
-		val reg2: PathReservationRegistry = getKoin().get()
+	fun `different contexts have isolated registries`() {
+		// Arrange - create two simulation contexts
+		val context1 = buildTestContext()
+		val context2 = buildTestContext()
 
-		// Assert - factory creates new instances
-		assertThat(reg1).isNotSameInstanceAs(reg2)
+		// Act - reserve path in context1
+		val service1 = context1.getPathReservationService()
+		val grid1 = context1.getRailWayNetGrid()
+		val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
+		val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+		service1.reservePath("train1", inOutA1, inOutB1)
 
-		// Verify isolation - register in reg1, reg2 should not see it
-		val context = buildTestContext() as SimulationContext
-		val blocks = getTestBlocks(context)
-		reg1.register("train1", blocks)
+		// Assert - context2 should not see train1's reservation (different scope)
+		val service2 = context2.getPathReservationService()
+		assertThat(service2.getReservedBlocks("train1")).isEmpty()
 
-		// reg2 should not know about train1's blocks
-		assertThat(reg2.getOwner(blocks.first())).isNull()
-		assertThat(reg2.getBlocks("train1")).isEmpty()
+		// Clean up
+		context1.close()
+		context2.close()
 	}
 
 	@Test
-	fun `PathReservationService receives correct dependencies`() {
-		// Arrange - create context and navigator
-		val simulationContext = contextBuilder
-			.withInOut("A", 1, 1, true)
-			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 5, 5, 100.0, 80.0)
-			.buildSimulationContext()
+	fun `PathReservationService is functional within scoped context`() {
+		// Arrange - create context
+		val context = buildTestContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(simulationContext) }
-
-		// Act - get service with dependencies
-		val service: PathReservationService = getKoin().get {
-			parametersOf(navigator, simulationContext as SimulationEnvironment)
-		}
-
-		// Assert - service is properly constructed and functional
-		assertThat(service).isNotNull()
-
-		// Verify service works by attempting a reservation
-		val grid = simulationContext.getRailWayNetGrid()
+		// Act - get service from context and use it
+		val service = context.getPathReservationService()
+		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as PathSeparator
 		val inOutB = grid.getCellAt(5, 5) as PathSeparator
 
 		val result = service.reservePath("test-train", inOutA, inOutB)
+
+		// Assert - service works correctly
 		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+		assertThat(service.getReservedBlocks("test-train").size).isEqualTo(1)
+
+		// Clean up
+		context.close()
 	}
 
 	@Test
-	fun `PathReservationService uses injected registry`() {
-		// Arrange - create service
-		val simulationContext = contextBuilder
-			.withInOut("A", 1, 1, true)
-			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 5, 5, 100.0, 80.0)
-			.buildSimulationContext()
+	fun `TrainNavigationService is functional within scoped context`() {
+		// Arrange - create context with train
+		val context = buildTestContext()
 
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(simulationContext) }
-		val service: PathReservationService = getKoin().get {
-			parametersOf(navigator, simulationContext as SimulationEnvironment)
-		}
+		// Act - reserve path and use train navigation service
+		val pathService = context.getPathReservationService()
+		val trainService = context.getTrainNavigationService()
 
-		// Act - reserve path
-		val grid = simulationContext.getRailWayNetGrid()
+		val grid = context.getRailWayNetGrid()
+		val inOutA = grid.getCellAt(1, 1) as PathSeparator
+		val inOutB = grid.getCellAt(5, 5) as PathSeparator
+
+		pathService.reservePath("train1", inOutA, inOutB)
+
+		// Assert - train service can find path through reserved blocks
+		val blocks = pathService.getReservedBlocks("train1")
+		assertThat(blocks.size).isEqualTo(1)
+
+		val section = blocks.first().getNextTrackSection(inOutA, null)
+		assertThat(section).isNotNull()
+
+		val path = trainService.findReservedPathForTrain("train1", inOutA, section!!)
+		assertThat(path).isNotNull()  // Train service finds path because train1 owns the blocks
+
+		// Clean up
+		context.close()
+	}
+
+	@Test
+	fun `closing context cleans up scoped resources`() {
+		// Arrange - create context and use services
+		val context = buildTestContext()
+		val service = context.getPathReservationService()
+
+		val grid = context.getRailWayNetGrid()
 		val inOutA = grid.getCellAt(1, 1) as PathSeparator
 		val inOutB = grid.getCellAt(5, 5) as PathSeparator
 		service.reservePath("train1", inOutA, inOutB)
 
-		// Assert - service's registry tracks the reservation
-		val reservedBlocks = service.getReservedBlocks("train1")
-		assertThat(reservedBlocks).isNotNull()
-		assertThat(reservedBlocks.size).isEqualTo(1)  // One block in path
+		// Verify reservation exists
+		assertThat(service.getReservedBlocks("train1").size).isEqualTo(1)
+
+		// Act - close the context
+		context.close()
+
+		// Assert - scope is closed (accessing services after close would fail)
+		// We verify that creating a new context gives us a clean slate
+		val newContext = buildTestContext()
+		val newService = newContext.getPathReservationService()
+		assertThat(newService.getReservedBlocks("train1")).isEmpty()
+
+		// Clean up
+		newContext.close()
 	}
 
 	@Test
-	fun `multiple services have independent registries`() {
-		// Arrange - create one context but two services with different registries
-		val context = buildTestContext()
+	fun `scope isolation prevents state bleeding between sequential contexts`() {
+		// This test verifies that scoped pattern + close()
+		// prevent state from leaking between simulation runs
 
-		val navigator1: TopologyNavigator = getKoin().get { parametersOf(context) }
-		val navigator2: TopologyNavigator = getKoin().get { parametersOf(context) }
+		// Arrange - create first context and register trains
+		val context1 = buildTestContext()
+		val service1 = context1.getPathReservationService()
+		val grid1 = context1.getRailWayNetGrid()
+		val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
+		val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+		service1.reservePath("train1", inOutA1, inOutB1)
 
-		// Each service gets a fresh registry from Koin factory
-		val service1: PathReservationService = getKoin().get {
-			parametersOf(navigator1, context as SimulationEnvironment)
-		}
-		val service2: PathReservationService = getKoin().get {
-			parametersOf(navigator2, context as SimulationEnvironment)
-		}
+		// Verify registration
+		assertThat(service1.getReservedBlocks("train1").size).isEqualTo(1)
 
-		// Act - reserve path in service1
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val inOutB = grid.getCellAt(5, 5) as PathSeparator
-		service1.reservePath("train1", inOutA, inOutB)
+		// Act - close first context and create second
+		context1.close()
+		val context2 = buildTestContext()
+		val service2 = context2.getPathReservationService()
 
-		// Assert - service2 should not see train1's reservation (different registry)
+		// Assert - new context has clean registry (no leakage)
 		assertThat(service2.getReservedBlocks("train1")).isEmpty()
-	}
 
-	@Test
-	fun `parameter passing pattern works correctly`() {
-		// Arrange
-		val context: Context<Cell, out TrackBlock> = buildTestContext()
-
-		// Act - use parameter passing to inject context
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
-
-		// Assert - navigator works with the provided context
-		assertThat(navigator).isNotNull()
-
-		// Verify navigator uses the context by navigating
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as PathSeparator
-		val nextSection = navigator.getNextTrackSection(inOutA, null)
-		assertThat(nextSection).isNotNull()
-	}
-
-	@Test
-	fun `factory pattern prevents state leakage across tests`() {
-		// This test verifies that KoinTestBase teardown + factory scope
-		// prevent state from leaking between test runs
-
-		// Arrange - create and use a registry
-		val registry1: PathReservationRegistry = getKoin().get()
-		val context = buildTestContext() as SimulationContext
-		val blocks = getTestBlocks(context)
-		registry1.register("train1", blocks)
-
-		// Verify registry has the registration
-		assertThat(registry1.getBlocks("train1").size).isEqualTo(1)
-
-		// Act - get another registry instance (simulating next test)
-		val registry2: PathReservationRegistry = getKoin().get()
-
-		// Assert - new registry is clean (no leakage)
-		assertThat(registry2.getBlocks("train1")).isEmpty()
-		assertThat(registry2.trainCount()).isEqualTo(0)
-		assertThat(registry2.blockCount()).isEqualTo(0)
+		// Clean up
+		context2.close()
 	}
 
 	// ========== Helper Methods ==========
 
 	/**
-	 * Build a simple test context with InOut A -> InOut B
+	 * Build a simple test context with InOut A -> InOut B.
+	 * Each call creates a NEW TestContextBuilder instance to avoid reusing frozen EditingContext.
+	 * Each context gets its own Koin scope.
 	 */
-	private fun buildTestContext() =
-		contextBuilder
+	private fun buildTestContext(): cz.vutbr.fit.interlockSim.context.DefaultSimulationContext {
+		// Get a fresh TestContextBuilder for each call (avoids frozen EditingContext reuse)
+		val builder: TestContextBuilder = getKoin().get()
+		return builder
 			.withInOut("A", 1, 1, true)
 			.withInOut("B", 5, 5, false)
 			.withConnection(1, 1, 5, 5, 100.0, 80.0)
 			.buildSimulationContext()
-
-	/**
-	 * Get test blocks from a context for registry testing
-	 */
-	private fun getTestBlocks(context: SimulationContext): List<DynamicTrackBlock> {
-		val block = context.getGraph()
-			.assignedEdges(Point(1, 1))
-			.values()
-			.first()
-		return listOf(block as DynamicTrackBlock)
 	}
 }

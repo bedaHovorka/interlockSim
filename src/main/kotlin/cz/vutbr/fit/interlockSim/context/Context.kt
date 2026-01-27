@@ -14,7 +14,11 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
+import io.github.oshai.kotlinlogging.KotlinLogging
+import org.koin.core.scope.Scope
 import java.beans.PropertyChangeListener
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Represents the program Context - editing or simulation ...
@@ -71,7 +75,9 @@ import java.beans.PropertyChangeListener
  *
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface Context<out C : Cell, T : TrackBlock> {
+interface Context<out C : Cell, T : TrackBlock>: AutoCloseable {
+	val scope: Scope
+
 	/**
 	 * get grid, which is graphic representation of model
 	 * @return grid with cells of type C
@@ -104,4 +110,20 @@ interface Context<out C : Cell, T : TrackBlock> {
 	 * @param listener the listener to remove
 	 */
 	fun removePropertyChangeListener(listener: PropertyChangeListener)
+
+	/**
+	 * Close this editing context and release scoped resources.
+	 *
+	 * Closes the Koin scope, which destroys scoped navigation services (TopologyNavigator).
+	 * After calling close(), this context should not be used for editing operations.
+	 *
+	 * This method is idempotent - calling it multiple times is safe.
+	 *
+	 * @see scope
+	 * @see AutoCloseable
+	 */
+	override fun close() {
+		scope.close()
+		logger.debug { "Closed ${this::class.simpleName} context scope" }
+	}
 }

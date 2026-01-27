@@ -12,13 +12,13 @@ package cz.vutbr.fit.interlockSim.di
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.MyResourceBundle
-import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
@@ -28,8 +28,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.gui.Frame
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -138,72 +136,108 @@ val simulationModule: Module =
 /**
  * Navigation module
  *
- * Provides navigation services for path finding and reservation:
+ * Provides navigation services for path finding and reservation using **scope-per-context** pattern:
  * - TopologyNavigator for static topology navigation
  * - PathReservationRegistry for tracking train ownership of blocks
  * - PathReservationService for atomic path reservation
  * - TrainNavigationService for train-specific path following
  *
- * All services use factory scope (NOT singleton) to ensure:
- * - Fresh instances per context (TopologyNavigator)
- * - Isolated state per simulation run (PathReservationRegistry)
- * - Proper dependency injection (PathReservationService, TrainNavigationService)
+ * ## Scope-per-Context Architecture
+ *
+ * Each SimulationContext creates its own Koin scope ("simulationScope") that manages:
+ * - **One shared PathReservationRegistry** for the entire simulation
+ * - All navigation services within that context share the same registry
+ * - Different contexts have isolated registries (no state bleeding)
+ * - Scope is closed when context is destroyed, cleaning up resources
  *
  * ## Usage Patterns
  *
- * Services require context-specific parameters via Koin parameter passing:
+ * Services are retrieved from the context's scope (NOT global Koin):
  *
  * ```kotlin
+ * // In DefaultSimulationContext constructor:
+ * private val scope = getKoin().createScope<DefaultSimulationContext>()
+ *
  * // TopologyNavigator requires Context parameter
- * val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+ * val navigator: TopologyNavigator = scope.get { parametersOf(this) }
  *
  * // PathReservationService requires navigator and environment
- * val service: PathReservationService = getKoin().get {
- *     parametersOf(navigator, environment)
+ * val service: PathReservationService = scope.get {
+ *     parametersOf(navigator, this as SimulationEnvironment)
  * }
  *
  * // TrainNavigationService requires environment parameter
- * // Registry is shared with PathReservationService
- * val trainNavService: TrainNavigationService = getKoin().get {
- *     parametersOf(environment)
+ * // Registry is SHARED with PathReservationService (same scoped instance)
+ * val trainNavService: TrainNavigationService = scope.get {
+ *     parametersOf(this as SimulationEnvironment)
  * }
  *
- * // PathReservationRegistry created automatically (no parameters)
- * val registry: PathReservationRegistry = getKoin().get()
+ * // In context cleanup:
+ * scope.close()  // Destroys scoped PathReservationRegistry
  * ```
+ *
+ * ## Why Scoped, Not Singleton or Factory?
+ *
+ * - **singleton**: ❌ State bleeding between simulation runs
+ * - **factory**: ❌ Each get() creates new instance, components don't share state
+ * - **scoped**: ✅ One registry per context, shared by all components, isolated between contexts
  *
  * @see TopologyNavigator
  * @see PathReservationRegistry
  * @see PathReservationService
  * @see TrainNavigationService
+ * @see org.koin.core.scope.Scope
  * @since Issue #294 (Phase 2 DI Integration), Issue #295 (Phase 3 TrainNavigationService)
+ * @since Issue #296 (Phase 4 Scope-per-Context Pattern)
  */
 val navigationModule: Module =
 	module {
-		// Factory for TopologyNavigator (requires context parameter)
-		// Each context gets its own navigator instance
-		factory<TopologyNavigator> { (context: Context<Cell, out TrackBlock>) ->
-			DefaultTopologyNavigator(context)
+		// Define editingScope for per-context lifecycle management
+		scope<DefaultEditingContext> {
+			// TopologyNavigator: scoped to this editing context
+			// Context is automatically provided via getSource()
+			scoped<TopologyNavigator> {
+				val context = getSource<DefaultEditingContext>()
+					?: throw IllegalStateException("DefaultEditingContext source not found in scope")
+				DefaultTopologyNavigator(context)
+			}
 		}
 
-		// Factory for PathReservationRegistry (fresh instance per simulation)
-		// Prevents state bleeding between simulation runs
-		factory<PathReservationRegistry> {
-			PathReservationRegistry()
-		}
+		// Define simulationScope for per-context lifecycle management
+		scope<DefaultSimulationContext> {
+			// TopologyNavigator: scoped to this simulation context
+			// Context is automatically provided via getSource()
+			scoped<TopologyNavigator> {
+				val context = getSource<DefaultSimulationContext>()
+					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultTopologyNavigator(context)
+			}
 
-		// Factory for PathReservationService (requires navigator + environment parameters)
-		// Registry is created automatically by Koin and injected
-		factory<PathReservationService> { (navigator: TopologyNavigator, environment: SimulationEnvironment) ->
-			val registry: PathReservationRegistry = get()
-			DefaultPathReservationService(navigator, environment, registry)
-		}
+			// PathReservationRegistry: scoped, ONE instance per simulation context
+			// All services within this scope share the same registry
+			// Different scopes (contexts) have isolated registries
+			scoped<PathReservationRegistry> {
+				PathReservationRegistry()
+			}
 
-		// Factory for TrainNavigationService (requires environment parameter)
-		// Registry is shared with PathReservationService (same instance within simulation)
-		factory<TrainNavigationService> { (environment: SimulationEnvironment) ->
-			val registry: PathReservationRegistry = get()
-			DefaultTrainNavigationService(environment, registry)
+			// PathReservationService: scoped to this simulation context
+			// Navigator and registry are injected from the same scope (shared instances)
+			scoped<PathReservationService> {
+				val context = getSource<DefaultSimulationContext>()
+					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val navigator: TopologyNavigator = get()
+				val registry: PathReservationRegistry = get()
+				DefaultPathReservationService(navigator, context, registry)
+			}
+
+			// TrainNavigationService: scoped to this simulation context
+			// Registry is SHARED with PathReservationService (same scoped instance)
+			scoped<TrainNavigationService> {
+				val context = getSource<DefaultSimulationContext>()
+					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val registry: PathReservationRegistry = get()
+				DefaultTrainNavigationService(context, registry)
+			}
 		}
 	}
 

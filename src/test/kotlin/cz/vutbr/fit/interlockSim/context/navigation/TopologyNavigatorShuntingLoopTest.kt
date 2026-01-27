@@ -31,7 +31,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.core.parameter.parametersOf
 import org.koin.test.inject
 import java.io.InputStream
 import kotlin.getValue
@@ -89,8 +88,8 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		// Load vyhybna.xml fixture
 		context = editingContextFactory.createContext(shuntingXml()) as EditingContext
 
-		// Get TopologyNavigator from Koin with context parameter
-		navigator = getKoin().get { parametersOf(context) }
+		// Get TopologyNavigator from context's scope
+		navigator = context.scope.get()
 	}
 
 	// ========================================================================

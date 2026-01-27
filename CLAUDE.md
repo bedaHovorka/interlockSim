@@ -497,23 +497,77 @@ Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/Interl
 **SimulationProcessFactory (2026-01-14):**
 The simulation module now provides `SimulationProcessFactory` as a singleton. This factory abstracts creation of simulation processes (Generator, InOutWorker) following the Factory pattern. Contexts receive the factory via constructor injection, eliminating direct dependencies on concrete sim/ classes.
 
-**navigationModule (2026-01-26, Issue #294):**
-The navigation module provides path finding and reservation services using factory scope:
-- **TopologyNavigator** - Static topology navigation (requires context parameter)
-- **PathReservationRegistry** - Train ownership tracking (fresh instance per simulation)
-- **PathReservationService** - Atomic path reservation (requires navigator + environment parameters)
+**navigationModule (2026-01-26, Issue #294 / Issue #296 Phase 4):**
+The navigation module provides path finding and reservation services using **scope-per-context** pattern:
+- **TopologyNavigator** - Static topology navigation (scoped to context)
+- **PathReservationRegistry** - Train ownership tracking (ONE instance per context, shared by all services)
+- **PathReservationService** - Atomic path reservation (scoped to context)
+- **TrainNavigationService** - Train-specific path following (scoped to context)
 
-All services use `factory` scope (NOT singleton) to ensure fresh instances and prevent state bleeding between simulation runs. Services use parameter passing pattern for context-dependent dependencies:
+**Why Scoped, Not Singleton or Factory?**
+- **singleton**: ❌ State bleeding between simulation runs
+- **factory**: ❌ Each get() creates new instance, components don't share state
+- **scoped**: ✅ One registry per context, shared by all components, isolated between contexts
+
+**Architecture:**
+
+Each context (`DefaultEditingContext` and `DefaultSimulationContext`) creates its own Koin scope and passes itself as the scope source:
 
 ```kotlin
-// TopologyNavigator requires Context parameter
-val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+// In DefaultSimulationContext constructor:
+val scope = GlobalContext.get().createScope(
+    scopeId = System.identityHashCode(this).toString(),
+    qualifier = named<DefaultSimulationContext>(),
+    source = this  // Context accessible via getSource()
+)
+```
 
-// PathReservationService requires navigator and environment
-val service: PathReservationService = getKoin().get {
-    parametersOf(navigator, environment)
+Services retrieve the context via `getSource()` - no redundant `parametersOf(context)`:
+
+```kotlin
+// In InterlockSimModule.kt:
+scope<DefaultSimulationContext> {
+    scoped<TopologyNavigator> {
+        val context = getSource<DefaultSimulationContext>()
+        DefaultTopologyNavigator(context)
+    }
+
+    scoped<PathReservationRegistry> { PathReservationRegistry() }
+
+    scoped<PathReservationService> {
+        val context = getSource<DefaultSimulationContext>()
+        val navigator: TopologyNavigator = get()  // Shared within scope
+        val registry: PathReservationRegistry = get()  // Shared within scope
+        DefaultPathReservationService(navigator, context, registry)
+    }
 }
 ```
+
+**Usage Patterns:**
+
+```kotlin
+// Production code - services accessed via context API
+val context = buildSimulationContext()
+val pathService = context.getPathReservationService()
+val trainService = context.getTrainNavigationService()
+
+// Both services share the same registry within this context
+pathService.reservePath("train1", start, end)
+val blocks = trainService.getReservedBlocks("train1") // Sees the same reservation
+
+// Test code - direct scope access when needed
+val navigator = context.scope.get<TopologyNavigator>()  // No parameters!
+
+// Clean up scope when done (AutoCloseable pattern)
+context.close()  // Idempotent
+```
+
+**Key Benefits:**
+- No redundant `parametersOf(context)` - context is the scope source
+- Shared registry within context, isolated between contexts
+- Type-safe service retrieval via `get<T>()`
+- Resource cleanup via `AutoCloseable` pattern
+- Both `EditingContext` and `SimulationContext` support
 
 ### Critical DI Rules
 
