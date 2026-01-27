@@ -326,8 +326,30 @@ class DefaultTopologyNavigator(
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
-					val following = staticNodeCell.getFollowingSegment(segment)
-					if (following != null) setOf(following) else emptySet()
+					try {
+						val following = staticNodeCell.getFollowingSegment(segment)
+						if (following != null) setOf(following) else emptySet()
+					} catch (e: IllegalStateException) {
+						// When segment is null and there are multiple possible directions,
+						// getFollowingSegment throws IllegalStateException.
+						// In this case, explore ALL possible directions (all joins).
+						// PathReservationService will filter and select the valid path.
+						if (segment == null) {
+							logger.debug {
+								"getAllNextTrackBlocks: OrientedNodeCell ${staticNodeCell.javaClass.simpleName} " +
+									"at $location has multiple directions with segment=null, " +
+									"exploring all joins: ${staticNodeCell.joins()}"
+							}
+							staticNodeCell.joins()
+						} else {
+							// If segment is not null but still throws exception, this is a real error
+							logger.error(e) {
+								"getAllNextTrackBlocks: Unexpected IllegalStateException for " +
+									"${staticNodeCell.javaClass.simpleName} at $location with segment=$segment"
+							}
+							emptySet()
+						}
+					}
 				}
 				else -> {
 					// Non-oriented (switches) may have multiple branches

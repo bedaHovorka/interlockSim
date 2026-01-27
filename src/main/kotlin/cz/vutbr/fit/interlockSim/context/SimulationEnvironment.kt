@@ -170,6 +170,44 @@ interface SimulationEnvironment {
 	 */
 	fun getTrainNavigationService(): TrainNavigationService
 
+	/**
+	 * Get path reservation service for dispatcher/interlocking path reservation.
+	 *
+	 * The PathReservationService provides atomic path reservation with train ownership
+	 * tracking. Used by dispatchers and interlocking logic to reserve paths before
+	 * trains enter the network.
+	 *
+	 * ## Use Cases
+	 *
+	 * - InOutWorker reserves path for incoming train
+	 * - Interlocking reserves continuation path when train approaches semaphore
+	 * - Dispatcher pre-reserves paths for scheduled trains
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * // In InOutWorker or Interlocking:
+	 * val pathService = env.getPathReservationService()
+	 * val result = pathService.reservePath(trainId, start, target)
+	 *
+	 * when (result) {
+	 *     is Success -> {
+	 *         // Path reserved, train can proceed
+	 *         approveTrainEntry(train)
+	 *     }
+	 *     is AllPathsBlocked -> {
+	 *         // Wait for path to become available
+	 *         waitUntil { pathService.isPathAvailable(start, target) }
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * @return PathReservationService instance for this simulation context
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+	 * @since Issue #296 (ShuntingLoop refactoring)
+	 */
+	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+
 	// ========================================
 	// Dynamic State Management
 	// ========================================
