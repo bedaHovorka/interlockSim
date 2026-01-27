@@ -65,7 +65,7 @@ open class Generator(
 	}
 
 	override fun interLoopSleep() {
-		hold(random.exp(43.0))
+		hold(random.exp(30.0))  // Reduced from 43s to 30s for higher train throughput
 		i++
 	}
 

@@ -1377,6 +1377,47 @@ open class DefaultSimulationContext(
 	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
 
 	/**
+	 * Configure semaphore signal appearance after path reservation.
+	 *
+	 * This method separates signal configuration from block reservation logic.
+	 * PathReservationService handles block ownership tracking, while this method
+	 * updates semaphore visual signals (GO/SLOW/STOP) to match the reserved path.
+	 *
+	 * ## Implementation
+	 *
+	 * Uses getSegment to determine signal segments (fromSegment, toSegment) and
+	 * calls semaphore.setUpPath to update visual state.
+	 *
+	 * ## Error Handling
+	 *
+	 * Signal configuration failures are non-fatal - if semaphore update fails,
+	 * blocks remain reserved and trains can proceed. Only logs warning.
+	 *
+	 * @param semaphore The semaphore to configure
+	 * @param firstBlock First reserved block in the path
+	 * @param allowedSpeed Speed limit for the path
+	 */
+	override fun configureSemaphoreSignal(
+		semaphore: DynamicRailSemaphore,
+		firstBlock: DynamicTrackBlock,
+		allowedSpeed: Double
+	) {
+		try {
+			val fromSegment = getSegment(semaphore, null, firstBlock)
+			val toSegment = getSegment(semaphore, firstBlock, null)
+			semaphore.setUpPath(fromSegment, toSegment, allowedSpeed)
+			logger.debug {
+				"SEMAPHORE_CONFIGURED: ${semaphore.name} signal updated for path to ${firstBlock.name}"
+			}
+		} catch (e: Exception) {
+			logger.warn {
+				"SEMAPHORE_CONFIG_WARNING: ${semaphore.name} signal configuration failed: ${e.message}"
+			}
+			// Non-fatal: blocks are reserved, train can proceed even if signal update fails
+		}
+	}
+
+	/**
 	 * Set the main process for the simulation
 	 * (for examples where the main process is not a generator)
 	 *

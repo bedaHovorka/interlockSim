@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -23,10 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
@@ -69,7 +65,9 @@ import java.util.Queue
 class ShuntingLoop : Interlocking, KoinComponent {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-		private const val MAX_TRAINS: Int = 2 // maximalni pocet odsouhlasených vlaků v systému
+		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
+		// Increased to 3 to allow higher concurrency
+		private const val MAX_TRAINS: Int = 3
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
@@ -126,6 +124,11 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		override fun iteration() {
 			// Stop generating trains when approaching endTime
 			if (time() >= endTime) {
+				logger.info {
+					"${time()} GENERATOR_SHUTDOWN: Stopping new train generation at endTime, " +
+						"unapproved queue size: ${unapprowedTrains.size}, " +
+						"approved trains: ${approwedTrains.size}"
+				}
 				terminate()
 				return
 			}
@@ -218,6 +221,16 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 		// nove vlaky a inouty
 		approveTrains()
+
+		// If generator terminated and all queues empty, terminate ShuntingLoop
+		if (generator.terminated() && unapprowedTrains.isEmpty() && approwedTrains.isEmpty()) {
+			logger.info {
+				"${time()} SIMULATION_COMPLETE: All trains processed, terminating ShuntingLoop"
+			}
+			terminate()
+			return
+		}
+
 		// Polling interval: 1.0s (matches baseline timing)
 		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
@@ -233,62 +246,43 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 	}
 
-	private fun trySetupPath(path: Path, trainId: String?): Boolean {
-		try {
-			val from: PathSeparator = path.getFirst()
-			if (!path.isFreeFrom(from)) {
-				return false
-			}
-
-			// Reserve each block in the path with train ownership
-			var prevSeparator: PathSeparator = from
-			path.forEach { element ->
-				if (element is DynamicTrackBlock) {
-					element.setUpPathWithTrainId(prevSeparator, trainId)
-				} else if (element is PathSeparator) {
-					prevSeparator = element
-				}
-			}
-			return true
-		} catch (e: TrackOperationException) {
-			logger.error(e) { "Track operation exception during path setup: ${e.message}" }
-			return false
-		}
-	}
-
 	/**
-	 * Try to set up a path from the given semaphore using dynamic path discovery.
+	 * Try to set up a path from the given semaphore using PathReservationService.
 	 *
-	 * Issue #296: Refactored to use TopologyNavigator for on-demand path finding
-	 * instead of pre-constructed paths.
+	 * Migrated to use PathReservationService exclusively (user requirement).
+	 * Replaces previous TopologyNavigator-based path construction approach.
 	 *
 	 * Algorithm:
-	 * 1. Determine target separator based on network topology
-	 * 2. Use navigator to find all possible paths
-	 * 3. For each path, construct ArrayPath and try to set it up
-	 * 4. Return true if any path setup succeeds, false otherwise
+	 * 1. Find all potential target separators (InOuts and other semaphores)
+	 * 2. For each target, call PathReservationService.reservePath
+	 * 3. If reservation succeeds, configure semaphore signal
+	 * 4. Return true on first successful reservation, false if all fail
 	 */
 	private fun trySetupPaths(sem: DynamicRailSemaphore, trainId: String?): Boolean {
+		val effectiveTrainId = trainId ?: "ShuntingLoop-Reserved-${System.currentTimeMillis()}"
 
 		// Find all potential target separators (InOuts and other semaphores)
 		val targets = findPotentialTargets(sem)
 
 		for (target in targets) {
+			val result = pathReservationService.reservePath(effectiveTrainId, sem, target)
 
-			// Find all topological paths from sem to target
-			val topologicalPaths = navigator.findAllTopologicalPaths(sem, target, maxDepth = 50)
-
-			for (pathSections in topologicalPaths) {
-				try {
-					// Convert list of TrackSections to ArrayPath
-					val path = buildPathFromSections(sem, pathSections, target)
-
-					// Try to set up this path with train ownership
-					if (path.isSetUpPath(sem) || trySetupPath(path, trainId)) {
-						return true
+			when (result) {
+				is PathReservationService.ReservationResult.Success -> {
+					logger.info {
+						"PATH_RESERVED: ${sem.name} -> ${getTargetName(target)} " +
+							"for trainId=$effectiveTrainId, ${result.reservedBlocks.size} blocks"
 					}
-				} catch (e: TrackOperationException) {
-					// Continue to next path
+
+					// Configure semaphore signal after successful reservation
+					if (result.reservedBlocks.isNotEmpty()) {
+						env.configureSemaphoreSignal(sem, result.reservedBlocks.first(), sem.allowedSpeed())
+					}
+
+					return true
+				}
+				else -> {
+					// Continue to next target (AllPathsBlocked, NoPathExists, Conflict)
 				}
 			}
 		}
@@ -326,38 +320,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 
 		return targets
-	}
-
-	/**
-	 * Build an ArrayPath from a list of TrackSections returned by TopologyNavigator.
-	 */
-	private fun buildPathFromSections(
-		start: PathSeparator,
-		sections: List<TrackSection>,
-		end: PathSeparator
-	): ArrayPath {
-		val path = ArrayPath(env as SimulationContext)
-
-		// Add start separator
-		path.addLast(start)
-
-		// Add track sections (which include separators and blocks)
-		var lastSeparator: PathSeparator = start
-		for (section in sections) {
-			val staticBlock = section.getTrackBlock()
-			val nextSep = section.getSecondEnd(lastSeparator)
-
-			// Convert static TrackBlock to DynamicTrackBlock
-			val dynamicTrack = env.toDynamic(staticBlock as TrackFacility)
-			// DynamicTrackBlock implements PathElement, so safe to cast
-			val dynamicBlock = dynamicTrack as DynamicTrackBlock
-			path.addLast(dynamicBlock)
-			path.addLast(nextSep)
-
-			lastSeparator = nextSep
-		}
-
-		return path
 	}
 
 	/**
@@ -449,19 +411,9 @@ class ShuntingLoop : Interlocking, KoinComponent {
 							"for trainId=$effectiveTrainId, ${result.reservedBlocks.size} blocks"
 					}
 
-					// Update semaphore signal after successful reservation
-					// PathReservationService only reserves blocks; we need to update semaphore signals separately
+					// Configure semaphore signal after successful reservation
 					if (result.reservedBlocks.isNotEmpty()) {
-						try {
-							val firstBlock = result.reservedBlocks.first()
-							val context = env as SimulationContext
-							val fromSegment = context.getSegment(sem, null, firstBlock)
-							val toSegment = context.getSegment(sem, firstBlock, null)
-							sem.setUpPath(fromSegment, toSegment, sem.allowedSpeed())
-						} catch (e: Exception) {
-							logger.warn { "SEMAPHORE_UPDATE_WARNING: ${sem.name} - could not update signal: ${e.message}" }
-							// Continue anyway - blocks are reserved, train can proceed
-						}
+						env.configureSemaphoreSignal(sem, result.reservedBlocks.first(), sem.allowedSpeed())
 					}
 
 					return true
