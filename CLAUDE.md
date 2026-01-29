@@ -385,12 +385,50 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
 
-**Path Reservation System (Issue #292 Phase 2, 2026-01-26):**
-- `context/navigation/PathReservationService` - Atomic path reservation with all-or-nothing semantics
-- `context/navigation/PathReservationRegistry` - Bidirectional train↔block ownership tracking
-- `context/navigation/TopologyNavigator` - BFS-based static path finding
-- Comprehensive architecture documentation: `docs/PATH_RESERVATION_ARCHITECTURE.md`
-- Features: TOCTOU trade-off analysis, exception hierarchy, atomic operations, Kotlin extensions
+**Path Discovery Restructuring (Issue #292 Phases 1-5, 2026-01-11 to 2026-01-27):**
+
+Separated path discovery into three specialized services, replacing deprecated mixed-concern `pathToNextSemaphore()` API:
+
+1. **TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
+   - Interface: `context/navigation/TopologyNavigator`
+   - Implementation: `context/navigation/DefaultTopologyNavigator`
+   - **Use Case**: Editor validation, network analysis without dynamic state
+   - **Access**: `EditingContext.getTopologyNavigator()` or `SimulationContext.getTopologyNavigator()`
+
+2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
+   - Interface: `context/navigation/PathReservationService`
+   - Implementation: `context/navigation/DefaultPathReservationService`
+   - **Use Case**: Dispatcher finding available routes, interlocking path setup
+   - **Access**: `SimulationEnvironment.getPathReservationService()`
+   - **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
+
+3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
+   - Interface: `context/navigation/TrainNavigationService`
+   - Implementation: `context/navigation/DefaultTrainNavigationService`
+   - **Use Case**: Train requesting next track section (only through owned blocks)
+   - **Access**: `SimulationEnvironment.getTrainNavigationService()`
+   - **Features**: Explicit ownership validation, null = "not reserved for THIS train"
+
+4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking
+   - Class: `context/navigation/PathReservationRegistry`
+   - **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
+
+**Architecture Documentation**:
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration from deprecated APIs, before/after examples
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design
+
+**Impact**:
+- ✅ Deprecated `pathToNextSemaphore()` and `getNextTrackSection()` (DeprecationLevel.WARNING)
+- ✅ Eliminates Issue #291 workaround (manual path construction in ShuntingLoop, ~100 lines removed)
+- ✅ Eliminates Issue #282 workaround (block ownership validation no longer needed)
+- ✅ Clean editor validation without SimulationContext conversion
+- ✅ Zero regressions (1321+ tests passing, golden output validated)
+
+**Koin DI Integration**:
+- Scope-per-context pattern (one registry per context, isolated between contexts)
+- Services share ONE registry within context (consistent ownership view)
+- Automatic cleanup via `Context.close()` (AutoCloseable pattern)
 
 **Utilities:**
 - `util/Array2DMap` - Grid data structure with pathfinding extensions

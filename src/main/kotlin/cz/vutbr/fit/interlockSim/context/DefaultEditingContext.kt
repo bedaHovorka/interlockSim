@@ -144,6 +144,31 @@ open class DefaultEditingContext(
 	override fun getInOuts(): List<InOut> = getInOutsList()
 
 	/**
+	 * Get topology navigator for static path finding.
+	 *
+	 * Implementation of [EditingContext.getTopologyNavigator] interface method.
+	 * Returns a scoped TopologyNavigator instance from Koin DI, initialized with this
+	 * context's network topology.
+	 *
+	 * The TopologyNavigator is scoped to this context, meaning:
+	 * - Same instance returned for all calls to this method
+	 * - Isolated from other EditingContext instances
+	 * - Automatically cleaned up when context.close() is called
+	 *
+	 * ## Implementation Note
+	 *
+	 * Uses Koin scope-per-context pattern. The navigator is lazily initialized on first
+	 * access and retrieved from the context's scope without requiring `parametersOf()`.
+	 *
+	 * @return TopologyNavigator instance for this editing context
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
+	 * @since Issue #292 Phase 5
+	 */
+	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
+		scope.get()
+
+	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
 	 */
 	private fun swapXY(p: Point): Point = Point(p.y, p.x)
