@@ -9,9 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import co.touchlab.stately.concurrency.AtomicInt
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -28,6 +28,7 @@ import jDisco.Continuous
 import jDisco.Process
 import jDisco.Reporter
 import jDisco.Variable
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Train Process
@@ -38,7 +39,7 @@ class Train :
 	TrackOccupant {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-		private var count: AtomicInt = AtomicInt(0)
+		private val count = AtomicInteger(0)
 
 		/**
 		 * Maximum train acceleration in m/s²
@@ -88,7 +89,7 @@ class Train :
 	private abstract inner class Site : Process() { // lepsi nazev?
 		private val position: Variable = Variable(0.0)
 		private val pv: SimpleIntegration = SimpleIntegration(position, velocity)
-		private var totalLenghtOfPreviousBlocks: Double = 0.0
+		private var totalLengthOfPreviousBlocks: Double = 0.0
 		private var next: TrackSection? = null
 		private var current: TrackSection? = null
 		private var onNext: Boolean = false
@@ -101,8 +102,10 @@ class Train :
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
-				next = env.getNextTrackSection(where, current)
-				if (next == null) {
+
+				val path = trainNavService.findReservedPathForTrain(name, where)
+				next = path?.getNext(current)
+				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					env.stop()
 					passivate()
@@ -121,7 +124,7 @@ class Train :
 				}
 
 				position.state -= nextLength
-				totalLenghtOfPreviousBlocks += nextLength
+				totalLengthOfPreviousBlocks += nextLength
 				val staticWhere = next!!.getSecondEnd(where)
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
@@ -170,7 +173,7 @@ class Train :
 		/**
 		 * @return "to co cast vlaku urazila uvnitr modelu"
 		 */
-		fun getTotalDistance(): Double = totalLenghtOfPreviousBlocks + position.state
+		fun getTotalDistance(): Double = totalLengthOfPreviousBlocks + position.state
 
 		protected fun getSection(): TrackSection? = if (onNext) next else current
 
@@ -197,56 +200,27 @@ class Train :
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
 
-			// Issue #295: Use TrainNavigationService for ownership-validated path finding
-			// Only returns paths through blocks RESERVED for this specific train
-			val trainNavService = env.getTrainNavigationService()
-			val path: Path? = trainNavService.findReservedPathForTrain(this@Train.toString(), separator, next!!)
+			// Use train navigation service to find reserved path
+			// Finds paths that are reserved for this train
+			val path: Path? = trainNavService.findReservedPathForTrain(name, separator)
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			// ENHANCED FIX (Issue #295): Handle null path when blocks are not reserved for this train
-			// findReservedPathForTrain returns null if:
-			// - No topological path exists, OR
-			// - Blocks are reserved for a different train
-			// Treat this as STOP signal: halt the train and wait for path to become available.
-			if (semaphore.signal == Signal.STOP || path == null) {
-				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
-				if (path == null) {
-					logger.info {
-						"Train $number cannot navigate from ${semaphore.name} - " +
-							"blocks not reserved for this train, halting"
-					}
-					env.report("STOP (path not reserved)", this@Train, ReportType.TRAIN_EVENTS)
-				} else {
-					logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
-					env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
-				}
+			// Navigate based on topology only - ignore semaphore signals
+			// Path reservation is handled by interlocking, trains just follow topology
+			if (path == null) {
+				// No path exists - this is a dead end or terminus
+				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative at terminus" }
+				logger.debug { "Train $number reached terminus (no path available)" }
+				env.report("STOP", this@Train, ReportType.TRAIN_EVENTS)
 				fireStop()
-
-				// Wait for allowing signal from semaphore
-				waitUntil(allowingSignal(semaphore))
-				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
-
-				// Try to find reserved path again - blocks may now be available
-				val newPath = trainNavService.findReservedPathForTrain(this@Train.toString(), separator, next!!)
-				if (newPath != null) {
-					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
-					fireStart(semaphore, newPath)
-				} else {
-					// Path still not reserved even with allowing signal
-					// This indicates blocks are reserved for different train (not a deadlock)
-					// This is normal coordination behavior in multi-train simulations
-					logger.info {
-						"Train $number: semaphore signal is ALLOWING but path blocks not reserved for this train - " +
-							"waiting for path to become available"
-					}
-					// Continue waiting (train remains stopped, will be reactivated by interlocking)
-					env.report("WAIT (path reserved for other train)", this@Train, ReportType.TRAIN_EVENTS)
-				}
-			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
-				logger.debug { "Train $number starting movement with allowing signal" }
+			} else if (velocity.state <= maxAbsError) {
+				// Starting from stop
+				logger.debug { "Train $number starting movement from stop" }
+				env.report("OK FREE", this@Train, ReportType.TRAIN_EVENTS)
 				fireStart(semaphore, path)
 			} else {
+				// Already moving, accelerate toward next semaphore
 				logger.debug { "Train $number accelerating toward next semaphore" }
 				accelerateToSignal(semaphore, path)
 			}
@@ -391,7 +365,7 @@ class Train :
 			next: TrackSection?
 		) {
 			logger.debug {
-				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
+				"${time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
 			if (where == timetable.getIn()) {
 				fromHome = true
@@ -572,6 +546,8 @@ class Train :
 	private val env: SimulationEnvironment
 	private var pathToSemaphore: Path? = null
 	override val name: String
+	private val trainNavService: TrainNavigationService
+
 
 	private val number: Int
 
@@ -592,6 +568,7 @@ class Train :
 		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
+		trainNavService = env.getTrainNavigationService()
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
@@ -608,20 +585,10 @@ class Train :
 
 		// Wait for InOutWorker to reserve initial path before starting Front
 		// This prevents race condition where Front checks for reserved path before InOutWorker completes
-		val next = env.getNextTrackSection(inout, null)
-		if (next != null) {
-			waitUntil(
-				object : jDisco.Condition {
-					override fun test(): Boolean {
-						// Check if we have any reserved blocks (path has been reserved)
-						val trainNavService = env.getTrainNavigationService()
-						val path = trainNavService.findReservedPathForTrain(this@Train.toString(), inout, next)
-						return path != null
-					}
-				}
-			)
-			logger.info { "Train $number path is reserved, starting Front process" }
+		waitUntil { // Check if we have any reserved blocks (path has been reserved)
+			trainNavService.isPathReservedForTrain(name, inout)
 		}
+		logger.info { "Train $number path is reserved, starting Front process" }
 
 		activate(front)
 

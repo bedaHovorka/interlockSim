@@ -13,7 +13,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -36,7 +35,7 @@ class InOutWorker(
 
 	private val queqe = Head()
 	private var myIdle = true
-	private val next: TrackSection? = env.getNextTrackSection(inOut, null)
+	private val next: TrackSection? = env.getTopologyNavigator().getNextTrackSection(inOut, null)
 	private var path: Path? = null // cesta k naskedujicimu semaforu - pokud existuje
 
 	private val pathFree: Condition =
@@ -47,7 +46,7 @@ class InOutWorker(
 				// Related to interlocking validation (Goal 4) - see LONG_TERM_GOALS.md
 				// Local variable for smart cast since next is mutable property
 				val nextLocal = next
-				path = if (nextLocal != null) env.pathToNextSemaphore(inOut, nextLocal) else null
+				// FIXME path = if (nextLocal != null) env.pathToNextSemaphore(inOut, nextLocal) else null
 				return try {
 					val pathExists = path != null
 					val isFree = pathExists && path?.isFreeFrom(inOut) ?: false
@@ -86,73 +85,14 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {
-				// Extract train ID for ownership tracking
+				// Use integrated path setup like working version
+				// This reserves blocks AND sets up semaphore signals in one call
 				val train = first as? Train
-				val trainId = train?.toString()
-				val currentPath = path  // Capture for smart cast
-
-				// Use PathReservationService API for atomic path reservation
-				if (trainId != null && next != null && currentPath != null) {
-					val pathService = env.getPathReservationService()
-
-					// Find target separator (last element in path - the semaphore we're heading to)
-					val targetSeparator = try {
-						currentPath.getLast() as DynamicPathSeparator
-					} catch (e: Exception) {
-						logger.warn {
-							"${Process.time()} APPROVAL_WARNING: InOut ${inOut.name} - " +
-								"could not get target separator: ${e.message}, falling back to manual reservation"
-						}
-						null
-					}
-
-					if (targetSeparator != null) {
-						val result = pathService.reservePath(trainId, inOut, targetSeparator)
-
-						when (result) {
-							is cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Success -> {
-								logger.info {
-									"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
-										"path reserved for $trainId via PathReservationService, " +
-										"${result.reservedBlocks.size} blocks reserved, " +
-										"length=${currentPath.length()}"
-								}
-
-								// Configure semaphore signal after successful reservation
-								// PathReservationService only reserves blocks; we need to update signals
-								// This ensures target semaphore shows GO/SLOW signal instead of STOP
-								if (result.reservedBlocks.isNotEmpty() &&
-									targetSeparator is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-								) {
-									val semaphore =
-										targetSeparator as cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-									env.configureSemaphoreSignal(
-										semaphore,
-										result.reservedBlocks.first(),
-										currentPath.maxSpeed(inOut)
-									)
-								}
-							}
-							else -> {
-								logger.warn {
-									"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +
-										"PathReservationService could not reserve path: $result"
-								}
-							}
-						}
-					}
-				} else {
-					// Error: no trainId or next section - cannot proceed without ownership tracking
-					logger.error {
-						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
-							"cannot approve train without valid trainId (trainId=$trainId) or target separator"
-					}
-					env.errorStop(
-						IllegalStateException(
-							"Train approval requires trainId and valid path target for ownership tracking"
-						)
-					)
-					return
+				val trainId = train?.toString() ?: "unknown"
+				path?.setUpPath(inOut, trainId)
+				logger.info {
+					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
+						"path reserved for $first, length=${path?.length()}"
 				}
 			} catch (e: Exception) {
 				logger.warn {

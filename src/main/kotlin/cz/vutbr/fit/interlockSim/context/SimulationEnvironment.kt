@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -17,10 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 
 /**
@@ -91,54 +90,23 @@ interface SimulationEnvironment {
 	fun getInOuts(): Collection<DynamicInOut>
 
 	/**
-	 * Navigate to the next track section from a path separator.
+	 * Get topology navigator for pure topology navigation (no state dependencies).
 	 *
-	 * Object comes from `current` to `separator` and needs to know how to continue.
+	 * The TopologyNavigator provides static graph traversal without any dependency on
+	 * dynamic state (block reservations, occupancy, etc.). Use this for finding the next
+	 * track section based purely on network topology.
 	 *
-	 * @param separator Starting point (semaphore, switch, InOut)
-	 * @param current Current track section (null = start of navigation)
-	 * @return Next track section, or null if no path exists
-	 * @deprecated Use [getTrainNavigationService] or [getPathReservationService] instead.
-	 *   This method mixes static topology navigation with dynamic state concerns.
-	 *   See docs/PATH_DISCOVERY_MIGRATION_GUIDE.md for migration instructions.
-	 * @since Issue #292 Phase 5
+	 * ## Use Cases
+	 *
+	 * - InOutWorker finding initial track section from InOut
+	 * - Network validation and connectivity analysis
+	 * - Editor features requiring topology queries
+	 *
+	 * @return TopologyNavigator instance for this simulation context
+	 * @see TopologyNavigator
+	 * @since Issue #296 Phase 5 (InOutWorker dependency)
 	 */
-	@Deprecated(
-		message = "Use getTrainNavigationService() or getPathReservationService() for path navigation " +
-			"with ownership tracking",
-		replaceWith = ReplaceWith(
-			"getTrainNavigationService().findReservedPathForTrain(trainId, separator, current)"
-		),
-		level = DeprecationLevel.WARNING
-	)
-	fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection?
-
-	/**
-	 * Find path from separator to next semaphore.
-	 * Used for train navigation and path reservation.
-	 *
-	 * @param separator Start of path (must be in direction of travel)
-	 * @param next First track section in path
-	 * @return Path to next semaphore, or null if no path found
-	 * @deprecated Use [getTrainNavigationService] or [getPathReservationService] instead.
-	 *   This method mixes static topology navigation with dynamic block ownership validation,
-	 *   leading to ambiguity about who owns blocks and race conditions. See Issue #291.
-	 *   Use train-specific navigation or dispatcher reservation APIs for clear ownership semantics.
-	 *   See docs/PATH_DISCOVERY_MIGRATION_GUIDE.md for migration instructions.
-	 * @since Issue #292 Phase 5
-	 */
-	@Deprecated(
-		message = "Use getTrainNavigationService().findReservedPathForTrain() for train navigation with ownership tracking",
-		replaceWith = ReplaceWith("getTrainNavigationService().findReservedPathForTrain(trainId, separator, next)"),
-		level = DeprecationLevel.WARNING
-	)
-	fun pathToNextSemaphore(
-		separator: PathSeparator,
-		next: TrackSection
-	): Path?
+	fun getTopologyNavigator(): TopologyNavigator
 
 	/**
 	 * Check if an oriented separator (semaphore) faces the specified direction.

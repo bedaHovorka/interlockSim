@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
@@ -25,16 +24,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrackWithSemaphore
 import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
-import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
@@ -284,40 +280,6 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("getNextTrackSection with null current tries to navigate")
-		fun getNextTrackSection_validSeparator_returnsSection() {
-			// When getNextTrackSection is called with null current:
-			// 1. It tries to find the next track block from inA
-			// 2. Then tries to get the next section from that block
-			// This fails because the track topology is incomplete for this test setup
-			try {
-				val section = context.getNextTrackSection(inA, null)
-				assertThat(section).isNotNull()
-			} catch (e: IllegalStateException) {
-				// Expected - incomplete track network
-				assertThat(e.message).isNotNull()
-			} catch (e: UnsupportedOperationException) {
-				// Also acceptable - SimpleTrackBlock doesn't support getNextTrackSection
-				assertThat(e.message ?: "").contains("SimpleTrackBlock does not support")
-			}
-		}
-
-		@Test
-		@DisplayName("getNextTrackSection with current section returns null")
-		fun getNextTrackSection_withCurrentSection_returnsNull() {
-			// Get dynamic blocks from simulation context and extract static refs as TrackSection
-			val dynamicBlock1 = context.getNextTrackBlock(inA, null)
-			val dynamicBlock2 = context.getNextTrackBlock(outB, null)
-
-			// DynamicTrackBlock wraps TrackBlock, access staticRef which implements TrackSection
-			val section1 = (dynamicBlock1 as? DynamicTrackBlock)?.staticRef as? TrackSection
-			val section2 = (dynamicBlock2 as? DynamicTrackBlock)?.staticRef as? TrackSection
-
-			assertThat(context.getNextTrackSection(inA, section1)).isNull()
-			assertThat(context.getNextTrackSection(outB, section2)).isNull()
-		}
-
-		@Test
 		@DisplayName("isSeparatorInDirection validates direction correctly")
 		fun isSeparatorInDirection_validDirections_returnsTrue() {
 			// Get dynamic block from simulation context
@@ -361,67 +323,6 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			testContext = context  // Track for cleanup
 			// Trigger lazy initialization of dynamic wrappers
 			context.getInOuts()
-		}
-
-		@Test
-		@DisplayName("pathToNextSemaphore requires proper semaphore endpoint")
-		fun pathToNextSemaphore_validPath_returnsPath() {
-			// pathToNextSemaphore requires:
-			// 1. A starting separator (inA)
-			// 2. A track section (tl)
-			// 3. The track must lead to a RailSemaphore as intermediate node
-			// With only one section leading to a semaphore, it can't navigate further
-			// because getNextTrackSection returns null, then tries to get next block
-			// which throws IllegalStateException (no following segment)
-			// This is expected behavior - the method assumes multi-section navigation
-			//
-			// After Issue #153 refactoring, pathToNextSemaphore may return null
-			// when the path cannot be found (e.g., single-section track, uninitialized
-			// dynamic wrappers, or no semaphore endpoint)
-			try {
-				val pathFromInA = context.pathToNextSemaphore(inA, tl)
-				// Either succeeds with a valid path, or returns null, or throws IllegalStateException
-				if (pathFromInA != null) {
-					assertThat(pathFromInA.length()).isGreaterThan(0.0)
-				}
-				// All outcomes are acceptable for this test - it documents behavior
-			} catch (e: IllegalStateException) {
-				// Expected with SimpleTrackBlock which has only one section
-				// OR when standalone RailSemaphore lacks dynamic wrapper initialization
-				assertThat(e.message).containsAnyOf(
-					"No following segment",
-					"No track block found",
-					"Dynamic wrapper not found"
-				)
-			}
-		}
-
-		@Test
-		@DisplayName("pathToNextSemaphore requires multi-section track")
-		fun pathToNextSemaphore_returnsValidPath() {
-			// Test documents that pathToNextSemaphore is designed for multi-block tracks
-			// SimpleTrackBlock has only one section, so getNextTrackSection returns null
-			// Then it tries to get the next track block, which throws IllegalStateException
-			//
-			// After Issue #153 refactoring, pathToNextSemaphore may return null
-			// when the path cannot be found (e.g., single-section track, uninitialized
-			// dynamic wrappers, or no semaphore endpoint)
-			try {
-				val path = context.pathToNextSemaphore(inA, tl)
-				// Either succeeds with a valid path, or returns null, or throws IllegalStateException
-				if (path != null) {
-					assertThat(path.length()).isGreaterThan(0.0)
-				}
-				// All outcomes are acceptable for this test - it documents behavior
-			} catch (e: IllegalStateException) {
-				// Expected - no following segment for single-section track
-				// OR when standalone RailSemaphore lacks dynamic wrapper initialization
-				assertThat(e.message).containsAnyOf(
-					"No following segment",
-					"No track block found",
-					"Dynamic wrapper not found"
-				)
-			}
 		}
 	}
 
