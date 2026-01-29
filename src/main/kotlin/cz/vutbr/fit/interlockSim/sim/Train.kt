@@ -206,18 +206,21 @@ class Train :
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			// Navigate based on topology only - ignore semaphore signals
-			// Path reservation is handled by interlocking, trains just follow topology
-			if (path == null) {
-				// No path exists - this is a dead end or terminus
-				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative at terminus" }
-				logger.debug { "Train $number reached terminus (no path available)" }
-				env.report("STOP", this@Train, ReportType.TRAIN_EVENTS)
+			if (semaphore.signal == Signal.STOP) {
+				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
+				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 				fireStop()
-			} else if (velocity.state <= maxAbsError) {
-				// Starting from stop
-				logger.debug { "Train $number starting movement from stop" }
-				env.report("OK FREE", this@Train, ReportType.TRAIN_EVENTS)
+				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
+
+				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
+				waitUntil(allowingSignal(semaphore))
+				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
+				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
+
+				val path: Path? = trainNavService.findReservedPathForTrain(name, separator) // znovu najit
+				fireStart(semaphore, path)
+			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
+				logger.debug { "Train $number starting movement with allowing signal" }
 				fireStart(semaphore, path)
 			} else {
 				// Already moving, accelerate toward next semaphore
