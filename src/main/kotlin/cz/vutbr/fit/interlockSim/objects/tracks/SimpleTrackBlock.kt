@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -84,25 +85,25 @@ class SimpleTrackBlock :
 				"Use DynamicTrack wrapper for state management."
 		)
 
-	override fun isFreeFrom(sep: PathSeparator): Boolean =
+	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
 				"Use DynamicTrack wrapper for path operations."
 		)
 
-	override fun setUpPath(from: PathSeparator): Unit =
+	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
 				"Use DynamicTrack wrapper for path operations."
 		)
 
-	override fun isSetUpPath(from: PathSeparator): Boolean =
+	override fun isSetUpPath(from: DynamicPathSeparator): Boolean =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
 				"Use DynamicTrack wrapper for path operations."
 		)
 
-	override fun cancelPathSetup(from: PathSeparator): Unit =
+	override fun cancelPathSetup(from: DynamicPathSeparator): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
 				"Use DynamicTrack wrapper for path operations."

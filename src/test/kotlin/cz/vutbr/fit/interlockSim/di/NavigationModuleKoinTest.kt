@@ -62,8 +62,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Reserve path using PathReservationService
 			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as PathSeparator
-			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
+			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
 			pathReservationService.reservePath("train1", inOutA, inOutB)
 
 			// Assert - Both services see the same reservation (shared registry)
@@ -93,8 +93,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 				// Act - reserve path in context1
 				val service1 = context1.getPathReservationService()
 				val grid1 = context1.getRailWayNetGrid()
-				val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
-				val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+				val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as PathSeparator)
+				val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as PathSeparator)
 				service1.reservePath("train1", inOutA1, inOutB1)
 
 				// Assert - context2 should not see train1's reservation (different scope)
@@ -111,8 +111,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			// Act - get service from context and use it
 			val service = context.getPathReservationService()
 			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as PathSeparator
-			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
+			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
 
 			val result = service.reservePath("test-train", inOutA, inOutB)
 
@@ -131,8 +131,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val trainService = context.getTrainNavigationService()
 
 			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as PathSeparator
-			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
+			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
 
 			pathService.reservePath("train1", inOutA, inOutB)
 
@@ -155,8 +155,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val service = context.getPathReservationService()
 
 			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as PathSeparator
-			val inOutB = grid.getCellAt(5, 5) as PathSeparator
+			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
+			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
 			service.reservePath("train1", inOutA, inOutB)
 
 			// Verify reservation exists
@@ -180,8 +180,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			// Arrange - create first context and register trains
 			val service1 = context1.getPathReservationService()
 			val grid1 = context1.getRailWayNetGrid()
-			val inOutA1 = grid1.getCellAt(1, 1) as PathSeparator
-			val inOutB1 = grid1.getCellAt(5, 5) as PathSeparator
+			val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as PathSeparator)
+			val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as PathSeparator)
 			service1.reservePath("train1", inOutA1, inOutB1)
 
 			// Verify registration

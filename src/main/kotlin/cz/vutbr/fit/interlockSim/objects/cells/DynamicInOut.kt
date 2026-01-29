@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 
 /**
  * Dynamic wrapper for InOut separating static and dynamic properties.
@@ -69,10 +70,11 @@ class DynamicInOut(
 	override fun setUpPath(
 		from: Cell.Segment?,
 		to: Cell.Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	) {
 		val sem = getSemaphoreForWithException(from, to)
-		sem.signal = forSpeed(allowedSpeed)
+		sem.setUpPath(from, to, allowedSpeed, trackOccupant)
 	}
 
 	override fun cancelPathSetup(
@@ -80,16 +82,10 @@ class DynamicInOut(
 		to: Cell.Segment?
 	) {
 		val sem = getSemaphoreForWithException(from, to)
-		sem.signal = Signal.STOP
+		sem.cancelPathSetup(from, to)
 	}
 
 	override fun allowedSpeed(): Double = PathElement.ABSOLUTE_MAX_SPEED
-
-	/**
-	 * Implementation of isSwitch() for DynamicInOut.
-	 * Returns false since this is an InOut point, not a switch.
-	 */
-	override fun isSwitch(): Boolean = false
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		if (from == null) return staticRef.direction()

@@ -16,6 +16,8 @@ interface TrackOccupant {
 	// EXTENSION position (obsazuje celou delku- nebo jen od urciteho konce a smer)...
 	// pozor na vymenu koncu vlaku, obsazuje vice segmentu
 
+	val name: String
+
 	/**
 	 * @return length of path to next Semaphore
 	 */

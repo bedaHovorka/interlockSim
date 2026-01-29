@@ -44,7 +44,7 @@ interface DynamicTrackBehavior {
 	 * @param sep The separator to check from
 	 * @return true if track is in FREE state, false otherwise
 	 */
-	fun isFreeFrom(sep: PathSeparator): Boolean
+	fun isFreeFrom(sep: DynamicPathSeparator): Boolean
 
 	/**
 	 * Reserves this track for a path.
@@ -53,9 +53,10 @@ interface DynamicTrackBehavior {
 	 * of the TrackFacilities in this track change state.
 	 *
 	 * @param from The separator from which the path is being set up (must be one of ends())
+	 * @param reservingTrainId
 	 * @throws TrackOperationException if track is not FREE
 	 */
-	fun setUpPath(from: PathSeparator)
+	fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String)
 
 	/**
 	 * Checks if a path is set up from the given separator.
@@ -64,7 +65,7 @@ interface DynamicTrackBehavior {
 	 * @return true if track is RESERVED from this separator, false otherwise
 	 * @throws TrackOperationException on invalid state
 	 */
-	fun isSetUpPath(from: PathSeparator): Boolean
+	fun isSetUpPath(from: DynamicPathSeparator): Boolean
 
 	/**
 	 * Cancels the path reservation.
@@ -75,7 +76,7 @@ interface DynamicTrackBehavior {
 	 * @param from The separator from which the path was set up
 	 * @throws TrackOperationException if separator doesn't match or state is not RESERVED
 	 */
-	fun cancelPathSetup(from: PathSeparator)
+	fun cancelPathSetup(from: DynamicPathSeparator)
 
 	/**
 	 * Train entering the track.
@@ -100,8 +101,7 @@ interface DynamicTrackBehavior {
 	/**
 	 * Gets the current occupant (train) in the track.
 	 *
-	 * @return The current occupant
-	 * @throws IllegalStateException if track is not OCCUPIED
+	 * @return The current occupant, null if not occupied
 	 */
-	fun getTrackOccupant(): TrackOccupant
+	fun getTrackOccupant(): TrackOccupant?
 }

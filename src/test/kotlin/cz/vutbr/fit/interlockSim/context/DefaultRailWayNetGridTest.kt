@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.containsOnly
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNull
@@ -22,10 +21,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
@@ -56,13 +54,13 @@ private class MockTrackBlock : TrackBlock {
 	): Cell.Segment = Cell.Segment.A
 
 	// Track methods
-	override fun isFreeFrom(sep: PathSeparator): Boolean = true
+	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean = true
 
-	override fun setUpPath(from: PathSeparator) {}
+	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String) {}
 
-	override fun isSetUpPath(from: PathSeparator): Boolean = false
+	override fun isSetUpPath(from: DynamicPathSeparator): Boolean = false
 
-	override fun cancelPathSetup(from: PathSeparator) {}
+	override fun cancelPathSetup(from: DynamicPathSeparator) {}
 
 	override fun getSecondEnd(sep: PathSeparator): PathSeparator = sep
 

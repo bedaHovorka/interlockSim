@@ -1405,7 +1405,7 @@ open class DefaultSimulationContext(
 		try {
 			val fromSegment = getSegment(semaphore, null, firstBlock)
 			val toSegment = getSegment(semaphore, firstBlock, null)
-			semaphore.setUpPath(fromSegment, toSegment, allowedSpeed)
+			semaphore.setUpSpeed(fromSegment, toSegment, allowedSpeed)
 			logger.debug {
 				"SEMAPHORE_CONFIGURED: ${semaphore.name} signal updated for path to ${firstBlock.name}"
 			}

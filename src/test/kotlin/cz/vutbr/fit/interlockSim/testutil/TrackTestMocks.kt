@@ -38,7 +38,8 @@ class MockNodeCell(
 	override fun setUpPath(
 		from: Segment?,
 		to: Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	) {
 		// Mock implementation - no-op
 	}
@@ -48,8 +49,6 @@ class MockNodeCell(
 	override fun possibleFollowers(from: Segment): Set<Segment> = emptySet()
 
 	override fun allowedSpeed(): Double = speed
-
-	override fun isSwitch(): Boolean = false // Mock as non-switch by default
 
 	override fun joins(): Set<Segment> {
 		// Return the two segments that join for HORIZONTAL type
@@ -68,7 +67,7 @@ class MockNodeCell(
  * For testing, we only need the minimal implementation.
  */
 class MockTrackOccupant(
-	private val name: String
+	override val name: String
 ) : TrackOccupant {
 	override fun distanceToSemaphore(): Double = 100.0
 

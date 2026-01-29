@@ -16,12 +16,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
@@ -287,56 +288,12 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	}
 
 	/**
-	 * Try to set up a path from the given semaphore using PathReservationService.
-	 *
-	 * Migrated to use PathReservationService exclusively (user requirement).
-	 * Replaces previous TopologyNavigator-based path construction approach.
-	 *
-	 * Algorithm:
-	 * 1. Find all potential target separators (InOuts and other semaphores)
-	 * 2. For each target, call PathReservationService.reservePath
-	 * 3. If reservation succeeds, configure semaphore signal
-	 * 4. Return true on first successful reservation, false if all fail
-	 */
-	private fun trySetupPaths(sem: DynamicRailSemaphore, trainId: String?): Boolean {
-		val effectiveTrainId = trainId ?: "ShuntingLoop-Reserved-${System.currentTimeMillis()}"
-
-		// Find all potential target separators (InOuts and other semaphores)
-		val targets = findPotentialTargets(sem)
-
-		for (target in targets) {
-			val result = pathReservationService.reservePath(effectiveTrainId, sem, target)
-
-			when (result) {
-				is PathReservationService.ReservationResult.Success -> {
-					logger.info {
-						"PATH_RESERVED: ${sem.name} -> ${getTargetName(target)} " +
-							"for trainId=$effectiveTrainId, ${result.reservedBlocks.size} blocks"
-					}
-
-					// Configure semaphore signal after successful reservation
-					if (result.reservedBlocks.isNotEmpty()) {
-						env.configureSemaphoreSignal(sem, result.reservedBlocks.first(), sem.allowedSpeed())
-					}
-
-					return true
-				}
-				else -> {
-					// Continue to next target (AllPathsBlocked, NoPathExists, Conflict)
-				}
-			}
-		}
-
-		return false
-	}
-
-	/**
 	 * Find potential target separators from a given source semaphore.
 	 *
 	 * Returns list of separators that could be valid path destinations.
 	 */
-	private fun findPotentialTargets(from: DynamicRailSemaphore): List<PathSeparator> {
-		val targets = mutableListOf<PathSeparator>()
+	private fun findPotentialTargets(from: DynamicRailSemaphore): List<DynamicPathSeparator> {
+		val targets = mutableListOf<DynamicPathSeparator>()
 
 		// Add all InOut elements as potential targets
 		val inouts = env.getInOuts()
@@ -365,7 +322,7 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	/**
 	 * Get display name for a target separator (for logging).
 	 */
-	private fun getTargetName(target: PathSeparator): String = when (target) {
+	private fun getTargetName(target: DynamicPathSeparator): String = when (target) {
 		is DynamicRailSemaphore -> target.name ?: "unnamed_semaphore"
 		is DynamicInOut -> target.staticRef.getName() ?: "unnamed_inout"
 		else -> target.toString()
@@ -376,7 +333,7 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		to: DynamicRailSemaphore
 	): Boolean {
 		// Extract trainId from block for ownership tracking
-		val trainId = block.trainId
+		val trainId = block.trainName
 
 		logger.debug {
 			"checkOneEnd: block=${block.name}, state=${block.getState()}, trainId=$trainId, to=${to.name}"
@@ -387,10 +344,11 @@ class ShuntingLoop : Interlocking, KoinComponent {
 			return false
 		}
 		if (block.getState() == TrackFacility.State.OCCUPIED) {
-			if (block.getTrackOccupant().nextSemaphore() != to) {
+			val occupant = requireSimulationNotNull(block.getTrackOccupant())
+			if (occupant.nextSemaphore() != to) {
 				return false
 			}
-			return tryReservePathFrom(to, block, trainId)
+			return tryReservePathFrom(to, block, occupant.name)
 		} else if (block.getState() == TrackFacility.State.RESERVED) {
 			// Use PathReservationService API to check if train has blocks reserved
 			// This is the proper API for checking train ownership (dispatcher/interlocking perspective)
@@ -426,13 +384,13 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	 *
 	 * @param sem The semaphore to reserve paths from
 	 * @param fromBlock The block the train is coming FROM (provides direction context for oriented semaphores)
-	 * @param trainId The ID of the train that will use this path (nullable during path discovery)
+	 * @param trainName
 	 */
-	private fun tryReservePathFrom(sem: DynamicRailSemaphore, fromBlock: DynamicTrackBlock, trainId: String?): Boolean {
-		// trainId can be null when reserving paths for upcoming trains
-		// PathReservationService requires non-null trainId, so we need a placeholder
-		val effectiveTrainId = trainId ?: "ShuntingLoop-Reserved-${System.currentTimeMillis()}"
-
+	private fun tryReservePathFrom(
+		sem: DynamicRailSemaphore,
+		fromBlock: DynamicTrackBlock,
+		trainName: String
+	): Boolean {
 		// TopologyNavigator will explore all possible directions when the semaphore has
 		// multiple possible paths (Issue #296: catches IllegalStateException and explores all joins)
 		// This handles oriented semaphores with ambiguous direction by trying all possibilities
@@ -442,13 +400,13 @@ class ShuntingLoop : Interlocking, KoinComponent {
 
 		for (target in targets) {
 
-			val result = pathReservationService.reservePath(effectiveTrainId, sem, target)
+			val result = pathReservationService.reservePath(trainName, sem, target)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
 					logger.info {
 						"PATH_RESERVED: ${sem.name} -> ${getTargetName(target)} " +
-							"for trainId=$effectiveTrainId, ${result.reservedBlocks.size} blocks"
+							"for trainId=${trainName}, ${result.reservedBlocks.size} blocks"
 					}
 
 					// Configure semaphore signal after successful reservation

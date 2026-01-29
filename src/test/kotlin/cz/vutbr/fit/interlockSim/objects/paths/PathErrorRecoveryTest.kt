@@ -90,7 +90,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - attempt setup that may fail
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				// If successful, semaphore is configured
 				assertThat(path.getLastPathSemaphore()).isNotNull()
 			} catch (e: Exception) {
@@ -114,7 +114,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - attempt failed setup
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -127,11 +127,11 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path with multiple semaphores handles partial failure`() {
 			// Arrange - path with multiple semaphores
-			val sem1 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val sem1 = MockNodeCell("Sem1")
 			val track1 = SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val sem2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val sem2 = MockNodeCell("Sem2")
 			val track2 = SimpleTrackBlock(MockNodeCell("End2"), MockNodeCell("End3"), 150.0, 70.0, 70.0)
-			val sem3 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+			val sem3 = MockNodeCell("Sem3")
 
 			val path = ArrayPath(mockContext)
 			path.addLast(sem1)
@@ -142,7 +142,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - setup may partially fail
 			try {
-				path.setUpPath(sem1)
+				path.setUpPath(sem1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -170,7 +170,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -203,9 +203,9 @@ class PathErrorRecoveryTest : KoinTestBase() {
 			// Act - simulate occupation error
 			try {
 				// First setup may succeed or fail
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				// Second setup should detect occupation
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Cleanup should be automatic
 			}
@@ -229,7 +229,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - setup path first
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				// Check if still free (should be false if occupied)
 				val isFree = path.isFreeFrom(end1)
 				assertThat(isFree).isNotNull()
@@ -257,7 +257,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - if one track is occupied, entire setup should fail
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				// All tracks should be checked
 				assertThat(path.contains(track1)).isTrue()
 				assertThat(path.contains(track2)).isTrue()
@@ -287,7 +287,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -328,7 +328,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - setup may conflict with switch state
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				// Switch configured for path
 				assertThat(path.contains(railSwitch)).isTrue()
 			} catch (e: Exception) {
@@ -367,7 +367,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected: switch conflict
 			}
@@ -399,7 +399,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -433,7 +433,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - setup validates switch can be set correctly
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 				assertThat(path.size).isEqualTo(5)
 			} catch (e: Exception) {
 				// Validation failure leaves path intact
@@ -464,7 +464,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 			// Act & Assert - operation errors should be wrapped
 			try {
 				// This may throw if mock doesn't support full simulation
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: TrackOperationException) {
 				// Proper exception type thrown
 				assertThat(e).isNotNull()
@@ -490,7 +490,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - pathIterating error
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -513,7 +513,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act & Assert
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Error should contain useful diagnostic info
 				val message = e.message
@@ -537,7 +537,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 			val iterator = path.iterator()
 
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -568,7 +568,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act - trigger error
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -597,7 +597,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "error-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -623,7 +623,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 			// Act - multiple recovery attempts
 			for (i in 1..3) {
 				try {
-					path.setUpPath(end1)
+					path.setUpPath(end1, "error-test-train")
 					path.cancelPathSetup(end1)
 				} catch (e: Exception) {
 					// Each attempt recovers gracefully

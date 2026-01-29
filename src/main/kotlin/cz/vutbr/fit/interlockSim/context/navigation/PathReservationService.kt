@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 
@@ -153,8 +154,8 @@ interface PathReservationService {
 	 */
 	fun reservePath(
 		trainId: String,
-		start: PathSeparator,
-		target: PathSeparator,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
 		maxDepth: Int = 100
 	): ReservationResult
 
