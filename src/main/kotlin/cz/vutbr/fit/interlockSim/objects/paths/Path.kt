@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
 /**
  * Represents a Path - a sequence of [PathElement] ([PathSeparator] and [Track]).
@@ -55,6 +56,11 @@ interface Path :
 	 * Returns the last element in this path, which must be an [OrientedPathSeparator].
 	 */
 	fun getLast(): OrientedPathSeparator
+
+	/**
+	 * Gets the next track section in this path after the given current section.
+	 */
+	fun getNext(current: TrackSection?): TrackSection?
 
 	/**
 	 * Tests element-wise equality with another path.
