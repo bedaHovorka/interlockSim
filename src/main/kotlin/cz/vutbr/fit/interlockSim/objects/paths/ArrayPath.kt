@@ -102,8 +102,12 @@ class ArrayPath(
 // 		return result
 
 		if (current == null) {
-			val first = deque.firstOrNull() ?: return null
-			return if (first is TrackSection) first else null
+			// Paths always start with a PathSeparator, then a TrackSection
+			// When current is null, we want the first TrackSection (element at index 1)
+			// not the first element (index 0, which is always a separator)
+			if (deque.size < 2) return null
+			val second = deque[1]
+			return if (second is TrackSection) second else null
 		}
 
 		val index = deque.indexOf(current)

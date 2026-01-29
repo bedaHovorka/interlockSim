@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
 /**
  * Service for finding and reserving free paths in railway network.
@@ -212,4 +213,83 @@ interface PathReservationService {
 	 * @return List of blocks reserved by this train (empty if no reservations)
 	 */
 	fun getReservedBlocks(trainId: String): List<DynamicTrackBlock>
+
+	/**
+	 * Find and reserve path from separator to any next semaphore via specific track section.
+	 *
+	 * This method navigates from the starting separator through the given track section
+	 * to find ALL reachable semaphores. If the network has switches creating multiple routes,
+	 * it tries to reserve a path to each semaphore until one succeeds.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Find ALL semaphores reachable from `start` via `next` track section
+	 * 2. For each semaphore, attempt `reservePath(trainId, start, semaphore)`
+	 * 3. Return Success on first successful reservation
+	 * 4. Return last failure result if all attempts fail
+	 *
+	 * ## Use Case: Train Entry (InOutWorker)
+	 *
+	 * When a train enters the network via an InOut point:
+	 * ```kotlin
+	 * val next = navigator.getNextTrackSection(inOut, null)  // First section after InOut
+	 * val result = service.reservePathToAnyNextSemaphore("train1", inOut, next)
+	 * when (result) {
+	 *     is Success -> // Train can enter, path reserved
+	 *     is NoPathExists -> // No semaphore found in this direction
+	 *     is AllPathsBlocked -> // Semaphore found but path occupied
+	 *     is Conflict -> // Reservation conflict (should not happen)
+	 * }
+	 * ```
+	 *
+	 * ## Multiple Path Handling
+	 *
+	 * If the railway network has switches creating multiple routes to different semaphores,
+	 * this method will try each route in order. The first free path is reserved, using the
+	 * same multi-path fallback logic as `reservePath()` (BFS = shortest first).
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting path separator (typically InOut)
+	 * @param next First track section after the start (direction to search)
+	 * @return ReservationResult indicating success or failure reason
+	 * @see reservePath
+	 * @see isPathToAnyNextSemaphoreAvailable
+	 */
+	fun reservePathToAnyNextSemaphore(trainId: String, start: DynamicPathSeparator, next: TrackSection): ReservationResult
+
+	/**
+	 * Check if a path from separator to any next semaphore is currently available.
+	 *
+	 * This is a read-only operation that does NOT reserve the path. It's used as a
+	 * polling condition in InOutWorker to wait until a path becomes free.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. If `next` is null, return false (no direction to search)
+	 * 2. Find ALL semaphores reachable from `start` via `next` track section
+	 * 3. For each semaphore, check `isPathAvailable(start, semaphore)`
+	 * 4. Return true if ANY semaphore has a free path, false otherwise
+	 *
+	 * ## Use Case: jDisco Condition Polling
+	 *
+	 * ```kotlin
+	 * private val pathFree = Condition {
+	 *     service.isPathToAnyNextSemaphoreAvailable(inOut, next)
+	 * }
+	 * waitUntil(pathFree)  // Wait until path becomes free
+	 * ```
+	 *
+	 * ## Null Handling
+	 *
+	 * Unlike `reservePathToAnyNextSemaphore()`, this method accepts nullable `next`:
+	 * - `next == null` → returns false (no direction to search)
+	 * - This matches the pattern from the working tag where null next → no path
+	 *
+	 * @param start Starting path separator
+	 * @param next First track section after start (null if none exists)
+	 * @return true if path exists and is available (all blocks FREE), false otherwise
+	 * @see isPathAvailable
+	 * @see reservePathToAnyNextSemaphore
+	 */
+	fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean
 }
