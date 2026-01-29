@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -65,8 +65,8 @@ class PathReservationServiceTest : KoinTestBase() {
 	private lateinit var environment: SimulationEnvironment
 	private lateinit var navigator: TopologyNavigator
 	private lateinit var service: PathReservationService
-	private lateinit var inOut1: PathSeparator
-	private lateinit var inOut2: PathSeparator
+	private lateinit var inOut1: DynamicPathSeparator
+	private lateinit var inOut2: DynamicPathSeparator
 
 	@BeforeEach
 	fun setUp() {
@@ -95,8 +95,8 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		// Convert Java List to Kotlin List and get by index
 		val inOutsList = inOuts.toList()
-		inOut1 = inOutsList[0]
-		inOut2 = inOutsList[1]
+		inOut1 = simulationContext.toDynamic(inOutsList[0])
+		inOut2 = simulationContext.toDynamic(inOutsList[1])
 
 		assertThat(inOut1).isNotNull()
 		assertThat(inOut2).isNotNull()
@@ -121,7 +121,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			success.reservedBlocks.forEach { block ->
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
 				assertThat(block.reservedFrom).isEqualTo(inOut1)
-				assertThat(block.trainId).isEqualTo("train1")
+				assertThat(block.trainName).isEqualTo("train1")
 			}
 		}
 
@@ -193,7 +193,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Reserve second block manually (simulate partial conflict)
 			if (blocks.size >= 2) {
-				blocks[1].setUpPathWithTrainId(inOut1, "other-train")
+				blocks[1].setUpPath(inOut1, "other-train")
 			}
 
 			// Act - try to reserve path for train1
@@ -208,7 +208,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Verify first block is FREE (rollback succeeded)
 			assertThat(blocks[0].getState()).isEqualTo(TrackFacility.State.FREE)
-			assertThat(blocks[0].trainId).isNull()
+			assertThat(blocks[0].trainName).isNull()
 		}
 	}
 
@@ -233,7 +233,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Verify train2 owns the blocks
 			val blocks = service.getReservedBlocks("train2")
 			assertThat(blocks.size).isEqualTo(7)
-			blocks.forEach { block -> assertThat(block.trainId).isEqualTo("train2") }
+			blocks.forEach { block -> assertThat(block.trainName).isEqualTo("train2") }
 		}
 
 		@Test
@@ -265,7 +265,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			blocks.forEach { block ->
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.FREE)
 				assertThat(block.reservedFrom).isNull()
-				assertThat(block.trainId).isNull()
+				assertThat(block.trainName).isNull()
 			}
 
 			// Verify registry is cleared
@@ -317,7 +317,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(blocks.size).isEqualTo(7)
 			blocks.forEach { block ->
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
-				assertThat(block.trainId).isEqualTo("train1")
+				assertThat(block.trainName).isEqualTo("train1")
 			}
 		}
 
@@ -335,7 +335,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Verify ownership
 			val blocks = service.getReservedBlocks("train2")
-			blocks.forEach { block -> assertThat(block.trainId).isEqualTo("train2") }
+			blocks.forEach { block -> assertThat(block.trainName).isEqualTo("train2") }
 
 			val train1Blocks = service.getReservedBlocks("train1")
 			assertThat(train1Blocks).isEmpty()
@@ -353,7 +353,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 			val blocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
-			blocks.forEach { block -> assertThat(block.trainId).isEqualTo("train123") }
+			blocks.forEach { block -> assertThat(block.trainName).isEqualTo("train123") }
 		}
 
 		@Test
@@ -367,6 +367,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			val occupant =
 				object : TrackOccupant {
+					override val name: String = "test-occupant"
 					override fun distanceToSemaphore(): Double = 0.0
 
 					override fun nextSemaphore(): cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator? = null
@@ -379,7 +380,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Assert - trainId should be cleared
 			assertThat(firstBlock.getState()).isEqualTo(TrackFacility.State.FREE)
-			assertThat(firstBlock.trainId).isNull()
+			assertThat(firstBlock.trainName).isNull()
 		}
 	}
 }

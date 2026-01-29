@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
@@ -87,8 +88,8 @@ class DefaultPathReservationService(
 	 */
 	override fun reservePath(
 		trainId: String,
-		start: PathSeparator,
-		target: PathSeparator,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
 		// Step 1: Find all topologically possible paths
@@ -294,14 +295,14 @@ class DefaultPathReservationService(
 	 */
 	private fun tryAtomicReservation(
 		trainId: String,
-		separator: PathSeparator,
+		separator: DynamicPathSeparator,
 		blocks: List<DynamicTrackBlock>
 	): PathReservationService.ReservationResult? {
 		val reservedSoFar = mutableListOf<DynamicTrackBlock>()
 
 		try {
 			for (block in blocks) {
-				block.setUpPathWithTrainId(separator, trainId)
+				block.setUpPath(separator, trainId)
 				reservedSoFar.add(block)
 			}
 			// All blocks reserved successfully

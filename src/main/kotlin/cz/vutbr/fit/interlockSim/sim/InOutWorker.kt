@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -96,7 +97,7 @@ class InOutWorker(
 
 					// Find target separator (last element in path - the semaphore we're heading to)
 					val targetSeparator = try {
-						currentPath.getLast()
+						currentPath.getLast() as DynamicPathSeparator
 					} catch (e: Exception) {
 						logger.warn {
 							"${Process.time()} APPROVAL_WARNING: InOut ${inOut.name} - " +

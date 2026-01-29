@@ -88,7 +88,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - attempt setup (may fail due to mock limitations)
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				// If successful, path is set up
 				assertThat(path).isNotNull()
 			} catch (e: Exception) {
@@ -112,9 +112,9 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - attempt setup twice
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				// Second setup should be idempotent or handled gracefully
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				assertThat(path).isNotNull()
 			} catch (e: Exception) {
 				// Expected: mock context may not fully support setup
@@ -140,7 +140,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act & Assert - setup should validate structure
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				assertThat(path.size).isEqualTo(5)
 			} catch (e: Exception) {
 				// Expected with mock context
@@ -167,7 +167,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - setup should process both tracks
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				// Both tracks should be processed
 				assertThat(path.contains(track1)).isTrue()
 				assertThat(path.contains(track2)).isTrue()
@@ -277,7 +277,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 			// Act - cancel should work even if setup was partial
 			try {
 				// Attempt setup
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 			} catch (e: Exception) {
 				// Setup may fail, but cancellation should still work
 			}
@@ -359,7 +359,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - simulate occupation by setting up path
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				val isFree = path.isFreeFrom(end1)
 				// After setup, path may not be free
 				assertThat(isFree).isNotNull()
@@ -383,7 +383,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				val isSetUp = path.isSetUpPath(end1)
 				// After setup, should return true
 				assertThat(isSetUp).isTrue()
@@ -415,7 +415,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - attempt setup that may fail
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 			} catch (e: Exception) {
 				// Setup failed, but path structure should be intact
 			}
@@ -444,7 +444,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - attempt setup
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 			} catch (e: Exception) {
 				// Expected
 			}
@@ -498,7 +498,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - perform setup and cancel
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				path.cancelPathSetup(end1)
 			} catch (e: Exception) {
 				// Expected
@@ -532,7 +532,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				path.cancelPathSetup(end1)
 				// Path should be back to initial state
 				assertThat(path.size).isEqualTo(3)
@@ -557,7 +557,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 			// Act - multiple cycles
 			try {
 				for (i in 1..3) {
-					path.setUpPath(end1)
+					path.setUpPath(end1, "setup-test-train")
 					path.cancelPathSetup(end1)
 				}
 				assertThat(path.size).isEqualTo(3)
@@ -581,7 +581,7 @@ class PathSetupTeardownTest : KoinTestBase() {
 
 			// Act - simulate concurrent attempts (sequential in test)
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "setup-test-train")
 				// Second attempt while first is active
 				// Should be handled by track state management
 				assertThat(path).isNotNull()

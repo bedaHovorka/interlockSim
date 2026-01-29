@@ -56,7 +56,7 @@ fun List<DynamicTrackBlock>.areAllFree(): Boolean =
  * @return true if block is RESERVED by this train, false otherwise
  */
 fun DynamicTrackBlock.isReservedBy(trainId: String): Boolean =
-	this.trainId == trainId && getState() == TrackFacility.State.RESERVED
+	this.trainName == trainId && getState() == TrackFacility.State.RESERVED
 
 /**
  * Check if this block is occupied by a specific train.
@@ -77,7 +77,7 @@ fun DynamicTrackBlock.isReservedBy(trainId: String): Boolean =
  * @return true if block is OCCUPIED by this train, false otherwise
  */
 fun DynamicTrackBlock.isOccupiedBy(trainId: String): Boolean =
-	this.trainId == trainId && getState() == TrackFacility.State.OCCUPIED
+	this.trainName == trainId && getState() == TrackFacility.State.OCCUPIED
 
 /**
  * Check if this block is owned by any train (RESERVED or OCCUPIED).
@@ -93,7 +93,7 @@ fun DynamicTrackBlock.isOccupiedBy(trainId: String): Boolean =
  * @return true if block has a non-null trainId, false otherwise
  */
 fun DynamicTrackBlock.isOwnedByAnyTrain(): Boolean =
-	this.trainId != null
+	this.trainName != null
 
 /**
  * Get the count of blocks in this list that are FREE.

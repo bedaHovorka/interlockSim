@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import co.touchlab.stately.concurrency.AtomicInt
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -17,7 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -37,7 +38,7 @@ class Train :
 	TrackOccupant {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-		private var count: Int = 0
+		private var count: AtomicInt = AtomicInt(0)
 
 		/**
 		 * Maximum train acceleration in m/s²
@@ -95,7 +96,7 @@ class Train :
 		val terminated: Condition = Condition { terminated() }
 
 		final override fun actions() {
-			var where: PathSeparator = timetable.getIn()
+			var where: DynamicPathSeparator = timetable.getIn()
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
@@ -140,7 +141,7 @@ class Train :
 		 * @param next
 		 */
 		abstract fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		)
@@ -181,7 +182,7 @@ class Train :
 	private inner class Front : Site() {
 		private fun semaphoreAction(
 			semaphore: DynamicRailSemaphore,
-			separator: PathSeparator,
+			separator: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
@@ -350,7 +351,7 @@ class Train :
 		}
 
 		override fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
@@ -385,7 +386,7 @@ class Train :
 		private var fromHome: Boolean = false
 
 		override fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
@@ -570,7 +571,7 @@ class Train :
 	private val timetable: Timetable
 	private val env: SimulationEnvironment
 	private var pathToSemaphore: Path? = null
-	private val trainPrefix: String
+	override val name: String
 
 	private val number: Int
 
@@ -587,8 +588,8 @@ class Train :
 		val validatedTimetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
 		this.timetable = validatedTimetable
 		this.length = validatedTimetable.getLength()
-		number = ++count
-		trainPrefix = "Train #$number"
+		number = count.incrementAndGet()
+		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
@@ -662,7 +663,6 @@ class Train :
 		return length // pozdeji soucet vagonu
 	}
 
-	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
 
 	override fun start(): Train {
@@ -682,5 +682,5 @@ class Train :
 		acceleration.state = 0.0
 	}
 
-	override fun toString(): String = trainPrefix
+	override fun toString(): String = name
 }
