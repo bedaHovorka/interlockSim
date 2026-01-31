@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
