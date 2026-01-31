@@ -17,10 +17,41 @@ private val logger = KotlinLogging.logger {}
 /**
  * "Navestidlo"
  */
-open class RailSemaphore(
-	orientation: Boolean,
-	spatialType: Cell.SpatialType
-) : OrientedNodeCell(orientation, spatialType) {
+open class RailSemaphore : OrientedNodeCell {
+	/**
+	 * Primary constructor accepting orientation and spatialType (for backward compatibility).
+	 */
+	constructor(
+		orientation: Boolean,
+		spatialType: Cell.SpatialType
+	) : super(orientation, spatialType)
+
+	/**
+	 * Constructor accepting optional name, orientation, and spatialType.
+	 * Used by XML parser when name attribute is present.
+	 *
+	 * Example XML:
+	 * ```xml
+	 * <RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL"
+	 *                 orientation="true" name="signal_north_entry"/>
+	 * ```
+	 *
+	 * @param name Optional name for the semaphore (alphanumeric, -, _, max 50 chars).
+	 *             Null or empty = auto-generated name.
+	 * @param orientation Semaphore orientation (true/false)
+	 * @param spatialType Spatial type (HORIZONTAL/VERTICAL)
+	 * @since 2026-01 (Issue #296 Phase 4, Issue #306)
+	 */
+	constructor(
+		name: String?,
+		orientation: Boolean,
+		spatialType: Cell.SpatialType
+	) : super(orientation, spatialType) {
+		if (name != null && name.isNotEmpty()) {
+			setName(name)
+		}
+	}
+
 	override fun joins(): Set<Cell.Segment> = joinsOnLine()
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = secondOnLine(from)

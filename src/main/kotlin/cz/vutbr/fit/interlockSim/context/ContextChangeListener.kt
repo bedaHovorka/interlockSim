@@ -40,6 +40,11 @@ interface ContextChangeListener : PropertyChangeListener {
 		 * Property name for failed join operations.
 		 */
 		const val JOIN_FAILED = "joinFailed"
+
+		/**
+		 * Property name for cell property modifications (e.g., name changes).
+		 */
+		const val CELL_MODIFIED = "cellModified"
 	}
 
 	/**

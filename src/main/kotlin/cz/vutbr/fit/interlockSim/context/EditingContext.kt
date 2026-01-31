@@ -229,4 +229,27 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 * @see freeze
 	 */
 	fun isFrozen(): Boolean
+
+	/**
+	 * Fire a property change event for cell modification.
+	 *
+	 * Notifies registered listeners that a cell's properties have been modified
+	 * (e.g., name changed). This enables modification tracking and UI updates.
+	 *
+	 * ## Usage
+	 *
+	 * Use this method when modifying cell properties in-place without going through
+	 * putCell() (which would trigger CELL_ADDED event instead).
+	 *
+	 * ## Example
+	 *
+	 * ```kotlin
+	 * val cell = grid[Point(1, 1)] as RailSemaphore
+	 * cell.setName("S1")
+	 * context.fireCellModified(Point(1, 1))  // Notify listeners
+	 * ```
+	 *
+	 * @param key The grid position of the modified cell
+	 */
+	fun fireCellModified(key: Point)
 }

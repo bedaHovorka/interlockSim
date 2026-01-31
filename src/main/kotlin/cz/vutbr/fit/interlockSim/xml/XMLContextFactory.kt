@@ -113,14 +113,24 @@ class XMLContextFactory :
 									arrayOf(name as Any, orientation as Any, spatialType as Any)
 								}
 								RailSemaphore::class.java -> {
-									arrayOf(orientation as Any, spatialType as Any)
+									val name = parseNameAttribute(uri, attributes)  // Use helper
+									if (name != null) {
+										arrayOf(name as Any, orientation as Any, spatialType as Any)
+									} else {
+										arrayOf(orientation as Any, spatialType as Any)
+									}
 								}
 								else -> error("Unexpected OrientedPathSeparator: $clazz")
 							}
 						}
 						clazz == RailSwitch::class.java -> {
 							val type = getEnum(uri, attributes, Type::class.java)
-							arrayOf(spatialType as Any, type as Any)
+							val name = parseNameAttribute(uri, attributes)  // Use helper
+							if (name != null) {
+								arrayOf(name as Any, spatialType as Any, type as Any)
+							} else {
+								arrayOf(spatialType as Any, type as Any)
+							}
 						}
 						else -> error("Unexpected PathElement class: $clazz")
 					}
@@ -318,6 +328,44 @@ class XMLContextFactory :
 			e.printStackTrace()
 		} catch (e: Exception) {
 			check(false) { "Failed to initialize XML validator: $e" }
+		}
+	}
+
+	/**
+	 * Parses the optional name attribute from XML.
+	 *
+	 * @param uri XML namespace URI
+	 * @param attributes XML attributes collection
+	 * @return Name string if present and non-empty, null otherwise
+	 * @throws SAXException if name validation fails
+	 * @since 2026-01 (Issue #306)
+	 */
+	private fun parseNameAttribute(
+		uri: String,
+		attributes: Attributes
+	): String? {
+		val name = attributes.getValue(uri, NAME)
+		validateName(name)
+		return if (name != null && name.isNotEmpty()) name else null
+	}
+
+	/**
+	 * Validates name format (alphanumeric, hyphens, underscores, max 50 chars).
+	 *
+	 * @param name Name to validate (null or empty is valid)
+	 * @throws SAXException if validation fails
+	 * @since 2026-01 (Issue #306)
+	 */
+	private fun validateName(name: String?) {
+		if (name != null && name.isNotEmpty()) {
+			if (name.length > 50) {
+				throw SAXException("Element name too long (max 50 characters): $name")
+			}
+			if (!name.matches(Regex("[a-zA-Z0-9_-]+"))) {
+				throw SAXException(
+					"Element name contains invalid characters (allowed: alphanumeric, -, _): $name"
+				)
+			}
 		}
 	}
 
@@ -584,8 +632,25 @@ class XMLContextFactory :
 			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
 		}
 		when (clazz) {
-			RailSwitch::class.java -> appendAttribute(builder, (cell as RailSwitch).type)
-			InOut::class.java -> appendAttribute(builder, NAME, (cell as InOut).getName())
+			RailSwitch::class.java -> {
+				appendAttribute(builder, (cell as RailSwitch).type)
+				val name = cell.getName()
+				if (name.isNotEmpty()) {
+					appendAttribute(builder, NAME, name)
+				}
+			}
+			RailSemaphore::class.java -> {
+				val name = (cell as RailSemaphore).getName()
+				if (name.isNotEmpty()) {
+					appendAttribute(builder, NAME, name)
+				}
+			}
+			InOut::class.java -> {
+				val name = (cell as InOut).getName()
+				if (name.isNotEmpty()) {
+					appendAttribute(builder, NAME, name)
+				}
+			}
 		}
 		closingEndOfTag(builder)
 		return builder

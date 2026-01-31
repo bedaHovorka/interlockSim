@@ -56,6 +56,17 @@ class InOut(
 	override fun getName(): String = name
 
 	/**
+	 * Set the name of this InOut.
+	 * Overrides parent to update the local name field (which shadows parent's name).
+	 *
+	 * @param name The new name for this InOut
+	 */
+	override fun setName(name: String) {
+		this.name = name
+		super.setName(name)  // Also update parent's name for consistency
+	}
+
+	/**
 	 * @return semaphore on output
 	 */
 	fun getOutSemaphore(): RailSemaphore = outSemaphore

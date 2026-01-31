@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_ADDED
+import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_MODIFIED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_REMOVED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.JOIN_CREATED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.TRACK_BLOCK_REMOVED
@@ -97,22 +98,22 @@ class ModificationTracker(
 	 * - CELL_REMOVED: ✓ Marks dirty (structural change)
 	 * - JOIN_CREATED: ✓ Marks dirty (structural change)
 	 * - TRACK_BLOCK_REMOVED: ✓ Marks dirty (structural change)
+	 * - CELL_MODIFIED: ✓ Marks dirty (property modification)
 	 * - JOIN_FAILED: ✗ Ignored (failed operation, no actual change)
 	 * - CONTEXT_CHANGED: ✗ Ignored (generic event, too broad for dirty tracking)
 	 *
 	 * Rationale:
-	 * - Only track events that represent successful structural modifications
+	 * - Only track events that represent successful modifications
 	 * - Failed operations (JOIN_FAILED) don't modify the network
 	 * - Generic notifications (CONTEXT_CHANGED) are informational only
 	 *
 	 * Future extensions (as needed):
 	 * - Configuration changes (maxSpeed, trackLength): Could mark dirty
-	 * - Cell property modifications: Could mark dirty
 	 * - InOut list modifications: Could mark dirty
 	 */
 	override fun propertyChange(evt: PropertyChangeEvent) {
 		when (evt.propertyName) {
-			CELL_ADDED, CELL_REMOVED, JOIN_CREATED, TRACK_BLOCK_REMOVED -> markDirty()
+			CELL_ADDED, CELL_REMOVED, JOIN_CREATED, TRACK_BLOCK_REMOVED, CELL_MODIFIED -> markDirty()
 			// Explicitly ignore JOIN_FAILED (failed operation, no change)
 			// Explicitly ignore CONTEXT_CHANGED (generic event)
 		}

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="50" Y="50" >
+  <InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="this_is_a_very_long_name_that_exceeds_the_fifty_character_limit_validation" />
+  <InOut X="40" Y="40" SpatialType="HORIZONTAL" orientation="false" name="exit_1" />
+</net>

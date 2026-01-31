@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.context.AutoNameGenerator
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -21,8 +22,11 @@ import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasPopupMenu
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.SimulationCellRenderer
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color
 import java.awt.Dimension
@@ -132,9 +136,42 @@ class RailwayNetGridCanvas :
 								toolbarCellClass!!,
 								*(toolbarArgs!! as Array<Any>)
 							) as NodeCell
-						if (newCell is InOut) {
-							newCell.setName(editingContext.currentNameString)
+
+						// Auto-name newly created elements
+						logger.debug {
+							"Creating cell: ${newCell.javaClass.simpleName}, " +
+								"currentNameString: '${editingContext.currentNameString}'"
 						}
+						when (newCell) {
+							is InOut -> {
+								// Auto-generate sequential names for InOuts (IO1, IO2, ...)
+								// Users can customize via toolbar nameString or rename dialog afterward
+								val name = if (editingContext.currentNameString.isNotEmpty()) {
+									logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
+									editingContext.currentNameString
+								} else {
+									val autoName = AutoNameGenerator.generateName(newCell.javaClass, editingContext)
+									logger.debug { "InOut: Auto-generated name: '$autoName'" }
+									autoName
+								}
+								newCell.setName(name)
+								logger.debug { "InOut: After setName(), getName() returns: '${newCell.getName()}'" }
+							}
+							is RailSemaphore, is RailSwitch -> {
+								// Auto-generate sequential names for semaphores and switches
+								val autoName = AutoNameGenerator.generateName(
+									newCell.javaClass,
+									editingContext
+								)
+								newCell.setName(autoName)
+								logger.debug {
+									"${newCell.javaClass.simpleName}: Auto-named as '$autoName', " +
+										"getName() returns: '${newCell.getName()}'"
+								}
+							}
+							// Other NodeCell types could be added here in the future
+						}
+
 						editingContext.putCell(clickKey, newCell)
 						// Clear selection after creating a cell to prevent auto-joining
 						selectedKey = null
@@ -487,6 +524,7 @@ class RailwayNetGridCanvas :
 	private fun getEditingContextFactory(): EditingContextFactory = getKoin().get<EditingContextFactory>()
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
 		private const val MAX_UNIT_INCREMENT = 35
 		private const val CELL_WIDTH = 16
 		private const val CELL_HEIGHT = 16

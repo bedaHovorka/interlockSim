@@ -566,4 +566,20 @@ open class DefaultEditingContext(
 			)
 		)
 	}
+
+	/**
+	 * Fire a property change event for cell modification.
+	 *
+	 * Implements {@link EditingContext#fireCellModified} to notify listeners
+	 * that a cell's properties have been modified in-place (e.g., name changed).
+	 *
+	 * @param key The grid position of the modified cell
+	 */
+	override fun fireCellModified(key: Point) {
+		getChangeSupport().firePropertyChange(
+			ContextChangeListener.CELL_MODIFIED,
+			null,
+			key
+		)
+	}
 }
