@@ -138,7 +138,7 @@ class RailwayNetGridCanvas :
 							) as NodeCell
 
 						// Auto-name newly created elements
-						logger.info {
+						logger.debug {
 							"Creating cell: ${newCell.javaClass.simpleName}, " +
 								"currentNameString: '${editingContext.currentNameString}'"
 						}
@@ -147,15 +147,15 @@ class RailwayNetGridCanvas :
 								// Auto-generate sequential names for InOuts (IO1, IO2, ...)
 								// Users can customize via toolbar nameString or rename dialog afterward
 								val name = if (editingContext.currentNameString.isNotEmpty()) {
-									logger.info { "InOut: Using toolbar name: '$name'" }
+									logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
 									editingContext.currentNameString
 								} else {
 									val autoName = AutoNameGenerator.generateName(newCell.javaClass, editingContext)
-									logger.info { "InOut: Auto-generated name: '$autoName'" }
+									logger.debug { "InOut: Auto-generated name: '$autoName'" }
 									autoName
 								}
 								newCell.setName(name)
-								logger.info { "InOut: After setName(), getName() returns: '${newCell.getName()}'" }
+								logger.debug { "InOut: After setName(), getName() returns: '${newCell.getName()}'" }
 							}
 							is RailSemaphore, is RailSwitch -> {
 								// Auto-generate sequential names for semaphores and switches
@@ -164,7 +164,7 @@ class RailwayNetGridCanvas :
 									editingContext
 								)
 								newCell.setName(autoName)
-								logger.info {
+								logger.debug {
 									"${newCell.javaClass.simpleName}: Auto-named as '$autoName', " +
 										"getName() returns: '${newCell.getName()}'"
 								}

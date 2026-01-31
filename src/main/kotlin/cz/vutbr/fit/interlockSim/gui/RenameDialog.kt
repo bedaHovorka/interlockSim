@@ -1,5 +1,6 @@
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.util.NameValidator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.Component
@@ -14,6 +15,7 @@ import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JDialog
 import javax.swing.JLabel
+import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JTextField
 import javax.swing.KeyStroke
@@ -149,13 +151,37 @@ class RenameDialog(
 
 	/**
 	 * Handles OK button click or Enter key press.
-	 * Stores the new name and closes the dialog with OK result.
+	 * Validates input and stores the new name if valid, shows error dialog if invalid.
 	 */
 	private fun handleOk() {
-		newName = nameTextField.text
+		val inputText = nameTextField.text
+
+		// Validate input using shared utility
+		val validationResult = NameValidator.validate(inputText)
+
+		if (!validationResult.isValid) {
+			// Show error dialog with specific validation errors
+			val errorMessage = validationResult.errors.joinToString("\n\n") { it.message }
+			JOptionPane.showMessageDialog(
+				this,
+				errorMessage,
+				"Invalid Name",
+				JOptionPane.ERROR_MESSAGE
+			)
+
+			// Keep dialog open, let user fix the input
+			nameTextField.requestFocusInWindow()
+			nameTextField.selectAll()
+			logger.warn { "Invalid name rejected: '$inputText' - ${errorMessage.replace("\n\n", ", ")}" }
+			return
+		}
+
+		// Validation passed - accept the name
+		newName = inputText
 		userChoice = DialogResult.OK
 		isVisible = false
 		dispose()
+		logger.info { "Name changed: '$currentName' → '$newName'" }
 	}
 
 	/**

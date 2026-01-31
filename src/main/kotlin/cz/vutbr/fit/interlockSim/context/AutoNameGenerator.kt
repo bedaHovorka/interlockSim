@@ -17,11 +17,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * Ensures uniqueness by checking against existing names in the context.
  *
+ * Performance optimization: Uses lazy name cache (built on first use) to avoid
+ * O(n²) grid scans. Cache is invalidated when context changes.
+ *
  * Thread-safety: Not thread-safe. Assumes single-threaded GUI usage.
  */
 object AutoNameGenerator {
 	private val logger = KotlinLogging.logger {}
 	private val counters = mutableMapOf<String, Int>()
+
+	// Name cache for performance optimization
+	private var nameCache: MutableSet<String>? = null
+	private var cachedContext: EditingContext? = null
 
 	/**
 	 * Generates a unique name for a new cell.
@@ -37,16 +44,17 @@ object AutoNameGenerator {
 		var candidateNumber = counter + 1
 		var candidateName = "$prefix$candidateNumber"
 
-		// Ensure uniqueness by checking all cells in grid
+		// Ensure uniqueness using cached names (O(1) lookup instead of O(n²) scan)
 		while (nameExists(candidateName, context)) {
 			candidateNumber++
 			candidateName = "$prefix$candidateNumber"
 		}
 
-		// Update counter for this prefix
+		// Update counter AND cache
 		counters[prefix] = candidateNumber
+		nameCache?.add(candidateName)  // Add new name to cache
 
-		logger.info { "AutoNameGenerator: Generated name '$candidateName' for ${cellClass.simpleName}" }
+		logger.debug { "Generated name '$candidateName' for ${cellClass.simpleName}" }
 		return candidateName
 	}
 
@@ -63,25 +71,45 @@ object AutoNameGenerator {
 
 	/**
 	 * Checks if a name already exists in the context.
+	 * Uses lazy name cache for O(1) lookups instead of O(n²) grid scan.
 	 */
 	private fun nameExists(name: String, context: EditingContext): Boolean {
+		// Build cache on first use or context change
+		if (nameCache == null || cachedContext !== context) {
+			buildNameCache(context)
+			cachedContext = context
+		}
+		return nameCache!!.contains(name)
+	}
+
+	/**
+	 * Builds name cache from grid (O(n²) once, then O(1) lookups).
+	 */
+	private fun buildNameCache(context: EditingContext) {
+		val names = mutableSetOf<String>()
 		val grid = context.getRailWayNetGrid()
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
 				val point = cz.vutbr.fit.interlockSim.util.Point(x, y)
 				val cell = grid[point]
-				if (cell is NodeCell && cell.getName() == name) {
-					return true
+				if (cell is NodeCell) {
+					val name = cell.getName()
+					if (name.isNotEmpty()) {
+						names.add(name)
+					}
 				}
 			}
 		}
-		return false
+		nameCache = names
+		logger.debug { "Built name cache with ${names.size} existing names" }
 	}
 
 	/**
-	 * Resets all counters (for testing or new context creation).
+	 * Resets all counters and cache (for testing or new context creation).
 	 */
 	fun reset() {
 		counters.clear()
+		nameCache = null
+		cachedContext = null
 	}
 }
