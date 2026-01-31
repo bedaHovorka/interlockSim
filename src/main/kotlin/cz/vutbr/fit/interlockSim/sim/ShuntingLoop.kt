@@ -121,20 +121,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.offer(train)
 		}
-
-		override fun iteration() {
-			// Stop generating trains when approaching endTime
-			if (time() >= endTime) {
-				logger.info {
-					"${time()} GENERATOR_SHUTDOWN: Stopping new train generation at endTime, " +
-						"unapproved queue size: ${unapprowedTrains.size}, " +
-						"approved trains: ${approwedTrains.size}"
-				}
-				terminate()
-				return
-			}
-			super.iteration()
-		}
 	}
 
 	/**
@@ -260,18 +246,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 		// nove vlaky a inouty
 		approveTrains()
-
-		// If generator terminated and all queues empty, terminate ShuntingLoop
-		if (generator.terminated() && unapprowedTrains.isEmpty() && approwedTrains.isEmpty()) {
-			logger.info {
-				"${time()} SIMULATION_COMPLETE: All trains processed, terminating ShuntingLoop"
-			}
-			terminate()
-			return
-		}
-
-		// Polling interval: 1.0s (matches baseline timing)
-		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
@@ -291,53 +265,16 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	 * Returns list of separators that could be valid path destinations.
 	 */
 	private fun findPotentialTargets(from: DynamicRailSemaphore): List<DynamicPathSeparator> {
-		val targets = mutableListOf<DynamicPathSeparator>()
-
-		// Add all InOut elements as potential targets
-		val inouts = env.getInOuts()
-		for (dynamicInOut in inouts) {
-			if (dynamicInOut != from) {
-				targets.add(dynamicInOut)
-			}
-		}
-
-		// Add relevant semaphores based on known topology
-		// For vyhybna.xml: zA, doA1, doA2, doB1, doB2, zB
-		val context = env as SimulationContext
-		val grid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		for (x in 0 until 50) {
-			for (y in 0 until 20) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore && cell != from) {
-					targets.add(cell)
-				}
-			}
-		}
-
-		return targets
+		// Dispatcher reserves paths to entry/exit points (InOuts)
+		// No need to scan entire grid for semaphores
+		return env.getInOuts().filter { it != from }
 	}
 
-	/**
-	 * Get display name for a target separator (for logging).
-	 */
-	private fun getTargetName(target: DynamicPathSeparator): String = when (target) {
-		is DynamicRailSemaphore -> target.name ?: "unnamed_semaphore"
-		is DynamicInOut -> target.staticRef.getName() ?: "unnamed_inout"
-		else -> target.toString()
-	}
 
 	private fun checkOneEnd(
 		block: DynamicTrackBlock,
 		to: DynamicRailSemaphore
 	): Boolean {
-		// Extract trainId from block for ownership tracking
-		val trainId = block.trainName
-
-		logger.debug {
-			"checkOneEnd: block=${block.name}, state=${block.getState()}, trainId=$trainId, to=${to.name}"
-		}
-
-		// je v bloku vlak?
 		if (block.getState() == TrackFacility.State.FREE) {
 			return false
 		}
@@ -348,19 +285,8 @@ class ShuntingLoop : Interlocking, KoinComponent {
 			}
 			return tryReservePathFrom(to, block, occupant.name)
 		} else if (block.getState() == TrackFacility.State.RESERVED) {
-			// Use PathReservationService API to check if train has blocks reserved
-			// This is the proper API for checking train ownership (dispatcher/interlocking perspective)
-			if (trainId != null) {
-				val reservedBlocks = pathReservationService.getReservedBlocks(trainId)
-				val hasThisBlock = reservedBlocks.contains(block)
-				if (hasThisBlock) {
-					// Train has this block reserved, try to reserve forward path from semaphore
-					logger.debug { "Train $trainId owns block ${block.name}, reserving forward from ${to.name}" }
-					return tryReservePathFrom(to, block, trainId)
-				}
-			} else {
-				logger.warn { "Block ${block.name} RESERVED but trainId is null - cannot determine ownership" }
-			}
+			val trainId = block.trainName ?: return false
+			return tryReservePathFrom(to, block, trainId)
 		}
 		return false
 	}
@@ -403,11 +329,8 @@ class ShuntingLoop : Interlocking, KoinComponent {
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
 					logger.info {
-						"PATH_RESERVED: ${sem.name} -> ${getTargetName(target)} " +
-							"for trainId=${trainName}, ${result.reservedBlocks.size} blocks"
+						"PATH_RESERVED: ${sem.name} -> $target for $trainName, ${result.reservedBlocks.size} blocks"
 					}
-
-					// Signal configuration now handled by PathReservationService
 					return true
 				}
 				is PathReservationService.ReservationResult.AllPathsBlocked -> {
@@ -418,10 +341,8 @@ class ShuntingLoop : Interlocking, KoinComponent {
 				}
 				is PathReservationService.ReservationResult.Conflict -> {
 					logger.warn {
-						"Reservation conflict at block ${result.conflictingBlock.name}, " +
-							"owned by ${result.existingOwner}"
+						"Reservation conflict at block ${result.conflictingBlock.name}, owned by ${result.existingOwner}"
 					}
-					// Continue to next target
 				}
 			}
 		}
