@@ -242,12 +242,12 @@ interface SimulationEnvironment {
 	 *
 	 * @param semaphore The semaphore to configure
 	 * @param firstBlock First reserved block in the path
-	 * @param allowedSpeed Speed limit for the path
+	 * @param allowedSpeed Speed limit for the path (null = auto-calculate from firstBlock)
 	 */
 	fun configureSemaphoreSignal(
 		semaphore: DynamicRailSemaphore,
 		firstBlock: DynamicTrackBlock,
-		allowedSpeed: Double
+		allowedSpeed: Double? = null
 	)
 
 	// ========================================

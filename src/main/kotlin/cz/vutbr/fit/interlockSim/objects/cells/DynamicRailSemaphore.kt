@@ -82,8 +82,19 @@ sealed class DynamicRailSemaphore(
 	}
 
 	fun setUpSpeed(from: Cell.Segment?, to: Cell.Segment?, allowedSpeed: Double) {
-		if (checkPathSegments(from, to)) {
+		val isValidDirection = checkPathSegments(from, to)
+
+		if (isValidDirection) {
 			signal = forSpeed(allowedSpeed)
+			logger.debug {
+				"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
+					"(allowedSpeed=$allowedSpeed)"
+			}
+		} else {
+			logger.warn {
+				"SEMAPHORE_SIGNAL_NOT_UPDATED: ${staticRef.getName()} signal remains $signal " +
+					"due to reverse direction (from=$from, to=$to, semaphoreDirection=${staticRef.direction()})"
+			}
 		}
 	}
 
