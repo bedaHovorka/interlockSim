@@ -143,14 +143,14 @@ class ShuntingLoop : Interlocking, KoinComponent {
 
 		val B: DynamicInOut = elementAt(context, DynamicInOut::class.java, 30, 8)
 		val A: DynamicInOut = elementAt(context, DynamicInOut::class.java, 11, 8)
-		val zA: DynamicRailSemaphore = elementAt(context, "zA", DynamicRailSemaphore::class.java, 14, 8)
-		val doA1: DynamicRailSemaphore = elementAt(context, "doA1", DynamicRailSemaphore::class.java, 16, 8)
-		val doB1: DynamicRailSemaphore = elementAt(context, "doB1", DynamicRailSemaphore::class.java, 25, 8)
-		val zB: DynamicRailSemaphore = elementAt(context, "zB", DynamicRailSemaphore::class.java, 27, 8)
-		val doA2: DynamicRailSemaphore = elementAt(context, "doA2", DynamicRailSemaphore::class.java, 17, 9)
-		val doB2: DynamicRailSemaphore = elementAt(context, "doB2", DynamicRailSemaphore::class.java, 24, 9)
-		val vA: DynamicRailSwitch = elementAt(context, "vA", DynamicRailSwitch::class.java, 15, 8)
-		val vB: DynamicRailSwitch = elementAt(context, "vB", DynamicRailSwitch::class.java, 26, 8)
+		val zA: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 14, 8)
+		val doA1: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 16, 8)
+		val doB1: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 25, 8)
+		val zB: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 27, 8)
+		val doA2: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 17, 9)
+		val doB2: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 24, 9)
+		val vA: DynamicRailSwitch = elementAt(context, DynamicRailSwitch::class.java, 15, 8)
+		val vB: DynamicRailSwitch = elementAt(context, DynamicRailSwitch::class.java, 26, 8)
 
 		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
@@ -177,43 +177,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		return Util.assertInstanceOf(clazz, cell)
 	}
 
-	/**
-	 * Get a cell at specified coordinates and set its name.
-	 *
-	 * **Fix for Issue #280/#284:**
-	 * After the grid transformation fix, cells are dynamic wrappers that delegate
-	 * all NodeCell methods (including setName) to their staticRef via delegation pattern:
-	 * - `DynamicRailSemaphore : OrientedPathSeparator by staticRef`
-	 * - `DynamicInOut : OrientedPathSeparator by staticRef`
-	 *
-	 * Calling setName() on a dynamic wrapper delegates to staticRef.setName().
-	 *
-	 * @param context Simulation context
-	 * @param name Name to set on the cell
-	 * @param clazz Expected cell class (dynamic wrapper type after grid fix)
-	 * @param x Grid X coordinate
-	 * @param y Grid Y coordinate
-	 * @return Cell of type T from the grid with name set
-	 */
-	private fun <T : Cell> elementAt(
-		context: SimulationContext,
-		name: String,
-		clazz: Class<T>,
-		x: Int,
-		y: Int
-	): T {
-		val elementAt: T = elementAt(context, clazz, x, y)
-		// Set name on the underlying static cell
-		when (elementAt) {
-			is DynamicRailSemaphore -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
-			is DynamicInOut -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
-			is DynamicRailSwitch -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
-			else -> throw IllegalStateException(
-				"Cell at ($x, $y) does not support setName(): ${elementAt.javaClass.simpleName}"
-			)
-		}
-		return elementAt
-	}
 
 	private fun getBlock(
 		context: SimulationContext,
