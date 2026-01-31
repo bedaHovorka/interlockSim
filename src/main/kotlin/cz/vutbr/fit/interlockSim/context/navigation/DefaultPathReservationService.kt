@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -61,12 +62,14 @@ private val logger = KotlinLogging.logger {}
  * @property navigator Static topology navigator for path finding
  * @property environment Simulation environment for dynamic block access
  * @property registry Ownership registry for tracking train reservations
+ * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
-	private val registry: PathReservationRegistry = PathReservationRegistry()
+	private val registry: PathReservationRegistry = PathReservationRegistry(),
+	private val pathInfoBuilder: PathInfoBuilder
 ) : PathReservationService {
 	/**
 	 * Find and reserve a free path from start to target separator.
@@ -136,7 +139,20 @@ class DefaultPathReservationService(
 				is PathReservationRegistry.RegistrationResult.Success -> {
 					// Success - path reserved and registered
 
-					// Step 2e: Configure semaphore signal after successful reservation
+					// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
+					val pathInfo = pathInfoBuilder.buildPathInfo(
+						start = start,
+						target = target,
+						trackSections = path  // path is List<TrackSection> here
+					)
+
+					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
+					registry.registerPathInfo(trainId, pathInfo)
+					logger.debug {
+						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions"
+					}
+
+					// Step 2g: Configure semaphore signal after successful reservation
 					if (start is DynamicRailSemaphore && blocks.isNotEmpty()) {
 						environment.configureSemaphoreSignal(start, blocks.first())
 						logger.debug {

@@ -27,6 +27,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -220,14 +221,24 @@ val navigationModule: Module =
 				PathReservationRegistry()
 			}
 
+			// PathInfoBuilder: scoped to this simulation context (Issue #295/#296 Phase 4)
+			// Used by PathReservationService to build entry direction metadata
+			scoped<PathInfoBuilder> {
+				val context = getSource<DefaultSimulationContext>()
+					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val navigator: TopologyNavigator = get()
+				PathInfoBuilder(context, navigator)
+			}
+
 			// PathReservationService: scoped to this simulation context
-			// Navigator and registry are injected from the same scope (shared instances)
+			// Navigator, registry, and pathInfoBuilder are injected from the same scope (shared instances)
 			scoped<PathReservationService> {
 				val context = getSource<DefaultSimulationContext>()
 					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
-				DefaultPathReservationService(navigator, context, registry)
+				val pathInfoBuilder: PathInfoBuilder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
 			}
 
 			// TrainNavigationService: scoped to this simulation context

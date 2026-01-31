@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 
 /**
@@ -94,6 +95,16 @@ class PathReservationRegistry {
 	 * Mapping: Block → Owning train ID
 	 */
 	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
+
+	/**
+	 * Mapping: Train ID → PathInfo metadata
+	 *
+	 * Stores complete path information including entry directions for each train.
+	 * This enables TrainNavigationService to determine correct direction at switches.
+	 *
+	 * @since Issue #295/#296 Phase 3
+	 */
+	private val trainToPathInfo = mutableMapOf<String, PathInfo>()
 
 	/**
 	 * Atomically register blocks for a train.
@@ -212,6 +223,7 @@ class PathReservationRegistry {
 	 *
 	 * - Removes trainToBlocks[trainId]
 	 * - Removes blockToTrain[block] for all blocks owned by this train
+	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
 	 *
 	 * @param trainId The train identifier
 	 * @return List of blocks that were released (empty if train had no reservations)
@@ -223,6 +235,9 @@ class PathReservationRegistry {
 		blocks.forEach { block ->
 			blockToTrain.remove(block)
 		}
+
+		// Remove path metadata (Issue #295/#296)
+		trainToPathInfo.remove(trainId)
 
 		return blocks
 	}
@@ -253,6 +268,32 @@ class PathReservationRegistry {
 	fun isRegistered(block: DynamicTrackBlock): Boolean = blockToTrain.containsKey(block)
 
 	/**
+	 * Register PathInfo for a train.
+	 *
+	 * Stores complete path metadata including entry directions.
+	 * This is called by PathReservationService after successful path reservation.
+	 *
+	 * @param trainId The train identifier
+	 * @param pathInfo Complete path metadata
+	 * @since Issue #295/#296 Phase 3
+	 */
+	fun registerPathInfo(trainId: String, pathInfo: PathInfo) {
+		trainToPathInfo[trainId] = pathInfo
+	}
+
+	/**
+	 * Get PathInfo for a train.
+	 *
+	 * Retrieves complete path metadata including entry directions.
+	 * Used by TrainNavigationService to determine correct direction.
+	 *
+	 * @param trainId The train identifier
+	 * @return PathInfo if registered, null otherwise
+	 * @since Issue #295/#296 Phase 3
+	 */
+	fun getPathInfo(trainId: String): PathInfo? = trainToPathInfo[trainId]
+
+	/**
 	 * Clear all registrations.
 	 *
 	 * Removes all train-to-block and block-to-train mappings.
@@ -261,6 +302,7 @@ class PathReservationRegistry {
 	fun clear() {
 		trainToBlocks.clear()
 		blockToTrain.clear()
+		trainToPathInfo.clear()
 	}
 
 	/**
