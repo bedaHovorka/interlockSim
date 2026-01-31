@@ -113,14 +113,24 @@ class XMLContextFactory :
 									arrayOf(name as Any, orientation as Any, spatialType as Any)
 								}
 								RailSemaphore::class.java -> {
-									arrayOf(orientation as Any, spatialType as Any)
+									val name = attributes.getValue(uri, NAME) // May be null for old XML
+									if (name != null) {
+										arrayOf(name as Any, orientation as Any, spatialType as Any)
+									} else {
+										arrayOf(orientation as Any, spatialType as Any)
+									}
 								}
 								else -> error("Unexpected OrientedPathSeparator: $clazz")
 							}
 						}
 						clazz == RailSwitch::class.java -> {
 							val type = getEnum(uri, attributes, Type::class.java)
-							arrayOf(spatialType as Any, type as Any)
+							val name = attributes.getValue(uri, NAME) // May be null for old XML
+							if (name != null) {
+								arrayOf(name as Any, spatialType as Any, type as Any)
+							} else {
+								arrayOf(spatialType as Any, type as Any)
+							}
 						}
 						else -> error("Unexpected PathElement class: $clazz")
 					}
@@ -584,7 +594,19 @@ class XMLContextFactory :
 			appendAttribute(builder, ATR_ORIENT_NAME, (cell as OrientedPathSeparator).getOrientation().toString())
 		}
 		when (clazz) {
-			RailSwitch::class.java -> appendAttribute(builder, (cell as RailSwitch).type)
+			RailSwitch::class.java -> {
+				appendAttribute(builder, (cell as RailSwitch).type)
+				val name = cell.getName()
+				if (name.isNotEmpty()) {
+					appendAttribute(builder, NAME, name)
+				}
+			}
+			RailSemaphore::class.java -> {
+				val name = (cell as RailSemaphore).getName()
+				if (name.isNotEmpty()) {
+					appendAttribute(builder, NAME, name)
+				}
+			}
 			InOut::class.java -> appendAttribute(builder, NAME, (cell as InOut).getName())
 		}
 		closingEndOfTag(builder)
