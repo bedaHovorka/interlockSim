@@ -651,6 +651,7 @@ Follows `.editorconfig` configuration:
 - **No refactoring** - Do not restructure working simulation code
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
+- **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
 - **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
 
 **jDisco Library:**

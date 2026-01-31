@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -133,6 +135,15 @@ class DefaultPathReservationService(
 			return when (val result = registry.registerAtomic(trainId, blocks)) {
 				is PathReservationRegistry.RegistrationResult.Success -> {
 					// Success - path reserved and registered
+
+					// Step 2e: Configure semaphore signal after successful reservation
+					if (start is DynamicRailSemaphore && blocks.isNotEmpty()) {
+						environment.configureSemaphoreSignal(start, blocks.first())
+						logger.debug {
+							"reservePath: Configured semaphore signal for ${start.name}"
+						}
+					}
+
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -255,6 +266,37 @@ class DefaultPathReservationService(
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
 					// Success! Path reserved
+
+					// Configure the START separator's semaphore (if it has one)
+					// For InOut, this is the output semaphore that controls entry
+					// For RailSemaphore start points, this would be the semaphore itself
+					if (result.reservedBlocks.isNotEmpty()) {
+						when (start) {
+							is DynamicInOut -> {
+								// InOut has an output semaphore that needs configuration
+								// NOTE: Due to simulation timing, this configuration may not take effect
+								// before the train checks the signal (race condition at t=0.0)
+								// See Issue #296 for details
+								val outSemaphore = environment.toDynamic(start.staticRef.getOutSemaphore())
+								if (outSemaphore is DynamicRailSemaphore) {
+									environment.configureSemaphoreSignal(outSemaphore, result.reservedBlocks.first())
+									logger.debug {
+										"reservePathToAnyNextSemaphore: Configured InOut ${start.name} output " +
+											"semaphore to ${outSemaphore.signal}"
+									}
+								}
+							}
+							is DynamicRailSemaphore -> {
+								// Semaphore at start - configure it
+								environment.configureSemaphoreSignal(start, result.reservedBlocks.first())
+								logger.debug {
+									"reservePathToAnyNextSemaphore: Configured START semaphore " +
+										"${start.name} to ${start.signal}"
+								}
+							}
+						}
+					}
+
 					logger.debug {
 						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore"
 					}
@@ -594,4 +636,5 @@ class DefaultPathReservationService(
 			}
 		}
 	}
+
 }

@@ -1285,14 +1285,21 @@ open class DefaultSimulationContext(
 	override fun configureSemaphoreSignal(
 		semaphore: DynamicRailSemaphore,
 		firstBlock: DynamicTrackBlock,
-		allowedSpeed: Double
+		allowedSpeed: Double?
 	) {
 		try {
+			// Calculate allowed speed from path if not provided
+			// Fixes circular logic bug where sem.allowedSpeed() returns 0.0 (STOP)
+			val effectiveSpeed = allowedSpeed ?: firstBlock.maxSpeed(semaphore)
+
 			val fromSegment = getSegment(semaphore, null, firstBlock)
 			val toSegment = getSegment(semaphore, firstBlock, null)
-			semaphore.setUpSpeed(fromSegment, toSegment, allowedSpeed)
+
+			semaphore.setUpSpeed(fromSegment, toSegment, effectiveSpeed)
+
 			logger.debug {
-				"SEMAPHORE_CONFIGURED: ${semaphore.name} signal updated for path to ${firstBlock.name}"
+				"SEMAPHORE_CONFIGURED: ${semaphore.name} signal updated to " +
+					"${semaphore.signal} (allowedSpeed=$effectiveSpeed)"
 			}
 		} catch (e: Exception) {
 			logger.warn {

@@ -20,7 +20,6 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -220,7 +219,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		val elementAt: T = elementAt(context, clazz, x, y)
 		// Set name on the underlying static cell
 		when (elementAt) {
-			is NodeCell -> elementAt.setName(name) // Static cells have setName() directly
 			is DynamicRailSemaphore -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
 			is DynamicInOut -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
 			is DynamicRailSwitch -> elementAt.staticRef.setName(name) // Access staticRef to call setName()
@@ -409,11 +407,7 @@ class ShuntingLoop : Interlocking, KoinComponent {
 							"for trainId=${trainName}, ${result.reservedBlocks.size} blocks"
 					}
 
-					// Configure semaphore signal after successful reservation
-					if (result.reservedBlocks.isNotEmpty()) {
-						env.configureSemaphoreSignal(sem, result.reservedBlocks.first(), sem.allowedSpeed())
-					}
-
+					// Signal configuration now handled by PathReservationService
 					return true
 				}
 				is PathReservationService.ReservationResult.AllPathsBlocked -> {
