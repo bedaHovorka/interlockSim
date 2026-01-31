@@ -15,6 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
@@ -23,6 +24,9 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -62,6 +66,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
+	private lateinit var simulationContext: DefaultSimulationContext
 	private lateinit var environment: SimulationEnvironment
 	private lateinit var navigator: TopologyNavigator
 	private lateinit var service: PathReservationService
@@ -76,7 +81,7 @@ class PathReservationServiceTest : KoinTestBase() {
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		val simulationContext =
+		simulationContext =
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 		environment = simulationContext
@@ -563,17 +568,51 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `reservePath configures START semaphore signal when START is DynamicRailSemaphore`() {
-			// This test would require finding a semaphore in the network
-			// and testing signal configuration, but vyhybna.xml structure
-			// makes this complex. For now, documented as TODO.
-			// TODO: Add test with network that has semaphore at START position
+			// Arrange - Find semaphore doA1 by iterating grid (simulation grid uses dynamic cells)
+			val grid = simulationContext.getRailWayNetGrid()
+			var doA1Semaphore: DynamicRailSemaphore? = null
+
+			// Iterate through grid to find doA1 semaphore
+			for (x in 0 until grid.getCols()) {
+				for (y in 0 until grid.getRows()) {
+					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == "doA1") {
+						doA1Semaphore = cell
+						break
+					}
+				}
+				if (doA1Semaphore != null) break
+			}
+
+			assertThat(doA1Semaphore).isNotNull()
+
+			// Assert BEFORE - initial signal is STOP
+			assertThat(doA1Semaphore!!.signal).isEqualTo(Signal.STOP)
+			assertThat(doA1Semaphore.signal.isAllowing()).isFalse()
+
+			// Act - reserve path from semaphore to inOut2
+			val result = service.reservePath("train1", doA1Semaphore, inOut2)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Assert AFTER - signal was configured to allow movement
+			assertThat(doA1Semaphore.signal).isNotEqualTo(Signal.STOP)
+			assertThat(doA1Semaphore.signal.isAllowing()).isTrue()
 		}
 
 		@Test
 		fun `reservePathToAnyNextSemaphore identifies InOut output semaphore`() {
-			// This test verifies that the method attempts to configure the InOut's
-			// output semaphore, even though the race condition prevents it from
-			// working in actual simulation.
+			// Arrange - Access InOut's output semaphore directly
+			// Cast inOut1 (DynamicPathSeparator) to DynamicInOut for type-safe access
+			val dynamicInOut = inOut1 as DynamicInOut
+			val outSemaphore = dynamicInOut.outSemaphore
+
+			// Assert BEFORE - InOut output semaphore is constant FREE
+			// Note: InOut output semaphores are created as ConstantSemaphore with Signal.FREE
+			// and never change (no-op setter). This is by design - exit points always allow trains out.
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+			assertThat(outSemaphore.signal.isAllowing()).isTrue()
 
 			// Act - reserve path from InOut
 			val next = navigator.getNextTrackSection(inOut1, null)
@@ -581,16 +620,14 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			val result = service.reservePathToAnyNextSemaphore("train1", inOut1, next!!)
 
-			// Assert - reservation succeeds
+			// Assert - reservation succeeded
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			// NOTE: We cannot directly assert the signal value due to:
-			// 1. InOut's output semaphore is internal and not easily accessible
-			// 2. Race condition at t=0.0 may cause non-deterministic signal state
-			// 3. Signal configuration happens asynchronously
+			// Assert AFTER - InOut output semaphore remains constant FREE (ConstantSemaphore)
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+			assertThat(outSemaphore.signal.isAllowing()).isTrue()
 
-			// Instead, verify that the path was reserved successfully,
-			// which indirectly confirms the signal configuration was attempted
+			// Verify blocks were reserved
 			val blocks = service.getReservedBlocks("train1")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
@@ -598,18 +635,41 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `releasePath allows subsequent signal reconfiguration`() {
-			// Arrange - reserve and release
+			// Arrange - Access InOut's output semaphore
+			val dynamicInOut = inOut1 as DynamicInOut
+			val outSemaphore = dynamicInOut.outSemaphore
+
+			// Assert BEFORE - InOut output semaphore is constant FREE
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+
+			// Reserve path for train1
 			val next = navigator.getNextTrackSection(inOut1, null)
 			assertThat(next).isNotNull()
 
 			service.reservePathToAnyNextSemaphore("train1", inOut1, next!!)
+
+			// Assert AFTER FIRST RESERVATION - semaphore remains constant FREE
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+			assertThat(outSemaphore.signal.isAllowing()).isTrue()
+
+			// Act - release path
 			service.releasePath("train1")
 
-			// Act - reserve again with different train
+			// Assert AFTER RELEASE - semaphore still constant FREE (ConstantSemaphore)
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+			assertThat(outSemaphore.signal.isAllowing()).isTrue()
+
+			// Reserve again with different train
 			val result = service.reservePathToAnyNextSemaphore("train2", inOut1, next)
 
-			// Assert - second reservation succeeds (signal reconfigured)
+			// Assert - second reservation succeeded
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Assert AFTER SECOND RESERVATION - semaphore still constant FREE
+			assertThat(outSemaphore.signal).isEqualTo(Signal.FREE)
+			assertThat(outSemaphore.signal.isAllowing()).isTrue()
+
+			// Verify blocks were reserved for train2
 			val blocks = service.getReservedBlocks("train2")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
