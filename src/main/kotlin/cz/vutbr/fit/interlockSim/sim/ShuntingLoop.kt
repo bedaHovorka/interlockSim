@@ -21,7 +21,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
@@ -120,20 +119,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	) : Generator(context) {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.offer(train)
-		}
-
-		override fun iteration() {
-			// Stop generating trains when approaching endTime
-			if (time() >= endTime) {
-				logger.info {
-					"${time()} GENERATOR_SHUTDOWN: Stopping new train generation at endTime, " +
-						"unapproved queue size: ${unapprowedTrains.size}, " +
-						"approved trains: ${approwedTrains.size}"
-				}
-				terminate()
-				return
-			}
-			super.iteration()
 		}
 	}
 
@@ -247,152 +232,64 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 	}
 
-	/**
-	 * Find potential target separators from a given source semaphore.
-	 *
-	 * Returns list of separators that could be valid path destinations.
-	 */
-	private fun findPotentialTargets(from: DynamicRailSemaphore): List<DynamicPathSeparator> {
-		val targets = mutableListOf<DynamicPathSeparator>()
-
-		// Add all InOut elements as potential targets
-		val inouts = env.getInOuts()
-		for (dynamicInOut in inouts) {
-			if (dynamicInOut != from) {
-				targets.add(dynamicInOut)
-			}
-		}
-
-		// Add relevant semaphores based on known topology
-		// For vyhybna.xml: zA, doA1, doA2, doB1, doB2, zB
-		val context = env as SimulationContext
-		val grid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
-		for (x in 0 until 50) {
-			for (y in 0 until 20) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore && cell != from) {
-					targets.add(cell)
-				}
-			}
-		}
-
-		return targets
-	}
-
-	/**
-	 * Get display name for a target separator (for logging).
-	 */
-	private fun getTargetName(target: DynamicPathSeparator): String = when (target) {
-		is DynamicRailSemaphore -> target.name ?: "unnamed_semaphore"
-		is DynamicInOut -> target.staticRef.getName() ?: "unnamed_inout"
-		else -> target.toString()
-	}
-
 	private fun checkOneEnd(
 		block: DynamicTrackBlock,
 		to: DynamicRailSemaphore
 	): Boolean {
-		// Extract trainId from block for ownership tracking
-		val trainId = block.trainName
-
-		logger.debug {
-			"checkOneEnd: block=${block.name}, state=${block.getState()}, trainId=$trainId, to=${to.name}"
-		}
-
-		// je v bloku vlak?
 		if (block.getState() == TrackFacility.State.FREE) {
 			return false
 		}
+
 		if (block.getState() == TrackFacility.State.OCCUPIED) {
 			val occupant = requireSimulationNotNull(block.getTrackOccupant())
 			if (occupant.nextSemaphore() != to) {
 				return false
 			}
-			return tryReservePathFrom(to, block, occupant.name)
-		} else if (block.getState() == TrackFacility.State.RESERVED) {
-			// Use PathReservationService API to check if train has blocks reserved
-			// This is the proper API for checking train ownership (dispatcher/interlocking perspective)
-			if (trainId != null) {
-				val reservedBlocks = pathReservationService.getReservedBlocks(trainId)
-				val hasThisBlock = reservedBlocks.contains(block)
-				if (hasThisBlock) {
-					// Train has this block reserved, try to reserve forward path from semaphore
-					logger.debug { "Train $trainId owns block ${block.name}, reserving forward from ${to.name}" }
-					return tryReservePathFrom(to, block, trainId)
+
+			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
+			return tryReservePathFrom(to, occupant.name)
+		}
+
+		if (block.getState() == TrackFacility.State.RESERVED) {
+			// Check if path is already set up through this semaphore
+			val otherEnd = block.getSecondEnd(to)
+			if (otherEnd != null && block.isSetUpPath(env.toDynamic(otherEnd))) {
+				logger.debug { "Path already set up through ${to.name}, attempting extension" }
+				val trainName = block.trainName
+				if (trainName != null) {
+					return tryReservePathFrom(to, trainName)
 				}
-			} else {
-				logger.warn { "Block ${block.name} RESERVED but trainId is null - cannot determine ownership" }
 			}
 		}
+
 		return false
 	}
 
 	/**
 	 * Try to reserve a path from the given semaphore using PathReservationService.
 	 *
-	 * Issue #296: Uses PathReservationService for atomic path reservation with train ownership.
-	 *
-	 * Algorithm:
-	 * 1. Find all potential target separators (InOuts and other semaphores)
-	 * 2. For each target, try to reserve a free path using PathReservationService
-	 * 3. PathReservationService handles:
-	 *    - Finding all topological paths (via TopologyNavigator)
-	 *    - Filtering by FREE blocks
-	 *    - Atomic reservation with trainId
-	 *    - Rollback on partial failure
-	 * 4. Return true if any reservation succeeds
+	 * Uses the new reservePathToAny() method which handles all target discovery
+	 * and path reservation internally, eliminating manual iteration.
 	 *
 	 * @param sem The semaphore to reserve paths from
-	 * @param fromBlock The block the train is coming FROM (provides direction context for oriented semaphores)
-	 * @param trainName
+	 * @param trainName The train requesting the reservation
 	 */
 	private fun tryReservePathFrom(
 		sem: DynamicRailSemaphore,
-		fromBlock: DynamicTrackBlock,
 		trainName: String
 	): Boolean {
-		// TopologyNavigator will explore all possible directions when the semaphore has
-		// multiple possible paths (Issue #296: catches IllegalStateException and explores all joins)
-		// This handles oriented semaphores with ambiguous direction by trying all possibilities
+		val result = pathReservationService.reservePathToAny(trainName, sem)
 
-		// Find all potential target separators
-		val targets = findPotentialTargets(sem)
-
-		for (target in targets) {
-
-			val result = pathReservationService.reservePath(trainName, sem, target)
-
-			when (result) {
-				is PathReservationService.ReservationResult.Success -> {
-					logger.info {
-						"PATH_RESERVED: ${sem.name} -> ${getTargetName(target)} " +
-							"for trainId=${trainName}, ${result.reservedBlocks.size} blocks"
-					}
-
-					// Configure semaphore signal after successful reservation
-					if (result.reservedBlocks.isNotEmpty()) {
-						env.configureSemaphoreSignal(sem, result.reservedBlocks.first(), sem.allowedSpeed())
-					}
-
-					return true
-				}
-				is PathReservationService.ReservationResult.AllPathsBlocked -> {
-					// Continue to next target
-				}
-				is PathReservationService.ReservationResult.NoPathExists -> {
-					// Continue to next target
-				}
-				is PathReservationService.ReservationResult.Conflict -> {
-					logger.warn {
-						"Reservation conflict at block ${result.conflictingBlock.name}, " +
-							"owned by ${result.existingOwner}"
-					}
-					// Continue to next target
-				}
+		return when (result) {
+			is PathReservationService.ReservationResult.Success -> {
+				logger.debug { "Reserved path from ${sem.name} for $trainName" }
+				true
+			}
+			else -> {
+				logger.debug { "No path available from ${sem.name} for $trainName" }
+				false
 			}
 		}
-
-		return false
 	}
 
 	private fun approveTrains() {

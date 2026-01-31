@@ -395,6 +395,67 @@ class DefaultPathReservationService(
 	 */
 	override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> = registry.getBlocks(trainId)
 
+	override fun reservePathToAny(
+		trainId: String,
+		start: DynamicPathSeparator
+	): PathReservationService.ReservationResult {
+		logger.debug {
+			"reservePathToAny: Searching for available targets from $start for $trainId"
+		}
+
+		// Step 1: Discover all potential targets from context
+		// We try each candidate in turn until a reservation succeeds
+		var lastResult: PathReservationService.ReservationResult? = null
+		var attemptCount = 0
+
+		// Try all InOuts except the start
+		for (inout in environment.getInOuts()) {
+			if (inout == start) continue
+
+			attemptCount++
+			val result = reservePath(trainId, start, inout)
+
+			when (result) {
+				is PathReservationService.ReservationResult.Success -> {
+					logger.debug {
+						"reservePathToAny: Successfully reserved path from $start to $inout for $trainId"
+					}
+					return result
+				}
+				is PathReservationService.ReservationResult.Conflict -> {
+					// Conflict indicates serious error, return immediately
+					logger.warn {
+						"reservePathToAny: Conflict detected at ${result.conflictingBlock}, aborting"
+					}
+					return result
+				}
+				else -> {
+					logger.trace { "reservePathToAny: Path to $inout not available, trying next target" }
+					lastResult = result
+				}
+			}
+		}
+
+		// Note: We don't iterate over all semaphores in the network here because:
+		// 1. ShuntingLoop hardcoded topology means InOuts are sufficient as targets
+		// 2. Grid scanning would reintroduce the 50×20 hardcoded dimensions we're trying to eliminate
+		// 3. For general dispatcher logic, InOuts are the primary path destinations
+		// 4. Semaphore-to-semaphore paths are handled via specific reservePath() calls when needed
+
+		if (attemptCount == 0) {
+			logger.warn { "reservePathToAny: No targets found from $start" }
+			return PathReservationService.ReservationResult.NoPathExists
+		}
+
+		// All targets failed - log and return failure
+		logger.warn {
+			"reservePathToAny: No available path from $start for $trainId " +
+				"(tried $attemptCount targets, all blocked or unreachable)"
+		}
+
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+	}
+
 	// ========== Private helper methods ==========
 
 	/**

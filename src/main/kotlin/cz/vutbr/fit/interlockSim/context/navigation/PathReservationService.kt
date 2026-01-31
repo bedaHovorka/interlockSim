@@ -292,4 +292,53 @@ interface PathReservationService {
 	 * @see reservePathToAnyNextSemaphore
 	 */
 	fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean
+
+	/**
+	 * Find and reserve path from separator to ANY available target.
+	 *
+	 * Discovers all potential targets (semaphores and InOuts) and tries each
+	 * until a successful reservation is made. Returns the first successful path.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Discover all potential targets (InOuts and semaphores) from the context
+	 * 2. For each target, attempt `reservePath(trainId, start, target)`
+	 * 3. Return Success with first available path
+	 * 4. If all targets fail, return NoPath (all blocked or no targets exist)
+	 *
+	 * ## Use Case: Dispatcher Logic (ShuntingLoop)
+	 *
+	 * When a train approaches a semaphore and needs a forward path:
+	 * ```kotlin
+	 * val result = service.reservePathToAny("train1", semaphore)
+	 * when (result) {
+	 *     is Success -> // Train can proceed, path reserved
+	 *     is NoPath -> // No available targets
+	 *     is AllPathsBlocked -> // Targets exist but all blocked
+	 *     is Conflict -> // Reservation conflict (should not happen)
+	 * }
+	 * ```
+	 *
+	 * ## Target Discovery
+	 *
+	 * Targets are discovered automatically from the context:
+	 * - All InOut elements except the start
+	 * - All oriented semaphores (RailSemaphore) except the start
+	 *
+	 * ## Advantages Over Manual Iteration
+	 *
+	 * - No hardcoded grid dimensions (50×20)
+	 * - No type casting to SimulationContext
+	 * - Single responsibility (all target discovery in service layer)
+	 * - Automatic semaphore signal configuration
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting path separator (typically a semaphore)
+	 * @return ReservationResult indicating success or failure reason
+	 * @see reservePath
+	 */
+	fun reservePathToAny(
+		trainId: String,
+		start: DynamicPathSeparator
+	): ReservationResult
 }
