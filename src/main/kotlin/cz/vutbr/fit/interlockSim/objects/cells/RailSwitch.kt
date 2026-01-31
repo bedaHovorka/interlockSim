@@ -133,18 +133,26 @@ class RailSwitch : NodeCell {
 
 	/**
 	 * Constructor accepting optional name, spatialType, and type.
-	 * Used by XML parser when name attribute is present in vyhybna.xml.
+	 * Used by XML parser when name attribute is present.
 	 *
-	 * @param name Optional name for the switch (e.g., "vA", "vB")
+	 * Example XML:
+	 * ```xml
+	 * <RailSwitch X="10" Y="15" SpatialType="HORIZONTAL"
+	 *             Type="SIMPLE_LEFT_TRUE" name="switch_junction_A"/>
+	 * ```
+	 *
+	 * @param name Optional name for the switch (alphanumeric, -, _, max 50 chars).
+	 *             Null or empty = auto-generated name.
 	 * @param spatialType Spatial type (HORIZONTAL/VERTICAL)
 	 * @param type Switch type (SIMPLE_LEFT_FALSE, SIMPLE_RIGHT_TRUE, etc.)
+	 * @since 2026-01 (Issue #296 Phase 4, Issue #306)
 	 */
 	constructor(
 		name: String?,
 		spatialType: Cell.SpatialType,
 		type: Type
 	) : this(spatialType, type, COMMON_MAIN_SPEED.toDouble(), COMMON_BRANCH_SPEED.toDouble()) {
-		if (name != null) {
+		if (name != null && name.isNotEmpty()) {
 			setName(name)
 		}
 	}

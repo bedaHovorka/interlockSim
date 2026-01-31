@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="50" Y="50" >
+  <InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="entry_1" />
+  <RailSemaphore X="15" Y="10" SpatialType="HORIZONTAL" orientation="true" name="signal-north-001" />
+  <RailSwitch X="20" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="switch_junction_A" />
+  <InOut X="40" Y="40" SpatialType="HORIZONTAL" orientation="false" name="exit-track-2" />
+</net>

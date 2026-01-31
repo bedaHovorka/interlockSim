@@ -28,18 +28,26 @@ open class RailSemaphore : OrientedNodeCell {
 
 	/**
 	 * Constructor accepting optional name, orientation, and spatialType.
-	 * Used by XML parser when name attribute is present in vyhybna.xml.
+	 * Used by XML parser when name attribute is present.
 	 *
-	 * @param name Optional name for the semaphore (e.g., "zA", "doA1")
+	 * Example XML:
+	 * ```xml
+	 * <RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL"
+	 *                 orientation="true" name="signal_north_entry"/>
+	 * ```
+	 *
+	 * @param name Optional name for the semaphore (alphanumeric, -, _, max 50 chars).
+	 *             Null or empty = auto-generated name.
 	 * @param orientation Semaphore orientation (true/false)
 	 * @param spatialType Spatial type (HORIZONTAL/VERTICAL)
+	 * @since 2026-01 (Issue #296 Phase 4, Issue #306)
 	 */
 	constructor(
 		name: String?,
 		orientation: Boolean,
 		spatialType: Cell.SpatialType
 	) : super(orientation, spatialType) {
-		if (name != null) {
+		if (name != null && name.isNotEmpty()) {
 			setName(name)
 		}
 	}

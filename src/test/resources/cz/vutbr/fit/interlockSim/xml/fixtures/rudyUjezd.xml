@@ -6,16 +6,16 @@
   <RailSwitch X="35" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" />
   <RailSwitch X="8" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
   <RailSemaphore X="36" Y="32" SpatialType="HORIZONTAL" orientation="true" />
-  <InOut X="37" Y="32" SpatialType="HORIZONTAL" orientation="true" name="" />
+  <InOut X="37" Y="32" SpatialType="HORIZONTAL" orientation="true" name="east_exit_2" />
   <RailSwitch X="9" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" />
   <RailSemaphore X="11" Y="31" SpatialType="HORIZONTAL" orientation="true" />
   <RailSemaphore X="31" Y="31" SpatialType="HORIZONTAL" orientation="false" />
   <RailSemaphore X="11" Y="30" SpatialType="HORIZONTAL" orientation="true" />
-  <InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="" />
+  <InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="west_entry_1" />
   <RailSemaphore X="6" Y="31" SpatialType="HORIZONTAL" orientation="false" />
   <RailSwitch X="7" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
   <RailSemaphore X="31" Y="30" SpatialType="HORIZONTAL" orientation="false" />
-  <InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="" />
+  <InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="west_entry_2" />
   <RailSemaphore X="6" Y="32" SpatialType="HORIZONTAL" orientation="false" />
   <RailSwitch X="7" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" />
   <RailSwitch X="35" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
@@ -24,7 +24,7 @@
   <RailSwitch X="33" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" />
   <RailSwitch X="9" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
   <RailSemaphore X="36" Y="31" SpatialType="HORIZONTAL" orientation="true" />
-  <InOut X="37" Y="31" SpatialType="HORIZONTAL" orientation="true" name="" />
+  <InOut X="37" Y="31" SpatialType="HORIZONTAL" orientation="true" name="east_exit_1" />
   <RailSemaphore X="11" Y="32" SpatialType="HORIZONTAL" orientation="true" />
   <RailSemaphore X="11" Y="33" SpatialType="HORIZONTAL" orientation="true" />
   <RailSemaphore X="31" Y="33" SpatialType="HORIZONTAL" orientation="false" />
