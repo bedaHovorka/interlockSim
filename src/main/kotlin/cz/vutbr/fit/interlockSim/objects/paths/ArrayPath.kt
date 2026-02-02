@@ -111,10 +111,28 @@ class ArrayPath(
 		}
 
 		val index = deque.indexOf(current)
-		if (index == -1 || index + 1 >= deque.size) return null
+		if (index == -1) return null
 
-		val next = deque[index + 1]
-		return if (next is TrackSection) next else null
+		// In this codebase, paths are stored as [PathSeparator, TrackSection, PathSeparator, TrackSection, ...]
+		// After a TrackSection there is always a PathSeparator, then the next TrackSection.
+		// So the "next" TrackSection is at index + 2, not index + 1.
+		val separatorIndex = index + 1
+		val nextIndex = index + 2
+
+		if (nextIndex >= deque.size) {
+			// No further elements (we're at the end of the path)
+			return null
+		}
+
+		val separator = deque[separatorIndex]
+		val candidate = deque[nextIndex]
+
+		return if (separator is PathSeparator && candidate is TrackSection) {
+			candidate
+		} else {
+			// Path structure not as expected; fail gracefully
+			null
+		}
 	}
 
 	// Reverse iteration support

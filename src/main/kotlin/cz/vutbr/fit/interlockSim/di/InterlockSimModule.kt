@@ -229,8 +229,7 @@ val navigationModule: Module =
 			scoped<PathInfoBuilder> {
 				val context = getSource<DefaultSimulationContext>()
 					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				val navigator: TopologyNavigator = get()
-				PathInfoBuilder(context, navigator)
+				PathInfoBuilder(context)
 			}
 
 			// PathReservationService: scoped to this simulation context

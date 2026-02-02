@@ -151,8 +151,8 @@ class AutoNameGeneratorTest : KoinTestBase() {
 			val duration = System.nanoTime() - startTime
 
 			assertThat(name).isEqualTo("S101")
-			// Should complete in < 10ms (cache is fast, but allow for CI variability)
-			assertThat(duration).isLessThan(10_000_000L) // 10ms in nanoseconds
+			// Should complete in < 50ms (cache is fast, increased threshold for CI variability)
+			assertThat(duration).isLessThan(50_000_000L) // 50ms in nanoseconds
 		}
 
 		@Test

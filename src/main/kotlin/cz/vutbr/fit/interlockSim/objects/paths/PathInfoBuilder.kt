@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -65,7 +64,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 4. Use getSecondEnd() to navigate through blocks
  *
  * @property context Simulation context (for validation and logging)
- * @property topologyNavigator Topology navigator (for path traversal helpers)
  *
  * @see PathInfo
  * @see PathReservationService
@@ -73,8 +71,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/296">Issue #296</a>
  */
 class PathInfoBuilder(
-	private val context: SimulationContext,
-	private val topologyNavigator: TopologyNavigator
+	private val context: SimulationContext
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}

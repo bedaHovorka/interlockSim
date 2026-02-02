@@ -19,9 +19,6 @@ import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
@@ -51,9 +48,8 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class InitializationTests {
 		@Test
 		fun constructor_validInOut_succeeds() {
-			// Create mock context with a single InOut
-			val context = createMockSimulationContext()
-			val dynInOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			// Create context with a connected InOut
+			val (context, dynInOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, dynInOut)
 
@@ -62,7 +58,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_nullContext_throwsNullPointerException() {
-			val dynInOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (_, dynInOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val nullContext: SimulationContext? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -73,7 +69,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_nullInOut_throwsNullPointerException() {
-			val context = createMockSimulationContext()
+			val (context, _) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val nullInOut: DynamicInOut? = null
 
 			@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -84,8 +80,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_entryInOut_succeeds() {
-			val context = createMockSimulationContext()
-			val entryInOut = createTestDynamicInOut("IN", false, SpatialType.HORIZONTAL)
+			val (context, entryInOut) = createTestContextWithInOut("IN", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, entryInOut)
 
@@ -94,8 +89,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_exitInOut_succeeds() {
-			val context = createMockSimulationContext()
-			val exitInOut = createTestDynamicInOut("OUT", true, SpatialType.HORIZONTAL)
+			val (context, exitInOut) = createTestContextWithInOut("OUT", true, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, exitInOut)
 
@@ -108,8 +102,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class QueueManagementTests {
 		@Test
 		fun getQueqe_afterConstruction_returnsNonNullQueue() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue = worker.getQueqe()
@@ -121,8 +114,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun getQueqe_afterConstruction_queueIsEmpty() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue = worker.getQueqe()
@@ -134,8 +126,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun getQueqe_calledMultipleTimes_returnsSameInstance() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val queue1 = worker.getQueqe()
@@ -152,8 +143,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class QueueStateTests {
 		@Test
 		fun queueEmpty_afterConstruction_returnsTrue() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			val isEmpty = worker.getQueqe().empty()
@@ -165,8 +155,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun queueEmpty_afterConstruction_isConsistent() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("A", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("A", false, SpatialType.HORIZONTAL)
 			val worker = InOutWorker(context, inOut)
 
 			// Verify queue is empty
@@ -184,8 +173,7 @@ class InOutWorkerTest : KoinTestBase() {
 	inner class InOutConfigurationTests {
 		@Test
 		fun constructor_horizontalInOut_succeeds() {
-			val context = createMockSimulationContext()
-			val horizontalInOut = createTestDynamicInOut("H", false, SpatialType.HORIZONTAL)
+			val (context, horizontalInOut) = createTestContextWithInOut("H", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, horizontalInOut)
 
@@ -194,8 +182,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_verticalInOut_succeeds() {
-			val context = createMockSimulationContext()
-			val verticalInOut = createTestDynamicInOut("V", false, SpatialType.VERTICAL)
+			val (context, verticalInOut) = createTestContextWithInOut("V", false, SpatialType.VERTICAL)
 
 			val worker = InOutWorker(context, verticalInOut)
 
@@ -204,8 +191,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_diagonal1InOut_succeeds() {
-			val context = createMockSimulationContext()
-			val diagonalInOut = createTestDynamicInOut("D1", false, SpatialType.DIAGONAL1)
+			val (context, diagonalInOut) = createTestContextWithInOut("D1", false, SpatialType.DIAGONAL1)
 
 			val worker = InOutWorker(context, diagonalInOut)
 
@@ -214,8 +200,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_diagonal2InOut_succeeds() {
-			val context = createMockSimulationContext()
-			val diagonalInOut = createTestDynamicInOut("D2", false, SpatialType.DIAGONAL2)
+			val (context, diagonalInOut) = createTestContextWithInOut("D2", false, SpatialType.DIAGONAL2)
 
 			val worker = InOutWorker(context, diagonalInOut)
 
@@ -224,8 +209,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_inOutWithLongName_succeeds() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("VERY_LONG_INOUT_NAME_FOR_TESTING", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
 
@@ -234,8 +218,7 @@ class InOutWorkerTest : KoinTestBase() {
 
 		@Test
 		fun constructor_inOutWithSingleCharName_succeeds() {
-			val context = createMockSimulationContext()
-			val inOut = createTestDynamicInOut("X", false, SpatialType.HORIZONTAL)
+			val (context, inOut) = createTestContextWithInOut("X", false, SpatialType.HORIZONTAL)
 
 			val worker = InOutWorker(context, inOut)
 
@@ -328,16 +311,28 @@ class InOutWorkerTest : KoinTestBase() {
 	}
 
 	/**
-	 * Helper function to create a DynamicInOut for testing.
+	 * Helper function to create a test context with a connected DynamicInOut.
+	 *
+	 * This creates a minimal connected network with:
+	 * - InOut at one position
+	 * - Semaphore at another position
+	 * - Track connection between them (direction depends on entry vs exit)
+	 *
+	 * Returns a pair of (context, inOut) for testing.
 	 */
-	private fun createTestDynamicInOut(
+	private fun createTestContextWithInOut(
 		name: String,
 		orientation: Boolean,
 		spatialType: SpatialType
-	): DynamicInOut {
-		val staticInOut = InOut(name, orientation, spatialType)
-		val inSemaphore = createDynamicInstance(RailSemaphore(true, spatialType))
-		val outSemaphore = createDynamicInstance(RailSemaphore(false, spatialType))
-		return DynamicInOut(staticInOut, inSemaphore, outSemaphore)
+	): Pair<SimulationContext, DynamicInOut> {
+		// Create a context with a connected InOut
+		val context = cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
+			inOutName = name,
+			isEntry = !orientation  // orientation is inverted: false = entry, true = exit
+		)
+
+		// Return the context and the first InOut
+		val inOut = context.getInOuts().first()
+		return Pair(context, inOut)
 	}
 }

@@ -225,14 +225,29 @@ class Train :
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
 				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 
-				val path: Path? = trainNavService.findReservedPathForTrain(name, separator) // znovu najit
-				fireStart(semaphore, path)
+				// Re-fetch path after signal becomes allowing
+				// The signal should only become allowing when a path is reserved
+				val resumePath: Path? = trainNavService.findReservedPathForTrain(name, separator)
+				requireSimulationNotNull(resumePath) {
+					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
+						"This indicates a logic error - signal should only allow when path is reserved."
+				}
+				fireStart(semaphore, resumePath)
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
+				// Validate path exists before starting
+				requireSimulationNotNull(path) {
+					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
+						"This indicates a logic error - signal should only allow when path is reserved."
+				}
 				fireStart(semaphore, path)
 			} else {
 				// Already moving, accelerate toward next semaphore
 				logger.debug { "Train $number accelerating toward next semaphore" }
+				// Validate path exists before accelerating
+				requireSimulationNotNull(path) {
+					"Train $number at semaphore ${semaphore.name}: Cannot accelerate without reserved path."
+				}
 				accelerateToSignal(semaphore, path)
 			}
 			hold(1.0)
