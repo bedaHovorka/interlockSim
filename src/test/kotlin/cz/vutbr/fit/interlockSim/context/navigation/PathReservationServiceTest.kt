@@ -187,8 +187,19 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Arrange - manually reserve one block in the middle of the path
 			val allPaths = navigator.findAllTopologicalPaths(inOut1, inOut2)
 			assertThat(allPaths).isNotNull()
-			assertThat(allPaths.size).isEqualTo(1)
+			// After Issue #291 fix: vyhybna.xml correctly discovers 2 paths (k1 and k2)
+			assertThat(allPaths.size).isEqualTo(2)
 
+			// Verify the two paths are different (different sets of blocks)
+			// Path 0: through MAIN branch (doA1 → doB1)
+			// Path 1: through BRANCH branch (doA2 → doB2)
+			val path0Blocks = allPaths[0].mapNotNull { it.getTrackBlock() }.toSet()
+			val path1Blocks = allPaths[1].mapNotNull { it.getTrackBlock() }.toSet()
+
+			// The two paths should have some different blocks (not identical)
+			assertThat(path0Blocks).isNotEqualTo(path1Blocks)
+
+			// Use first path for rollback test
 			val path = allPaths.first()
 			val blocks =
 				path.map { section ->

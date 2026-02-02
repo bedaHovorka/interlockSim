@@ -188,7 +188,6 @@ class DefaultTopologyNavigator(
 	): List<List<TrackSection>> {
 		val paths = mutableListOf<List<TrackSection>>()
 		val queue = ArrayDeque<PathNode>()
-		val visited = mutableSetOf<PathSeparator>()
 
 		// Initialize BFS with start separator
 		queue.add(PathNode(start, null, null))
@@ -202,13 +201,11 @@ class DefaultTopologyNavigator(
 				continue
 			}
 
-			// Skip if already visited (cycle detection)
-			// Note: visited set uses PathSeparator's equals(), which handles Dynamic wrappers correctly
-			if (separator in visited) {
-				logger.trace { "findAllTopologicalPaths: skipping visited separator $separator" }
+			// Cycle detection: Check if separator appears in this path's ancestor chain
+			// This allows reaching the same separator via different paths (needed for finding ALL paths)
+			if (isInAncestorChain(separator, node.parent)) {
 				continue
 			}
-			visited.add(separator)
 
 			// Check if we reached the target
 			// Note: PathSeparator.equals() handles comparison between static and dynamic instances
@@ -345,7 +342,16 @@ class DefaultTopologyNavigator(
 				}
 				else -> {
 					// Non-oriented (switches) may have multiple branches
-					staticNodeCell.possibleFollowers(segment ?: return emptyList())
+					// For topology navigation, return ALL possible exit segments regardless of switch configuration
+					// (possibleFollowers() would only return configuration-dependent paths)
+					val allJoins = staticNodeCell.joins()
+					if (segment != null) {
+						// Exclude the incoming segment to avoid going backwards
+						allJoins - segment
+					} else {
+						// No incoming segment (starting point), explore all directions
+						allJoins
+					}
 				}
 			}
 
@@ -389,6 +395,35 @@ class DefaultTopologyNavigator(
 		val static2 = CellUtilities.assertNodeCell(sep2)
 		return static1 === static2
 	}
+	/**
+	 * Check if a separator appears in the ancestor chain of a node (cycle detection).
+	 *
+	 * This method traverses the parent chain to detect if we're revisiting a separator
+	 * within the SAME path (which would create a cycle). This is different from the
+	 * previous global visited set, which prevented visiting a separator via ANY path.
+	 *
+	 * For finding ALL topological paths, we need to allow reaching the same separator
+	 * via different paths (e.g., switch with MAIN and BRANCH), but prevent cycles within
+	 * a single path.
+	 *
+	 * @param separator The separator to check for
+	 * @param parentNode The parent node to start checking from (may be null for root)
+	 * @return true if separator appears in the ancestor chain, false otherwise
+	 */
+	private fun isInAncestorChain(
+		separator: PathSeparator,
+		parentNode: PathNode?
+	): Boolean {
+		var current = parentNode
+		while (current != null) {
+			if (isSameSeparator(separator, current.separator)) {
+				return true
+			}
+			current = current.parent
+		}
+		return false
+	}
+
 
 	/**
 	 * Build path by following parent pointers from target node back to start.
