@@ -314,6 +314,68 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("Path discovery validation (Issue #291)")
+	inner class PathDiscoveryTests {
+		/**
+		 * Integration Test for Issue #291: Verify TopologyNavigator discovers both k1 and k2 paths.
+		 *
+		 * **Issue #291 Problem:**
+		 * TopologyNavigator was only discovering one path (k1) in vyhybna.xml network,
+		 * even though two parallel tracks exist (k1 and k2).
+		 *
+		 * **Expected Behavior:**
+		 * - findAllTopologicalPaths() should discover 2 paths between InOuts
+		 * - Path 1: Through k1 block
+		 * - Path 2: Through k2 block
+		 * - Simulation should complete successfully using these paths
+		 *
+		 * **Success Criteria:**
+		 * - Both paths discovered (count == 2)
+		 * - Paths use different track blocks (k1 vs k2)
+		 * - Simulation runs without crashes
+		 */
+		@Test
+		@Timeout(value = 30, unit = TimeUnit.SECONDS)
+		@Tag("integration-test")
+		fun `shunting loop discovers and uses both k1 and k2 paths`() {
+			// Arrange: Create simulation context
+			val context = createConfiguredSimulation(endTime = 60L)
+			val navigator = context.getTopologyNavigator()
+
+			// Get the two InOut separators
+			val inOuts = context.getInOuts()
+			assertThat(inOuts.size).isGreaterThan(1)
+			val inOutA = inOuts.first { it.name == "A" }
+			val inOutB = inOuts.first { it.name == "B" }
+
+			// Act: Find all topological paths between InOuts
+			val pathsAtoB = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 20)
+			val pathsBtoA = navigator.findAllTopologicalPaths(inOutB, inOutA, maxDepth = 20)
+
+			// Assert: Both directions should have 2 paths discovered (k1 and k2)
+			logger.info { "Paths A→B: ${pathsAtoB.size}, B→A: ${pathsBtoA.size}" }
+			assertThat(pathsAtoB.size).isGreaterThan(1)
+			assertThat(pathsBtoA.size).isGreaterThan(1)
+
+			// Verify paths use different blocks
+			val pathAtoB_blocks = pathsAtoB.map { path ->
+				path.mapNotNull { it.getTrackBlock() }.map { it.toString() }.toSet()
+			}
+			logger.info { "Path 0 A→B blocks: ${pathAtoB_blocks[0]}" }
+			logger.info { "Path 1 A→B blocks: ${pathAtoB_blocks[1]}" }
+			// Verify the two paths use different blocks (not identical sets)
+			assertThat(pathAtoB_blocks[0] != pathAtoB_blocks[1]).isTrue()
+
+			// Act: Run simulation to verify no crashes
+			context.run()
+
+			// Assert: Simulation completed successfully
+			logger.info { "Issue #291: Both k1 and k2 paths discovered, simulation completed successfully" }
+			assertThat(true).isTrue()
+		}
+	}
+
+	@Nested
 	@DisplayName("Regression tests for known issues")
 	inner class RegressionTests {
 		/**

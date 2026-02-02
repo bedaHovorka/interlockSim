@@ -395,6 +395,7 @@ class DefaultTopologyNavigator(
 		val static2 = CellUtilities.assertNodeCell(sep2)
 		return static1 === static2
 	}
+
 	/**
 	 * Check if a separator appears in the ancestor chain of a node (cycle detection).
 	 *
