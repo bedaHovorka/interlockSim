@@ -25,25 +25,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Architecture
  *
- * This service wraps the existing `pathToNextSemaphore` logic with train ownership
- * validation. It ensures trains only navigate through blocks they have reserved.
+ * This service ensures trains only navigate through blocks they have reserved by
+ * following the PathInfo.reservedPath sequence instead of exploring topology.
  *
  * ## Dependencies
  *
  * - **SimulationContext**: Simulation environment for dynamic type conversion
- * - **PathReservationRegistry**: Provides block ownership information
- * - **TopologyNavigator**: Pure topology navigation (no state dependencies)
+ * - **PathReservationRegistry**: Provides block ownership information and PathInfo
+ * - **TopologyNavigator**: ⚠️ UNUSED (kept for backward compatibility)
  *
  * All dependencies are injected via constructor (Koin DI).
  *
- * ## Algorithm
+ * ## Algorithm (Issue #297 - Fixed Navigation)
  *
- * 1. Call `pathToNextSemaphore()` to get candidate path using topology navigation
- * 2. If no path exists topologically, return null immediately
- * 3. Extract all DynamicTrackBlocks from the path
+ * 1. Get PathInfo for trainId from registry (contains reservedPath)
+ * 2. Use PathInfo.reservedPath.getNext() to follow RESERVED blocks only
+ * 3. Extract all DynamicTrackBlocks from the built path
  * 4. For each block, validate ownership via registry
  * 5. If ANY block is not owned by trainId, return null (train must wait)
  * 6. If ALL blocks are owned by trainId, return complete path
+ *
+ * **Key Change:** No topology exploration! Trains follow reservedPath faithfully,
+ * eliminating wrong turns at switches (fixes Issue #291 root cause).
  *
  * ## Error Handling
  *
@@ -59,15 +62,17 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param context Simulation environment for dynamic type conversion
  * @param registry Registry for checking block ownership
- * @param topologyNavigator Pure topology navigator (no state dependencies)
+ * @param topologyNavigator ⚠️ UNUSED (kept for backward compatibility, may be removed)
  * @see TrainNavigationService
  * @since Issue #295 (Phase 3 of Issue #292)
  * @since Issue #296 Phase 5 (Removed indirect recursion)
+ * @since Issue #297 (Fixed navigation to use reserved blocks only)
  */
 class DefaultTrainNavigationService(
 	private val context: SimulationContext,
 	private val registry: PathReservationRegistry,
-	private val topologyNavigator: TopologyNavigator
+	@Suppress("UNUSED_PARAMETER")
+	private val topologyNavigator: TopologyNavigator  // Unused after Issue #297 fix
 ) : TrainNavigationService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -360,30 +365,29 @@ class DefaultTrainNavigationService(
 	}
 
 	/**
-	 * Build path to next semaphore using KNOWN direction.
+	 * Build path to next semaphore using reserved blocks from PathInfo.
 	 *
-	 * ## Algorithm (Based on Working Solution - Commit 18108fa)
+	 * ## Algorithm (Issue #297 - Fixed Navigation)
 	 *
-	 * This mirrors the working `pathToNextSemaphore()` method, but with the critical
-	 * difference that we START with a known `initialNext` direction instead of guessing!
+	 * Instead of exploring ALL topological possibilities at switches (which could
+	 * choose wrong branches), this method follows ONLY the reserved blocks in PathInfo.
 	 *
-	 * Working solution (line 863-876):
-	 * ```kotlin
-	 * var next: TrackSection? = nxt  // Parameter provides direction!
-	 * do {
-	 *     path.add(separator)
-	 *     if (next != null) {
-	 *         path.add(next)
-	 *         separator = next.getSecondEnd(separator)
-	 *         previous = next
-	 *         next = getNextTrackSection(separator, next)
-	 *     }
-	 * } while (next != null)
-	 * ```
+	 * Key change: Uses `pathInfo.reservedPath.getNext(current)` to get the next
+	 * TrackSection in the RESERVED path sequence, rather than exploring topology.
+	 *
+	 * Path structure: [Separator] → [TrackSection] → [Separator] → [TrackSection]
+	 * - When current == null: returns first TrackSection (index 1)
+	 * - When current != null: returns next TrackSection (index+2, skipping separator)
+	 *
+	 * ## Benefits
+	 *
+	 * - Trains follow reserved blocks faithfully (no wrong turns at switches)
+	 * - No topology exploration (eliminates Issue #291 workaround)
+	 * - Simpler logic (path structure defines navigation)
 	 *
 	 * @param startSeparator Starting position
 	 * @param initialNext Initial direction (from PathInfo!)
-	 * @param pathInfo Complete path metadata (for validation)
+	 * @param pathInfo Complete path metadata with reservedPath
 	 * @return Path to next semaphore, or null if path cannot be built
 	 */
 	private fun buildPathWithDirection(
@@ -395,26 +399,28 @@ class DefaultTrainNavigationService(
 			"buildPathWithDirection: building path from $startSeparator via $initialNext"
 		}
 
+		val reservedPath = pathInfo.reservedPath
 		var separator = startSeparator
 		var previous: TrackSection? = null
-		var next: TrackSection? = initialNext
+		var current: TrackSection? = initialNext
 		val path = ArrayPath(context)
 
 		do {
 			path.add(separator)
-			if (next != null) {
-				path.add(next)
-				val staticResult = next.getSecondEnd(separator)
+			if (current != null) {
+				path.add(current)
+				val staticResult = current.getSecondEnd(separator)
 				separator = context.toDynamic(staticResult)
-				previous = next
-				next = topologyNavigator.getNextTrackSection(separator, next)
+				previous = current
+				// NEW: Use PathInfo.reservedPath instead of topology exploration
+				current = reservedPath.getNext(current)
 			} else {
 				break
 			}
 
 			// Check if we've reached an oriented semaphore
 			if (separator is OrientedPathSeparator) {
-				if (context.isSeparatorInDirection(separator, next, previous)) {
+				if (context.isSeparatorInDirection(separator, current, previous)) {
 					path.add(separator)
 					logger.debug {
 						"buildPathWithDirection: found complete path with length ${path.length()}"
@@ -422,7 +428,7 @@ class DefaultTrainNavigationService(
 					return path
 				}
 			}
-		} while (next != null)
+		} while (current != null)
 
 		logger.debug { "buildPathWithDirection: no path found (no oriented semaphore reached)" }
 		return null
