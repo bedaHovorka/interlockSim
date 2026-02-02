@@ -144,6 +144,10 @@ class DefaultPathReservationService(
 						}
 					}
 				}
+				// FIX (Issue #296): Register PathInfo for already-owned blocks
+				val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
+				registry.registerPathInfo(trainId, pathInfo)
+
 				return PathReservationService.ReservationResult.Success(blocks)
 			}
 
