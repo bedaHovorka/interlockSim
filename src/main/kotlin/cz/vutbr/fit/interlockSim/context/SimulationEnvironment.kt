@@ -340,4 +340,50 @@ interface SimulationEnvironment {
 	 * @param types Report types to enable
 	 */
 	fun addReportTypes(vararg types: SimulationContext.ReportType)
+
+	/**
+	 * Release all path reservations for a train that has completed its journey.
+	 *
+	 * When a train reaches its destination and completes, it MUST release all
+	 * blocks it has reserved from the PathReservationRegistry. This ensures
+	 * subsequent trains can reserve those blocks without conflicts.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by [cz.vutbr.fit.interlockSim.sim.Train] when it completes its
+	 * journey and reaches the destination InOut from its timetable.
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * // In Train.actions() when journey complete:
+	 * env.releaseTrainReservations(trainId = name)
+	 * env.report("ends", this, ReportType.TRAIN_EVENTS)
+	 * ```
+	 *
+	 * @param trainId The train identifier to release reservations for
+	 */
+	fun releaseTrainReservations(trainId: String)
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from the registry if it is FREE (no occupant).
+	 * This is called automatically by the Train's Tail process after leaving a block,
+	 * ensuring blocks are cleaned up as soon as they become available.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by Train's Tail after leaving a block:
+	 * ```kotlin
+	 * if (current != null) {
+	 *     current.leave(this@Train)
+	 *     env.unregisterBlock(trainId = name, block = current)
+	 * }
+	 * ```
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 */
+	fun unregisterBlock(trainId: String, block: DynamicTrackBlock)
 }

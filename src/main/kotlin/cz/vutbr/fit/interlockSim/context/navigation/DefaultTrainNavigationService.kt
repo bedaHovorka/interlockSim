@@ -76,14 +76,14 @@ class DefaultTrainNavigationService(
 		trainId: String,
 		separator: PathSeparator
 	): Path? {
-		logger.debug {
+		logger.info {
 			"findReservedPathForTrain: train '$trainId' requesting path from $separator"
 		}
 
 		// Step 1: Get PathInfo for this train (Issue #295/#296 Phase 5)
 		val pathInfo = registry.getPathInfo(trainId)
 		if (pathInfo == null) {
-			logger.debug {
+			logger.info {
 				"findReservedPathForTrain: no PathInfo registered for train '$trainId'"
 			}
 			return null
@@ -92,9 +92,13 @@ class DefaultTrainNavigationService(
 		// Step 2: Determine next track section from PathInfo
 		val dynamicSeparator = context.toDynamic(separator)
 		val nextTrackSection = determineNextFromPathInfo(dynamicSeparator, pathInfo)
+
+		// If separator not in PathInfo, return null (train should wait for proper reservation)
+		// Issue #296 Phase 8: Removed fallback mechanism - it returned wrong-direction blocks
 		if (nextTrackSection == null) {
-			logger.debug {
-				"findReservedPathForTrain: cannot determine next track section from PathInfo for $separator"
+			logger.info {
+				"findReservedPathForTrain: separator $separator not in PathInfo, " +
+					"returning null (train should wait for new path reservation)"
 			}
 			return null
 		}
@@ -249,7 +253,7 @@ class DefaultTrainNavigationService(
 						return null
 					}
 				} else {
-					logger.debug {
+					logger.info {
 						"determineNextFromPathInfo: separator is last element in path (end of route)"
 					}
 					return null

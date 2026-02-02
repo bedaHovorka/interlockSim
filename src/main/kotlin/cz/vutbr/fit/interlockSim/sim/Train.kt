@@ -102,9 +102,26 @@ class Train :
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
+				// Check if we've reached the destination InOut BEFORE querying for path
+				if (where is DynamicInOut && current != null) {
+					// We're at an InOut and we've already traveled through at least one block
+					// This is our destination - exit the loop
+					break
+				}
 
 				val path = trainNavService.findReservedPathForTrain(name, where)
 				next = path?.getNext(current)
+
+				// Path transition optimization: if current is not in this path, try with null
+				// This handles the case where we're transitioning from one path segment to another
+				if (next == null && path != null && current != null) {
+					next = path.getNext(null)
+					logger.info {
+						"${time()} TRAIN PATH TRANSITION: $name at $where, starting new path segment, " +
+							"next=$next"
+					}
+				}
+
 				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					env.stop()

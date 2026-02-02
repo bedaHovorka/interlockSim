@@ -1192,6 +1192,37 @@ open class DefaultSimulationContext(
 	}
 
 	/**
+	 * Release all path reservations for a train that has completed its journey.
+	 *
+	 * Unregisters the train from the PathReservationRegistry, removing all block
+	 * reservations and PathInfo metadata. This cleanup is essential to prevent
+	 * conflicts when subsequent trains try to reserve the same blocks.
+	 *
+	 * @param trainId The train identifier to release reservations for
+	 */
+	override fun releaseTrainReservations(trainId: String) {
+		val pathService = getPathReservationService()
+		val releasedBlocks = pathService.unregister(trainId)
+		logger.debug {
+			"releaseTrainReservations: Released ${releasedBlocks.size} blocks for train '$trainId'"
+		}
+	}
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Delegates to PathReservationService to remove the block from the registry
+	 * if it is FREE (no occupant).
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 */
+	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock) {
+		val pathService = getPathReservationService()
+		pathService.unregisterBlock(trainId, block)
+	}
+
+	/**
 	 * Check if a report type is enabled
 	 */
 	override fun isReporting(type: ReportType): Boolean = allowedReportTypes.contains(type)

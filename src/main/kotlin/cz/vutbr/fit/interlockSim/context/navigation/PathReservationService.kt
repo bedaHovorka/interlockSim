@@ -341,4 +341,44 @@ interface PathReservationService {
 		trainId: String,
 		start: DynamicPathSeparator
 	): ReservationResult
+
+	/**
+	 * Unregister all block reservations for a train.
+	 *
+	 * Removes all blocks owned by the specified train from the registry,
+	 * freeing them for subsequent trains. This is called when a train
+	 * completes its journey and reaches its destination.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by train cleanup when journey completes:
+	 * ```kotlin
+	 * pathService.unregister("train1")
+	 * ```
+	 *
+	 * @param trainId The train identifier to unregister
+	 * @return List of blocks that were released
+	 */
+	fun unregister(trainId: String): List<DynamicTrackBlock>
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from registry mappings if it is FREE (no occupant).
+	 * This is called automatically when a train's Tail leaves a block, ensuring
+	 * blocks are cleaned up as soon as they become available for subsequent trains.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by Train's Tail process after calling block.leave():
+	 * ```kotlin
+	 * current.leave(this@Train)
+	 * pathService.unregisterBlock(trainId, current)
+	 * ```
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 * @return true if block was unregistered, false if block is still occupied or not owned
+	 */
+	fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean
 }

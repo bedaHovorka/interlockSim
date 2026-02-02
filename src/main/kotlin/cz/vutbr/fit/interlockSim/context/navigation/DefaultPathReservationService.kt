@@ -71,7 +71,7 @@ private val logger = KotlinLogging.logger {}
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
-	private val registry: PathReservationRegistry = PathReservationRegistry(),
+	private val registry: PathReservationRegistry,
 	private val pathInfoBuilder: PathInfoBuilder
 ) : PathReservationService {
 	/**
@@ -847,6 +847,38 @@ class DefaultPathReservationService(
 				logger.warn(e) { "rollbackReservation: Failed to rollback block $block" }
 			}
 		}
+	}
+
+	/**
+	 * Unregister all block reservations for a train.
+	 *
+	 * Removes the train from the registry, freeing all blocks it owns.
+	 * Called when a train completes its journey.
+	 *
+	 * @param trainId The train identifier to unregister
+	 * @return List of blocks that were released
+	 */
+	override fun unregister(trainId: String): List<DynamicTrackBlock> {
+		val releasedBlocks = registry.unregister(trainId)
+		logger.info {
+			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
+				releasedBlocks.joinToString(", ") { it.toString() }
+		}
+		return releasedBlocks
+	}
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from registry if it is FREE (no occupant).
+	 * Called by Train's Tail process after leaving a block.
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 * @return true if block was unregistered, false if still occupied or not owned
+	 */
+	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
+		return registry.unregisterBlock(trainId, block)
 	}
 
 }

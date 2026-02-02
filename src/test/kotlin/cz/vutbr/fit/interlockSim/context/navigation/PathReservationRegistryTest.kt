@@ -50,8 +50,6 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		registry = PathReservationRegistry()
-
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
 		val xmlStream: InputStream =
 			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -60,6 +58,9 @@ class PathReservationRegistryTest : KoinTestBase() {
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 		val simulationContext =
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+
+		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
+		registry = simulationContext.scope.get()
 
 		// Get all blocks from the graph using a navigator
 		val inOuts = simulationContext.getInOuts().toList()

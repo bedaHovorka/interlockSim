@@ -217,8 +217,11 @@ val navigationModule: Module =
 			// PathReservationRegistry: scoped, ONE instance per simulation context
 			// All services within this scope share the same registry
 			// Different scopes (contexts) have isolated registries
+			// Issue #296 Phase 8: Now requires SimulationContext for PathInfo merging
 			scoped<PathReservationRegistry> {
-				PathReservationRegistry()
+				val context = getSource<DefaultSimulationContext>()
+					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				PathReservationRegistry(context)
 			}
 
 			// PathInfoBuilder: scoped to this simulation context (Issue #295/#296 Phase 4)
