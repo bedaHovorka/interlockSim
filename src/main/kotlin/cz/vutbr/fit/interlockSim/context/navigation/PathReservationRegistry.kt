@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
@@ -404,10 +405,11 @@ class PathReservationRegistry(
 	 *
 	 * ## Algorithm
 	 *
-	 * 1. Create new ArrayPath and add all elements from old path
-	 * 2. Find overlap point (old.target == new.start)
-	 * 3. Add elements from new path, skipping first occurrence if it overlaps
-	 * 4. Merge entry directions (new overwrites old for same blocks)
+	 * 1. Validate circular route assumption (new.start appears exactly once)
+	 * 2. Create new ArrayPath and add all elements from old path
+	 * 3. Find overlap point (old.target == new.start)
+	 * 4. Add elements from new path, skipping first occurrence if it overlaps
+	 * 5. Merge entry directions (new overwrites old for same blocks)
 	 *
 	 * ## Example
 	 *
@@ -417,23 +419,50 @@ class PathReservationRegistry(
 	 * merged: B → zB → vB → doB1 → k1 → A  (complete path for both Front and Tail)
 	 * ```
 	 *
+	 * ## Assumptions
+	 *
+	 * - Railway networks are acyclic within a single path (no circular routes)
+	 * - new.start appears exactly ONCE in new.reservedPath (at the beginning)
+	 * - old.target and new.start may overlap (direct continuation)
+	 *
+	 * ## Circular Route Handling
+	 *
+	 * Circular routes (where start appears >1 time) are EXPLICITLY REJECTED
+	 * with IllegalStateException. Railway interlocking systems typically prohibit
+	 * circular routes within a single path reservation.
+	 *
+	 * ## Entry Direction Merging
+	 *
+	 * When old and new have the same block with different entry directions,
+	 * the NEW direction overwrites the old (most recent direction is used).
+	 *
 	 * @param old Previous PathInfo (Tail may still be navigating through this)
 	 * @param new New PathInfo (Front just reserved this)
 	 * @return Merged PathInfo covering both old and new paths
+	 * @throws IllegalStateException if new.start appears multiple times in path
 	 * @since Issue #296 Phase 8
 	 */
 	private fun mergePathInfo(old: PathInfo, new: PathInfo): PathInfo {
-		// Strategy: Append new path to old path
+		logger.trace { "mergePathInfo: merging old path ${old.start}->${old.target} with new ${new.start}->${new.target}" }
+
+		// Step 0: Validate circular route assumption
+		val occurrences = new.reservedPath.count { it == new.start }
+		requireValidState(occurrences == 1) {
+			"Circular routes not supported: new.start ($new.start) appears $occurrences times in path. " +
+				"Expected exactly 1 occurrence at path beginning."
+		}
+
+		// Step 1: Create merged path starting from old path
 		val mergedPath = ArrayPath(context)
 
-		// Step 1: Add all elements from old path
+		// Step 2: Add all elements from old path
 		old.reservedPath.forEach { mergedPath.add(it) }
 
-		// Step 2: Find overlap point (old.target == new.start)
+		// Step 3: Find overlap point (old.target == new.start)
 		val skipFirst = (new.start == old.target)
 		var skipped = false
 
-		// Step 3: Add elements from new path (skip first separator if overlapping)
+		// Step 4: Add elements from new path (skip first separator if overlapping)
 		new.reservedPath.forEach { element ->
 			if (skipFirst && !skipped && element == new.start) {
 				skipped = true  // Skip this occurrence (already in old path)
@@ -445,7 +474,7 @@ class PathReservationRegistry(
 			}
 		}
 
-		// Step 4: Merge entry directions (new overwrites old for conflicts)
+		// Step 5: Merge entry directions (new overwrites old for conflicts)
 		val mergedDirections = old.entryDirections.toMutableMap()
 		mergedDirections.putAll(new.entryDirections)
 
