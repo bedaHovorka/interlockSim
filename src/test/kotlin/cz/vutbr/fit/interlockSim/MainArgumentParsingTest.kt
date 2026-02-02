@@ -142,7 +142,10 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
-		@Disabled("Sim mode selected with sim argument")
+		@Disabled("FIXME: Test fails after AutoCloseable refactoring (commit 907cbde). " +
+			"Main.kt now uses context.use {} blocks which may interfere with capturing output. " +
+			"Need to investigate why 'example' mode detection is not working. " +
+			"See: https://github.com/bedaHovorka/interlockSim/issues/XXX")
 		fun `example mode selected with example argument`() {
 			// Arrange
 			val args = arrayOf("example")
@@ -196,7 +199,10 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
-		@Disabled("Sim mode selected with sim argument")
+		@Disabled("FIXME: Test fails after AutoCloseable refactoring (commit 907cbde). " +
+			"Main.kt now uses context.use {} blocks which may interfere with output capture. " +
+			"Need to investigate proper test setup for example mode with optional arguments. " +
+			"See: https://github.com/bedaHovorka/interlockSim/issues/XXX")
 		fun `example mode accepts optional example name`() {
 			// Arrange
 			val args = arrayOf("example")

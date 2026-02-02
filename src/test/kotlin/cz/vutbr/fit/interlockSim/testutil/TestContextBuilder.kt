@@ -269,3 +269,58 @@ fun buildMinimalEditing(): DefaultEditingContext =
 		.withInOut("B", 2, 1, false) // exit point
 		.buildEditingContext()
 
+/**
+ * Creates a minimal context with a single connected InOut for testing InOutWorker.
+ *
+ * This creates different topologies based on whether it's an entry or exit:
+ * - **Entry InOut (isEntry=true)**: Semaphore → InOut (track INTO the network)
+ * - **Exit InOut (isEntry=false)**: InOut → Semaphore (track OUT OF the network)
+ *
+ * This ensures the InOut has a valid outgoing track section, which is required
+ * by InOutWorker validation. Both entry and exit InOuts need an outgoing connection
+ * from the TopologyNavigator's perspective.
+ *
+ * @param inOutName name for the InOut element
+ * @param isEntry true for entry point, false for exit point
+ * @return context with connected InOut
+ */
+fun buildConnectedInOut(
+	inOutName: String = "TEST_INOUT",
+	isEntry: Boolean = false
+): DefaultSimulationContext {
+	val builder = getKoin().get<TestContextBuilder>()
+
+	// For InOutWorker to function, InOuts need a track in their movement direction.
+	//
+	// Entry InOut (isEntry=true, orientation=false):
+	//   - direction() points INTO network (towards far end)
+	//   - getNextTrackSection finds track FROM (1,1) TO (2,1)
+	//   - Track connection: entry (1,1) ---> semaphore (2,1)
+	//
+	// Exit InOut (isEntry=false, orientation=true):
+	//   - direction() points OUT OF network (away from network center)
+	//   - getNextTrackSection looks for track in direction OUT
+	//   - But our connection goes (1,1) ---> (2,1) which is TO the right
+	//   - This might not align with the exit direction!
+	//
+	// SOLUTION: For exit InOut, reverse the connection OR use different topology.
+	// Following vyhybna.xml pattern: exit InOut B (30,8) has track FROM it to (27,8).
+
+	return if (isEntry) {
+		// Entry point: Track goes from InOut into network
+		builder
+			.withInOut(inOutName, 1, 1, isEntry = true)
+			.withSemaphore(2, 1, false)
+			.withConnection(1, 1, 2, 1, 100.0, 80.0)
+			.buildSimulationContext()
+	} else {
+		// Exit point: Track goes from InOut outward
+		// Reverse the connection to match exit direction
+		builder
+			.withInOut(inOutName, 2, 1, isEntry = false)
+			.withSemaphore(1, 1, false)
+			.withConnection(2, 1, 1, 1, 100.0, 80.0)
+			.buildSimulationContext()
+	}
+}
+

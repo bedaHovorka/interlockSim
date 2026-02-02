@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -35,10 +36,16 @@ class InOutWorker(
 
 	private val queqe = Head()
 	private var myIdle = true
-	private val next: TrackSection? = env.getTopologyNavigator().getNextTrackSection(inOut, null)
+	private val next: TrackSection = requireNotNull(
+		env.getTopologyNavigator().getNextTrackSection(inOut, null)
+	) {
+		"InOut ${inOut.name} has no outgoing track section. " +
+			"This is a configuration error - InOut must be connected to the network."
+	}
 
 	private val pathFree = Condition {
 		try {
+			// next is guaranteed non-null by init check
 			env.getPathReservationService().isPathToAnyNextSemaphoreAvailable(inOut, next)
 		} catch (e: TrackOperationException) {
 			logger.error {
@@ -68,11 +75,45 @@ class InOutWorker(
 				val trainId = train?.name ?: throw SimulationException(
 					"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
 				)
+				// next is guaranteed non-null by init check
 				val result = env.getPathReservationService()
-					.reservePathToAnyNextSemaphore(trainId, inOut, next!!)
+					.reservePathToAnyNextSemaphore(trainId, inOut, next)
 
-				logger.info {  "${time()} APPROVAL: InOut ${inOut.name} - $result" }
-				// FIXME result processing?
+				// Handle reservation result
+				when (result) {
+					is PathReservationService.ReservationResult.Success -> {
+						logger.info {
+							"${time()} APPROVAL: InOut ${inOut.name} - " +
+								"Path reserved successfully for train $trainId, " +
+								"${result.reservedBlocks.size} blocks"
+						}
+						// Train can now proceed
+					}
+					is PathReservationService.ReservationResult.NoPathExists -> {
+						val errorMsg = "InOut ${inOut.name} - No path exists to any semaphore. " +
+							"This is a network configuration error."
+						logger.error { "${time()} APPROVAL_DENIED: $errorMsg" }
+						throw SimulationException(errorMsg)
+					}
+					is PathReservationService.ReservationResult.AllPathsBlocked -> {
+						// All paths are currently blocked - this is normal during busy periods
+						// The train will wait in the queue and try again
+						logger.debug {
+							"${time()} APPROVAL_WAIT: InOut ${inOut.name} - " +
+								"All ${result.attemptedPaths} path(s) blocked for train $trainId, " +
+								"will retry"
+						}
+						// Continue waiting (waitUntil will be called again in next iteration)
+						continue
+					}
+					is PathReservationService.ReservationResult.Conflict -> {
+						val errorMsg = "InOut ${inOut.name} - Reservation conflict: " +
+							"block ${result.conflictingBlock} already owned by ${result.existingOwner}. " +
+							"This indicates a race condition or logic error."
+						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
+						throw SimulationException(errorMsg)
+					}
+				}
 
 			} catch (e: Exception) {
 				logger.warn {

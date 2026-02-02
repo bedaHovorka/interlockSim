@@ -82,10 +82,17 @@ class Main {
 							"Unexpected context type: ${raw::class.java.name}"
 						)
 					}
-				context.use {
-					it.addReportTypes(*ReportType.values())
-					it.run()
-				} // context closed
+				// Only use context.use if it's a different instance from raw
+				// (to avoid double-close when rawContext is already a SimulationContext)
+				if (context === raw) {
+					context.addReportTypes(*ReportType.values())
+					context.run()
+				} else {
+					context.use {
+						it.addReportTypes(*ReportType.values())
+						it.run()
+					} // context closed
+				}
 			} // rawContext closed
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Context creation failed" }
