@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+import cz.vutbr.fit.interlockSim.objects.paths.TransitionAwarePath
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -116,8 +117,26 @@ class DefaultTrainNavigationService(
 			return null
 		}
 
+		// Step 3.5: Handle path transitions (Issue #296 Phase 9)
+		// When PathInfo instances are merged, train's current TrackSection may be from the old
+		// segment and not present in the new path built from the separator forward.
+		// Determine the previous track section (the one train just left to arrive at separator)
+		val currentTrackSection = getCurrentTrackSection(dynamicSeparator, pathInfo)
+		val finalPath = if (currentTrackSection != null &&
+			currentTrackSection != nextTrackSection &&
+			!candidatePath.contains(currentTrackSection)) {
+			// Train is transitioning from old PathInfo to new merged PathInfo
+			// Wrap path to handle getNext(currentTrackSection) correctly
+			logger.debug {
+				"findReservedPathForTrain: wrapping path for transition from $currentTrackSection"
+			}
+			TransitionAwarePath(candidatePath, currentTrackSection, nextTrackSection)
+		} else {
+			candidatePath
+		}
+
 		// Step 4: Extract all track blocks from the path
-		val blocks = extractDynamicTrackBlocks(candidatePath)
+		val blocks = extractDynamicTrackBlocks(finalPath)
 		logger.trace {
 			"findReservedPathForTrain: candidate path has ${blocks.size} blocks: ${blocks.map { it.toString() }}"
 		}
@@ -137,9 +156,9 @@ class DefaultTrainNavigationService(
 		// Step 6: All blocks owned by this train, return complete path
 		logger.debug {
 			"findReservedPathForTrain: train '$trainId' owns all ${blocks.size} blocks in path, " +
-				"path length ${candidatePath.length()}"
+				"path length ${finalPath.length()}"
 		}
-		return candidatePath
+		return finalPath
 	}
 
 	override fun isPathReservedForTrain(
@@ -264,6 +283,78 @@ class DefaultTrainNavigationService(
 		logger.debug {
 			"determineNextFromPathInfo: separator $separator not found in reserved path " +
 				"(train may have passed this separator already)"
+		}
+		return null
+	}
+
+	/**
+	 * Get the TrackSection that comes BEFORE the given separator in PathInfo.
+	 *
+	 * ## Purpose (Issue #296 Phase 9)
+	 *
+	 * When PathInfo instances are merged (old + new), the train's current position
+	 * might be in the old segment. To detect transition cases, we need to know which
+	 * TrackSection the train just left to arrive at the current separator.
+	 *
+	 * ## Algorithm
+	 *
+	 * Walk backward through the reservedPath from the separator:
+	 * 1. Find the separator in the path
+	 * 2. Look at the previous element (index - 1)
+	 * 3. If it's a TrackSection, return it (this is the "current" the train is coming from)
+	 * 4. Otherwise, return null (separator is first element, or path structure unexpected)
+	 *
+	 * ## Example
+	 *
+	 * ```
+	 * PathInfo.reservedPath: [start] -> [trackA] -> [separator] -> [trackB] -> [end]
+	 *                                      ^          ^
+	 *                                      |          |
+	 *                                  current    separator (where train is now)
+	 *
+	 * getCurrentTrackSection(separator, pathInfo) returns trackA
+	 * ```
+	 *
+	 * @param separator Current separator where train is positioned
+	 * @param pathInfo Complete path metadata
+	 * @return TrackSection before separator, or null if separator is first element
+	 */
+	private fun getCurrentTrackSection(
+		separator: PathSeparator,
+		pathInfo: PathInfo
+	): TrackSection? {
+		val reservedPath = pathInfo.reservedPath
+
+		// Find separator in path
+		for (i in 0 until reservedPath.size) {
+			val element = reservedPath.elementAt(i)
+			if (element == separator) {
+				// Found separator! Look at previous element
+				if (i > 0) {
+					val previous = reservedPath.elementAt(i - 1)
+					if (previous is TrackSection) {
+						logger.trace {
+							"getCurrentTrackSection: found previous track section at index ${i - 1}: $previous"
+						}
+						return previous
+					} else {
+						logger.trace {
+							"getCurrentTrackSection: element before separator is not TrackSection: " +
+								"${previous.javaClass.simpleName}"
+						}
+						return null
+					}
+				} else {
+					logger.trace {
+						"getCurrentTrackSection: separator is first element in path (no previous section)"
+					}
+					return null
+				}
+			}
+		}
+
+		logger.trace {
+			"getCurrentTrackSection: separator $separator not found in reserved path"
 		}
 		return null
 	}

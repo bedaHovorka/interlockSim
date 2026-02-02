@@ -113,16 +113,6 @@ class Train :
 				val path = trainNavService.findReservedPathForTrain(name, where)
 				next = path?.getNext(current)
 
-				// Path transition optimization: if current is not in this path, try with null
-				// This handles the case where we're transitioning from one path segment to another
-				if (next == null && path != null && current != null) {
-					next = path.getNext(null)
-					logger.info {
-						"${time()} TRAIN PATH TRANSITION: $name at $where, starting new path segment, " +
-							"next=$next"
-					}
-				}
-
 				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					env.stop()
