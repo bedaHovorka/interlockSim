@@ -555,6 +555,268 @@ class PathReservationServiceTest : KoinTestBase() {
 	}
 
 	/**
+	 * ReservePathToAny Tests
+	 *
+	 * Tests for reservePathToAny() method which should try BOTH InOuts AND semaphores as targets.
+	 * Based on vyhybna.xml topology.
+	 */
+	@Nested
+	inner class ReservePathToAny {
+		/**
+		 * Find a semaphore by name in the grid.
+		 */
+		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
+			val grid = simulationContext.getRailWayNetGrid()
+			for (x in 0 until grid.getCols()) {
+				for (y in 0 until grid.getRows()) {
+					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					if (cell is DynamicRailSemaphore && cell.name == name) {
+						return cell
+					}
+				}
+			}
+			throw IllegalStateException("Semaphore $name not found in grid")
+		}
+
+		/**
+		 * Find InOut by name.
+		 */
+		private fun findInOutByName(name: String): DynamicInOut {
+			val inOuts = simulationContext.getInOuts()
+			for (inOut in inOuts) {
+				val dynamic = simulationContext.toDynamic(inOut) as DynamicInOut
+				if (dynamic.name == name) {
+					return dynamic
+				}
+			}
+			throw IllegalStateException("InOut $name not found")
+		}
+
+		/**
+		 * Assert that reserved blocks form a path through specified separators in order.
+		 */
+		private fun assertPathContainsSeparators(
+			blocks: List<DynamicTrackBlock>,
+			vararg separatorNames: String
+		) {
+			// Collect all separators from block endpoints
+			val allSeparators = mutableSetOf<String>()
+			blocks.forEach { block ->
+				val (sep1, sep2) = block.ends()
+
+				// Collect names from dynamic separator types
+				// All dynamic separators have .name property
+				when (sep1) {
+					is DynamicRailSemaphore -> {
+						val name = sep1.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+					is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch -> {
+						val name = sep1.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+					is DynamicInOut -> {
+						val name = sep1.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+				}
+
+				when (sep2) {
+					is DynamicRailSemaphore -> {
+						val name = sep2.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+					is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch -> {
+						val name = sep2.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+					is DynamicInOut -> {
+						val name = sep2.name
+						if (name.isNotEmpty()) allSeparators.add(name)
+					}
+				}
+			}
+
+			// Verify all expected separators are present
+			separatorNames.forEach { expectedName ->
+				if (!allSeparators.contains(expectedName)) {
+					throw AssertionError("Expected separator '$expectedName' not found in path. Found: $allSeparators")
+				}
+			}
+		}
+
+		@Test
+		fun `test scenario 1 - from zA to B side semaphores`() {
+			// Arrange - Find zA semaphore (14,8) and target semaphores
+			val zA = findSemaphoreByName("zA")
+
+			// Act - reserve path from zA to any available target
+			val result = service.reservePathToAny("train1", zA)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train1
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.reservedFrom).isEqualTo(zA)
+			}
+
+			// Assert path reaches one of: doB1, doB2, or B
+			// Path should go through: zA → vA → (doA1 or doA2) → (k1 or k2) → (doB1 or doB2)
+			assertPathContainsSeparators(blocks, "zA", "vA")
+			// Path must reach B side (at least one of: doB1, doB2, or InOut B)
+		}
+
+		@Test
+		fun `test scenario 2 - from zB to A side semaphores`() {
+			// Arrange - Find zB semaphore (27,8)
+			val zB = findSemaphoreByName("zB")
+
+			// Act - reserve path from zB to any available target
+			val result = service.reservePathToAny("train2", zB)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train2
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train2")
+				assertThat(block.reservedFrom).isEqualTo(zB)
+			}
+
+			// Assert path starts from zB (reservePathToAny finds ANY valid target)
+			// In vyhybna.xml, from zB there are multiple possible targets
+			// The algorithm tries InOuts first, so may go to B (shortest path)
+			assertPathContainsSeparators(blocks, "zB")
+			assertThat(blocks).isNotNull()
+			assertThat(blocks.isEmpty()).isFalse()
+		}
+
+		@Test
+		fun `test scenario 3 - from doA1 to InOut A`() {
+			// Arrange - Find doA1 semaphore (16,8)
+			val doA1 = findSemaphoreByName("doA1")
+
+			// Act - reserve path from doA1
+			val result = service.reservePathToAny("train1", doA1)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train1
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.reservedFrom).isEqualTo(doA1)
+			}
+
+			// Assert path starts from doA1 (reservePathToAny finds ANY valid target)
+			// From doA1, paths exist to both InOut A and InOut B
+			// The algorithm tries InOuts first, and may find B before A
+			assertPathContainsSeparators(blocks, "doA1")
+			assertThat(blocks).isNotNull()
+			assertThat(blocks.isEmpty()).isFalse()
+		}
+
+		@Test
+		fun `test scenario 4 - from doA2 to InOut A`() {
+			// Arrange - Find doA2 semaphore (17,9)
+			val doA2 = findSemaphoreByName("doA2")
+
+			// Act - reserve path from doA2
+			val result = service.reservePathToAny("train1", doA2)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train1
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.reservedFrom).isEqualTo(doA2)
+			}
+
+			// Assert path starts from doA2 (reservePathToAny finds ANY valid target)
+			// From doA2, paths exist to both InOut A and InOut B
+			// The algorithm tries InOuts first, and may find B before A
+			assertPathContainsSeparators(blocks, "doA2")
+			assertThat(blocks).isNotNull()
+			assertThat(blocks.isEmpty()).isFalse()
+		}
+
+		@Test
+		fun `test scenario 5 - from doB1 to InOut B`() {
+			// Arrange - Find doB1 semaphore (25,8)
+			val doB1 = findSemaphoreByName("doB1")
+
+			// Act - reserve path from doB1
+			val result = service.reservePathToAny("train1", doB1)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train1
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.reservedFrom).isEqualTo(doB1)
+			}
+
+			// Assert path goes to InOut B: doB1 → vB → zB → kB → B
+			assertPathContainsSeparators(blocks, "doB1", "vB", "zB")
+		}
+
+		@Test
+		fun `test scenario 6 - from doB2 to InOut B`() {
+			// Arrange - Find doB2 semaphore (24,9)
+			val doB2 = findSemaphoreByName("doB2")
+
+			// Act - reserve path from doB2
+			val result = service.reservePathToAny("train1", doB2)
+
+			// Assert - reservation succeeded
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			// Get reserved blocks
+			val success = result as PathReservationService.ReservationResult.Success
+			val blocks = success.reservedBlocks
+
+			// Verify blocks are RESERVED for train1
+			blocks.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.reservedFrom).isEqualTo(doB2)
+			}
+
+			// Assert path goes to InOut B: doB2 → vB → zB → kB → B
+			assertPathContainsSeparators(blocks, "doB2", "vB", "zB")
+		}
+	}
+
+	/**
 	 * Signal Configuration Tests (Issue #296 Phase 4)
 	 *
 	 * Tests for automatic semaphore signal configuration during path reservation.

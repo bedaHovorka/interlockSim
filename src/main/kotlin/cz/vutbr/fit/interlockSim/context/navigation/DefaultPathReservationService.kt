@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -437,22 +438,38 @@ class DefaultPathReservationService(
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
 
-		// Step 1: Discover all potential targets from context
-		// We try each candidate in turn until a reservation succeeds
+		// Step 1: Collect all potential targets (InOuts and Semaphores)
+		val targets = mutableListOf<DynamicPathSeparator>()
+
+		// Add InOuts (except start)
+		environment.getInOuts().forEach { inout ->
+			val dynamicInOut = environment.toDynamic(inout)
+			if (dynamicInOut != start) {
+				targets.add(dynamicInOut)
+			}
+		}
+
+		// Add semaphores (except start)
+		getAllSemaphores().forEach { semaphore ->
+			if (semaphore != start) {
+				targets.add(semaphore)
+			}
+		}
+
+		logger.debug {
+			"reservePathToAny: Found ${targets.size} potential target(s) from $start"
+		}
+
+		// Step 2: Try each target until a reservation succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
-		var attemptCount = 0
 
-		// Try all InOuts except the start
-		for (inout in environment.getInOuts()) {
-			if (inout == start) continue
-
-			attemptCount++
-			val result = reservePath(trainId, start, inout)
+		for (target in targets) {
+			val result = reservePath(trainId, start, target)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
 					logger.debug {
-						"reservePathToAny: Successfully reserved path from $start to $inout for $trainId"
+						"reservePathToAny: Successfully reserved path from $start to $target for $trainId"
 					}
 					return result
 				}
@@ -464,30 +481,72 @@ class DefaultPathReservationService(
 					return result
 				}
 				else -> {
-					logger.trace { "reservePathToAny: Path to $inout not available, trying next target" }
+					logger.trace { "reservePathToAny: Path to $target not available, trying next target" }
 					lastResult = result
 				}
 			}
 		}
 
-		// Note: We don't iterate over all semaphores in the network here because:
-		// 1. ShuntingLoop hardcoded topology means InOuts are sufficient as targets
-		// 2. Grid scanning would reintroduce the 50×20 hardcoded dimensions we're trying to eliminate
-		// 3. For general dispatcher logic, InOuts are the primary path destinations
-		// 4. Semaphore-to-semaphore paths are handled via specific reservePath() calls when needed
-
-		if (attemptCount == 0) {
+		// Step 3: All targets failed
+		if (targets.isEmpty()) {
 			logger.warn { "reservePathToAny: No targets found from $start" }
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
-		// All targets failed - log and return failure
 		logger.warn {
 			"reservePathToAny: No available path from $start for $trainId " +
-				"(tried $attemptCount targets, all blocked or unreachable)"
+				"(tried ${targets.size} targets, all blocked or unreachable)"
 		}
 
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(targets.size)
+	}
+
+	/**
+	 * Get all semaphores in the network by scanning the grid.
+	 *
+	 * ## Implementation
+	 *
+	 * Scans the grid using dynamically-obtained dimensions (getCols(), getRows())
+	 * to find all DynamicRailSemaphore instances.
+	 *
+	 * ## Grid Dimensions
+	 *
+	 * No hardcoded dimensions - uses grid.getCols() and grid.getRows() for
+	 * dynamic discovery. This is acceptable for reservePathToAny() which is
+	 * called infrequently (only when train needs new path).
+	 *
+	 * ## Type Safety
+	 *
+	 * The environment parameter is typed as SimulationEnvironment, but at runtime
+	 * it's always a SimulationContext (which extends Context). We cast to access
+	 * getRailWayNetGrid() for grid scanning. This is safe because:
+	 * - PathReservationService is only used in simulation mode
+	 * - SimulationContext always implements Context interface
+	 * - All Koin module configurations pass DefaultSimulationContext
+	 *
+	 * @return List of all DynamicRailSemaphore instances in the network
+	 */
+	private fun getAllSemaphores(): List<DynamicRailSemaphore> {
+		// Safe cast: environment is always SimulationContext in practice
+		val context = environment as? SimulationContext
+			?: throw IllegalStateException(
+				"getAllSemaphores requires SimulationContext, but got ${environment::class.simpleName}"
+			)
+
+		val grid = context.getRailWayNetGrid()
+		val semaphores = mutableListOf<DynamicRailSemaphore>()
+
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+				if (cell is DynamicRailSemaphore) {
+					semaphores.add(cell)
+				}
+			}
+		}
+
+		logger.trace { "getAllSemaphores: Found ${semaphores.size} semaphore(s) in grid" }
+		return semaphores
 	}
 
 	// ========== Private helper methods ==========
