@@ -645,6 +645,30 @@ class PathReservationServiceTest : KoinTestBase() {
 			}
 		}
 
+		private fun assertIsDirectedToOutSide(
+			blocks: List<DynamicTrackBlock>, nameOfOut: String
+		) {
+			val sem1 = "do${nameOfOut}1"
+			val sem2 = "do${nameOfOut}2"
+			assertThat(blocks.any { block ->
+				val (sep1, sep2) = block.ends()
+				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+					(sep2 is DynamicInOut && sep2.name == nameOfOut) ||
+					(sep1 is DynamicRailSemaphore && (sep1.name == sem1 || sep1.name == sem2)) ||
+					(sep2 is DynamicRailSemaphore && (sep2.name == sem1 || sep2.name == sem2))
+			}).isTrue()
+		}
+
+		private fun assertIsReachedOutSide(
+			blocks: List<DynamicTrackBlock>, nameOfOut: String
+		) {
+			assertThat(blocks.any { block ->
+				val (sep1, sep2) = block.ends()
+				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+					(sep2 is DynamicInOut && sep2.name == nameOfOut)
+			}).isTrue()
+		}
+
 		@Test
 		fun `test scenario 1 - from zA to B side semaphores`() {
 			// Arrange - Find zA semaphore (14,8) and target semaphores
@@ -671,6 +695,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Path should go through: zA → vA → (doA1 or doA2) → (k1 or k2) → (doB1 or doB2)
 			assertPathContainsSeparators(blocks, "zA", "vA")
 			// Path must reach B side (at least one of: doB1, doB2, or InOut B)
+			assertIsDirectedToOutSide(blocks, "B")
 		}
 
 		@Test
@@ -701,6 +726,9 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertPathContainsSeparators(blocks, "zB")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
+
+			// Path must reach A side (at least one of: doA1, doA2, or InOut A)
+			assertIsDirectedToOutSide(blocks, "A")
 		}
 
 		@Test
@@ -731,6 +759,8 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertPathContainsSeparators(blocks, "doA1")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
+
+			assertIsReachedOutSide(blocks, "A")
 		}
 
 		@Test
@@ -761,6 +791,8 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertPathContainsSeparators(blocks, "doA2")
 			assertThat(blocks).isNotNull()
 			assertThat(blocks.isEmpty()).isFalse()
+
+			assertIsReachedOutSide(blocks, "A")
 		}
 
 		@Test
@@ -787,6 +819,8 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Assert path goes to InOut B: doB1 → vB → zB → kB → B
 			assertPathContainsSeparators(blocks, "doB1", "vB", "zB")
+
+			assertIsReachedOutSide(blocks, "B")
 		}
 
 		@Test
@@ -813,6 +847,8 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Assert path goes to InOut B: doB2 → vB → zB → kB → B
 			assertPathContainsSeparators(blocks, "doB2", "vB", "zB")
+
+			assertIsReachedOutSide(blocks, "B")
 		}
 	}
 

@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -438,32 +439,65 @@ class DefaultPathReservationService(
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
 
-		// Step 1: Collect all potential targets (InOuts and Semaphores)
-		val targets = mutableListOf<DynamicPathSeparator>()
+		// Step 1: Collect all potential targets, prioritizing InOuts over semaphores
+		val inouts = mutableListOf<DynamicInOut>()
+		val semaphores = mutableListOf<DynamicPathSeparator>()
 
 		// Add InOuts (except start)
 		environment.getInOuts().forEach { inout ->
 			val dynamicInOut = environment.toDynamic(inout)
 			if (dynamicInOut != start) {
-				targets.add(dynamicInOut)
+				inouts.add(dynamicInOut as DynamicInOut)
 			}
 		}
 
 		// Add semaphores (except start)
 		getAllSemaphores().forEach { semaphore ->
 			if (semaphore != start) {
-				targets.add(semaphore)
+				semaphores.add(semaphore)
 			}
 		}
 
 		logger.debug {
-			"reservePathToAny: Found ${targets.size} potential target(s) from $start"
+			"reservePathToAny: Found ${inouts.size} InOut(s) and ${semaphores.size} semaphore(s) from $start"
 		}
 
-		// Step 2: Try each target until a reservation succeeds
+		// Step 2: Sort InOuts with preference for opposite-side targets
+		// If start is an oriented separator (e.g., semaphore with orientation), prefer InOuts
+		// with opposite orientation (crossing the shunting loop rather than going backward)
+		val sortedInOuts = when (start) {
+			is OrientedPathSeparator -> {
+				val startOrientation = start.getOrientation()
+				// Partition InOuts by orientation: opposite-side first, same-side last
+				val (oppositeSide, sameSide) = inouts.partition { it.getOrientation() != startOrientation }
+				// Within each group, sort by path length
+				val sortedOpposite = oppositeSide.sortedBy { target ->
+					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+				}
+				val sortedSame = sameSide.sortedBy { target ->
+					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+				}
+				sortedOpposite + sortedSame
+			}
+			else -> {
+				// No orientation info, just sort by distance
+				inouts.sortedBy { target ->
+					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+				}
+			}
+		}
+
+		// Step 3: Combine sorted InOuts with semaphores (InOuts tried first)
+		val sortedTargets: List<DynamicPathSeparator> = sortedInOuts + semaphores
+
+		logger.debug {
+			"reservePathToAny: Target order (InOuts first): ${sortedTargets.joinToString(", ")}"
+		}
+
+		// Step 3: Try each target in priority order until a reservation succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
 
-		for (target in targets) {
+		for (target in sortedTargets) {
 			val result = reservePath(trainId, start, target)
 
 			when (result) {
@@ -487,18 +521,18 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// Step 3: All targets failed
-		if (targets.isEmpty()) {
+		// Step 4: All targets failed
+		if (sortedTargets.isEmpty()) {
 			logger.warn { "reservePathToAny: No targets found from $start" }
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
 		logger.warn {
 			"reservePathToAny: No available path from $start for $trainId " +
-				"(tried ${targets.size} targets, all blocked or unreachable)"
+				"(tried ${sortedTargets.size} targets, all blocked or unreachable)"
 		}
 
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(targets.size)
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargets.size)
 	}
 
 	/**
