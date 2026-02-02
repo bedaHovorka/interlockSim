@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
@@ -394,6 +395,10 @@ class Train :
 
 			if (current != null) {
 				current.leave(this@Train)
+				val block = current.getTrackBlock()
+				if (block is DynamicTrackBlock) {
+					env.unregisterBlock(name, block)
+				}
 			}
 			if (next == null &&
 				where != timetable.getOut()
@@ -628,6 +633,7 @@ class Train :
 		r.stop()
 		stop()
 		motor.terminate()
+		env.releaseTrainReservations(name)
 		// ukoncovaci..
 		logger.debug { "Train $number completed journey: distance traveled ${front.getTotalDistance()}" }
 		env.report("ends", this, ReportType.TRAIN_EVENTS)
