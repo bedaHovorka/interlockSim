@@ -211,9 +211,14 @@ class PathReservationServiceTest : KoinTestBase() {
 					block as DynamicTrackBlock
 				}.distinct()
 
-			// Reserve second block manually (simulate partial conflict)
-			if (blocks.size >= 2) {
-				blocks[1].setUpPath(inOut1, "other-train")
+			// Find blocks that exist in ALL paths to ensure conflict blocks all routes
+			// This prevents the test from being non-deterministic with multiple paths
+			val commonBlocks = path0Blocks.intersect(path1Blocks)
+			val blockToReserve = blocks.firstOrNull { it in commonBlocks } ?: blocks.getOrNull(1)
+
+			// Reserve a block that blocks ALL paths (simulate partial conflict)
+			if (blockToReserve != null) {
+				blockToReserve.setUpPath(inOut1, "other-train")
 			}
 
 			// Act - try to reserve path for train1

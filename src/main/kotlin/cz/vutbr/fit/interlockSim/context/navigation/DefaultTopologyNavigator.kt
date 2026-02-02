@@ -118,13 +118,15 @@ class DefaultTopologyNavigator(
 	 * ## Direction Handling
 	 *
 	 * **When segment==null** (no known incoming direction):
-	 * - Returns ALL possible exit directions via `joins()`
+	 * - Considers all possible exit directions via `joins()`
+	 * - Selects a single next block (e.g. first matching candidate) in a deterministic way
 	 * - Expected at entry points where direction cannot be determined from context
 	 *
 	 * **When segment!=null** (known incoming direction):
 	 * - Queries node's `getFollowingSegment()` for deterministic exit
 	 * - OrientedNodeCell returns single exit (requires non-null result)
-	 * - Non-oriented cells (switches) may return multiple branches
+	 * - Non-oriented cells (switches) may return multiple branches, but this method
+	 *   returns only one chosen next block
 	 *
 	 * ## Critical Difference from Simulation Version
 	 *
@@ -205,7 +207,9 @@ class DefaultTopologyNavigator(
 	 * ## Cycle Detection
 	 *
 	 * Railway networks can contain loops (e.g., around-the-block routing).
-	 * The algorithm prevents infinite loops by tracking visited separators.
+	 * The algorithm uses **per-path ancestor-chain cycle detection** instead of a global visited set.
+	 * This allows the same separator to be visited via different paths (needed for enumerating ALL paths),
+	 * while preventing infinite loops within a single path.
 	 *
 	 * ## Dynamic Wrapper Handling
 	 *
@@ -215,10 +219,11 @@ class DefaultTopologyNavigator(
 	 *
 	 * ## Performance Characteristics
 	 *
-	 * - **Time complexity**: O(V + E) where V = number of path separators, E = track connections
-	 * - **Space complexity**: O(V) for visited set and BFS queue
+	 * - **Time complexity**: O(k * (V + E)) where k = number of paths, V = separators, E = connections
+	 * - **Space complexity**: O(V * maxDepth) for BFS queue and path storage
 	 * - **Best case**: O(1) when start == target
-	 * - **Worst case**: O(V + E) when exploring entire network before finding target
+	 * - **Worst case**: Bounded by maxDepth to prevent runaway exploration
+	 * - **Note**: Can revisit separators via different branches (enumerates all paths, not single path)
 	 *
 	 * @param start The starting path separator
 	 * @param target The target path separator to reach
