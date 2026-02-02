@@ -147,7 +147,8 @@ class DefaultTopologyNavigator(
 		// Determine following segment based on NodeCell type (lines 529-540)
 		// Kotlin idiom: Use when expression with smart casts
 		// NOTE: Uses same logic as getAllNextTrackBlocks() for consistency (Issue #291)
-		val followingSegments: Set<Cell.Segment> =
+		// Performance optimization: Return segment directly for oriented cells (avoids Set allocation)
+		val followingSegment: Cell.Segment? =
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
@@ -156,13 +157,12 @@ class DefaultTopologyNavigator(
 							// No incoming direction known - explore ALL possible exits
 							// Avoids calling getFollowingSegment(null) which throws IllegalStateException
 							// when multiple directions exist (e.g., at entry points)
-							staticNodeCell.joins()
+							staticNodeCell.joins().firstOrNull()
 						}
 						else -> {
 							// Known incoming direction - get deterministic exit
 							// May return null at dead ends (e.g., InOut exit points)
-							val following = staticNodeCell.getFollowingSegment(segment)
-							if (following != null) setOf(following) else emptySet()
+							staticNodeCell.getFollowingSegment(segment)
 						}
 					}
 				}
@@ -171,18 +171,18 @@ class DefaultTopologyNavigator(
 					// For topology navigation, return ALL possible exit segments regardless of switch configuration
 					// (possibleFollowers() would only return configuration-dependent paths)
 					val allJoins = staticNodeCell.joins()
-					if (segment != null) {
-						// Exclude the incoming segment to avoid going backwards
-						allJoins - segment
-					} else {
-						// No incoming segment (starting point), explore all directions
-						allJoins
-					}
+					val followingSegments =
+						if (segment != null) {
+							// Exclude the incoming segment to avoid going backwards
+							allJoins - segment
+						} else {
+							// No incoming segment (starting point), explore all directions
+							allJoins
+						}
+					// Get first valid segment (maintains single-path navigation semantics)
+					followingSegments.firstOrNull()
 				}
-			}
-
-		// Get first valid edge (maintains single-path navigation semantics)
-		val followingSegment = followingSegments.firstOrNull() ?: return null
+			} ?: return null
 
 		// Query graph for edge assigned to following segment (lines 543-544)
 		return context.getGraph().assignedEdges(location)[followingSegment]

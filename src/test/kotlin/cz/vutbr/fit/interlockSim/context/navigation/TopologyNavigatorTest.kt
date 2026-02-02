@@ -717,4 +717,159 @@ class TopologyNavigatorTest : KoinTestBase() {
 		assertThat(staticThroughRed).isNotNull()
 		assertThat(dynamicThroughRed).isNotNull()
 	}
+
+	// ========================================================================
+	// Cycle Detection Tests (isInAncestorChain validation)
+	// ========================================================================
+
+	/**
+	 * Test: Long chain path discovery with ancestor tracking
+	 *
+	 * Topology: A → S1 → S2 → S3 → B (chain with intermediate semaphores)
+	 *
+	 * Expected: Algorithm finds path through multiple nodes
+	 * This indirectly validates isInAncestorChain prevents infinite loops
+	 * by verifying algorithm completes successfully on complex topologies
+	 */
+	@Test
+	fun `findAllTopologicalPaths - long chain - completes without hanging`() {
+		// Arrange: Build A → S1 → S2 → S3 → B using TestContextBuilder
+		val context =
+			TestContextBuilder()
+				.withInOut("A", 1, 1, isEntry = true)
+				.withSemaphore(3, 3, isAllowing = true)
+				.withSemaphore(5, 5, isAllowing = true)
+				.withSemaphore(7, 7, isAllowing = true)
+				.withInOut("B", 9, 9, isEntry = false)
+				.withConnection(1, 1, 3, 3, 100.0, 80.0)
+				.withConnection(3, 3, 5, 5, 100.0, 80.0)
+				.withConnection(5, 5, 7, 7, 100.0, 80.0)
+				.withConnection(7, 7, 9, 9, 100.0, 80.0)
+				.buildEditingContext()
+
+		val navigator: TopologyNavigator = context.scope.get()
+		val grid = context.getRailWayNetGrid()
+		val inOutA = grid.getCellAt(1, 1) as InOut
+		val inOutB = grid.getCellAt(9, 9) as InOut
+
+		// Act: Find path A → B through long chain
+		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
+
+		// Assert: Algorithm completes without hanging, finds correct path
+		assertThat(paths).hasSize(1)
+		assertThat(paths[0]).hasSize(4) // Four sections (A→S1, S1→S2, S2→S3, S3→B)
+	}
+
+	/**
+	 * Test: No false positive on linear path (no cycles)
+	 *
+	 * Topology: A → B → C → D (linear, no cycles)
+	 *
+	 * Expected: All paths found, no incorrect cycle detection
+	 */
+	@Test
+	fun `findAllTopologicalPaths - linear path - no false cycle detection`() {
+		// Arrange: Build A → B → C → D (no cycles)
+		val editingContext = DefaultEditingContext(10, 10)
+		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+		val semaphoreB = RailSemaphore("B", true, Cell.SpatialType.HORIZONTAL)
+		val semaphoreC = RailSemaphore("C", true, Cell.SpatialType.HORIZONTAL)
+		val inOutD = InOut("D", true, Cell.SpatialType.HORIZONTAL)
+
+		editingContext.putCell(Point(1, 1), inOutA)
+		editingContext.putCell(Point(3, 3), semaphoreB)
+		editingContext.putCell(Point(5, 5), semaphoreC)
+		editingContext.putCell(Point(7, 7), inOutD)
+
+		editingContext.joinCells(
+			Point(1, 1),
+			Point(3, 3),
+			SimpleTrackBlock(inOutA, semaphoreB, 100.0, 80.0)
+		)
+		editingContext.joinCells(
+			Point(3, 3),
+			Point(5, 5),
+			SimpleTrackBlock(semaphoreB, semaphoreC, 100.0, 80.0)
+		)
+		editingContext.joinCells(
+			Point(5, 5),
+			Point(7, 7),
+			SimpleTrackBlock(semaphoreC, inOutD, 100.0, 80.0)
+		)
+
+		val navigator: TopologyNavigator = editingContext.scope.get()
+
+		// Act: Find path A → D
+		val paths = navigator.findAllTopologicalPaths(inOutA, inOutD)
+
+		// Assert: Path found (no false cycle detection)
+		assertThat(paths).hasSize(1)
+		assertThat(paths[0]).hasSize(3) // Three sections (A→B, B→C, C→D)
+	}
+
+	/**
+	 * Test: Self-loop detection (immediate cycle)
+	 *
+	 * Topology: A (isolated node)
+	 *
+	 * Expected: Detected as "already at target", returns empty path
+	 */
+	@Test
+	fun `findAllTopologicalPaths - self loop - immediate detection`() {
+		// Arrange: Build A (isolated)
+		val editingContext = DefaultEditingContext(10, 10)
+		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+
+		editingContext.putCell(Point(1, 1), inOutA)
+
+		val navigator: TopologyNavigator = editingContext.scope.get()
+
+		// Act: Find path A → A (self-loop)
+		val paths = navigator.findAllTopologicalPaths(inOutA, inOutA)
+
+		// Assert: Returns empty path (already at target)
+		assertThat(paths).hasSize(1)
+		assertThat(paths[0]).isEmpty()
+	}
+
+	/**
+	 * Test: Multiple intermediate nodes to validate ancestor tracking depth
+	 *
+	 * Topology: A → S1 → S2 → S3 → S4 → S5 → B (7 nodes)
+	 *
+	 * Expected: Algorithm handles moderately deep chains correctly
+	 * This validates isInAncestorChain works with chains longer than typical 2-3 nodes
+	 */
+	@Test
+	fun `findAllTopologicalPaths - moderate chain - validates ancestor depth`() {
+		// Arrange: Build A → S1 → S2 → S3 → S4 → S5 → B (horizontal layout)
+		val context =
+			TestContextBuilder()
+				.withInOut("A", 1, 5, isEntry = true)
+				.withSemaphore(2, 5, isAllowing = true)
+				.withSemaphore(3, 5, isAllowing = true)
+				.withSemaphore(4, 5, isAllowing = true)
+				.withSemaphore(5, 5, isAllowing = true)
+				.withSemaphore(6, 5, isAllowing = true)
+				.withInOut("B", 7, 5, isEntry = false)
+				.withConnection(1, 5, 2, 5, 100.0, 80.0)
+				.withConnection(2, 5, 3, 5, 100.0, 80.0)
+				.withConnection(3, 5, 4, 5, 100.0, 80.0)
+				.withConnection(4, 5, 5, 5, 100.0, 80.0)
+				.withConnection(5, 5, 6, 5, 100.0, 80.0)
+				.withConnection(6, 5, 7, 5, 100.0, 80.0)
+				.buildEditingContext()
+
+		val navigator: TopologyNavigator = context.scope.get()
+		val grid = context.getRailWayNetGrid()
+		val inOutA = grid.getCellAt(1, 5) as InOut
+		val inOutB = grid.getCellAt(7, 5) as InOut
+
+		// Act: Find path through moderate chain
+		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
+
+		// Assert: Algorithm completes, finds correct path
+		assertThat(paths).hasSize(1)
+		assertThat(paths[0]).hasSize(6) // Six sections
+	}
 }
