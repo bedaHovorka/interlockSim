@@ -207,18 +207,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 		// nove vlaky a inouty
 		approveTrains()
-
-		// If generator terminated and all queues empty, terminate ShuntingLoop
-		if (generator.terminated() && unapprowedTrains.isEmpty() && approwedTrains.isEmpty()) {
-			logger.info {
-				"${time()} SIMULATION_COMPLETE: All trains processed, terminating ShuntingLoop"
-			}
-			terminate()
-			return
-		}
-
-		// Polling interval: 1.0s (matches baseline timing)
-		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
