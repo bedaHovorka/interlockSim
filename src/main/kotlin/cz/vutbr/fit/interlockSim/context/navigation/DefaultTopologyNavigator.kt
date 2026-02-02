@@ -115,6 +115,16 @@ class DefaultTopologyNavigator(
 	 * 4. Get following segment using NodeCell navigation methods
 	 * 5. Query graph for edge assigned to following segment
 	 *
+	 * ## Exception Handling Pattern
+	 *
+	 * When `segment` is null and the node has multiple possible directions,
+	 * `getFollowingSegment()` throws [IllegalStateException] to signal ambiguous
+	 * navigation. We catch this and fall back to [joins()] to explore all directions.
+	 *
+	 * This exception-based control flow is intentional and used only at entry points
+	 * where direction cannot be determined from context alone. Unexpected exceptions
+	 * are logged as errors.
+	 *
 	 * ## Critical Difference from Simulation Version
 	 *
 	 * - Returns static `TrackBlock` instead of `DynamicTrackBlock`
@@ -338,6 +348,16 @@ class DefaultTopologyNavigator(
 	 *
 	 * For oriented cells (InOut, Semaphore), returns single deterministic block.
 	 * For switches (RailSwitch), returns ALL possible blocks for all branches.
+	 *
+	 * ## Exception Handling Pattern
+	 *
+	 * When `segment` is null and the node has multiple possible directions,
+	 * `getFollowingSegment()` throws [IllegalStateException] to signal ambiguous
+	 * navigation. We catch this and fall back to [joins()] to explore all directions.
+	 *
+	 * This exception-based control flow is intentional and used only at entry points
+	 * where direction cannot be determined from context alone. It signals semantic
+	 * meaning (ambiguous direction) rather than an error condition.
 	 *
 	 * @param nodeCell The node cell to navigate from
 	 * @param current The current track block (for determining direction), or null

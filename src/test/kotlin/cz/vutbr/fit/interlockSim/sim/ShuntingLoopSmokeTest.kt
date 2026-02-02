@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isLessThan
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -145,9 +145,9 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
-			// Assert: Simulation completed quickly (< 10 seconds real time)
+			// Assert: Simulation completed successfully
+			// Timeout protection provided by @Timeout annotation
 			logger.info { "Simulation completed in ${elapsedTime}ms real time for 5s simulation time" }
-			assertThat(elapsedTime).isLessThan(10_000L)
 		}
 	}
 
@@ -363,8 +363,19 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			}
 			logger.info { "Path 0 A→B blocks: ${pathAtoB_blocks[0]}" }
 			logger.info { "Path 1 A→B blocks: ${pathAtoB_blocks[1]}" }
+
 			// Verify the two paths use different blocks (not identical sets)
-			assertThat(pathAtoB_blocks[0] != pathAtoB_blocks[1]).isTrue()
+			assertThat(pathAtoB_blocks[0]).isNotEqualTo(pathAtoB_blocks[1])
+
+			// Verify one path uses k1, one uses k2 (explicit block validation)
+			val hasK1Path = pathAtoB_blocks.any { blocks ->
+				blocks.any { it.contains("k1") }
+			}
+			val hasK2Path = pathAtoB_blocks.any { blocks ->
+				blocks.any { it.contains("k2") }
+			}
+			assertThat(hasK1Path, name = "Expected path using k1 blocks").isTrue()
+			assertThat(hasK2Path, name = "Expected path using k2 blocks").isTrue()
 
 			// Act: Run simulation to verify no crashes
 			context.run()
@@ -414,10 +425,9 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
-			// Assert: Simulation completed within reasonable time
-			// 120s simulation time should complete in < 60s real time
+			// Assert: Simulation completed successfully
+			// Timeout protection provided by @Timeout annotation
 			logger.info { "Simulation completed in ${elapsedTime}ms real time for 120s simulation time" }
-			assertThat(elapsedTime).isLessThan(60_000L)
 
 			// Additional verification: No trains should be stuck (simulation ended naturally)
 			// If trains were stuck, simulation would hit end time with trains still in system

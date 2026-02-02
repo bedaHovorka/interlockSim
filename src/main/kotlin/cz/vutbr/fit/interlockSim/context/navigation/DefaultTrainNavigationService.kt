@@ -72,7 +72,8 @@ class DefaultTrainNavigationService(
 	private val context: SimulationContext,
 	private val registry: PathReservationRegistry,
 	@Suppress("UNUSED_PARAMETER")
-	private val topologyNavigator: TopologyNavigator  // Unused after Issue #297 fix
+	// TODO(Issue #297): Remove in next major version after all DI configurations updated
+	private val topologyNavigator: TopologyNavigator  // Kept for backward compatibility with Koin DI
 ) : TrainNavigationService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
