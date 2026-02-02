@@ -115,20 +115,22 @@ class DefaultTopologyNavigator(
 	 * 4. Get following segment using NodeCell navigation methods
 	 * 5. Query graph for edge assigned to following segment
 	 *
-	 * ## Exception Handling Pattern
+	 * ## Direction Handling
 	 *
-	 * When `segment` is null and the node has multiple possible directions,
-	 * `getFollowingSegment()` throws [IllegalStateException] to signal ambiguous
-	 * navigation. We catch this and fall back to [joins()] to explore all directions.
+	 * **When segment==null** (no known incoming direction):
+	 * - Returns ALL possible exit directions via `joins()`
+	 * - Expected at entry points where direction cannot be determined from context
 	 *
-	 * This exception-based control flow is intentional and used only at entry points
-	 * where direction cannot be determined from context alone. Unexpected exceptions
-	 * are logged as errors.
+	 * **When segment!=null** (known incoming direction):
+	 * - Queries node's `getFollowingSegment()` for deterministic exit
+	 * - OrientedNodeCell returns single exit (requires non-null result)
+	 * - Non-oriented cells (switches) may return multiple branches
 	 *
 	 * ## Critical Difference from Simulation Version
 	 *
 	 * - Returns static `TrackBlock` instead of `DynamicTrackBlock`
 	 * - No dynamic wrapper lookups or state dependencies
+	 * - Pure topology navigation without reservation state
 	 */
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,
@@ -149,22 +151,18 @@ class DefaultTopologyNavigator(
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
-					try {
-						val following = staticNodeCell.getFollowingSegment(segment)
-						if (following != null) setOf(following) else emptySet()
-					} catch (e: IllegalStateException) {
-						// When segment is null and there are multiple possible directions,
-						// getFollowingSegment throws IllegalStateException.
-						// In this case, explore ALL possible directions (all joins).
-						if (segment == null) {
+					when {
+						segment == null -> {
+							// No incoming direction known - explore ALL possible exits
+							// Avoids calling getFollowingSegment(null) which throws IllegalStateException
+							// when multiple directions exist (e.g., at entry points)
 							staticNodeCell.joins()
-						} else {
-							// If segment is not null but still throws exception, this is a real error
-							logger.error(e) {
-								"getNextTrackBlock: Unexpected IllegalStateException for " +
-									"${staticNodeCell.javaClass.simpleName} with segment=$segment"
-							}
-							emptySet()
+						}
+						else -> {
+							// Known incoming direction - get deterministic exit
+							// May return null at dead ends (e.g., InOut exit points)
+							val following = staticNodeCell.getFollowingSegment(segment)
+							if (following != null) setOf(following) else emptySet()
 						}
 					}
 				}
@@ -344,20 +342,21 @@ class DefaultTopologyNavigator(
 	}
 
 	/**
-	 * Get all possible next track blocks following a node cell.
+	 * Get all possible next track blocks following a node cell (recursive helper).
 	 *
 	 * For oriented cells (InOut, Semaphore), returns single deterministic block.
 	 * For switches (RailSwitch), returns ALL possible blocks for all branches.
 	 *
-	 * ## Exception Handling Pattern
+	 * ## Direction Handling
 	 *
-	 * When `segment` is null and the node has multiple possible directions,
-	 * `getFollowingSegment()` throws [IllegalStateException] to signal ambiguous
-	 * navigation. We catch this and fall back to [joins()] to explore all directions.
+	 * **When segment==null** (no known incoming direction):
+	 * - Explores ALL possible exit directions via `joins()`
+	 * - Expected at entry points or when exploring all paths
 	 *
-	 * This exception-based control flow is intentional and used only at entry points
-	 * where direction cannot be determined from context alone. It signals semantic
-	 * meaning (ambiguous direction) rather than an error condition.
+	 * **When segment!=null** (known incoming direction):
+	 * - Queries node's navigation methods for valid exits
+	 * - OrientedNodeCell: single deterministic direction (requires non-null result)
+	 * - Non-oriented cells: multiple branches possible
 	 *
 	 * @param nodeCell The node cell to navigate from
 	 * @param current The current track block (for determining direction), or null
@@ -376,23 +375,17 @@ class DefaultTopologyNavigator(
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
-					try {
-						val following = staticNodeCell.getFollowingSegment(segment)
-						if (following != null) setOf(following) else emptySet()
-					} catch (e: IllegalStateException) {
-						// When segment is null and there are multiple possible directions,
-						// getFollowingSegment throws IllegalStateException.
-						// In this case, explore ALL possible directions (all joins).
-						// PathReservationService will filter and select the valid path.
-						if (segment == null) {
+					when {
+						segment == null -> {
+							// No incoming direction - explore all possible exits
+							// Avoids IllegalStateException from getFollowingSegment(null)
 							staticNodeCell.joins()
-						} else {
-							// If segment is not null but still throws exception, this is a real error
-							logger.error(e) {
-								"getAllNextTrackBlocks: Unexpected IllegalStateException for " +
-									"${staticNodeCell.javaClass.simpleName} at $location with segment=$segment"
-							}
-							emptySet()
+						}
+						else -> {
+							// Known incoming direction - find deterministic exit
+							// May return null at dead ends (e.g., InOut exit points)
+							val following = staticNodeCell.getFollowingSegment(segment)
+							if (following != null) setOf(following) else emptySet()
 						}
 					}
 				}
