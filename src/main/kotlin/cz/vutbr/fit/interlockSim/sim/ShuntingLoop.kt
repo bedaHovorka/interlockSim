@@ -62,7 +62,12 @@ import java.util.Queue
  * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/296">Issue #296</a>
  * @see docs/PATH_RESERVATION_ARCHITECTURE.md
  */
-class ShuntingLoop : Interlocking, KoinComponent {
+class ShuntingLoop(
+	context: SimulationContext,
+	endTime: Long,
+	private val navigator: TopologyNavigator = context.scope.get(),
+	private val pathReservationService: PathReservationService = context.getPathReservationService()
+) : Interlocking(context), KoinComponent {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
@@ -76,12 +81,7 @@ class ShuntingLoop : Interlocking, KoinComponent {
 	private val generator: InnerGenerator
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
-	private val endTime: Long
-
-	// Navigation services for dynamic path finding and reservation (Issue #296)
-	// Note: Services are initialized after context is set in constructor
-	private lateinit var navigator: TopologyNavigator
-	private lateinit var pathReservationService: PathReservationService
+	private val endTime: Long = endTime
 
 	private inner class RealTimeSynch : LoopProcess() {
 		private var presvihnuto: Double = 0.0
@@ -122,18 +122,8 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 	}
 
-	/**
-	 * @param context
-	 * @param endTime when simulation schould stop
-	 */
-	constructor(context: SimulationContext, endTime: Long) : super(context) {
-		this.endTime = endTime
+	init {
 		generator = InnerGenerator(context)
-
-		// Initialize navigator and pathReservationService via Koin DI (Issue #296)
-		navigator = context.scope.get()
-		// Use SimulationEnvironment interface to get PathReservationService (avoid casting to DefaultSimulationContext)
-		pathReservationService = context.getPathReservationService()
 
 		requireSimulation(context.getGraph().size() > 0) {
 			"Railway network graph is empty - must be loaded from vyhybna.xml first"
@@ -240,8 +230,23 @@ class ShuntingLoop : Interlocking, KoinComponent {
 				logger.debug { "Reserved path from ${sem.name} for $trainName" }
 				true
 			}
-			else -> {
-				logger.debug { "No path available from ${sem.name} for $trainName" }
+			is PathReservationService.ReservationResult.Conflict -> {
+				logger.warn {
+					"Conflict for $trainName at ${sem.name}: " +
+						"block ${result.conflictingBlock.name ?: "unnamed"} " +
+						"owned by ${result.existingOwner}"
+				}
+				false
+			}
+			is PathReservationService.ReservationResult.NoPathExists -> {
+				logger.debug { "No path exists from ${sem.name} for $trainName" }
+				false
+			}
+			is PathReservationService.ReservationResult.AllPathsBlocked -> {
+				logger.debug {
+					"All paths blocked from ${sem.name} for $trainName " +
+						"(attempted: ${result.attemptedPaths})"
+				}
 				false
 			}
 		}
