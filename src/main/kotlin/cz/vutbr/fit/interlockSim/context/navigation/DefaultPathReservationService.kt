@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
+import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -108,12 +109,44 @@ class DefaultPathReservationService(
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
 
-			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
+				// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
 			val blocks = extractUniqueBlocks(path)
 			logger.trace { "reservePath: Path has ${blocks.size} unique block(s)" }
 
-			// Step 2b: Check if all blocks are FREE
-			if (!blocks.areAllFree()) {
+			// Step 2a.5: Bug fix (Issue #296) - Filter out blocks already owned by this train
+			// Blocks already owned (RESERVED or OCCUPIED) by this train should be excluded because:
+			// 1. OCCUPIED: Train has already been there (blocks behind the train)
+			// 2. RESERVED: Already reserved from a (possibly different) separator
+			// Including owned blocks causes TOCTOU conflicts when trying to re-reserve from different separator.
+			val forwardBlocks = blocks.filterNot { block ->
+				block.trainName == trainId
+			}
+
+			if (forwardBlocks.isEmpty()) {
+				// All blocks in this path are already owned by this train
+				// Configure START semaphore before returning (may be from different position)
+				// configureSemaphoreSignal is idempotent, safe to call multiple times
+				if (blocks.isNotEmpty()) {
+					when {
+						start is DynamicRailSemaphore -> {
+							environment.configureSemaphoreSignal(start, blocks.first())
+						}
+						start is DynamicInOut -> {
+							val firstBlock = blocks.first()
+							val maxSpeed = firstBlock.maxSpeed(start)
+							start.inSemaphore.setUpSpeed(
+								from = start.direction(),
+								to = cz.vutbr.fit.interlockSim.objects.core.anti(start.direction()),
+								allowedSpeed = maxSpeed
+							)
+						}
+					}
+				}
+				return PathReservationService.ReservationResult.Success(blocks)
+			}
+
+			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
+			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
 				continue
 			}
 
@@ -123,8 +156,8 @@ class DefaultPathReservationService(
 			// - tryAtomicReservation() has rollback logic if state changed
 			// - Worst case: false positive on free check, caught during reservation, try next path
 			//
-			// Step 2c: Attempt atomic reservation with rollback
-			val reservationResult = tryAtomicReservation(trainId, start, blocks)
+			// Step 2c: Attempt atomic reservation with rollback (only forward blocks)
+			val reservationResult = tryAtomicReservation(trainId, start, forwardBlocks)
 			if (reservationResult != null) {
 				// Reservation failed, try next path
 				if (reservationResult is PathReservationService.ReservationResult.Conflict) {
@@ -134,8 +167,8 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// Step 2d: Register ownership in registry (atomic operation)
-			return when (val result = registry.registerAtomic(trainId, blocks)) {
+			// Step 2d: Register ownership in registry (atomic operation, only forward blocks)
+			return when (val result = registry.registerAtomic(trainId, forwardBlocks)) {
 				is PathReservationRegistry.RegistrationResult.Success -> {
 					// Success - path reserved and registered
 
@@ -153,11 +186,12 @@ class DefaultPathReservationService(
 					}
 
 					// Step 2g: Configure semaphore signal after successful reservation
-					if (blocks.isNotEmpty()) {
+					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
+					if (forwardBlocks.isNotEmpty()) {
 						when {
 							// Case 1: START is a semaphore -> configure it (train departing from semaphore)
 							start is DynamicRailSemaphore -> {
-								environment.configureSemaphoreSignal(start, blocks.first())
+								environment.configureSemaphoreSignal(start, forwardBlocks.first())
 								logger.debug {
 									"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
 								}
@@ -166,7 +200,7 @@ class DefaultPathReservationService(
 							// Path is conceptually: inOut.inSemaphore → blocks → target
 							// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
 							start is DynamicInOut -> {
-								val firstBlock = blocks.first()
+								val firstBlock = forwardBlocks.first()
 								val maxSpeed = firstBlock.maxSpeed(start)
 								// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
 								// For valid direction: from=anti(inSem.dir), to=inSem.dir
@@ -649,6 +683,8 @@ class DefaultPathReservationService(
 
 		try {
 			for (block in blocks) {
+				// Note: OCCUPIED blocks are filtered out before calling this method.
+				// RESERVED blocks are handled idempotently by setUpPath() (if from same separator).
 				block.setUpPath(separator, trainId)
 				reservedSoFar.add(block)
 			}
