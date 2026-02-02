@@ -11,9 +11,9 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
@@ -35,45 +35,23 @@ class InOutWorker(
 
 	private val queqe = Head()
 	private var myIdle = true
-	private val next: TrackSection? = env.getNextTrackSection(inOut, null)
-	private var path: Path? = null // cesta k naskedujicimu semaforu - pokud existuje
+	private val next: TrackSection? = env.getTopologyNavigator().getNextTrackSection(inOut, null)
 
-	private val pathFree: Condition =
-		object : Condition {
-			override fun test(): Boolean {
-				// GOAL 2 & GOAL 4: Path finding and interlocking validation
-				// When automatic pathfinding is implemented (Goal 2), handle case where no valid path exists
-				// Related to interlocking validation (Goal 4) - see LONG_TERM_GOALS.md
-				// Local variable for smart cast since next is mutable property
-				val nextLocal = next
-				path = if (nextLocal != null) env.pathToNextSemaphore(inOut, nextLocal) else null
-				return try {
-					val pathExists = path != null
-					val isFree = pathExists && path?.isFreeFrom(inOut) ?: false
-
-					if (!pathExists) {
-						logger.debug {
-							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.name} - path does not exist"
-						}
-					} else if (!isFree) {
-						logger.debug {
-							"${Process.time()} APPROVAL_CHECK: InOut ${inOut.name} - " +
-								"path not free, length=${path?.length()}"
-						}
-					}
-					isFree
-				} catch (e: TrackOperationException) {
-					logger.error {
-						"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
-							"path check failed: ${e.message}"
-					}
-					logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
-					env.errorStop(e)
-					false
-				}
+	private val pathFree = Condition {
+		try {
+			env.getPathReservationService().isPathToAnyNextSemaphoreAvailable(inOut, next)
+		} catch (e: TrackOperationException) {
+			logger.error {
+				"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
+					"path check failed: ${e.message}"
 			}
+			logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
+			env.errorStop(e)
+			false
 		}
+	}
 
+	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
 	override fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
@@ -84,12 +62,18 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {
-				// zarezervovat koleje
-				path?.setUpPath(inOut)
-				logger.info {
-					"${Process.time()} APPROVAL_GRANTED: InOut ${inOut.name} - " +
-						"path reserved for $first, length=${path?.length()}"
-				}
+				// Use integrated path setup like working version
+				// This reserves blocks AND sets up semaphore signals in one call
+				val train = first as? Train
+				val trainId = train?.name ?: throw SimulationException(
+					"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
+				)
+				val result = env.getPathReservationService()
+					.reservePathToAnyNextSemaphore(trainId, inOut, next!!)
+
+				logger.info {  "${time()} APPROVAL: InOut ${inOut.name} - $result" }
+				// FIXME result processing?
+
 			} catch (e: Exception) {
 				logger.warn {
 					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +

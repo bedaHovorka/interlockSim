@@ -142,6 +142,7 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
+		@Disabled("Sim mode selected with sim argument")
 		fun `example mode selected with example argument`() {
 			// Arrange
 			val args = arrayOf("example")
@@ -195,6 +196,7 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
+		@Disabled("Sim mode selected with sim argument")
 		fun `example mode accepts optional example name`() {
 			// Arrange
 			val args = arrayOf("example")

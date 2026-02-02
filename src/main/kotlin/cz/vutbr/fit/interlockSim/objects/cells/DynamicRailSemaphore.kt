@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -74,20 +75,30 @@ sealed class DynamicRailSemaphore(
 	override fun setUpPath(
 		from: Cell.Segment?,
 		to: Cell.Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	) {
-		if (checkPathSegments(from, to)) {
+		setUpSpeed(from, to, allowedSpeed)
+	}
+
+	fun setUpSpeed(from: Cell.Segment?, to: Cell.Segment?, allowedSpeed: Double) {
+		val isValidDirection = checkPathSegments(from, to)
+
+		if (isValidDirection) {
 			signal = forSpeed(allowedSpeed)
+			logger.debug {
+				"SEMAPHORE_SIGNAL_UPDATED: ${staticRef.getName()} signal changed to $signal " +
+					"(allowedSpeed=$allowedSpeed)"
+			}
+		} else {
+			logger.warn {
+				"SEMAPHORE_SIGNAL_NOT_UPDATED: ${staticRef.getName()} signal remains $signal " +
+					"due to reverse direction (from=$from, to=$to, semaphoreDirection=${staticRef.direction()})"
+			}
 		}
 	}
 
 	override fun allowedSpeed(): Double = signal.allowedSpeed()
-
-	/**
-	 * Implementation of isSwitch() for DynamicRailSemaphore.
-	 * Returns false since this is a semaphore, not a switch.
-	 */
-	override fun isSwitch(): Boolean = false
 
 	@Throws(PathSeparatorChangeException::class)
 	private fun checkPathSegments(

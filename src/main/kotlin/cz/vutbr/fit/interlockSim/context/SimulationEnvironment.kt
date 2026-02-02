@@ -9,16 +9,17 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 
 /**
@@ -89,31 +90,23 @@ interface SimulationEnvironment {
 	fun getInOuts(): Collection<DynamicInOut>
 
 	/**
-	 * Navigate to the next track section from a path separator.
+	 * Get topology navigator for pure topology navigation (no state dependencies).
 	 *
-	 * Object comes from `current` to `separator` and needs to know how to continue.
+	 * The TopologyNavigator provides static graph traversal without any dependency on
+	 * dynamic state (block reservations, occupancy, etc.). Use this for finding the next
+	 * track section based purely on network topology.
 	 *
-	 * @param separator Starting point (semaphore, switch, InOut)
-	 * @param current Current track section (null = start of navigation)
-	 * @return Next track section, or null if no path exists
+	 * ## Use Cases
+	 *
+	 * - InOutWorker finding initial track section from InOut
+	 * - Network validation and connectivity analysis
+	 * - Editor features requiring topology queries
+	 *
+	 * @return TopologyNavigator instance for this simulation context
+	 * @see TopologyNavigator
+	 * @since Issue #296 Phase 5 (InOutWorker dependency)
 	 */
-	fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection?
-
-	/**
-	 * Find path from separator to next semaphore.
-	 * Used for train navigation and path reservation.
-	 *
-	 * @param separator Start of path (must be in direction of travel)
-	 * @param next First track section in path
-	 * @return Path to next semaphore, or null if no path found
-	 */
-	fun pathToNextSemaphore(
-		separator: PathSeparator,
-		next: TrackSection
-	): Path?
+	fun getTopologyNavigator(): TopologyNavigator
 
 	/**
 	 * Check if an oriented separator (semaphore) faces the specified direction.
@@ -169,6 +162,93 @@ interface SimulationEnvironment {
 	 * @since Issue #295 (Phase 3 of Issue #292)
 	 */
 	fun getTrainNavigationService(): TrainNavigationService
+
+	/**
+	 * Get path reservation service for dispatcher/interlocking path reservation.
+	 *
+	 * The PathReservationService provides atomic path reservation with train ownership
+	 * tracking. Used by dispatchers and interlocking logic to reserve paths before
+	 * trains enter the network.
+	 *
+	 * ## Use Cases
+	 *
+	 * - InOutWorker reserves path for incoming train
+	 * - Interlocking reserves continuation path when train approaches semaphore
+	 * - Dispatcher pre-reserves paths for scheduled trains
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * // In InOutWorker or Interlocking:
+	 * val pathService = env.getPathReservationService()
+	 * val result = pathService.reservePath(trainId, start, target)
+	 *
+	 * when (result) {
+	 *     is Success -> {
+	 *         // Path reserved, train can proceed
+	 *         approveTrainEntry(train)
+	 *     }
+	 *     is AllPathsBlocked -> {
+	 *         // Wait for path to become available
+	 *         waitUntil { pathService.isPathAvailable(start, target) }
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * @return PathReservationService instance for this simulation context
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+	 * @since Issue #296 (ShuntingLoop refactoring)
+	 */
+	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+
+	/**
+	 * Configure semaphore signal appearance after path reservation.
+	 *
+	 * This method separates signal configuration from block reservation logic.
+	 * PathReservationService handles block ownership tracking, while this method
+	 * updates semaphore visual signals (GO/SLOW/STOP) to match the reserved path.
+	 *
+	 * ## Separation of Concerns
+	 *
+	 * - **PathReservationService**: Owns block reservation and ownership tracking
+	 * - **configureSemaphoreSignal**: Owns semaphore visual state updates
+	 *
+	 * This separation allows:
+	 * - Clear API responsibilities
+	 * - Non-fatal signal configuration failures (blocks already reserved)
+	 * - Independent testing of reservation vs signal logic
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * val result = env.getPathReservationService().reservePath(trainId, start, target)
+	 * when (result) {
+	 *     is Success -> {
+	 *         if (result.reservedBlocks.isNotEmpty()) {
+	 *             env.configureSemaphoreSignal(
+	 *                 semaphore = target as DynamicRailSemaphore,
+	 *                 firstBlock = result.reservedBlocks.first(),
+	 *                 allowedSpeed = 40.0
+	 *             )
+	 *         }
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * ## Error Handling
+	 *
+	 * Signal configuration failures are non-fatal - if semaphore update fails,
+	 * blocks remain reserved and trains can proceed. Only logs warning.
+	 *
+	 * @param semaphore The semaphore to configure
+	 * @param firstBlock First reserved block in the path
+	 * @param allowedSpeed Speed limit for the path (null = auto-calculate from firstBlock)
+	 */
+	fun configureSemaphoreSignal(
+		semaphore: DynamicRailSemaphore,
+		firstBlock: DynamicTrackBlock,
+		allowedSpeed: Double? = null
+	)
 
 	// ========================================
 	// Dynamic State Management
@@ -260,4 +340,50 @@ interface SimulationEnvironment {
 	 * @param types Report types to enable
 	 */
 	fun addReportTypes(vararg types: SimulationContext.ReportType)
+
+	/**
+	 * Release all path reservations for a train that has completed its journey.
+	 *
+	 * When a train reaches its destination and completes, it MUST release all
+	 * blocks it has reserved from the PathReservationRegistry. This ensures
+	 * subsequent trains can reserve those blocks without conflicts.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by [cz.vutbr.fit.interlockSim.sim.Train] when it completes its
+	 * journey and reaches the destination InOut from its timetable.
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * // In Train.actions() when journey complete:
+	 * env.releaseTrainReservations(trainId = name)
+	 * env.report("ends", this, ReportType.TRAIN_EVENTS)
+	 * ```
+	 *
+	 * @param trainId The train identifier to release reservations for
+	 */
+	fun releaseTrainReservations(trainId: String)
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from the registry if it is FREE (no occupant).
+	 * This is called automatically by the Train's Tail process after leaving a block,
+	 * ensuring blocks are cleaned up as soon as they become available.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by Train's Tail after leaving a block:
+	 * ```kotlin
+	 * if (current != null) {
+	 *     current.leave(this@Train)
+	 *     env.unregisterBlock(trainId = name, block = current)
+	 * }
+	 * ```
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 */
+	fun unregisterBlock(trainId: String, block: DynamicTrackBlock)
 }

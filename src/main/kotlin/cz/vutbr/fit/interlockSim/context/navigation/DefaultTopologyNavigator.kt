@@ -199,7 +199,6 @@ class DefaultTopologyNavigator(
 
 			// Check depth limit
 			if (node.depth >= maxDepth) {
-				logger.debug { "findAllTopologicalPaths: reached max depth $maxDepth at $separator" }
 				continue
 			}
 
@@ -216,7 +215,6 @@ class DefaultTopologyNavigator(
 			if (isSameSeparator(separator, target)) {
 				val path = buildPath(node)
 				paths.add(path)
-				logger.debug { "findAllTopologicalPaths: found path with ${path.size} sections" }
 				continue
 			}
 
@@ -230,7 +228,6 @@ class DefaultTopologyNavigator(
 			}
 		}
 
-		logger.info { "findAllTopologicalPaths: found ${paths.size} path(s) from $start to $target" }
 		return paths
 	}
 
@@ -326,8 +323,25 @@ class DefaultTopologyNavigator(
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
-					val following = staticNodeCell.getFollowingSegment(segment)
-					if (following != null) setOf(following) else emptySet()
+					try {
+						val following = staticNodeCell.getFollowingSegment(segment)
+						if (following != null) setOf(following) else emptySet()
+					} catch (e: IllegalStateException) {
+						// When segment is null and there are multiple possible directions,
+						// getFollowingSegment throws IllegalStateException.
+						// In this case, explore ALL possible directions (all joins).
+						// PathReservationService will filter and select the valid path.
+						if (segment == null) {
+							staticNodeCell.joins()
+						} else {
+							// If segment is not null but still throws exception, this is a real error
+							logger.error(e) {
+								"getAllNextTrackBlocks: Unexpected IllegalStateException for " +
+									"${staticNodeCell.javaClass.simpleName} at $location with segment=$segment"
+							}
+							emptySet()
+						}
+					}
 				}
 				else -> {
 					// Non-oriented (switches) may have multiple branches

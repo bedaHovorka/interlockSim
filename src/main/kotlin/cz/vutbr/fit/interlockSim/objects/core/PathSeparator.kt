@@ -20,4 +20,14 @@ interface PathSeparator :
 	 * @return following segments - static
 	 */
 	fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment>
+
+	/**
+	 * Returns true if this is a switch (RailSwitch), false for semaphores/InOut.
+	 * Eliminates instanceof checks in AbstractPath for switch-specific logic.
+	 *
+	 * Used for path speed calculation where switches may affect allowed speed.
+	 *
+	 * @return true if this is a RailSwitch, false otherwise
+	 */
+	fun isSwitch(): Boolean = false
 }

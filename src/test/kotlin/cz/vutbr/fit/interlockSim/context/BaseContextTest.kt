@@ -54,15 +54,14 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `create empty editing context succeeds`() {
-		// Act
-		val context = editingContextFactory.createEmptyContext()
-
-		// Assert
-		assertThat(context).isNotNull()
-		assertThat(context.getRailWayNetGrid()).isNotNull()
-		assertThat(context.getGraph()).isNotNull()
-		assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
-		assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+		editingContextFactory.createEmptyContext().use { context ->
+			// Assert
+			assertThat(context).isNotNull()
+			assertThat(context.getRailWayNetGrid()).isNotNull()
+			assertThat(context.getGraph()).isNotNull()
+			assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
+			assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+		}
 	}
 
 	/**
@@ -70,15 +69,14 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `create empty simulation context succeeds`() {
-		// Act
-		val context = simulationContextFactory.createEmptyContext()
-
-		// Assert
-		assertThat(context).isNotNull()
-		assertThat(context.getRailWayNetGrid()).isNotNull()
-		assertThat(context.getGraph()).isNotNull()
-		assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
-		assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+		simulationContextFactory.createEmptyContext().use { context ->
+			// Assert
+			assertThat(context).isNotNull()
+			assertThat(context.getRailWayNetGrid()).isNotNull()
+			assertThat(context.getGraph()).isNotNull()
+			assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
+			assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+		}
 	}
 
 	/**
@@ -86,15 +84,14 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `getRailWayNetGrid returns consistent instance`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { context ->
+			// Act
+			val grid1 = context.getRailWayNetGrid()
+			val grid2 = context.getRailWayNetGrid()
 
-		// Act
-		val grid1 = context.getRailWayNetGrid()
-		val grid2 = context.getRailWayNetGrid()
-
-		// Assert
-		assertThat(grid1).isSameInstanceAs(grid2)
+			// Assert
+			assertThat(grid1).isSameInstanceAs(grid2)
+		}
 	}
 
 	/**
@@ -102,15 +99,14 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `getGraph returns consistent instance`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { context ->
+			// Act
+			val graph1 = context.getGraph()
+			val graph2 = context.getGraph()
 
-		// Act
-		val graph1 = context.getGraph()
-		val graph2 = context.getGraph()
-
-		// Assert
-		assertThat(graph1).isSameInstanceAs(graph2)
+			// Assert
+			assertThat(graph1).isSameInstanceAs(graph2)
+		}
 	}
 
 	/**
@@ -118,18 +114,17 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `configuration properties work in editing context`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { context ->
+			// Act - Set configuration
+			context.currentMaxSpeed = 120.0
+			context.currentTrackLength = 500.0
+			context.currentNameString = "TestName"
 
-		// Act - Set configuration
-		context.currentMaxSpeed = 120.0
-		context.currentTrackLength = 500.0
-		context.currentNameString = "TestName"
-
-		// Assert - Read configuration
-		assertThat(context.currentMaxSpeed).isEqualTo(120.0)
-		assertThat(context.currentTrackLength).isEqualTo(500.0)
-		assertThat(context.currentNameString).isEqualTo("TestName")
+			// Assert - Read configuration
+			assertThat(context.currentMaxSpeed).isEqualTo(120.0)
+			assertThat(context.currentTrackLength).isEqualTo(500.0)
+			assertThat(context.currentNameString).isEqualTo("TestName")
+		}
 	}
 
 	/**
@@ -137,18 +132,19 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `grid stores and retrieves cells correctly`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
-		val point = Point(5, 5)
+		editingContextFactory.createEmptyContext().use { context ->
+			// Arrange
+			val point = Point(5, 5)
 
-		// Act
-		context.putCell(point, inA)
+			// Act
+			context.putCell(point, inA)
 
-		// Assert
-		val retrievedCell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
-		assertThat(retrievedCell).isNotNull()
-		assertThat(retrievedCell!!).isInstanceOf<InOut>()
-		assertThat((retrievedCell as InOut).getName()).isEqualTo("A")
+			// Assert
+			val retrievedCell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
+			assertThat(retrievedCell).isNotNull()
+			assertThat(retrievedCell!!).isInstanceOf<InOut>()
+			assertThat((retrievedCell as InOut).getName()).isEqualTo("A")
+		}
 	}
 
 	/**
@@ -156,20 +152,21 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `graph tracks track block connections correctly`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
-		val p1 = Point(1, 1)
-		val p2 = Point(5, 5)
-		context.putCell(p1, inA)
-		context.putCell(p2, outB)
+		editingContextFactory.createEmptyContext().use { context ->
+			// Arrange
+			val p1 = Point(1, 1)
+			val p2 = Point(5, 5)
+			context.putCell(p1, inA)
+			context.putCell(p2, outB)
 
-		// Act - Join cells with track block
-		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-		context.joinCells(p1, p2, trackBlock)
+			// Act - Join cells with track block
+			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+			context.joinCells(p1, p2, trackBlock)
 
-		// Assert - Graph contains the connection
-		val graph = context.getGraph()
-		assertThat(graph.size()).isGreaterThan(0)
+			// Assert - Graph contains the connection
+			val graph = context.getGraph()
+			assertThat(graph.size()).isGreaterThan(0)
+		}
 	}
 
 	/**
@@ -177,22 +174,23 @@ class BaseContextTest : KoinTestBase() {
 	 */
 	@Test
 	fun `property change listener registration works`() {
-		// Arrange
-		val context = editingContextFactory.createEmptyContext()
-		var listenerCalled = false
-		val listener =
-			java.beans.PropertyChangeListener { evt ->
-				listenerCalled = true
-			}
+		editingContextFactory.createEmptyContext().use { context ->
+			// Arrange
+			var listenerCalled = false
+			val listener =
+				java.beans.PropertyChangeListener { evt ->
+					listenerCalled = true
+				}
 
-		// Act
-		context.addPropertyChangeListener(listener)
-		// Trigger a property change by adding a cell
-		context.putCell(Point(1, 1), inA)
+			// Act
+			context.addPropertyChangeListener(listener)
+			// Trigger a property change by adding a cell
+			context.putCell(Point(1, 1), inA)
 
-		// Assert - Listener was registered successfully (no exception thrown)
-		// Note: We can't easily verify if listener was called without internal access,
-		// but we can verify registration/removal doesn't throw
-		context.removePropertyChangeListener(listener)
+			// Assert - Listener was registered successfully (no exception thrown)
+			// Note: We can't easily verify if listener was called without internal access,
+			// but we can verify registration/removal doesn't throw
+			context.removePropertyChangeListener(listener)
+		}
 	}
 }

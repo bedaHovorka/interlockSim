@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Path
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
 /**
  * Service for train-specific path navigation within reserved blocks.
@@ -141,13 +140,11 @@ interface TrainNavigationService {
 	 *
 	 * @param trainId Unique identifier for the train (typically Train.toString())
 	 * @param separator Starting point (semaphore, InOut)
-	 * @param next First track section in path
 	 * @return Path to next semaphore if all blocks are reserved for this train, null otherwise
 	 */
 	fun findReservedPathForTrain(
 		trainId: String,
-		separator: PathSeparator,
-		next: TrackSection
+		separator: PathSeparator
 	): Path?
 
 	/**
@@ -171,12 +168,10 @@ interface TrainNavigationService {
 	 *
 	 * @param trainId Unique identifier for the train
 	 * @param separator Starting point
-	 * @param next First track section
 	 * @return true if path exists and all blocks are reserved for this train, false otherwise
 	 */
 	fun isPathReservedForTrain(
 		trainId: String,
-		separator: PathSeparator,
-		next: TrackSection
+		separator: PathSeparator
 	): Boolean
 }

@@ -56,7 +56,7 @@ fun List<DynamicTrackBlock>.areAllFree(): Boolean =
  * @return true if block is RESERVED by this train, false otherwise
  */
 fun DynamicTrackBlock.isReservedBy(trainId: String): Boolean =
-	this.trainId == trainId && getState() == TrackFacility.State.RESERVED
+	this.trainName == trainId && getState() == TrackFacility.State.RESERVED
 
 /**
  * Check if this block is occupied by a specific train.
@@ -77,7 +77,7 @@ fun DynamicTrackBlock.isReservedBy(trainId: String): Boolean =
  * @return true if block is OCCUPIED by this train, false otherwise
  */
 fun DynamicTrackBlock.isOccupiedBy(trainId: String): Boolean =
-	this.trainId == trainId && getState() == TrackFacility.State.OCCUPIED
+	this.trainName == trainId && getState() == TrackFacility.State.OCCUPIED
 
 /**
  * Check if this block is owned by any train (RESERVED or OCCUPIED).
@@ -93,7 +93,7 @@ fun DynamicTrackBlock.isOccupiedBy(trainId: String): Boolean =
  * @return true if block has a non-null trainId, false otherwise
  */
 fun DynamicTrackBlock.isOwnedByAnyTrain(): Boolean =
-	this.trainId != null
+	this.trainName != null
 
 /**
  * Get the count of blocks in this list that are FREE.
@@ -125,3 +125,37 @@ fun List<DynamicTrackBlock>.countReserved(): Int =
  */
 fun List<DynamicTrackBlock>.countOccupied(): Int =
 	count { it.getState() == TrackFacility.State.OCCUPIED }
+
+/**
+ * Check if all blocks in this list are available for a specific train.
+ *
+ * A block is considered "available" for a train if:
+ * - Block is FREE (no owner), OR
+ * - Block is already owned by THIS train (RESERVED or OCCUPIED)
+ *
+ * This allows trains to re-reserve paths through blocks they already own,
+ * which is necessary for incremental path extension as trains move forward.
+ *
+ * ## Usage
+ *
+ * ```kotlin
+ * val blocks: List<DynamicTrackBlock> = getBlocks()
+ * if (blocks.areAllFreeOrOwnedBy("train123")) {
+ *     // All blocks are available - either free or already owned by train123
+ *     reservePath("train123", blocks)
+ * }
+ * ```
+ *
+ * ## Bug Fix (Issue #296)
+ * Previously, `areAllFree()` was used which rejected paths through blocks
+ * already owned by the requesting train. This caused trains to fail path
+ * reservation when trying to extend their reserved path forward.
+ *
+ * @param trainId The train identifier to check ownership
+ * @return true if ALL blocks are FREE or owned by this train, false if any is owned by another train
+ */
+fun List<DynamicTrackBlock>.areAllFreeOrOwnedBy(trainId: String): Boolean =
+	all { block ->
+		block.getState() == TrackFacility.State.FREE ||
+		block.trainName == trainId
+	}
