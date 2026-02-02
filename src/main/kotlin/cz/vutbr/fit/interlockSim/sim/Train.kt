@@ -103,7 +103,8 @@ class Train :
 				next = env.getNextTrackSection(where, current)
 				if (next == null) {
 					if (where is DynamicInOut) break
-					env.stop()
+					// Train should wait for dispatcher to reserve next path
+					// Do NOT stop the entire simulation!
 					passivate()
 					continue // Restart loop after passivation to re-check for next track section
 				}
