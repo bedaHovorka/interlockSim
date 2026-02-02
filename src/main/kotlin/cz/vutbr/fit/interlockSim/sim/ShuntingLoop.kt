@@ -232,39 +232,6 @@ class ShuntingLoop : Interlocking, KoinComponent {
 		}
 	}
 
-	private fun checkOneEnd(
-		block: DynamicTrackBlock,
-		to: DynamicRailSemaphore
-	): Boolean {
-		if (block.getState() == TrackFacility.State.FREE) {
-			return false
-		}
-
-		if (block.getState() == TrackFacility.State.OCCUPIED) {
-			val occupant = requireSimulationNotNull(block.getTrackOccupant())
-			if (occupant.nextSemaphore() != to) {
-				return false
-			}
-
-			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
-			return tryReservePathFrom(to, occupant.name)
-		}
-
-		if (block.getState() == TrackFacility.State.RESERVED) {
-			// Check if path is already set up through this semaphore
-			val otherEnd = block.getSecondEnd(to)
-			if (otherEnd != null && block.isSetUpPath(env.toDynamic(otherEnd))) {
-				logger.debug { "Path already set up through ${to.name}, attempting extension" }
-				val trainName = block.trainName
-				if (trainName != null) {
-					return tryReservePathFrom(to, trainName)
-				}
-			}
-		}
-
-		return false
-	}
-
 	/**
 	 * Try to reserve a path from the given semaphore using PathReservationService.
 	 *
@@ -290,6 +257,37 @@ class ShuntingLoop : Interlocking, KoinComponent {
 				false
 			}
 		}
+	}
+
+	private fun checkOneEnd(
+		block: DynamicTrackBlock,
+		to: DynamicRailSemaphore
+	): Boolean {
+		if (block.getState() == TrackFacility.State.FREE) {
+			return false
+		}
+
+		if (block.getState() == TrackFacility.State.OCCUPIED) {
+			val occupant = requireSimulationNotNull(block.getTrackOccupant())
+			if (occupant.nextSemaphore() != to) {
+				return false
+			}
+
+			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
+			return tryReservePathFrom(to, occupant.name)
+		}
+
+		if (block.getState() == TrackFacility.State.RESERVED) {
+			// Check if path is already set up through this semaphore
+			val otherEnd = block.getSecondEnd(to)
+			if (block.isSetUpPath(env.toDynamic(otherEnd))) {
+				logger.debug { "Path already set up through ${to.name}, attempting extension" }
+				val trainName = requireSimulationNotNull(block.trainName)
+				return tryReservePathFrom(to, trainName)
+			}
+		}
+
+		return false
 	}
 
 	private fun approveTrains() {
