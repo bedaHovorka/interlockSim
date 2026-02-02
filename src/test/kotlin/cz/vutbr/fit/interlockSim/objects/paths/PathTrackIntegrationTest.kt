@@ -599,7 +599,7 @@ class PathTrackIntegrationTest : KoinTestBase() {
  * Represents a train occupying a track.
  */
 internal class MockTrainOccupant(
-	private val name: String
+	override val name: String
 ) : TrackOccupant {
 	override fun distanceToSemaphore(): Double = 50.0
 

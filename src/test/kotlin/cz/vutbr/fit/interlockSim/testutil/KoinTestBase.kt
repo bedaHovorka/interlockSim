@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.Context
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.koin.core.context.startKoin
@@ -54,10 +55,45 @@ import org.koin.test.KoinTest
  * start Koin until test methods run, so accessing `by inject()` properties
  * in @BeforeEach would fail without this base class.
  *
+ * Context Resource Management:
+ * Tests that create Context instances should assign them to `testContext` field
+ * for automatic cleanup in tearDownKoin(). This prevents Koin scope leaks.
+ *
+ * Pattern A - Single context per test class:
+ * ```kotlin
+ * class MyTest : KoinTestBase() {
+ *     private lateinit var context: SimulationContext
+ *
+ *     @BeforeEach
+ *     fun setUp() {
+ *         context = factory.createContext()
+ *         testContext = context  // Tracked for cleanup
+ *     }
+ *     // Cleanup automatic via tearDownKoin()
+ * }
+ * ```
+ *
+ * Pattern B - Context per test method:
+ * ```kotlin
+ * @Test
+ * fun myTest() {
+ *     factory.createContext().use { context ->
+ *         // ... test code ...
+ *     } // Automatic close()
+ * }
+ * ```
+ *
  * @since 2026-01-12 (Koin migration)
  * @since 2026-01-16 (Performance optimization - lightweight module by default)
+ * @since 2026-01-27 (Context cleanup pattern)
  */
 abstract class KoinTestBase : KoinTest {
+	/**
+	 * Optional context tracking for automatic cleanup.
+	 * Tests that create a context in @BeforeEach should set this field.
+	 * Will be closed automatically in tearDownKoin().
+	 */
+	protected var testContext: Context<*, *>? = null
 	/**
 	 * Override this method to use a different test module.
 	 * Default: testModuleLightweight (no GUI, faster)
@@ -75,6 +111,8 @@ abstract class KoinTestBase : KoinTest {
 
 	@AfterEach
 	fun tearDownKoin() {
+		testContext?.close()
+		testContext = null
 		stopKoin()
 	}
 }

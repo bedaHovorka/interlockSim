@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -104,16 +105,11 @@ class DynamicRailSwitch(
 		return double1!!.toDouble()
 	}
 
-	/**
-	 * Implementation of isSwitch() for DynamicRailSwitch.
-	 * Returns true since this is a switch.
-	 */
-	override fun isSwitch(): Boolean = true
-
 	override fun setUpPath(
 		from: Cell.Segment?,
 		to: Cell.Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	) {
 		val newConf = getPathConfWithException(from, to)
 		logger.info {

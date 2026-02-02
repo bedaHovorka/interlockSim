@@ -9,7 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * Registry tracking train ownership of reserved track blocks.
@@ -28,7 +35,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * ## Usage Pattern (New Atomic API)
  *
  * ```kotlin
- * val registry = PathReservationRegistry()
+ * val registry = PathReservationRegistry(context)
  *
  * // Attempt atomic registration
  * when (val result = registry.registerAtomic("train123", listOf(block1, block2, block3))) {
@@ -52,9 +59,13 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  *
  * **NOT thread-safe.** All operations assume single-threaded access.
  *
+ * @param context Simulation context (needed for PathInfo merging with ArrayPath)
  * @since Issue #294 (Phase 2 of Issue #292)
+ * @since Issue #296 Phase 8 (PathInfo extension fix)
  */
-class PathReservationRegistry {
+class PathReservationRegistry(
+	private val context: SimulationContext
+) {
 	/**
 	 * Result of an atomic registration attempt.
 	 *
@@ -94,6 +105,16 @@ class PathReservationRegistry {
 	 * Mapping: Block → Owning train ID
 	 */
 	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
+
+	/**
+	 * Mapping: Train ID → PathInfo metadata
+	 *
+	 * Stores complete path information including entry directions for each train.
+	 * This enables TrainNavigationService to determine correct direction at switches.
+	 *
+	 * @since Issue #295/#296 Phase 3
+	 */
+	private val trainToPathInfo = mutableMapOf<String, PathInfo>()
 
 	/**
 	 * Atomically register blocks for a train.
@@ -206,25 +227,105 @@ class PathReservationRegistry {
 	/**
 	 * Unregister all blocks reserved by a train.
 	 *
-	 * Removes all bidirectional mappings for the given train.
+	 * Removes all bidirectional mappings for the given train, regardless of block state.
+	 * This is used for simulation cleanup, test scenarios, and forced release.
 	 *
 	 * ## State Changes
 	 *
 	 * - Removes trainToBlocks[trainId]
 	 * - Removes blockToTrain[block] for all blocks owned by this train
+	 * - Removes trainToPathInfo[trainId] (Issue #295/#296)
 	 *
 	 * @param trainId The train identifier
 	 * @return List of blocks that were released (empty if train had no reservations)
 	 */
 	fun unregister(trainId: String): List<DynamicTrackBlock> {
-		val blocks = trainToBlocks.remove(trainId) ?: return emptyList()
+		val blocks = trainToBlocks[trainId] ?: return emptyList()
 
-		// Remove reverse mappings
+		// Remove all blocks from mappings (regardless of state)
 		blocks.forEach { block ->
 			blockToTrain.remove(block)
 		}
 
-		return blocks
+		// Remove train entry and PathInfo
+		trainToBlocks.remove(trainId)
+		trainToPathInfo.remove(trainId)
+
+		logger.debug {
+			"unregister: Released ${blocks.size} blocks for '$trainId'"
+		}
+
+		return blocks.toList()
+	}
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from registry mappings if it is FREE (no occupant).
+	 * This is called automatically when a train's Tail leaves a block, ensuring
+	 * blocks are cleaned up as soon as they become available for subsequent trains.
+	 *
+	 * ## Preconditions
+	 *
+	 * - Block must be FREE (no occupant, state == FREE)
+	 * - Block must be registered to the given train
+	 *
+	 * ## State Changes
+	 *
+	 * If block is FREE and owned by trainId:
+	 * - Removes block from trainToBlocks[trainId]
+	 * - Removes blockToTrain[block]
+	 * - If this was the last block, removes trainToBlocks[trainId] and trainToPathInfo[trainId]
+	 *
+	 * ## Use Case
+	 *
+	 * Called by Train's Tail process after calling block.leave():
+	 * ```kotlin
+	 * current.leave(this@Train)
+	 * env.unregisterBlock(trainId, current)
+	 * ```
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 * @return true if block was unregistered, false if block is still occupied or not owned
+	 */
+	fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
+		// Validate block is owned by this train
+		val owner = blockToTrain[block]
+		if (owner != trainId) {
+			logger.debug {
+				"unregisterBlock: Block $block not owned by '$trainId' (owner='$owner')"
+			}
+			return false
+		}
+
+		// Only unregister if block is FREE
+		if (block.occupant != null || block.getState() != TrackFacility.State.FREE) {
+			logger.debug {
+				"unregisterBlock: Block $block still occupied (occupant=${block.occupant}, " +
+					"state=${block.getState()})"
+			}
+			return false
+		}
+
+		// Remove from mappings
+		blockToTrain.remove(block)
+		trainToBlocks[trainId]?.remove(block)
+
+		logger.debug {
+			"unregisterBlock: Released block $block for '$trainId'"
+		}
+
+		// If no blocks remain, remove train entry and PathInfo
+		if (trainToBlocks[trainId]?.isEmpty() == true) {
+			trainToBlocks.remove(trainId)
+			trainToPathInfo.remove(trainId)
+			logger.debug {
+				"unregisterBlock: All blocks released, removed '$trainId' from registry"
+			}
+		}
+
+		return true
 	}
 
 	/**
@@ -253,6 +354,128 @@ class PathReservationRegistry {
 	fun isRegistered(block: DynamicTrackBlock): Boolean = blockToTrain.containsKey(block)
 
 	/**
+	 * Register PathInfo for a train.
+	 *
+	 * ## PathInfo Extension (Issue #296 Phase 8)
+	 *
+	 * Instead of overwriting the old PathInfo, this method **extends** it by merging:
+	 * - Appends new path elements to old path (preserves Tail navigation)
+	 * - Updates target to new target (allows Front to progress)
+	 * - Merges entry directions (new overwrites old for conflicts)
+	 *
+	 * This fixes the "Train Tail Double-Leave Bug" where overwriting PathInfo caused
+	 * the Tail to lose track of its position, leading to wrong-direction navigation.
+	 *
+	 * @param trainId The train identifier
+	 * @param newPathInfo Complete path metadata to register or merge
+	 * @since Issue #295/#296 Phase 3
+	 * @since Issue #296 Phase 8 (PathInfo extension fix)
+	 */
+	fun registerPathInfo(trainId: String, newPathInfo: PathInfo) {
+		val oldPathInfo = trainToPathInfo[trainId]
+
+		if (oldPathInfo == null) {
+			// First registration, just store it
+			logger.debug {
+				"registerPathInfo: first registration for '$trainId', storing PathInfo " +
+					"(start=${newPathInfo.start}, target=${newPathInfo.target}, " +
+					"path length=${newPathInfo.reservedPath.size})"
+			}
+			trainToPathInfo[trainId] = newPathInfo
+			return
+		}
+
+		// Merge old and new PathInfo
+		val mergedPathInfo = mergePathInfo(oldPathInfo, newPathInfo)
+		trainToPathInfo[trainId] = mergedPathInfo
+
+		logger.debug {
+			"registerPathInfo: merged PathInfo for '$trainId' " +
+				"(old: ${oldPathInfo.start}→${oldPathInfo.target}, " +
+				"new: ${newPathInfo.start}→${newPathInfo.target}, " +
+				"merged: ${mergedPathInfo.start}→${mergedPathInfo.target}, " +
+				"path length: ${oldPathInfo.reservedPath.size} + ${newPathInfo.reservedPath.size} " +
+				"= ${mergedPathInfo.reservedPath.size})"
+		}
+	}
+
+	/**
+	 * Merge two PathInfo instances by extending old path with new path.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Create new ArrayPath and add all elements from old path
+	 * 2. Find overlap point (old.target == new.start)
+	 * 3. Add elements from new path, skipping first occurrence if it overlaps
+	 * 4. Merge entry directions (new overwrites old for same blocks)
+	 *
+	 * ## Example
+	 *
+	 * ```
+	 * old: B → zB → vB → doB1  (Tail at B, Front at doB1)
+	 * new: doB1 → k1 → A       (Front reserves forward to A)
+	 * merged: B → zB → vB → doB1 → k1 → A  (complete path for both Front and Tail)
+	 * ```
+	 *
+	 * @param old Previous PathInfo (Tail may still be navigating through this)
+	 * @param new New PathInfo (Front just reserved this)
+	 * @return Merged PathInfo covering both old and new paths
+	 * @since Issue #296 Phase 8
+	 */
+	private fun mergePathInfo(old: PathInfo, new: PathInfo): PathInfo {
+		// Strategy: Append new path to old path
+		val mergedPath = ArrayPath(context)
+
+		// Step 1: Add all elements from old path
+		old.reservedPath.forEach { mergedPath.add(it) }
+
+		// Step 2: Find overlap point (old.target == new.start)
+		val skipFirst = (new.start == old.target)
+		var skipped = false
+
+		// Step 3: Add elements from new path (skip first separator if overlapping)
+		new.reservedPath.forEach { element ->
+			if (skipFirst && !skipped && element == new.start) {
+				skipped = true  // Skip this occurrence (already in old path)
+				logger.trace {
+					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
+				}
+			} else {
+				mergedPath.add(element)
+			}
+		}
+
+		// Step 4: Merge entry directions (new overwrites old for conflicts)
+		val mergedDirections = old.entryDirections.toMutableMap()
+		mergedDirections.putAll(new.entryDirections)
+
+		logger.trace {
+			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
+				"elements into ${mergedPath.size} elements " +
+				"(overlap: ${if (skipFirst) "yes" else "no"})"
+		}
+
+		return PathInfo(
+			start = old.start,  // Keep original start (where Tail might still be)
+			target = new.target,  // Update to new target (where Front is going)
+			reservedPath = mergedPath,
+			entryDirections = mergedDirections
+		)
+	}
+
+	/**
+	 * Get PathInfo for a train.
+	 *
+	 * Retrieves complete path metadata including entry directions.
+	 * Used by TrainNavigationService to determine correct direction.
+	 *
+	 * @param trainId The train identifier
+	 * @return PathInfo if registered, null otherwise
+	 * @since Issue #295/#296 Phase 3
+	 */
+	fun getPathInfo(trainId: String): PathInfo? = trainToPathInfo[trainId]
+
+	/**
 	 * Clear all registrations.
 	 *
 	 * Removes all train-to-block and block-to-train mappings.
@@ -261,6 +484,7 @@ class PathReservationRegistry {
 	fun clear() {
 		trainToBlocks.clear()
 		blockToTrain.clear()
+		trainToPathInfo.clear()
 	}
 
 	/**

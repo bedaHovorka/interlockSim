@@ -385,12 +385,50 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
 
-**Path Reservation System (Issue #292 Phase 2, 2026-01-26):**
-- `context/navigation/PathReservationService` - Atomic path reservation with all-or-nothing semantics
-- `context/navigation/PathReservationRegistry` - Bidirectional train↔block ownership tracking
-- `context/navigation/TopologyNavigator` - BFS-based static path finding
-- Comprehensive architecture documentation: `docs/PATH_RESERVATION_ARCHITECTURE.md`
-- Features: TOCTOU trade-off analysis, exception hierarchy, atomic operations, Kotlin extensions
+**Path Discovery Restructuring (Issue #292 Phases 1-5, 2026-01-11 to 2026-01-27):**
+
+Separated path discovery into three specialized services, replacing deprecated mixed-concern `pathToNextSemaphore()` API:
+
+1. **TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
+   - Interface: `context/navigation/TopologyNavigator`
+   - Implementation: `context/navigation/DefaultTopologyNavigator`
+   - **Use Case**: Editor validation, network analysis without dynamic state
+   - **Access**: `EditingContext.getTopologyNavigator()` or `SimulationContext.getTopologyNavigator()`
+
+2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
+   - Interface: `context/navigation/PathReservationService`
+   - Implementation: `context/navigation/DefaultPathReservationService`
+   - **Use Case**: Dispatcher finding available routes, interlocking path setup
+   - **Access**: `SimulationEnvironment.getPathReservationService()`
+   - **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
+
+3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
+   - Interface: `context/navigation/TrainNavigationService`
+   - Implementation: `context/navigation/DefaultTrainNavigationService`
+   - **Use Case**: Train requesting next track section (only through owned blocks)
+   - **Access**: `SimulationEnvironment.getTrainNavigationService()`
+   - **Features**: Explicit ownership validation, null = "not reserved for THIS train"
+
+4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking
+   - Class: `context/navigation/PathReservationRegistry`
+   - **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
+
+**Architecture Documentation**:
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration from deprecated APIs, before/after examples
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design
+
+**Impact**:
+- ✅ Deprecated `pathToNextSemaphore()` and `getNextTrackSection()` (DeprecationLevel.WARNING)
+- ✅ Eliminates Issue #291 workaround (manual path construction in ShuntingLoop, ~100 lines removed)
+- ✅ Eliminates Issue #282 workaround (block ownership validation no longer needed)
+- ✅ Clean editor validation without SimulationContext conversion
+- ✅ Zero regressions (1321+ tests passing, golden output validated)
+
+**Koin DI Integration**:
+- Scope-per-context pattern (one registry per context, isolated between contexts)
+- Services share ONE registry within context (consistent ownership view)
+- Automatic cleanup via `Context.close()` (AutoCloseable pattern)
 
 **Utilities:**
 - `util/Array2DMap` - Grid data structure with pathfinding extensions
@@ -497,23 +535,77 @@ Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/Interl
 **SimulationProcessFactory (2026-01-14):**
 The simulation module now provides `SimulationProcessFactory` as a singleton. This factory abstracts creation of simulation processes (Generator, InOutWorker) following the Factory pattern. Contexts receive the factory via constructor injection, eliminating direct dependencies on concrete sim/ classes.
 
-**navigationModule (2026-01-26, Issue #294):**
-The navigation module provides path finding and reservation services using factory scope:
-- **TopologyNavigator** - Static topology navigation (requires context parameter)
-- **PathReservationRegistry** - Train ownership tracking (fresh instance per simulation)
-- **PathReservationService** - Atomic path reservation (requires navigator + environment parameters)
+**navigationModule (2026-01-26, Issue #294 / Issue #296 Phase 4):**
+The navigation module provides path finding and reservation services using **scope-per-context** pattern:
+- **TopologyNavigator** - Static topology navigation (scoped to context)
+- **PathReservationRegistry** - Train ownership tracking (ONE instance per context, shared by all services)
+- **PathReservationService** - Atomic path reservation (scoped to context)
+- **TrainNavigationService** - Train-specific path following (scoped to context)
 
-All services use `factory` scope (NOT singleton) to ensure fresh instances and prevent state bleeding between simulation runs. Services use parameter passing pattern for context-dependent dependencies:
+**Why Scoped, Not Singleton or Factory?**
+- **singleton**: ❌ State bleeding between simulation runs
+- **factory**: ❌ Each get() creates new instance, components don't share state
+- **scoped**: ✅ One registry per context, shared by all components, isolated between contexts
+
+**Architecture:**
+
+Each context (`DefaultEditingContext` and `DefaultSimulationContext`) creates its own Koin scope and passes itself as the scope source:
 
 ```kotlin
-// TopologyNavigator requires Context parameter
-val navigator: TopologyNavigator = getKoin().get { parametersOf(context) }
+// In DefaultSimulationContext constructor:
+val scope = GlobalContext.get().createScope(
+    scopeId = System.identityHashCode(this).toString(),
+    qualifier = named<DefaultSimulationContext>(),
+    source = this  // Context accessible via getSource()
+)
+```
 
-// PathReservationService requires navigator and environment
-val service: PathReservationService = getKoin().get {
-    parametersOf(navigator, environment)
+Services retrieve the context via `getSource()` - no redundant `parametersOf(context)`:
+
+```kotlin
+// In InterlockSimModule.kt:
+scope<DefaultSimulationContext> {
+    scoped<TopologyNavigator> {
+        val context = getSource<DefaultSimulationContext>()
+        DefaultTopologyNavigator(context)
+    }
+
+    scoped<PathReservationRegistry> { PathReservationRegistry() }
+
+    scoped<PathReservationService> {
+        val context = getSource<DefaultSimulationContext>()
+        val navigator: TopologyNavigator = get()  // Shared within scope
+        val registry: PathReservationRegistry = get()  // Shared within scope
+        DefaultPathReservationService(navigator, context, registry)
+    }
 }
 ```
+
+**Usage Patterns:**
+
+```kotlin
+// Production code - services accessed via context API
+val context = buildSimulationContext()
+val pathService = context.getPathReservationService()
+val trainService = context.getTrainNavigationService()
+
+// Both services share the same registry within this context
+pathService.reservePath("train1", start, end)
+val blocks = trainService.getReservedBlocks("train1") // Sees the same reservation
+
+// Test code - direct scope access when needed
+val navigator = context.scope.get<TopologyNavigator>()  // No parameters!
+
+// Clean up scope when done (AutoCloseable pattern)
+context.close()  // Idempotent
+```
+
+**Key Benefits:**
+- No redundant `parametersOf(context)` - context is the scope source
+- Shared registry within context, isolated between contexts
+- Type-safe service retrieval via `get<T>()`
+- Resource cleanup via `AutoCloseable` pattern
+- Both `EditingContext` and `SimulationContext` support
 
 ### Critical DI Rules
 
@@ -559,6 +651,7 @@ Follows `.editorconfig` configuration:
 - **No refactoring** - Do not restructure working simulation code
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
+- **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
 - **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
 
 **jDisco Library:**

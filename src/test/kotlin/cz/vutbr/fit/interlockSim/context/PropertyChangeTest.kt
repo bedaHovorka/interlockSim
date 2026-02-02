@@ -43,6 +43,7 @@ class PropertyChangeTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		context = editingContextFactory.createEmptyContext()
+		testContext = context  // Track for cleanup
 		listener = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener)
 	}

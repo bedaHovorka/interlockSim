@@ -9,8 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
 /**
  * Service for finding and reserving free paths in railway network.
@@ -153,8 +155,8 @@ interface PathReservationService {
 	 */
 	fun reservePath(
 		trainId: String,
-		start: PathSeparator,
-		target: PathSeparator,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
 		maxDepth: Int = 100
 	): ReservationResult
 
@@ -211,4 +213,172 @@ interface PathReservationService {
 	 * @return List of blocks reserved by this train (empty if no reservations)
 	 */
 	fun getReservedBlocks(trainId: String): List<DynamicTrackBlock>
+
+	/**
+	 * Find and reserve path from separator to any next semaphore via specific track section.
+	 *
+	 * This method navigates from the starting separator through the given track section
+	 * to find ALL reachable semaphores. If the network has switches creating multiple routes,
+	 * it tries to reserve a path to each semaphore until one succeeds.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Find ALL semaphores reachable from `start` via `next` track section
+	 * 2. For each semaphore, attempt `reservePath(trainId, start, semaphore)`
+	 * 3. Return Success on first successful reservation
+	 * 4. Return last failure result if all attempts fail
+	 *
+	 * ## Use Case: Train Entry (InOutWorker)
+	 *
+	 * When a train enters the network via an InOut point:
+	 * ```kotlin
+	 * val next = navigator.getNextTrackSection(inOut, null)  // First section after InOut
+	 * val result = service.reservePathToAnyNextSemaphore("train1", inOut, next)
+	 * when (result) {
+	 *     is Success -> // Train can enter, path reserved
+	 *     is NoPathExists -> // No semaphore found in this direction
+	 *     is AllPathsBlocked -> // Semaphore found but path occupied
+	 *     is Conflict -> // Reservation conflict (should not happen)
+	 * }
+	 * ```
+	 *
+	 * ## Multiple Path Handling
+	 *
+	 * If the railway network has switches creating multiple routes to different semaphores,
+	 * this method will try each route in order. The first free path is reserved, using the
+	 * same multi-path fallback logic as `reservePath()` (BFS = shortest first).
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting path separator (typically InOut)
+	 * @param next First track section after the start (direction to search)
+	 * @return ReservationResult indicating success or failure reason
+	 * @see reservePath
+	 * @see isPathToAnyNextSemaphoreAvailable
+	 */
+	fun reservePathToAnyNextSemaphore(trainId: String, start: DynamicPathSeparator, next: TrackSection): ReservationResult
+
+	/**
+	 * Check if a path from separator to any next semaphore is currently available.
+	 *
+	 * This is a read-only operation that does NOT reserve the path. It's used as a
+	 * polling condition in InOutWorker to wait until a path becomes free.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. If `next` is null, return false (no direction to search)
+	 * 2. Find ALL semaphores reachable from `start` via `next` track section
+	 * 3. For each semaphore, check `isPathAvailable(start, semaphore)`
+	 * 4. Return true if ANY semaphore has a free path, false otherwise
+	 *
+	 * ## Use Case: jDisco Condition Polling
+	 *
+	 * ```kotlin
+	 * private val pathFree = Condition {
+	 *     service.isPathToAnyNextSemaphoreAvailable(inOut, next)
+	 * }
+	 * waitUntil(pathFree)  // Wait until path becomes free
+	 * ```
+	 *
+	 * ## Null Handling
+	 *
+	 * Unlike `reservePathToAnyNextSemaphore()`, this method accepts nullable `next`:
+	 * - `next == null` → returns false (no direction to search)
+	 * - This matches the pattern from the working tag where null next → no path
+	 *
+	 * @param start Starting path separator
+	 * @param next First track section after start (null if none exists)
+	 * @return true if path exists and is available (all blocks FREE), false otherwise
+	 * @see isPathAvailable
+	 * @see reservePathToAnyNextSemaphore
+	 */
+	fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean
+
+	/**
+	 * Find and reserve path from separator to ANY available target.
+	 *
+	 * Discovers all potential targets (semaphores and InOuts) and tries each
+	 * until a successful reservation is made. Returns the first successful path.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Discover all potential targets (InOuts and semaphores) from the context
+	 * 2. For each target, attempt `reservePath(trainId, start, target)`
+	 * 3. Return Success with first available path
+	 * 4. If all targets fail, return NoPath (all blocked or no targets exist)
+	 *
+	 * ## Use Case: Dispatcher Logic (ShuntingLoop)
+	 *
+	 * When a train approaches a semaphore and needs a forward path:
+	 * ```kotlin
+	 * val result = service.reservePathToAny("train1", semaphore)
+	 * when (result) {
+	 *     is Success -> // Train can proceed, path reserved
+	 *     is NoPath -> // No available targets
+	 *     is AllPathsBlocked -> // Targets exist but all blocked
+	 *     is Conflict -> // Reservation conflict (should not happen)
+	 * }
+	 * ```
+	 *
+	 * ## Target Discovery
+	 *
+	 * Targets are discovered automatically from the context:
+	 * - All InOut elements except the start
+	 * - All oriented semaphores (RailSemaphore) except the start
+	 *
+	 * ## Advantages Over Manual Iteration
+	 *
+	 * - No hardcoded grid dimensions (50×20)
+	 * - No type casting to SimulationContext
+	 * - Single responsibility (all target discovery in service layer)
+	 * - Automatic semaphore signal configuration
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting path separator (typically a semaphore)
+	 * @return ReservationResult indicating success or failure reason
+	 * @see reservePath
+	 */
+	fun reservePathToAny(
+		trainId: String,
+		start: DynamicPathSeparator
+	): ReservationResult
+
+	/**
+	 * Unregister all block reservations for a train.
+	 *
+	 * Removes all blocks owned by the specified train from the registry,
+	 * freeing them for subsequent trains. This is called when a train
+	 * completes its journey and reaches its destination.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by train cleanup when journey completes:
+	 * ```kotlin
+	 * pathService.unregister("train1")
+	 * ```
+	 *
+	 * @param trainId The train identifier to unregister
+	 * @return List of blocks that were released
+	 */
+	fun unregister(trainId: String): List<DynamicTrackBlock>
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Removes the block from registry mappings if it is FREE (no occupant).
+	 * This is called automatically when a train's Tail leaves a block, ensuring
+	 * blocks are cleaned up as soon as they become available for subsequent trains.
+	 *
+	 * ## Use Case
+	 *
+	 * Called by Train's Tail process after calling block.leave():
+	 * ```kotlin
+	 * current.leave(this@Train)
+	 * pathService.unregisterBlock(trainId, current)
+	 * ```
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 * @return true if block was unregistered, false if block is still occupied or not owned
+	 */
+	fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean
 }

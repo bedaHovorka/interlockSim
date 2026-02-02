@@ -23,7 +23,6 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.koin.core.parameter.parametersOf
 import org.koin.test.inject
 import java.io.InputStream
 
@@ -51,8 +50,6 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		registry = PathReservationRegistry()
-
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
 		val xmlStream: InputStream =
 			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -62,9 +59,12 @@ class PathReservationRegistryTest : KoinTestBase() {
 		val simulationContext =
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-		// Get all blocks from the graph using Koin-injected navigator
+		// Get registry from context's scope (Issue #296 Phase 8: now requires context)
+		registry = simulationContext.scope.get()
+
+		// Get all blocks from the graph using a navigator
 		val inOuts = simulationContext.getInOuts().toList()
-		val navigator: TopologyNavigator = getKoin().get { parametersOf(simulationContext) }
+		val navigator: TopologyNavigator = simulationContext.scope.get()
 		val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
 
 		blocks =

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -32,8 +33,6 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
@@ -120,6 +119,22 @@ open class DefaultSimulationContext(
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
+	 * Koin scope for this simulation context.
+	 * Manages lifecycle of navigation services and ensures one shared PathReservationRegistry
+	 * per context. The context itself is passed as the scope source, allowing services to access it via getSource().
+	 * Scope is closed when context is destroyed via close().
+	 *
+	 * @see navigationModule
+	 * @see close
+	 */
+	override val scope = org.koin.core.context.GlobalContext.get()
+		.createScope(
+			scopeId = System.identityHashCode(this).toString(),
+			qualifier = org.koin.core.qualifier.named<DefaultSimulationContext>(),
+			source = this
+		)
+
+	/**
 	 * Set of allowed report types for simulation output
 	 */
 	private val allowedReportTypes: MutableSet<ReportType> = EnumSet.noneOf(ReportType::class.java)
@@ -157,14 +172,30 @@ open class DefaultSimulationContext(
 	private val random: Random = Random(0)
 
 	/**
+	 * Topology navigator for pure topology navigation (no state dependencies).
+	 * Lazy-initialized on first access to ensure Context (this) is fully constructed.
+	 * Retrieved from this context's scope.
+	 */
+	private val topologyNavigatorInstance: cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator by lazy {
+		scope.get<cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator>()
+	}
+
+	/**
 	 * Train navigation service for train-specific path following.
 	 * Lazy-initialized on first access to ensure SimulationEnvironment (this) is fully constructed.
-	 * Created via Koin DI with shared PathReservationRegistry instance.
+	 * Retrieved from this context's scope, ensuring shared PathReservationRegistry with other services.
 	 */
 	private val trainNavigationServiceInstance: TrainNavigationService by lazy {
-		org.koin.core.context.GlobalContext.get().get<TrainNavigationService> {
-			org.koin.core.parameter.parametersOf(this as SimulationEnvironment)
-		}
+		scope.get<TrainNavigationService>()
+	}
+
+	/**
+	 * Path reservation service for atomic path reservation and ownership tracking.
+	 * Lazy-initialized on first access to ensure SimulationEnvironment (this) is fully constructed.
+	 * Retrieved from this context's scope, ensuring shared PathReservationRegistry and TopologyNavigator.
+	 */
+	private val pathReservationServiceInstance: PathReservationService by lazy {
+		scope.get<PathReservationService>()
 	}
 
 	// ========================================
@@ -572,88 +603,6 @@ open class DefaultSimulationContext(
 		}
 		return null // No wrapper found
 	}
-
-	/**
-	 * Get the next track section from a path separator
-	 */
-	override fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection? {
-		var trackBlock: DynamicTrackBlock? = null
-		if (current != null) {
-			val block = current.getTrackBlock()
-			requireSimulation(block != null) { "TrackBlock cannot be null for current track section" }
-			val nextTrackSection = block.getNextTrackSection(separator, current)
-			if (nextTrackSection != null) {
-				logger.trace {
-					"getNextTrackSection: found next section within same block from $separator"
-				}
-				return nextTrackSection
-			}
-			// Look up DynamicTrackBlock wrapper from graph for use in getNextTrackBlock call below
-			trackBlock = block as? DynamicTrackBlock ?: getDynamicWrapper(block)
-		}
-
-		// z dalsi TrackBlock
-		// Extract static NodeCell for getNextTrackBlock (which needs NodeCell interface)
-		// but preserve the separator (which could be Dynamic*) for proper type checking
-		val staticNodeCell = CellUtilities.assertNodeCell(separator)
-
-		// Pass separator as NodeCell to getNextTrackBlock
-		// (NodeCell is a subtype of PathSeparator, so static objects work directly;
-		// Dynamic* also implement PathSeparator, so they work too)
-		val nodeCell = if (separator is NodeCell) separator else staticNodeCell
-		val nextTrackBlock = getNextTrackBlock(nodeCell, trackBlock)
-
-		// CRITICAL FIX (Issue #282): Validate block reservation before allowing navigation
-		// Train navigation follows physical topology based on current switch configuration,
-		// but path reservation only reserves blocks based on switch configuration at setup time.
-		// If switch configuration changes (due to another train's path), trains would navigate
-		// into blocks not reserved by their own path, causing "Wrong state: FREE, expected: RESERVED" errors.
-		//
-		// Solution: Block navigation when block is not properly reserved for this train.
-		//
-		// Allowed cases:
-		// 1. Block is RESERVED from the separator we're navigating from - correct reservation
-		// 2. Block is OCCUPIED - we're following/approaching another train
-		// 3. Initial entry from InOut (current == null) - path setup happens first
-		//
-		// Blocked cases:
-		// - Block is FREE and we're navigating between blocks - block was never reserved!
-		// - Block is RESERVED from a different separator - reserved by different path!
-		if (nextTrackBlock != null && current != null) {
-			val dynamicSeparator = separator as? DynamicPathSeparator
-			val blockState = nextTrackBlock.getState()
-			val reservedFrom = nextTrackBlock.reservedFrom
-
-			// Block is properly reserved if it's RESERVED from the separator we're navigating from
-			val isProperlyReserved = blockState == TrackFacility.State.RESERVED && reservedFrom == dynamicSeparator
-
-			// Block is occupied (we might be following another train or waiting)
-			val isOccupied = blockState == TrackFacility.State.OCCUPIED
-
-			// Allow navigation only if properly reserved or occupied
-			if (!isProperlyReserved && !isOccupied) {
-				logger.info {
-					"getNextTrackSection: blocking navigation from $separator to block ${nextTrackBlock.staticRef.hashCode()} " +
-						"(state=$blockState, reservedFrom=$reservedFrom, expected=$dynamicSeparator)"
-				}
-				return null // Block entry - train will stop at semaphore
-			}
-		}
-
-		@Suppress("UNCHECKED_CAST")
-		val result = nextTrackBlock?.getNextTrackSection(separator, null)
-		logger.trace {
-			"getNextTrackSection: navigating network from $separator, result: ${if (result != null) "found" else "not found"}"
-		}
-		return result
-	}
-
-	/**
-	 * Run the simulation (jDisco framework integration)
-	 */
 
 	/**
 	 * Initialize static-to-dynamic mapping for all PathSeparators in the network
@@ -1208,58 +1157,6 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Find path to the next semaphore from a path separator
-	 *
-	 * Returns paths containing only dynamic references.
-	 * All PathSeparators added to the path are converted to their dynamic wrappers
-	 * to ensure consistent use of dynamic types throughout simulation.
-	 */
-	override fun pathToNextSemaphore(
-		sep: PathSeparator,
-		nxt: TrackSection
-	): Path? {
-		logger.debug { "pathToNextSemaphore: searching path from $sep via track section" }
-		// Convert initial separator to dynamic reference
-		var separator = toDynamic(sep)
-		logger.trace { "Converted input separator to dynamic: ${separator.javaClass.simpleName}" }
-		var previous: TrackSection? = null
-		var next: TrackSection? = nxt
-		val path = ArrayPath(this)
-		do {
-			// Add dynamic separator to path
-			path.add(separator)
-			if (next != null) {
-				path.add(next)
-				// Extract static separator for track operations (getSecondEnd uses === comparison)
-				val staticSeparator = CellUtilities.assertNodeCell(separator)
-				val staticResult = next.getSecondEnd(staticSeparator)
-				// Convert static result to dynamic wrapper before adding to path
-				separator = toDynamic(staticResult)
-				logger.trace {
-					"Converted separator from track to dynamic: ${separator.javaClass.simpleName}"
-				}
-				previous = next
-				next = getNextTrackSection(separator, next)
-			} else {
-				break
-			}
-			// Check if we've reached the final semaphore AFTER getting next section
-			// This check is outside the if block to match baseline behavior
-			if (separator is OrientedPathSeparator) {
-				// Direction check for oriented semaphores
-				if (isSeparatorInDirection(separator, next, previous)) {
-					// Add dynamic separator to path
-					path.add(separator)
-					logger.debug { "pathToNextSemaphore: found complete path to $separator with length ${path.length()}" }
-					return path
-				}
-			}
-		} while (next != null)
-		logger.debug { "pathToNextSemaphore: no path found from $sep" }
-		return null
-	}
-
-	/**
 	 * Report simulation events
 	 */
 	override fun report(
@@ -1292,6 +1189,37 @@ open class DefaultSimulationContext(
 		} else {
 			allowedReportTypes.addAll(types.asList())
 		}
+	}
+
+	/**
+	 * Release all path reservations for a train that has completed its journey.
+	 *
+	 * Unregisters the train from the PathReservationRegistry, removing all block
+	 * reservations and PathInfo metadata. This cleanup is essential to prevent
+	 * conflicts when subsequent trains try to reserve the same blocks.
+	 *
+	 * @param trainId The train identifier to release reservations for
+	 */
+	override fun releaseTrainReservations(trainId: String) {
+		val pathService = getPathReservationService()
+		val releasedBlocks = pathService.unregister(trainId)
+		logger.debug {
+			"releaseTrainReservations: Released ${releasedBlocks.size} blocks for train '$trainId'"
+		}
+	}
+
+	/**
+	 * Unregister a single block for a train.
+	 *
+	 * Delegates to PathReservationService to remove the block from the registry
+	 * if it is FREE (no occupant).
+	 *
+	 * @param trainId The train identifier
+	 * @param block The block to unregister
+	 */
+	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock) {
+		val pathService = getPathReservationService()
+		pathService.unregisterBlock(trainId, block)
 	}
 
 	/**
@@ -1330,6 +1258,18 @@ open class DefaultSimulationContext(
 		workers[inOut] ?: throw IllegalStateException("No worker found for InOut: $inOut")
 
 	/**
+	 * Get topology navigator for pure topology navigation (no state dependencies).
+	 *
+	 * Returns the TopologyNavigator instance for this simulation context.
+	 * The navigator provides static graph traversal without state validation.
+	 *
+	 * @return TopologyNavigator instance
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+	 */
+	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
+		topologyNavigatorInstance
+
+	/**
 	 * Get train navigation service for train-specific path following.
 	 *
 	 * Returns the TrainNavigationService instance for this simulation context.
@@ -1339,6 +1279,66 @@ open class DefaultSimulationContext(
 	 * @see TrainNavigationService
 	 */
 	override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
+
+	/**
+	 * Get path reservation service for atomic path reservation.
+	 *
+	 * Returns the PathReservationService instance for this simulation context.
+	 * The service provides dispatcher logic for finding and reserving free paths
+	 * with atomic all-or-nothing semantics and train ownership tracking.
+	 *
+	 * @return PathReservationService instance
+	 * @see PathReservationService
+	 */
+	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+
+	/**
+	 * Configure semaphore signal appearance after path reservation.
+	 *
+	 * This method separates signal configuration from block reservation logic.
+	 * PathReservationService handles block ownership tracking, while this method
+	 * updates semaphore visual signals (GO/SLOW/STOP) to match the reserved path.
+	 *
+	 * ## Implementation
+	 *
+	 * Uses getSegment to determine signal segments (fromSegment, toSegment) and
+	 * calls semaphore.setUpPath to update visual state.
+	 *
+	 * ## Error Handling
+	 *
+	 * Signal configuration failures are non-fatal - if semaphore update fails,
+	 * blocks remain reserved and trains can proceed. Only logs warning.
+	 *
+	 * @param semaphore The semaphore to configure
+	 * @param firstBlock First reserved block in the path
+	 * @param allowedSpeed Speed limit for the path
+	 */
+	override fun configureSemaphoreSignal(
+		semaphore: DynamicRailSemaphore,
+		firstBlock: DynamicTrackBlock,
+		allowedSpeed: Double?
+	) {
+		try {
+			// Calculate allowed speed from path if not provided
+			// Fixes circular logic bug where sem.allowedSpeed() returns 0.0 (STOP)
+			val effectiveSpeed = allowedSpeed ?: firstBlock.maxSpeed(semaphore)
+
+			val fromSegment = getSegment(semaphore, null, firstBlock)
+			val toSegment = getSegment(semaphore, firstBlock, null)
+
+			semaphore.setUpSpeed(fromSegment, toSegment, effectiveSpeed)
+
+			logger.debug {
+				"SEMAPHORE_CONFIGURED: ${semaphore.name} signal updated to " +
+					"${semaphore.signal} (allowedSpeed=$effectiveSpeed)"
+			}
+		} catch (e: Exception) {
+			logger.warn {
+				"SEMAPHORE_CONFIG_WARNING: ${semaphore.name} signal configuration failed: ${e.message}"
+			}
+			// Non-fatal: blocks are reserved, train can proceed even if signal update fails
+		}
+	}
 
 	/**
 	 * Set the main process for the simulation
