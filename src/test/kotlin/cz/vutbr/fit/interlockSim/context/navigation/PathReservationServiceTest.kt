@@ -214,12 +214,13 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Find blocks that exist in ALL paths to ensure conflict blocks all routes
 			// This prevents the test from being non-deterministic with multiple paths
 			val commonBlocks = path0Blocks.intersect(path1Blocks)
-			val blockToReserve = blocks.firstOrNull { it in commonBlocks } ?: blocks.getOrNull(1)
+			require(commonBlocks.isNotEmpty()) {
+				"Test requires common blocks between paths. Found ${path0Blocks.size} and ${path1Blocks.size} blocks."
+			}
+			val blockToReserve = blocks.first { it in commonBlocks }
 
 			// Reserve a block that blocks ALL paths (simulate partial conflict)
-			if (blockToReserve != null) {
-				blockToReserve.setUpPath(inOut1, "other-train")
-			}
+			blockToReserve.setUpPath(inOut1, "other-train")
 
 			// Act - try to reserve path for train1
 			val result = service.reservePath("train1", inOut1, inOut2)

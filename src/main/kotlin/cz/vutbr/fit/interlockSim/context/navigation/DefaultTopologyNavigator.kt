@@ -220,7 +220,7 @@ class DefaultTopologyNavigator(
 	 * ## Performance Characteristics
 	 *
 	 * - **Time complexity**: O(k * (V + E)) where k = number of paths, V = separators, E = connections
-	 * - **Space complexity**: O(V * maxDepth) for BFS queue and path storage
+	 * - **Space complexity**: O(k * V) for storing k paths of average length V, plus O(maxDepth) for BFS queue
 	 * - **Best case**: O(1) when start == target
 	 * - **Worst case**: Bounded by maxDepth to prevent runaway exploration
 	 * - **Note**: Can revisit separators via different branches (enumerates all paths, not single path)
