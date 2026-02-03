@@ -276,7 +276,19 @@ class PathReservationRegistry(
 	 * If block is FREE and owned by trainId:
 	 * - Removes block from trainToBlocks[trainId]
 	 * - Removes blockToTrain[block]
-	 * - If this was the last block, removes trainToBlocks[trainId] and trainToPathInfo[trainId]
+	 * - If this was the last block, removes trainToBlocks[trainId] (but keeps trainToPathInfo[trainId])
+	 *
+	 * ## PathInfo Lifecycle (Issue #301 Fix)
+	 *
+	 * PathInfo represents the train's **intended path** (where it's going) and is semantically
+	 * separate from the train's **current reservations** (which blocks it owns). A train needs
+	 * PathInfo for navigation queries even after all blocks are unregistered (e.g., when the
+	 * tail has cleared all blocks but the front is requesting the next path segment).
+	 *
+	 * PathInfo is only deleted in:
+	 * - `releaseTrainReservations()` - when train completes its journey
+	 * - `unregister()` - explicit full unregistration
+	 * - `clear()` - clear all registrations
 	 *
 	 * ## Use Case
 	 *
@@ -313,16 +325,18 @@ class PathReservationRegistry(
 		blockToTrain.remove(block)
 		trainToBlocks[trainId]?.remove(block)
 
+		val remainingBlocks = trainToBlocks[trainId]?.size ?: 0
 		logger.debug {
-			"unregisterBlock: Released block $block for '$trainId'"
+			"unregisterBlock: Released block $block for '$trainId', $remainingBlocks blocks remaining"
 		}
 
-		// If no blocks remain, remove train entry and PathInfo
+		// If no blocks remain, remove train entry from trainToBlocks
+		// BUT keep PathInfo for navigation queries (Issue #301 - deadlock fix)
 		if (trainToBlocks[trainId]?.isEmpty() == true) {
 			trainToBlocks.remove(trainId)
-			trainToPathInfo.remove(trainId)
 			logger.debug {
-				"unregisterBlock: All blocks released, removed '$trainId' from registry"
+				"unregisterBlock: All blocks released for '$trainId', " +
+					"removed from trainToBlocks (PathInfo retained for navigation)"
 			}
 		}
 
