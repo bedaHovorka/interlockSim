@@ -39,6 +39,8 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 import org.koin.test.inject
 import java.io.InputStream
 
@@ -1718,6 +1720,55 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(blocks.isEmpty()).isFalse()
 		}
 
+		@ParameterizedTest
+		@CsvSource("A,B", "B,A")
+		fun `parallel from zX do to doYn via oriented overload`(first: String, second: String) {
+			// Arrange - Find start semaphore (zA or zB)
+			val firstSemaphoreName = "z$first"
+			val secondSemaphoreName = "z$second"
+			val firstSemaphore = findSemaphoreByName(firstSemaphoreName)
+			val firstTrainId = "first-train"
+			val secondSemaphore = findSemaphoreByName(secondSemaphoreName)
+			val secondTrainId = "second-train"
+
+			// Act - first train
+			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
+			// Assert
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val blocks1 = success1.reservedBlocks
+
+			blocks1.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo(firstTrainId)
+				assertThat(block.reservedFrom).isEqualTo(firstSemaphore)
+			}
+
+			// Assert path goes from start semaphore to expected doYn semaphore
+			assertPathContainsSeparators(blocks1, "z$first", "v$first", "do${second}1")
+			assertThat(blocks1.isEmpty()).isFalse()
+
+
+			// Act - second train
+			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
+			// Assert
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success2 = result2 as PathReservationService.ReservationResult.Success
+			val blocks2 = success2.reservedBlocks
+
+			blocks2.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo(secondTrainId)
+				assertThat(block.reservedFrom).isEqualTo(secondSemaphore)
+			}
+
+			assertThat(blocks2.intersect(blocks1)).isEmpty() // No overlap
+
+			// Assert path goes from start semaphore to expected doYn semaphore
+			assertPathContainsSeparators(blocks2, "z$second", "v$second", "do${first}2")
+			assertThat(blocks2.isEmpty()).isFalse()
+		}
+
 		@Test
 		fun `from semaphore doB1 to next separator via oriented overload`() {
 			// Arrange - Find doB1 semaphore (25,8) - MAIN branch near B
@@ -1803,5 +1854,88 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Method reserves to NEXT semaphore (zA), not to InOut A
 			assertThat(blocks.isEmpty()).isFalse()
 		}
+
+		@ParameterizedTest
+		@CsvSource("A,B", "B,A")
+		fun `parallel from doX1 do to X and doY2 do Y via oriented overload`(first: String, second: String) {
+			// Arrange - Find start semaphore (doA1 or doB1)
+			val firstSemaphoreName = "do${first}1"
+			val secondSemaphoreName = "do${second}2"
+			val firstSemaphore = findSemaphoreByName(firstSemaphoreName)
+			val firstTrainId = "first-train"
+			val secondSemaphore = findSemaphoreByName(secondSemaphoreName)
+			val secondTrainId = "second-train"
+
+			// Act - first train
+			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
+			// Assert
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val blocks1 = success1.reservedBlocks
+
+			blocks1.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo(firstTrainId)
+				assertThat(block.reservedFrom).isEqualTo(firstSemaphore)
+			}
+
+			// Assert path goes from start semaphore to expected InOut X
+			assertPathContainsSeparators(blocks1, "do${first}1", "v$first", "$first")
+			assertThat(blocks1.isEmpty()).isFalse()
+
+			// Act - second train
+			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
+			// Assert
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success2 = result2 as PathReservationService.ReservationResult.Success
+			val blocks2 = success2.reservedBlocks
+
+			blocks2.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo(secondTrainId)
+				assertThat(block.reservedFrom).isEqualTo(secondSemaphore)
+			}
+
+			assertThat(blocks2.intersect(blocks1)).isEmpty() // No overlap
+
+			// Assert path goes from start semaphore to expected InOut Y
+			assertPathContainsSeparators(blocks2, "do${second}2", "v$second", "$second")
+			assertThat(blocks2.isEmpty()).isFalse()
+		}
+
+		@ParameterizedTest
+		@CsvSource("A,1,2", "A,2,1", "B,1,2", "B,2,1")
+		fun `only first from doXn do to X and not doYm do X via oriented overload`(out: String, n: Int, m: Int) {
+			// Arrange - Find start semaphore (doA1 or doB1)
+			val firstSemaphoreName = "do${out}$n"
+			val secondSemaphoreName = "do${out}$m"
+			val firstSemaphore = findSemaphoreByName(firstSemaphoreName)
+			val firstTrainId = "first-train"
+			val secondSemaphore = findSemaphoreByName(secondSemaphoreName)
+			val secondTrainId = "second-train"
+
+			// Act - first train
+			val result1 = service.reservePathToAnyNextSemaphore(firstTrainId, firstSemaphore)
+			// Assert
+			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success1 = result1 as PathReservationService.ReservationResult.Success
+			val blocks1 = success1.reservedBlocks
+			blocks1.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(block.trainName).isEqualTo(firstTrainId)
+				assertThat(block.reservedFrom).isEqualTo(firstSemaphore)
+			}
+
+			// Assert path goes from start semaphore to expected InOut X
+			assertPathContainsSeparators(blocks1, "do${out}$n", "v$out", out)
+			assertThat(blocks1.isEmpty()).isFalse()
+
+
+			// Act - second train
+			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
+			// Assert
+			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		}
+
 	}
 }

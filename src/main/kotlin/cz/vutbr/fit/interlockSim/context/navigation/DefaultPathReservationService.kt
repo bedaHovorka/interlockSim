@@ -333,6 +333,16 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Found ${semaphores.size} semaphore(s): $semaphores"
 		}
 
+		// Extract the DynamicTrackBlock from the 'next' parameter for validation
+		// next is a TrackSection, which could be a DynamicTrackBlock or other type
+		val nextBlock = next.getTrackBlock() as? DynamicTrackBlock
+		if (nextBlock == null) {
+			logger.warn {
+				"reservePathToAnyNextSemaphore: next parameter is not a DynamicTrackBlock: $next"
+			}
+			return PathReservationService.ReservationResult.NoPathExists
+		}
+
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
 		for (semaphore in semaphores) {
@@ -344,7 +354,29 @@ class DefaultPathReservationService(
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
-					// Success! Path reserved
+					// FIX: Validate that the reserved path actually goes through the 'next' block
+					// This prevents alternative routes that bypass the intended track section
+					if (!result.reservedBlocks.contains(nextBlock)) {
+						logger.debug {
+							"reservePathToAnyNextSemaphore: Path to $semaphore does NOT use " +
+								"required next block @${System.identityHashCode(nextBlock)}, rejecting"
+						}
+						// Release the wrongly reserved path
+						result.reservedBlocks.forEach { block ->
+							try {
+								block.cancelPathSetup(start)
+								registry.unregisterBlock(trainId, block)
+							} catch (e: Exception) {
+								logger.warn(e) {
+									"reservePathToAnyNextSemaphore: Failed to release block during rollback: ${block.staticRef}"
+								}
+							}
+						}
+						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(1)
+						continue
+					}
+
+					// Success! Path reserved and validated to use the required 'next' block
 
 					// Configure semaphore signal after successful reservation
 					// Only configure for RailSemaphore start (InOut semaphores are constant)
@@ -356,7 +388,7 @@ class DefaultPathReservationService(
 					}
 
 					logger.debug {
-						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore"
+						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore via required next block"
 					}
 					return result
 				}
@@ -807,23 +839,27 @@ class DefaultPathReservationService(
 	 * Find all semaphores reachable from start separator via specific track section.
 	 *
 	 * This method navigates from the starting separator through the given track section
-	 * to discover oriented semaphores (OrientedPathSeparator instances) reachable
+	 * to discover ALL oriented semaphores (OrientedPathSeparator instances) reachable
 	 * in the network, skipping backward-facing semaphores that show RED.
 	 *
-	 * ## Algorithm
+	 * ## Algorithm (Modified for Multi-Path Discovery)
 	 *
 	 * 1. Calculate travel direction from start + next track section
-	 * 2. Navigate step-by-step through network
-	 * 3. At each separator encountered:
-	 *    - If it's an InOut: RETURN (always valid endpoint, bidirectional)
-	 *    - If it's an OrientedPathSeparator (semaphore):
-	 *      * Check if direction() matches travel direction
-	 *      * If YES (forward-facing): RETURN as valid target (can show GREEN)
-	 *      * If NO (backward-facing): SKIP and continue (shows RED, cannot change)
-	 *    - Otherwise, continue to the next section
-	 * 4. Stop at cycles or dead-ends
+	 * 2. Use BFS to explore ALL reachable separators through the network
+	 * 3. At switches, explore ALL outgoing edges (enables parallel path discovery)
+	 * 4. Filter separators to include only:
+	 *    - InOut elements (always valid endpoints)
+	 *    - Forward-facing semaphores (direction() matches travel direction)
+	 * 5. Return list of all valid targets
 	 *
-	 * ## Rationale
+	 * ## Rationale for Multi-Path Discovery
+	 *
+	 * **Why return ALL reachable semaphores instead of just the first?**
+	 * - In networks with parallel paths (e.g., shunting loops with k1 and k2 tracks),
+	 *   multiple semaphores may be reachable from the same starting point.
+	 * - When the first path is blocked (e.g., k1 occupied by Train 1), the service
+	 *   should retry alternative paths (e.g., k2 for Train 2).
+	 * - This enables true parallel operations with shared switches but disjoint tracks.
 	 *
 	 * **Backward-facing semaphores must be skipped**: A semaphore whose direction() does NOT
 	 * match the travel direction shows RED and cannot be changed. Path discovery must continue
@@ -834,9 +870,9 @@ class DefaultPathReservationService(
 	 *
 	 * ## Return Value
 	 *
-	 * List of unique DynamicPathSeparator instances representing semaphores:
-	 * - **Empty list**: No valid semaphore or InOut found (dead-end, buffer stop, cycle)
-	 * - **Single element**: First forward-facing semaphore or InOut found via this path
+	 * List of unique DynamicPathSeparator instances representing valid targets:
+	 * - **Empty list**: No valid semaphore or InOut found (dead-end, buffer stop)
+	 * - **One or more elements**: All forward-facing semaphores or InOuts reachable via next
 	 *
 	 * ## Type Safety
 	 *
@@ -847,6 +883,16 @@ class DefaultPathReservationService(
 	 * - OrientedPathSeparator includes semaphores and oriented InOuts
 	 *
 	 * ## Example Networks
+	 *
+	 * **Parallel paths with shared switches:**
+	 * ```
+	 * Travel RIGHT →
+	 * zA (orient=false) → vA (switch) → {
+	 *   doA1 (backward) → k1 → doB1 (forward) ← vB (switch)
+	 *   doA2 (backward) → k2 → doB2 (forward) ← vB (switch)
+	 * }
+	 * Result: [doB1, doB2]  (both forward-facing semaphores reachable via k1 and k2)
+	 * ```
 	 *
 	 * **Skip backward-facing semaphore:**
 	 * ```
@@ -871,82 +917,132 @@ class DefaultPathReservationService(
 		next: TrackSection
 	): List<DynamicPathSeparator> {
 		logger.trace {
-			"findNextSemaphoresVia: Starting search from $start via $next"
+			"findNextSemaphoresVia: Starting multi-path search from $start via $next"
 		}
 
-		// Calculate the initial travel direction from start through next
 		val travelDirection = calculateTravelDirection(start, next)
-		logger.trace {
-			"findNextSemaphoresVia: Travel direction=$travelDirection"
-		}
+		logger.trace { "findNextSemaphoresVia: Travel direction=$travelDirection" }
 
-		var currentSep: PathSeparator = start
-		var currentSection: TrackSection? = next
+		// BFS to explore all reachable separators
+		val validTargets = mutableListOf<DynamicPathSeparator>()
+		val queue = mutableListOf<Pair<PathSeparator, TrackSection?>>()
+		queue.add(Pair(start, next))
 		val visited = mutableSetOf<PathSeparator>()
 		visited.add(start)
 
-		while (currentSection != null) {
-			logger.trace {
-				"findNextSemaphoresVia: Navigating from separator=$currentSep through section=$currentSection"
-			}
+		val context = environment as SimulationContext
 
-			// Get the separator at the other end of currentSection
+		while (queue.isNotEmpty()) {
+			val (currentSep, currentSection) = queue.removeAt(0)
+			if (currentSection == null) continue
+
 			val nextSeparator = currentSection.getSecondEnd(currentSep)
+			if (!visited.add(nextSeparator)) continue
 
-			logger.trace {
-				"findNextSemaphoresVia: Reached separator=$nextSeparator"
-			}
+			// Check if separator is a valid target
+			val targetAdded = processReachedSeparator(nextSeparator, travelDirection, validTargets)
+			if (targetAdded) continue
 
-			// Check separator type and orientation
-			when {
-				// InOut is always a valid endpoint (bidirectional)
-				nextSeparator is cz.vutbr.fit.interlockSim.objects.cells.InOut ||
-				nextSeparator is DynamicInOut -> {
-					val dynamicSep = environment.toDynamic(nextSeparator)
-					logger.trace {
-						"findNextSemaphoresVia: Found InOut: $dynamicSep"
-					}
-					return listOf(dynamicSep)
-				}
-
-				// Oriented semaphore - check if facing forward
-				nextSeparator is OrientedPathSeparator -> {
-					val isFacingForward = (nextSeparator.direction() == travelDirection)
-
-					if (isFacingForward) {
-						// Forward-facing (can show GREEN) - valid target
-						val dynamicSep = environment.toDynamic(nextSeparator)
-						logger.trace {
-							"findNextSemaphoresVia: Found forward-facing semaphore: $dynamicSep"
-						}
-						return listOf(dynamicSep)
-					} else {
-						// Backward-facing (RED, cannot change) - skip and continue
-						logger.trace {
-							"findNextSemaphoresVia: Skipping backward-facing semaphore: $nextSeparator"
-						}
-					}
-				}
-			}
-
-			// Check for cycles
-			if (!visited.add(nextSeparator)) {
-				logger.warn {
-					"findNextSemaphoresVia: Cycle detected at $nextSeparator, stopping search"
-				}
-				break
-			}
-
-			// Continue to next section
-			currentSep = nextSeparator
-			currentSection = navigator.getNextTrackSection(currentSep, currentSection)
+			// Explore outgoing paths from this separator
+			exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
 		}
 
-		// No valid endpoint found
+		return prioritizeInOuts(validTargets)
+	}
+
+	/**
+	 * Process a reached separator to check if it's a valid target.
+	 *
+	 * @return true if separator was added as target (stop exploration), false to continue
+	 */
+	private fun processReachedSeparator(
+		separator: PathSeparator,
+		travelDirection: cz.vutbr.fit.interlockSim.objects.core.Cell.Segment,
+		validTargets: MutableList<DynamicPathSeparator>
+	): Boolean {
+		return when {
+			// InOut is always a valid endpoint (bidirectional)
+			separator is cz.vutbr.fit.interlockSim.objects.cells.InOut ||
+			separator is DynamicInOut -> {
+				val dynamicSep = environment.toDynamic(separator)
+				logger.trace { "findNextSemaphoresVia: Found InOut: $dynamicSep" }
+				validTargets.add(dynamicSep)
+				true // Don't continue past InOut
+			}
+
+			// Oriented semaphore - check if facing forward
+			separator is OrientedPathSeparator -> {
+				val isFacingForward = (separator.direction() == travelDirection)
+				if (isFacingForward) {
+					val dynamicSep = environment.toDynamic(separator)
+					logger.trace { "findNextSemaphoresVia: Found forward-facing semaphore: $dynamicSep" }
+					validTargets.add(dynamicSep)
+					true // Don't continue past forward-facing semaphore
+				} else {
+					logger.trace { "findNextSemaphoresVia: Skipping backward-facing semaphore: $separator" }
+					false // Continue exploring
+				}
+			}
+
+			else -> false // Continue exploring
+		}
+	}
+
+	/**
+	 * Explore all outgoing paths from a separator.
+	 * At the FIRST junction, explores ALL branches. At subsequent junctions, uses single-path navigation.
+	 */
+	private fun exploreOutgoingPaths(
+		separator: PathSeparator,
+		currentSep: PathSeparator,
+		currentSection: TrackSection,
+		start: PathSeparator,
+		context: SimulationContext,
+		queue: MutableList<Pair<PathSeparator, TrackSection?>>
+	) {
+		val grid = context.getRailWayNetGrid()
+		val graph = context.getGraph()
+		val location = grid.getLocation(separator) ?: return
+		@Suppress("UNCHECKED_CAST")
+		val edges = graph.assignedEdges(location) as Map<*, *>
+
+		val outgoingEdges = edges.entries.filter { (_, block) ->
+			val trackSection = block as? TrackSection
+			trackSection != null && trackSection != currentSection
+		}
+
+		when {
+			outgoingEdges.size > 1 && currentSep == start -> {
+				// At FIRST junction: explore ALL branches (parallel paths)
+				logger.trace { "findNextSemaphoresVia: At first junction, exploring ${outgoingEdges.size} branches" }
+				outgoingEdges.forEach { (_, block) ->
+					queue.add(Pair(separator, block as TrackSection))
+				}
+			}
+			outgoingEdges.size == 1 -> {
+				// Single path forward
+				queue.add(Pair(separator, outgoingEdges.first().value as TrackSection))
+			}
+			outgoingEdges.size > 1 -> {
+				// Multiple branches NOT at first junction: use single-path navigation
+				val nextSection = navigator.getNextTrackSection(separator, currentSection)
+				if (nextSection != null) {
+					queue.add(Pair(separator, nextSection))
+				}
+			}
+		}
+	}
+
+	/**
+	 * Prioritize InOuts over semaphores in result list.
+	 */
+	private fun prioritizeInOuts(validTargets: List<DynamicPathSeparator>): List<DynamicPathSeparator> {
+		val distinctTargets = validTargets.distinct()
+		val (inouts, semaphores) = distinctTargets.partition { it is DynamicInOut }
 		logger.trace {
-			"findNextSemaphoresVia: Search complete, no valid endpoint found"
+			"findNextSemaphoresVia: Returning ${inouts.size} InOut(s) + ${semaphores.size} semaphore(s)"
 		}
-		return emptyList()
+		return inouts + semaphores
 	}
 
 	/**

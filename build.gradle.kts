@@ -111,6 +111,7 @@ dependencies {
 
     // Test dependencies (from Ivy test configuration)
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion") // JUnit 5 API
+    testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion") // JUnit 5 parameterized tests
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion") // JUnit 5 engine
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion") // JUnit platform launcher
     testRuntimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion") // JUnit platform console
