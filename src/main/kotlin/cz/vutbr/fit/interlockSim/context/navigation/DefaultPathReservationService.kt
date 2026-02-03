@@ -179,6 +179,9 @@ class DefaultPathReservationService(
 					// Success - path reserved and registered
 
 					// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
+					logger.debug {
+						"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
+					}
 					val pathInfo = pathInfoBuilder.buildPathInfo(
 						start = start,
 						target = target,
@@ -188,7 +191,8 @@ class DefaultPathReservationService(
 					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
 					registry.registerPathInfo(trainId, pathInfo)
 					logger.debug {
-						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions"
+						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
+							"reserved path has ${pathInfo.reservedPath.length()} elements"
 					}
 
 					// Step 2g: Configure semaphore signal after successful reservation
@@ -317,7 +321,9 @@ class DefaultPathReservationService(
 		next: TrackSection
 	): PathReservationService.ReservationResult {
 		logger.debug {
-			"reservePathToAnyNextSemaphore: Searching for semaphores from $start via $next"
+			"reservePathToAnyNextSemaphore: ENTRY POINT for $trainId - " +
+				"start=$start (${start.javaClass.simpleName}), " +
+				"next=$next (${next.javaClass.simpleName})"
 		}
 
 		// Find ALL reachable semaphores via this track section
@@ -345,9 +351,11 @@ class DefaultPathReservationService(
 
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
+		var attemptCount = 0
 		for (semaphore in semaphores) {
+			attemptCount++
 			logger.trace {
-				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore"
+				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
 			}
 
 			val result = reservePath(trainId, start, semaphore)
@@ -358,8 +366,7 @@ class DefaultPathReservationService(
 					// This prevents alternative routes that bypass the intended track section
 					if (!result.reservedBlocks.contains(nextBlock)) {
 						logger.debug {
-							"reservePathToAnyNextSemaphore: Path to $semaphore does NOT use " +
-								"required next block @${System.identityHashCode(nextBlock)}, rejecting"
+							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
 						}
 						// Release the wrongly reserved path
 						result.reservedBlocks.forEach { block ->
@@ -372,7 +379,7 @@ class DefaultPathReservationService(
 								}
 							}
 						}
-						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(1)
+						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 						continue
 					}
 
@@ -397,7 +404,7 @@ class DefaultPathReservationService(
 					logger.trace {
 						"reservePathToAnyNextSemaphore: Path to $semaphore blocked, trying next"
 					}
-					lastResult = result
+					lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 					continue
 				}
 				is PathReservationService.ReservationResult.Conflict -> {
@@ -412,7 +419,7 @@ class DefaultPathReservationService(
 					logger.warn {
 						"reservePathToAnyNextSemaphore: No topological path to $semaphore (unexpected)"
 					}
-					lastResult = result
+					lastResult = PathReservationService.ReservationResult.NoPathExists
 					continue
 				}
 			}
@@ -420,9 +427,9 @@ class DefaultPathReservationService(
 
 		// All semaphores tried, all paths blocked
 		logger.debug {
-			"reservePathToAnyNextSemaphore: All ${semaphores.size} path(s) blocked"
+			"reservePathToAnyNextSemaphore: All $attemptCount path(s) blocked"
 		}
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(semaphores.size)
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 	}
 
 	override fun reservePathToAnyNextSemaphore(
@@ -939,12 +946,14 @@ class DefaultPathReservationService(
 			val nextSeparator = currentSection.getSecondEnd(currentSep)
 			if (!visited.add(nextSeparator)) continue
 
-			// Check if separator is a valid target
-			val targetAdded = processReachedSeparator(nextSeparator, travelDirection, validTargets)
-			if (targetAdded) continue
+			// Check if separator is a valid target and whether to stop exploring beyond it
+			val stopExploration = processReachedSeparator(nextSeparator, travelDirection, validTargets)
 
-			// Explore outgoing paths from this separator
-			exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
+			// Only explore outgoing paths if we haven't reached a stopping point
+			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
+			if (!stopExploration) {
+				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
+			}
 		}
 
 		return prioritizeInOuts(validTargets)
@@ -953,7 +962,8 @@ class DefaultPathReservationService(
 	/**
 	 * Process a reached separator to check if it's a valid target.
 	 *
-	 * @return true if separator was added as target (stop exploration), false to continue
+	 * @return true if exploration should stop beyond this separator (forward-facing semaphore/InOut),
+	 *         false if exploration should continue (backward-facing semaphore/junction)
 	 */
 	private fun processReachedSeparator(
 		separator: PathSeparator,
@@ -961,13 +971,13 @@ class DefaultPathReservationService(
 		validTargets: MutableList<DynamicPathSeparator>
 	): Boolean {
 		return when {
-			// InOut is always a valid endpoint (bidirectional)
+			// InOut is always a valid endpoint (bidirectional) - stop exploration
 			separator is cz.vutbr.fit.interlockSim.objects.cells.InOut ||
 			separator is DynamicInOut -> {
 				val dynamicSep = environment.toDynamic(separator)
 				logger.trace { "findNextSemaphoresVia: Found InOut: $dynamicSep" }
 				validTargets.add(dynamicSep)
-				true // Don't continue past InOut
+				true // Stop exploring beyond InOuts
 			}
 
 			// Oriented semaphore - check if facing forward
@@ -977,10 +987,10 @@ class DefaultPathReservationService(
 					val dynamicSep = environment.toDynamic(separator)
 					logger.trace { "findNextSemaphoresVia: Found forward-facing semaphore: $dynamicSep" }
 					validTargets.add(dynamicSep)
-					true // Don't continue past forward-facing semaphore
+					true // Stop exploring beyond forward-facing semaphores
 				} else {
 					logger.trace { "findNextSemaphoresVia: Skipping backward-facing semaphore: $separator" }
-					false // Continue exploring
+					false // Continue exploring beyond backward-facing semaphores
 				}
 			}
 
@@ -1012,9 +1022,11 @@ class DefaultPathReservationService(
 		}
 
 		when {
-			outgoingEdges.size > 1 && currentSep == start -> {
-				// At FIRST junction: explore ALL branches (parallel paths)
-				logger.trace { "findNextSemaphoresVia: At first junction, exploring ${outgoingEdges.size} branches" }
+			outgoingEdges.size > 1 -> {
+				// At ANY junction: explore ALL branches (enables full parallel path discovery)
+				logger.trace {
+					"findNextSemaphoresVia: At junction $separator, exploring ${outgoingEdges.size} branches"
+				}
 				outgoingEdges.forEach { (_, block) ->
 					queue.add(Pair(separator, block as TrackSection))
 				}
@@ -1022,13 +1034,6 @@ class DefaultPathReservationService(
 			outgoingEdges.size == 1 -> {
 				// Single path forward
 				queue.add(Pair(separator, outgoingEdges.first().value as TrackSection))
-			}
-			outgoingEdges.size > 1 -> {
-				// Multiple branches NOT at first junction: use single-path navigation
-				val nextSection = navigator.getNextTrackSection(separator, currentSection)
-				if (nextSection != null) {
-					queue.add(Pair(separator, nextSection))
-				}
 			}
 		}
 	}
