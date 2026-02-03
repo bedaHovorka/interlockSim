@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -445,7 +446,12 @@ class DefaultPathReservationService(
 
 		// Step 2: Get next track section based on separator's orientation
 		// For oriented separators, use the direction() method to get the forward segment
-		val forwardSegment = start.direction()
+		// SPECIAL CASE: InOut connects bidirectionally at direction() (not anti-direction)
+		val forwardSegment = when (start) {
+			is InOut -> start.getTrackConnectionDirection()  // Track connection at direction()
+			is DynamicInOut -> start.getTrackConnectionDirection()  // Track connection at direction()
+			else -> start.direction()  // Semaphores: direction is forward travel
+		}
 		logger.debug {
 			"reservePathToAnyNextSemaphore: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
 		}

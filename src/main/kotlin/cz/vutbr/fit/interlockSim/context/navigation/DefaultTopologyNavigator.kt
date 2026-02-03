@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -156,10 +157,13 @@ class DefaultTopologyNavigator(
 					// Oriented cells have single deterministic direction
 					when {
 						segment == null -> {
-							// No incoming direction known - explore ALL possible exits
-							// Avoids calling getFollowingSegment(null) which throws IllegalStateException
-							// when multiple directions exist (e.g., at entry points)
-							staticNodeCell.joins().firstOrNull()
+							// No incoming direction known
+							// SPECIAL CASE: InOut connects bidirectionally at direction()
+							// Track connection is at direction() for both entry and exit
+							when (staticNodeCell) {
+								is InOut -> staticNodeCell.getTrackConnectionDirection()
+								else -> staticNodeCell.joins().firstOrNull()
+							}
 						}
 						else -> {
 							// Known incoming direction - get deterministic exit
