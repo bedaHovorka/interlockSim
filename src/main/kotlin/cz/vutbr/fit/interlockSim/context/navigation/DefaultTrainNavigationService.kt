@@ -264,22 +264,36 @@ class DefaultTrainNavigationService(
 				// Found separator! Get next element
 				if (i + 1 < reservedPath.size) {
 					val nextElement = reservedPath.elementAt(i + 1)
-					if (nextElement is TrackSection) {
-						logger.trace {
-							"determineNextFromPathInfo: found separator at index $i, " +
-								"next track section at index ${i + 1}: $nextElement"
+					return when (nextElement) {
+						is TrackSection -> {
+							logger.trace {
+								"determineNextFromPathInfo: found separator at index $i, " +
+									"next track section at index ${i + 1}: $nextElement"
+							}
+							nextElement
 						}
-						return nextElement
-					} else {
-						logger.warn {
-							"determineNextFromPathInfo: element after separator is not TrackSection: " +
-								"${nextElement.javaClass.simpleName}"
+						is PathSeparator -> {
+							// Target separator reached - this is the end of the reserved path
+							logger.debug {
+								"determineNextFromPathInfo: Reached target separator $nextElement, " +
+									"no more tracks in reserved path for train at $separator"
+							}
+							null  // Expected: train has reached destination
 						}
-						return null
+						else -> {
+							// Unexpected element type - path structure error
+							logger.warn {
+								"determineNextFromPathInfo: Unexpected element type after separator: " +
+									"${nextElement.javaClass.simpleName}, path may be malformed"
+							}
+							null  // Unexpected structure
+						}
 					}
 				} else {
-					logger.info {
-						"determineNextFromPathInfo: separator is last element in path (end of route)"
+					// Current separator is the last element in the path
+					logger.debug {
+						"determineNextFromPathInfo: Current separator $separator is last element " +
+							"in reserved path, destination reached"
 					}
 					return null
 				}
