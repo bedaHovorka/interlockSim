@@ -116,6 +116,13 @@ class Train :
 				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					// Train should wait for dispatcher to reserve next path
+					// Stop motor completely to prevent creeping motion during passivation
+					motor.cancelAccelerating()
+					this@Train.stop()
+
+					logger.debug {
+						"Train $number: No reserved path available at $where, halting completely and waiting for dispatcher"
+					}
 					// Do NOT stop the entire simulation!
 					passivate()
 					continue // Restart loop after passivation to re-check for next track section
