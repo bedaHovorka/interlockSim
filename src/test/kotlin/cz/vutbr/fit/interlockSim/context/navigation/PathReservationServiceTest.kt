@@ -232,9 +232,12 @@ class PathReservationServiceTest : KoinTestBase() {
 			val reservedBlocks = service.getReservedBlocks("train1")
 			assertThat(reservedBlocks).isEmpty()
 
-			// Verify first block is FREE (rollback succeeded)
-			assertThat(blocks[0].getState()).isEqualTo(TrackFacility.State.FREE)
-			assertThat(blocks[0].trainName).isNull()
+			// Verify blocks not reserved by other-train are FREE (rollback succeeded)
+			// Note: blockToReserve is intentionally RESERVED by "other-train", so check different blocks
+			val freeBlocks = blocks.filter { it != blockToReserve }
+			require(freeBlocks.isNotEmpty()) { "Test requires at least one block besides the conflict block" }
+			assertThat(freeBlocks[0].getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(freeBlocks[0].trainName).isNull()
 		}
 	}
 

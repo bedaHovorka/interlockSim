@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isTrue
