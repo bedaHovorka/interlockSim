@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -256,6 +257,52 @@ interface PathReservationService {
 	 * @see isPathToAnyNextSemaphoreAvailable
 	 */
 	fun reservePathToAnyNextSemaphore(trainId: String, start: DynamicPathSeparator, next: TrackSection): ReservationResult
+
+
+	/**
+	 * Find and reserve path from oriented separator to any next semaphore.
+	 *
+	 * This method is similar to `reservePathToAnyNextSemaphore()` but works with
+	 * oriented separators (e.g., semaphores) that have a defined direction.
+	 * It automatically determines the next track section based on the orientation.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Determine `next` track section based on `start` orientation
+	 * 2. Find ALL semaphores reachable from `start` via `next` track section
+	 * 3. For each semaphore, attempt ` reservePath(trainId, start, semaphore)`
+	 * 4. Return Success on first successful reservation
+	 * 5. Return last failure result if all attempts fail
+	 *
+	 * ## Use Case: Semaphore Forward Path
+	 *
+	 * When a train approaches a semaphore and needs a forward path:
+	 * ```kotlin
+	 * val result = service.reservePathToAnyNextSemaphore("train1", semaphore)
+	 * when (result) {
+	 *     is Success -> // Train can proceed, path reserved
+	 *     is NoPathExists -> // No semaphore found in this direction
+	 *     is AllPathsBlocked -> // Semaphore found but path occupied
+	 *     is Conflict -> // Reservation conflict (should not happen)
+	 * }
+	 * ```
+	 * ## Automatic Next Section Discovery
+	 *
+	 * This method automatically finds the next track section based on the orientation
+	 * of the starting separator. It uses [OrientedPathSeparator.direction] to determine
+	 * the forward segment, then queries the graph for the track section connected to that
+	 * segment. This ensures path discovery follows the separator's intended direction.
+	 *
+	 * This simplifies usage for oriented elements like semaphores, where the direction
+	 * is inherent to the element itself.
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting oriented path separator (typically a semaphore)
+	 * @return ReservationResult indicating success or failure reason
+	 * @see reservePath
+	 * @see isPathToAnyNextSemaphoreAvailable
+	 */
+	fun reservePathToAnyNextSemaphore(trainId: String, start: OrientedPathSeparator): ReservationResult
 
 	/**
 	 * Check if a path from separator to any next semaphore is currently available.

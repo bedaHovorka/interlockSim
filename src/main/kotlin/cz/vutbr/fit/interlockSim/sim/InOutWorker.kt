@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -28,7 +29,9 @@ import jDisco.Process
  */
 class InOutWorker(
 	private val env: SimulationEnvironment,
-	private val inOut: DynamicInOut
+	private val inOut: DynamicInOut,
+	val navigator: TopologyNavigator = env.getTopologyNavigator(),
+	private val pathReservationService: PathReservationService = env.getPathReservationService()
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -37,7 +40,7 @@ class InOutWorker(
 	private val queqe = Head()
 	private var myIdle = true
 	private val next: TrackSection = requireNotNull(
-		env.getTopologyNavigator().getNextTrackSection(inOut, null)
+		navigator.getNextTrackSection(inOut, null)
 	) {
 		"InOut ${inOut.name} has no outgoing track section. " +
 			"This is a configuration error - InOut must be connected to the network."
@@ -46,7 +49,7 @@ class InOutWorker(
 	private val pathFree = Condition {
 		try {
 			// next is guaranteed non-null by init check
-			env.getPathReservationService().isPathToAnyNextSemaphoreAvailable(inOut, next)
+			pathReservationService.isPathToAnyNextSemaphoreAvailable(inOut, next)
 		} catch (e: TrackOperationException) {
 			logger.error {
 				"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
@@ -76,7 +79,7 @@ class InOutWorker(
 					"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
 				)
 				// next is guaranteed non-null by init check
-				val result = env.getPathReservationService()
+				val result = pathReservationService
 					.reservePathToAnyNextSemaphore(trainId, inOut, next)
 
 				// Handle reservation result

@@ -64,8 +64,7 @@ import java.util.Queue
  */
 class ShuntingLoop(
 	context: SimulationContext,
-	endTime: Long,
-	private val navigator: TopologyNavigator = context.scope.get(),
+	private val endTime: Long,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
 ) : Interlocking(context), KoinComponent {
 	companion object {
@@ -78,10 +77,9 @@ class ShuntingLoop(
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
 	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
 	private val approwedTrains: MutableList<Train> = mutableListOf()
-	private val generator: InnerGenerator
+	private val generator: InnerGenerator =  InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
-	private val endTime: Long = endTime
 
 	private inner class RealTimeSynch : LoopProcess() {
 		private var presvihnuto: Double = 0.0
@@ -123,8 +121,6 @@ class ShuntingLoop(
 	}
 
 	init {
-		generator = InnerGenerator(context)
-
 		requireSimulation(context.getGraph().size() > 0) {
 			"Railway network graph is empty - must be loaded from vyhybna.xml first"
 		}
@@ -223,7 +219,7 @@ class ShuntingLoop(
 		sem: DynamicRailSemaphore,
 		trainName: String
 	): Boolean {
-		val result = pathReservationService.reservePathToAny(trainName, sem)
+		val result = pathReservationService.reservePathToAnyNextSemaphore(trainName, sem)
 
 		return when (result) {
 			is PathReservationService.ReservationResult.Success -> {

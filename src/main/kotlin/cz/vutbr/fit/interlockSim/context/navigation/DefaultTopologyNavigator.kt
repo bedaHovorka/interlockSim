@@ -181,13 +181,90 @@ class DefaultTopologyNavigator(
 							// No incoming segment (starting point), explore all directions
 							allJoins
 						}
-					// Get first valid segment (maintains single-path navigation semantics)
-					followingSegments.firstOrNull()
+					// Get first valid segment with forward-direction preference (maintains single-path navigation semantics)
+					preferForwardSegment(staticNodeCell, segment, followingSegments)
 				}
 			} ?: return null
 
 		// Query graph for edge assigned to following segment (lines 543-544)
 		return context.getGraph().assignedEdges(location)[followingSegment]
+	}
+
+	/**
+	 * Select the most appropriate following segment at a switch, preferring segments
+	 * that continue in the same spatial direction through the switch.
+	 *
+	 * For HORIZONTAL switches: prefers segments on the opposite side to continue
+	 * traveling through the switch in the same overall direction.
+	 *
+	 * Falls back to sorted() for determinism when direction cannot be determined.
+	 *
+	 * ## Switch Traversal Logic
+	 *
+	 * When traveling through a switch, you ENTER from one side and EXIT from the OPPOSITE side:
+	 * - Traveling RIGHT: enter via LEFT segment (dx < 0), exit via RIGHT segment (dx > 0)
+	 * - Traveling LEFT: enter via RIGHT segment (dx > 0), exit via LEFT segment (dx < 0)
+	 *
+	 * This is because segment dx values indicate direction FROM cell center:
+	 * - Segment A (dx=-1): on LEFT side of cell
+	 * - Segment F (dx=+1): on RIGHT side of cell
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. If HORIZONTAL spatial type and incoming segment known:
+	 *    - Filter candidates with OPPOSITE dx sign from incoming
+	 *    - Return first from sorted filtered list (deterministic)
+	 * 2. Otherwise: return first from sorted candidates (deterministic fallback)
+	 *
+	 * ## Example
+	 *
+	 * From doB2 (X=24) → vB (X=26) traveling RIGHT:
+	 * - Entered vB via segment with dx < 0 (from LEFT side)
+	 * - Candidates at vB: {A (dx=-1, toward doB1), F (dx=+1, toward zB)}
+	 * - Filter: candidates with dx > 0 (opposite sign) → {F}
+	 * - Result: F (exits RIGHT side, continues to zB at X=27)
+	 *
+	 * ## Why Opposite Signs?
+	 *
+	 * To continue traveling in the same overall direction (e.g., RIGHT), you must:
+	 * 1. Enter switch from the LEFT (incoming segment dx < 0)
+	 * 2. Exit switch to the RIGHT (outgoing segment dx > 0)
+	 *
+	 * This prevents routing back toward the direction you came from.
+	 *
+	 * @param nodeCell The switch node cell
+	 * @param incoming The incoming segment (null if starting at this node)
+	 * @param candidates Set of possible outgoing segments
+	 * @return The selected segment, or null if no candidates
+	 */
+	private fun preferForwardSegment(
+		nodeCell: NodeCell,
+		incoming: Cell.Segment?,
+		candidates: Set<Cell.Segment>
+	): Cell.Segment? {
+		if (candidates.isEmpty()) return null
+
+		// If HORIZONTAL spatial type and incoming segment is known
+		if (nodeCell.getSpatialType() == Cell.SpatialType.HORIZONTAL && incoming != null) {
+			val incomingDx = incoming.dx
+
+			// Filter candidates with OPPOSITE dx sign (continue forward through switch)
+			// When traveling through a switch, you enter from one side and exit from opposite side
+			// Incoming dx=-1 (entered from LEFT) → exit dx=+1 (continue RIGHT)
+			// Incoming dx=+1 (entered from RIGHT) → exit dx=-1 (continue LEFT)
+			// Note: dx * incomingDx < 0 means opposite signs
+			val forward = candidates.filter { candidate ->
+				candidate.dx * incomingDx < 0
+			}
+
+			if (forward.isNotEmpty()) {
+				// Return first from sorted for determinism
+				return forward.sorted().first()
+			}
+		}
+
+		// Fallback: use sorted for determinism when no directional preference
+		return candidates.sorted().firstOrNull()
 	}
 
 	/**
