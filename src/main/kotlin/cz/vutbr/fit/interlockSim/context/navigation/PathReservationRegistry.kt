@@ -412,6 +412,13 @@ class PathReservationRegistry(
 				"path length: ${oldPathInfo.reservedPath.size} + ${newPathInfo.reservedPath.size} " +
 				"= ${mergedPathInfo.reservedPath.size})"
 		}
+
+		// Log merged PathInfo (debug level for normal operation)
+		logger.debug {
+			"registerPathInfo: Created/merged PathInfo for '$trainId': " +
+				"start=${mergedPathInfo.start}, target=${mergedPathInfo.target}, " +
+				"path length=${mergedPathInfo.reservedPath.size}"
+		}
 	}
 
 	/**
@@ -475,15 +482,39 @@ class PathReservationRegistry(
 		// Step 3: Find overlap point (old.target == new.start)
 		val skipFirst = (new.start == old.target)
 		var skipped = false
+		var cycleDetected = false
+		var actualTarget: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator = new.target
 
-		// Step 4: Add elements from new path (skip first separator if overlapping)
-		new.reservedPath.forEach { element ->
+		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
+		for (element in new.reservedPath) {
+			if (cycleDetected) break  // Stop if cycle was detected
+
 			if (skipFirst && !skipped && element == new.start) {
 				skipped = true  // Skip this occurrence (already in old path)
 				logger.trace {
 					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
 				}
 			} else {
+				// Check for cycle: if this separator already exists in merged path, stop
+				if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
+					mergedPath.any { it == element }) {
+					logger.info {
+						"mergePathInfo: CYCLE DETECTED - separator $element already in merged path, " +
+							"truncating to avoid infinite loop (old: ${old.start}→${old.target}, " +
+							"new: ${new.start}→${new.target})"
+					}
+					cycleDetected = true
+					// Update target to the last valid separator before the cycle
+					// Find the last PathSeparator in mergedPath (before this cycle point)
+					val lastSeparator = mergedPath.findLast { it is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator }
+					if (lastSeparator is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
+						actualTarget = lastSeparator
+						logger.info {
+							"mergePathInfo: Updated target from ${new.target} to $actualTarget (last separator before cycle)"
+						}
+					}
+					break  // Stop adding elements
+				}
 				mergedPath.add(element)
 			}
 		}
@@ -495,12 +526,12 @@ class PathReservationRegistry(
 		logger.trace {
 			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
 				"elements into ${mergedPath.size} elements " +
-				"(overlap: ${if (skipFirst) "yes" else "no"})"
+				"(overlap: ${if (skipFirst) "yes" else "no"}, cycle: ${if (cycleDetected) "yes" else "no"})"
 		}
 
 		return PathInfo(
 			start = old.start,  // Keep original start (where Tail might still be)
-			target = new.target,  // Update to new target (where Front is going)
+			target = actualTarget,  // Use actual target (updated if cycle detected)
 			reservedPath = mergedPath,
 			entryDirections = mergedDirections
 		)
