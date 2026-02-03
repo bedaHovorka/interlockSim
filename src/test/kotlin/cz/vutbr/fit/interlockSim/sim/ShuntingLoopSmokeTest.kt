@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isTrue
@@ -222,7 +223,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// We run for 350 seconds to ensure trains complete or deadlock is detected
 			context.run()
 
-			// Assert: Medium-duration simulation (60s) completes without deadlock
+			// Assert: Medium-duration simulation (350s) completes without deadlock
 			// Success: Path reservation system allowed concurrent train movement
 			logger.info { "Deadlock prevention test completed successfully" }
 		}
@@ -362,25 +363,25 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 
 			// Assert: Both directions should have 2 paths discovered (k1 and k2)
 			logger.info { "Paths A→B: ${pathsAtoB.size}, B→A: ${pathsBtoA.size}" }
-			assertThat(pathsAtoB.size).isGreaterThan(1)
-			assertThat(pathsBtoA.size).isGreaterThan(1)
+			assertThat(pathsAtoB.size).isEqualTo(2)
+			assertThat(pathsBtoA.size).isEqualTo(2)
 
 			// Verify paths use different blocks
 			val pathAtoB_blocks = pathsAtoB.map { path ->
-				path.mapNotNull { it.getTrackBlock() }.map { it.toString() }.toSet()
+				path.mapNotNull { it.getTrackBlock() }.toSet()
 			}
-			logger.info { "Path 0 A→B blocks: ${pathAtoB_blocks[0]}" }
-			logger.info { "Path 1 A→B blocks: ${pathAtoB_blocks[1]}" }
+			logger.info { "Path 0 A→B blocks: ${pathAtoB_blocks[0].map { it.name }}" }
+			logger.info { "Path 1 A→B blocks: ${pathAtoB_blocks[1].map { it.name }}" }
 
 			// Verify the two paths use different blocks (not identical sets)
 			assertThat(pathAtoB_blocks[0]).isNotEqualTo(pathAtoB_blocks[1])
 
-			// Verify one path uses k1, one uses k2 (explicit block validation)
+			// Verify one path uses k1, one uses k2 (explicit block name validation)
 			val hasK1Path = pathAtoB_blocks.any { blocks ->
-				blocks.any { it.contains("k1") }
+				blocks.any { it.name?.contains("k1") == true }
 			}
 			val hasK2Path = pathAtoB_blocks.any { blocks ->
-				blocks.any { it.contains("k2") }
+				blocks.any { it.name?.contains("k2") == true }
 			}
 			assertThat(hasK1Path, name = "Expected path using k1 blocks").isTrue()
 			assertThat(hasK2Path, name = "Expected path using k2 blocks").isTrue()

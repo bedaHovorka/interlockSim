@@ -211,10 +211,16 @@ class PathReservationServiceTest : KoinTestBase() {
 					block as DynamicTrackBlock
 				}.distinct()
 
-			// Reserve second block manually (simulate partial conflict)
-			if (blocks.size >= 2) {
-				blocks[1].setUpPath(inOut1, "other-train")
+			// Find blocks that exist in ALL paths to ensure conflict blocks all routes
+			// This prevents the test from being non-deterministic with multiple paths
+			val commonBlocks = path0Blocks.intersect(path1Blocks)
+			require(commonBlocks.isNotEmpty()) {
+				"Test requires common blocks between paths. Found ${path0Blocks.size} and ${path1Blocks.size} blocks."
 			}
+			val blockToReserve = blocks.first { it in commonBlocks }
+
+			// Reserve a block that blocks ALL paths (simulate partial conflict)
+			blockToReserve.setUpPath(inOut1, "other-train")
 
 			// Act - try to reserve path for train1
 			val result = service.reservePath("train1", inOut1, inOut2)
@@ -226,9 +232,12 @@ class PathReservationServiceTest : KoinTestBase() {
 			val reservedBlocks = service.getReservedBlocks("train1")
 			assertThat(reservedBlocks).isEmpty()
 
-			// Verify first block is FREE (rollback succeeded)
-			assertThat(blocks[0].getState()).isEqualTo(TrackFacility.State.FREE)
-			assertThat(blocks[0].trainName).isNull()
+			// Verify blocks not reserved by other-train are FREE (rollback succeeded)
+			// Note: blockToReserve is intentionally RESERVED by "other-train", so check different blocks
+			val freeBlocks = blocks.filter { it != blockToReserve }
+			require(freeBlocks.isNotEmpty()) { "Test requires at least one block besides the conflict block" }
+			assertThat(freeBlocks[0].getState()).isEqualTo(TrackFacility.State.FREE)
+			assertThat(freeBlocks[0].trainName).isNull()
 		}
 	}
 

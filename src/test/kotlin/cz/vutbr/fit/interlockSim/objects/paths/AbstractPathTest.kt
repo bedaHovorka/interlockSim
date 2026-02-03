@@ -343,9 +343,8 @@ class AbstractPathTest : KoinTestBase() {
 
 			// Act & Assert - method should be callable (may throw due to mock limitations)
 			try {
-				val isFree = path.isFreeFrom(end1)
-				// Verify method returns boolean (true or false, both valid)
-				assertThat(isFree is Boolean).isTrue()
+				path.isFreeFrom(end1)
+				// Method executed successfully without throwing
 			} catch (e: Throwable) {
 				// Expected with mock context - reflection needs full segment setup
 				// Method exists and is callable, even if it fails with mock data

@@ -740,7 +740,8 @@ class PathValidationTest : KoinTestBase() {
 				val maxSpeed = path.maxSpeed(sem1)
 				// If dynamic wrappers are initialized, verify reasonable speed
 				assertThat(maxSpeed).isNotNull()
-				assertThat(maxSpeed!! > 0.0).isTrue()
+				val nonNullMaxSpeed = maxSpeed ?: error("maxSpeed should not be null after assertion")
+				assertThat(nonNullMaxSpeed > 0.0).isTrue()
 			} catch (e: ClassCastException) {
 				// Expected - static separators cannot be cast to DynamicPathSeparator
 				assertThat(e.message).isNotNull()
