@@ -206,50 +206,40 @@ object AnimationStateCapture {
 	}
 
 	/**
-	 * Determine train color variant based on origin InOut (TEMPORARY HEURISTIC - MVP).
+	 * Determine train color variant based on origin InOut.
 	 *
-	 * **Goal:** Trains should be colored based on which InOut they entered the network from:
-	 * - InOut B → Blue (return true)
-	 * - InOut A → Orange (return false)
+	 * Trains are color-coded by their entry point for visual distinction:
+	 * - **Blue (true):** Trains from InOut named "B"
+	 * - **Orange (false):** Trains from InOut named "A" (or any other name)
 	 *
-	 * Trains maintain their color throughout their entire journey based on their origin.
+	 * This implementation uses the train's actual origin InOut from its timetable,
+	 * replacing the broken odd/even heuristic that failed when Generator shuffled
+	 * train creation order.
 	 *
-	 * **Current Implementation (MVP):**
-	 * Uses train number parity as a heuristic:
-	 * - Odd train numbers → Blue (assumes InOut B origin)
-	 * - Even train numbers → Orange (assumes InOut A origin)
-	 *
-	 * This works ONLY for the shunting loop example where the Generator assigns train
-	 * numbers sequentially and alternates between InOuts. This will FAIL if:
-	 * - Train numbering scheme changes
-	 * - Generator assigns numbers differently
-	 * - Different example configurations with different InOut patterns
-	 *
-	 * **TODO (Issue #XXX):** Implement proper InOut-based color determination
-	 * - Add `fun getOriginInOut(): DynamicInOut` to Train.kt (accesses `timetable.getIn()`)
-	 * - Update this method to compare `train.getOriginInOut()` against context InOut list
-	 * - This requires minimal changes to sim/ package (just a simple getter method)
-	 * - See Train.kt line 101: `var where: DynamicPathSeparator = timetable.getIn()`
-	 * - See Timetable.kt line 30: `fun getIn(): DynamicInOut` (already exists)
-	 *
-	 * **Proper Implementation:**
-	 * ```kotlin
-	 * val originInOut = train.getOriginInOut() // Access timetable.getIn()
-	 * // Compare originInOut against known InOuts in context
-	 * return originInOut.toString().contains("B") // Or use proper InOut identification
+	 * **Configuration:**
+	 * InOut names are defined in XML configuration (e.g., vyhybna.xml):
+	 * ```xml
+	 * <InOut X="30" Y="8" name="B"/>
+	 * <InOut X="11" Y="8" name="A"/>
 	 * ```
 	 *
+	 * **Edge Cases:**
+	 * - If InOut has no name or null name: defaults to orange (false)
+	 * - Name comparison is case-sensitive ("B" ≠ "b")
+	 * - Future configurations with different names: only "B" maps to blue
+	 *
 	 * @param train Train to determine color variant for
-	 * @param context Simulation context (unused in current heuristic, needed for proper implementation)
-	 * @return True for blue color variant (assumed InOut B), false for orange (assumed InOut A)
+	 * @param context Simulation context (unused, kept for future extensibility)
+	 * @return True for blue color variant (InOut "B"), false for orange (InOut "A" or other)
+	 * @since 2026-02-04 (Fixed train color coding bug)
 	 */
 	private fun determineOriginColorVariant(
 		train: Train,
 		context: SimulationContext
 	): Boolean {
-		// TEMPORARY HEURISTIC: Use train number parity as proxy for origin InOut
-		// This is NOT a proper solution - see documentation above for correct implementation
-		return train.getNumber() % 2 == 1
+		val originInOut = train.getOriginInOut()
+		val inOutName = originInOut.name
+		return inOutName == "B"
 	}
 
 	/**

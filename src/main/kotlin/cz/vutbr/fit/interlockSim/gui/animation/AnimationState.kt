@@ -101,13 +101,16 @@ data class AnimationState(
  * ## Color Coding by Origin InOut
  *
  * - **travelingRight:** Color selector based on train's origin InOut
- * - true = Blue (trains from InOut B)
- * - false = Orange (trains from InOut A)
- * - Trains maintain their origin color throughout their entire journey
+ *   - true = Blue (trains from InOut "B")
+ *   - false = Orange (trains from InOut "A" or other names)
+ *   - Trains maintain their origin color throughout their entire journey
  *
- * **NOTE FOR MVP:** This class is defined but not populated in initial implementation
- * due to private Train internals. Will be implemented in future iteration with
- * public Train API (#201 follow-up).
+ * **Implementation:**
+ * Train origin is determined via `Train.getOriginInOut()` which accesses
+ * the train's Timetable entry InOut. This provides accurate color coding
+ * regardless of train creation order or Generator shuffling.
+ *
+ * @see AnimationStateCapture.determineOriginColorVariant
  *
  * @property trainNumber Unique train identifier
  * @property position Total distance traveled in meters

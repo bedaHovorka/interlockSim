@@ -696,6 +696,20 @@ class Train :
 	fun getNumber(): Int = number
 
 	/**
+	 * Get the origin InOut where this train entered the network.
+	 *
+	 * Used by animation system to determine train color coding based on entry point.
+	 * Color mapping: InOut "B" → blue, InOut "A" → orange (configurable in vyhybna.xml).
+	 *
+	 * This is a minimal accessor to support animation visualization without exposing
+	 * full Timetable structure. No sim/ package refactoring required.
+	 *
+	 * @return The DynamicInOut where the train originated
+	 * @since 2026-02-04 (Fix train color coding bug)
+	 */
+	fun getOriginInOut(): DynamicInOut = timetable.getIn()
+
+	/**
 	 * Get the track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.
