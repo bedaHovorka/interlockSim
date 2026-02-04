@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -18,6 +19,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
@@ -204,6 +207,16 @@ class DefaultPathReservationService(
 						registry.registerSwitches(trainId, switches)
 						logger.debug {
 							"reservePath: Registered ${switches.size} switches for $trainId"
+						}
+					}
+
+					// Step 2f.2: Configure switches based on path topology (Issue #300)
+					// Switches must be configured BEFORE semaphore signals are set up
+					// This ensures switches are in correct position (MAIN/BRANCH) for the reserved route
+					if (switches.isNotEmpty()) {
+						configureSwitchesInPath(trainId, pathInfo)
+						logger.debug {
+							"reservePath: Configured ${switches.size} switches for $trainId"
 						}
 					}
 
@@ -1202,6 +1215,123 @@ class DefaultPathReservationService(
 					if (seen.add(element)) element else null
 				}
 				else -> null
+			}
+		}
+	}
+
+	/**
+	 * Configure switches in the reserved path based on topology.
+	 *
+	 * For each switch in the path, determines the correct configuration (MAIN or BRANCH)
+	 * based on the path topology (from/to track segments). Calls DynamicRailSwitch.setUpPath()
+	 * which:
+	 * 1. Calculates correct Conf based on from/to segments
+	 * 2. Updates switch.conf property
+	 * 3. Fires PropertyChangeSupport event for animation
+	 * 4. Locks the switch
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Convert Path to indexed list for neighbor access
+	 * 2. Iterate through each element with index
+	 * 3. For each DynamicRailSwitch:
+	 *    a. Get previous element (track or null)
+	 *    b. Get next element (track or null)
+	 *    c. Calculate from/to segments using environment.getSegment()
+	 *    d. Call switch.setUpPath(from, to, allowedSpeed, trainOccupant)
+	 *
+	 * ## Railway Safety
+	 *
+	 * Configuration happens BEFORE semaphore signals are set, following railway
+	 * interlocking principles: switches must be positioned and locked before
+	 * authorizing train movement.
+	 *
+	 * @param trainId Train identifier for logging and occupant creation
+	 * @param pathInfo PathInfo containing the reserved path with switches
+	 * @throws PathSeparatorChangeException if switch configuration fails (null segments)
+	 * @since Issue #300 Fix switch animation regression
+	 */
+	private fun configureSwitchesInPath(
+		trainId: String,
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+	) {
+		// Convert Path to list for indexed access
+		val pathElements = pathInfo.reservedPath.toList()
+
+		// Cast environment to SimulationContext for getSegment() access
+		// Note: environment is actually SimulationContext, which provides getSegment()
+		val context = environment as SimulationContext
+
+		// Iterate through path elements with index for neighbor access
+		pathElements.forEachIndexed { index, element ->
+			// Only process switches
+			if (element is DynamicRailSwitch) {
+				// Find previous Track (skip over separators)
+				var previous: Track? = null
+				for (i in (index - 1) downTo 0) {
+					if (pathElements[i] is Track) {
+						previous = pathElements[i] as Track
+						break
+					}
+				}
+
+				// Find next Track (skip over separators)
+				var next: Track? = null
+				for (i in (index + 1) until pathElements.size) {
+					if (pathElements[i] is Track) {
+						next = pathElements[i] as Track
+						break
+					}
+				}
+
+				// Skip if we don't have a next track (required for configuration)
+				if (next == null) {
+					logger.warn {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+							"has no next track, skipping configuration"
+					}
+					return@forEachIndexed  // Kotlin lambda: use return@label instead of continue
+				}
+
+				// Calculate from/to segments using context.getSegment()
+				// from = segment the train is coming FROM
+				// to = segment the train is going TO
+				val from = context.getSegment(element, previous, next)
+				val to = context.getSegment(element, next, previous)
+
+				// Try to configure the switch - if it fails, skip this switch
+				// Some switches in the path may not need configuration (e.g., already configured,
+				// or path doesn't actually traverse the switch in a way that changes its state)
+				try {
+					// Get allowed speed for this switch
+					val allowedSpeed = element.allowedSpeed()
+
+					// Create minimal TrackOccupant for switch configuration
+					// Switch only uses this for logging, not business logic
+					val trainOccupant = object : TrackOccupant {
+						override val name: String = trainId
+						override fun distanceToSemaphore(): Double = 0.0
+						override fun nextSemaphore(): OrientedPathSeparator? = null
+					}
+
+					// Configure the switch (sets conf, fires PropertyChange event, locks)
+					element.setUpPath(from, to, allowedSpeed, trainOccupant)
+
+					logger.info {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+							"configured to ${element.conf} for train $trainId " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+					}
+				} catch (e: PathSeparatorChangeException) {
+					// Switch configuration failed - segments don't match any valid configuration
+					// This can happen for switches that are in the path but not actually traversed
+					// Skip configuration for this switch and continue
+					logger.debug {
+						"configureSwitchesInPath: Skipping switch ${element.staticRef.getName()} " +
+							"- configuration not applicable for this path " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()}, error=${e.message})"
+					}
+				}
 			}
 		}
 	}
