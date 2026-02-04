@@ -126,6 +126,9 @@ class Doubleton<T, V> : AbstractSet<T> {
 		if (this === obj) return true
 		if (obj == null) return false
 
+		// Type check: Set can only equal another Set
+		if (obj !is Set<*>) return false
+
 		// Delegate to AbstractSet's content-based equality implementation
 		// which correctly handles order-independent comparison.
 		// This allows equality with any Set (not just Doubleton) that has
