@@ -192,7 +192,7 @@ object AnimationStateCapture {
 
 		// Determine train color based on origin InOut
 		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
-		val travelingRight = calculateTravelDirection(train, context)
+		val isBlueColorVariant = determineOriginColorVariant(train, context)
 
 		return TrainState(
 			trainNumber = trainNumber,
@@ -201,46 +201,54 @@ object AnimationStateCapture {
 			acceleration = acceleration,
 			frontGridLocation = frontGridLocation,
 			length = length,
-			travelingRight = travelingRight
+			travelingRight = isBlueColorVariant
 		)
 	}
 
 	/**
-	 * Determine train color based on origin InOut.
+	 * Determine train color variant based on origin InOut (TEMPORARY HEURISTIC - MVP).
 	 *
-	 * Trains are colored based on which InOut they entered the network from:
-	 * - InOut B → Blue (travelingRight = true)
-	 * - InOut A → Orange (travelingRight = false)
+	 * **Goal:** Trains should be colored based on which InOut they entered the network from:
+	 * - InOut B → Blue (return true)
+	 * - InOut A → Orange (return false)
 	 *
-	 * This is determined by checking the train's first path separator. Trains maintain
-	 * their color throughout their entire journey based on their origin.
+	 * Trains maintain their color throughout their entire journey based on their origin.
 	 *
-	 * **Implementation Note:**
-	 * We cannot directly track the original InOut after the train has progressed through
-	 * the network, as the entry separator changes at each section boundary. However, we
-	 * can use the train's initial path direction by checking the first separator in the
-	 * train's path history or by examining the train's path planning.
+	 * **Current Implementation (MVP):**
+	 * Uses train number parity as a heuristic:
+	 * - Odd train numbers → Blue (assumes InOut B origin)
+	 * - Even train numbers → Orange (assumes InOut A origin)
 	 *
-	 * For now, we use a heuristic: check if the train number is odd/even, or check
-	 * the train's entry point name if accessible through the path.
+	 * This works ONLY for the shunting loop example where the Generator assigns train
+	 * numbers sequentially and alternates between InOuts. This will FAIL if:
+	 * - Train numbering scheme changes
+	 * - Generator assigns numbers differently
+	 * - Different example configurations with different InOut patterns
 	 *
-	 * **Fallback:** Defaults to true (blue) if origin cannot be determined.
+	 * **TODO (Issue #XXX):** Implement proper InOut-based color determination
+	 * - Add `fun getOriginInOut(): DynamicInOut` to Train.kt (accesses `timetable.getIn()`)
+	 * - Update this method to compare `train.getOriginInOut()` against context InOut list
+	 * - This requires minimal changes to sim/ package (just a simple getter method)
+	 * - See Train.kt line 101: `var where: DynamicPathSeparator = timetable.getIn()`
+	 * - See Timetable.kt line 30: `fun getIn(): DynamicInOut` (already exists)
 	 *
-	 * @param train Train to determine color for
-	 * @param context Simulation context for accessing InOut information
-	 * @return True for blue (InOut B), false for orange (InOut A)
+	 * **Proper Implementation:**
+	 * ```kotlin
+	 * val originInOut = train.getOriginInOut() // Access timetable.getIn()
+	 * // Compare originInOut against known InOuts in context
+	 * return originInOut.toString().contains("B") // Or use proper InOut identification
+	 * ```
+	 *
+	 * @param train Train to determine color variant for
+	 * @param context Simulation context (unused in current heuristic, needed for proper implementation)
+	 * @return True for blue color variant (assumed InOut B), false for orange (assumed InOut A)
 	 */
-	private fun calculateTravelDirection(
+	private fun determineOriginColorVariant(
 		train: Train,
 		context: SimulationContext
 	): Boolean {
-		// Try to determine origin InOut from train's path
-		// The train's entry separator at the START of its journey would be an InOut
-		// However, we don't have direct access to the train's original entry point
-
-		// Heuristic: Use train number parity as a proxy
-		// In shunting loop: odd trains from B (blue), even trains from A (orange)
-		// This matches typical generator patterns where trains alternate between InOuts
+		// TEMPORARY HEURISTIC: Use train number parity as proxy for origin InOut
+		// This is NOT a proper solution - see documentation above for correct implementation
 		return train.getNumber() % 2 == 1
 	}
 
