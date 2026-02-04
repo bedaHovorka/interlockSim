@@ -14,7 +14,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.PointF
 
 /**
  * Immutable snapshot of simulation state for animation rendering.
@@ -114,7 +114,7 @@ data class TrainState(
 	val position: Double,
 	val velocity: Double,
 	val acceleration: Double,
-	val frontGridLocation: Point?,
+	val frontGridLocation: PointF?,
 	val length: Double
 )
 

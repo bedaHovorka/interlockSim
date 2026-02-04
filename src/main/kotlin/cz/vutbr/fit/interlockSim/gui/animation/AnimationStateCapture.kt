@@ -181,6 +181,7 @@ object AnimationStateCapture {
 		val currentSection = train.getFrontSection()
 		val frontPosition = train.getFrontPosition()
 		val frontGridLocation = positionCalculator.calculateTrainGridLocation(
+			train = train,
 			currentSection = currentSection,
 			distanceAlongSection = frontPosition
 		)

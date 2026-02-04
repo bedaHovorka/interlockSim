@@ -310,8 +310,9 @@ class AnimatedSimulationCellRenderer(
 		val gridLocation = trainState.frontGridLocation ?: return
 
 		// Convert grid coordinates to pixel coordinates (center of cell)
-		val pixelX = gridLocation.x * cellWidth + cellWidth / 2
-		val pixelY = gridLocation.y * cellHeight + cellHeight / 2
+		// PointF provides continuous coordinates, round to nearest pixel for rendering
+		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).toInt()
+		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).toInt()
 
 		// Train body: blue circle
 		g.color = AnimationColors.TRAIN_BODY

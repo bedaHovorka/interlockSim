@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.PointF
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 
@@ -90,7 +90,7 @@ class AnimationStateTest {
 			position = 100.5,
 			velocity = 25.0,
 			acceleration = 2.0,
-			frontGridLocation = Point(5, 10),
+			frontGridLocation = PointF(5f, 10f),
 			length = 50.0
 		)
 
@@ -99,7 +99,7 @@ class AnimationStateTest {
 		assertThat(trainState.position).isEqualTo(100.5)
 		assertThat(trainState.velocity).isEqualTo(25.0)
 		assertThat(trainState.acceleration).isEqualTo(2.0)
-		assertThat(trainState.frontGridLocation).isEqualTo(Point(5, 10))
+		assertThat(trainState.frontGridLocation).isEqualTo(PointF(5f, 10f))
 		assertThat(trainState.length).isEqualTo(50.0)
 	}
 
