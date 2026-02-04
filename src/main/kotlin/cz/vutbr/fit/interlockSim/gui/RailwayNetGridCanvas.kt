@@ -116,16 +116,22 @@ class RailwayNetGridCanvas :
 			state.popupMenu?.show(this@RailwayNetGridCanvas, e, currentKey(e), cellOn(e))
 		}
 
+		@Suppress("EmptyFunctionBlock")
 		protected open fun middleMouseClicked(e: MouseEvent) {}
 
+		@Suppress("EmptyFunctionBlock")
 		protected open fun leftMouseClicked(e: MouseEvent) {}
 
+		@Suppress("EmptyFunctionBlock")
 		override fun mouseEntered(e: MouseEvent) {}
 
+		@Suppress("EmptyFunctionBlock")
 		override fun mouseExited(e: MouseEvent) {}
 
+		@Suppress("EmptyFunctionBlock")
 		override fun mousePressed(e: MouseEvent) {}
 
+		@Suppress("EmptyFunctionBlock")
 		override fun mouseReleased(e: MouseEvent) {}
 	}
 
