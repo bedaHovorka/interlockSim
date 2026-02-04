@@ -197,7 +197,8 @@ class DynamicInOutTest {
 	inner class EqualsContract {
 		@Test
 		fun `equals with null returns false`() {
-			assertThat(dynamicInOut1.equals(null)).isFalse()
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicInOut1 == null).isFalse()
 		}
 
 		@Test

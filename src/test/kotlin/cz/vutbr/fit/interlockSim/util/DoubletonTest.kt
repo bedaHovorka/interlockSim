@@ -275,7 +275,8 @@ class DoubletonTest {
 		@Test
 		fun `equals with null returns false`() {
 			val d1: Doubleton<String, Int> = Doubleton("A", "B")
-			assertThat(d1.equals(null)).isFalse()
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(d1 == null).isFalse()
 		}
 
 		@Test

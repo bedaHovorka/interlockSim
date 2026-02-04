@@ -253,11 +253,19 @@ class DynamicRailSwitch(
 	 */
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
-		return when (other) {
-			is DynamicRailSwitch -> staticRef === other.staticRef
-			is RailSwitch -> staticRef === other
-			else -> false
+		if (other == null) return false
+
+		// Compare with DynamicRailSwitch (compare staticRef references)
+		if (other is DynamicRailSwitch) {
+			return staticRef === other.staticRef
 		}
+
+		// Compare with static RailSwitch (compare this.staticRef with other)
+		if (other is RailSwitch) {
+			return staticRef === other
+		}
+
+		return false
 	}
 
 	/**

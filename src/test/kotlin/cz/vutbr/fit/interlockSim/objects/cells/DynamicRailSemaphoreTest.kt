@@ -356,7 +356,8 @@ class DynamicRailSemaphoreTest {
 	inner class EqualsContract {
 		@Test
 		fun `equals with null returns false`() {
-			assertThat(dynamicSemaphore1.equals(null)).isFalse()
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicSemaphore1 == null).isFalse()
 		}
 
 		@Test

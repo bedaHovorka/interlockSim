@@ -427,7 +427,8 @@ class DynamicRailSwitchTest {
 	inner class EqualsContract {
 		@Test
 		fun `equals with null returns false`() {
-			assertThat(dynamicSwitch1.equals(null)).isFalse()
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicSwitch1 == null).isFalse()
 		}
 
 		@Test

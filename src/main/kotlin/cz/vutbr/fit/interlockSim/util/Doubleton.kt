@@ -122,8 +122,14 @@ class Doubleton<T, V> : AbstractSet<T> {
 	 * @return true if obj is a Doubleton with the same elements
 	 */
 	override fun equals(obj: Any?): Boolean {
+		// Early reference check
+		if (this === obj) return true
+		if (obj == null) return false
+
 		// Delegate to AbstractSet's content-based equality implementation
-		// which correctly handles order-independent comparison
+		// which correctly handles order-independent comparison.
+		// This allows equality with any Set (not just Doubleton) that has
+		// the same elements, which is the correct Set semantics.
 		return super.equals(obj)
 	}
 
