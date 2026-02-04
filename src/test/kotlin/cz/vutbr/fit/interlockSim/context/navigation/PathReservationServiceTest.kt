@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.doesNotContain
+import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
@@ -35,7 +36,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -124,12 +125,12 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 			val success = result as PathReservationService.ReservationResult.Success
-			assertThat(success.reservedBlocks).isNotNull()
 			// vyhybna.xml has 7 unique blocks in the path from InOut1 to InOut2
-			assertThat(success.reservedBlocks.size).isEqualTo(7)
+			assertThat(success.reservedBlocks).hasSize(7)
 
-			// Verify all blocks are RESERVED
+			// Verify all blocks are DynamicTrackBlock instances (not separators) with correct ownership
 			success.reservedBlocks.forEach { block ->
+				assertThat(block).isInstanceOf(DynamicTrackBlock::class)
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
 				assertThat(block.reservedFrom).isEqualTo(inOut1)
 				assertThat(block.trainName).isEqualTo("train1")
@@ -199,11 +200,17 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Verify the two paths are different (different sets of blocks)
 			// Path 0: through MAIN branch (doA1 → doB1)
 			// Path 1: through BRANCH branch (doA2 → doB2)
-			val path0Blocks = allPaths[0].mapNotNull { it.getTrackBlock() }.toSet()
-			val path1Blocks = allPaths[1].mapNotNull { it.getTrackBlock() }.toSet()
+			val path0Blocks = allPaths[0].map { it.getTrackBlock() }
+				.filterIsInstance<DynamicTrackBlock>()
+			val path1Blocks = allPaths[1].map { it.getTrackBlock() }
+				.filterIsInstance<DynamicTrackBlock>()
+
+			// Both paths must have blocks
+			assertThat(path0Blocks).isNotEmpty()
+			assertThat(path1Blocks).isNotEmpty()
 
 			// The two paths should have some different blocks (not identical)
-			assertThat(path0Blocks).isNotEqualTo(path1Blocks)
+			assertThat(path0Blocks.toSet()).isNotEqualTo(path1Blocks.toSet())
 
 			// Use first path for rollback test
 			val path = allPaths.first()
@@ -712,10 +719,14 @@ class PathReservationServiceTest : KoinTestBase() {
 
 			// Verify blocks are RESERVED for train1
 			blocks.forEach { block ->
+				assertThat(block).isInstanceOf(DynamicTrackBlock::class)
 				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
 				assertThat(block.trainName).isEqualTo("train1")
 				assertThat(block.reservedFrom).isEqualTo(zA)
 			}
+
+			// Verify START semaphore signal allows entry (not STOP)
+			assertThat(zA.signal).isNotEqualTo(Signal.STOP)
 
 			// Assert path reaches one of: doB1, doB2, or B
 			// Path should go through: zA → vA → (doA1 or doA2) → (k1 or k2) → (doB1 or doB2)

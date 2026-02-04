@@ -25,10 +25,10 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -124,9 +124,18 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Act: Navigate using real TrainNavigationService
 			val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: Path is available (all blocks owned)
+			// Assert: Path is available with correctly owned blocks
 			assertThat(result).isNotNull()
-			assertThat(result!!.size).isGreaterThan(0)
+			val blocks = result!!
+				.filterIsInstance<TrackSection>()
+				.map { it.getTrackBlock() }
+				.filterIsInstance<DynamicTrackBlock>()
+			assertThat(blocks).isNotEmpty()
+
+			blocks.forEach { block ->
+				assertThat(block.trainName).isEqualTo("train1")
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+			}
 		}
 
 		@Test
@@ -223,7 +232,13 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				.map { it.getTrackBlock() }
 				.filterIsInstance<DynamicTrackBlock>()
 				.toSet()
-			assertThat(blocksInPath.size).isGreaterThan(0)
+
+			// Verify blocks are valid and owned by train1 before conflict
+			assertThat(blocksInPath).isNotEmpty()
+			blocksInPath.forEach { block ->
+				assertThat(block.getState()).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(registry.getOwner(block)).isEqualTo("train1")
+			}
 
 			// Simulate conflict: train2 steals the FIRST block in the navigation path
 			// IMPORTANT: Must update BOTH block state AND registry

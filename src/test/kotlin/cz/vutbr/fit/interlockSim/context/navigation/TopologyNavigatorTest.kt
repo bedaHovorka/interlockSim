@@ -18,6 +18,7 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
@@ -28,8 +29,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.*
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
 
@@ -81,9 +81,16 @@ class TopologyNavigatorTest : KoinTestBase() {
 		// Act: Navigate from A
 		val nextSection = navigator.getNextTrackSection(inOutA, null)
 
-		// Assert: Found next section
+		// Assert: Found next section with correct properties
 		assertThat(nextSection).isNotNull()
-		assertThat(nextSection!!.getTrackBlock()).isNotNull()
+
+		val block = nextSection!!.getTrackBlock()
+		assertThat(block).isNotNull()
+		assertThat(block).isInstanceOf(SimpleTrackBlock::class)
+
+		// Verify block connects to InOut A
+		val (end1, end2) = block.ends()
+		assertThat(listOf(end1, end2)).containsElement(inOutA)
 	}
 
 	/**
