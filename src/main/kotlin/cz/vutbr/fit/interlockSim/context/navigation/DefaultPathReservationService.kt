@@ -1248,7 +1248,7 @@ class DefaultPathReservationService(
 	 *
 	 * ## Error Handling
 	 *
-	 * Any internal {@link PathSeparatorChangeException} from switch configuration
+	 * Any internal [PathSeparatorChangeException] from switch configuration
 	 * is handled via logging only and is not propagated to callers. Switches that
 	 * cannot be configured are skipped (this may occur when path topology doesn't
 	 * actually traverse the switch).
