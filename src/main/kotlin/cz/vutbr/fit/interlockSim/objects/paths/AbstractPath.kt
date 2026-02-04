@@ -225,7 +225,7 @@ abstract class AbstractPath protected constructor(
 		methodName: String,
 		dynamicSeparator: DynamicPathSeparator,
 		previous: Track?,
-		next: Track,
+		next: Track
 	): Boolean {
 		val from = context.getSegment(dynamicSeparator, previous, next)
 		val to = context.getSegment(dynamicSeparator, next, previous)
@@ -253,11 +253,8 @@ abstract class AbstractPath protected constructor(
 			requireSimulation(following === to) {
 				"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
 			}
-			// Tier 1: Lock switch after setting up path
-			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
-				dynamicSeparator.lock()
-				logger.debug { "Switch ${dynamicSeparator.hashCode()} locked after SET_UP_PATH" }
-			}
+			// Note: Switch configuration is handled by PathReservationService.configureSwitchesInPath()
+			// See Issue #300 - AbstractPath iteration was causing incorrect switch configuration
 		} else if (methodName == IS_FREE_FROM) {
 			// Java: //EMPTY
 			// Intentionally empty - segments can be null, no action needed

@@ -271,4 +271,154 @@ class DynamicRailSwitchTest {
 		assertThat(dynamicSwitch2.type).isEqualTo(staticSwitch2.type)
 		assertThat(dynamicSwitch2.getSpatialType()).isEqualTo(staticSwitch2.getSpatialType())
 	}
+
+	// Tests for getActiveSegments() method (visual switch direction indicator)
+
+	@Test
+	fun `getActiveSegments returns correct segments for MAIN configuration`() {
+		// HORIZONTAL SIMPLE_LEFT_FALSE: MAIN direction is A-F (left-right)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+		)
+
+		// Initial configuration is MAIN
+		val segments = switch.getActiveSegments()
+
+		// Should return the main line segments (A and F for horizontal)
+		assertThat(segments).hasSize(2)
+		assertThat(segments).containsAll(Cell.Segment.A, Cell.Segment.F)
+	}
+
+	@Test
+	fun `getActiveSegments returns correct segments for BRANCH configuration`() {
+		// HORIZONTAL SIMPLE_LEFT_FALSE: BRANCH direction is A-E (merging=A, branch=E)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+		)
+
+		// Change to BRANCH
+		switch.changeConf()
+		val segments = switch.getActiveSegments()
+
+		// Should return the branch segments (A and E for left-false)
+		assertThat(segments).hasSize(2)
+		assertThat(segments).containsAll(Cell.Segment.A, Cell.Segment.E)
+	}
+
+	@Test
+	fun `getActiveSegments updates after changeConf`() {
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+		)
+
+		// Initially MAIN (A-F)
+		val mainSegments = switch.getActiveSegments()
+		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
+
+		// Change to BRANCH (A-E)
+		switch.changeConf()
+		val branchSegments = switch.getActiveSegments()
+		assertThat(branchSegments).containsAll(Cell.Segment.A, Cell.Segment.E)
+
+		// Change back to MAIN (A-F)
+		switch.changeConf()
+		val mainSegmentsAgain = switch.getActiveSegments()
+		assertThat(mainSegmentsAgain).containsAll(Cell.Segment.A, Cell.Segment.F)
+	}
+
+	@Test
+	fun `getActiveSegments works for VERTICAL spatial type`() {
+		// VERTICAL SIMPLE_RIGHT_TRUE: MAIN direction is C-H (top-bottom)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.VERTICAL, Type.SIMPLE_RIGHT_TRUE)
+		)
+
+		// MAIN configuration
+		val mainSegments = switch.getActiveSegments()
+		assertThat(mainSegments).hasSize(2)
+		assertThat(mainSegments).containsAll(Cell.Segment.C, Cell.Segment.H)
+
+		// BRANCH configuration (merging=H, branch=E for SIMPLE_RIGHT_TRUE + VERTICAL)
+		switch.changeConf()
+		val branchSegments = switch.getActiveSegments()
+		assertThat(branchSegments).hasSize(2)
+		assertThat(branchSegments).containsAll(Cell.Segment.H, Cell.Segment.E)
+	}
+
+	@Test
+	fun `getActiveSegments works for SIMPLE_RIGHT_FALSE type`() {
+		// HORIZONTAL SIMPLE_RIGHT_FALSE:
+		// - MAIN configuration: straight route between A (left) and F (right)
+		// - BRANCH configuration: diverging route between A (common/merging) and G (right-bottom branch)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_FALSE)
+		)
+
+		// MAIN configuration: path A-F
+		val mainSegments = switch.getActiveSegments()
+		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
+
+		// BRANCH configuration: path A-G (A remains the common/merging segment, G is the branch)
+		switch.changeConf()
+		val branchSegments = switch.getActiveSegments()
+		assertThat(branchSegments).containsAll(Cell.Segment.A, Cell.Segment.G)
+	}
+
+	@Test
+	fun `getActiveSegments works for SIMPLE_LEFT_TRUE type`() {
+		// HORIZONTAL SIMPLE_LEFT_TRUE: branch=D (left-bottom)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_TRUE)
+		)
+
+		// MAIN configuration (A-F for horizontal)
+		val mainSegments = switch.getActiveSegments()
+		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
+
+		// BRANCH configuration (F-D for left-true)
+		switch.changeConf()
+		val branchSegments = switch.getActiveSegments()
+		assertThat(branchSegments).containsAll(Cell.Segment.F, Cell.Segment.D)
+	}
+
+	@Test
+	fun `getActiveSegments works for SIMPLE_RIGHT_TRUE type`() {
+		// HORIZONTAL SIMPLE_RIGHT_TRUE: branch=B (left-top)
+		val switch = DynamicRailSwitch(
+			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_TRUE)
+		)
+
+		// MAIN configuration (A-F for horizontal)
+		val mainSegments = switch.getActiveSegments()
+		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
+
+		// BRANCH configuration (F-B for right-true)
+		switch.changeConf()
+		val branchSegments = switch.getActiveSegments()
+		assertThat(branchSegments).containsAll(Cell.Segment.F, Cell.Segment.B)
+	}
+
+	@Test
+	fun `getActiveSegments returns exactly 2 segments`() {
+		// All switch configurations should return exactly 2 segments
+		val switchTypes = listOf(
+			Type.SIMPLE_LEFT_FALSE,
+			Type.SIMPLE_LEFT_TRUE,
+			Type.SIMPLE_RIGHT_FALSE,
+			Type.SIMPLE_RIGHT_TRUE
+		)
+
+		for (type in switchTypes) {
+			val switch = DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, type)
+			)
+
+			// Test MAIN configuration
+			assertThat(switch.getActiveSegments()).hasSize(2)
+
+			// Test BRANCH configuration
+			switch.changeConf()
+			assertThat(switch.getActiveSegments()).hasSize(2)
+		}
+	}
 }

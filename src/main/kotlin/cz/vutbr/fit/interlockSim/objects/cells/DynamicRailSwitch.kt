@@ -35,6 +35,13 @@ private val logger = KotlinLogging.logger {}
  *
  * Part of Phase 4: Static/Dynamic property separation (bedaHovorka/interlockSim#92)
  *
+ * **Property change events:**
+ * - "conf" property: Fired when configuration changes (MAIN ↔ BRANCH)
+ *   - `changeConf()`: Always fires event (always toggles position)
+ *   - `setUpPath()`: Fires event only if new configuration differs from current
+ * - "locked" property: Fired when lock state changes
+ *   - `lock()`/`unlock()`: Fire event only if state actually changes
+ *
  * @property static The static switch object with immutable editing-time properties
  */
 class DynamicRailSwitch(
@@ -87,6 +94,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
+		propertyChangeSupport.firePropertyChange("conf", oldConf, conf)
 	}
 
 	override fun cancelPathSetup(
@@ -116,12 +124,16 @@ class DynamicRailSwitch(
 		allowedSpeed: Double,
 		trackOccupant: TrackOccupant
 	) {
+		val oldConf = conf
 		val newConf = getPathConfWithException(from, to)
 		logger.info {
 			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		conf = newConf
+		if (oldConf != newConf) {
+			propertyChangeSupport.firePropertyChange("conf", oldConf, newConf)
+		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
 		logger.info {
@@ -146,10 +158,12 @@ class DynamicRailSwitch(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		val map = staticRef.confs.getJoinedNodesAndEdges(from)
-		for (e in (map as Map<*, *>).entries) {
-			@Suppress("UNCHECKED_CAST")
-			val entry = e as Map.Entry<Cell.Segment, Conf>
-			if (entry.value == conf) return entry.key
+		// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
+		// Note: Java Map.entrySet() provides entries, cast needed for destructuring
+		@Suppress("UNCHECKED_CAST")
+		val typedEntries = map.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
+		for ((segment, configuration) in typedEntries) {
+			if (configuration == conf) return segment
 		}
 		return null
 	}
@@ -158,8 +172,11 @@ class DynamicRailSwitch(
 	 * Locks the switch to prevent position changes during train movement.
 	 *
 	 * Safety property SI-5: Switch cannot toggle during train movement.
+	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun lock() {
+		if (locked) return  // Already locked, no change needed
+
 		val oldLocked = locked
 		locked = true
 		logger.debug {
@@ -172,8 +189,11 @@ class DynamicRailSwitch(
 	 * Unlocks the switch to allow position changes.
 	 *
 	 * Safety property SI-5: Switch cannot toggle during train movement.
+	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun unlock() {
+		if (!locked) return  // Already unlocked, no change needed
+
 		val oldLocked = locked
 		locked = false
 		logger.debug {
@@ -249,6 +269,45 @@ class DynamicRailSwitch(
 	 * - Proper behavior in hash-based collections
 	 */
 	override fun hashCode(): Int = System.identityHashCode(staticRef)
+
+	/**
+	 * Returns the segment pair that forms the current active path.
+	 *
+	 * Queries the switch topology to find which segments are connected
+	 * based on the current configuration (MAIN or BRANCH).
+	 *
+	 * Performance: O(n) where n = number of segments in switch (typically 3-4).
+	 * Currently adequate; if rendering performance becomes an issue (called from
+	 * SimulationCellRenderer.draw() on every frame), consider caching the result
+	 * and invalidating on configuration changes.
+	 *
+	 * @return Set of 2 segments forming the active path based on current conf
+	 * @throws IllegalStateException if no segments found for current configuration
+	 */
+	fun getActiveSegments(): Set<Cell.Segment> {
+		// Iterate through all segments that join in this switch
+		for (segment in staticRef.joins()) {
+			// Get all edges connected to this segment
+			val joinedEdges = staticRef.confs.getJoinedNodesAndEdges(segment)
+
+			// Search for the edge with value matching current conf
+			// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
+			// Note: Java Map.entrySet() provides entries, cast needed for destructuring
+			@Suppress("UNCHECKED_CAST")
+			val typedEntries = joinedEdges.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
+			for ((connectedSegment, configuration) in typedEntries) {
+				if (configuration == conf) {
+					return setOf(segment, connectedSegment)
+				}
+			}
+		}
+
+		// This should never happen if the switch is properly initialized
+		throw IllegalStateException(
+			"No segments found for configuration $conf in switch $name. " +
+				"This indicates a corrupted switch topology."
+		)
+	}
 
 	/**
 	 * String representation for debugging

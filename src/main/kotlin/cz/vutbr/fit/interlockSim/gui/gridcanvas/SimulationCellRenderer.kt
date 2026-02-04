@@ -63,10 +63,12 @@ class SimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicRailSwitch
 	) {
-		// Render base configuration from static reference
-		drawStaticRailSwitch(g, cell.staticRef)
+		// Get active segments for current configuration
+		val activeSegments = cell.getActiveSegments()
 
-		// TODO (Issue #153): Add visual indicator for switch position (cell.conf)
+		// Draw only the active direction to indicate switch position
+		drawSegments(g, *activeSegments.toTypedArray())
+
 		// TODO (Issue #153): Add visual indicator for locked state (cell.locked)
 		// Future: Animate switch transitions
 	}

@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -18,6 +19,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
@@ -204,6 +207,16 @@ class DefaultPathReservationService(
 						registry.registerSwitches(trainId, switches)
 						logger.debug {
 							"reservePath: Registered ${switches.size} switches for $trainId"
+						}
+					}
+
+					// Step 2f.2: Configure switches based on path topology (Issue #300)
+					// Switches must be configured BEFORE semaphore signals are set up
+					// This ensures switches are in correct position (MAIN/BRANCH) for the reserved route
+					if (switches.isNotEmpty()) {
+						val configuredCount = configureSwitchesInPath(trainId, pathInfo)
+						logger.debug {
+							"reservePath: Configured $configuredCount of ${switches.size} switches for $trainId"
 						}
 					}
 
@@ -480,9 +493,8 @@ class DefaultPathReservationService(
 		}
 
 		// Step 3: Find the track section connected to the forward segment
-		// Note: environment is actually SimulationContext, which provides getRailWayNetGrid/getGraph
-		val context = environment as SimulationContext
-		val location = context.getRailWayNetGrid().getLocation(start)
+		// Use interface methods (added to SimulationEnvironment for navigation services)
+		val location = environment.getRailWayNetGrid().getLocation(start)
 		if (location == null) {
 			logger.warn {
 				"reservePathToAnyNextSemaphore: No location found for $start"
@@ -494,7 +506,7 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Location=$location"
 		}
 
-		val next = context.getGraph().assignedEdges(location)[forwardSegment]
+		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
 		if (next == null) {
 			logger.warn {
 				"reservePathToAnyNextSemaphore: No outgoing track section from $start at $location in direction $forwardSegment"
@@ -847,13 +859,8 @@ class DefaultPathReservationService(
 	 * @return List of all DynamicRailSemaphore instances in the network
 	 */
 	private fun getAllSemaphores(): List<DynamicRailSemaphore> {
-		// Safe cast: environment is always SimulationContext in practice
-		val context = environment as? SimulationContext
-			?: throw IllegalStateException(
-				"getAllSemaphores requires SimulationContext, but got ${environment::class.simpleName}"
-			)
-
-		val grid = context.getRailWayNetGrid()
+		// Use interface method (added to SimulationEnvironment for navigation services)
+		val grid = environment.getRailWayNetGrid()
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
 		for (x in 0 until grid.getCols()) {
@@ -966,8 +973,6 @@ class DefaultPathReservationService(
 		val visited = mutableSetOf<PathSeparator>()
 		visited.add(start)
 
-		val context = environment as SimulationContext
-
 		while (queue.isNotEmpty()) {
 			val (currentSep, currentSection) = queue.removeAt(0)
 			if (currentSection == null) continue
@@ -981,7 +986,7 @@ class DefaultPathReservationService(
 			// Only explore outgoing paths if we haven't reached a stopping point
 			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
 			if (!stopExploration) {
-				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
+				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, queue)
 			}
 		}
 
@@ -1036,11 +1041,10 @@ class DefaultPathReservationService(
 		currentSep: PathSeparator,
 		currentSection: TrackSection,
 		start: PathSeparator,
-		context: SimulationContext,
 		queue: MutableList<Pair<PathSeparator, TrackSection?>>
 	) {
-		val grid = context.getRailWayNetGrid()
-		val graph = context.getGraph()
+		val grid = environment.getRailWayNetGrid()
+		val graph = environment.getGraph()
 		val location = grid.getLocation(separator) ?: return
 		@Suppress("UNCHECKED_CAST")
 		val edges = graph.assignedEdges(location) as Map<*, *>
@@ -1106,12 +1110,11 @@ class DefaultPathReservationService(
 		start: PathSeparator,
 		next: TrackSection
 	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment {
-		val context = environment as SimulationContext
-		val location = context.getRailWayNetGrid().getLocation(start)
+		val location = environment.getRailWayNetGrid().getLocation(start)
 			?: throw IllegalStateException("No location for $start")
 
 		@Suppress("UNCHECKED_CAST")
-		val edges = context.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
+		val edges = environment.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
 
 		// Find which segment connects to 'next' track section
 		// Note: edges is Map<Segment, DynamicTrackBlock> (DynamicTrackBlock implements TrackSection)
@@ -1204,6 +1207,138 @@ class DefaultPathReservationService(
 				else -> null
 			}
 		}
+	}
+
+	/**
+	 * Configure switches in the reserved path based on topology.
+	 *
+	 * For each switch in the path, determines the correct configuration (MAIN or BRANCH)
+	 * based on the path topology (from/to track segments). Calls DynamicRailSwitch.setUpPath()
+	 * which:
+	 * 1. Calculates correct Conf based on from/to segments
+	 * 2. Updates switch.conf property
+	 * 3. Fires PropertyChangeSupport event for animation
+	 * 4. Locks the switch
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Convert Path to indexed list for neighbor access
+	 * 2. Iterate through each element with index
+	 * 3. For each DynamicRailSwitch:
+	 *    a. Get previous element (track or null)
+	 *    b. Get next element (track or null)
+	 *    c. Calculate from/to segments using environment.getSegment()
+	 *    d. Call switch.setUpPath(from, to, allowedSpeed, trainOccupant)
+	 *
+	 * ## Railway Safety
+	 *
+	 * Configuration happens BEFORE semaphore signals are set, following railway
+	 * interlocking principles: switches must be positioned and locked before
+	 * authorizing train movement.
+	 *
+	 * ## Error Handling
+	 *
+	 * Any internal [PathSeparatorChangeException] from switch configuration
+	 * is handled via logging only and is not propagated to callers. Switches that
+	 * cannot be configured are skipped (this may occur when path topology doesn't
+	 * actually traverse the switch).
+	 *
+	 * @param trainId Train identifier for logging and occupant creation
+	 * @param pathInfo PathInfo containing the reserved path with switches
+	 * @return Number of switches successfully configured
+	 * @since Issue #300 Fix switch animation regression
+	 */
+	private fun configureSwitchesInPath(
+		trainId: String,
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+	): Int {
+		// Convert Path to list for indexed access
+		val pathElements = pathInfo.reservedPath.toList()
+
+		// Safe cast: environment is always SimulationContext in practice (provides getSegment())
+		// Note: getSegment() is in SimulationContext interface, not SimulationEnvironment
+		val context = environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
+			?: throw IllegalStateException(
+				"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
+				"but got ${environment::class.simpleName}"
+			)
+
+		// Track count of successfully configured switches
+		var configuredCount = 0
+
+		// Iterate through path elements with index for neighbor access
+		pathElements.forEachIndexed { index, element ->
+			// Only process switches
+			if (element is DynamicRailSwitch) {
+				// Find previous Track (skip over separators)
+				var previous: Track? = null
+				for (i in (index - 1) downTo 0) {
+					if (pathElements[i] is Track) {
+						previous = pathElements[i] as Track
+						break
+					}
+				}
+
+				// Find next Track (skip over separators)
+				var next: Track? = null
+				for (i in (index + 1) until pathElements.size) {
+					if (pathElements[i] is Track) {
+						next = pathElements[i] as Track
+						break
+					}
+				}
+
+				// Skip if we don't have a next track (required for configuration)
+				if (next == null) {
+					logger.warn {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+							"has no next track, skipping configuration"
+					}
+					return@forEachIndexed  // Kotlin lambda: use return@label instead of continue
+				}
+
+				// Calculate from/to segments using context.getSegment()
+				// from = segment the train is coming FROM
+				// to = segment the train is going TO
+				val from = context.getSegment(element, previous, next)
+				val to = context.getSegment(element, next, previous)
+
+				// Try to configure the switch - if it fails, skip this switch
+				// Some switches in the path may not need configuration (e.g., already configured,
+				// or path doesn't actually traverse the switch in a way that changes its state)
+				try {
+					// Get allowed speed for this switch
+					val allowedSpeed = element.allowedSpeed()
+
+					// Create minimal TrackOccupant for switch configuration
+					// Switch only uses this for logging, not business logic
+					val trainOccupant = MinimalTrackOccupant(trainId)
+
+					// Configure the switch (sets conf, fires PropertyChange event, locks)
+					element.setUpPath(from, to, allowedSpeed, trainOccupant)
+
+					// Increment counter on successful configuration
+					configuredCount++
+
+					logger.info {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
+							"configured to ${element.conf} for train $trainId " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+					}
+				} catch (e: PathSeparatorChangeException) {
+					// Switch configuration failed - segments don't match any valid configuration
+					// This is expected for switches in path that aren't actually traversed (e.g., parallel routes)
+					logger.info {
+						"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
+							"for train $trainId - path topology doesn't require configuration " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+					}
+					logger.debug(e) { "Exception details: ${e.message}" }
+				}
+			}
+		}
+
+		return configuredCount
 	}
 
 	/**
@@ -1332,6 +1467,23 @@ class DefaultPathReservationService(
 	 */
 	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
 		return registry.unregisterBlock(trainId, block)
+	}
+
+	/**
+	 * Minimal TrackOccupant implementation for switch configuration.
+	 *
+	 * Switches only use the `name` property for logging during setUpPath().
+	 * The distance and semaphore methods are not used during configuration,
+	 * so they return placeholder values.
+	 *
+	 * @property trainId The train identifier for logging
+	 */
+	private class MinimalTrackOccupant(
+		private val trainId: String
+	) : TrackOccupant {
+		override val name: String get() = trainId
+		override fun distanceToSemaphore(): Double = 0.0
+		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 
 }
