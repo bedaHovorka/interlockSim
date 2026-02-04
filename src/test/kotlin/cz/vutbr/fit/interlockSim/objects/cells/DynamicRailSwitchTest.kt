@@ -347,17 +347,18 @@ class DynamicRailSwitchTest {
 
 	@Test
 	fun `getActiveSegments works for SIMPLE_RIGHT_FALSE type`() {
-		// HORIZONTAL SIMPLE_RIGHT_FALSE: branch=G (right-bottom), merging=F
+		// HORIZONTAL SIMPLE_RIGHT_FALSE:
+		// - MAIN configuration: straight route between A (left) and F (right)
+		// - BRANCH configuration: diverging route between A (common/merging) and G (right-bottom branch)
 		val switch = DynamicRailSwitch(
 			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_FALSE)
 		)
 
-		// MAIN configuration (A-F for horizontal)
+		// MAIN configuration: path A-F
 		val mainSegments = switch.getActiveSegments()
 		assertThat(mainSegments).containsAll(Cell.Segment.A, Cell.Segment.F)
 
-		// BRANCH configuration (merging=A at pos[1]=F based on FALSE orientation, wait...)
-		// According to test output: actual is A-G, so merging must be A
+		// BRANCH configuration: path A-G (A remains the common/merging segment, G is the branch)
 		switch.changeConf()
 		val branchSegments = switch.getActiveSegments()
 		assertThat(branchSegments).containsAll(Cell.Segment.A, Cell.Segment.G)

@@ -214,9 +214,9 @@ class DefaultPathReservationService(
 					// Switches must be configured BEFORE semaphore signals are set up
 					// This ensures switches are in correct position (MAIN/BRANCH) for the reserved route
 					if (switches.isNotEmpty()) {
-						configureSwitchesInPath(trainId, pathInfo)
+						val configuredCount = configureSwitchesInPath(trainId, pathInfo)
 						logger.debug {
-							"reservePath: Configured ${switches.size} switches for $trainId"
+							"reservePath: Configured $configuredCount of ${switches.size} switches for $trainId"
 						}
 					}
 
@@ -1246,15 +1246,22 @@ class DefaultPathReservationService(
 	 * interlocking principles: switches must be positioned and locked before
 	 * authorizing train movement.
 	 *
+	 * ## Error Handling
+	 *
+	 * Any internal [PathSeparatorChangeException] from switch configuration
+	 * is handled via logging only and is not propagated to callers. Switches that
+	 * cannot be configured are skipped (this may occur when path topology doesn't
+	 * actually traverse the switch).
+	 *
 	 * @param trainId Train identifier for logging and occupant creation
 	 * @param pathInfo PathInfo containing the reserved path with switches
-	 * @throws PathSeparatorChangeException if switch configuration fails (null segments)
+	 * @return Number of switches successfully configured
 	 * @since Issue #300 Fix switch animation regression
 	 */
 	private fun configureSwitchesInPath(
 		trainId: String,
 		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-	) {
+	): Int {
 		// Convert Path to list for indexed access
 		val pathElements = pathInfo.reservedPath.toList()
 
@@ -1264,6 +1271,9 @@ class DefaultPathReservationService(
 				"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
 				"but got ${environment::class.simpleName}"
 			)
+
+		// Track count of successfully configured switches
+		var configuredCount = 0
 
 		// Iterate through path elements with index for neighbor access
 		pathElements.forEachIndexed { index, element ->
@@ -1316,6 +1326,9 @@ class DefaultPathReservationService(
 					// Configure the switch (sets conf, fires PropertyChange event, locks)
 					element.setUpPath(from, to, allowedSpeed, trainOccupant)
 
+					// Increment counter on successful configuration
+					configuredCount++
+
 					logger.info {
 						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
 							"configured to ${element.conf} for train $trainId " +
@@ -1333,6 +1346,8 @@ class DefaultPathReservationService(
 				}
 			}
 		}
+
+		return configuredCount
 	}
 
 	/**
