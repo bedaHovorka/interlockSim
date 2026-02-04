@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -99,6 +100,12 @@ abstract class AbstractPath protected constructor(
 	override fun ends(): Array<PathSeparator> = arrayOf(getFirst(), getLast())
 
 	/**
+	 * Ensure track is a TrackFacility (DynamicTrackBlock or DynamicTrack).
+	 * **CRITICAL FIX (Issue #282):** Do NOT convert DynamicTrackBlock to DynamicTrack!
+	 * Paths contain DynamicTrackBlock instances from the grid. Converting them to
+	 * DynamicTrack wrappers creates duplicate state - one instance gets reserved,
+	 * another instance gets entered, causing "Wrong state: FREE, expected: RESERVED" errors.
+	 *
 	 * Converts a Track to DynamicTrack wrapper for state operations.
 	 * Helper method to reduce code duplication in path operations.
 	 *
@@ -108,14 +115,6 @@ abstract class AbstractPath protected constructor(
 	 * @return DynamicTrack wrapper for state operations
 	 * @throws ClassCastException if track is not a TrackFacility
 	 */
-	/**
-	 * Ensure track is a TrackFacility (DynamicTrackBlock or DynamicTrack).
-	 *
-	 * **CRITICAL FIX (Issue #282):** Do NOT convert DynamicTrackBlock to DynamicTrack!
-	 * Paths contain DynamicTrackBlock instances from the grid. Converting them to
-	 * DynamicTrack wrappers creates duplicate state - one instance gets reserved,
-	 * another instance gets entered, causing "Wrong state: FREE, expected: RESERVED" errors.
-	 */
 	private fun toTrackFacility(track: Track): TrackFacility {
 		require(track is TrackFacility) {
 			"Track in path must be a TrackFacility, got: ${track::class.simpleName}"
@@ -123,29 +122,29 @@ abstract class AbstractPath protected constructor(
 		return track
 	}
 
-	override fun isFreeFrom(sep: PathSeparator): Boolean =
+	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean =
 		pathIterating(sep, IS_FREE_FROM) { track, separator ->
 			toTrackFacility(track).isFreeFrom(separator)
 		}
 
-	override fun isSetUpPath(sep: PathSeparator): Boolean =
-		pathIterating(sep, IS_SET_UP_PATH) { track, separator ->
+	override fun isSetUpPath(from: DynamicPathSeparator): Boolean =
+		pathIterating(from, IS_SET_UP_PATH) { track, separator ->
 			toTrackFacility(track).isSetUpPath(separator)
 		}
 
-	override fun setUpPath(sep: PathSeparator) {
-		logger.debug { "PATH_RESERVATION_START: from=$sep, pathSize=$size" }
+	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String) {
+		logger.debug { "PATH_RESERVATION_START: from=$from, pathSize=$size" }
 		var blockCount = 0
-		pathIterating(sep, SET_UP_PATH) { track, separator ->
+		pathIterating(from, SET_UP_PATH) { track, separator ->
 			val facility = toTrackFacility(track)
-			facility.setUpPath(separator)
+			facility.setUpPath(separator, reservingTrainId)
 			blockCount++
 			true
 		}
-		logger.debug { "PATH_RESERVATION_COMPLETE: from=$sep, reserved $blockCount blocks" }
+		logger.debug { "PATH_RESERVATION_COMPLETE: from=$from, reserved $blockCount blocks" }
 	}
 
-	override fun cancelPathSetup(sep: PathSeparator) {
+	override fun cancelPathSetup(sep: DynamicPathSeparator) {
 		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
 			toTrackFacility(track).cancelPathSetup(separator)
 			true
@@ -168,9 +167,9 @@ abstract class AbstractPath protected constructor(
 	 */
 	@Throws(TrackOperationException::class)
 	private fun pathIterating(
-		sep: PathSeparator,
+		sep: DynamicPathSeparator,
 		operationName: String,
-		trackOperation: (Track, PathSeparator) -> Boolean
+		trackOperation: (Track, DynamicPathSeparator) -> Boolean
 	): Boolean {
 		try {
 			var previous: Track? = null
@@ -178,7 +177,7 @@ abstract class AbstractPath protected constructor(
 
 			val iterator = getIterator(sep)
 			while (iterator.hasNext()) {
-				val separator = Util.assertInstanceOf(PathSeparator::class.java, iterator.next())
+				val separator = Util.assertInstanceOf(DynamicPathSeparator::class.java, iterator.next())
 				if (!iterator.hasNext()) break // Last element is semaphore, separatorSetting doesn't set it
 				val nextTrack = Util.assertInstanceOf(Track::class.java, iterator.next())
 
@@ -224,13 +223,10 @@ abstract class AbstractPath protected constructor(
 	@Throws(PathSeparatorChangeException::class)
 	private fun separatorSetting(
 		methodName: String,
-		separator: PathSeparator,
+		dynamicSeparator: DynamicPathSeparator,
 		previous: Track?,
-		next: Track
+		next: Track,
 	): Boolean {
-		val dynamicSeparator =
-			separator as? DynamicPathSeparator
-				?: throw IllegalStateException("PathSeparator must be DynamicPathSeparator in simulation context")
 		val from = context.getSegment(dynamicSeparator, previous, next)
 		val to = context.getSegment(dynamicSeparator, next, previous)
 		requireSimulation(!conflict(from, to)) { "Segment conflict: from=$from, to=$to" }
@@ -246,22 +242,21 @@ abstract class AbstractPath protected constructor(
 		} else if (methodName == CANCEL_PATH_SETUP) {
 			// Java: separator.cancelPathSetup(from, to);
 			dynamicSeparator.cancelPathSetup(from, to)
-		} else if (methodName == SET_UP_PATH) {
-			// Java: if (!(separator instanceof RailSemaphore)) separator.setUpPath(from, to, ...);
-			// CRITICAL FIX: Java has NO null check here!
-			// setUpPath is called via DynamicTrack wrappers on Track objects (see pathIterating method)
-			// The segments may be null in certain network configurations
-			// Passing nulls to setUpPath is INTENTIONAL - it's up to the implementation to handle
-			if (separator !is DynamicRailSemaphore) {
-				logger.debug {
-					"SET_UP_PATH: setUpPath(from=$from, to=$to, speed=${dynamicSeparator.allowedSpeed()}) on $separator"
-				}
-				dynamicSeparator.setUpPath(from, to, dynamicSeparator.allowedSpeed())
+			// Tier 1: Unlock switch after cancelling path setup
+			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
+				dynamicSeparator.unlock()
+				logger.debug { "Switch ${dynamicSeparator.hashCode()} unlocked after CANCEL_PATH_SETUP" }
 			}
+		} else if (methodName == SET_UP_PATH) {
 			val following = dynamicSeparator.getFollowingSegment(from)
 			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
 			requireSimulation(following === to) {
-				"Separator $separator: getFollowingSegment($from) returned $following but expected $to"
+				"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
+			}
+			// Tier 1: Lock switch after setting up path
+			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
+				dynamicSeparator.lock()
+				logger.debug { "Switch ${dynamicSeparator.hashCode()} locked after SET_UP_PATH" }
 			}
 		} else if (methodName == IS_FREE_FROM) {
 			// Java: //EMPTY
@@ -273,7 +268,7 @@ abstract class AbstractPath protected constructor(
 	}
 
 	@Throws(PathSeparatorChangeException::class)
-	private fun setUpSemaphores(sep: PathSeparator) {
+	private fun setUpSemaphores(sep: DynamicPathSeparator) {
 		// ukolem je natavit zpetnym pruchodem rychlosti semaforu podle vyhybek
 		var previousSwitch: DynamicPathSeparator? = null
 		var previousTrack: Track? = null
@@ -285,12 +280,12 @@ abstract class AbstractPath protected constructor(
 				previousSwitch = element
 			} else if (element is OrientedPathSeparator && element is DynamicPathSeparator) {
 				if (previousTrack == null) continue
-				val semaphore = element
+				val semaphore = element as DynamicRailSemaphore
 				if (context.isSeparatorInDirection(semaphore, previousTrack, null)) {
 					val speed = previousSwitch?.allowedSpeed() ?: PathElement.ABSOLUTE_MAX_SPEED
 					val segment = context.getSegment(semaphore, null, previousTrack)
 					val segment2 = context.getSegment(semaphore, previousTrack, null)
-					element.setUpPath(segment, segment2, speed)
+					semaphore.setUpSpeed(segment, segment2, speed)
 					previousSwitch = null
 				}
 			} else {

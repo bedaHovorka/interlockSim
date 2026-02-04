@@ -79,6 +79,21 @@ open class DefaultEditingContext(
 	rows: Int
 ) : BaseContext<TrackBlock>(cols, rows),
 	EditingContext {
+	/**
+	 * Koin scope for this editing context.
+	 * Manages lifecycle of navigation services (TopologyNavigator).
+	 * The context itself is passed as the scope source, allowing services to access it via getSource().
+	 * Scope is closed when context is destroyed via close().
+	 *
+	 * @see navigationModule
+	 * @see close
+	 */
+	override val scope = org.koin.core.context.GlobalContext.get()
+		.createScope(
+			scopeId = System.identityHashCode(this).toString(),
+			qualifier = org.koin.core.qualifier.named<DefaultEditingContext>(),
+			source = this
+		)
 	companion object {
 		/**
 		 * Logger for general class operations.
@@ -127,6 +142,31 @@ open class DefaultEditingContext(
 	 * @return Immutable list of InOut elements (copy of internal list)
 	 */
 	override fun getInOuts(): List<InOut> = getInOutsList()
+
+	/**
+	 * Get topology navigator for static path finding.
+	 *
+	 * Implementation of [EditingContext.getTopologyNavigator] interface method.
+	 * Returns a scoped TopologyNavigator instance from Koin DI, initialized with this
+	 * context's network topology.
+	 *
+	 * The TopologyNavigator is scoped to this context, meaning:
+	 * - Same instance returned for all calls to this method
+	 * - Isolated from other EditingContext instances
+	 * - Automatically cleaned up when context.close() is called
+	 *
+	 * ## Implementation Note
+	 *
+	 * Uses Koin scope-per-context pattern. The navigator is lazily initialized on first
+	 * access and retrieved from the context's scope without requiring `parametersOf()`.
+	 *
+	 * @return TopologyNavigator instance for this editing context
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
+	 * @since Issue #292 Phase 5
+	 */
+	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
+		scope.get()
 
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)

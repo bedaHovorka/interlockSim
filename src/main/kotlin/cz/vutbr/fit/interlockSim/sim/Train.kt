@@ -11,15 +11,17 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jDisco.Condition
@@ -27,6 +29,7 @@ import jDisco.Continuous
 import jDisco.Process
 import jDisco.Reporter
 import jDisco.Variable
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Train Process
@@ -37,7 +40,7 @@ class Train :
 	TrackOccupant {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-		private var count: Int = 0
+		private val count = AtomicInteger(0)
 
 		/**
 		 * Maximum train acceleration in m/s²
@@ -87,7 +90,7 @@ class Train :
 	private abstract inner class Site : Process() { // lepsi nazev?
 		private val position: Variable = Variable(0.0)
 		private val pv: SimpleIntegration = SimpleIntegration(position, velocity)
-		private var totalLenghtOfPreviousBlocks: Double = 0.0
+		private var totalLengthOfPreviousBlocks: Double = 0.0
 		private var next: TrackSection? = null
 		private var current: TrackSection? = null
 		private var onNext: Boolean = false
@@ -95,18 +98,36 @@ class Train :
 		val terminated: Condition = Condition { terminated() }
 
 		final override fun actions() {
-			var where: PathSeparator = timetable.getIn()
+			var where: DynamicPathSeparator = timetable.getIn()
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
 			while (true) {
-				next = env.getNextTrackSection(where, current)
-				if (next == null) {
+				// Check if we've reached the destination InOut BEFORE querying for path
+				if (where is DynamicInOut && current != null) {
+					// We're at an InOut and we've already traveled through at least one block
+					// This is our destination - exit the loop
+					break
+				}
+
+				val path = trainNavService.findReservedPathForTrain(name, where)
+				next = path?.getNext(current)
+
+				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					// Train should wait for dispatcher to reserve next path
-					// Do NOT stop the entire simulation!
-					passivate()
-					continue // Restart loop after passivation to re-check for next track section
+					// Stop motor completely to prevent creeping motion during passivation
+					motor.cancelAccelerating()
+					this@Train.stop()
+
+					logger.debug {
+						"Train $number: No reserved path available at $where, halting and waiting for dispatcher (will retry after 5s)"
+					}
+					// Use hold() with timeout instead of passivate() to prevent permanent freezing
+					// If path becomes available (dispatcher reserves), train will be reactivated
+					// If timeout expires, train will retry path request
+					hold(5.0)  // Wait 5 seconds before retrying
+					continue // Restart loop to retry path request
 				}
 				val nextLength: Double = next!!.length()
 				separatorAction(where, current, next)
@@ -121,7 +142,7 @@ class Train :
 				}
 
 				position.state -= nextLength
-				totalLenghtOfPreviousBlocks += nextLength
+				totalLengthOfPreviousBlocks += nextLength
 				val staticWhere = next!!.getSecondEnd(where)
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
@@ -141,7 +162,7 @@ class Train :
 		 * @param next
 		 */
 		abstract fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		)
@@ -170,7 +191,7 @@ class Train :
 		/**
 		 * @return "to co cast vlaku urazila uvnitr modelu"
 		 */
-		fun getTotalDistance(): Double = totalLenghtOfPreviousBlocks + position.state
+		fun getTotalDistance(): Double = totalLengthOfPreviousBlocks + position.state
 
 		protected fun getSection(): TrackSection? = if (onNext) next else current
 
@@ -182,7 +203,7 @@ class Train :
 	private inner class Front : Site() {
 		private fun semaphoreAction(
 			semaphore: DynamicRailSemaphore,
-			separator: PathSeparator,
+			separator: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
@@ -196,49 +217,47 @@ class Train :
 					"${semaphore.name}, " +
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
-			val path: Path? = env.pathToNextSemaphore(separator, next!!)
+
+			// Use train navigation service to find reserved path
+			// Finds paths that are reserved for this train
+			val path: Path? = trainNavService.findReservedPathForTrain(name, separator)
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
-			// CRITICAL FIX (Issue #282): Handle null path when navigation is blocked
-			// If path is null, it means getNextTrackSection() blocked navigation to unreserved blocks.
-			// Treat this as STOP signal: halt the train and wait for a valid path.
-			if (semaphore.signal == Signal.STOP || path == null) {
+			if (semaphore.signal == Signal.STOP) {
 				requireSimulation(getVelocity() >= 0) { "Velocity must be non-negative when approaching semaphore" }
-				if (path == null) {
-					logger.info {
-						"Train $number cannot build path from ${semaphore.name} - " +
-							"next block not properly reserved, treating as STOP signal"
-					}
-					env.report("STOP (path blocked)", this@Train, ReportType.TRAIN_EVENTS)
-				} else {
-					logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
-					env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
-				}
+				logger.debug { "Train $number approaching semaphore with STOP signal, halting" }
 				fireStop()
+				env.report(semaphore.signal.toString(), this@Train, ReportType.TRAIN_EVENTS)
 
 				// freePath(separator, next); //vlak si sam pri zastaveni u semaforu postavi cestu k dalsimu sem.
 				waitUntil(allowingSignal(semaphore))
 				logger.debug { "Train $number received allowing signal from semaphore, resuming movement" }
+				env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
 
-				// Try to build path again - it might still be blocked
-				val newPath = env.pathToNextSemaphore(separator, next!!)
-				if (newPath != null) {
-					env.report("OK " + semaphore.signal, this@Train, ReportType.TRAIN_EVENTS)
-					fireStart(semaphore, newPath)
-				} else {
-					// Path still blocked even with allowing signal - stop simulation to investigate
-					logger.error {
-						"Train $number: semaphore signal is ALLOWING but path is still blocked - " +
-							"this indicates a deadlock or interlocking error"
-					}
-					env.stop()
+				// Re-fetch path after signal becomes allowing
+				// The signal should only become allowing when a path is reserved
+				val resumePath: Path? = trainNavService.findReservedPathForTrain(name, separator)
+				requireSimulationNotNull(resumePath) {
+					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
+						"This indicates a logic error - signal should only allow when path is reserved."
 				}
+				fireStart(semaphore, resumePath)
 			} else if (semaphore.signal.isAllowing() && velocity.state <= maxAbsError) {
 				logger.debug { "Train $number starting movement with allowing signal" }
+				// Validate path exists before starting
+				requireSimulationNotNull(path) {
+					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
+						"This indicates a logic error - signal should only allow when path is reserved."
+				}
 				fireStart(semaphore, path)
 			} else {
+				// Already moving, accelerate toward next semaphore
 				logger.debug { "Train $number accelerating toward next semaphore" }
+				// Validate path exists before accelerating
+				requireSimulationNotNull(path) {
+					"Train $number at semaphore ${semaphore.name}: Cannot accelerate without reserved path."
+				}
 				accelerateToSignal(semaphore, path)
 			}
 			hold(1.0)
@@ -342,7 +361,7 @@ class Train :
 		}
 
 		override fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
@@ -377,12 +396,12 @@ class Train :
 		private var fromHome: Boolean = false
 
 		override fun separatorAction(
-			where: PathSeparator,
+			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		) {
 			logger.debug {
-				"${jDisco.Process.time()} POSITION: Train $number tail at separator $where, clearing block $current"
+				"${time()} POSITION: Train $number tail at separator $where, clearing block $current"
 			}
 			if (where == timetable.getIn()) {
 				fromHome = true
@@ -391,6 +410,10 @@ class Train :
 
 			if (current != null) {
 				current.leave(this@Train)
+				val block = current.getTrackBlock()
+				if (block is DynamicTrackBlock) {
+					env.unregisterBlock(name, block)
+				}
 			}
 			if (next == null &&
 				where != timetable.getOut()
@@ -562,7 +585,9 @@ class Train :
 	private val timetable: Timetable
 	private val env: SimulationEnvironment
 	private var pathToSemaphore: Path? = null
-	private val trainPrefix: String
+	override val name: String
+	private val trainNavService: TrainNavigationService
+
 
 	private val number: Int
 
@@ -579,10 +604,11 @@ class Train :
 		val validatedTimetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
 		this.timetable = validatedTimetable
 		this.length = validatedTimetable.getLength()
-		number = ++count
-		trainPrefix = "Train #$number"
+		number = count.incrementAndGet()
+		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
+		trainNavService = env.getTrainNavigationService()
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
@@ -596,6 +622,13 @@ class Train :
 		logger.debug { "Train $number approved for movement from ${inout.name} to ${timetable.getOut().name}" }
 		worker.enterTrain(this)
 		env.report("approved ${inout.name}->${timetable.getOut().name}", this, ReportType.TRAIN_EVENTS)
+
+		// Wait for InOutWorker to reserve initial path before starting Front
+		// This prevents race condition where Front checks for reserved path before InOutWorker completes
+		waitUntil { // Check if we have any reserved blocks (path has been reserved)
+			trainNavService.isPathReservedForTrain(name, inout)
+		}
+		logger.info { "Train $number path is reserved, starting Front process" }
 
 		activate(front)
 
@@ -615,6 +648,7 @@ class Train :
 		r.stop()
 		stop()
 		motor.terminate()
+		env.releaseTrainReservations(name)
 		// ukoncovaci..
 		logger.debug { "Train $number completed journey: distance traveled ${front.getTotalDistance()}" }
 		env.report("ends", this, ReportType.TRAIN_EVENTS)
@@ -637,7 +671,6 @@ class Train :
 		return length // pozdeji soucet vagonu
 	}
 
-	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
 
 	override fun start(): Train {
@@ -657,5 +690,5 @@ class Train :
 		acceleration.state = 0.0
 	}
 
-	override fun toString(): String = trainPrefix
+	override fun toString(): String = name
 }

@@ -12,12 +12,6 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
-import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
@@ -64,21 +58,15 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 	@Test
 	@DisplayName("createInOutWorker returns InOutWorker")
 	fun createInOutWorkerReturnsInOutWorker() {
-		// Arrange
-		val mockContext = createMockSimulationContext()
-
-		val staticInOut =
-			InOut(
-				"TestInOut",
-				false,
-				cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL
-			)
-		val inSem = createDynamicInstance(staticInOut.getInSemaphore())
-		val outSem = createConstantInstance(staticInOut.getOutSemaphore(), Signal.FREE)
-		val inOut = DynamicInOut(staticInOut, inSem, outSem)
+		// Arrange - Create a context with a properly connected InOut
+		val context = cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
+			inOutName = "TestInOut",
+			isEntry = true
+		)
+		val inOut = context.getInOuts().first()
 
 		// Act
-		val worker = processFactory.createInOutWorker(mockContext, inOut)
+		val worker = processFactory.createInOutWorker(context, inOut)
 
 		// Assert
 		assertThat(worker).isNotNull()

@@ -17,11 +17,9 @@ import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
@@ -346,12 +344,11 @@ class AbstractPathTest : KoinTestBase() {
 			// Act & Assert - method should be callable (may throw due to mock limitations)
 			try {
 				path.isFreeFrom(end1)
-				// If it succeeds, that's great
-				assertThat(true).isTrue()
+				// Method executed successfully without throwing
 			} catch (e: Throwable) {
 				// Expected with mock context - reflection needs full segment setup
 				// Method exists and is callable, even if it fails with mock data
-				assertThat(path).isNotNull()
+				assertThat(e).isNotNull()
 			}
 		}
 
@@ -563,7 +560,7 @@ class AbstractPathTest : KoinTestBase() {
 
 			// Act & Assert - setUpPath uses pathIterating internally
 			try {
-				path.setUpPath(end1)
+				path.setUpPath(end1, "test-train")
 				// If successful, path remains valid
 				assertThat(path).isNotNull()
 			} catch (e: Throwable) {
@@ -861,46 +858,5 @@ class AbstractPathTest : KoinTestBase() {
 				.withMessage("context should be the same as provided")
 				.isEqualTo(mockContext)
 		}
-	}
-}
-
-/**
- * Mock implementation of NodeCell for testing path endpoints.
- * NodeCell implements PathSeparator interface.
- */
-private class MockNodeCell(
-	private val name: String
-) : NodeCell(Cell.SpatialType.HORIZONTAL),
-	DynamicPathSeparator {
-	override fun cancelPathSetup(
-		from: Cell.Segment?,
-		to: Cell.Segment?
-	) {
-		// Mock implementation - no-op
-	}
-
-	override fun setUpPath(
-		from: Cell.Segment?,
-		to: Cell.Segment?,
-		allowedSpeed: Double
-	) {
-		// Mock implementation - no-op
-	}
-
-	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = null
-
-	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = emptySet()
-
-	override fun allowedSpeed(): Double = 80.0
-
-	override fun isSwitch(): Boolean = false // Mock as non-switch by default
-
-	override fun joins(): Set<Cell.Segment> {
-		// Return the two segments that join for HORIZONTAL type
-		return setOf(Cell.Segment.F, Cell.Segment.A)
-	}
-
-	init {
-		setName(name)
 	}
 }

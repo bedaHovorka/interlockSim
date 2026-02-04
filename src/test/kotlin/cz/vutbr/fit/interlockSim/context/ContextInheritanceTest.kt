@@ -57,14 +57,13 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `DefaultEditingContext extends BaseContext`() {
-		// Arrange & Act
-		val context = editingContextFactory.createEmptyContext()
-
-		// Assert - Should be DefaultEditingContext which extends BaseContext
-		assertThat(context).isInstanceOf(DefaultEditingContext::class)
-		assertThat(context).isInstanceOf(BaseContext::class)
-		// Should NOT be a DefaultSimulationContext
-		assertThat(context).isNotInstanceOf(DefaultSimulationContext::class)
+		editingContextFactory.createEmptyContext().use { context ->
+			// Assert - Should be DefaultEditingContext which extends BaseContext
+			assertThat(context).isInstanceOf(DefaultEditingContext::class)
+			assertThat(context).isInstanceOf(BaseContext::class)
+			// Should NOT be a DefaultSimulationContext
+			assertThat(context).isNotInstanceOf(DefaultSimulationContext::class)
+		}
 	}
 
 	/**
@@ -74,14 +73,13 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `DefaultSimulationContext extends BaseContext`() {
-		// Arrange & Act
-		val context = simulationContextFactory.createEmptyContext()
-
-		// Assert - Should be DefaultSimulationContext which extends BaseContext
-		assertThat(context).isInstanceOf(DefaultSimulationContext::class)
-		assertThat(context).isInstanceOf(BaseContext::class)
-		// Should NOT be a DefaultEditingContext
-		assertThat(context).isNotInstanceOf(DefaultEditingContext::class)
+		simulationContextFactory.createEmptyContext().use { context ->
+			// Assert - Should be DefaultSimulationContext which extends BaseContext
+			assertThat(context).isInstanceOf(DefaultSimulationContext::class)
+			assertThat(context).isInstanceOf(BaseContext::class)
+			// Should NOT be a DefaultEditingContext
+			assertThat(context).isNotInstanceOf(DefaultEditingContext::class)
+		}
 	}
 
 	/**
@@ -92,20 +90,19 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `SimulationContext does NOT extend EditingContext`() {
-		// Arrange & Act
-		val context = simulationContextFactory.createEmptyContext()
+		simulationContextFactory.createEmptyContext().use { context ->
+			// Assert - SimulationContext interface does not extend EditingContext
+			// This is enforced at compile time - if we try to cast, it won't work
+			val simulationContext: SimulationContext = context
 
-		// Assert - SimulationContext interface does not extend EditingContext
-		// This is enforced at compile time - if we try to cast, it won't work
-		val simulationContext: SimulationContext = context
+			// We cannot cast SimulationContext to EditingContext
+			// This test verifies the type system prevents this
+			assertThat(simulationContext).isInstanceOf(SimulationContext::class)
 
-		// We cannot cast SimulationContext to EditingContext
-		// This test verifies the type system prevents this
-		assertThat(simulationContext).isInstanceOf(SimulationContext::class)
-
-		// If SimulationContext extended EditingContext, this would work:
-		// val editingContext: EditingContext = simulationContext // This would not compile
-		// Since it doesn't compile, the architecture is correct
+			// If SimulationContext extended EditingContext, this would work:
+			// val editingContext: EditingContext = simulationContext // This would not compile
+			// Since it doesn't compile, the architecture is correct
+		}
 	}
 
 	/**
@@ -115,15 +112,14 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `SimulationContext instance is not an EditingContext`() {
-		// Arrange & Act
-		val context = simulationContextFactory.createEmptyContext()
+		simulationContextFactory.createEmptyContext().use { context ->
+			// Assert - Cannot treat as EditingContext
+			val isEditingContext = context is EditingContext
+			assertThat(isEditingContext).isFalse()
 
-		// Assert - Cannot treat as EditingContext
-		val isEditingContext = context is EditingContext
-		assertThat(isEditingContext).isFalse()
-
-		// The instance is a SimulationContext, not an EditingContext
-		assertThat(context is SimulationContext).isTrue()
+			// The instance is a SimulationContext, not an EditingContext
+			assertThat(context is SimulationContext).isTrue()
+		}
 	}
 
 	/**
@@ -133,25 +129,25 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `shared functionality in BaseContext only`() {
-		// Arrange & Act
-		val editingContext = editingContextFactory.createEmptyContext()
-		val simulationContext = simulationContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			simulationContextFactory.createEmptyContext().use { simulationContext ->
+				// Assert - Both extend BaseContext
+				assertThat(editingContext).isInstanceOf(BaseContext::class)
+				assertThat(simulationContext).isInstanceOf(BaseContext::class)
 
-		// Assert - Both extend BaseContext
-		assertThat(editingContext).isInstanceOf(BaseContext::class)
-		assertThat(simulationContext).isInstanceOf(BaseContext::class)
+				// Both have access to BaseContext methods:
+				// - getRailWayNetGrid()
+				// - getGraph()
+				// - addPropertyChangeListener()
+				// - currentMaxSpeed, currentTrackLength, currentNameString
+				// This is inherited from BaseContext, not duplicated
 
-		// Both have access to BaseContext methods:
-		// - getRailWayNetGrid()
-		// - getGraph()
-		// - addPropertyChangeListener()
-		// - currentMaxSpeed, currentTrackLength, currentNameString
-		// This is inherited from BaseContext, not duplicated
-
-		val editingGrid = editingContext.getRailWayNetGrid()
-		val simulationGrid = simulationContext.getRailWayNetGrid()
-		assertThat(editingGrid).isInstanceOf(RailwayNetGrid::class)
-		assertThat(simulationGrid).isInstanceOf(RailwayNetGrid::class)
+				val editingGrid = editingContext.getRailWayNetGrid()
+				val simulationGrid = simulationContext.getRailWayNetGrid()
+				assertThat(editingGrid).isInstanceOf(RailwayNetGrid::class)
+				assertThat(simulationGrid).isInstanceOf(RailwayNetGrid::class)
+			}
+		}
 	}
 
 	/**
@@ -166,32 +162,32 @@ class ContextInheritanceTest : KoinTestBase() {
 	 */
 	@Test
 	fun `no code duplication between contexts - architectural validation`() {
-		// Arrange & Act
-		val editingContext = editingContextFactory.createEmptyContext() as DefaultEditingContext
-		val simulationContext = simulationContextFactory.createEmptyContext() as DefaultSimulationContext
+		(editingContextFactory.createEmptyContext() as DefaultEditingContext).use { editingContext ->
+			(simulationContextFactory.createEmptyContext() as DefaultSimulationContext).use { simulationContext ->
+				// Assert - EditingContext has editing-specific methods
+				// We can't directly test method existence without reflection, but we can verify
+				// that the class hierarchy is correct and the interfaces are properly segregated
 
-		// Assert - EditingContext has editing-specific methods
-		// We can't directly test method existence without reflection, but we can verify
-		// that the class hierarchy is correct and the interfaces are properly segregated
+				// EditingContext should implement EditingContext interface (with putCell, etc.)
+				assertThat(editingContext).isInstanceOf(EditingContext::class)
 
-		// EditingContext should implement EditingContext interface (with putCell, etc.)
-		assertThat(editingContext).isInstanceOf(EditingContext::class)
+				// SimulationContext should implement SimulationContext interface (with run, etc.)
+				assertThat(simulationContext).isInstanceOf(SimulationContext::class)
 
-		// SimulationContext should implement SimulationContext interface (with run, etc.)
-		assertThat(simulationContext).isInstanceOf(SimulationContext::class)
+				// Both should extend BaseContext (shared infrastructure)
+				assertThat(editingContext).isInstanceOf(BaseContext::class)
+				assertThat(simulationContext).isInstanceOf(BaseContext::class)
 
-		// Both should extend BaseContext (shared infrastructure)
-		assertThat(editingContext).isInstanceOf(BaseContext::class)
-		assertThat(simulationContext).isInstanceOf(BaseContext::class)
+				// Neither should be an instance of the other's concrete type
+				assertThat(editingContext).isNotInstanceOf(DefaultSimulationContext::class)
+				assertThat(simulationContext).isNotInstanceOf(DefaultEditingContext::class)
 
-		// Neither should be an instance of the other's concrete type
-		assertThat(editingContext).isNotInstanceOf(DefaultSimulationContext::class)
-		assertThat(simulationContext).isNotInstanceOf(DefaultEditingContext::class)
-
-		// This architecture ensures:
-		// 1. Shared code in BaseContext (grid, graph, listeners, config)
-		// 2. Editing operations in DefaultEditingContext only
-		// 3. Simulation operations in DefaultSimulationContext only
-		// 4. No code duplication - each layer has distinct responsibility
+				// This architecture ensures:
+				// 1. Shared code in BaseContext (grid, graph, listeners, config)
+				// 2. Editing operations in DefaultEditingContext only
+				// 3. Simulation operations in DefaultSimulationContext only
+				// 4. No code duplication - each layer has distinct responsibility
+			}
+		}
 	}
 }

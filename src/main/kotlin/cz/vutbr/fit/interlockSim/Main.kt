@@ -73,16 +73,27 @@ class Main {
 		try {
 			// Get context and ensure it's a SimulationContext
 			val rawContext = createContext(args)
-			val context: SimulationContext =
-				when (rawContext) {
-					is SimulationContext -> rawContext
-					is EditingContext -> simulationContextFactory.createContext(rawContext)
-					else -> throw ContextCreationException(
-						"Unexpected context type: ${rawContext::class.java.name}"
-					)
+			rawContext.use { raw ->
+				val context: SimulationContext =
+					when (raw) {
+						is SimulationContext -> raw
+						is EditingContext -> simulationContextFactory.createContext(raw)
+						else -> throw ContextCreationException(
+							"Unexpected context type: ${raw::class.java.name}"
+						)
+					}
+				// Only use context.use if it's a different instance from raw
+				// (to avoid double-close when rawContext is already a SimulationContext)
+				if (context === raw) {
+					context.addReportTypes(*ReportType.values())
+					context.run()
+				} else {
+					context.use {
+						it.addReportTypes(*ReportType.values())
+						it.run()
+					} // context closed
 				}
-			context.addReportTypes(*ReportType.values())
-			context.run()
+			} // rawContext closed
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Context creation failed" }
 		} catch (e: EmptyContextException) {
@@ -110,7 +121,7 @@ class Main {
 		try {
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
 			val context = exampleFactory(simulationContextFactory, args)
-			context.run()
+			context.use { it.run() } // context closed after simulation
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Example context creation failed" }
 		} catch (e: SimulationException) {

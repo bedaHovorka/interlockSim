@@ -1,7 +1,5 @@
 package cz.vutbr.fit.interlockSim.sim
 
-import assertk.assertThat
-import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -140,9 +138,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		val wallTimeSeconds = (endWallTime - startWallTime) / 1000.0
 		logger.info { "Simulation completed in $wallTimeSeconds seconds (wall-clock)" }
 
-		// Verify simulation completes without hanging
-		// Wall-clock time should be reasonable (< 120 seconds as enforced by @Timeout)
-		assertThat(wallTimeSeconds).isGreaterThanOrEqualTo(0.0) // Sanity check
+		// Note: Timeout is enforced by @Timeout(120 seconds) annotation, no explicit assertion needed
 	}
 
 	/**

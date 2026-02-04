@@ -333,9 +333,10 @@ Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_
 - `DefaultSimulationContext : BaseContext, SimulationContext` - Implementation of simulation operations (829 lines):
   - Extends BaseContext directly (does NOT extend DefaultEditingContext)
   - Network structure is immutable (frozen after initialization)
-  - Provides simulation-specific operations: run, stop, pathToNextSemaphore, toDynamic
+  - Provides simulation-specific operations: run, stop, toDynamic, navigation service accessors
   - Returns `RailwayNetGrid<Cell>` (simulation needs both NodeCell and TrackBlockPart)
   - Uses SimulationProcessFactory for dependency injection
+  - Provides TopologyNavigator, PathReservationService, TrainNavigationService via Koin scope
 - `ContextTransformer` - Factory for transforming EditingContext to SimulationContext:
   - Stateless singleton object
   - Copies network structure, configuration, and InOut elements
@@ -384,6 +385,58 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - `objects/tracks/` - Track facilities, blocks, occupants, DynamicTrack wrapper
 - `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
+
+**Path Discovery Restructuring (Issue #292 Phases 1-5, 2026-01-11 to 2026-02-04) - COMPLETED:**
+
+Separated path discovery into three specialized services, fully replacing the removed mixed-concern `pathToNextSemaphore()` API:
+
+1. **TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
+   - Interface: `context/navigation/TopologyNavigator`
+   - Implementation: `context/navigation/DefaultTopologyNavigator`
+   - **Use Case**: Editor validation, network analysis without dynamic state
+   - **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getTopologyNavigator()`
+   - **Methods**: `findPath()`, `getNextTrackSection()`, `findPathToNextSemaphore()`
+
+2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
+   - Interface: `context/navigation/PathReservationService`
+   - Implementation: `context/navigation/DefaultPathReservationService`
+   - **Use Case**: Dispatcher finding available routes, interlocking path setup
+   - **Access**: `SimulationEnvironment.getPathReservationService()`
+   - **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
+   - **Methods**: `reservePath()`, `releasePath()`, `findReservablePaths()`, `reservePathToAnyNextSemaphore()`
+
+3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
+   - Interface: `context/navigation/TrainNavigationService`
+   - Implementation: `context/navigation/DefaultTrainNavigationService`
+   - **Use Case**: Train requesting next track section (only through owned blocks)
+   - **Access**: `SimulationEnvironment.getTrainNavigationService()`
+   - **Features**: Explicit ownership validation, null = "not reserved for THIS train"
+   - **Methods**: `findReservedPathForTrain()`, `isPathReservedForTrain()`, `getReservedBlocks()`
+
+4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking
+   - Class: `context/navigation/PathReservationRegistry`
+   - **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
+   - **Methods**: `register()`, `unregister()`, `getBlocks()`, `getOwner()`, `isOwnedBy()`
+
+**Architecture Documentation**:
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples (547 lines)
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design (1069 lines)
+
+**Phase 5 Completion (Issue #297, 2026-02-04)**:
+- ✅ **REMOVED** `pathToNextSemaphore()` and `getNextTrackSection()` from all interfaces (fully migrated)
+- ✅ All callers migrated to new specialized services (Train, InOutWorker, ShuntingLoop)
+- ✅ Service accessors added: `EditingContext.getTopologyNavigator()`, `SimulationEnvironment.getPathReservationService()`, `SimulationEnvironment.getTrainNavigationService()`
+- ✅ Issue #291 workaround fully eliminated (manual path construction in ShuntingLoop, ~100 lines removed)
+- ✅ Issue #282 workaround eliminated (block ownership validation handled by registry)
+- ✅ Clean editor validation without SimulationContext conversion
+- ✅ Zero regressions (1321+ tests passing, golden output validated)
+- ✅ Comprehensive documentation completed (2,424 lines across 3 architecture docs)
+
+**Koin DI Integration**:
+- Scope-per-context pattern (one registry per context, isolated between contexts)
+- Services share ONE registry within context (consistent ownership view)
+- Automatic cleanup via `Context.close()` (AutoCloseable pattern)
 
 **Utilities:**
 - `util/Array2DMap` - Grid data structure with pathfinding extensions
@@ -482,12 +535,85 @@ Koin modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSim/di/Interl
 - **xmlModule** - XML parsing, XMLContextFactory
 - **editingModule** - Editing context factories
 - **simulationModule** - Simulation context factories and SimulationProcessFactory
+- **navigationModule** - Navigation services (TopologyNavigator, PathReservationService, PathReservationRegistry)
 - **guiModule** - Swing components (ready for expansion)
 - **objectsModule** - Domain model (minimal by design)
 - **sim/** - ❌ **EXCLUDED** (wait for jDisco migration, except new factory classes)
 
 **SimulationProcessFactory (2026-01-14):**
 The simulation module now provides `SimulationProcessFactory` as a singleton. This factory abstracts creation of simulation processes (Generator, InOutWorker) following the Factory pattern. Contexts receive the factory via constructor injection, eliminating direct dependencies on concrete sim/ classes.
+
+**navigationModule (2026-01-26, Issue #294 / Issue #296 Phase 4):**
+The navigation module provides path finding and reservation services using **scope-per-context** pattern:
+- **TopologyNavigator** - Static topology navigation (scoped to context)
+- **PathReservationRegistry** - Train ownership tracking (ONE instance per context, shared by all services)
+- **PathReservationService** - Atomic path reservation (scoped to context)
+- **TrainNavigationService** - Train-specific path following (scoped to context)
+
+**Why Scoped, Not Singleton or Factory?**
+- **singleton**: ❌ State bleeding between simulation runs
+- **factory**: ❌ Each get() creates new instance, components don't share state
+- **scoped**: ✅ One registry per context, shared by all components, isolated between contexts
+
+**Architecture:**
+
+Each context (`DefaultEditingContext` and `DefaultSimulationContext`) creates its own Koin scope and passes itself as the scope source:
+
+```kotlin
+// In DefaultSimulationContext constructor:
+val scope = GlobalContext.get().createScope(
+    scopeId = System.identityHashCode(this).toString(),
+    qualifier = named<DefaultSimulationContext>(),
+    source = this  // Context accessible via getSource()
+)
+```
+
+Services retrieve the context via `getSource()` - no redundant `parametersOf(context)`:
+
+```kotlin
+// In InterlockSimModule.kt:
+scope<DefaultSimulationContext> {
+    scoped<TopologyNavigator> {
+        val context = getSource<DefaultSimulationContext>()
+        DefaultTopologyNavigator(context)
+    }
+
+    scoped<PathReservationRegistry> { PathReservationRegistry() }
+
+    scoped<PathReservationService> {
+        val context = getSource<DefaultSimulationContext>()
+        val navigator: TopologyNavigator = get()  // Shared within scope
+        val registry: PathReservationRegistry = get()  // Shared within scope
+        DefaultPathReservationService(navigator, context, registry)
+    }
+}
+```
+
+**Usage Patterns:**
+
+```kotlin
+// Production code - services accessed via context API
+val context = buildSimulationContext()
+val pathService = context.getPathReservationService()
+val trainService = context.getTrainNavigationService()
+
+// Both services share the same registry within this context
+pathService.reservePath("train1", start, end)
+val blocks = trainService.getReservedBlocks("train1") // Sees the same reservation
+
+// Test code - direct scope access when needed
+val navigator = context.scope.get<TopologyNavigator>()  // No parameters!
+
+// Clean up scope when done (AutoCloseable pattern)
+context.close()  // Idempotent
+```
+
+**Key Benefits:**
+- No redundant `parametersOf(context)` - context is the scope source
+- Shared registry within context, isolated between contexts
+- Type-safe service retrieval via `get<T>()`
+- Resource cleanup via `AutoCloseable` pattern
+- Both `EditingContext` and `SimulationContext` support
 
 ### Critical DI Rules
 
@@ -533,6 +659,7 @@ Follows `.editorconfig` configuration:
 - **No refactoring** - Do not restructure working simulation code
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
+- **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
 - **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
 
 **jDisco Library:**
@@ -745,6 +872,13 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 
 **Thesis:** LaTeX sources in `text/`, build with `docker compose up text` (outputs to `artifacts/text/bakalarka.pdf`)
 **JavaDoc:** Generate with `./gradlew javadoc` (outputs to `build/docs/javadoc/`)
+
+**Architecture Documentation (docs/):**
+- `PATH_RESERVATION_ARCHITECTURE.md` - Path reservation system design (Issue #292 Phase 2)
+- `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98)
+- `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern (Issue #100)
+- `GRID_PARAMETERIZATION_*.md` - Type-safe grid parameterization (Issue #131)
+- `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions and DI patterns
 
 ## Logging
 

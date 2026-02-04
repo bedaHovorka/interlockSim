@@ -76,4 +76,30 @@ class InOut(
 	 * Returns the output semaphore since InOut acts as an exit point.
 	 */
 	override fun asRailSemaphore(): RailSemaphore = outSemaphore
+
+	/**
+	 * Get the track connection direction for InOut.
+	 *
+	 * InOut connects to the railway network at `direction()` regardless of whether
+	 * trains are entering or exiting. The track connection is bidirectional.
+	 *
+	 * ## Bidirectional Semantics
+	 *
+	 * InOut has two semaphores:
+	 * - **inSemaphore**: faces `anti(direction())` - controls trains entering FROM external network
+	 * - **outSemaphore**: faces `direction()` - controls trains exiting TO external network
+	 *
+	 * The track connection is ALWAYS at `direction()`:
+	 * - **Entry path**: FROM null (outside at anti-direction) TO direction() (track) → uses inSemaphore
+	 * - **Exit path**: FROM direction() (track) TO null (outside at anti-direction) → uses outSemaphore
+	 *
+	 * See [DynamicInOut.getSemaphoreFor] for the logic that determines which semaphore
+	 * controls a path based on from/to segments.
+	 *
+	 * @return Track connection direction (same as output direction)
+	 * @see DynamicInOut.getSemaphoreFor
+	 * @see getInSemaphore
+	 * @see getOutSemaphore
+	 */
+	fun getTrackConnectionDirection(): Cell.Segment = direction()
 }

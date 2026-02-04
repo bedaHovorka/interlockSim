@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
-import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -119,22 +118,22 @@ class DynamicTrackBlockTest {
 		fun freeToReserved() {
 			// Initially FREE
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.FREE)
-			assertThat(dynamicBlock1.isFreeFrom(semaphore1)).isTrue()
+			assertThat(dynamicBlock1.isFreeFrom(dynSemaphore1)).isTrue()
 
 			// Reserve path
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 
 			// Now RESERVED
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
-			assertThat(dynamicBlock1.isSetUpPath(semaphore1)).isTrue()
-			assertThat(dynamicBlock1.reservedFrom).isEqualTo(semaphore1)
+			assertThat(dynamicBlock1.isSetUpPath(dynSemaphore1)).isTrue()
+			assertThat(dynamicBlock1.reservedFrom).isEqualTo(dynSemaphore1)
 		}
 
 		@Test
 		@DisplayName("RESERVED to OCCUPIED via enter")
 		fun reservedToOccupied() {
 			// Set up path first
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Train enters
@@ -151,7 +150,7 @@ class DynamicTrackBlockTest {
 		@DisplayName("OCCUPIED to FREE via leave")
 		fun occupiedToFree() {
 			// Set up path and enter
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			dynamicBlock1.enter(train)
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.OCCUPIED)
 
@@ -161,23 +160,23 @@ class DynamicTrackBlockTest {
 			// Back to FREE
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.FREE)
 			assertThat(dynamicBlock1.occupant).isNull()
-			assertThat(dynamicBlock1.isFreeFrom(semaphore1)).isTrue()
+			assertThat(dynamicBlock1.isFreeFrom(dynSemaphore1)).isTrue()
 		}
 
 		@Test
 		@DisplayName("RESERVED to FREE via cancelPathSetup")
 		fun reservedToFreeCancellation() {
 			// Reserve path
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Cancel reservation
-			dynamicBlock1.cancelPathSetup(semaphore1)
+			dynamicBlock1.cancelPathSetup(dynSemaphore1)
 
 			// Back to FREE
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.FREE)
 			assertThat(dynamicBlock1.reservedFrom).isNull()
-			assertThat(dynamicBlock1.isFreeFrom(semaphore1)).isTrue()
+			assertThat(dynamicBlock1.isFreeFrom(dynSemaphore1)).isTrue()
 		}
 
 		@Test
@@ -187,7 +186,7 @@ class DynamicTrackBlockTest {
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.FREE)
 
 			// 2. Reserve path: FREE → RESERVED
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
 			// 3. Train enters: RESERVED → OCCUPIED
@@ -203,16 +202,16 @@ class DynamicTrackBlockTest {
 		@DisplayName("can reserve from different separator after release")
 		fun differentReservations() {
 			// Reserve from semaphore1
-			dynamicBlock1.setUpPath(semaphore1)
-			assertThat(dynamicBlock1.reservedFrom).isEqualTo(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
+			assertThat(dynamicBlock1.reservedFrom).isEqualTo(dynSemaphore1)
 
 			// Cancel and reserve from semaphore2
-			dynamicBlock1.cancelPathSetup(semaphore1)
-			dynamicBlock1.setUpPath(semaphore2)
+			dynamicBlock1.cancelPathSetup(dynSemaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore2, "block-test-train")
 
-			assertThat(dynamicBlock1.reservedFrom).isEqualTo(semaphore2)
-			assertThat(dynamicBlock1.isSetUpPath(semaphore2)).isTrue()
-			assertThat(dynamicBlock1.isSetUpPath(semaphore1)).isFalse()
+			assertThat(dynamicBlock1.reservedFrom).isEqualTo(dynSemaphore2)
+			assertThat(dynamicBlock1.isSetUpPath(dynSemaphore2)).isTrue()
+			assertThat(dynamicBlock1.isSetUpPath(dynSemaphore1)).isFalse()
 		}
 	}
 
@@ -237,28 +236,28 @@ class DynamicTrackBlockTest {
 		@DisplayName("double reservation from same separator is idempotent")
 		fun cannotDoubleReserve() {
 			// Reserve once
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Try to reserve again from SAME separator - should succeed (idempotent)
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
-			assertThat(dynamicBlock1.reservedFrom).isEqualTo(semaphore1)
+			assertThat(dynamicBlock1.reservedFrom).isEqualTo(dynSemaphore1)
 		}
 
 		@Test
 		@DisplayName("reservation from different separator throws exception")
 		fun cannotReserveFromDifferentSeparator() {
 			// Reserve from first separator
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.getState()).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Try to reserve from DIFFERENT separator - should fail
-			assertFailure { dynamicBlock1.setUpPath(semaphore2) }
-				.isInstanceOf(TrackOperationException::class)
+			assertFailure { dynamicBlock1.setUpPath(dynSemaphore2, "block-test-train") }
+				.isInstanceOf(TrackReservationException.AlreadyReservedConflict::class)
 				.message()
 				.isNotNull()
-				.contains("Block already reserved from different separator")
+				.contains("already reserved from")
 		}
 
 		@Test
@@ -267,7 +266,7 @@ class DynamicTrackBlockTest {
 			val wrongTrain = mockk<TrackOccupant>()
 
 			// Set up and enter with first train
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			dynamicBlock1.enter(train)
 
 			// Try to leave with different train
@@ -303,7 +302,7 @@ class DynamicTrackBlockTest {
 			val hashBefore = dynamicBlock1.hashCode()
 
 			// Change state multiple times
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			assertThat(dynamicBlock1.hashCode()).isEqualTo(hashBefore)
 
 			dynamicBlock1.enter(train)
@@ -322,7 +321,7 @@ class DynamicTrackBlockTest {
 			assertThat(dynamicBlock1).isEqualTo(anotherWrapper1)
 
 			// Change one wrapper's state
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			dynamicBlock1.enter(train)
 
 			// Still equal (equality based on static object, not state)
@@ -358,7 +357,7 @@ class DynamicTrackBlockTest {
 		@Test
 		@DisplayName("toString includes state and occupant")
 		fun toStringFormat() {
-			dynamicBlock1.setUpPath(semaphore1)
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
 			dynamicBlock1.enter(train)
 
 			val str = dynamicBlock1.toString()
@@ -372,13 +371,11 @@ class DynamicTrackBlockTest {
 		@DisplayName("getTrackOccupant throws when not occupied")
 		fun getTrackOccupantThrowsWhenNotOccupied() {
 			// FREE state
-			assertFailure { dynamicBlock1.getTrackOccupant() }
-				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertThat(dynamicBlock1.getTrackOccupant()).isNull()
 
-			// RESERVED state
-			dynamicBlock1.setUpPath(semaphore1)
-			assertFailure { dynamicBlock1.getTrackOccupant() }
-				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			// also RESERVED state doesn't have real occupant yet, only reservation name
+			dynamicBlock1.setUpPath(dynSemaphore1, "block-test-train")
+			assertThat(dynamicBlock1.getTrackOccupant()).isNull()
 		}
 	}
 }

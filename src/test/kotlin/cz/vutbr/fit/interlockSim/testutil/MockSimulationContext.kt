@@ -25,10 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.InputStream
@@ -145,27 +143,6 @@ class MockSimulationContext(
 	override fun isReporting(type: ReportType): Boolean = enabledReports.contains(type)
 
 	// Delegate methods to wrapped DefaultSimulationContext
-
-	override fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection? {
-		// Check if node is in grid before delegating
-		// Extract static NodeCell from Dynamic wrapper for grid lookup
-		val staticSeparator =
-			when (separator) {
-				is DynamicPathSeparator ->
-					cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
-						.assertNodeCell(separator)
-				is NodeCell -> separator
-				else -> null
-			}
-		if (staticSeparator != null && delegate.getRailWayNetGrid().getLocation(staticSeparator) == null) {
-			// Node not in grid - return null (graceful handling for tests)
-			return null
-		}
-		return delegate.getNextTrackSection(separator, current)
-	}
 
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,

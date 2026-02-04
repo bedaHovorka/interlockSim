@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -96,6 +97,11 @@ class DynamicRailSwitch(
 		if (pathConf != conf) {
 			throw PathSeparatorChangeException("cancelPathSetup: Switch is not configured (neccesarry except?)", this)
 		}
+		// Tier 1: Unlock switch after canceling path setup (Issue #291)
+		unlock()
+		logger.debug {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} unlocked after cancelPathSetup"
+		}
 	}
 
 	override fun allowedSpeed(): Double {
@@ -104,16 +110,11 @@ class DynamicRailSwitch(
 		return double1!!.toDouble()
 	}
 
-	/**
-	 * Implementation of isSwitch() for DynamicRailSwitch.
-	 * Returns true since this is a switch.
-	 */
-	override fun isSwitch(): Boolean = true
-
 	override fun setUpPath(
 		from: Cell.Segment?,
 		to: Cell.Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	) {
 		val newConf = getPathConfWithException(from, to)
 		logger.info {
@@ -121,6 +122,11 @@ class DynamicRailSwitch(
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		conf = newConf
+		// Tier 1: Lock switch after configuration (Issue #291)
+		lock()
+		logger.info {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} LOCKED after setUpPath, locked=$locked"
+		}
 	}
 
 	@Throws(PathSeparatorChangeException::class)

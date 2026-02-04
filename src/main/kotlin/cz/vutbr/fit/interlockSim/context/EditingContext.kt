@@ -252,4 +252,36 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 * @param key The grid position of the modified cell
 	 */
 	fun fireCellModified(key: Point)
+
+	/**
+	 * Get topology navigator for static path finding without state dependencies.
+	 *
+	 * TopologyNavigator provides pure graph traversal operations for editing and
+	 * validation without checking dynamic block ownership or simulation state.
+	 *
+	 * ## Use Cases
+	 *
+	 * - **Network Validation**: Check connectivity during editing
+	 * - **Path Visualization**: Show possible routes in editor
+	 * - **Topology Analysis**: Verify network structure before simulation
+	 *
+	 * ## Example Usage
+	 *
+	 * ```kotlin
+	 * val context: EditingContext = factory.createEmptyContext()
+	 * // ... build network ...
+	 *
+	 * val navigator = context.getTopologyNavigator()
+	 * val path = navigator.findPath(start, target)
+	 *
+	 * if (path == null) {
+	 *     // No route exists, fix network topology
+	 * }
+	 * ```
+	 *
+	 * @return TopologyNavigator instance for this editing context
+	 * @see cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+	 * @since Issue #292 Phase 5
+	 */
+	fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 }

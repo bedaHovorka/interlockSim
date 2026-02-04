@@ -41,12 +41,14 @@ import org.junit.jupiter.api.Test
 class TracksPolishTest {
 	private lateinit var separator1: PathSeparator
 	private lateinit var separator2: PathSeparator
+	private lateinit var dynSeparator1: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 	private lateinit var occupant: TrackOccupant
 
 	@BeforeEach
 	fun setUp() {
 		separator1 = mockk<OrientedPathSeparator>()
 		separator2 = mockk<OrientedPathSeparator>()
+		dynSeparator1 = mockk<cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator>()
 		occupant = mockk<TrackOccupant>()
 	}
 
@@ -70,7 +72,7 @@ class TracksPolishTest {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 
 			assertFailure {
-				block.isFreeFrom(separator1)
+				block.isFreeFrom(dynSeparator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
 				.message()
 				.isNotNull()
@@ -82,7 +84,7 @@ class TracksPolishTest {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 
 			assertFailure {
-				block.setUpPath(separator1)
+				block.setUpPath(dynSeparator1, "polish-test-train")
 			}.isInstanceOf(UnsupportedOperationException::class)
 				.message()
 				.isNotNull()
@@ -94,7 +96,7 @@ class TracksPolishTest {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 
 			assertFailure {
-				block.isSetUpPath(separator1)
+				block.isSetUpPath(dynSeparator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
 				.message()
 				.isNotNull()
@@ -106,7 +108,7 @@ class TracksPolishTest {
 			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 
 			assertFailure {
-				block.cancelPathSetup(separator1)
+				block.cancelPathSetup(dynSeparator1)
 			}.isInstanceOf(UnsupportedOperationException::class)
 				.message()
 				.isNotNull()

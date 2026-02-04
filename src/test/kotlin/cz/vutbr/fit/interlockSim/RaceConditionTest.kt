@@ -122,7 +122,7 @@ class RaceConditionTest : KoinTestBase() {
 							startLatch.await()
 
 							// Attempt to setup path on track1
-							track1.setUpPath(end1)
+							track1.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 							successCount.incrementAndGet()
 						} catch (e: TrackOperationException) {
 							// Expected if another thread beat us to it
@@ -164,7 +164,7 @@ class RaceConditionTest : KoinTestBase() {
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 
 			// Setup initial path
-			track.setUpPath(end1)
+			track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 			val isFreeInitially = track.isFreeFrom(end1)
 
 			val threadCount = THREAD_COUNT
@@ -230,7 +230,7 @@ class RaceConditionTest : KoinTestBase() {
 						try {
 							// Thread-local timing to avoid deadlock
 							if (iter % 2 == 0) {
-								track.setUpPath(end1)
+								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 							} else {
 								track.cancelPathSetup(end1)
 							}
@@ -423,7 +423,7 @@ class RaceConditionTest : KoinTestBase() {
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 
 			// First reserve the track
-			track.setUpPath(end1)
+			track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -497,7 +497,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (iter in 0 until iterations) {
 						for (track in tracks) {
 							try {
-								track.setUpPath(end1)
+								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 								track.enter(occupant)
 								enterCount.incrementAndGet()
 								track.leave(occupant)
@@ -523,7 +523,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (iter in 0 until iterations) {
 						for (track in tracks) {
 							try {
-								track.setUpPath(end1)
+								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 								Thread.sleep(1)
 								track.cancelPathSetup(end1)
 							} catch (e: TrackOperationException) {
@@ -573,7 +573,7 @@ class RaceConditionTest : KoinTestBase() {
 				try {
 					startLatch.await()
 					for (i in 0 until iterations) {
-						track.setUpPath(end1)
+						track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 						Thread.sleep(1)
 						try {
 							track.enter(occupant)
@@ -877,7 +877,7 @@ class RaceConditionTest : KoinTestBase() {
 
 							setupAttempts.incrementAndGet()
 							try {
-								track.setUpPath(end1)
+								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 								setupSuccesses.incrementAndGet()
 							} catch (e: TrackOperationException) {
 								// Other threads beat us - this is expected
@@ -933,7 +933,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until iterations) {
 						try {
-							track.setUpPath(end1)
+							track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 							track.cancelPathSetup(end1)
 						} catch (e: TrackOperationException) {
 							// Expected due to interference
@@ -952,7 +952,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until iterations) {
 						try {
-							track.setUpPath(end1)
+							track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
 							track.enter(occupant)
 							track.leave(occupant)
 						} catch (e: TrackOperationException) {

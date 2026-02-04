@@ -25,7 +25,8 @@ interface DynamicPathSeparator : PathSeparator {
 	fun setUpPath(
 		from: Cell.Segment?,
 		to: Cell.Segment?,
-		allowedSpeed: Double
+		allowedSpeed: Double,
+		trackOccupant: TrackOccupant
 	)
 
 	/**
@@ -38,14 +39,4 @@ interface DynamicPathSeparator : PathSeparator {
 	 * @return segment reprezents element configuration (dynamic)
 	 */
 	fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
-
-	/**
-	 * Returns true if this is a switch (RailSwitch), false for semaphores/InOut.
-	 * Eliminates instanceof checks in AbstractPath for switch-specific logic.
-	 *
-	 * Used for path speed calculation where switches may affect allowed speed.
-	 *
-	 * @return true if this is a RailSwitch, false otherwise
-	 */
-	fun isSwitch(): Boolean
 }
