@@ -87,6 +87,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
+		propertyChangeSupport.firePropertyChange("conf", oldConf, conf)
 	}
 
 	override fun cancelPathSetup(
@@ -116,12 +117,16 @@ class DynamicRailSwitch(
 		allowedSpeed: Double,
 		trackOccupant: TrackOccupant
 	) {
+		val oldConf = conf
 		val newConf = getPathConfWithException(from, to)
 		logger.info {
 			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		conf = newConf
+		if (oldConf != newConf) {
+			propertyChangeSupport.firePropertyChange("conf", oldConf, newConf)
+		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
 		logger.info {
@@ -249,6 +254,39 @@ class DynamicRailSwitch(
 	 * - Proper behavior in hash-based collections
 	 */
 	override fun hashCode(): Int = System.identityHashCode(staticRef)
+
+	/**
+	 * Returns the segment pair that forms the current active path.
+	 *
+	 * Queries the switch topology to find which segments are connected
+	 * based on the current configuration (MAIN or BRANCH).
+	 *
+	 * @return Set of 2 segments forming the active path based on current conf
+	 * @throws IllegalStateException if no segments found for current configuration
+	 */
+	fun getActiveSegments(): Set<Cell.Segment> {
+		// Iterate through all segments that join in this switch
+		for (segment in staticRef.joins()) {
+			// Get all edges connected to this segment
+			val joinedEdges = staticRef.confs.getJoinedNodesAndEdges(segment)
+
+			// Search for the edge with value matching current conf
+			// Use explicit cast similar to getFollowingSegment() implementation
+			for (e in (joinedEdges as Map<*, *>).entries) {
+				@Suppress("UNCHECKED_CAST")
+				val entry = e as Map.Entry<Cell.Segment, Conf>
+				if (entry.value == conf) {
+					return setOf(segment, entry.key)
+				}
+			}
+		}
+
+		// This should never happen if the switch is properly initialized
+		throw IllegalStateException(
+			"No segments found for configuration $conf in switch $name. " +
+				"This indicates a corrupted switch topology."
+		)
+	}
 
 	/**
 	 * String representation for debugging
