@@ -13,6 +13,8 @@ import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
@@ -351,8 +353,8 @@ class DynamicRailSemaphoreTest {
 		assertThat(capturedEvents).isEmpty()
 	}
 
-	@org.junit.jupiter.api.Nested
-	@org.junit.jupiter.api.DisplayName("Equals contract tests")
+	@Nested
+	@DisplayName("Equals contract tests")
 	inner class EqualsContract {
 		@Test
 		fun `equals with null returns false`() {
