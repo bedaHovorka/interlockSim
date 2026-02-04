@@ -102,6 +102,9 @@ class Train :
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
+			// Initialize entry separator for animation (train enters network here)
+			this@Train.entrySeparator = where
+
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
 				if (where is DynamicInOut && current != null) {
@@ -146,6 +149,10 @@ class Train :
 				val staticWhere = next!!.getSecondEnd(where)
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
+
+				// Store entry separator for animation position calculation
+				// where = separator we just crossed (entry to next section)
+				this@Train.entrySeparator = where
 
 				current = next
 				onNext = false
@@ -588,6 +595,12 @@ class Train :
 	override val name: String
 	private val trainNavService: TrainNavigationService
 
+	/**
+	 * The separator through which the train entered the current section.
+	 * Used by animation calculator to determine interpolation direction.
+	 * Null if train hasn't entered any section yet (initialization).
+	 */
+	private var entrySeparator: DynamicPathSeparator? = null
 
 	private val number: Int
 
@@ -683,6 +696,20 @@ class Train :
 	fun getNumber(): Int = number
 
 	/**
+	 * Get the origin InOut where this train entered the network.
+	 *
+	 * Used by animation system to determine train color coding based on entry point.
+	 * Color mapping: InOut "B" → blue, InOut "A" → orange (configurable in vyhybna.xml).
+	 *
+	 * This is a minimal accessor to support animation visualization without exposing
+	 * full Timetable structure. No sim/ package refactoring required.
+	 *
+	 * @return The DynamicInOut where the train originated
+	 * @since 2026-02-04 (Fix train color coding bug)
+	 */
+	fun getOriginInOut(): DynamicInOut = timetable.getIn()
+
+	/**
 	 * Get the track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.
@@ -714,6 +741,13 @@ class Train :
 	 * @since 2026-01-22 (Issue #203)
 	 */
 	fun getTotalDistance(): Double = front.getTotalDistance()
+
+	/**
+	 * Get the separator where train entered current section.
+	 * Used for correct position interpolation in animation.
+	 * @return entry separator, or null if train hasn't entered any section yet
+	 */
+	fun getEntrySeparator(): DynamicPathSeparator? = entrySeparator
 
 	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()

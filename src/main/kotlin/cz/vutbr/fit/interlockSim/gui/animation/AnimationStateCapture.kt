@@ -153,7 +153,7 @@ object AnimationStateCapture {
 		)
 
 		return trains.associate { train ->
-			train.getNumber() to captureTrainState(train, positionCalculator)
+			train.getNumber() to captureTrainState(train, positionCalculator, context)
 		}
 	}
 
@@ -163,13 +163,17 @@ object AnimationStateCapture {
 	 * Captures position, velocity, acceleration, and calculates grid location
 	 * for rendering via linear interpolation along the current track section.
 	 *
+	 * Also determines train color based on origin InOut for directional color rendering.
+	 *
 	 * @param train Train to capture state from
 	 * @param positionCalculator Calculator for grid position interpolation
+	 * @param context Simulation context for accessing InOut information
 	 * @return Immutable train state snapshot
 	 */
 	private fun captureTrainState(
 		train: Train,
-		positionCalculator: TrainPositionCalculator
+		positionCalculator: TrainPositionCalculator,
+		context: SimulationContext
 	): TrainState {
 		val trainNumber = train.getNumber()
 		val position = train.getTotalDistance()
@@ -181,9 +185,14 @@ object AnimationStateCapture {
 		val currentSection = train.getFrontSection()
 		val frontPosition = train.getFrontPosition()
 		val frontGridLocation = positionCalculator.calculateTrainGridLocation(
+			train = train,
 			currentSection = currentSection,
 			distanceAlongSection = frontPosition
 		)
+
+		// Determine train color based on origin InOut
+		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
+		val isBlueColorVariant = determineOriginColorVariant(train, context)
 
 		return TrainState(
 			trainNumber = trainNumber,
@@ -191,8 +200,46 @@ object AnimationStateCapture {
 			velocity = velocity,
 			acceleration = acceleration,
 			frontGridLocation = frontGridLocation,
-			length = length
+			length = length,
+			travelingRight = isBlueColorVariant
 		)
+	}
+
+	/**
+	 * Determine train color variant based on origin InOut.
+	 *
+	 * Trains are color-coded by their entry point for visual distinction:
+	 * - **Blue (true):** Trains from InOut named "B"
+	 * - **Orange (false):** Trains from InOut named "A" (or any other name)
+	 *
+	 * This implementation uses the train's actual origin InOut from its timetable,
+	 * replacing the broken odd/even heuristic that failed when Generator shuffled
+	 * train creation order.
+	 *
+	 * **Configuration:**
+	 * InOut names are defined in XML configuration (e.g., vyhybna.xml):
+	 * ```xml
+	 * <InOut X="30" Y="8" name="B"/>
+	 * <InOut X="11" Y="8" name="A"/>
+	 * ```
+	 *
+	 * **Edge Cases:**
+	 * - If InOut has no name or null name: defaults to orange (false)
+	 * - Name comparison is case-sensitive ("B" ≠ "b")
+	 * - Future configurations with different names: only "B" maps to blue
+	 *
+	 * @param train Train to determine color variant for
+	 * @param context Simulation context (unused, kept for future extensibility)
+	 * @return True for blue color variant (InOut "B"), false for orange (InOut "A" or other)
+	 * @since 2026-02-04 (Fixed train color coding bug)
+	 */
+	private fun determineOriginColorVariant(
+		train: Train,
+		context: SimulationContext
+	): Boolean {
+		val originInOut = train.getOriginInOut()
+		val inOutName = originInOut.name
+		return inOutName == "B"
 	}
 
 	/**

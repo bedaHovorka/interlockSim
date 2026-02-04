@@ -68,8 +68,14 @@ object AnimationColors {
 
 	// ========== Train Colors ==========
 
-	/** Train body color - Blue */
-	val TRAIN_BODY: Color = Color(0x00, 0x00, 0xFF)
+	/** Train body color for trains from InOut B - Blue */
+	val TRAIN_FROM_B: Color = Color(0x00, 0x00, 0xFF)
+
+	/** Train body color for trains from InOut A - Orange */
+	val TRAIN_FROM_A: Color = Color(0xFF, 0x8C, 0x00)
+
+	/** Train border color - Black */
+	val TRAIN_BORDER: Color = Color(0x00, 0x00, 0x00)
 
 	/** Train ID text color - White */
 	val TRAIN_ID: Color = Color(0xFF, 0xFF, 0xFF)

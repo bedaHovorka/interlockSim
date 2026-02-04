@@ -14,7 +14,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.PointF
 
 /**
  * Immutable snapshot of simulation state for animation rendering.
@@ -98,9 +98,19 @@ data class AnimationState(
  * - **position:** Total distance traveled along the path (meters)
  * - **frontGridLocation:** Grid coordinates for rendering train front (nullable if not calculable)
  *
- * **NOTE FOR MVP:** This class is defined but not populated in initial implementation
- * due to private Train internals. Will be implemented in future iteration with
- * public Train API (#201 follow-up).
+ * ## Color Coding by Origin InOut
+ *
+ * - **travelingRight:** Color selector based on train's origin InOut
+ *   - true = Blue (trains from InOut "B")
+ *   - false = Orange (trains from InOut "A" or other names)
+ *   - Trains maintain their origin color throughout their entire journey
+ *
+ * **Implementation:**
+ * Train origin is determined via `Train.getOriginInOut()` which accesses
+ * the train's Timetable entry InOut. This provides accurate color coding
+ * regardless of train creation order or Generator shuffling.
+ *
+ * @see AnimationStateCapture.determineOriginColorVariant
  *
  * @property trainNumber Unique train identifier
  * @property position Total distance traveled in meters
@@ -108,14 +118,16 @@ data class AnimationState(
  * @property acceleration Current acceleration in m/s²
  * @property frontGridLocation Grid coordinates for train front rendering (nullable)
  * @property length Train length in meters
+ * @property travelingRight Color selector: true for blue (InOut B), false for orange (InOut A)
  */
 data class TrainState(
 	val trainNumber: Int,
 	val position: Double,
 	val velocity: Double,
 	val acceleration: Double,
-	val frontGridLocation: Point?,
-	val length: Double
+	val frontGridLocation: PointF?,
+	val length: Double,
+	val travelingRight: Boolean
 )
 
 /**
