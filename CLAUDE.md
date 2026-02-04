@@ -333,9 +333,10 @@ Koin 3.5.6 fully compatible with Docker (verified 2026-01-12). See `docs/KOTLIN_
 - `DefaultSimulationContext : BaseContext, SimulationContext` - Implementation of simulation operations (829 lines):
   - Extends BaseContext directly (does NOT extend DefaultEditingContext)
   - Network structure is immutable (frozen after initialization)
-  - Provides simulation-specific operations: run, stop, pathToNextSemaphore, toDynamic
+  - Provides simulation-specific operations: run, stop, toDynamic, navigation service accessors
   - Returns `RailwayNetGrid<Cell>` (simulation needs both NodeCell and TrackBlockPart)
   - Uses SimulationProcessFactory for dependency injection
+  - Provides TopologyNavigator, PathReservationService, TrainNavigationService via Koin scope
 - `ContextTransformer` - Factory for transforming EditingContext to SimulationContext:
   - Stateless singleton object
   - Copies network structure, configuration, and InOut elements
@@ -385,15 +386,16 @@ DefaultSimulationContext uses dependency injection to obtain a `SimulationProces
 - `objects/cells/` - Grid-based spatial representation (uses `Array2DMap`), Dynamic separator wrappers
 - `objects/paths/` - Route management
 
-**Path Discovery Restructuring (Issue #292 Phases 1-5, 2026-01-11 to 2026-01-27):**
+**Path Discovery Restructuring (Issue #292 Phases 1-5, 2026-01-11 to 2026-02-04) - COMPLETED:**
 
-Separated path discovery into three specialized services, replacing deprecated mixed-concern `pathToNextSemaphore()` API:
+Separated path discovery into three specialized services, fully replacing the removed mixed-concern `pathToNextSemaphore()` API:
 
 1. **TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
    - Interface: `context/navigation/TopologyNavigator`
    - Implementation: `context/navigation/DefaultTopologyNavigator`
    - **Use Case**: Editor validation, network analysis without dynamic state
-   - **Access**: `EditingContext.getTopologyNavigator()` or `SimulationContext.getTopologyNavigator()`
+   - **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getTopologyNavigator()`
+   - **Methods**: `findPath()`, `getNextTrackSection()`, `findPathToNextSemaphore()`
 
 2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
    - Interface: `context/navigation/PathReservationService`
@@ -401,6 +403,7 @@ Separated path discovery into three specialized services, replacing deprecated m
    - **Use Case**: Dispatcher finding available routes, interlocking path setup
    - **Access**: `SimulationEnvironment.getPathReservationService()`
    - **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
+   - **Methods**: `reservePath()`, `releasePath()`, `findReservablePaths()`, `reservePathToAnyNextSemaphore()`
 
 3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
    - Interface: `context/navigation/TrainNavigationService`
@@ -408,22 +411,27 @@ Separated path discovery into three specialized services, replacing deprecated m
    - **Use Case**: Train requesting next track section (only through owned blocks)
    - **Access**: `SimulationEnvironment.getTrainNavigationService()`
    - **Features**: Explicit ownership validation, null = "not reserved for THIS train"
+   - **Methods**: `findReservedPathForTrain()`, `isPathReservedForTrain()`, `getReservedBlocks()`
 
 4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking
    - Class: `context/navigation/PathReservationRegistry`
    - **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
+   - **Methods**: `register()`, `unregister()`, `getBlocks()`, `getOwner()`, `isOwnedBy()`
 
 **Architecture Documentation**:
-- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases
-- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration from deprecated APIs, before/after examples
-- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples (547 lines)
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design (1069 lines)
 
-**Impact**:
-- ✅ Deprecated `pathToNextSemaphore()` and `getNextTrackSection()` (DeprecationLevel.WARNING)
-- ✅ Eliminates Issue #291 workaround (manual path construction in ShuntingLoop, ~100 lines removed)
-- ✅ Eliminates Issue #282 workaround (block ownership validation no longer needed)
+**Phase 5 Completion (Issue #297, 2026-02-04)**:
+- ✅ **REMOVED** `pathToNextSemaphore()` and `getNextTrackSection()` from all interfaces (fully migrated)
+- ✅ All callers migrated to new specialized services (Train, InOutWorker, ShuntingLoop)
+- ✅ Service accessors added: `EditingContext.getTopologyNavigator()`, `SimulationEnvironment.getPathReservationService()`, `SimulationEnvironment.getTrainNavigationService()`
+- ✅ Issue #291 workaround fully eliminated (manual path construction in ShuntingLoop, ~100 lines removed)
+- ✅ Issue #282 workaround eliminated (block ownership validation handled by registry)
 - ✅ Clean editor validation without SimulationContext conversion
 - ✅ Zero regressions (1321+ tests passing, golden output validated)
+- ✅ Comprehensive documentation completed (2,424 lines across 3 architecture docs)
 
 **Koin DI Integration**:
 - Scope-per-context pattern (one registry per context, isolated between contexts)

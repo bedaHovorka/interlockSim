@@ -45,15 +45,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Maintains backward compatibility with existing tests (35 tests passing)
 - Golden output validation confirms zero behavior changes
 
-### Deprecated
+### Removed
 
-#### Path Discovery APIs (Issue #292 Phase 5)
-- `SimulationEnvironment.pathToNextSemaphore(separator, next)` → Use `getTrainNavigationService().findReservedPathForTrain()` for train navigation, or `getPathReservationService().reservePath()` for dispatcher logic, or `getTopologyNavigator().findPathToNextSemaphore()` for static topology
-- `SimulationEnvironment.getNextTrackSection(separator, current)` → Use `getTrainNavigationService().findReservedPathForTrain()` for train navigation, or `getTopologyNavigator().getNextTrackSection()` for static topology
+#### Path Discovery APIs - Phase 5 Complete (Issue #292 Phase 5, Issue #297)
+- **REMOVED** `SimulationEnvironment.pathToNextSemaphore(separator, next)` - Replaced by:
+  - `TrainNavigationService.findReservedPathForTrain()` for train navigation through owned blocks
+  - `PathReservationService.reservePath()` for dispatcher logic (atomic reservation)
+  - `TopologyNavigator.findPathToNextSemaphore()` for static topology analysis
+- **REMOVED** `SimulationEnvironment.getNextTrackSection(separator, current)` - Replaced by:
+  - `TrainNavigationService.findReservedPathForTrain()` for train navigation
+  - `TopologyNavigator.getNextTrackSection()` for static topology
+- **REMOVED** Issue #291 workaround code from ShuntingLoop (~100 lines of manual path construction)
 
-**Deprecation Level**: `WARNING` (code compiles with warnings)
-**Rationale**: Original methods mixed three distinct concerns (static topology, dynamic reservation, train navigation), leading to fragility and race conditions. New specialized services provide clean separation of responsibilities.
-**Migration Guide**: See `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` for detailed instructions
+**Breaking Change**: All code must migrate to new specialized services
+**Rationale**: Original methods mixed three distinct concerns (static topology, dynamic reservation, train navigation), leading to fragility, race conditions (Issue #291), and ownership validation issues (Issue #282). New specialized services provide clean separation with explicit ownership tracking.
+**Migration Status**: All internal callers migrated (Train, InOutWorker, ShuntingLoop)
+**Migration Guide**: See `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` for detailed instructions and examples
 
 ---
 

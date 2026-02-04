@@ -449,3 +449,9 @@ fun <T> Assert<Collection<T?>>.containsNull(): Assert<Collection<T?>> =
 			expected("to contain null but was:${show(actual)}")
 		}
 	}
+
+// ============================================================================
+// Path and Block Validation Extensions (Issue #297)
+// ============================================================================
+// Note: Complex helper functions removed to avoid type inference issues.
+// Use inline assertions with filterIsInstance<DynamicTrackBlock>() instead.
