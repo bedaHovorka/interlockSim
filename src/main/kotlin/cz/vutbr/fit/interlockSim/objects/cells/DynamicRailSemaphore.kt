@@ -144,11 +144,19 @@ sealed class DynamicRailSemaphore(
 	 */
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
-		return when (other) {
-			is DynamicRailSemaphore -> staticRef === other.staticRef
-			is RailSemaphore -> staticRef === other
-			else -> false
+		if (other == null) return false
+
+		// Compare with DynamicRailSemaphore (compare staticRef references)
+		if (other is DynamicRailSemaphore) {
+			return staticRef === other.staticRef
 		}
+
+		// Compare with static RailSemaphore (compare this.staticRef with other)
+		if (other is RailSemaphore) {
+			return staticRef === other
+		}
+
+		return false
 	}
 
 	/**

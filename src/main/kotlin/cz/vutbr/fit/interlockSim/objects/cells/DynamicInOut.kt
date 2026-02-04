@@ -60,11 +60,19 @@ class DynamicInOut(
 	 */
 	override fun equals(other: Any?): Boolean {
 		if (this === other) return true
-		return when (other) {
-			is DynamicInOut -> staticRef === other.staticRef
-			is InOut -> staticRef === other
-			else -> false
+		if (other == null) return false
+
+		// Compare with DynamicInOut (compare staticRef references)
+		if (other is DynamicInOut) {
+			return staticRef === other.staticRef
 		}
+
+		// Compare with static InOut (compare this.staticRef with other)
+		if (other is InOut) {
+			return staticRef === other
+		}
+
+		return false
 	}
 
 	override fun setUpPath(

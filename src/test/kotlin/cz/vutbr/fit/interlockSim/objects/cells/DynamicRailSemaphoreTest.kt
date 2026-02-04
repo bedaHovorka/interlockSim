@@ -13,6 +13,8 @@ import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
@@ -349,5 +351,61 @@ class DynamicRailSemaphoreTest {
 		// Then: signal remains FREE and no event is fired
 		assertThat(constantSemaphore.signal).isEqualTo(Signal.FREE)
 		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Nested
+	@DisplayName("Equals contract tests")
+	inner class EqualsContract {
+		@Test
+		fun `equals with null returns false`() {
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicSemaphore1 == null).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			assertThat(dynamicSemaphore1).isEqualTo(dynamicSemaphore1)
+			assertThat(dynamicSemaphore1.equals(dynamicSemaphore1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			assertThat(dynamicSemaphore1.equals("string")).isFalse()
+			assertThat(dynamicSemaphore1.equals(42)).isFalse()
+			assertThat(dynamicSemaphore1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			assertThat(dynamicSemaphore1).isEqualTo(dynamicSemaphore1)
+		}
+
+		@Test
+		fun `equals is symmetric`() {
+			val another = createDynamicInstance(staticSemaphore1)
+			assertThat(dynamicSemaphore1).isEqualTo(another)
+			assertThat(another).isEqualTo(dynamicSemaphore1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x = createDynamicInstance(staticSemaphore1)
+			val y = createDynamicInstance(staticSemaphore1)
+			val z = createDynamicInstance(staticSemaphore1)
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z) // Transitivity
+		}
+
+		@Test
+		fun `equals with static RailSemaphore returns true when same reference`() {
+			assertThat(dynamicSemaphore1.equals(staticSemaphore1)).isTrue()
+		}
+
+		@Test
+		fun `equals with different static RailSemaphore returns false`() {
+			assertThat(dynamicSemaphore1.equals(staticSemaphore2)).isFalse()
+		}
 	}
 }

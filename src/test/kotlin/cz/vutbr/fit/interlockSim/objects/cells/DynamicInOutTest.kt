@@ -13,6 +13,8 @@ import assertk.assertThat
 import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 // Factory functions for creating dynamic semaphores
@@ -190,5 +192,61 @@ class DynamicInOutTest {
 
 		// But semaphore wrappers are different instances
 		assertThat(alternativeWrapper.inSemaphore).isNotSameAs(dynamicInOut1.inSemaphore)
+	}
+
+	@Nested
+	@DisplayName("Equals contract tests")
+	inner class EqualsContract {
+		@Test
+		fun `equals with null returns false`() {
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicInOut1 == null).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			assertThat(dynamicInOut1).isEqualTo(dynamicInOut1)
+			assertThat(dynamicInOut1.equals(dynamicInOut1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			assertThat(dynamicInOut1.equals("string")).isFalse()
+			assertThat(dynamicInOut1.equals(42)).isFalse()
+			assertThat(dynamicInOut1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			assertThat(dynamicInOut1).isEqualTo(dynamicInOut1)
+		}
+
+		@Test
+		fun `equals is symmetric`() {
+			val another = DynamicInOut(staticInOut1, dynamicInSemaphore1, dynamicOutSemaphore1)
+			assertThat(dynamicInOut1).isEqualTo(another)
+			assertThat(another).isEqualTo(dynamicInOut1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x = DynamicInOut(staticInOut1, dynamicInSemaphore1, dynamicOutSemaphore1)
+			val y = DynamicInOut(staticInOut1, dynamicInSemaphore1, dynamicOutSemaphore1)
+			val z = DynamicInOut(staticInOut1, dynamicInSemaphore1, dynamicOutSemaphore1)
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z) // Transitivity
+		}
+
+		@Test
+		fun `equals with static InOut returns true when same reference`() {
+			assertThat(dynamicInOut1.equals(staticInOut1)).isTrue()
+		}
+
+		@Test
+		fun `equals with different static InOut returns false`() {
+			assertThat(dynamicInOut1.equals(staticInOut2)).isFalse()
+		}
 	}
 }

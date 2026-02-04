@@ -16,6 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
@@ -419,6 +421,62 @@ class DynamicRailSwitchTest {
 			// Test BRANCH configuration
 			switch.changeConf()
 			assertThat(switch.getActiveSegments()).hasSize(2)
+		}
+	}
+
+	@Nested
+	@DisplayName("Equals contract tests")
+	inner class EqualsContract {
+		@Test
+		fun `equals with null returns false`() {
+			@Suppress("KotlinConstantConditions") // Testing null comparison explicitly
+			assertThat(dynamicSwitch1 == null).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			assertThat(dynamicSwitch1).isEqualTo(dynamicSwitch1)
+			assertThat(dynamicSwitch1.equals(dynamicSwitch1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			assertThat(dynamicSwitch1.equals("string")).isFalse()
+			assertThat(dynamicSwitch1.equals(42)).isFalse()
+			assertThat(dynamicSwitch1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			assertThat(dynamicSwitch1).isEqualTo(dynamicSwitch1)
+		}
+
+		@Test
+		fun `equals is symmetric`() {
+			val another = DynamicRailSwitch(staticSwitch1)
+			assertThat(dynamicSwitch1).isEqualTo(another)
+			assertThat(another).isEqualTo(dynamicSwitch1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x = DynamicRailSwitch(staticSwitch1)
+			val y = DynamicRailSwitch(staticSwitch1)
+			val z = DynamicRailSwitch(staticSwitch1)
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z) // Transitivity
+		}
+
+		@Test
+		fun `equals with static RailSwitch returns true when same reference`() {
+			assertThat(dynamicSwitch1.equals(staticSwitch1)).isTrue()
+		}
+
+		@Test
+		fun `equals with different static RailSwitch returns false`() {
+			assertThat(dynamicSwitch1.equals(staticSwitch2)).isFalse()
 		}
 	}
 }
