@@ -35,6 +35,13 @@ private val logger = KotlinLogging.logger {}
  *
  * Part of Phase 4: Static/Dynamic property separation (bedaHovorka/interlockSim#92)
  *
+ * **Property change events:**
+ * - "conf" property: Fired when configuration changes (MAIN ↔ BRANCH)
+ *   - `changeConf()`: Always fires event (always toggles position)
+ *   - `setUpPath()`: Fires event only if new configuration differs from current
+ * - "locked" property: Fired when lock state changes
+ *   - `lock()`/`unlock()`: Fire event only if state actually changes
+ *
  * @property static The static switch object with immutable editing-time properties
  */
 class DynamicRailSwitch(
@@ -151,6 +158,9 @@ class DynamicRailSwitch(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		val map = staticRef.confs.getJoinedNodesAndEdges(from)
+		// Safe cast: EnumUnorientedGraph guarantees edges are Map<Cell.Segment, Conf>
+		// The graph structure ensures type safety at construction time, but Java generics
+		// don't preserve this information at runtime, requiring the explicit cast here.
 		for (e in (map as Map<*, *>).entries) {
 			@Suppress("UNCHECKED_CAST")
 			val entry = e as Map.Entry<Cell.Segment, Conf>
@@ -261,6 +271,11 @@ class DynamicRailSwitch(
 	 * Queries the switch topology to find which segments are connected
 	 * based on the current configuration (MAIN or BRANCH).
 	 *
+	 * Performance: O(n) where n = number of segments in switch (typically 3-4).
+	 * Currently adequate; if rendering performance becomes an issue (called from
+	 * SimulationCellRenderer.draw() on every frame), consider caching the result
+	 * and invalidating on configuration changes.
+	 *
 	 * @return Set of 2 segments forming the active path based on current conf
 	 * @throws IllegalStateException if no segments found for current configuration
 	 */
@@ -271,7 +286,9 @@ class DynamicRailSwitch(
 			val joinedEdges = staticRef.confs.getJoinedNodesAndEdges(segment)
 
 			// Search for the edge with value matching current conf
-			// Use explicit cast similar to getFollowingSegment() implementation
+			// Safe cast: EnumUnorientedGraph guarantees edges are Map<Cell.Segment, Conf>
+			// The graph structure ensures type safety at construction time, but Java generics
+			// don't preserve this information at runtime, requiring the explicit cast here.
 			for (e in (joinedEdges as Map<*, *>).entries) {
 				@Suppress("UNCHECKED_CAST")
 				val entry = e as Map.Entry<Cell.Segment, Conf>
