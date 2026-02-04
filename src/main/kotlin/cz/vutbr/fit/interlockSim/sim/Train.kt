@@ -121,11 +121,13 @@ class Train :
 					this@Train.stop()
 
 					logger.debug {
-						"Train $number: No reserved path available at $where, halting completely and waiting for dispatcher"
+						"Train $number: No reserved path available at $where, halting and waiting for dispatcher (will retry after 5s)"
 					}
-					// Do NOT stop the entire simulation!
-					passivate()
-					continue // Restart loop after passivation to re-check for next track section
+					// Use hold() with timeout instead of passivate() to prevent permanent freezing
+					// If path becomes available (dispatcher reserves), train will be reactivated
+					// If timeout expires, train will retry path request
+					hold(5.0)  // Wait 5 seconds before retrying
+					continue // Restart loop to retry path request
 				}
 				val nextLength: Double = next!!.length()
 				separatorAction(where, current, next)

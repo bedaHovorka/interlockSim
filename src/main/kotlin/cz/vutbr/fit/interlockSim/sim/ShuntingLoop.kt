@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -67,11 +68,16 @@ class ShuntingLoop(
 	private val endTime: Long,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
 ) : Interlocking(context), KoinComponent {
+	// Inject registry for idempotent path reservation checks
+	private val registry: PathReservationRegistry by lazy {
+		context.scope.get<PathReservationRegistry>()
+	}
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
-		// Increased to 3 to allow higher concurrency
-		private const val MAX_TRAINS: Int = 3
+		// MAX_TRAINS = 2 enforces physical capacity constraint
+		// All 5 generated trains complete sequentially via queueing mechanism
+		private const val MAX_TRAINS: Int = 2
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
@@ -262,6 +268,15 @@ class ShuntingLoop(
 				return false
 			}
 
+			// NEW: Idempotent check - skip if path already extends beyond this semaphore
+			if (registry.isPathExtendedBeyond(occupant.name, to)) {
+				logger.debug {
+					"Path already extends beyond ${to.name} for ${occupant.name}, " +
+						"skipping redundant reservation"
+				}
+				return true  // ← Early exit, like working tag's pattern
+			}
+
 			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
 			return tryReservePathFrom(to, occupant.name)
 		}
@@ -270,8 +285,18 @@ class ShuntingLoop(
 			// Check if path is already set up through this semaphore
 			val otherEnd = block.getSecondEnd(to)
 			if (block.isSetUpPath(env.toDynamic(otherEnd))) {
-				logger.debug { "Path already set up through ${to.name}, attempting extension" }
 				val trainName = requireSimulationNotNull(block.trainName)
+
+				// NEW: Idempotent check for reserved blocks too
+				if (registry.isPathExtendedBeyond(trainName, to)) {
+					logger.debug {
+						"Path already extends beyond ${to.name} for $trainName " +
+							"(reserved block), skipping"
+					}
+					return true
+				}
+
+				logger.debug { "Path already set up through ${to.name}, attempting extension" }
 				return tryReservePathFrom(to, trainName)
 			}
 		}

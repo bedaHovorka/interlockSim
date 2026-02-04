@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -96,6 +97,7 @@ class DefaultPathReservationService(
 	 * - Empty paths list → return NoPathExists
 	 * - All paths blocked → return AllPathsBlocked
 	 */
+	@Suppress("LongMethod")
 	override fun reservePath(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -196,6 +198,15 @@ class DefaultPathReservationService(
 							"reserved path has ${pathInfo.reservedPath.length()} elements"
 					}
 
+					// Step 2f.1: Register switches (Tier 2 - Issue #291)
+					val switches = extractUniqueSwitches(pathInfo)
+					if (switches.isNotEmpty()) {
+						registry.registerSwitches(trainId, switches)
+						logger.debug {
+							"reservePath: Registered ${switches.size} switches for $trainId"
+						}
+					}
+
 					// Step 2g: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
@@ -280,8 +291,20 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// Unregister from registry
+		// Tier 2: Unlock switches atomically with blocks (Issue #291)
+		val switches = registry.getSwitches(trainId)
+		switches.forEach { switch ->
+			try {
+				switch.unlock()
+				logger.debug { "releasePath: Unlocked switch ${switch.hashCode()} for $trainId" }
+			} catch (e: Exception) {
+				logger.warn(e) { "releasePath: Failed to unlock switch $switch" }
+			}
+		}
+
+		// Unregister blocks and switches from registry
 		registry.unregister(trainId)
+		registry.unregisterSwitches(trainId)
 
 		return blocks
 	}
@@ -1148,6 +1171,37 @@ class DefaultPathReservationService(
 					}
 					null
 				}
+			}
+		}
+	}
+
+	/**
+	 * Extract unique railway switches from a reserved path (Tier 2).
+	 *
+	 * Iterates through all PathElements in the path and collects DynamicRailSwitch instances.
+	 * Switches are deduplicated to ensure each switch appears only once in the result.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Iterate through path.reservedPath elements
+	 * 2. Filter for DynamicPathSeparator elements that are switches (isSwitch() == true)
+	 * 3. Cast to DynamicRailSwitch
+	 * 4. Return unique switches
+	 *
+	 * @param pathInfo The PathInfo containing the reserved path
+	 * @return List of unique DynamicRailSwitch instances in the path
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	private fun extractUniqueSwitches(
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+	): List<DynamicRailSwitch> {
+		val seen = mutableSetOf<DynamicRailSwitch>()
+		return pathInfo.reservedPath.mapNotNull { element ->
+			when {
+				element is DynamicPathSeparator && element.isSwitch() && element is DynamicRailSwitch -> {
+					if (seen.add(element)) element else null
+				}
+				else -> null
 			}
 		}
 	}

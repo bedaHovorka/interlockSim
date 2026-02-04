@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
@@ -106,6 +107,26 @@ class PathReservationRegistry(
 	 * Mapping: Block → Owning train ID
 	 */
 	private val blockToTrain = mutableMapOf<DynamicTrackBlock, String>()
+
+	/**
+	 * Mapping: Train ID → List of reserved switches (Tier 2)
+	 *
+	 * Tracks railway switches that are locked for specific trains.
+	 * Switches are locked during path reservation and unlocked during release.
+	 *
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock
+	 */
+	private val trainToSwitches = mutableMapOf<String, MutableList<DynamicRailSwitch>>()
+
+	/**
+	 * Mapping: Switch → Owning train ID (Tier 2)
+	 *
+	 * Reverse mapping to quickly determine which train owns a given switch.
+	 * Used for conflict detection during path reservation.
+	 *
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock
+	 */
+	private val switchToTrain = mutableMapOf<DynamicRailSwitch, String>()
 
 	/**
 	 * Mapping: Train ID → PathInfo metadata
@@ -352,6 +373,107 @@ class PathReservationRegistry(
 	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
 
 	/**
+	 * Register switches as reserved by a train (Tier 2).
+	 *
+	 * This creates bidirectional mappings for all switches in the list and locks them.
+	 * If the train already has reserved switches, the new switches are added to the existing list.
+	 *
+	 * ## Preconditions
+	 *
+	 * - No switch in the list should be already owned by a different train
+	 * - Caller is responsible for validating switches are not locked by another train
+	 *
+	 * ## State Changes
+	 *
+	 * For each switch:
+	 * - Adds switch to trainToSwitches[trainId]
+	 * - Sets switchToTrain[switch] = trainId
+	 * - Locks the switch
+	 *
+	 * @param trainId The train identifier
+	 * @param switches List of switches to register as reserved
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	fun registerSwitches(
+		trainId: String,
+		switches: List<DynamicRailSwitch>
+	) {
+		val switchList = trainToSwitches.getOrPut(trainId) { mutableListOf() }
+		switches.forEach { switch ->
+			if (switch !in switchList) {
+				switchList.add(switch)
+				// Lock switch when first registered to this train
+				switch.lock()
+				logger.info {
+					"registerSwitches: Locked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
+				}
+			}
+			switchToTrain[switch] = trainId
+		}
+
+		logger.info {
+			"registerSwitches: Registered ${switches.size} switches for '$trainId'"
+		}
+	}
+
+	/**
+	 * Unregister all switches reserved by a train (Tier 2).
+	 *
+	 * Removes all bidirectional mappings for the given train's switches and unlocks them.
+	 * This is used for simulation cleanup and forced release.
+	 *
+	 * ## State Changes
+	 *
+	 * - Unlocks all switches
+	 * - Removes trainToSwitches[trainId]
+	 * - Removes switchToTrain[switch] for all switches owned by this train
+	 *
+	 * @param trainId The train identifier
+	 * @return List of switches that were released (empty if train had no switches)
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	fun unregisterSwitches(trainId: String): List<DynamicRailSwitch> {
+		val switches = trainToSwitches[trainId] ?: return emptyList()
+
+		// Unlock and remove all switches from mappings
+		switches.forEach { switch ->
+			switch.unlock()
+			switchToTrain.remove(switch)
+			logger.info {
+				"unregisterSwitches: Unlocked switch ${switch.hashCode()} for '$trainId', locked=${switch.locked}"
+			}
+		}
+
+		// Remove train entry
+		trainToSwitches.remove(trainId)
+
+		logger.info {
+			"unregisterSwitches: Released ${switches.size} switches for '$trainId'"
+		}
+
+		return switches.toList()
+	}
+
+	/**
+	 * Get all switches registered to a train (Tier 2).
+	 *
+	 * @param trainId The train identifier
+	 * @return List of switches owned by the train (empty if none)
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	fun getSwitches(trainId: String): List<DynamicRailSwitch> =
+		trainToSwitches[trainId]?.toList() ?: emptyList()
+
+	/**
+	 * Get the train ID that owns a switch (Tier 2).
+	 *
+	 * @param switch The switch to query
+	 * @return Train ID if switch is registered, null otherwise
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	fun getSwitchOwner(switch: DynamicRailSwitch): String? = switchToTrain[switch]
+
+	/**
 	 * Get all blocks reserved by a train.
 	 *
 	 * @param trainId The train identifier
@@ -400,8 +522,8 @@ class PathReservationRegistry(
 			return
 		}
 
-		// Merge old and new PathInfo
-		val mergedPathInfo = mergePathInfo(oldPathInfo, newPathInfo)
+		// Merge old and new PathInfo (pass trainId for switch cleanup)
+		val mergedPathInfo = mergePathInfo(trainId, oldPathInfo, newPathInfo)
 		trainToPathInfo[trainId] = mergedPathInfo
 
 		logger.debug {
@@ -430,7 +552,8 @@ class PathReservationRegistry(
 	 * 2. Create new ArrayPath and add all elements from old path
 	 * 3. Find overlap point (old.target == new.start)
 	 * 4. Add elements from new path, skipping first occurrence if it overlaps
-	 * 5. Merge entry directions (new overwrites old for same blocks)
+	 * 5. Distinguish legitimate circular routes from infinite loop bugs
+	 * 6. Merge entry directions (new overwrites old for same blocks)
 	 *
 	 * ## Example
 	 *
@@ -442,15 +565,22 @@ class PathReservationRegistry(
 	 *
 	 * ## Assumptions
 	 *
-	 * - Railway networks are acyclic within a single path (no circular routes)
 	 * - new.start appears exactly ONCE in new.reservedPath (at the beginning)
 	 * - old.target and new.start may overlap (direct continuation)
+	 * - Circular routes are ALLOWED if train completes one full loop back to original start
+	 * - Repeated cycles (>1 loop) are REJECTED to prevent infinite loops
 	 *
 	 * ## Circular Route Handling
 	 *
-	 * Circular routes (where start appears >1 time) are EXPLICITLY REJECTED
-	 * with IllegalStateException. Railway interlocking systems typically prohibit
-	 * circular routes within a single path reservation.
+	 * **Shunting Loop Scenario (LEGITIMATE):**
+	 * - Train starts at A, travels A → B → C → A (one complete loop)
+	 * - old.start = A, new path returns to A
+	 * - This is ALLOWED: train completes circular shunting operation
+	 *
+	 * **Infinite Loop Bug (REJECTED):**
+	 * - Train oscillates: A → B → A → B → A (repeated back-and-forth)
+	 * - Separator appears MULTIPLE times in merged path (not just returning to original start)
+	 * - This is TRUNCATED: prevents TOCROA infinite loop bug (Issue #301)
 	 *
 	 * ## Entry Direction Merging
 	 *
@@ -463,8 +593,12 @@ class PathReservationRegistry(
 	 * @throws IllegalStateException if new.start appears multiple times in path
 	 * @since Issue #296 Phase 8
 	 */
-	private fun mergePathInfo(old: PathInfo, new: PathInfo): PathInfo {
-		logger.trace { "mergePathInfo: merging old path ${old.start}->${old.target} with new ${new.start}->${new.target}" }
+	@Suppress("LongMethod", "CyclomaticComplexMethod")
+	private fun mergePathInfo(trainId: String, old: PathInfo, new: PathInfo): PathInfo {
+		logger.trace {
+			"mergePathInfo: merging old path ${old.start}->${old.target} " +
+				"with new ${new.start}->${new.target} for '$trainId'"
+		}
 
 		// Step 0: Validate circular route assumption
 		val occurrences = new.reservedPath.count { it == new.start }
@@ -486,8 +620,16 @@ class PathReservationRegistry(
 		var actualTarget: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator = new.target
 
 		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
+		val truncatedSwitches = mutableListOf<DynamicRailSwitch>()  // Tier 3: Track truncated switches
 		for (element in new.reservedPath) {
-			if (cycleDetected) break  // Stop if cycle was detected
+			if (cycleDetected) {
+				// Tier 3: Collect switches from truncated portion of path
+				if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
+					element.isSwitch() && element is DynamicRailSwitch) {
+					truncatedSwitches.add(element)
+				}
+				continue  // Keep collecting truncated switches
+			}
 
 			if (skipFirst && !skipped && element == new.start) {
 				skipped = true  // Skip this occurrence (already in old path)
@@ -495,27 +637,76 @@ class PathReservationRegistry(
 					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
 				}
 			} else {
-				// Check for cycle: if this separator already exists in merged path, stop
+				// Smart cycle detection: allow ONE full circular loop (2 occurrences), prevent infinite loops (3+)
 				if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
 					mergedPath.any { it == element }) {
-					logger.info {
-						"mergePathInfo: CYCLE DETECTED - separator $element already in merged path, " +
-							"truncating to avoid infinite loop (old: ${old.start}→${old.target}, " +
-							"new: ${new.start}→${new.target})"
-					}
-					cycleDetected = true
-					// Update target to the last valid separator before the cycle
-					// Find the last PathSeparator in mergedPath (before this cycle point)
-					val lastSeparator = mergedPath.findLast { it is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator }
-					if (lastSeparator is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
-						actualTarget = lastSeparator
+
+					// Count how many times this separator already appears in merged path
+					val occurrenceCount = mergedPath.count { it == element }
+
+					if (occurrenceCount >= 2) {
+						// This would be the 3rd occurrence - infinite loop detected
 						logger.info {
-							"mergePathInfo: Updated target from ${new.target} to $actualTarget (last separator before cycle)"
+							"mergePathInfo: INFINITE LOOP DETECTED - separator $element appears $occurrenceCount times " +
+								"in merged path, would be ${occurrenceCount + 1}th occurrence. Truncating to prevent infinite loop " +
+								"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+						}
+						cycleDetected = true
+						// Update target to the last valid separator before the cycle
+						val lastSeparator = mergedPath.findLast { it is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator }
+						if (lastSeparator is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
+							actualTarget = lastSeparator
+							logger.info {
+								"mergePathInfo: Updated target from ${new.target} to $actualTarget (last separator before cycle)"
+							}
+						}
+						// Tier 3: Collect THIS element if it's a switch (first truncated element)
+						if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
+							element.isSwitch() && element is DynamicRailSwitch) {
+							truncatedSwitches.add(element)
+						}
+						continue  // Keep collecting truncated switches
+					} else {
+						// 2nd occurrence - legitimate circular route (train completing one loop)
+						logger.info {
+							"mergePathInfo: LEGITIMATE CIRCULAR ROUTE - separator $element appears ${occurrenceCount + 1}x " +
+								"in path (train '$trainId' progressing through circular shunting loop). " +
+								"Allowing (old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+						}
+						mergedPath.add(element)
+					}
+				} else {
+					mergedPath.add(element)
+				}
+			}
+		}
+
+		// Tier 3: Unlock and unregister truncated switches (Issue #291 - Cycle Detection Cleanup)
+		if (truncatedSwitches.isNotEmpty()) {
+			logger.info {
+				"mergePathInfo: Unlocking and unregistering ${truncatedSwitches.size} switches " +
+					"from truncated path portion for '$trainId'"
+			}
+			truncatedSwitches.forEach { switch ->
+				try {
+					// Unlock the switch
+					switch.unlock()
+					// Unregister from registry
+					val switchList = trainToSwitches[trainId]
+					if (switchList != null && switch in switchList) {
+						switchList.remove(switch)
+						switchToTrain.remove(switch)
+						logger.info {
+							"mergePathInfo: Unregistered and unlocked switch ${switch.hashCode()} from '$trainId' after cycle detection"
+						}
+					} else {
+						logger.debug {
+							"mergePathInfo: Switch ${switch.hashCode()} was not registered to '$trainId', only unlocked"
 						}
 					}
-					break  // Stop adding elements
+				} catch (e: Exception) {
+					logger.warn(e) { "mergePathInfo: Failed to cleanup switch $switch" }
 				}
-				mergedPath.add(element)
 			}
 		}
 
@@ -538,6 +729,73 @@ class PathReservationRegistry(
 	}
 
 	/**
+	 * Check if path extends beyond the given separator.
+	 *
+	 * Prevents redundant reservation attempts by dispatcher while allowing path extensions.
+	 * This implements an idempotent check similar to the working tag's `isSetUpPath()` pattern.
+	 *
+	 * ## Usage Pattern
+	 *
+	 * ```kotlin
+	 * // Before attempting path extension from a semaphore:
+	 * if (registry.isPathExtendedBeyond(trainId, currentSemaphore)) {
+	 *     // Path already extends beyond this semaphore, skip reservation
+	 *     return true
+	 * }
+	 * // Otherwise, proceed with extension
+	 * pathReservationService.reservePathToAnyNextSemaphore(trainId, currentSemaphore)
+	 * ```
+	 *
+	 * ## Path Extension Check
+	 *
+	 * A path is considered extended beyond a separator if:
+	 * 1. PathInfo exists for this train
+	 * 2. The separator appears in the reserved path
+	 * 3. There is at least one more element AFTER the separator in the path
+	 *
+	 * This allows the dispatcher to extend paths that END at a semaphore but prevents
+	 * redundant reservations when the path already extends beyond it.
+	 *
+	 * ## Benefits
+	 *
+	 * - Prevents dispatcher from repeatedly calling reservePathToAnyNextSemaphore()
+	 * - Allows path extensions when train is approaching a semaphore
+	 * - Reduces cycle detection trigger rate
+	 * - Matches working tag's idempotent behavior
+	 * - Cheap O(n) check (linear scan of path elements)
+	 *
+	 * @param trainId Train identifier
+	 * @param separator Semaphore/separator to check
+	 * @return true if path already extends beyond this separator, false otherwise
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Dispatcher State Tracking
+	 */
+	fun isPathExtendedBeyond(
+		trainId: String,
+		separator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+	): Boolean {
+		val pathInfo = trainToPathInfo[trainId] ?: return false
+
+		// Find the separator in the path
+		val separatorIndex = pathInfo.reservedPath.indexOfLast { it == separator }
+		if (separatorIndex == -1) {
+			// Separator not in path
+			return false
+		}
+
+		// Path extends beyond if there are elements after the separator
+		val extendsBeyond = separatorIndex < pathInfo.reservedPath.size - 1
+
+		if (extendsBeyond) {
+			logger.debug {
+				"Path already extends beyond $separator for '$trainId' " +
+					"(${pathInfo.reservedPath.size} elements, separator at index $separatorIndex)"
+			}
+		}
+
+		return extendsBeyond
+	}
+
+	/**
 	 * Get PathInfo for a train.
 	 *
 	 * Retrieves complete path metadata including entry directions.
@@ -552,12 +810,14 @@ class PathReservationRegistry(
 	/**
 	 * Clear all registrations.
 	 *
-	 * Removes all train-to-block and block-to-train mappings.
+	 * Removes all train-to-block, block-to-train, train-to-switch, and switch-to-train mappings.
 	 * Used for simulation reset or cleanup.
 	 */
 	fun clear() {
 		trainToBlocks.clear()
 		blockToTrain.clear()
+		trainToSwitches.clear()
+		switchToTrain.clear()
 		trainToPathInfo.clear()
 	}
 

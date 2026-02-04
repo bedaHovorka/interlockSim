@@ -97,6 +97,11 @@ class DynamicRailSwitch(
 		if (pathConf != conf) {
 			throw PathSeparatorChangeException("cancelPathSetup: Switch is not configured (neccesarry except?)", this)
 		}
+		// Tier 1: Unlock switch after canceling path setup (Issue #291)
+		unlock()
+		logger.debug {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} unlocked after cancelPathSetup"
+		}
 	}
 
 	override fun allowedSpeed(): Double {
@@ -117,6 +122,11 @@ class DynamicRailSwitch(
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		conf = newConf
+		// Tier 1: Lock switch after configuration (Issue #291)
+		lock()
+		logger.info {
+			"${jDisco.Process.time()} Switch ${this.hashCode()} LOCKED after setUpPath, locked=$locked"
+		}
 	}
 
 	@Throws(PathSeparatorChangeException::class)

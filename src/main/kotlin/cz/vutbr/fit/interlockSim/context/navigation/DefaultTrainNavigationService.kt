@@ -420,7 +420,38 @@ class DefaultTrainNavigationService(
 		var current: TrackSection? = initialNext
 		val path = ArrayPath(context)
 
+		// Track visited (separator, direction) pairs for cycle detection
+		// Direction = which track we came from (previous)
+		val visited = mutableSetOf<Pair<PathSeparator, TrackSection?>>()
+
 		do {
+			// Cycle detection: Check if we've visited this separator from this direction before
+			val directedPosition = Pair(separator, previous)
+			if (directedPosition in visited) {
+				logger.warn {
+					"buildPathWithDirection: cycle detected at $separator from $previous, " +
+					"path length ${path.length()} elements"
+				}
+				// Cycle detected - check if we're at a valid stopping point
+				if (separator is OrientedPathSeparator) {
+					if (context.isSeparatorInDirection(separator, current, previous)) {
+						path.add(separator)
+						logger.debug {
+							"buildPathWithDirection: completed circular route, " +
+							"final path length ${path.length()} elements"
+						}
+						return path
+					}
+				}
+				// Cycle but not at valid exit point - path incomplete
+				logger.error {
+					"buildPathWithDirection: cycle detected but not at oriented semaphore, " +
+					"path incomplete (${path.length()} elements)"
+				}
+				return null
+			}
+			visited.add(directedPosition)
+
 			path.add(separator)
 			if (current != null) {
 				path.add(current)
