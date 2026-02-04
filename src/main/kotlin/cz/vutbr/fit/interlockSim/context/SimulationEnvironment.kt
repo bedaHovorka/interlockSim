@@ -200,6 +200,66 @@ interface SimulationEnvironment {
 	 */
 	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 
+	// ========================================
+	// Grid and Graph Access
+	// ========================================
+
+	/**
+	 * Get the railway network grid for spatial cell access.
+	 *
+	 * Used by path reservation service for:
+	 * - Grid location lookup (getRailWayNetGrid().getLocation(separator))
+	 * - Cell scanning for semaphore discovery
+	 * - Network topology analysis
+	 *
+	 * ## Navigation Service Requirements
+	 *
+	 * PathReservationService needs grid access to:
+	 * 1. Find separator locations in the network
+	 * 2. Query track connections at specific grid coordinates
+	 * 3. Scan grid cells for semaphore discovery (reservePathToAny)
+	 *
+	 * ## Implementation Note
+	 *
+	 * This method is part of the Context<C, T> parent interface.
+	 * DefaultSimulationContext already provides the implementation.
+	 *
+	 * @return RailwayNetGrid<Cell> containing all grid cells
+	 * @see Context.getRailWayNetGrid
+	 * @since Fix type safety violations (SimulationEnvironment extension)
+	 */
+	fun getRailWayNetGrid(): cz.vutbr.fit.interlockSim.context.RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
+
+	/**
+	 * Get the track block graph for topology queries.
+	 *
+	 * Used by path reservation service for:
+	 * - Edge lookup by segment (graph.assignedEdges(location))
+	 * - Track connectivity analysis
+	 * - Path validation and routing
+	 *
+	 * ## Navigation Service Requirements
+	 *
+	 * PathReservationService needs graph access to:
+	 * 1. Query outgoing edges from a separator location
+	 * 2. Navigate track connections during path search
+	 * 3. Calculate travel directions for multi-path discovery
+	 *
+	 * ## Implementation Note
+	 *
+	 * This method is part of the Context<C, T> parent interface.
+	 * DefaultSimulationContext already provides the implementation.
+	 *
+	 * @return ExtendedUnorientedGraph with Point nodes and DynamicTrackBlock edges
+	 * @see Context.getGraph
+	 * @since Fix type safety violations (SimulationEnvironment extension)
+	 */
+	fun getGraph(): cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph<
+		cz.vutbr.fit.interlockSim.util.Point,
+		cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock,
+		cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+	>
+
 	/**
 	 * Configure semaphore signal appearance after path reservation.
 	 *

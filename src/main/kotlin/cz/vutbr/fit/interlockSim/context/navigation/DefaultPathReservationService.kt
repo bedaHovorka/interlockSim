@@ -493,9 +493,8 @@ class DefaultPathReservationService(
 		}
 
 		// Step 3: Find the track section connected to the forward segment
-		// Note: environment is actually SimulationContext, which provides getRailWayNetGrid/getGraph
-		val context = environment as SimulationContext
-		val location = context.getRailWayNetGrid().getLocation(start)
+		// Use interface methods (added to SimulationEnvironment for navigation services)
+		val location = environment.getRailWayNetGrid().getLocation(start)
 		if (location == null) {
 			logger.warn {
 				"reservePathToAnyNextSemaphore: No location found for $start"
@@ -507,7 +506,7 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Location=$location"
 		}
 
-		val next = context.getGraph().assignedEdges(location)[forwardSegment]
+		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
 		if (next == null) {
 			logger.warn {
 				"reservePathToAnyNextSemaphore: No outgoing track section from $start at $location in direction $forwardSegment"
@@ -860,13 +859,8 @@ class DefaultPathReservationService(
 	 * @return List of all DynamicRailSemaphore instances in the network
 	 */
 	private fun getAllSemaphores(): List<DynamicRailSemaphore> {
-		// Safe cast: environment is always SimulationContext in practice
-		val context = environment as? SimulationContext
-			?: throw IllegalStateException(
-				"getAllSemaphores requires SimulationContext, but got ${environment::class.simpleName}"
-			)
-
-		val grid = context.getRailWayNetGrid()
+		// Use interface method (added to SimulationEnvironment for navigation services)
+		val grid = environment.getRailWayNetGrid()
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
 		for (x in 0 until grid.getCols()) {
@@ -979,8 +973,6 @@ class DefaultPathReservationService(
 		val visited = mutableSetOf<PathSeparator>()
 		visited.add(start)
 
-		val context = environment as SimulationContext
-
 		while (queue.isNotEmpty()) {
 			val (currentSep, currentSection) = queue.removeAt(0)
 			if (currentSection == null) continue
@@ -994,7 +986,7 @@ class DefaultPathReservationService(
 			// Only explore outgoing paths if we haven't reached a stopping point
 			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
 			if (!stopExploration) {
-				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
+				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, queue)
 			}
 		}
 
@@ -1049,11 +1041,10 @@ class DefaultPathReservationService(
 		currentSep: PathSeparator,
 		currentSection: TrackSection,
 		start: PathSeparator,
-		context: SimulationContext,
 		queue: MutableList<Pair<PathSeparator, TrackSection?>>
 	) {
-		val grid = context.getRailWayNetGrid()
-		val graph = context.getGraph()
+		val grid = environment.getRailWayNetGrid()
+		val graph = environment.getGraph()
 		val location = grid.getLocation(separator) ?: return
 		@Suppress("UNCHECKED_CAST")
 		val edges = graph.assignedEdges(location) as Map<*, *>
@@ -1119,12 +1110,11 @@ class DefaultPathReservationService(
 		start: PathSeparator,
 		next: TrackSection
 	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment {
-		val context = environment as SimulationContext
-		val location = context.getRailWayNetGrid().getLocation(start)
+		val location = environment.getRailWayNetGrid().getLocation(start)
 			?: throw IllegalStateException("No location for $start")
 
 		@Suppress("UNCHECKED_CAST")
-		val edges = context.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
+		val edges = environment.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
 
 		// Find which segment connects to 'next' track section
 		// Note: edges is Map<Segment, DynamicTrackBlock> (DynamicTrackBlock implements TrackSection)
@@ -1266,7 +1256,8 @@ class DefaultPathReservationService(
 		val pathElements = pathInfo.reservedPath.toList()
 
 		// Safe cast: environment is always SimulationContext in practice (provides getSegment())
-		val context = environment as? SimulationContext
+		// Note: getSegment() is in SimulationContext interface, not SimulationEnvironment
+		val context = environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
 			?: throw IllegalStateException(
 				"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
 				"but got ${environment::class.simpleName}"

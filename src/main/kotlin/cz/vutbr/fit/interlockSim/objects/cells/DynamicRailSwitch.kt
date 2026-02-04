@@ -158,13 +158,12 @@ class DynamicRailSwitch(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		val map = staticRef.confs.getJoinedNodesAndEdges(from)
-		// Safe cast: EnumUnorientedGraph guarantees edges are Map<Cell.Segment, Conf>
-		// The graph structure ensures type safety at construction time, but Java generics
-		// don't preserve this information at runtime, requiring the explicit cast here.
-		for (e in (map as Map<*, *>).entries) {
-			@Suppress("UNCHECKED_CAST")
-			val entry = e as Map.Entry<Cell.Segment, Conf>
-			if (entry.value == conf) return entry.key
+		// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
+		// Note: Java Map.entrySet() provides entries, cast needed for destructuring
+		@Suppress("UNCHECKED_CAST")
+		val typedEntries = map.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
+		for ((segment, configuration) in typedEntries) {
+			if (configuration == conf) return segment
 		}
 		return null
 	}
@@ -292,14 +291,13 @@ class DynamicRailSwitch(
 			val joinedEdges = staticRef.confs.getJoinedNodesAndEdges(segment)
 
 			// Search for the edge with value matching current conf
-			// Safe cast: EnumUnorientedGraph guarantees edges are Map<Cell.Segment, Conf>
-			// The graph structure ensures type safety at construction time, but Java generics
-			// don't preserve this information at runtime, requiring the explicit cast here.
-			for (e in (joinedEdges as Map<*, *>).entries) {
-				@Suppress("UNCHECKED_CAST")
-				val entry = e as Map.Entry<Cell.Segment, Conf>
-				if (entry.value == conf) {
-					return setOf(segment, entry.key)
+			// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
+			// Note: Java Map.entrySet() provides entries, cast needed for destructuring
+			@Suppress("UNCHECKED_CAST")
+			val typedEntries = joinedEdges.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
+			for ((connectedSegment, configuration) in typedEntries) {
+				if (configuration == conf) {
+					return setOf(segment, connectedSegment)
 				}
 			}
 		}
