@@ -107,6 +107,18 @@ gpr.key=your-personal-access-token
 ./gradlew runEditor
 ```
 
+**Run animated GUI simulation (NEW - AnimatedSim milestone):**
+```bash
+./gradlew runExampleGui
+```
+
+This launches the shunting loop example with real-time animated visualization:
+- Trains move smoothly across the track network (30 FPS)
+- Track blocks change color: Gray (FREE) → Yellow (RESERVED) → Red (OCCUPIED)
+- Semaphores show RED/GREEN signals
+- Event timeline displays simulation events with filtering
+- Time display updates at 10 Hz
+
 **Run custom example:**
 ```bash
 ./gradlew runExample -PexampleName=shuntingLoop -PendTime=300
@@ -154,9 +166,17 @@ java -jar build/libs/interlockSim.jar sim [xmlFile]
 java -jar build/libs/interlockSim.jar edit [xmlFile]
 ```
 
-**Built-in examples:**
+**Built-in examples (console output):**
 ```bash
 java -jar build/libs/interlockSim.jar example [exampleName] [endTime]
+```
+
+**Built-in examples with animated GUI (NEW):**
+```bash
+java -jar build/libs/interlockSim.jar exampleGui [exampleName] [endTime]
+
+# Example: Run shunting loop with animation for 300 time units
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 ```
 
 To list available examples, run:
