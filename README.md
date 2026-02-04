@@ -197,6 +197,10 @@ Run simulation examples with animated GUI:
 java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 ```
 
+![AnimatedSim GUI](text/img/Screenshot%20at%202026-02-04%2013-47-30.png)
+
+*The animated GUI showing real-time train movement with dynamic track coloring (Gray/Yellow/Red), signal states (RED/GREEN), and event timeline with simulation time display.*
+
 **Features:**
 - **Real-time train animation** - Watch trains move smoothly across the track network (30 FPS)
 - **Dynamic track coloring** - Tracks change color based on state:
