@@ -11,6 +11,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### AnimatedSim Milestone (Issues #201-#208, #273, 2026-01-22 to 2026-02-04) ⭐ NEW
+
+Complete animated GUI visualization system for real-time railway simulation.
+
+**Core Animation Infrastructure (#201-#205)**:
+- **AnimationState** - Immutable state snapshots for thread-safe rendering
+  - TrainState (position, velocity, acceleration, grid location)
+  - TrackState (FREE/RESERVED/OCCUPIED with ownership tracking)
+  - SignalState (RED/GREEN semaphore visualization)
+  - SwitchState (MAIN/BRANCH position display)
+- **AnimationController** - 30 FPS rendering with EDT marshaling
+  - Swing Timer-driven repaint loop (33ms interval)
+  - PropertyChangeListener integration for event-driven updates
+  - Cache optimization for O(1) state queries (20-80× faster than polling)
+  - Proper resource cleanup (timers, listeners, caches)
+- **AnimationStateCapture** - Efficient state snapshot creation
+  - Single grid scan at startup, reused throughout animation
+  - Dynamic cell detection (DynamicRailSemaphore, DynamicRailSwitch support)
+- **AnimatedSimulationCellRenderer** - State-based color rendering
+  - InOut-based color coding for train direction visualization
+  - Track state colors: Gray (FREE), Yellow (RESERVED), Red (OCCUPIED)
+- **ControlPanel** - Time display and status updates (10 Hz)
+- **EventTimelinePanel** - Scrollable event log with type-based filtering
+  - Path commands, node events, train events, continuous updates
+  - Real-time event display with HH:MM:SS.mmm timestamps
+
+**Entry Point (#206)**:
+- `exampleGui` command mode for animated simulation examples
+- Gradle task: `./gradlew runExampleGui`
+- Manual: `java -jar interlockSim.jar exampleGui [name] [endTime]`
+
+**Performance Optimizations (#207, Performance commits)**:
+- Event-driven animation (eliminated O(n²) polling overhead)
+- AnimationController caching: 20-80× faster state updates
+- TrainPositionCalculator O(1) cache: 2,500× faster position lookups
+- Smooth 30 FPS with multiple trains, zero degradation
+
+**Bug Fixes**:
+- Issue #278: DynamicRailSemaphore signal state capture
+- Issue #291: Round-robin path selection for multi-track usage
+- Issue #280: Train deadlock resolution
+- Animation timer memory leak fixes
+
+**Quality Verification (#273)**:
+- Resource cleanup verified (timers, listeners, caches)
+- Code quality: Zero detekt violations
+- KDoc coverage: 100% across 8 animation files (~2,013 lines)
+- Comprehensive test report: `docs/ISSUE_273_TEST_EXECUTION_REPORT.md`
+
+**Documentation**:
+- `docs/IMPLEMENTATION_SUMMARY_ISSUE_205.md` - Complete implementation guide
+- `docs/MANUAL_TEST_PLAN_ISSUE_205.md` - Manual testing procedures
+- `docs/ANIMATED_SIM_MILESTONE_PREP.md` - Milestone preparation and retrospective
+- `docs/ANIMATED_SIM_STATUS_MEETING_2026_02_04.md` - Team status meeting summary
+- README.md updated with AnimatedSim feature section
+- CLAUDE.md updated with `exampleGui` command usage
+
+**Architecture Achievements**:
+- Clean separation: animation state (immutable) vs. rendering (stateful)
+- Thread-safe: EDT enforcement, immutable snapshots, marshaling
+- Performant: Caching, event-driven, optimized update rates
+- Maintainable: Comprehensive KDoc, clean architecture
+
+**Test Coverage**: 1,321+ tests passing, zero regressions, golden output validated
+
+---
+
 #### Path Discovery Restructuring (Issue #292)
 - **TopologyNavigator** - Static topology navigation service for pure graph traversal
   - `EditingContext.getTopologyNavigator()` - Access topology navigator from editing context

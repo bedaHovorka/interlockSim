@@ -15,6 +15,8 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
+import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.gui.gridcanvas.AnimatedSimulationCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.CellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.GridCanvasEditingPopupMenu
@@ -57,6 +59,20 @@ import javax.swing.SwingConstants
  * - Use [getSimulationContext] to access SimulationContext (only when in SIMULATION state)
  *
  * The state machine ensures type-safe access to the appropriate context type.
+ *
+ * ## Animation and Event Logging (Issue #205)
+ *
+ * When in simulation mode, this component integrates with:
+ * - [cz.vutbr.fit.interlockSim.gui.animation.AnimationController] - 30 FPS rendering and state management
+ * - [cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel] - Event logging display (optional)
+ *
+ * Use [setEventTimelinePanel] before calling [setContext] with a [SimulationContext] to enable
+ * event logging. Events are forwarded from AnimationController to the panel via PropertyChangeListener.
+ *
+ * Use [getAnimationController] to access the current animation state (e.g., for time display updates).
+ *
+ * @see setEventTimelinePanel
+ * @see getAnimationController
  */
 class RailwayNetGridCanvas :
 	JComponent(),
@@ -235,6 +251,13 @@ class RailwayNetGridCanvas :
 	private var toolbarArgs: Array<Any?>? = null
 	private var selectedKey: cz.vutbr.fit.interlockSim.util.Point? = null
 
+	// Animation support (Issue #202)
+	private var animationController: AnimationController? = null
+	private var animatedRenderer: CellRenderer? = null
+
+	// Event timeline integration (Issue #205)
+	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
+
 	init {
 		background = Color.BLACK
 		autoscrolls = true
@@ -247,13 +270,25 @@ class RailwayNetGridCanvas :
 	 *
 	 * Explicitly handles both EditingContext and SimulationContext without assuming
 	 * inheritance relationship between them (preparation for Issue #153.5).
+	 *
+	 * ## Animation Support (Issue #202)
+	 *
+	 * When switching to [SimulationContext], this method creates and starts an
+	 * [AnimationController] for 30 FPS animated rendering with state-based colors.
+	 * The controller is automatically stopped when switching away from simulation mode.
 	 */
 	fun setContext(newContext: Context<*, *>) {
+		// Stop any existing animation controller
+		stopAnimation()
+
 		when (newContext) {
 			is SimulationContext -> {
 				// Handle SimulationContext first (more specific type)
 				state = State.SIMULATION
 				changeListeners(editListener, simulationControlListener)
+
+				// Create and start animation infrastructure (Issue #202)
+				startAnimation(newContext)
 			}
 			is EditingContext -> {
 				// Handle EditingContext (base editing functionality)
@@ -269,6 +304,88 @@ class RailwayNetGridCanvas :
 		}
 		changeContext(newContext)
 	}
+
+	/**
+	 * Start animation controller for simulation mode (Issue #202).
+	 *
+	 * Creates [AnimationController] and [AnimatedSimulationCellRenderer] for
+	 * state-based animated rendering at 30 FPS.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun startAnimation(simulationContext: SimulationContext) {
+		// Create animation controller with event timeline integration (Issue #205)
+		animationController = AnimationController(simulationContext, this, eventTimelinePanel)
+
+		// Create animated renderer with state-based coloring
+		animatedRenderer = AnimatedSimulationCellRenderer(
+			CELL_WIDTH,
+			CELL_HEIGHT,
+			animationController!!
+		)
+
+		// Start animation loop (30 FPS rendering)
+		animationController?.start()
+	}
+
+	/**
+	 * Stop animation controller if running (Issue #202).
+	 *
+	 * Cleans up animation resources when switching away from simulation mode
+	 * or when switching between different simulation contexts.
+	 *
+	 * **Scenarios:**
+	 * - Switching from simulation mode to editing mode
+	 * - Switching between different simulation contexts
+	 * - Frame is closing (explicit cleanup via cleanupAnimation())
+	 *
+	 * **Idempotent:** Safe to call multiple times (no-op if already stopped).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun stopAnimation() {
+		animationController?.stop()
+		animationController = null
+		animatedRenderer = null
+	}
+
+	/**
+	 * Clean up animation resources explicitly.
+	 * Should be called when canvas is being disposed or parent Frame is closing.
+	 * Safe to call multiple times (idempotent).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun cleanupAnimation() {
+		stopAnimation()
+	}
+
+	/**
+	 * Set the event timeline panel for event logging during simulation (Issue #205).
+	 *
+	 * This panel receives simulation events (path settings, train movements, etc.)
+	 * from the [AnimationController]. Must be called before switching to simulation mode
+	 * to ensure events are properly logged.
+	 *
+	 * **Must be called from EDT.**
+	 *
+	 * @param panel The event timeline panel to receive events, or null to disable event logging
+	 */
+	fun setEventTimelinePanel(panel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel?) {
+		eventTimelinePanel = panel
+	}
+
+	/**
+	 * Get the current animation controller if running (Issue #205).
+	 *
+	 * Used by [cz.vutbr.fit.interlockSim.gui.Frame] to access animation state
+	 * for time display updates in [cz.vutbr.fit.interlockSim.gui.animation.ControlPanel].
+	 *
+	 * **Must be called from EDT.**
+	 *
+	 * @return The current animation controller, or null if not in simulation mode
+	 */
+	fun getAnimationController(): AnimationController? = animationController
 
 	// Change mouse listeners based on mode
 	private fun changeListeners(
@@ -310,11 +427,28 @@ class RailwayNetGridCanvas :
 
 	/**
 	 * Paint all cells in the railway grid
+	 *
+	 * ## Animation Rendering (Issue #202, #203)
+	 *
+	 * When in simulation mode with animation enabled, uses [AnimatedSimulationCellRenderer]
+	 * for state-based color rendering and train overlays. Falls back to static renderer otherwise.
+	 *
+	 * ## Rendering Order
+	 *
+	 * 1. Grid cells (tracks, signals, switches) - bottom layer
+	 * 2. Train overlays - top layer (only in animation mode)
+	 * 3. Grid lines (if enabled) - guide layer
+	 * 4. Selected cell highlight (if any) - interaction feedback
 	 */
 	private fun paint(g: Graphics2D) {
 		if (context == null) return
 		cancelClip(g)
 
+		// Use animated renderer if available (simulation mode with animation),
+		// otherwise use static renderer from state enum
+		val renderer = animatedRenderer ?: state.cellRenderer
+
+		// Render all grid cells (bottom layer)
 		val grid = context!!.getRailWayNetGrid()
 		for (entry in grid) {
 			val key = entry.key
@@ -325,11 +459,19 @@ class RailwayNetGridCanvas :
 
 			g.translate(x, y)
 			g.clipRect(0, 0, CELL_WIDTH + 1, CELL_HEIGHT + 1)
-			state.cellRenderer?.draw(g, cell)
+			renderer?.draw(g, cell)
 			g.translate(-x, -y)
 			cancelClip(g)
 		}
 
+		// Render train overlays (top layer, only in animation mode)
+		val animRenderer = animatedRenderer
+		if (animRenderer is AnimatedSimulationCellRenderer) {
+			cancelClip(g)
+			animRenderer.drawAllTrains(g, CELL_WIDTH, CELL_HEIGHT)
+		}
+
+		// Render grid lines and selection highlight
 		if (showGrid) paintGrid(g)
 		if (selectedKey != null) paintMarkSelected(g)
 	}

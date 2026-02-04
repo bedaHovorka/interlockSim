@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
@@ -28,8 +29,8 @@ object DynamicWrapperUtils {
 	 * Unwrap a PathSeparator to its static reference for identity comparison.
 	 *
 	 * This function handles the common pattern of extracting static references from
-	 * dynamic wrappers (DynamicInOut, DynamicRailSemaphore). If the separator is already
-	 * static (neither DynamicInOut nor DynamicRailSemaphore), it returns the input unchanged.
+	 * dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch).
+	 * If the separator is already static (not a dynamic wrapper), it returns the input unchanged.
 	 * If the input is null, returns null.
 	 *
 	 * **Use case:** Identity-based comparison and caching where we need to compare the
@@ -51,6 +52,7 @@ object DynamicWrapperUtils {
 			null -> null
 			is DynamicInOut -> separator.staticRef
 			is DynamicRailSemaphore -> separator.staticRef
+			is DynamicRailSwitch -> separator.staticRef
 			else -> separator
 		}
 }

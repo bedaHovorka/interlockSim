@@ -66,8 +66,14 @@ import java.util.Queue
 class ShuntingLoop(
 	context: SimulationContext,
 	private val endTime: Long,
+	private val enableRealTimeSync: Boolean = false,
+	private val speedMultiplier: Double = 1.0,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
 ) : Interlocking(context), KoinComponent {
+	init {
+		require(speedMultiplier > 0.0) { "Speed multiplier must be positive, got: $speedMultiplier" }
+	}
+
 	// Inject registry for idempotent path reservation checks
 	private val registry: PathReservationRegistry by lazy {
 		context.scope.get<PathReservationRegistry>()
@@ -96,8 +102,9 @@ class ShuntingLoop(
 		}
 
 		override fun iteration() {
-			val endTime: Long = System.currentTimeMillis()
-			val sleepTime: Long = 1000 - (endTime - beginTime)
+			val iterationEndTime: Long = System.currentTimeMillis()
+			val targetInterval = (1000.0 / speedMultiplier).toLong()
+			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
 			if (sleepTime > 10) {
 				try {
 					Thread.sleep(sleepTime)
@@ -186,7 +193,12 @@ class ShuntingLoop(
 
 	override fun startAction() {
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
-		// activate(RealTimeSynch())
+
+		// Conditionally activate real-time synchronization for GUI mode
+		if (enableRealTimeSync) {
+			activate(RealTimeSynch())
+		}
+
 		activate(generator)
 	}
 
@@ -199,6 +211,8 @@ class ShuntingLoop(
 		}
 		// nove vlaky a inouty
 		approveTrains()
+		// Polling interval: 1.0s (matches baseline timing)
+		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
 		for (block in innerTrackBlocks) checkBothEnds(block)
 		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)

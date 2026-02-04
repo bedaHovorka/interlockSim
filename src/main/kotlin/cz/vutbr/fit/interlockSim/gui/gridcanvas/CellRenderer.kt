@@ -150,12 +150,45 @@ abstract class CellRenderer(
 		cell: Cell
 	) {
 		try {
-			// Use reflection to find and invoke the specific draw method for this cell type
-			val method = javaClass.getMethod("draw", Graphics2D::class.java, cell.javaClass)
+			// Try to find the most specific draw method for this cell type
+			// Search up the class hierarchy to handle private subclasses
+			val method = findDrawMethod(cell.javaClass)
+				?: error("No draw method found for cell type: ${cell.javaClass.name}")
 			method.invoke(this, g, cell)
 		} catch (e: Exception) {
 			error("Failed to draw cell: $e")
 		}
+	}
+
+	/**
+	 * Find a compatible draw method for the given cell class.
+	 * Searches up the class hierarchy to handle private subclasses.
+	 */
+	private fun findDrawMethod(cellClass: Class<*>): java.lang.reflect.Method? {
+		var currentClass: Class<*>? = cellClass
+
+		// Walk up the class hierarchy until we find a compatible draw method
+		while (currentClass != null && Cell::class.java.isAssignableFrom(currentClass)) {
+			try {
+				return javaClass.getMethod("draw", Graphics2D::class.java, currentClass)
+			} catch (e: NoSuchMethodException) {
+				// Try superclass
+				currentClass = currentClass.superclass
+			}
+		}
+
+		// Also try interfaces implemented by the cell
+		for (iface in cellClass.interfaces) {
+			if (Cell::class.java.isAssignableFrom(iface)) {
+				try {
+					return javaClass.getMethod("draw", Graphics2D::class.java, iface)
+				} catch (e: NoSuchMethodException) {
+					// Continue searching
+				}
+			}
+		}
+
+		return null
 	}
 
 	// Abstract draw methods for static cell types - to be implemented by subclasses

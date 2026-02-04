@@ -14,6 +14,8 @@ import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.beans.PropertyChangeEvent
+import java.beans.PropertyChangeListener
 
 /**
  * Tests for DynamicRailSemaphore wrapper class
@@ -181,5 +183,171 @@ class DynamicRailSemaphoreTest {
 		// Verify for second semaphore with different properties
 		assertThat(dynamicSemaphore2.getOrientation()).isEqualTo(staticSemaphore2.getOrientation())
 		assertThat(dynamicSemaphore2.getSpatialType()).isEqualTo(staticSemaphore2.getSpatialType())
+	}
+
+	// ========== PropertyChangeSupport Tests ==========
+
+	@Test
+	fun `signal change fires property change event`() {
+		// Given: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+
+		// When: signal changes
+		dynamicSemaphore1.signal = Signal.S30
+
+		// Then: one event should be fired
+		assertThat(capturedEvents).hasSize(1)
+
+		// Verify "signal" event
+		val signalEvent = capturedEvents[0]
+		assertThat(signalEvent.propertyName).isEqualTo("signal")
+		assertThat(signalEvent.oldValue).isEqualTo(Signal.STOP)
+		assertThat(signalEvent.newValue).isEqualTo(Signal.S30)
+		assertThat(signalEvent.source).isSameAs(dynamicSemaphore1)
+	}
+
+	@Test
+	fun `multiple signal changes fire multiple events`() {
+		// Given: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+
+		// When: signal changes multiple times
+		dynamicSemaphore1.signal = Signal.S30
+		dynamicSemaphore1.signal = Signal.S60
+		dynamicSemaphore1.signal = Signal.FREE
+
+		// Then: three events should be fired
+		assertThat(capturedEvents).hasSize(3)
+
+		// Verify first change: STOP -> S30
+		assertThat(capturedEvents[0].oldValue).isEqualTo(Signal.STOP)
+		assertThat(capturedEvents[0].newValue).isEqualTo(Signal.S30)
+
+		// Verify second change: S30 -> S60
+		assertThat(capturedEvents[1].oldValue).isEqualTo(Signal.S30)
+		assertThat(capturedEvents[1].newValue).isEqualTo(Signal.S60)
+
+		// Verify third change: S60 -> FREE
+		assertThat(capturedEvents[2].oldValue).isEqualTo(Signal.S60)
+		assertThat(capturedEvents[2].newValue).isEqualTo(Signal.FREE)
+	}
+
+	@Test
+	fun `no event fired when signal set to same value`() {
+		// Given: signal is S30
+		dynamicSemaphore1.signal = Signal.S30
+
+		// And: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+
+		// When: signal is set to same value
+		dynamicSemaphore1.signal = Signal.S30
+
+		// Then: no event should be fired
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `removePropertyChangeListener stops receiving events`() {
+		// Given: listener is registered and receives events
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+		dynamicSemaphore1.signal = Signal.S30
+		assertThat(capturedEvents).hasSize(1)
+
+		// When: listener is removed
+		capturedEvents.clear()
+		dynamicSemaphore1.removePropertyChangeListener(testListener)
+		dynamicSemaphore1.signal = Signal.S60
+
+		// Then: no events should be received
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `multiple listeners all receive events`() {
+		// Given: two listeners
+		val capturedEvents1 = mutableListOf<PropertyChangeEvent>()
+		val capturedEvents2 = mutableListOf<PropertyChangeEvent>()
+		val testListener1 = PropertyChangeListener { evt -> capturedEvents1.add(evt) }
+		val testListener2 = PropertyChangeListener { evt -> capturedEvents2.add(evt) }
+
+		dynamicSemaphore1.addPropertyChangeListener(testListener1)
+		dynamicSemaphore1.addPropertyChangeListener(testListener2)
+
+		// When: signal changes
+		dynamicSemaphore1.signal = Signal.S30
+
+		// Then: both listeners receive events
+		assertThat(capturedEvents1).hasSize(1)
+		assertThat(capturedEvents2).hasSize(1)
+		assertThat(capturedEvents1[0].oldValue).isEqualTo(capturedEvents2[0].oldValue)
+		assertThat(capturedEvents1[0].newValue).isEqualTo(capturedEvents2[0].newValue)
+	}
+
+	@Test
+	fun `listener can be added and removed multiple times`() {
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+
+		// Add listener
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+		dynamicSemaphore1.signal = Signal.S30
+		assertThat(capturedEvents).hasSize(1)
+
+		// Remove listener
+		capturedEvents.clear()
+		dynamicSemaphore1.removePropertyChangeListener(testListener)
+		dynamicSemaphore1.signal = Signal.S60
+		assertThat(capturedEvents).isEmpty()
+
+		// Re-add listener
+		dynamicSemaphore1.addPropertyChangeListener(testListener)
+		dynamicSemaphore1.signal = Signal.FREE
+		assertThat(capturedEvents).hasSize(1)
+	}
+
+	@Test
+	fun `property change events are independent for different semaphores`() {
+		// Given: listeners on both semaphores
+		val capturedEvents1 = mutableListOf<PropertyChangeEvent>()
+		val capturedEvents2 = mutableListOf<PropertyChangeEvent>()
+		val testListener1 = PropertyChangeListener { evt -> capturedEvents1.add(evt) }
+		val testListener2 = PropertyChangeListener { evt -> capturedEvents2.add(evt) }
+
+		dynamicSemaphore1.addPropertyChangeListener(testListener1)
+		dynamicSemaphore2.addPropertyChangeListener(testListener2)
+
+		// When: only semaphore1 changes
+		dynamicSemaphore1.signal = Signal.S30
+
+		// Then: only listener1 receives event
+		assertThat(capturedEvents1).hasSize(1)
+		assertThat(capturedEvents2).isEmpty()
+	}
+
+	@Test
+	fun `constant semaphore does not fire events`() {
+		// Given: constant semaphore (signal cannot change)
+		val constantSemaphore = createConstantInstance(staticSemaphore1, Signal.FREE)
+
+		// And: listener is registered
+		val capturedEvents = mutableListOf<PropertyChangeEvent>()
+		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		constantSemaphore.addPropertyChangeListener(testListener)
+
+		// When: attempt to change signal (should be ignored)
+		constantSemaphore.signal = Signal.STOP
+
+		// Then: signal remains FREE and no event is fired
+		assertThat(constantSemaphore.signal).isEqualTo(Signal.FREE)
+		assertThat(capturedEvents).isEmpty()
 	}
 }

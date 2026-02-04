@@ -162,6 +162,15 @@ open class DefaultSimulationContext(
 	private val staticTrackToDynamicMap: MutableMap<TrackFacility, DynamicTrack> = IdentityHashMap()
 
 	/**
+	 * Cache of PathSeparator grid positions for O(1) animation rendering.
+	 * Populated once during fromEditingContext() transformation.
+	 * Valid for context lifetime (grid is immutable after freeze).
+	 *
+	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
+	 */
+	private lateinit var separatorPositionCache: Map<PathSeparator, Point>
+
+	/**
 	 * Main simulation process
 	 */
 	private var mainProcess: LoopProcess? = null
@@ -317,6 +326,9 @@ open class DefaultSimulationContext(
 			// PHASE 6: Copy configuration (existing logic)
 			copyConfiguration(editingContext, context)
 
+			// PHASE 7: Initialize separator position cache for animation rendering
+			initializeSeparatorPositionCache(context)
+
 			// Validate transformation
 			validateTransformation(editingContext, context)
 
@@ -408,6 +420,50 @@ open class DefaultSimulationContext(
 					"length=${editingContext.currentTrackLength}, " +
 					"name=${editingContext.currentNameString}"
 			}
+		}
+
+		/**
+		 * Initialize PathSeparator position cache for animation rendering.
+		 *
+		 * Performs single O(n²) grid scan to build map from PathSeparator to grid Point.
+		 * This cache enables O(1) position lookups in TrainPositionCalculator, avoiding
+		 * repeated grid scans at 30 FPS rendering rate.
+		 *
+		 * After grid transformation, the grid contains Dynamic wrappers (DynamicInOut,
+		 * DynamicRailSemaphore, DynamicRailSwitch). We map their static references to
+		 * grid positions for consistent lookup by TrainPositionCalculator.
+		 *
+		 * Called once during fromEditingContext() after grid transformation.
+		 *
+		 * @param simulationContext Target simulation context
+		 */
+		private fun initializeSeparatorPositionCache(simulationContext: DefaultSimulationContext) {
+			val grid = simulationContext.getRailWayNetGrid()
+			val cache = mutableMapOf<PathSeparator, Point>()
+
+			for (x in 0 until grid.getCols()) {
+				for (y in 0 until grid.getRows()) {
+					val cell = grid.getCellAt(x, y)
+					if (cell is PathSeparator) {
+						// Cell is PathSeparator - add directly
+						cache[cell] = Point(x, y)
+					} else if (cell is DynamicPathSeparator) {
+						// Cell is DynamicPathSeparator - add static reference
+						val staticRef = when (cell) {
+							is DynamicInOut -> cell.staticRef
+							is DynamicRailSemaphore -> cell.staticRef
+							is DynamicRailSwitch -> cell.staticRef
+							else -> null
+						}
+						if (staticRef != null) {
+							cache[staticRef] = Point(x, y)
+						}
+					}
+				}
+			}
+
+			simulationContext.separatorPositionCache = cache.toMap() // Immutable
+			logger.info { "Initialized PathSeparator position cache: ${cache.size} separators" }
 		}
 
 		/**
@@ -1178,6 +1234,10 @@ open class DefaultSimulationContext(
 		buf.insert(0, ' ')
 		buf.insert(0, jDisco.Process.time())
 		simulationLogger.info { buf }
+
+		// Fire property change event for animation event timeline
+		// Property name = report type name, new value = formatted message
+		getChangeSupport().firePropertyChange(type.name, null, buf.toString())
 	}
 
 	/**
@@ -1291,6 +1351,19 @@ open class DefaultSimulationContext(
 	 * @see PathReservationService
 	 */
 	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+
+	/**
+	 * Get PathSeparator grid position cache for animation rendering.
+	 *
+	 * Returns a map from PathSeparator to grid Point for O(1) position lookups.
+	 * Used by TrainPositionCalculator to avoid O(n²) grid scans at 30 FPS.
+	 *
+	 * The cache is populated once during fromEditingContext() transformation and
+	 * remains valid for the context lifetime (grid is immutable after freeze).
+	 *
+	 * @return Map from PathSeparator to grid Point
+	 */
+	fun getSeparatorPositionCache(): Map<PathSeparator, Point> = separatorPositionCache
 
 	/**
 	 * Configure semaphore signal appearance after path reservation.

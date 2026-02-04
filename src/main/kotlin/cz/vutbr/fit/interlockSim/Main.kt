@@ -46,8 +46,11 @@ class Main {
 
 	fun loadGui(args: Array<String>) {
 		try {
-			frame.setContext(createContext(args))
-			frame.setVisible(true)
+			val context = createContext(args)
+			javax.swing.SwingUtilities.invokeLater {
+				frame.setContext(context)
+				frame.setVisible(true)
+			}
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Context creation failed" }
 		}
@@ -132,6 +135,79 @@ class Main {
 			logger.error(e) { "Example initialization failed" }
 		}
 	}
+
+	/**
+	 * Run a GUI-based animated example (Issue #206).
+	 *
+	 * This method creates a simulation example and displays it in the animated Frame
+	 * with AnimationController, EventTimelinePanel, and ControlPanel.
+	 *
+	 * **Threading Model:**
+	 * - Main thread: Creates Frame and SimulationContext on EDT via SwingUtilities.invokeLater
+	 * - Simulation thread: jDisco simulation runs on background thread
+	 * - EDT: GUI updates occur on EDT, marshaled by AnimationController
+	 *
+	 * **Command Usage:**
+	 * ```
+	 * java -jar interlockSim.jar exampleGui <name> <endTime>
+	 * ./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60
+	 * ```
+	 *
+	 * @param args Command line arguments (expects example name as args[1], endTime as args[2])
+	 */
+	fun runExampleGui(args: Array<String>) {
+		if (args.size == 1) {
+			logger.warn {
+				"Available GUI examples: ${exampleRegistry.getAvailableGuiExamples()}\n" +
+					"Usage: exampleGui <name> <endTime>"
+			}
+			return
+		}
+
+		val name = args[1]
+		val exampleFactory = exampleRegistry.guiExamples[name]
+
+		if (exampleFactory == null) {
+			logger.error { "Unknown GUI example: $name" }
+			logger.warn { "Available GUI examples: ${exampleRegistry.getAvailableGuiExamples()}" }
+			return
+		}
+
+		try {
+			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
+			val context = exampleFactory(simulationContextFactory, args)
+
+			// Add all report types for event timeline visibility
+			context.addReportTypes(*ReportType.values())
+
+			// Initialize dynamic mapping BEFORE AnimationController accesses tracks
+			// This ensures all TrackBlocks and internal TrackSections are mapped
+			// before AnimationController.start() calls toDynamic() during state capture
+			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.initializeDynamicMapping()
+
+			// Launch GUI on EDT
+			javax.swing.SwingUtilities.invokeLater {
+				frame.setContext(context)
+				frame.isVisible = true
+
+				// Run simulation on background thread (jDisco simulation thread)
+				Thread {
+					try {
+						context.run()
+						logger.info { "GUI example simulation completed: $name" }
+					} catch (e: SimulationException) {
+						logger.error(e) { "GUI example simulation failed: $name" }
+					}
+				}.start()
+			}
+		} catch (e: ContextCreationException) {
+			logger.error(e) { "GUI example context creation failed" }
+		} catch (e: EmptyContextException) {
+			logger.error(e) { "GUI example simulation could not be started - empty context" }
+		} catch (e: Exception) {
+			logger.error(e) { "GUI example initialization failed" }
+		}
+	}
 }
 
 // Application metadata constants moved to AppMetadata.kt
@@ -166,10 +242,15 @@ fun main(args: Array<String>) {
 	when {
 		args.isNotEmpty() && args[0] == "sim" -> main.loadSim(args)
 		args.isNotEmpty() && args[0] == "example" -> main.runExample(args)
+		args.isNotEmpty() && args[0] == "exampleGui" -> main.runExampleGui(args)
 		args.isNotEmpty() && args[0] == "edit" -> main.loadGui(args)
 		else ->
 			logger.error {
-				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit) [file]\n\t\t example [name]"
+				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit|example|exampleGui) [file]\n" +
+					"\tsim [file]        - Run simulation from XML file\n" +
+					"\tedit [file]       - Launch graphical editor\n" +
+					"\texample <name> <endTime> - Run console-based example\n" +
+					"\texampleGui <name> <endTime> - Run GUI-based animated example"
 			}
 	}
 }

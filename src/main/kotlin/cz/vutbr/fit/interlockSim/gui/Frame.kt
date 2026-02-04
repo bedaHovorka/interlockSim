@@ -12,21 +12,94 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
+import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import java.awt.BorderLayout
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import javax.swing.BoxLayout
 import javax.swing.JFrame
 import javax.swing.JOptionPane
+import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.Timer
 
 /**
- * Program main window
+ * Main application window for Railway Interlocking Simulator.
+ *
+ * Provides dynamic layout that adapts based on context type:
+ * - **Editing Mode** ([EditingContext]): StatusBar visible, ControlPanel hidden
+ * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar hidden
+ *
+ * ## Layout Structure
+ *
+ * ### Editing Mode
+ * ```
+ * ┌─────────────────────────────────┐
+ * │ MenuBar                         │
+ * ├─────────────────────────────────┤
+ * │ ToolBar                         │
+ * ├─────────────────────────────────┤
+ * │ RailwayNetGridCanvas            │
+ * │ (scrollable)                    │
+ * ├─────────────────────────────────┤
+ * │ StatusBar                       │
+ * └─────────────────────────────────┘
+ * ```
+ *
+ * ### Simulation Mode
+ * ```
+ * ┌─────────────────────────────────┐
+ * │ MenuBar                         │
+ * ├─────────────────────────────────┤
+ * │ ToolBar                         │
+ * ├─────────────────────────────────┤
+ * │ ControlPanel (NEW - Issue #205) │
+ * │ [Time] [Status]                 │
+ * ├─────────────────────────────────┤
+ * │ RailwayNetGridCanvas            │
+ * │ (animated, scrollable)          │
+ * ├─────────────────────────────────┤
+ * │ EventTimelinePanel (NEW)        │
+ * │ [Filters] [Event log...]        │
+ * └─────────────────────────────────┘
+ * ```
+ *
+ * ## Animation Integration (Issue #205)
+ *
+ * When a [SimulationContext] is set, the frame:
+ * 1. Creates [EventTimelinePanel] (lazy, reused across simulations)
+ * 2. Wires EventTimelinePanel to [RailwayNetGridCanvas] → [cz.vutbr.fit.interlockSim.gui.animation.AnimationController]
+ * 3. Starts 10 Hz timer for [ControlPanel] time updates
+ * 4. Shows ControlPanel and EventTimelinePanel, hides StatusBar
+ *
+ * When an [EditingContext] is set, the frame:
+ * 1. Hides ControlPanel and EventTimelinePanel
+ * 2. Shows StatusBar for mouse position feedback
+ * 3. Stops animation timer (cleanup)
+ *
+ * ## Thread Safety
+ *
+ * All public methods must be called from the Event Dispatch Thread (EDT).
+ * Mode switching methods enforce EDT requirement with `require()` checks.
+ *
+ * @since 2006-2007
+ * @see setContext
+ * @see switchToEditingMode
+ * @see switchToSimulationMode
  */
 class Frame : JFrame(PROGRAM_FULL_NAME) {
 	val railwayNetGridCanvas: RailwayNetGridCanvas = RailwayNetGridCanvas()
 	internal val statusBar: StatusBar = StatusBar()
+	private val toolBar: ToolBar = ToolBar()
+
+	// Animation UI components (Issue #205)
+	private val controlPanel: ControlPanel = ControlPanel()
+	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
+	private var animationUpdateTimer: Timer? = null
 
 	/**
 	 * Tracks modification state for unsaved changes warning.
@@ -42,7 +115,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
 		contentPane.add(JScrollPane(railwayNetGridCanvas), BorderLayout.CENTER)
-		contentPane.add(ToolBar(), BorderLayout.NORTH)
+
+		// Create north container with ToolBar + ControlPanel (Issue #205)
+		val northContainer = JPanel()
+		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
+		northContainer.add(toolBar)
+		controlPanel.isVisible = false  // Initially hidden (shown only in simulation mode)
+		northContainer.add(controlPanel)
+		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		statusBar.registerProducer(railwayNetGridCanvas)
 		contentPane.add(statusBar, BorderLayout.SOUTH)
@@ -67,14 +147,153 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		)
 	}
 
-	fun setContext(context: Context<*, *>) {
-		context.addPropertyChangeListener(statusBar)
-		railwayNetGridCanvas.setContext(context)
-
-		// Register modification tracker if context supports editing
-		if (context is EditingContext) {
-			context.addPropertyChangeListener(modificationTracker)
+	/**
+	 * Switch UI layout to simulation mode (Issue #205).
+	 *
+	 * - Hides StatusBar
+	 * - Shows EventTimelinePanel (if created)
+	 * - Shows ControlPanel
+	 * - Disables editing ToolBar
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun switchToSimulationMode() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"switchToSimulationMode must be called from EDT"
 		}
+
+		// Hide StatusBar, show EventTimelinePanel
+		statusBar.isVisible = false
+		contentPane.remove(statusBar)
+		eventTimelinePanel?.let {
+			contentPane.add(it, BorderLayout.SOUTH)
+		}
+
+		// Show ControlPanel
+		controlPanel.isVisible = true
+		controlPanel.updateStatus("Running")
+
+		// Disable editing toolbar in simulation mode
+		toolBar.setToolsEnabled(false)
+
+		contentPane.revalidate()
+		contentPane.repaint()
+	}
+
+	/**
+	 * Switch UI layout to editing mode (Issue #205).
+	 *
+	 * - Shows StatusBar
+	 * - Hides EventTimelinePanel
+	 * - Hides ControlPanel
+	 * - Enables editing ToolBar
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun switchToEditingMode() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"switchToEditingMode must be called from EDT"
+		}
+
+		// Show StatusBar, hide EventTimelinePanel
+		eventTimelinePanel?.let {
+			contentPane.remove(it)
+		}
+		contentPane.add(statusBar, BorderLayout.SOUTH)
+		statusBar.isVisible = true
+
+		// Hide ControlPanel
+		controlPanel.isVisible = false
+
+		// Enable editing toolbar in editing mode
+		toolBar.setToolsEnabled(true)
+
+		contentPane.revalidate()
+		contentPane.repaint()
+	}
+
+	/**
+	 * Set the railway network context and switch UI mode accordingly.
+	 *
+	 * - [EditingContext]: Switches to editing mode with StatusBar
+	 * - [SimulationContext]: Switches to simulation mode with EventTimelinePanel and ControlPanel
+	 *
+	 * **Animation Integration (Issue #205):**
+	 * When switching to SimulationContext, this method:
+	 * 1. Lazy-creates EventTimelinePanel (reused across multiple simulations)
+	 * 2. Wires EventTimelinePanel to RailwayNetGridCanvas → AnimationController
+	 * 3. Starts 10 Hz timer for ControlPanel time updates
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun setContext(context: Context<*, *>) {
+		stopAnimationUpdates()  // Cleanup existing timer
+
+		when (context) {
+			is SimulationContext -> {
+				// Lazy-create event timeline panel (reused across simulations)
+				if (eventTimelinePanel == null) {
+					eventTimelinePanel = EventTimelinePanel()
+				}
+
+				switchToSimulationMode()
+				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
+				railwayNetGridCanvas.setContext(context)
+				startAnimationUpdates()
+			}
+			is EditingContext -> {
+				switchToEditingMode()
+				railwayNetGridCanvas.setContext(context)
+				context.addPropertyChangeListener(modificationTracker)
+			}
+			else -> {
+				// Unknown context type - default to simulation mode (read-only)
+				switchToSimulationMode()
+				railwayNetGridCanvas.setContext(context)
+			}
+		}
+
+		context.addPropertyChangeListener(statusBar)
+	}
+
+	/**
+	 * Start timer for ControlPanel time updates (Issue #205).
+	 *
+	 * Creates a 10 Hz (100ms) Swing Timer that reads the current simulation time
+	 * from [AnimationController] and updates [ControlPanel].
+	 *
+	 * **Timer Frequency Rationale:**
+	 * - 100ms interval (10 Hz) provides responsive display without excessive CPU overhead
+	 * - Much less frequent than 30 FPS rendering, but frequent enough for smooth time display
+	 * - Swing Timer automatically runs on EDT (thread-safe)
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun startAnimationUpdates() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"startAnimationUpdates must be called from EDT"
+		}
+
+		animationUpdateTimer = Timer(100) { // 10 Hz update rate
+			val controller = railwayNetGridCanvas.getAnimationController()
+			controller?.getCurrentState()?.let { state ->
+				controlPanel.updateTime(state.simulationTime)
+			}
+		}
+		animationUpdateTimer?.start()
+	}
+
+	/**
+	 * Stop ControlPanel update timer and clean up resources (Issue #205).
+	 *
+	 * Prevents memory leaks when switching between contexts or exiting simulation mode.
+	 * Safe to call multiple times or when timer is not running.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	private fun stopAnimationUpdates() {
+		animationUpdateTimer?.stop()
+		animationUpdateTimer = null
 	}
 
 	/**
@@ -149,6 +368,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Only exit if save was successful
 		if (saved) {
+			stopAnimationUpdates()  // Stop Frame's 10 Hz timer
+			railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
 			exitWithoutSaving()
 		}
 	}
@@ -157,6 +378,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
+		stopAnimationUpdates()  // Stop Frame's 10 Hz timer
+		railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
 		dispose()
 		System.exit(0)
 	}
