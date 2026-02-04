@@ -581,7 +581,7 @@ class RailwayNetGridCanvas :
 
 	override fun mouseMoved(ev: MouseEvent) {
 		// EXTENSION - In simulation mode, enable scrolling
-		if (false) mouseMoveScroll(ev)
+		mouseMoveScroll(ev)
 	}
 
 	private fun mouseMoveScroll(ev: MouseEvent) {
