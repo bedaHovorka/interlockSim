@@ -47,7 +47,22 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val editingContext = xmlFactory.createContext(File(resourcePath!!.path)) as EditingContext
 		val processFactory: SimulationProcessFactory by inject()
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
-		calculator = TrainPositionCalculator(context)
+
+		// Get separator position cache from context (performance optimization)
+		val cache = (context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
+			?.getSeparatorPositionCache() ?: emptyMap()
+
+		calculator = TrainPositionCalculator(context, cache)
+	}
+
+	@Test
+	fun testCacheIsPopulated() {
+		// Verify that cache was populated during context creation
+		val cache = (context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
+			?.getSeparatorPositionCache() ?: emptyMap()
+
+		// Cache should contain all PathSeparators from grid (InOuts, semaphores, switches)
+		assertThat(cache.size > 0).isEqualTo(true)
 	}
 
 	@Test

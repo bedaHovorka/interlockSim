@@ -36,6 +36,11 @@ import kotlin.math.roundToInt
  * 3. **End point:** Grid coordinates of section's end PathSeparator
  * 4. **Interpolated position:** `gridPos = start + (end - start) * ratio`
  *
+ * ## Performance Optimization
+ *
+ * Uses pre-built cache from DefaultSimulationContext for O(1) PathSeparator position lookups,
+ * avoiding O(n²) grid scans at 30 FPS rendering rate (2,500× faster for 50×50 grid).
+ *
  * ## Grid Coordinate System
  *
  * - **Origin:** Top-left corner (0, 0)
@@ -46,7 +51,10 @@ import kotlin.math.roundToInt
  * ## Usage
  *
  * ```kotlin
- * val calculator = TrainPositionCalculator(simulationContext)
+ * val calculator = TrainPositionCalculator(
+ *     simulationContext,
+ *     simulationContext.getSeparatorPositionCache()
+ * )
  * val gridLocation = calculator.calculateTrainGridLocation(
  *     currentSection = train.getCurrentSection(),
  *     distanceAlongSection = 45.0 // meters
@@ -60,6 +68,7 @@ import kotlin.math.roundToInt
  * (typically after marshaling to EDT via SwingUtilities.invokeLater).
  *
  * @property context Simulation context for accessing grid and network data
+ * @property separatorPositionCache Cache mapping PathSeparators to grid Points for O(1) lookups
  *
  * @see TrainState
  * @see AnimationStateCapture
@@ -67,7 +76,8 @@ import kotlin.math.roundToInt
  * @since 2026-01-22 (Issue #203)
  */
 class TrainPositionCalculator(
-	private val context: SimulationContext
+	private val context: SimulationContext,
+	private val separatorPositionCache: Map<PathSeparator, Point>
 ) {
 
 	/**
@@ -141,44 +151,45 @@ class TrainPositionCalculator(
 	/**
 	 * Get grid position of a PathSeparator.
 	 *
-	 * Searches the grid to find the cell coordinates of the given PathSeparator.
+	 * Uses pre-built cache from DefaultSimulationContext for O(1) lookup
+	 * instead of O(n²) grid scan. This method is called twice per train per frame
+	 * at 30 FPS, so performance is critical (2,500× faster for 50×50 grid).
 	 *
 	 * **Dynamic Wrapper Handling:** The separator parameter may be a dynamic wrapper
-	 * (DynamicRailSemaphore, DynamicInOut) but the grid contains static cells. This method
-	 * unwraps the separator to its static reference before comparison for correct identity matching.
+	 * (DynamicRailSemaphore, DynamicInOut). This method unwraps to static reference
+	 * before cache lookup.
 	 *
 	 * @param separator PathSeparator to locate in grid (can be dynamic or static)
 	 * @return Grid coordinates, or null if not found
 	 */
 	private fun getGridPosition(separator: PathSeparator): Point? {
-		val grid = context.getRailWayNetGrid()
-
-		// Unwrap dynamic wrapper to static reference for comparison with grid cells
+		// Unwrap dynamic wrapper to static reference for cache lookup
 		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
+		val result = separatorPositionCache[staticSeparator]
 
-		// Search grid for the separator cell
-		// Note: We search ALL cells because SimulationContext grid contains both NodeCells
-		// (RailSwitch, RailSemaphore, InOut) and TrackBlockPart cells
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
-				val cell = grid.getCellAt(x, y)
+		// Fallback: If not in cache, scan grid (should not happen after optimization)
+		if (result == null) {
+			val grid = context.getRailWayNetGrid()
+			for (x in 0 until grid.getCols()) {
+				for (y in 0 until grid.getRows()) {
+					val cell = grid.getCellAt(x, y)
 
-				// Direct identity match
-				if (cell === staticSeparator) {
-					return Point(x, y)
-				}
-
-				// Also check if this is a PathSeparator that equals the target
-				// (handles case where grid might contain different wrapper instances)
-				if (cell is PathSeparator && staticSeparator is PathSeparator) {
-					val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
-					if (unwrappedCell === staticSeparator) {
+					// Direct identity match
+					if (cell === staticSeparator) {
 						return Point(x, y)
+					}
+
+					// Also check if this is a PathSeparator that equals the target
+					if (cell is PathSeparator && staticSeparator is PathSeparator) {
+						val unwrappedCell = DynamicWrapperUtils.unwrapToStatic(cell)
+						if (unwrappedCell === staticSeparator) {
+							return Point(x, y)
+						}
 					}
 				}
 			}
 		}
 
-		return null // Separator not found in grid
+		return result
 	}
 }

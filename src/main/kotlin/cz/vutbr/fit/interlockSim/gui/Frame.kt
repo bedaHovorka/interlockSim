@@ -368,6 +368,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Only exit if save was successful
 		if (saved) {
+			stopAnimationUpdates()  // Ensure timer is stopped before exit
 			exitWithoutSaving()
 		}
 	}
@@ -376,6 +377,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
+		stopAnimationUpdates()  // Ensure timer is stopped before disposal
 		dispose()
 		System.exit(0)
 	}

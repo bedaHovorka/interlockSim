@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
 import java.beans.PropertyChangeEvent
@@ -102,6 +104,22 @@ class AnimationController(
 	private var isRunning: Boolean = false
 
 	/**
+	 * Cache of all semaphores in the grid for O(1) animation state capture.
+	 *
+	 * Populated once during start() via single grid scan.
+	 * Valid for controller lifetime (grid is immutable after context freeze).
+	 */
+	private var semaphoreCache: List<DynamicRailSemaphore>? = null
+
+	/**
+	 * Cache of all switches in the grid for O(1) animation state capture.
+	 *
+	 * Populated once during start() via single grid scan.
+	 * Valid for controller lifetime (grid is immutable after context freeze).
+	 */
+	private var switchCache: List<DynamicRailSwitch>? = null
+
+	/**
 	 * Get current animation state (thread-safe).
 	 *
 	 * This method may be called from EDT during rendering.
@@ -131,6 +149,11 @@ class AnimationController(
 
 		// Register as listener for simulation state changes
 		context.addPropertyChangeListener(this)
+
+		// Initialize caches with single grid scan (performance optimization)
+		semaphoreCache = buildSemaphoreCache()
+		switchCache = buildSwitchCache()
+		logger.debug { "Initialized caches: ${semaphoreCache?.size} semaphores, ${switchCache?.size} switches" }
 
 		// Capture initial state
 		captureAndUpdateState()
@@ -167,6 +190,10 @@ class AnimationController(
 
 		// Unregister listener
 		context.removePropertyChangeListener(this)
+
+		// Clear caches to allow GC
+		semaphoreCache = null
+		switchCache = null
 
 		isRunning = false
 
@@ -215,7 +242,12 @@ class AnimationController(
 		}
 
 		try {
-			val newState = AnimationStateCapture.captureState(context)
+			// Pass caches to avoid O(n²) grid scans on every PropertyChangeEvent
+			val newState = AnimationStateCapture.captureState(
+				context,
+				semaphoreCache ?: emptyList(),
+				switchCache ?: emptyList()
+			)
 			updateState(newState)
 			logger.trace {
 				"Animation state updated: time=${newState.simulationTime}, " +
@@ -283,6 +315,54 @@ class AnimationController(
 			eventType = reportType,
 			message = message
 		)
+	}
+
+	/**
+	 * Build cache of all semaphores in grid.
+	 *
+	 * Performs single O(n²) grid scan to find all DynamicRailSemaphore cells.
+	 * Called once during start() to avoid repeated scans on every PropertyChangeEvent.
+	 *
+	 * @return Immutable list of all semaphores in grid
+	 */
+	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> {
+		val grid = context.getRailWayNetGrid()
+		val cache = mutableListOf<DynamicRailSemaphore>()
+
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid.getCellAt(x, y)
+				if (cell is DynamicRailSemaphore) {
+					cache.add(cell)
+				}
+			}
+		}
+
+		return cache.toList() // Immutable
+	}
+
+	/**
+	 * Build cache of all switches in grid.
+	 *
+	 * Performs single O(n²) grid scan to find all DynamicRailSwitch cells.
+	 * Called once during start() to avoid repeated scans on every PropertyChangeEvent.
+	 *
+	 * @return Immutable list of all switches in grid
+	 */
+	private fun buildSwitchCache(): List<DynamicRailSwitch> {
+		val grid = context.getRailWayNetGrid()
+		val cache = mutableListOf<DynamicRailSwitch>()
+
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid.getCellAt(x, y)
+				if (cell is DynamicRailSwitch) {
+					cache.add(cell)
+				}
+			}
+		}
+
+		return cache.toList() // Immutable
 	}
 
 	companion object {
