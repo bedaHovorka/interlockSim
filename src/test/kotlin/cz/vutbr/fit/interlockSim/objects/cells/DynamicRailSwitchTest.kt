@@ -421,4 +421,59 @@ class DynamicRailSwitchTest {
 			assertThat(switch.getActiveSegments()).hasSize(2)
 		}
 	}
+
+	@org.junit.jupiter.api.Nested
+	@org.junit.jupiter.api.DisplayName("Equals contract tests")
+	inner class EqualsContract {
+		@Test
+		fun `equals with null returns false`() {
+			assertThat(dynamicSwitch1.equals(null)).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			assertThat(dynamicSwitch1).isEqualTo(dynamicSwitch1)
+			assertThat(dynamicSwitch1.equals(dynamicSwitch1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			assertThat(dynamicSwitch1.equals("string")).isFalse()
+			assertThat(dynamicSwitch1.equals(42)).isFalse()
+			assertThat(dynamicSwitch1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			assertThat(dynamicSwitch1).isEqualTo(dynamicSwitch1)
+		}
+
+		@Test
+		fun `equals is symmetric`() {
+			val another = DynamicRailSwitch(staticSwitch1)
+			assertThat(dynamicSwitch1).isEqualTo(another)
+			assertThat(another).isEqualTo(dynamicSwitch1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x = DynamicRailSwitch(staticSwitch1)
+			val y = DynamicRailSwitch(staticSwitch1)
+			val z = DynamicRailSwitch(staticSwitch1)
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z) // Transitivity
+		}
+
+		@Test
+		fun `equals with static RailSwitch returns true when same reference`() {
+			assertThat(dynamicSwitch1.equals(staticSwitch1)).isTrue()
+		}
+
+		@Test
+		fun `equals with different static RailSwitch returns false`() {
+			assertThat(dynamicSwitch1.equals(staticSwitch2)).isFalse()
+		}
+	}
 }

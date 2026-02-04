@@ -269,6 +269,82 @@ class DoubletonTest {
 
 			assertThat(d1).isEqualTo(d2)
 		}
+
+		// Additional equals() contract tests for SonarQube refactoring
+
+		@Test
+		fun `equals with null returns false`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			assertThat(d1.equals(null)).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			assertThat(d1).isEqualTo(d1)
+			assertThat(d1.equals(d1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			assertThat(d1.equals("string")).isFalse()
+			assertThat(d1.equals(42)).isFalse()
+			assertThat(d1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals with HashSet of same elements returns true`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			val set = hashSetOf("A", "B")
+
+			// Doubleton delegates to AbstractSet.equals() - should equal any Set with same content
+			assertThat(d1).isEqualTo(set)
+			assertThat(set).isEqualTo(d1) // Symmetry
+		}
+
+		@Test
+		fun `equals with TreeSet of same elements returns true`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			val set = sortedSetOf("A", "B")
+
+			assertThat(d1).isEqualTo(set)
+			assertThat(set).isEqualTo(d1)
+		}
+
+		@Test
+		fun `equals with different elements returns false`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			val d2: Doubleton<String, Int> = Doubleton("C", "D")
+
+			assertThat(d1.equals(d2)).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			assertThat(d1).isEqualTo(d1)
+		}
+
+		@Test
+		fun `equals is symmetric with other Doubleton`() {
+			val d1: Doubleton<String, Int> = Doubleton("A", "B")
+			val d2: Doubleton<String, Int> = Doubleton("A", "B")
+
+			assertThat(d1).isEqualTo(d2)
+			assertThat(d2).isEqualTo(d1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x: Doubleton<String, Int> = Doubleton("A", "B")
+			val y: Doubleton<String, Int> = Doubleton("A", "B")
+			val z: Doubleton<String, Int> = Doubleton("A", "B")
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z)
+		}
 	}
 
 	@Nested

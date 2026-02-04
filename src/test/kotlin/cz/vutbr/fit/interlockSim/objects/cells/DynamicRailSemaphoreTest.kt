@@ -350,4 +350,59 @@ class DynamicRailSemaphoreTest {
 		assertThat(constantSemaphore.signal).isEqualTo(Signal.FREE)
 		assertThat(capturedEvents).isEmpty()
 	}
+
+	@org.junit.jupiter.api.Nested
+	@org.junit.jupiter.api.DisplayName("Equals contract tests")
+	inner class EqualsContract {
+		@Test
+		fun `equals with null returns false`() {
+			assertThat(dynamicSemaphore1.equals(null)).isFalse()
+		}
+
+		@Test
+		fun `equals with self returns true`() {
+			assertThat(dynamicSemaphore1).isEqualTo(dynamicSemaphore1)
+			assertThat(dynamicSemaphore1.equals(dynamicSemaphore1)).isTrue()
+		}
+
+		@Test
+		fun `equals with wrong type returns false`() {
+			assertThat(dynamicSemaphore1.equals("string")).isFalse()
+			assertThat(dynamicSemaphore1.equals(42)).isFalse()
+			assertThat(dynamicSemaphore1.equals(listOf("A", "B"))).isFalse()
+		}
+
+		@Test
+		fun `equals is reflexive`() {
+			assertThat(dynamicSemaphore1).isEqualTo(dynamicSemaphore1)
+		}
+
+		@Test
+		fun `equals is symmetric`() {
+			val another = createDynamicInstance(staticSemaphore1)
+			assertThat(dynamicSemaphore1).isEqualTo(another)
+			assertThat(another).isEqualTo(dynamicSemaphore1)
+		}
+
+		@Test
+		fun `equals is transitive`() {
+			val x = createDynamicInstance(staticSemaphore1)
+			val y = createDynamicInstance(staticSemaphore1)
+			val z = createDynamicInstance(staticSemaphore1)
+
+			assertThat(x).isEqualTo(y)
+			assertThat(y).isEqualTo(z)
+			assertThat(x).isEqualTo(z) // Transitivity
+		}
+
+		@Test
+		fun `equals with static RailSemaphore returns true when same reference`() {
+			assertThat(dynamicSemaphore1.equals(staticSemaphore1)).isTrue()
+		}
+
+		@Test
+		fun `equals with different static RailSemaphore returns false`() {
+			assertThat(dynamicSemaphore1.equals(staticSemaphore2)).isFalse()
+		}
+	}
 }
