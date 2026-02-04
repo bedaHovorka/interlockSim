@@ -368,7 +368,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Only exit if save was successful
 		if (saved) {
-			stopAnimationUpdates()  // Ensure timer is stopped before exit
+			stopAnimationUpdates()  // Stop Frame's 10 Hz timer
+			railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
 			exitWithoutSaving()
 		}
 	}
@@ -377,7 +378,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
-		stopAnimationUpdates()  // Ensure timer is stopped before disposal
+		stopAnimationUpdates()  // Stop Frame's 10 Hz timer
+		railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
 		dispose()
 		System.exit(0)
 	}

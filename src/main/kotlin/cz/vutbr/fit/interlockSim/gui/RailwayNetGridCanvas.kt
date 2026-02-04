@@ -334,12 +334,30 @@ class RailwayNetGridCanvas :
 	 * Cleans up animation resources when switching away from simulation mode
 	 * or when switching between different simulation contexts.
 	 *
+	 * **Scenarios:**
+	 * - Switching from simulation mode to editing mode
+	 * - Switching between different simulation contexts
+	 * - Frame is closing (explicit cleanup via cleanupAnimation())
+	 *
+	 * **Idempotent:** Safe to call multiple times (no-op if already stopped).
+	 *
 	 * **Must be called from EDT.**
 	 */
 	private fun stopAnimation() {
 		animationController?.stop()
 		animationController = null
 		animatedRenderer = null
+	}
+
+	/**
+	 * Clean up animation resources explicitly.
+	 * Should be called when canvas is being disposed or parent Frame is closing.
+	 * Safe to call multiple times (idempotent).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun cleanupAnimation() {
+		stopAnimation()
 	}
 
 	/**
