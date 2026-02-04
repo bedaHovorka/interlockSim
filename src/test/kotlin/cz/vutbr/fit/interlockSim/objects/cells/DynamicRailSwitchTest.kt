@@ -16,6 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
@@ -422,8 +424,8 @@ class DynamicRailSwitchTest {
 		}
 	}
 
-	@org.junit.jupiter.api.Nested
-	@org.junit.jupiter.api.DisplayName("Equals contract tests")
+	@Nested
+	@DisplayName("Equals contract tests")
 	inner class EqualsContract {
 		@Test
 		fun `equals with null returns false`() {

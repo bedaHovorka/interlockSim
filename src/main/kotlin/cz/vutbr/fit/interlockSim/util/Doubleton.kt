@@ -109,9 +109,10 @@ class Doubleton<T, V> : AbstractSet<T> {
 	 * Compares this Doubleton with another object for equality.
 	 * <p>
 	 * This method explicitly delegates to {@link AbstractSet#equals(Object)},
-	 * which compares sets by their content (order-independent). Two Doubletons
-	 * are equal if they contain the same two elements, regardless of order.
-	 * The firstValue and secondValue fields are not considered for equality.
+	 * which compares sets by their content (order-independent). A Doubleton
+	 * is equal to any {@link Set} containing exactly the same two elements,
+	 * regardless of order. The firstValue and secondValue fields are not
+	 * considered for equality.
 	 * </p>
 	 * <p>
 	 * This explicit override satisfies the Java contract that requires overriding
@@ -119,7 +120,8 @@ class Doubleton<T, V> : AbstractSet<T> {
 	 * </p>
 	 *
 	 * @param obj the object to compare with
-	 * @return true if obj is a Doubleton with the same elements
+	 * @return true if {@code obj} is a {@link Set} containing exactly the same two elements
+	 * (regardless of order); associated values (firstValue, secondValue) are ignored
 	 */
 	override fun equals(obj: Any?): Boolean {
 		// Early reference check
