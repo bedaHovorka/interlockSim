@@ -32,6 +32,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Integration tests for complex railway network simulations.
@@ -271,7 +272,7 @@ class ComplexNetworkTest : KoinTestBase() {
 		// Load complex vyhybna.xml network
 		val edContext =
 			editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				TestFixtures.loadShuntingXml()
 			) as EditingContext
 
 		// Verify complex network topology

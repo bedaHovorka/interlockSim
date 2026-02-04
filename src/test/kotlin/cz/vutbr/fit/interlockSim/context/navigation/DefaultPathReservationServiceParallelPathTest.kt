@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Integration tests for parallel path discovery in [DefaultPathReservationService].
@@ -54,7 +55,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	fun setUp() {
 		// Load the shunting loop network from XML
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("Test resource vyhybna.xml not found")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext

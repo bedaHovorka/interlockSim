@@ -16,11 +16,11 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import java.io.InputStream
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
@@ -213,7 +213,7 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 
 	private fun createController(): Pair<AnimationController, SimulationContext> {
 		// Use vyhybna.xml for realistic simulation context
-		context = createMockSimulationContext(shuntingXml())
+		context = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 		// Create dummy canvas (JPanel is concrete Component subclass)
 		val canvas = JPanel()
@@ -230,13 +230,5 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 		} else {
 			SwingUtilities.invokeAndWait(block)
 		}
-	}
-
-	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-
-	private fun xml(name: String): InputStream {
-		val xml = javaClass.getResourceAsStream(name)
-		requireNotNull(xml) { "$name must exist in resources" }
-		return xml
 	}
 }

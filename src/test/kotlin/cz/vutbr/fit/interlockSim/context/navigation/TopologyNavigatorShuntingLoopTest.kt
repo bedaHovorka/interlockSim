@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Point
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeEach
@@ -32,7 +33,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 import kotlin.getValue
 
 private val logger = KotlinLogging.logger {}
@@ -86,7 +86,7 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load vyhybna.xml fixture
-		context = editingContextFactory.createContext(shuntingXml()) as EditingContext
+		context = editingContextFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
 
 		// Get TopologyNavigator from context's scope
 		navigator = context.scope.get()
@@ -697,17 +697,5 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		}
 
 		return staticSeparator?.let { grid.getLocation(it) }
-	}
-
-	/**
-	 * Returns vyhybna.xml fixture as InputStream.
-	 *
-	 * @return InputStream for vyhybna.xml resource
-	 * @throws IllegalStateException if resource not found
-	 */
-	private fun shuntingXml(): InputStream {
-		val resourcePath = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-		return javaClass.getResourceAsStream(resourcePath)
-			?: throw IllegalStateException("vyhybna.xml not found at $resourcePath")
 	}
 }

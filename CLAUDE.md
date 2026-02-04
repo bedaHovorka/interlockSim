@@ -773,7 +773,13 @@ class MyIntegrationTest {
 
 **Test classes (36 total):** Utility (6), Context (5), Simulation (13), Path/Track (7), Cell (4), Entry point (3), XML (1)
 
-**Test utilities:** MockSimulationContext, TestContextBuilder, TestFixtures, TestTrackBuilder, TrackTestMocks, AssertKExtensions
+**Test utilities:**
+- `MockSimulationContext` - Test double for simulation context
+- `TestContextBuilder` - Fluent API for building test contexts
+- `TestFixtures` - Centralized XML fixture loading (`TestFixtures.loadShuntingXml()` for vyhybna.xml, `TestFixtures.loadLinearTrackXml()` etc.)
+- `TestTopologies` - Reusable network topologies (`simpleLinearPath()`, `linearPathWithSemaphore()`, `deadEndSingleInOut()`)
+- `TestTrackBuilder`, `TrackTestMocks` - Track-specific test helpers
+- `AssertKExtensions` - Custom AssertK assertions
 
 **Test resources:** 10 XML fixtures in `src/test/resources/.../xml/fixtures/`
 

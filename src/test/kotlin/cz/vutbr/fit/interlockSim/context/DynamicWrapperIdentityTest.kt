@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Regression tests for wrapper identity preservation after PR #95.
@@ -31,7 +32,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
@@ -51,7 +52,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `getInOuts returns same instances as staticToDynamicMap`() {
 		// Given: Simulation context with InOuts
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
@@ -80,7 +81,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `grid cells match staticToDynamicMap entries`() {
 		// Given: Simulation context with dynamic grid
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
@@ -130,7 +131,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `toDynamic returns same instance for repeated calls`() {
 		// Given: Simulation context
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
@@ -160,7 +161,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `InOut semaphores are properly mapped to dynamic wrappers`() {
 		// Given: Simulation context with InOuts
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->

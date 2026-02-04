@@ -143,7 +143,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Arrange: Load vyhybna.xml (7 blocks, complex topology)
 			val editingContextFactory: EditingContextFactory by inject()
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			val vyhybnaContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
@@ -198,7 +198,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks) for realistic multi-block ownership scenarios
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			service = context.getTrainNavigationService()
@@ -397,7 +397,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain filters out non-DynamicTrackBlocks`() {
 			// Arrange: Use vyhybna.xml (has TrackSections with blocks)
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			val service = context.getTrainNavigationService()
@@ -423,7 +423,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain deduplicates blocks in path`() {
 			// Arrange: vyhybna.xml has switches that may create duplicate block references
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			val service = context.getTrainNavigationService()
@@ -564,7 +564,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun setUp() {
 			// Use vyhybna.xml (complex path with separators and blocks)
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			service = context.getTrainNavigationService()
@@ -680,7 +680,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks, 2 alternative paths via switches vA/vB)
 			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
+				TestFixtures.loadShuntingXml()!!
 			) as DefaultEditingContext
 			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 

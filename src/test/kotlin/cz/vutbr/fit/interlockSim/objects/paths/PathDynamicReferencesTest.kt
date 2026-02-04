@@ -22,12 +22,12 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Tests that paths created in simulation context contain only dynamic references.
@@ -60,10 +60,6 @@ class PathDynamicReferencesTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	companion object {
-		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
-
 	@Nested
 	@DisplayName("TopologyNavigator Dynamic References")
 	inner class TopologyNavigatorDynamicReferences {
@@ -71,8 +67,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		@DisplayName("findAllTopologicalPaths returns paths with dynamic separators")
 		fun findAllTopologicalPaths_returnsDynamicSeparators() {
 			// Arrange - Load vyhybna.xml network
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			// Get InOut elements (entry/exit points)
 			val inOuts = context.getInOuts()
@@ -103,17 +100,19 @@ class PathDynamicReferencesTest : KoinTestBase() {
 					}
 				}
 			}
-			// Note: vyhybna.xml may have paths without intermediate separators
-			// The important thing is that IF separators exist, they are dynamic
-			// This test passes if paths exist (even without separators)
+				// Note: vyhybna.xml may have paths without intermediate separators
+				// The important thing is that IF separators exist, they are dynamic
+				// This test passes if paths exist (even without separators)
+			}
 		}
 
 		@Test
 		@DisplayName("topology paths preserve dynamic types during iteration")
 		fun topologyPaths_preserveDynamicTypesDuringIteration() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val inOut1 = context.toDynamic(inOuts[0])
@@ -125,12 +124,13 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
 			assertThat(paths).isNotNull()
 
-			// Assert - All iterations yield dynamic separators
-			for (path in paths) {
-				val separators = path.filter { it is PathSeparator }
-				for (separator in separators) {
-					assertThat(separator)
-						.isInstanceOf(DynamicPathSeparator::class)
+				// Assert - All iterations yield dynamic separators
+				for (path in paths) {
+					val separators = path.filter { it is PathSeparator }
+					for (separator in separators) {
+						assertThat(separator)
+							.isInstanceOf(DynamicPathSeparator::class)
+					}
 				}
 			}
 		}
@@ -143,8 +143,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		@DisplayName("reserved paths contain only dynamic blocks")
 		fun reservedPaths_containOnlyDynamicBlocks() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val inOut1 = context.toDynamic(inOuts[0])
@@ -163,10 +164,11 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			// All reserved blocks should be DynamicTrackBlock (which are dynamic types)
 			assertThat(reservedBlocks.isNotEmpty()).isTrue()
 
-			// Verify blocks are dynamic (have trainName property for ownership tracking)
-			for (block in reservedBlocks) {
-				// DynamicTrackBlock has trainName property
-				assertThat(block.trainName).isNotNull()
+				// Verify blocks are dynamic (have trainName property for ownership tracking)
+				for (block in reservedBlocks) {
+					// DynamicTrackBlock has trainName property
+					assertThat(block.trainName).isNotNull()
+				}
 			}
 		}
 
@@ -174,8 +176,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		@DisplayName("path reservation uses dynamic wrappers")
 		fun pathReservation_usesDynamicWrappers() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val staticInOut1 = inOuts[0] // Static reference
@@ -194,8 +197,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			// Act - Reserve path using dynamic separators
 			val result = service.reservePath("train1", dynamicInOut1, dynamicInOut2)
 
-			// Assert - Reservation should succeed
-			assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+				// Assert - Reservation should succeed
+				assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+			}
 		}
 	}
 
@@ -206,8 +210,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		@DisplayName("findReservedPathForTrain returns paths with dynamic separators")
 		fun findReservedPathForTrain_returnsDynamicSeparators() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val inOut1 = context.toDynamic(inOuts[0])
@@ -237,16 +242,18 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				}
 			}
 
-			// Verify path contains separators
-			assertThat(separatorCount > 0).isTrue()
+				// Verify path contains separators
+				assertThat(separatorCount > 0).isTrue()
+			}
 		}
 
 		@Test
 		@DisplayName("train navigation validates dynamic block types")
 		fun trainNavigation_validatesDynamicBlockTypes() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val inOut1 = context.toDynamic(inOuts[0])
@@ -265,9 +272,10 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			// Check if path is reserved for train2 (should be false - different train)
 			val isReservedForTrain2 = trainService.isPathReservedForTrain("train2", inOut1)
 
-			// Assert
-			assertThat(isReservedForTrain1).isTrue()
-			assertThat(isReservedForTrain2).isFalse() // Different train
+				// Assert
+				assertThat(isReservedForTrain1).isTrue()
+				assertThat(isReservedForTrain2).isFalse() // Different train
+			}
 		}
 	}
 
@@ -278,8 +286,9 @@ class PathDynamicReferencesTest : KoinTestBase() {
 		@DisplayName("context.toDynamic converts static separators to dynamic")
 		fun toDynamic_convertsStaticToDynamic() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			// Get STATIC reference (before conversion) using getInOutsList()
 			val staticInOuts = context.getInOutsList()
@@ -295,16 +304,18 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			// DynamicInOut is a wrapper type, not the same type as InOut
 			assertThat(dynamicInOut.javaClass.simpleName).isNotNull()
 			assertThat(staticInOut.javaClass.simpleName).isNotNull()
-			// The types should be different (Dynamic vs Static)
-			assertThat(dynamicInOut.javaClass != staticInOut.javaClass).isTrue()
+				// The types should be different (Dynamic vs Static)
+				assertThat(dynamicInOut.javaClass != staticInOut.javaClass).isTrue()
+			}
 		}
 
 		@Test
 		@DisplayName("toDynamic is idempotent for dynamic inputs")
 		fun toDynamic_idempotentForDynamicInputs() {
 			// Arrange
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			val inOuts = context.getInOuts().toList()
 			val staticInOut = inOuts[0]
@@ -315,9 +326,10 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			// Act - Convert again (should be idempotent)
 			val dynamicInOut2 = context.toDynamic(dynamicInOut1)
 
-			// Assert - Should return same dynamic wrapper
-			assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)
-			assertThat(dynamicInOut1 === dynamicInOut2).isTrue() // Same object
+				// Assert - Should return same dynamic wrapper
+				assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)
+				assertThat(dynamicInOut1 === dynamicInOut2).isTrue() // Same object
+			}
 		}
 	}
 }

@@ -19,13 +19,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
@@ -41,10 +41,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 class PathSeparatorDynamicMappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
-	companion object {
-		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
-
 	@Nested
 	@DisplayName("Unit Tests - toDynamic() behavior")
 	inner class ToDynamicUnitTests {
@@ -55,7 +51,8 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("toDynamic returns same instance for already-dynamic separator")
 		fun toDynamic_alreadyDynamic_returnsSameInstance() {
 			// Arrange - Load vyhybna.xml and initialize mappings
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val context = factory.createContext(stream) as DefaultSimulationContext
 
 			// Initialize dynamic wrappers for InOuts
 			val dynamicInOuts = context.getInOuts()
@@ -73,8 +70,9 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			// Act - call toDynamic on already-dynamic separator
 			val result = context.toDynamic(dynamicSemaphore)
 
-			// Assert - should return same instance (identity function)
-			assertThat(result).isSameInstanceAs(dynamicSemaphore)
+				// Assert - should return same instance (identity function)
+				assertThat(result).isSameInstanceAs(dynamicSemaphore)
+			}
 		}
 
 		/**
@@ -135,7 +133,8 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - InOut-related separators registered after getInOuts()")
 		fun vyhybnaXml_inOutRelatedSeparatorsRegistered() {
 			// Arrange - Load vyhybna.xml configuration
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val context = factory.createContext(stream) as DefaultSimulationContext
 
 			// Act - Trigger InOut initialization by calling getInOuts()
 			val dynamicInOuts = context.getInOuts()
@@ -165,10 +164,11 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 				testedSemaphores++
 			}
 
-			// Verify we tested InOuts and their semaphores
-			assertThat(testedInOuts).isNotNull()
-			assertThat(testedSemaphores).isNotNull()
-			println("Tested $testedInOuts InOuts and $testedSemaphores associated semaphores successfully")
+				// Verify we tested InOuts and their semaphores
+				assertThat(testedInOuts).isNotNull()
+				assertThat(testedSemaphores).isNotNull()
+				println("Tested $testedInOuts InOuts and $testedSemaphores associated semaphores successfully")
+			}
 		}
 
 		/**
@@ -178,7 +178,8 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - InOut semaphores are registered")
 		fun vyhybnaXml_inOutSemaphoresRegistered() {
 			// Arrange
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { stream ->
+				val context = factory.createContext(stream) as DefaultSimulationContext
 
 			// Act - Trigger initialization
 			val dynamicInOuts = context.getInOuts()
@@ -191,8 +192,9 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
 				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
 
-				assertThat(inSemaphore).isInstanceOf(DynamicPathSeparator::class)
-				assertThat(outSemaphore).isInstanceOf(DynamicPathSeparator::class)
+					assertThat(inSemaphore).isInstanceOf(DynamicPathSeparator::class)
+					assertThat(outSemaphore).isInstanceOf(DynamicPathSeparator::class)
+				}
 			}
 		}
 
@@ -203,8 +205,9 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - repeated toDynamic calls return same instance")
 		fun vyhybnaXml_repeatedCallsReturnSameInstance() {
 			// Arrange
-			val context = factory.createContext(VYHYBNA_XML) as DefaultSimulationContext
-			context.getInOuts()
+			TestFixtures.loadShuntingXml().use { stream ->
+				val context = factory.createContext(stream) as DefaultSimulationContext
+				context.getInOuts()
 
 			// Get a static semaphore - use first InOut's in semaphore for reliability
 			val dynamicInOut = context.getInOuts().first()
@@ -215,9 +218,10 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			val dynamic2 = context.toDynamic(staticSemaphore)
 			val dynamic3 = context.toDynamic(staticSemaphore)
 
-			// Assert - all should be the same instance
-			assertThat(dynamic2).isSameInstanceAs(dynamic1)
-			assertThat(dynamic3).isSameInstanceAs(dynamic1)
+				// Assert - all should be the same instance
+				assertThat(dynamic2).isSameInstanceAs(dynamic1)
+				assertThat(dynamic3).isSameInstanceAs(dynamic1)
+			}
 		}
 	}
 }

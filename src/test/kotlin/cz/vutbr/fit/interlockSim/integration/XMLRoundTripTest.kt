@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.File
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Integration tests for XML serialization round-trip functionality.
@@ -262,7 +263,7 @@ class XMLRoundTripTest : KoinTestBase() {
 		// Load the complex vyhybna.xml network
 		val originalContext =
 			xmlFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+				TestFixtures.loadShuntingXml()
 			) as EditingContext
 
 		// Save to file

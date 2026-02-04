@@ -84,7 +84,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	fun setUp() {
 		// Load vyhybna.xml from resources
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext

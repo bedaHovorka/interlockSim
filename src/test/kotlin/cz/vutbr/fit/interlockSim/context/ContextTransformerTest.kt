@@ -30,6 +30,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.util.Point
@@ -37,7 +38,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Comprehensive tests for ContextTransformer
@@ -64,10 +64,6 @@ class ContextTransformerTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 	private val transformer: ContextTransformer by inject()
 	private val processFactory: SimulationProcessFactory by inject()
-
-	companion object {
-		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
 
 	@Nested
 	@DisplayName("Basic Transformation")
@@ -649,15 +645,17 @@ class ContextTransformerTest : KoinTestBase() {
 		@Test
 		@DisplayName("complex network (vyhybna.xml) has all blocks wrapped")
 		fun vyhybnaXml_allBlocksAreWrapped() {
-			(editingContextFactory.createContext(VYHYBNA_XML) as EditingContext).use { editingContext ->
-				// Arrange - Load vyhybna.xml which creates EditingContext
-				simulationContextFactory.createContext(editingContext).use { simulationContext ->
+			TestFixtures.loadShuntingXml().use { stream ->
+				(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
+					// Arrange - Load vyhybna.xml which creates EditingContext
+					simulationContextFactory.createContext(editingContext).use { simulationContext ->
 					val graph = simulationContext.getGraph()
 
-					// Assert - All graph entries are DynamicTrackBlock
-					assertThat(graph.size()).isGreaterThan(0)
-					for (entry in graph.entrySet()) {
-						assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
+						// Assert - All graph entries are DynamicTrackBlock
+						assertThat(graph.size()).isGreaterThan(0)
+						for (entry in graph.entrySet()) {
+							assertThat(entry.value).isInstanceOf(DynamicTrackBlock::class.java)
+						}
 					}
 				}
 			}

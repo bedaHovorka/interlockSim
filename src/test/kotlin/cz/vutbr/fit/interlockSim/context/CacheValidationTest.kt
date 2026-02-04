@@ -19,12 +19,12 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 
 /**
@@ -48,10 +48,6 @@ class CacheValidationTest : KoinTestBase() {
 	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	companion object {
-		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
-
 	@Nested
 	@DisplayName("Cache Hit Behavior")
 	inner class CacheHitBehavior {
@@ -59,56 +55,62 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("same wrapper returned for repeated toDynamic calls with same static object")
 		fun repeatedCallsReturnSameInstance() {
 			// Given: Simulation context with mapped separators
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
 
-			// When: Getting static reference and calling toDynamic multiple times
-			val dynamicInOut = context.getInOuts().first()
-			val staticInOut = dynamicInOut.staticRef
+				// When: Getting static reference and calling toDynamic multiple times
+				val dynamicInOut = context.getInOuts().first()
+				val staticInOut = dynamicInOut.staticRef
 
-			val wrapper1 = context.toDynamic(staticInOut)
-			val wrapper2 = context.toDynamic(staticInOut)
-			val wrapper3 = context.toDynamic(staticInOut)
+				val wrapper1 = context.toDynamic(staticInOut)
+				val wrapper2 = context.toDynamic(staticInOut)
+				val wrapper3 = context.toDynamic(staticInOut)
 
-			// Then: All calls return the same instance (cache hit)
-			assertThat(wrapper1).isSameInstanceAs(wrapper2)
-			assertThat(wrapper2).isSameInstanceAs(wrapper3)
-			assertThat(wrapper1).isSameInstanceAs(dynamicInOut)
+				// Then: All calls return the same instance (cache hit)
+				assertThat(wrapper1).isSameInstanceAs(wrapper2)
+				assertThat(wrapper2).isSameInstanceAs(wrapper3)
+				assertThat(wrapper1).isSameInstanceAs(dynamicInOut)
+			}
 		}
 
 		@Test
 		@DisplayName("same wrapper returned for InOut semaphore repeated calls")
 		fun semaphoreRepeatedCallsReturnSameInstance() {
 			// Given: Context with InOut semaphores
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
-			val dynamicInOut = context.getInOuts().first()
-			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
+				val dynamicInOut = context.getInOuts().first()
+				val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
 
-			// When: Calling toDynamic multiple times
-			val wrapper1 = context.toDynamic(staticSemaphore)
-			val wrapper2 = context.toDynamic(staticSemaphore)
-			val wrapper3 = context.toDynamic(staticSemaphore)
+				// When: Calling toDynamic multiple times
+				val wrapper1 = context.toDynamic(staticSemaphore)
+				val wrapper2 = context.toDynamic(staticSemaphore)
+				val wrapper3 = context.toDynamic(staticSemaphore)
 
-			// Then: Same instance returned (cache hit)
-			assertThat(wrapper1).isSameInstanceAs(wrapper2)
-			assertThat(wrapper2).isSameInstanceAs(wrapper3)
-			assertThat(wrapper1).isSameInstanceAs(dynamicInOut.inSemaphore)
+				// Then: Same instance returned (cache hit)
+				assertThat(wrapper1).isSameInstanceAs(wrapper2)
+				assertThat(wrapper2).isSameInstanceAs(wrapper3)
+				assertThat(wrapper1).isSameInstanceAs(dynamicInOut.inSemaphore)
+			}
 		}
 
 		@Test
 		@DisplayName("toDynamic is identity function for already-dynamic separators")
 		fun alreadyDynamicPassthrough() {
 			// Given: Context with dynamic wrappers
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
-			val dynamicInOut = context.getInOuts().first()
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
+				val dynamicInOut = context.getInOuts().first()
 
-			// When: Calling toDynamic on already-dynamic separator
-			val result = context.toDynamic(dynamicInOut)
+				// When: Calling toDynamic on already-dynamic separator
+				val result = context.toDynamic(dynamicInOut)
 
-			// Then: Same instance returned (identity function)
-			assertThat(result).isSameInstanceAs(dynamicInOut)
+				// Then: Same instance returned (identity function)
+				assertThat(result).isSameInstanceAs(dynamicInOut)
+			}
 		}
 	}
 
@@ -238,33 +240,37 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("validateDynamicMapping succeeds for complete vyhybna.xml")
 		fun completeVyhybnaValidates() {
 			// Given: Fully initialized context
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
 
-			// When: Triggering validation by accessing InOuts
-			val inouts = context.getInOuts()
+				// When: Triggering validation by accessing InOuts
+				val inouts = context.getInOuts()
 
-			// Then: No exception thrown, InOuts present
-			assertThat(inouts).isNotNull()
+				// Then: No exception thrown, InOuts present
+				assertThat(inouts).isNotNull()
+			}
 		}
 
 		@Test
 		@DisplayName("all InOut semaphores are mapped after initialization")
 		fun allInOutSemaphoresMapped() {
 			// Given: Context with InOuts
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
 
-			// When: Accessing all InOut semaphores
-			for (dynamicInOut in context.getInOuts()) {
-				val staticInOut = dynamicInOut.staticRef
+				// When: Accessing all InOut semaphores
+				for (dynamicInOut in context.getInOuts()) {
+					val staticInOut = dynamicInOut.staticRef
 
-				// Then: Both in and out semaphores should be mapped
-				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
-				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
+					// Then: Both in and out semaphores should be mapped
+					val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
+					val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
 
-				assertThat(inSemaphore).isNotNull()
-				assertThat(outSemaphore).isNotNull()
+					assertThat(inSemaphore).isNotNull()
+					assertThat(outSemaphore).isNotNull()
+				}
 			}
 		}
 	}
@@ -276,55 +282,61 @@ class CacheValidationTest : KoinTestBase() {
 		@DisplayName("multiple different wrapper types can coexist in cache")
 		fun multipleWrapperTypes() {
 			// Given: Context with multiple separator types
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
 
-			// When: Getting different wrapper types
-			val inouts = context.getInOuts()
-			val dynamicInOut = inouts.first()
-			val dynamicSemaphore = dynamicInOut.inSemaphore
+				// When: Getting different wrapper types
+				val inouts = context.getInOuts()
+				val dynamicInOut = inouts.first()
+				val dynamicSemaphore = dynamicInOut.inSemaphore
 
-			// Then: Both can be retrieved via toDynamic
-			val retrievedInOut = context.toDynamic(dynamicInOut.staticRef)
-			val retrievedSemaphore = context.toDynamic(dynamicSemaphore.staticRef)
+				// Then: Both can be retrieved via toDynamic
+				val retrievedInOut = context.toDynamic(dynamicInOut.staticRef)
+				val retrievedSemaphore = context.toDynamic(dynamicSemaphore.staticRef)
 
-			assertThat(retrievedInOut).isSameInstanceAs(dynamicInOut)
-			assertThat(retrievedSemaphore).isSameInstanceAs(dynamicSemaphore)
+				assertThat(retrievedInOut).isSameInstanceAs(dynamicInOut)
+				assertThat(retrievedSemaphore).isSameInstanceAs(dynamicSemaphore)
+			}
 		}
 
 		@Test
 		@DisplayName("cache preserves wrapper identity across different access patterns")
 		fun identityPreservedAcrossAccessPatterns() {
 			// Given: Context with mapped separators
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
 
-			// When: Accessing same separator via different paths
-			val fromGetInOuts = context.getInOuts().first()
-			val fromToDynamic = context.toDynamic(fromGetInOuts.staticRef)
+				// When: Accessing same separator via different paths
+				val fromGetInOuts = context.getInOuts().first()
+				val fromToDynamic = context.toDynamic(fromGetInOuts.staticRef)
 
-			// Then: Both access patterns return same instance
-			assertThat(fromToDynamic).isSameInstanceAs(fromGetInOuts)
+				// Then: Both access patterns return same instance
+				assertThat(fromToDynamic).isSameInstanceAs(fromGetInOuts)
+			}
 		}
 
 		@Test
 		@DisplayName("nested dynamic objects - InOut contains semaphores")
 		fun nestedDynamicObjects() {
 			// Given: Context with InOut containing semaphores
-			val editingContext = editingContextFactory.createContext(VYHYBNA_XML) as EditingContext
-			val context = simulationContextFactory.createContext(editingContext)
-			val dynamicInOut = context.getInOuts().first()
+			TestFixtures.loadShuntingXml().use { stream ->
+				val editingContext = editingContextFactory.createContext(stream) as EditingContext
+				val context = simulationContextFactory.createContext(editingContext)
+				val dynamicInOut = context.getInOuts().first()
 
-			// When: Accessing nested semaphores
-			val inSemaphore = dynamicInOut.inSemaphore
-			val outSemaphore = dynamicInOut.outSemaphore
+				// When: Accessing nested semaphores
+				val inSemaphore = dynamicInOut.inSemaphore
+				val outSemaphore = dynamicInOut.outSemaphore
 
-			// Then: Nested semaphores are also cached properly
-			val fromCache1 = context.toDynamic(inSemaphore.staticRef)
-			val fromCache2 = context.toDynamic(outSemaphore.staticRef)
+				// Then: Nested semaphores are also cached properly
+				val fromCache1 = context.toDynamic(inSemaphore.staticRef)
+				val fromCache2 = context.toDynamic(outSemaphore.staticRef)
 
-			assertThat(fromCache1).isSameInstanceAs(inSemaphore)
-			assertThat(fromCache2).isSameInstanceAs(outSemaphore)
+				assertThat(fromCache1).isSameInstanceAs(inSemaphore)
+				assertThat(fromCache2).isSameInstanceAs(outSemaphore)
+			}
 		}
 	}
 }

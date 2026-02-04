@@ -12,11 +12,11 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import java.io.InputStream
 
 private val logger = KotlinLogging.logger {}
 
@@ -41,10 +41,6 @@ private val logger = KotlinLogging.logger {}
  */
 @Tag("integration-test")
 class ShuntingLoopPathReservationTest : KoinTestBase() {
-	private fun shuntingXml(): InputStream =
-		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: throw IllegalStateException("vyhybna.xml not found in resources")
-
 	/**
 	 * Verifies that ShuntingLoop simulation completes without deadlock.
 	 *
@@ -65,7 +61,7 @@ class ShuntingLoopPathReservationTest : KoinTestBase() {
 	@Test
 	fun `shuntingLoop initializes without cache errors`() {
 		// Given: Load vyhybna.xml configuration
-		val context = createMockSimulationContext(shuntingXml())
+		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 		logger.info { "Creating ShuntingLoop with vyhybna.xml configuration" }
 
@@ -97,7 +93,7 @@ class ShuntingLoopPathReservationTest : KoinTestBase() {
 	@Test
 	fun `validation ensures cache completeness`() {
 		// Given: Load vyhybna.xml configuration
-		val context = createMockSimulationContext(shuntingXml())
+		val context = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 		// When: Create ShuntingLoop (constructor builds and validates cache)
 		val endTime = 10L
