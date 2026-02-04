@@ -10,8 +10,10 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -56,6 +58,7 @@ object AnimationStateCapture {
 	 * - All active trains and their positions (via occupied track blocks)
 	 * - All track blocks and their occupancy states
 	 * - All semaphores and their signal indications
+	 * - All railway switches and their configurations
 	 *
 	 * **Thread Safety:** This method accesses simulation objects. It should be
 	 * called from a thread-safe context (typically after marshaling to EDT via
@@ -71,7 +74,8 @@ object AnimationStateCapture {
 				simulationTime = captureSimulationTime(),
 				trainStates = captureTrainStates(context),
 				trackStates = captureTrackStates(context),
-				signalStates = captureSignalStates(context)
+				signalStates = captureSignalStates(context),
+				switchStates = captureSwitchStates(context)
 			)
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to capture animation state from simulation context" }
@@ -283,6 +287,59 @@ object AnimationStateCapture {
 		return SignalState(
 			semaphore = dynamicSemaphore.staticRef,
 			signal = signal
+		)
+	}
+
+	/**
+	 * Capture state of all railway switches in simulation.
+	 *
+	 * Iterates over grid to find all DynamicRailSwitch cells (dynamic wrappers)
+	 * and captures their current configuration state (MAIN or BRANCH).
+	 *
+	 * Note: SimulationContext grid contains DYNAMIC cells after transformation.
+	 * DynamicRailSwitch instances are already in the grid - no toDynamic() conversion needed.
+	 * The transformation from static to dynamic happens during ContextTransformer.createSimulationContext()
+	 * via GridTransformer.transformGrid().
+	 *
+	 * @param context Simulation context to query
+	 * @return Map of [RailSwitch] (static reference) to [SwitchState]
+	 */
+	private fun captureSwitchStates(context: SimulationContext): Map<RailSwitch, SwitchState> {
+		val grid = context.getRailWayNetGrid()
+		val switches = mutableListOf<DynamicRailSwitch>()
+
+		// Iterate grid to find all DynamicRailSwitch cells
+		for (x in 0 until grid.getCols()) {
+			for (y in 0 until grid.getRows()) {
+				val cell = grid.getCellAt(x, y)
+				if (cell is DynamicRailSwitch) {
+					// Cell is already dynamic, no conversion needed
+					switches.add(cell)
+				}
+			}
+		}
+
+		logger.trace { "Capturing state for ${switches.size} switches" }
+
+		return switches.associate { dynamicSwitch ->
+			dynamicSwitch.staticRef to captureSwitchState(dynamicSwitch)
+		}
+	}
+
+	/**
+	 * Capture state of a single railway switch.
+	 *
+	 * Extracts current configuration (MAIN/BRANCH) from dynamic wrapper.
+	 *
+	 * @param dynamicSwitch Dynamic switch wrapper with current state
+	 * @return Immutable switch state snapshot
+	 */
+	private fun captureSwitchState(dynamicSwitch: DynamicRailSwitch): SwitchState {
+		val conf = dynamicSwitch.conf
+
+		return SwitchState(
+			railSwitch = dynamicSwitch.staticRef,
+			conf = conf
 		)
 	}
 }

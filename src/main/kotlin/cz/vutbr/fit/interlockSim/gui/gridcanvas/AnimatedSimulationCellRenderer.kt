@@ -14,8 +14,11 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Graphics2D
 
@@ -191,6 +194,86 @@ class AnimatedSimulationCellRenderer(
 
 		// Delegate to parent for geometry rendering
 		super.draw(g, cell)
+	}
+
+	/**
+	 * Render railway switch showing the historically active direction from captured state.
+	 *
+	 * Uses the switch configuration from the current animation state snapshot rather than
+	 * the live cell state. This ensures that during playback, switches display their
+	 * historical positions (MAIN or BRANCH) as they were during the recorded simulation.
+	 *
+	 * Only the active path (based on captured conf) is drawn. Inactive directions
+	 * are not rendered, providing a clear indication of which route was set through
+	 * the switch at that moment in time.
+	 *
+	 * **Fallback behavior:** If switch state is not available in the animation state
+	 * (e.g., during initialization), falls back to using the current cell configuration.
+	 *
+	 * @param g Graphics context for rendering
+	 * @param cell Dynamic rail switch cell to render
+	 */
+	override fun draw(
+		g: Graphics2D,
+		cell: DynamicRailSwitch
+	) {
+		val state = animationController.getCurrentState()
+		val staticSwitch = cell.staticRef
+		val capturedState = state.switchStates[staticSwitch]
+
+		// Use captured state if available, otherwise fall back to current state
+		val activeSegments = if (capturedState != null) {
+			// Use historical state from animation
+			getActiveSegmentsForConf(staticSwitch, capturedState.conf)
+		} else {
+			// Fall back to current state (should not happen during playback)
+			logger.trace { "No captured state for switch ${staticSwitch.getName()}, using current conf" }
+			cell.getActiveSegments()
+		}
+
+		// Draw only the active direction (inherits graphics context color)
+		drawSegments(g, *activeSegments.toTypedArray())
+	}
+
+	/**
+	 * Get active segments for a railway switch with a specific configuration.
+	 *
+	 * Queries the static switch topology to find which segments are connected
+	 * based on the given configuration (MAIN or BRANCH).
+	 *
+	 * This is similar to [DynamicRailSwitch.getActiveSegments] but takes an
+	 * explicit configuration parameter rather than using the cell's current state.
+	 *
+	 * @param railSwitch Static switch configuration
+	 * @param conf Configuration to query (MAIN or BRANCH)
+	 * @return Set of 2 segments forming the active path for the given configuration
+	 * @throws IllegalStateException if no segments found for the configuration
+	 */
+	private fun getActiveSegmentsForConf(
+		railSwitch: RailSwitch,
+		conf: RailSwitch.Conf
+	): Set<Cell.Segment> {
+		// Iterate through all segments that join in this switch
+		for (segment in railSwitch.joins()) {
+			// Get all edges connected to this segment
+			val joinedEdges = railSwitch.confs.getJoinedNodesAndEdges(segment)
+
+			// Search for the edge with value matching the given conf
+			// Use explicit cast similar to DynamicRailSwitch.getActiveSegments()
+			for (e in (joinedEdges as Map<*, *>).entries) {
+				@Suppress("UNCHECKED_CAST")
+				val entry = e as Map.Entry<Cell.Segment, RailSwitch.Conf>
+				if (entry.value == conf) {
+					return setOf(segment, entry.key)
+				}
+			}
+		}
+
+		// This should never happen if the switch is properly initialized
+		throw IllegalStateException(
+			"No segments found for configuration $conf in switch ${railSwitch.getName()}. " +
+				"This indicates a corrupted switch topology."
+		)
 	}
 
 	/**

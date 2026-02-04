@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
@@ -54,17 +55,20 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @property trainStates Map of train number to [TrainState] (immutable)
  * @property trackStates Map of [TrackBlock] to [TrackState] (immutable)
  * @property signalStates Map of [RailSemaphore] to [SignalState] (immutable)
+ * @property switchStates Map of [RailSwitch] to [SwitchState] (immutable)
  *
  * @see TrainState
  * @see TrackState
  * @see SignalState
+ * @see SwitchState
  * @see AnimationController
  */
 data class AnimationState(
 	val simulationTime: Double,
 	val trainStates: Map<Int, TrainState>,
 	val trackStates: Map<TrackBlock, TrackState>,
-	val signalStates: Map<RailSemaphore, SignalState>
+	val signalStates: Map<RailSemaphore, SignalState>,
+	val switchStates: Map<RailSwitch, SwitchState>
 ) {
 	companion object {
 		/**
@@ -77,7 +81,8 @@ data class AnimationState(
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = emptyMap()
+			signalStates = emptyMap(),
+			switchStates = emptyMap()
 		)
 	}
 }
@@ -150,4 +155,26 @@ data class TrackState(
 data class SignalState(
 	val semaphore: RailSemaphore,
 	val signal: Signal
+)
+
+/**
+ * Immutable snapshot of a railway switch's state at a moment in time.
+ *
+ * Captures switch configuration (MAIN vs BRANCH) needed for rendering the
+ * active segments during animation playback.
+ *
+ * ## Configuration Mapping
+ *
+ * - [RailSwitch.Conf.MAIN] → Straight/normal path through switch
+ * - [RailSwitch.Conf.BRANCH] → Diverging/turnout path through switch
+ *
+ * This state is essential for animated playback to show which route was
+ * historically set through each switch at any point in time.
+ *
+ * @property railSwitch Reference to the static switch configuration
+ * @property conf Current configuration from [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch]
+ */
+data class SwitchState(
+	val railSwitch: RailSwitch,
+	val conf: RailSwitch.Conf
 )

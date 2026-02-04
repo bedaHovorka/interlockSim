@@ -33,6 +33,7 @@ class AnimationStateTest {
 		assertThat(AnimationState.EMPTY.trainStates).isEmpty()
 		assertThat(AnimationState.EMPTY.trackStates).isEmpty()
 		assertThat(AnimationState.EMPTY.signalStates).isEmpty()
+		assertThat(AnimationState.EMPTY.switchStates).isEmpty()
 	}
 
 	@Test
@@ -42,7 +43,8 @@ class AnimationStateTest {
 			simulationTime = 123.45,
 			trainStates = mapOf(1 to mockTrainState(1)),
 			trackStates = mapOf(mockk<TrackBlock>() to mockTrackState()),
-			signalStates = mapOf(mockk<RailSemaphore>() to mockSignalState())
+			signalStates = mapOf(mockk<RailSemaphore>() to mockSignalState()),
+			switchStates = emptyMap()
 		)
 
 		// Act & Assert - data class copy creates new instance
@@ -69,7 +71,8 @@ class AnimationStateTest {
 			),
 			signalStates = mapOf(
 				semaphore to mockSignalState()
-			)
+			),
+			switchStates = emptyMap()
 		)
 
 		// Assert
@@ -192,14 +195,16 @@ class AnimationStateTest {
 			simulationTime = 10.0,
 			trainStates = mapOf(1 to trainState),
 			trackStates = mapOf(trackBlock to trackState),
-			signalStates = mapOf(semaphore to signalState)
+			signalStates = mapOf(semaphore to signalState),
+			switchStates = emptyMap()
 		)
 
 		val state2 = AnimationState(
 			simulationTime = 10.0,
 			trainStates = mapOf(1 to trainState),
 			trackStates = mapOf(trackBlock to trackState),
-			signalStates = mapOf(semaphore to signalState)
+			signalStates = mapOf(semaphore to signalState),
+			switchStates = emptyMap()
 		)
 
 		// Act & Assert

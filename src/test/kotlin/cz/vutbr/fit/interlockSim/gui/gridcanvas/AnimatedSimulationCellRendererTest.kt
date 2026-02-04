@@ -75,7 +75,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap()
+			signalStates = emptyMap(),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -98,7 +99,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap()
+			signalStates = emptyMap(),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -122,7 +124,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap()
+			signalStates = emptyMap(),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -166,7 +169,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -190,7 +194,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -214,7 +219,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -238,7 +244,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -262,7 +269,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -286,7 +294,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
@@ -310,7 +319,8 @@ class AnimatedSimulationCellRendererTest {
 			simulationTime = 0.0,
 			trainStates = emptyMap(),
 			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState)
+			signalStates = mapOf(staticSemaphore to signalState),
+			switchStates = emptyMap()
 		)
 		every { animationController.getCurrentState() } returns animationState
 
