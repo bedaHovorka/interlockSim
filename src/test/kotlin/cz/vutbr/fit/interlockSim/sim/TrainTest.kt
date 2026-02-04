@@ -159,6 +159,23 @@ class TrainTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("Distance to semaphore")
+	inner class DistanceToSemaphoreTests {
+		@Test
+		fun distanceToSemaphore_withNullPath_returnsZero() {
+			// Arrange
+			val timetable = createTimetableWithLength(150.0)
+			val train = Train(mockContext, timetable)
+
+			// Act - Train has no path set initially
+			val distance = train.distanceToSemaphore()
+
+			// Assert - Should return 0.0 when no path exists
+			assertThat(distance).isEqualTo(0.0)
+		}
+	}
+
+	@Nested
 	@DisplayName("String representation")
 	inner class ToStringTests {
 		@Test

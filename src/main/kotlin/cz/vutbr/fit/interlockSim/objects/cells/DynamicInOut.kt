@@ -114,6 +114,16 @@ class DynamicInOut(
 	 */
 	override fun toString(): String = "Dynamic[$name]"
 
+	/**
+	 * Get the track connection direction for InOut.
+	 *
+	 * Delegates to the static InOut's getTrackConnectionDirection() method.
+	 *
+	 * @return Track connection direction
+	 * @see InOut.getTrackConnectionDirection
+	 */
+	fun getTrackConnectionDirection(): Cell.Segment = staticRef.getTrackConnectionDirection()
+
 	private fun getSemaphoreFor(
 		from: Cell.Segment?,
 		to: Cell.Segment?

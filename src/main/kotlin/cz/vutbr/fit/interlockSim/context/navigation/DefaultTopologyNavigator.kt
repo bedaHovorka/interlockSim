@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.OrientedNodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -115,10 +116,24 @@ class DefaultTopologyNavigator(
 	 * 4. Get following segment using NodeCell navigation methods
 	 * 5. Query graph for edge assigned to following segment
 	 *
+	 * ## Direction Handling
+	 *
+	 * **When segment==null** (no known incoming direction):
+	 * - Considers all possible exit directions via `joins()`
+	 * - Selects a single next block (e.g. first matching candidate) in a deterministic way
+	 * - Expected at entry points where direction cannot be determined from context
+	 *
+	 * **When segment!=null** (known incoming direction):
+	 * - Queries node's `getFollowingSegment()` for deterministic exit
+	 * - OrientedNodeCell returns single exit (requires non-null result)
+	 * - Non-oriented cells (switches) may return multiple branches, but this method
+	 *   returns only one chosen next block
+	 *
 	 * ## Critical Difference from Simulation Version
 	 *
 	 * - Returns static `TrackBlock` instead of `DynamicTrackBlock`
 	 * - No dynamic wrapper lookups or state dependencies
+	 * - Pure topology navigation without reservation state
 	 */
 	override fun getNextTrackBlock(
 		nodeCell: NodeCell,
@@ -134,14 +149,126 @@ class DefaultTopologyNavigator(
 
 		// Determine following segment based on NodeCell type (lines 529-540)
 		// Kotlin idiom: Use when expression with smart casts
-		val followingSegment =
+		// NOTE: Uses same logic as getAllNextTrackBlocks() for consistency (Issue #291)
+		// Performance optimization: Return segment directly for oriented cells (avoids Set allocation)
+		val followingSegment: Cell.Segment? =
 			when (staticNodeCell) {
-				is OrientedNodeCell -> staticNodeCell.getFollowingSegment(segment)
-				else -> staticNodeCell.possibleFollowers(segment ?: return null).firstOrNull()
+				is OrientedNodeCell -> {
+					// Oriented cells have single deterministic direction
+					when {
+						segment == null -> {
+							// No incoming direction known
+							// SPECIAL CASE: InOut connects bidirectionally at direction()
+							// Track connection is at direction() for both entry and exit
+							when (staticNodeCell) {
+								is InOut -> staticNodeCell.getTrackConnectionDirection()
+								else -> staticNodeCell.joins().firstOrNull()
+							}
+						}
+						else -> {
+							// Known incoming direction - get deterministic exit
+							// May return null at dead ends (e.g., InOut exit points)
+							staticNodeCell.getFollowingSegment(segment)
+						}
+					}
+				}
+				else -> {
+					// Non-oriented (switches) may have multiple branches
+					// For topology navigation, return ALL possible exit segments regardless of switch configuration
+					// (possibleFollowers() would only return configuration-dependent paths)
+					val allJoins = staticNodeCell.joins()
+					val followingSegments =
+						if (segment != null) {
+							// Exclude the incoming segment to avoid going backwards
+							allJoins - segment
+						} else {
+							// No incoming segment (starting point), explore all directions
+							allJoins
+						}
+					// Get first valid segment with forward-direction preference (maintains single-path navigation semantics)
+					preferForwardSegment(staticNodeCell, segment, followingSegments)
+				}
 			} ?: return null
 
 		// Query graph for edge assigned to following segment (lines 543-544)
 		return context.getGraph().assignedEdges(location)[followingSegment]
+	}
+
+	/**
+	 * Select the most appropriate following segment at a switch, preferring segments
+	 * that continue in the same spatial direction through the switch.
+	 *
+	 * For HORIZONTAL switches: prefers segments on the opposite side to continue
+	 * traveling through the switch in the same overall direction.
+	 *
+	 * Falls back to sorted() for determinism when direction cannot be determined.
+	 *
+	 * ## Switch Traversal Logic
+	 *
+	 * When traveling through a switch, you ENTER from one side and EXIT from the OPPOSITE side:
+	 * - Traveling RIGHT: enter via LEFT segment (dx < 0), exit via RIGHT segment (dx > 0)
+	 * - Traveling LEFT: enter via RIGHT segment (dx > 0), exit via LEFT segment (dx < 0)
+	 *
+	 * This is because segment dx values indicate direction FROM cell center:
+	 * - Segment A (dx=-1): on LEFT side of cell
+	 * - Segment F (dx=+1): on RIGHT side of cell
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. If HORIZONTAL spatial type and incoming segment known:
+	 *    - Filter candidates with OPPOSITE dx sign from incoming
+	 *    - Return first from sorted filtered list (deterministic)
+	 * 2. Otherwise: return first from sorted candidates (deterministic fallback)
+	 *
+	 * ## Example
+	 *
+	 * From doB2 (X=24) → vB (X=26) traveling RIGHT:
+	 * - Entered vB via segment with dx < 0 (from LEFT side)
+	 * - Candidates at vB: {A (dx=-1, toward doB1), F (dx=+1, toward zB)}
+	 * - Filter: candidates with dx > 0 (opposite sign) → {F}
+	 * - Result: F (exits RIGHT side, continues to zB at X=27)
+	 *
+	 * ## Why Opposite Signs?
+	 *
+	 * To continue traveling in the same overall direction (e.g., RIGHT), you must:
+	 * 1. Enter switch from the LEFT (incoming segment dx < 0)
+	 * 2. Exit switch to the RIGHT (outgoing segment dx > 0)
+	 *
+	 * This prevents routing back toward the direction you came from.
+	 *
+	 * @param nodeCell The switch node cell
+	 * @param incoming The incoming segment (null if starting at this node)
+	 * @param candidates Set of possible outgoing segments
+	 * @return The selected segment, or null if no candidates
+	 */
+	private fun preferForwardSegment(
+		nodeCell: NodeCell,
+		incoming: Cell.Segment?,
+		candidates: Set<Cell.Segment>
+	): Cell.Segment? {
+		if (candidates.isEmpty()) return null
+
+		// If HORIZONTAL spatial type and incoming segment is known
+		if (nodeCell.getSpatialType() == Cell.SpatialType.HORIZONTAL && incoming != null) {
+			val incomingDx = incoming.dx
+
+			// Filter candidates with OPPOSITE dx sign (continue forward through switch)
+			// When traveling through a switch, you enter from one side and exit from opposite side
+			// Incoming dx=-1 (entered from LEFT) → exit dx=+1 (continue RIGHT)
+			// Incoming dx=+1 (entered from RIGHT) → exit dx=-1 (continue LEFT)
+			// Note: dx * incomingDx < 0 means opposite signs
+			val forward = candidates.filter { candidate ->
+				candidate.dx * incomingDx < 0
+			}
+
+			if (forward.isNotEmpty()) {
+				// Return first from sorted for determinism
+				return forward.sorted().first()
+			}
+		}
+
+		// Fallback: use sorted for determinism when no directional preference
+		return candidates.sorted().firstOrNull()
 	}
 
 	/**
@@ -161,7 +288,9 @@ class DefaultTopologyNavigator(
 	 * ## Cycle Detection
 	 *
 	 * Railway networks can contain loops (e.g., around-the-block routing).
-	 * The algorithm prevents infinite loops by tracking visited separators.
+	 * The algorithm uses **per-path ancestor-chain cycle detection** instead of a global visited set.
+	 * This allows the same separator to be visited via different paths (needed for enumerating ALL paths),
+	 * while preventing infinite loops within a single path.
 	 *
 	 * ## Dynamic Wrapper Handling
 	 *
@@ -171,10 +300,11 @@ class DefaultTopologyNavigator(
 	 *
 	 * ## Performance Characteristics
 	 *
-	 * - **Time complexity**: O(V + E) where V = number of path separators, E = track connections
-	 * - **Space complexity**: O(V) for visited set and BFS queue
+	 * - **Time complexity**: O(k * (V + E)) where k = number of paths, V = separators, E = connections
+	 * - **Space complexity**: O(k * V) for storing k paths of average length V, plus O(maxDepth) for BFS queue
 	 * - **Best case**: O(1) when start == target
-	 * - **Worst case**: O(V + E) when exploring entire network before finding target
+	 * - **Worst case**: Bounded by maxDepth to prevent runaway exploration
+	 * - **Note**: Can revisit separators via different branches (enumerates all paths, not single path)
 	 *
 	 * @param start The starting path separator
 	 * @param target The target path separator to reach
@@ -188,7 +318,6 @@ class DefaultTopologyNavigator(
 	): List<List<TrackSection>> {
 		val paths = mutableListOf<List<TrackSection>>()
 		val queue = ArrayDeque<PathNode>()
-		val visited = mutableSetOf<PathSeparator>()
 
 		// Initialize BFS with start separator
 		queue.add(PathNode(start, null, null))
@@ -202,13 +331,11 @@ class DefaultTopologyNavigator(
 				continue
 			}
 
-			// Skip if already visited (cycle detection)
-			// Note: visited set uses PathSeparator's equals(), which handles Dynamic wrappers correctly
-			if (separator in visited) {
-				logger.trace { "findAllTopologicalPaths: skipping visited separator $separator" }
+			// Cycle detection: Check if separator appears in this path's ancestor chain
+			// This allows reaching the same separator via different paths (needed for finding ALL paths)
+			if (isInAncestorChain(separator, node.parent)) {
 				continue
 			}
-			visited.add(separator)
 
 			// Check if we reached the target
 			// Note: PathSeparator.equals() handles comparison between static and dynamic instances
@@ -301,10 +428,21 @@ class DefaultTopologyNavigator(
 	}
 
 	/**
-	 * Get all possible next track blocks following a node cell.
+	 * Get all possible next track blocks following a node cell (recursive helper).
 	 *
 	 * For oriented cells (InOut, Semaphore), returns single deterministic block.
 	 * For switches (RailSwitch), returns ALL possible blocks for all branches.
+	 *
+	 * ## Direction Handling
+	 *
+	 * **When segment==null** (no known incoming direction):
+	 * - Explores ALL possible exit directions via `joins()`
+	 * - Expected at entry points or when exploring all paths
+	 *
+	 * **When segment!=null** (known incoming direction):
+	 * - Queries node's navigation methods for valid exits
+	 * - OrientedNodeCell: single deterministic direction (requires non-null result)
+	 * - Non-oriented cells: multiple branches possible
 	 *
 	 * @param nodeCell The node cell to navigate from
 	 * @param current The current track block (for determining direction), or null
@@ -323,29 +461,32 @@ class DefaultTopologyNavigator(
 			when (staticNodeCell) {
 				is OrientedNodeCell -> {
 					// Oriented cells have single deterministic direction
-					try {
-						val following = staticNodeCell.getFollowingSegment(segment)
-						if (following != null) setOf(following) else emptySet()
-					} catch (e: IllegalStateException) {
-						// When segment is null and there are multiple possible directions,
-						// getFollowingSegment throws IllegalStateException.
-						// In this case, explore ALL possible directions (all joins).
-						// PathReservationService will filter and select the valid path.
-						if (segment == null) {
+					when {
+						segment == null -> {
+							// No incoming direction - explore all possible exits
+							// Avoids IllegalStateException from getFollowingSegment(null)
 							staticNodeCell.joins()
-						} else {
-							// If segment is not null but still throws exception, this is a real error
-							logger.error(e) {
-								"getAllNextTrackBlocks: Unexpected IllegalStateException for " +
-									"${staticNodeCell.javaClass.simpleName} at $location with segment=$segment"
-							}
-							emptySet()
+						}
+						else -> {
+							// Known incoming direction - find deterministic exit
+							// May return null at dead ends (e.g., InOut exit points)
+							val following = staticNodeCell.getFollowingSegment(segment)
+							if (following != null) setOf(following) else emptySet()
 						}
 					}
 				}
 				else -> {
 					// Non-oriented (switches) may have multiple branches
-					staticNodeCell.possibleFollowers(segment ?: return emptyList())
+					// For topology navigation, return ALL possible exit segments regardless of switch configuration
+					// (possibleFollowers() would only return configuration-dependent paths)
+					val allJoins = staticNodeCell.joins()
+					if (segment != null) {
+						// Exclude the incoming segment to avoid going backwards
+						allJoins - segment
+					} else {
+						// No incoming segment (starting point), explore all directions
+						allJoins
+					}
 				}
 			}
 
@@ -389,6 +530,36 @@ class DefaultTopologyNavigator(
 		val static2 = CellUtilities.assertNodeCell(sep2)
 		return static1 === static2
 	}
+
+	/**
+	 * Check if a separator appears in the ancestor chain of a node (cycle detection).
+	 *
+	 * This method traverses the parent chain to detect if we're revisiting a separator
+	 * within the SAME path (which would create a cycle). This is different from the
+	 * previous global visited set, which prevented visiting a separator via ANY path.
+	 *
+	 * For finding ALL topological paths, we need to allow reaching the same separator
+	 * via different paths (e.g., switch with MAIN and BRANCH), but prevent cycles within
+	 * a single path.
+	 *
+	 * @param separator The separator to check for
+	 * @param parentNode The parent node to start checking from (may be null for root)
+	 * @return true if separator appears in the ancestor chain, false otherwise
+	 */
+	private fun isInAncestorChain(
+		separator: PathSeparator,
+		parentNode: PathNode?
+	): Boolean {
+		var current = parentNode
+		while (current != null) {
+			if (isSameSeparator(separator, current.separator)) {
+				return true
+			}
+			current = current.parent
+		}
+		return false
+	}
+
 
 	/**
 	 * Build path by following parent pointers from target node back to start.

@@ -13,6 +13,8 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -95,6 +97,7 @@ class DefaultPathReservationService(
 	 * - Empty paths list → return NoPathExists
 	 * - All paths blocked → return AllPathsBlocked
 	 */
+	@Suppress("LongMethod")
 	override fun reservePath(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -179,6 +182,9 @@ class DefaultPathReservationService(
 					// Success - path reserved and registered
 
 					// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
+					logger.debug {
+						"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
+					}
 					val pathInfo = pathInfoBuilder.buildPathInfo(
 						start = start,
 						target = target,
@@ -188,7 +194,17 @@ class DefaultPathReservationService(
 					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
 					registry.registerPathInfo(trainId, pathInfo)
 					logger.debug {
-						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions"
+						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
+							"reserved path has ${pathInfo.reservedPath.length()} elements"
+					}
+
+					// Step 2f.1: Register switches (Tier 2 - Issue #291)
+					val switches = extractUniqueSwitches(pathInfo)
+					if (switches.isNotEmpty()) {
+						registry.registerSwitches(trainId, switches)
+						logger.debug {
+							"reservePath: Registered ${switches.size} switches for $trainId"
+						}
 					}
 
 					// Step 2g: Configure semaphore signal after successful reservation
@@ -275,8 +291,20 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// Unregister from registry
+		// Tier 2: Unlock switches atomically with blocks (Issue #291)
+		val switches = registry.getSwitches(trainId)
+		switches.forEach { switch ->
+			try {
+				switch.unlock()
+				logger.debug { "releasePath: Unlocked switch ${switch.hashCode()} for $trainId" }
+			} catch (e: Exception) {
+				logger.warn(e) { "releasePath: Failed to unlock switch $switch" }
+			}
+		}
+
+		// Unregister blocks and switches from registry
 		registry.unregister(trainId)
+		registry.unregisterSwitches(trainId)
 
 		return blocks
 	}
@@ -317,7 +345,9 @@ class DefaultPathReservationService(
 		next: TrackSection
 	): PathReservationService.ReservationResult {
 		logger.debug {
-			"reservePathToAnyNextSemaphore: Searching for semaphores from $start via $next"
+			"reservePathToAnyNextSemaphore: ENTRY POINT for $trainId - " +
+				"start=$start (${start.javaClass.simpleName}), " +
+				"next=$next (${next.javaClass.simpleName})"
 		}
 
 		// Find ALL reachable semaphores via this track section
@@ -333,18 +363,51 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Found ${semaphores.size} semaphore(s): $semaphores"
 		}
 
+		// Extract the DynamicTrackBlock from the 'next' parameter for validation
+		// next is a TrackSection, which could be a DynamicTrackBlock or other type
+		val nextBlock = next.getTrackBlock() as? DynamicTrackBlock
+		if (nextBlock == null) {
+			logger.warn {
+				"reservePathToAnyNextSemaphore: next parameter is not a DynamicTrackBlock: $next"
+			}
+			return PathReservationService.ReservationResult.NoPathExists
+		}
+
 		// Try to reserve path to each semaphore until one succeeds
 		var lastResult: PathReservationService.ReservationResult? = null
+		var attemptCount = 0
 		for (semaphore in semaphores) {
+			attemptCount++
 			logger.trace {
-				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore"
+				"reservePathToAnyNextSemaphore: Attempting reservation to $semaphore (attempt $attemptCount/${semaphores.size})"
 			}
 
 			val result = reservePath(trainId, start, semaphore)
 
 			when (result) {
 				is PathReservationService.ReservationResult.Success -> {
-					// Success! Path reserved
+					// FIX: Validate that the reserved path actually goes through the 'next' block
+					// This prevents alternative routes that bypass the intended track section
+					if (!result.reservedBlocks.contains(nextBlock)) {
+						logger.debug {
+							"reservePathToAnyNextSemaphore: Path to $semaphore rejected (doesn't use required next block)"
+						}
+						// Release the wrongly reserved path
+						result.reservedBlocks.forEach { block ->
+							try {
+								block.cancelPathSetup(start)
+								registry.unregisterBlock(trainId, block)
+							} catch (e: Exception) {
+								logger.warn(e) {
+									"reservePathToAnyNextSemaphore: Failed to release block during rollback: ${block.staticRef}"
+								}
+							}
+						}
+						lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+						continue
+					}
+
+					// Success! Path reserved and validated to use the required 'next' block
 
 					// Configure semaphore signal after successful reservation
 					// Only configure for RailSemaphore start (InOut semaphores are constant)
@@ -356,7 +419,7 @@ class DefaultPathReservationService(
 					}
 
 					logger.debug {
-						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore"
+						"reservePathToAnyNextSemaphore: Successfully reserved path to $semaphore via required next block"
 					}
 					return result
 				}
@@ -365,7 +428,7 @@ class DefaultPathReservationService(
 					logger.trace {
 						"reservePathToAnyNextSemaphore: Path to $semaphore blocked, trying next"
 					}
-					lastResult = result
+					lastResult = PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
 					continue
 				}
 				is PathReservationService.ReservationResult.Conflict -> {
@@ -380,7 +443,7 @@ class DefaultPathReservationService(
 					logger.warn {
 						"reservePathToAnyNextSemaphore: No topological path to $semaphore (unexpected)"
 					}
-					lastResult = result
+					lastResult = PathReservationService.ReservationResult.NoPathExists
 					continue
 				}
 			}
@@ -388,9 +451,67 @@ class DefaultPathReservationService(
 
 		// All semaphores tried, all paths blocked
 		logger.debug {
-			"reservePathToAnyNextSemaphore: All ${semaphores.size} path(s) blocked"
+			"reservePathToAnyNextSemaphore: All $attemptCount path(s) blocked"
 		}
-		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(semaphores.size)
+		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(attemptCount)
+	}
+
+	override fun reservePathToAnyNextSemaphore(
+		trainId: String,
+		start: OrientedPathSeparator
+	): PathReservationService.ReservationResult {
+		logger.debug {
+			"reservePathToAnyNextSemaphore: Finding path from oriented separator $start for $trainId"
+		}
+
+		// Step 1: Convert to dynamic if needed (toDynamic is idempotent)
+		val dynamicStart = environment.toDynamic(start)
+
+		// Step 2: Get next track section based on separator's orientation
+		// For oriented separators, use the direction() method to get the forward segment
+		// SPECIAL CASE: InOut connects bidirectionally at direction() (not anti-direction)
+		val forwardSegment = when (start) {
+			is InOut -> start.getTrackConnectionDirection()  // Track connection at direction()
+			is DynamicInOut -> start.getTrackConnectionDirection()  // Track connection at direction()
+			else -> start.direction()  // Semaphores: direction is forward travel
+		}
+		logger.debug {
+			"reservePathToAnyNextSemaphore: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
+		}
+
+		// Step 3: Find the track section connected to the forward segment
+		// Note: environment is actually SimulationContext, which provides getRailWayNetGrid/getGraph
+		val context = environment as SimulationContext
+		val location = context.getRailWayNetGrid().getLocation(start)
+		if (location == null) {
+			logger.warn {
+				"reservePathToAnyNextSemaphore: No location found for $start"
+			}
+			return PathReservationService.ReservationResult.NoPathExists
+		}
+
+		logger.info {
+			"reservePathToAnyNextSemaphore: Location=$location"
+		}
+
+		val next = context.getGraph().assignedEdges(location)[forwardSegment]
+		if (next == null) {
+			logger.warn {
+				"reservePathToAnyNextSemaphore: No outgoing track section from $start at $location in direction $forwardSegment"
+			}
+			return PathReservationService.ReservationResult.NoPathExists
+		}
+
+		logger.info {
+			"reservePathToAnyNextSemaphore: Selected next track section: $next"
+		}
+
+
+		// Step 4: Delegate to existing overload
+		logger.debug {
+			"reservePathToAnyNextSemaphore: Delegating to existing overload with next=$next"
+		}
+		return reservePathToAnyNextSemaphore(trainId, dynamicStart, next)
 	}
 
 	override fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean {
@@ -435,6 +556,109 @@ class DefaultPathReservationService(
 	 */
 	override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> = registry.getBlocks(trainId)
 
+	/**
+	 * Implementation of reservePathToAny with intelligent target prioritization.
+	 *
+	 * ## Algorithm Complexity
+	 *
+	 * This method is intentionally complex to optimize path selection. The complexity comes from:
+	 * 1. **Target discovery** - O(n) grid scan for semaphores + O(m) InOut iteration
+	 * 2. **Smart sorting** - O(k log k) sorting with path length calculation
+	 * 3. **Reservation attempts** - O(k) tries until first success
+	 *
+	 * Where:
+	 * - n = grid size (cols × rows)
+	 * - m = number of InOuts (typically 2-4)
+	 * - k = total number of targets (m + number of semaphores)
+	 *
+	 * ## Why This Complexity Is Necessary
+	 *
+	 * **Naive approach** (try random targets until one works):
+	 * - May try long paths before short paths
+	 * - May try same-side targets (backward) before opposite-side (forward)
+	 * - Results in inefficient train movements and longer simulation times
+	 *
+	 * **Smart approach** (this implementation):
+	 * - Prioritizes InOuts over semaphores (reaching exit is better than stopping mid-network)
+	 * - Prioritizes opposite-side targets (forward progress across shunting loop)
+	 * - Sorts by path length (shorter paths tried first)
+	 * - Results in realistic, efficient train routing
+	 *
+	 * ## Four-Step Algorithm
+	 *
+	 * **Step 1: Target Discovery**
+	 * - Collect all InOuts from environment (excluding start)
+	 * - Scan grid to find all semaphores (excluding start)
+	 * - Complexity: O(grid size + InOuts)
+	 *
+	 * **Step 2: Intelligent InOut Sorting**
+	 * - If start has orientation (e.g., semaphore):
+	 *   1. Partition InOuts by orientation (opposite-side vs same-side)
+	 *   2. Sort each partition by path length (shortest first)
+	 *   3. Combine: [opposite-side InOuts] + [same-side InOuts]
+	 * - If start has no orientation:
+	 *   1. Sort all InOuts by path length only
+	 * - Complexity: O(m log m × path_finding_cost)
+	 *
+	 * **Step 3: Target Prioritization**
+	 * - Combine sorted InOuts + unsorted semaphores
+	 * - InOuts tried first (exit points preferred over mid-network stops)
+	 * - Complexity: O(1) list concatenation
+	 *
+	 * **Step 4: Reservation Attempts**
+	 * - Try each target in priority order
+	 * - Return first Success
+	 * - Return immediately on Conflict (serious error)
+	 * - If all fail: return NoPathExists or AllPathsBlocked
+	 * - Complexity: O(k × reservation_cost)
+	 *
+	 * ## Performance Considerations
+	 *
+	 * **When is this method called?**
+	 * - Infrequently: only when train needs new path (not every simulation tick)
+	 * - Typical scenario: train approaches semaphore, needs forward path
+	 * - Frequency: ~once per train per network traversal
+	 *
+	 * **Optimization opportunities NOT taken:**
+	 * - Pre-compute all paths at initialization → rejected because paths are dynamic (occupation changes)
+	 * - Cache sorted targets → rejected because network state changes continuously
+	 * - Use spatial indexing for semaphores → rejected because grid scan is fast enough
+	 *
+	 * **Why these optimizations are unnecessary:**
+	 * - Method called rarely (not in hot path)
+	 * - Grid scan is O(n) but n is small (typical: 100×100 = 10,000 cells)
+	 * - Path finding is fast (TopologyNavigator uses graph traversal, not A*)
+	 * - Premature optimization would complicate code without measurable benefit
+	 *
+	 * ## Example: Shunting Loop Scenario
+	 *
+	 * Network: A ← zA ← vA ← (doA1/doA2) ↔ (doB1/doB2) → vB → zB → B
+	 *
+	 * Train at semaphore zA (orientation=false, points toward A):
+	 * 1. Discover targets: InOuts [A, B], Semaphores [doA1, doA2, doB1, doB2, zB]
+	 * 2. Sort InOuts by orientation:
+	 *    - Opposite-side (orientation=true): [B] (forward progress)
+	 *    - Same-side (orientation=false): [A] (backward)
+	 *    - Result: [B, A]
+	 * 3. Final order: [B, A, doA1, doA2, doB1, doB2, zB]
+	 * 4. Try B first (most efficient: cross entire network to exit)
+	 * 5. If B blocked, try A (backward to entry)
+	 * 6. If both InOuts blocked, try semaphores (stop mid-network)
+	 *
+	 * This ensures trains prefer forward progress and exiting over stopping mid-network.
+	 *
+	 * ## Design Decision: Why Not Move Sorting to Navigator?
+	 *
+	 * The sorting logic is tightly coupled to **reservation semantics**:
+	 * - TopologyNavigator handles pure graph traversal (no state)
+	 * - PathReservationService handles state-aware routing (occupation, orientation preference)
+	 * - Mixing these concerns would violate Single Responsibility Principle
+	 * - Current design: Navigator = stateless pathfinding, Service = stateful routing
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @param start Starting path separator (typically a semaphore)
+	 * @return ReservationResult indicating success or failure reason
+	 */
 	override fun reservePathToAny(
 		trainId: String,
 		start: DynamicPathSeparator
@@ -443,11 +667,16 @@ class DefaultPathReservationService(
 			"reservePathToAny: Searching for available targets from $start for $trainId"
 		}
 
-		// Step 1: Collect all potential targets, prioritizing InOuts over semaphores
+		// ========================================
+		// STEP 1: Target Discovery
+		// ========================================
+		// Collect all potential targets (InOuts and semaphores) excluding start itself.
+		// Why two separate lists? InOuts will be sorted differently than semaphores.
 		val inouts = mutableListOf<DynamicInOut>()
 		val semaphores = mutableListOf<DynamicPathSeparator>()
 
 		// Add InOuts (except start)
+		// Note: toDynamic() converts static InOut to DynamicInOut for state tracking
 		environment.getInOuts().forEach { inout ->
 			val dynamicInOut = environment.toDynamic(inout)
 			if (dynamicInOut != start) {
@@ -456,6 +685,7 @@ class DefaultPathReservationService(
 		}
 
 		// Add semaphores (except start)
+		// Note: getAllSemaphores() scans the grid to find all DynamicRailSemaphore instances
 		getAllSemaphores().forEach { semaphore ->
 			if (semaphore != start) {
 				semaphores.add(semaphore)
@@ -466,39 +696,84 @@ class DefaultPathReservationService(
 			"reservePathToAny: Found ${inouts.size} InOut(s) and ${semaphores.size} semaphore(s) from $start"
 		}
 
-		// Step 2: Sort InOuts with preference for opposite-side targets
-		// If start is an oriented separator (e.g., semaphore with orientation), prefer InOuts
-		// with opposite orientation (crossing the shunting loop rather than going backward)
+		// ========================================
+		// STEP 2: Intelligent InOut Sorting
+		// ========================================
+		// Sort InOuts with preference for opposite-side targets (forward progress).
+		// This is the most complex part of the algorithm.
+		//
+		// **Why orientation matters:**
+		// - Semaphores have orientation: true = points forward, false = points backward
+		// - InOuts also have orientation indicating which side of the network they're on
+		// - Opposite orientation = crossing the network (forward progress)
+		// - Same orientation = returning to same side (backward movement)
+		//
+		// **Why path length matters:**
+		// - Among targets with same orientation preference, choose shortest path
+		// - Reduces travel time and track occupation duration
+		//
+		// **Why partition before sorting:**
+		// - Ensures ALL opposite-side targets tried before ANY same-side target
+		// - Even if same-side target is closer, opposite-side is preferred
 		val sortedInOuts = when (start) {
 			is OrientedPathSeparator -> {
 				val startOrientation = start.getOrientation()
+
 				// Partition InOuts by orientation: opposite-side first, same-side last
+				// Example: if start.orientation = false (points left/backward)
+				//   - oppositeSide = InOuts with orientation = true (right/forward)
+				//   - sameSide = InOuts with orientation = false (left/backward)
 				val (oppositeSide, sameSide) = inouts.partition { it.getOrientation() != startOrientation }
-				// Within each group, sort by path length
+
+				// Sort each partition by path length (shortest first)
+				// Note: findAllTopologicalPaths returns empty list if no path exists
+				// Using firstOrNull() gets shortest path (navigator returns sorted by length)
+				// Int.MAX_VALUE ensures unreachable targets sorted last
 				val sortedOpposite = oppositeSide.sortedBy { target ->
 					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
 				}
 				val sortedSame = sameSide.sortedBy { target ->
 					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
 				}
+
+				// Combine: [shortest opposite-side, ..., longest opposite-side,
+				//           shortest same-side, ..., longest same-side]
 				sortedOpposite + sortedSame
 			}
 			else -> {
-				// No orientation info, just sort by distance
+				// Start has no orientation info (shouldn't happen for semaphores, but handle gracefully)
+				// Just sort by distance - no orientation preference
 				inouts.sortedBy { target ->
 					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
 				}
 			}
 		}
 
-		// Step 3: Combine sorted InOuts with semaphores (InOuts tried first)
+		// ========================================
+		// STEP 3: Target Prioritization
+		// ========================================
+		// Combine sorted InOuts with unsorted semaphores.
+		// InOuts tried first because reaching an exit point is better than stopping mid-network.
+		// Semaphores are not sorted because:
+		// - They represent mid-network stopping points (less desirable than InOuts)
+		// - Sorting cost not justified for secondary targets
+		// - If all InOuts blocked, any semaphore is acceptable
 		val sortedTargets: List<DynamicPathSeparator> = sortedInOuts + semaphores
 
 		logger.debug {
 			"reservePathToAny: Target order (InOuts first): ${sortedTargets.joinToString(", ")}"
 		}
 
-		// Step 3: Try each target in priority order until a reservation succeeds
+		// ========================================
+		// STEP 4: Reservation Attempts
+		// ========================================
+		// Try each target in priority order until a reservation succeeds.
+		// This is a greedy algorithm: return first success, don't try to find "optimal" path.
+		//
+		// **Why greedy is correct:**
+		// - Targets are already sorted by preference (opposite-side, short paths first)
+		// - First success is guaranteed to be the best available option
+		// - Trying all paths to find "optimal" would be wasteful (dynamic state changes anyway)
 		var lastResult: PathReservationService.ReservationResult? = null
 
 		for (target in sortedTargets) {
@@ -512,20 +787,26 @@ class DefaultPathReservationService(
 					return result
 				}
 				is PathReservationService.ReservationResult.Conflict -> {
-					// Conflict indicates serious error, return immediately
+					// Conflict indicates serious error (race condition or registry corruption)
+					// Abort immediately - don't try other targets
 					logger.warn {
 						"reservePathToAny: Conflict detected at ${result.conflictingBlock}, aborting"
 					}
 					return result
 				}
 				else -> {
+					// Path not available (blocked, occupied, or no path exists)
+					// Try next target
 					logger.trace { "reservePathToAny: Path to $target not available, trying next target" }
 					lastResult = result
 				}
 			}
 		}
 
-		// Step 4: All targets failed
+		// ========================================
+		// STEP 5: All Targets Failed
+		// ========================================
+		// No available path found after trying all targets.
 		if (sortedTargets.isEmpty()) {
 			logger.warn { "reservePathToAny: No targets found from $start" }
 			return PathReservationService.ReservationResult.NoPathExists
@@ -536,6 +817,7 @@ class DefaultPathReservationService(
 				"(tried ${sortedTargets.size} targets, all blocked or unreachable)"
 		}
 
+		// Return last failure result (or AllPathsBlocked if no result available)
 		return lastResult ?: PathReservationService.ReservationResult.AllPathsBlocked(sortedTargets.size)
 	}
 
@@ -594,24 +876,39 @@ class DefaultPathReservationService(
 	 *
 	 * This method navigates from the starting separator through the given track section
 	 * to discover ALL oriented semaphores (OrientedPathSeparator instances) reachable
-	 * in the network. If the network has switches creating multiple routes, all reachable
-	 * semaphores are returned.
+	 * in the network, skipping backward-facing semaphores that show RED.
 	 *
-	 * ## Algorithm
+	 * ## Algorithm (Modified for Multi-Path Discovery)
 	 *
-	 * 1. Use TopologyNavigator to find all possible paths from start
-	 * 2. Filter paths that begin with the `next` track section (direction constraint)
-	 * 3. Extract endpoint separators from filtered paths
-	 * 4. Filter for OrientedPathSeparator instances (semaphores, oriented InOuts)
-	 * 5. Cast to DynamicPathSeparator (safe in SimulationContext)
-	 * 6. Remove duplicates (multiple paths may lead to same semaphore)
+	 * 1. Calculate travel direction from start + next track section
+	 * 2. Use BFS to explore ALL reachable separators through the network
+	 * 3. At switches, explore ALL outgoing edges (enables parallel path discovery)
+	 * 4. Filter separators to include only:
+	 *    - InOut elements (always valid endpoints)
+	 *    - Forward-facing semaphores (direction() matches travel direction)
+	 * 5. Return list of all valid targets
+	 *
+	 * ## Rationale for Multi-Path Discovery
+	 *
+	 * **Why return ALL reachable semaphores instead of just the first?**
+	 * - In networks with parallel paths (e.g., shunting loops with k1 and k2 tracks),
+	 *   multiple semaphores may be reachable from the same starting point.
+	 * - When the first path is blocked (e.g., k1 occupied by Train 1), the service
+	 *   should retry alternative paths (e.g., k2 for Train 2).
+	 * - This enables true parallel operations with shared switches but disjoint tracks.
+	 *
+	 * **Backward-facing semaphores must be skipped**: A semaphore whose direction() does NOT
+	 * match the travel direction shows RED and cannot be changed. Path discovery must continue
+	 * until finding a forward-facing semaphore (can show GREEN) or an InOut destination.
+	 *
+	 * **InOut elements are bidirectional**: InOut points represent entry/exit to external
+	 * network and are always valid endpoints regardless of orientation.
 	 *
 	 * ## Return Value
 	 *
-	 * List of unique DynamicPathSeparator instances representing semaphores:
-	 * - **Empty list**: No semaphores reachable via `next` (dead-end, loop, or plain junction)
-	 * - **Single element**: One semaphore reachable
-	 * - **Multiple elements**: Switch creates multiple routes to different semaphores
+	 * List of unique DynamicPathSeparator instances representing valid targets:
+	 * - **Empty list**: No valid semaphore or InOut found (dead-end, buffer stop)
+	 * - **One or more elements**: All forward-facing semaphores or InOuts reachable via next
 	 *
 	 * ## Type Safety
 	 *
@@ -623,86 +920,211 @@ class DefaultPathReservationService(
 	 *
 	 * ## Example Networks
 	 *
-	 * **Linear path:**
+	 * **Parallel paths with shared switches:**
 	 * ```
-	 * InOut -> TrackSection -> Semaphore
-	 * Result: [Semaphore]
-	 * ```
-	 *
-	 * **Switch with multiple semaphores:**
-	 * ```
-	 * InOut -> TrackSection -> RailSwitch --> Path A -> Semaphore1
-	 *                                    \--> Path B -> Semaphore2
-	 * Result: [Semaphore1, Semaphore2]
+	 * Travel RIGHT →
+	 * zA (orient=false) → vA (switch) → {
+	 *   doA1 (backward) → k1 → doB1 (forward) ← vB (switch)
+	 *   doA2 (backward) → k2 → doB2 (forward) ← vB (switch)
+	 * }
+	 * Result: [doB1, doB2]  (both forward-facing semaphores reachable via k1 and k2)
 	 * ```
 	 *
-	 * **Dead-end:**
+	 * **Skip backward-facing semaphore:**
 	 * ```
-	 * InOut -> TrackSection -> BufferStop (non-oriented)
-	 * Result: []
+	 * Travel RIGHT →
+	 * zA (orient=false, faces RIGHT) → doA1 (orient=true, faces LEFT) → doB1 (orient=false, faces RIGHT)
+	 * Result: [doB1]  (skips doA1 because it's backward-facing/RED)
+	 * ```
+	 *
+	 * **Stop at InOut:**
+	 * ```
+	 * Travel LEFT ←
+	 * doA2 (orient=true) → zA (orient=false, faces RIGHT/backward) → A (InOut)
+	 * Result: [A]  (skips zA, reaches InOut destination)
 	 * ```
 	 *
 	 * @param start Starting path separator (typically InOut or semaphore)
 	 * @param next First track section after start (direction to search)
-	 * @return List of unique DynamicPathSeparator instances that are oriented semaphores
+	 * @return List of unique DynamicPathSeparator instances that are forward-facing semaphores or InOuts
 	 */
 	private fun findNextSemaphoresVia(
 		start: PathSeparator,
 		next: TrackSection
 	): List<DynamicPathSeparator> {
 		logger.trace {
-			"findNextSemaphoresVia: Starting search from $start via $next"
+			"findNextSemaphoresVia: Starting multi-path search from $start via $next"
 		}
 
-		// Strategy: Navigate step-by-step from start through 'next' section until finding
-		// the FIRST OrientedPathSeparator (semaphore). This matches the original
-		// pathToNextSemaphore semantics.
+		val travelDirection = calculateTravelDirection(start, next)
+		logger.trace { "findNextSemaphoresVia: Travel direction=$travelDirection" }
 
-		var currentSep: PathSeparator = start
-		var currentSection: TrackSection? = next
+		// BFS to explore all reachable separators
+		val validTargets = mutableListOf<DynamicPathSeparator>()
+		val queue = mutableListOf<Pair<PathSeparator, TrackSection?>>()
+		queue.add(Pair(start, next))
 		val visited = mutableSetOf<PathSeparator>()
 		visited.add(start)
 
-		while (currentSection != null) {
-			logger.trace {
-				"findNextSemaphoresVia: Navigating from separator=$currentSep through section=$currentSection"
-			}
+		val context = environment as SimulationContext
 
-			// Get the separator at the other end of currentSection
+		while (queue.isNotEmpty()) {
+			val (currentSep, currentSection) = queue.removeAt(0)
+			if (currentSection == null) continue
+
 			val nextSeparator = currentSection.getSecondEnd(currentSep)
+			if (!visited.add(nextSeparator)) continue
 
-			logger.trace {
-				"findNextSemaphoresVia: Reached separator=$nextSeparator"
+			// Check if separator is a valid target and whether to stop exploring beyond it
+			val stopExploration = processReachedSeparator(nextSeparator, travelDirection, validTargets)
+
+			// Only explore outgoing paths if we haven't reached a stopping point
+			// This discovers parallel paths UP TO the first layer of forward-facing semaphores
+			if (!stopExploration) {
+				exploreOutgoingPaths(nextSeparator, currentSep, currentSection, start, context, queue)
+			}
+		}
+
+		return prioritizeInOuts(validTargets)
+	}
+
+	/**
+	 * Process a reached separator to check if it's a valid target.
+	 *
+	 * @return true if exploration should stop beyond this separator (forward-facing semaphore/InOut),
+	 *         false if exploration should continue (backward-facing semaphore/junction)
+	 */
+	private fun processReachedSeparator(
+		separator: PathSeparator,
+		travelDirection: cz.vutbr.fit.interlockSim.objects.core.Cell.Segment,
+		validTargets: MutableList<DynamicPathSeparator>
+	): Boolean {
+		return when {
+			// InOut is always a valid endpoint (bidirectional) - stop exploration
+			separator is cz.vutbr.fit.interlockSim.objects.cells.InOut ||
+			separator is DynamicInOut -> {
+				val dynamicSep = environment.toDynamic(separator)
+				logger.trace { "findNextSemaphoresVia: Found InOut: $dynamicSep" }
+				validTargets.add(dynamicSep)
+				true // Stop exploring beyond InOuts
 			}
 
-			// Check if this separator is an oriented semaphore
-			if (nextSeparator is cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator) {
-				// Found the first semaphore!
-				val dynamicSep = environment.toDynamic(nextSeparator)
+			// Oriented semaphore - check if facing forward
+			separator is OrientedPathSeparator -> {
+				val isFacingForward = (separator.direction() == travelDirection)
+				if (isFacingForward) {
+					val dynamicSep = environment.toDynamic(separator)
+					logger.trace { "findNextSemaphoresVia: Found forward-facing semaphore: $dynamicSep" }
+					validTargets.add(dynamicSep)
+					true // Stop exploring beyond forward-facing semaphores
+				} else {
+					logger.trace { "findNextSemaphoresVia: Skipping backward-facing semaphore: $separator" }
+					false // Continue exploring beyond backward-facing semaphores
+				}
+			}
+
+			else -> false // Continue exploring
+		}
+	}
+
+	/**
+	 * Explore all outgoing paths from a separator.
+	 * At the FIRST junction, explores ALL branches. At subsequent junctions, uses single-path navigation.
+	 */
+	private fun exploreOutgoingPaths(
+		separator: PathSeparator,
+		currentSep: PathSeparator,
+		currentSection: TrackSection,
+		start: PathSeparator,
+		context: SimulationContext,
+		queue: MutableList<Pair<PathSeparator, TrackSection?>>
+	) {
+		val grid = context.getRailWayNetGrid()
+		val graph = context.getGraph()
+		val location = grid.getLocation(separator) ?: return
+		@Suppress("UNCHECKED_CAST")
+		val edges = graph.assignedEdges(location) as Map<*, *>
+
+		val outgoingEdges = edges.entries.filter { (_, block) ->
+			val trackSection = block as? TrackSection
+			trackSection != null && trackSection != currentSection
+		}
+
+		when {
+			outgoingEdges.size > 1 -> {
+				// At ANY junction: explore ALL branches (enables full parallel path discovery)
 				logger.trace {
-					"findNextSemaphoresVia: Found semaphore: $dynamicSep"
+					"findNextSemaphoresVia: At junction $separator, exploring ${outgoingEdges.size} branches"
 				}
-				return listOf(dynamicSep)
-			}
-
-			// Check for cycles
-			if (!visited.add(nextSeparator)) {
-				logger.warn {
-					"findNextSemaphoresVia: Cycle detected at $nextSeparator, stopping search"
+				outgoingEdges.forEach { (_, block) ->
+					queue.add(Pair(separator, block as TrackSection))
 				}
-				break
 			}
-
-			// Not a semaphore, continue to next section
-			currentSep = nextSeparator
-			currentSection = navigator.getNextTrackSection(currentSep, currentSection)
+			outgoingEdges.size == 1 -> {
+				// Single path forward
+				queue.add(Pair(separator, outgoingEdges.first().value as TrackSection))
+			}
 		}
+	}
 
-		// No semaphore found
+	/**
+	 * Prioritize InOuts over semaphores in result list.
+	 */
+	private fun prioritizeInOuts(validTargets: List<DynamicPathSeparator>): List<DynamicPathSeparator> {
+		val distinctTargets = validTargets.distinct()
+		val (inouts, semaphores) = distinctTargets.partition { it is DynamicInOut }
 		logger.trace {
-			"findNextSemaphoresVia: Search complete, no semaphore found"
+			"findNextSemaphoresVia: Returning ${inouts.size} InOut(s) + ${semaphores.size} semaphore(s)"
 		}
-		return emptyList()
+		return inouts + semaphores
+	}
+
+	/**
+	 * Calculate the travel direction from a starting separator through a track section.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Get the location of the start separator in the grid
+	 * 2. Query the graph for all edges (segment → track section) at that location
+	 * 3. Find which segment connects to the 'next' track section
+	 * 4. Return that segment as the travel direction
+	 *
+	 * ## Example
+	 *
+	 * ```
+	 * Grid location (14,8): zA semaphore
+	 * Graph edges: {Segment.A → track1, Segment.F → track2}
+	 * If next=track2, return Segment.F (traveling RIGHT)
+	 * ```
+	 *
+	 * @param start Starting path separator
+	 * @param next Track section we're traveling through
+	 * @return Cell.Segment indicating the direction of travel
+	 * @throws IllegalStateException if start has no location or no connection to next
+	 */
+	private fun calculateTravelDirection(
+		start: PathSeparator,
+		next: TrackSection
+	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment {
+		val context = environment as SimulationContext
+		val location = context.getRailWayNetGrid().getLocation(start)
+			?: throw IllegalStateException("No location for $start")
+
+		@Suppress("UNCHECKED_CAST")
+		val edges = context.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
+
+		// Find which segment connects to 'next' track section
+		// Note: edges is Map<Segment, DynamicTrackBlock> (DynamicTrackBlock implements TrackSection)
+		for ((segment, block) in edges.entries) {
+			if (block == next) {
+				logger.trace {
+					"calculateTravelDirection: start=$start, next=$next, direction=$segment"
+				}
+				return segment as cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+			}
+		}
+
+		throw IllegalStateException("No connection from $start to $next")
 	}
 
 	/**
@@ -749,6 +1171,37 @@ class DefaultPathReservationService(
 					}
 					null
 				}
+			}
+		}
+	}
+
+	/**
+	 * Extract unique railway switches from a reserved path (Tier 2).
+	 *
+	 * Iterates through all PathElements in the path and collects DynamicRailSwitch instances.
+	 * Switches are deduplicated to ensure each switch appears only once in the result.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Iterate through path.reservedPath elements
+	 * 2. Filter for DynamicPathSeparator elements that are switches (isSwitch() == true)
+	 * 3. Cast to DynamicRailSwitch
+	 * 4. Return unique switches
+	 *
+	 * @param pathInfo The PathInfo containing the reserved path
+	 * @return List of unique DynamicRailSwitch instances in the path
+	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
+	 */
+	private fun extractUniqueSwitches(
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+	): List<DynamicRailSwitch> {
+		val seen = mutableSetOf<DynamicRailSwitch>()
+		return pathInfo.reservedPath.mapNotNull { element ->
+			when {
+				element is DynamicPathSeparator && element.isSwitch() && element is DynamicRailSwitch -> {
+					if (seen.add(element)) element else null
+				}
+				else -> null
 			}
 		}
 	}

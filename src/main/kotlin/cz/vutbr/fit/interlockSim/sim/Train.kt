@@ -116,9 +116,18 @@ class Train :
 				if (path == null || next == null) {
 					if (where is DynamicInOut) break
 					// Train should wait for dispatcher to reserve next path
-					// Do NOT stop the entire simulation!
-					passivate()
-					continue // Restart loop after passivation to re-check for next track section
+					// Stop motor completely to prevent creeping motion during passivation
+					motor.cancelAccelerating()
+					this@Train.stop()
+
+					logger.debug {
+						"Train $number: No reserved path available at $where, halting and waiting for dispatcher (will retry after 5s)"
+					}
+					// Use hold() with timeout instead of passivate() to prevent permanent freezing
+					// If path becomes available (dispatcher reserves), train will be reactivated
+					// If timeout expires, train will retry path request
+					hold(5.0)  // Wait 5 seconds before retrying
+					continue // Restart loop to retry path request
 				}
 				val nextLength: Double = next!!.length()
 				separatorAction(where, current, next)

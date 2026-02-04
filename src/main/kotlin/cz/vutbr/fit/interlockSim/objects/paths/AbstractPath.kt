@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -241,11 +242,21 @@ abstract class AbstractPath protected constructor(
 		} else if (methodName == CANCEL_PATH_SETUP) {
 			// Java: separator.cancelPathSetup(from, to);
 			dynamicSeparator.cancelPathSetup(from, to)
+			// Tier 1: Unlock switch after cancelling path setup
+			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
+				dynamicSeparator.unlock()
+				logger.debug { "Switch ${dynamicSeparator.hashCode()} unlocked after CANCEL_PATH_SETUP" }
+			}
 		} else if (methodName == SET_UP_PATH) {
 			val following = dynamicSeparator.getFollowingSegment(from)
 			logger.debug { "SET_UP_PATH: getFollowingSegment($from) returned $following, expected $to" }
 			requireSimulation(following === to) {
 				"Separator $dynamicSeparator: getFollowingSegment($from) returned $following but expected $to"
+			}
+			// Tier 1: Lock switch after setting up path
+			if (dynamicSeparator.isSwitch() && dynamicSeparator is DynamicRailSwitch) {
+				dynamicSeparator.lock()
+				logger.debug { "Switch ${dynamicSeparator.hashCode()} locked after SET_UP_PATH" }
 			}
 		} else if (methodName == IS_FREE_FROM) {
 			// Java: //EMPTY
