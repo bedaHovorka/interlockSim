@@ -91,7 +91,8 @@ class AnimationStateTest {
 			velocity = 25.0,
 			acceleration = 2.0,
 			frontGridLocation = PointF(5f, 10f),
-			length = 50.0
+			length = 50.0,
+			travelingRight = true
 		)
 
 		// Assert
@@ -101,6 +102,7 @@ class AnimationStateTest {
 		assertThat(trainState.acceleration).isEqualTo(2.0)
 		assertThat(trainState.frontGridLocation).isEqualTo(PointF(5f, 10f))
 		assertThat(trainState.length).isEqualTo(50.0)
+		assertThat(trainState.travelingRight).isTrue()
 	}
 
 	@Test
@@ -112,11 +114,13 @@ class AnimationStateTest {
 			velocity = 0.0,
 			acceleration = 0.0,
 			frontGridLocation = null, // Grid location not calculable
-			length = 50.0
+			length = 50.0,
+			travelingRight = false
 		)
 
 		// Assert
 		assertThat(trainState.frontGridLocation).isNull()
+		assertThat(trainState.travelingRight).isFalse()
 	}
 
 	@Test
@@ -220,7 +224,8 @@ class AnimationStateTest {
 		velocity = 0.0,
 		acceleration = 0.0,
 		frontGridLocation = null,
-		length = 50.0
+		length = 50.0,
+		travelingRight = true
 	)
 
 	private fun mockTrackState() = TrackState(

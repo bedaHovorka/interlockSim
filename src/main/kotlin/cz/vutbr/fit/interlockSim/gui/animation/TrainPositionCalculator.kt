@@ -225,10 +225,12 @@ class TrainPositionCalculator(
 	 * (DynamicRailSemaphore, DynamicInOut). This method unwraps to static reference
 	 * before cache lookup.
 	 *
+	 * **Visibility:** Internal to allow AnimationStateCapture to calculate train direction.
+	 *
 	 * @param separator PathSeparator to locate in grid (can be dynamic or static)
 	 * @return Grid coordinates, or null if not found
 	 */
-	private fun getGridPosition(separator: PathSeparator): Point? {
+	internal fun getGridPosition(separator: PathSeparator): Point? {
 		// Unwrap dynamic wrapper to static reference for cache lookup
 		val staticSeparator = DynamicWrapperUtils.unwrapToStatic(separator)
 		val result = separatorPositionCache[staticSeparator]

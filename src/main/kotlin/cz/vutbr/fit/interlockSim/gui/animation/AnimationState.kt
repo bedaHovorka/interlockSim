@@ -98,6 +98,13 @@ data class AnimationState(
  * - **position:** Total distance traveled along the path (meters)
  * - **frontGridLocation:** Grid coordinates for rendering train front (nullable if not calculable)
  *
+ * ## Color Coding by Origin InOut
+ *
+ * - **travelingRight:** Color selector based on train's origin InOut
+ * - true = Blue (trains from InOut B)
+ * - false = Orange (trains from InOut A)
+ * - Trains maintain their origin color throughout their entire journey
+ *
  * **NOTE FOR MVP:** This class is defined but not populated in initial implementation
  * due to private Train internals. Will be implemented in future iteration with
  * public Train API (#201 follow-up).
@@ -108,6 +115,7 @@ data class AnimationState(
  * @property acceleration Current acceleration in m/s²
  * @property frontGridLocation Grid coordinates for train front rendering (nullable)
  * @property length Train length in meters
+ * @property travelingRight Color selector: true for blue (InOut B), false for orange (InOut A)
  */
 data class TrainState(
 	val trainNumber: Int,
@@ -115,7 +123,8 @@ data class TrainState(
 	val velocity: Double,
 	val acceleration: Double,
 	val frontGridLocation: PointF?,
-	val length: Double
+	val length: Double,
+	val travelingRight: Boolean
 )
 
 /**

@@ -279,15 +279,18 @@ class AnimatedSimulationCellRenderer(
 	/**
 	 * Draw a train overlay on the canvas.
 	 *
-	 * Trains are rendered as blue circles with white ID numbers overlaid on top
-	 * of the grid cells. This method should be called after all grid cells have
-	 * been rendered.
+	 * Trains are rendered as colored circles with white ID numbers and black borders
+	 * overlaid on top of the grid cells. This method should be called after all grid
+	 * cells have been rendered.
 	 *
 	 * ## Visual Design
 	 *
-	 * - **Train body:** Blue circle (6x6 pixels) at interpolated grid position
+	 * - **Train body:** Colored circle (12x12 pixels) at interpolated grid position
+	 * - **Origin-based colors:** Blue for trains from InOut B, orange for trains from InOut A
+	 * - **Border:** Black 2px stroke for visibility on all backgrounds
 	 * - **Train ID:** White text centered in the circle
 	 * - **Multiple trains:** Positioned at different grid locations (no overlap if on different sections)
+	 * - **Color persistence:** Trains maintain their origin color throughout their entire journey
 	 *
 	 * ## Coordinate System
 	 *
@@ -297,7 +300,7 @@ class AnimatedSimulationCellRenderer(
 	 * cell width and height.
 	 *
 	 * @param g Graphics context for rendering (must be Graphics2D)
-	 * @param trainState Immutable train state snapshot with position and ID
+	 * @param trainState Immutable train state snapshot with position, ID, and direction
 	 * @param cellWidth Width of each grid cell in pixels
 	 * @param cellHeight Height of each grid cell in pixels
 	 */
@@ -314,9 +317,19 @@ class AnimatedSimulationCellRenderer(
 		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).toInt()
 		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).toInt()
 
-		// Train body: blue circle
-		g.color = AnimationColors.TRAIN_BODY
-		val trainSize = 6 // 6x6 pixel circle
+		// Train size: 12x12 pixel circle (doubled from 6x6)
+		val trainSize = 12
+		val borderWidth = 2
+
+		// Select body color based on origin InOut
+		val bodyColor = if (trainState.travelingRight) {
+			AnimationColors.TRAIN_FROM_B  // Blue (InOut B)
+		} else {
+			AnimationColors.TRAIN_FROM_A  // Orange (InOut A)
+		}
+
+		// Draw train body (filled circle)
+		g.color = bodyColor
 		g.fillOval(
 			pixelX - trainSize / 2,
 			pixelY - trainSize / 2,
@@ -324,7 +337,17 @@ class AnimatedSimulationCellRenderer(
 			trainSize
 		)
 
-		// Train ID: white text
+		// Draw black border (stroke)
+		g.color = AnimationColors.TRAIN_BORDER
+		g.stroke = java.awt.BasicStroke(borderWidth.toFloat())
+		g.drawOval(
+			pixelX - trainSize / 2,
+			pixelY - trainSize / 2,
+			trainSize,
+			trainSize
+		)
+
+		// Draw train ID (white text centered)
 		g.color = AnimationColors.TRAIN_ID
 		val idText = trainState.trainNumber.toString()
 		val fontMetrics = g.fontMetrics
