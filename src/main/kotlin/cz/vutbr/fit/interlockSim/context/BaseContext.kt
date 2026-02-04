@@ -68,7 +68,7 @@ import java.util.IdentityHashMap
  *
  * **Subclasses** = Domain Logic (editing operations, simulation operations)
  * - [DefaultEditingContext]: putCell, removeCell, moveCell, joinCells, removeLine
- * - [DefaultSimulationContext]: run, stop, pathToNextSemaphore, toDynamic, reporting
+ * - [DefaultSimulationContext]: run, stop, toDynamic, reporting, navigation service access
  *
  * ## Thread Safety
  *

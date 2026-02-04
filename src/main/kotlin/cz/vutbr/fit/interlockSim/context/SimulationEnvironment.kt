@@ -44,9 +44,9 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  *
  * **Network Query Operations:**
  * - [getInOuts] - Get all entry/exit points
- * - [getNextTrackSection] - Navigate track topology
- * - [pathToNextSemaphore] - Find path to next signal
  * - [isSeparatorInDirection] - Check signal orientation
+ * - [getTopologyNavigator] - Get static topology navigation service
+ * - [getPathReservationService] - Get path reservation service
  * - [getTrainNavigationService] - Get service for train-specific path navigation
  *
  * **Dynamic State Management:**
@@ -127,8 +127,7 @@ interface SimulationEnvironment {
 	 * Get train navigation service for train-specific path following.
 	 *
 	 * The TrainNavigationService provides train-specific path navigation that validates
-	 * block ownership. Unlike [pathToNextSemaphore], it only returns paths through blocks
-	 * RESERVED for the specific train.
+	 * block ownership. It only returns paths through blocks RESERVED for the specific train.
 	 *
 	 * ## Use Cases
 	 *

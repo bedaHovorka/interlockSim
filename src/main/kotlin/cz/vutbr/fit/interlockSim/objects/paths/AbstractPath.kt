@@ -123,19 +123,19 @@ abstract class AbstractPath protected constructor(
 	}
 
 	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean =
-		pathIterating(sep, IS_FREE_FROM, null) { track, separator ->
+		pathIterating(sep, IS_FREE_FROM) { track, separator ->
 			toTrackFacility(track).isFreeFrom(separator)
 		}
 
 	override fun isSetUpPath(from: DynamicPathSeparator): Boolean =
-		pathIterating(from, IS_SET_UP_PATH, null) { track, separator ->
+		pathIterating(from, IS_SET_UP_PATH) { track, separator ->
 			toTrackFacility(track).isSetUpPath(separator)
 		}
 
 	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String) {
 		logger.debug { "PATH_RESERVATION_START: from=$from, pathSize=$size" }
 		var blockCount = 0
-		pathIterating(from, SET_UP_PATH, reservingTrainId) { track, separator ->
+		pathIterating(from, SET_UP_PATH) { track, separator ->
 			val facility = toTrackFacility(track)
 			facility.setUpPath(separator, reservingTrainId)
 			blockCount++
@@ -145,7 +145,7 @@ abstract class AbstractPath protected constructor(
 	}
 
 	override fun cancelPathSetup(sep: DynamicPathSeparator) {
-		pathIterating(sep, CANCEL_PATH_SETUP, null) { track, separator ->
+		pathIterating(sep, CANCEL_PATH_SETUP) { track, separator ->
 			toTrackFacility(track).cancelPathSetup(separator)
 			true
 		}
@@ -161,7 +161,6 @@ abstract class AbstractPath protected constructor(
 	 *
 	 * @param sep The path separator to start iteration from
 	 * @param operationName Name of the operation for logging and separator setting
-	 * @param reservingTrainId Optional train ID for SET_UP_PATH operations (needed for switch configuration)
 	 * @param trackOperation Lambda that performs the operation on a track and returns true if successful.
 	 *                       The lambda receives a Track parameter (guaranteed to be a TrackFacility).
 	 * @return true if all operations succeeded, false otherwise
@@ -170,7 +169,6 @@ abstract class AbstractPath protected constructor(
 	private fun pathIterating(
 		sep: DynamicPathSeparator,
 		operationName: String,
-		reservingTrainId: String?,
 		trackOperation: (Track, DynamicPathSeparator) -> Boolean
 	): Boolean {
 		try {
@@ -183,7 +181,7 @@ abstract class AbstractPath protected constructor(
 				if (!iterator.hasNext()) break // Last element is semaphore, separatorSetting doesn't set it
 				val nextTrack = Util.assertInstanceOf(Track::class.java, iterator.next())
 
-				if (!separatorSetting(operationName, separator, previous, nextTrack, reservingTrainId)) {
+				if (!separatorSetting(operationName, separator, previous, nextTrack)) {
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
@@ -227,8 +225,7 @@ abstract class AbstractPath protected constructor(
 		methodName: String,
 		dynamicSeparator: DynamicPathSeparator,
 		previous: Track?,
-		next: Track,
-		reservingTrainId: String?
+		next: Track
 	): Boolean {
 		val from = context.getSegment(dynamicSeparator, previous, next)
 		val to = context.getSegment(dynamicSeparator, next, previous)

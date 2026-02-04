@@ -1258,9 +1258,12 @@ class DefaultPathReservationService(
 		// Convert Path to list for indexed access
 		val pathElements = pathInfo.reservedPath.toList()
 
-		// Cast environment to SimulationContext for getSegment() access
-		// Note: environment is actually SimulationContext, which provides getSegment()
-		val context = environment as SimulationContext
+		// Safe cast: environment is always SimulationContext in practice (provides getSegment())
+		val context = environment as? SimulationContext
+			?: throw IllegalStateException(
+				"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
+				"but got ${environment::class.simpleName}"
+			)
 
 		// Iterate through path elements with index for neighbor access
 		pathElements.forEachIndexed { index, element ->
@@ -1308,11 +1311,7 @@ class DefaultPathReservationService(
 
 					// Create minimal TrackOccupant for switch configuration
 					// Switch only uses this for logging, not business logic
-					val trainOccupant = object : TrackOccupant {
-						override val name: String = trainId
-						override fun distanceToSemaphore(): Double = 0.0
-						override fun nextSemaphore(): OrientedPathSeparator? = null
-					}
+					val trainOccupant = MinimalTrackOccupant(trainId)
 
 					// Configure the switch (sets conf, fires PropertyChange event, locks)
 					element.setUpPath(from, to, allowedSpeed, trainOccupant)
@@ -1324,13 +1323,13 @@ class DefaultPathReservationService(
 					}
 				} catch (e: PathSeparatorChangeException) {
 					// Switch configuration failed - segments don't match any valid configuration
-					// This can happen for switches that are in the path but not actually traversed
-					// Skip configuration for this switch and continue
-					logger.debug {
-						"configureSwitchesInPath: Skipping switch ${element.staticRef.getName()} " +
-							"- configuration not applicable for this path " +
-							"(from=${from?.hashCode()}, to=${to?.hashCode()}, error=${e.message})"
+					// This is expected for switches in path that aren't actually traversed (e.g., parallel routes)
+					logger.info {
+						"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
+							"for train $trainId - path topology doesn't require configuration " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
 					}
+					logger.debug(e) { "Exception details: ${e.message}" }
 				}
 			}
 		}
@@ -1462,6 +1461,23 @@ class DefaultPathReservationService(
 	 */
 	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
 		return registry.unregisterBlock(trainId, block)
+	}
+
+	/**
+	 * Minimal TrackOccupant implementation for switch configuration.
+	 *
+	 * Switches only use the `name` property for logging during setUpPath().
+	 * The distance and semaphore methods are not used during configuration,
+	 * so they return placeholder values.
+	 *
+	 * @property trainId The train identifier for logging
+	 */
+	private class MinimalTrackOccupant(
+		private val trainId: String
+	) : TrackOccupant {
+		override val name: String get() = trainId
+		override fun distanceToSemaphore(): Double = 0.0
+		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 
 }

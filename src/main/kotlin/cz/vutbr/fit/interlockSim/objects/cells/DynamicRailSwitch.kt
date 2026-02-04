@@ -173,8 +173,11 @@ class DynamicRailSwitch(
 	 * Locks the switch to prevent position changes during train movement.
 	 *
 	 * Safety property SI-5: Switch cannot toggle during train movement.
+	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun lock() {
+		if (locked) return  // Already locked, no change needed
+
 		val oldLocked = locked
 		locked = true
 		logger.debug {
@@ -187,8 +190,11 @@ class DynamicRailSwitch(
 	 * Unlocks the switch to allow position changes.
 	 *
 	 * Safety property SI-5: Switch cannot toggle during train movement.
+	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun unlock() {
+		if (!locked) return  // Already unlocked, no change needed
+
 		val oldLocked = locked
 		locked = false
 		logger.debug {

@@ -27,9 +27,8 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Architecture
  *
- * This implementation extracts the static graph traversal logic from
- * DefaultSimulationContext.getNextTrackSection() (lines 567-608), removing all
- * block state validation (lines 614-632).
+ * This implementation provides static graph traversal logic, separating topology
+ * navigation from block state validation (Issue #292 Phase 1).
  *
  * ## Design Principles
  *
@@ -51,10 +50,9 @@ class DefaultTopologyNavigator(
 	/**
 	 * Get the next track section following a path separator, using pure topology traversal.
 	 *
-	 * This implementation corresponds to DefaultSimulationContext.getNextTrackSection()
-	 * lines 567-608, but removes all dynamic state validation (lines 614-632).
+	 * This implementation provides static topology navigation without state validation (Issue #292 Phase 1).
 	 *
-	 * ## Navigation Logic (Extracted from DefaultSimulationContext)
+	 * ## Navigation Logic
 	 *
 	 * 1. If current != null, search within same block for next section
 	 * 2. At block boundary, extract static NodeCell from separator
