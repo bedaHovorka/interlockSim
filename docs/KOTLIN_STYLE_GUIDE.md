@@ -1619,6 +1619,567 @@ Need test network?
    └─ Use: TestContextBuilder()
 ```
 
+## Build & Development Environment
+
+### Dependency Management
+
+Dependencies are managed via Gradle with fallback strategy:
+- **jDisco 1.2.0** - Discrete event simulation library (external Maven dependency, Java 6 compatible)
+  - Repository: https://github.com/bedaHovorka/jdisco
+  - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/jdisco`
+  - Fallback order: `mavenLocal()` (cache) → GitHub Packages → build fails
+  - Requires GitHub authentication for package download (see below)
+- **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
+- **AssertK 0.28.1** - Fluent Kotlin assertion library
+- **MockK 1.13.14** - Kotlin-native mocking framework (supports sealed classes, coroutines)
+- **Mockito 5.21.0** - Java mocking framework (deprecated, being phased out in favor of MockK)
+- **kotlin-logging-jvm 7.0.3** - Kotlin logging wrapper (lambda-based lazy evaluation)
+- **SLF4J 2.0.17** + **Logback 1.5.23** - Logging backend (used by kotlin-logging)
+- **Koin 3.5.6** - Kotlin-native dependency injection framework (adopted 2026-01-12, migration complete)
+
+Gradle automatically downloads dependencies during the build. Configuration files:
+- `build.gradle.kts` - Build configuration and dependency declarations
+- `settings.gradle.kts` - Project settings
+- `gradle.properties` - Version management and build properties
+
+**GitHub Packages Authentication:**
+
+To download jDisco from GitHub Packages, set these environment variables:
+```bash
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-personal-access-token
+```
+
+Or create `~/.gradle/gradle.properties`:
+```properties
+gpr.user=your-github-username
+gpr.key=your-personal-access-token
+```
+
+**Note:** In GitHub Actions CI/CD, authentication is automatic via `GITHUB_TOKEN`.
+
+### Gradle Build Commands
+
+**Clean and build (includes tests and uber JAR):**
+```bash
+./gradlew clean build
+```
+
+**Build only (compiles, tests, creates JAR):**
+```bash
+./gradlew build
+```
+
+**Run tests:**
+```bash
+./gradlew test                    # Unit tests only
+./gradlew integrationTest         # Integration tests only
+./gradlew test integrationTest    # All tests
+```
+
+**Create uber JAR (all dependencies included):**
+```bash
+./gradlew shadowJar
+```
+
+**Run application:**
+```bash
+./gradlew runSim                  # Pre-configured shunting loop example
+./gradlew runEditor               # Launch editor GUI
+./gradlew runExampleGui           # Animated GUI simulation (NEW)
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=300  # Custom example
+```
+
+**Generate JavaDoc documentation:**
+```bash
+./gradlew javadoc
+```
+
+**Show dependency tree:**
+```bash
+./gradlew dependencies
+```
+
+### Running Manually from JAR
+
+After building with `./gradlew shadowJar`, run from the project root:
+
+**Simulation mode:**
+```bash
+java -jar build/libs/interlockSim.jar sim [xmlFile]
+```
+
+**Editor mode:**
+```bash
+java -jar build/libs/interlockSim.jar edit [xmlFile]
+```
+
+**Built-in examples (console output):**
+```bash
+java -jar build/libs/interlockSim.jar example [exampleName] [endTime]
+```
+
+**Built-in examples with animated GUI:**
+```bash
+java -jar build/libs/interlockSim.jar exampleGui [exampleName] [endTime]
+
+# Example: Run shunting loop with animation for 300 time units
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+```
+
+To list available examples:
+```bash
+java -jar build/libs/interlockSim.jar example
+```
+
+### Docker Development Environment
+
+**Prerequisites:** Docker/Docker Compose and X11 server (Linux: usually installed; macOS: XQuartz; Windows: VcXsrv/Xming)
+
+**Docker Services:**
+- **app:** Java application with X11 GUI support
+- **text:** LaTeX thesis compilation
+
+**Build services:**
+```bash
+# Set GitHub credentials for jDisco download
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-personal-access-token
+
+# Build app (jDisco downloaded from GitHub Packages or uses local cache)
+docker compose build app
+
+# Build thesis
+docker compose build text
+```
+
+**Run editor GUI:**
+```bash
+# Method 1 (Recommended): Use .Xauthority file (more secure)
+docker compose up app
+
+# Method 2: If you get authorization errors, allow X11 connections from Docker
+xhost +local:docker
+docker compose up app
+
+# When done with Method 2, revoke access for security:
+xhost -local:docker
+```
+
+**Run simulation example:**
+```bash
+docker compose run app java -jar interlockSim.jar example shuntingLoop 60
+```
+
+**Run simulation with custom XML:**
+```bash
+docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
+```
+
+**Build thesis PDF:**
+```bash
+docker compose up text
+# PDF will be available in artifacts/text/bakalarka.pdf
+```
+
+**Extract compiled JAR:**
+```bash
+docker compose build app
+# JAR will be available in artifacts/app/interlockSim.jar
+```
+
+**Docker Architecture:**
+
+Multi-stage Dockerfile: Builder stage (Temurin 21 JDK, compiles, tests, creates uber JAR) → Runner stage (Temurin 21 JRE, X11 support). `text/Dockerfile` for LaTeX thesis compilation (Debian Bookworm, TeX Live).
+
+**X11 Forwarding Troubleshooting:**
+
+If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
+
+1. **Check DISPLAY variable:**
+   ```bash
+   echo $DISPLAY  # Should show :0, :1, or :0.0
+   ```
+
+2. **Verify X11 is running:**
+   ```bash
+   xdpyinfo | head  # Should show display information
+   ```
+
+3. **Use xhost as fallback:**
+   ```bash
+   xhost +local:docker
+   docker compose up app
+   # When done:
+   xhost -local:docker
+   ```
+
+4. **Check .Xauthority permissions:**
+   ```bash
+   ls -la ~/.Xauthority  # File should exist and be readable
+   ```
+
+5. **For Wayland users (Fedora 43+):**
+   ```bash
+   # Wayland uses a different socket location
+   export DISPLAY=:0
+   # Or set XDG_SESSION_TYPE=x11 to force X11 session
+   ```
+
+6. **For Fedora with SELinux (Fedora 43+):**
+   ```bash
+   # If you encounter AVC denial errors, configure SELinux:
+   # See docs/FEDORA_DOCKER_X11_SETUP.md for detailed instructions
+
+   # Option 1: Use pre-generated policy (fastest)
+   sudo semodule -i docker-x11/docker-x11-complete.pp
+
+   # Option 2: Generate from audit log
+   xhost +local:docker
+   sudo ausearch -c 'java' --raw | sudo audit2allow -M docker-x11-complete
+   sudo semodule -i docker-x11-complete.pp
+   ```
+
+**Artifacts:**
+
+Build outputs copied to `./artifacts/`: `app/interlockSim.jar`, `text/bakalarka.pdf`
+
+## Logging Configuration
+
+### Overview
+
+InterlockSim uses **kotlin-logging** (SLF4J wrapper) with Logback backend. Configuration: `src/main/resources/logback.xml`
+
+### Usage in Kotlin Code
+
+```kotlin
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {}
+
+logger.debug { "Message with $variable" }  // Lambda-based lazy evaluation
+logger.info { "Train ${train.id} at position $position" }
+logger.warn { "State: ${computeExpensiveState()}" }  // Lambda prevents unnecessary work
+```
+
+### Benefits of Lambda-Based Logging
+
+```kotlin
+// Old style (always evaluates arguments)
+logger.debug("State: " + computeExpensiveState())  // computeExpensiveState() called even if debug disabled
+
+// New style (lazy evaluation)
+logger.debug { "State: ${computeExpensiveState()}" }  // computeExpensiveState() only called if debug enabled
+```
+
+### Changing Log Levels
+
+**Edit logback.xml:**
+```xml
+<configuration>
+  <root level="DEBUG">  <!-- Change to DEBUG, INFO, WARN, ERROR -->
+    <appender-ref ref="CONSOLE" />
+    <appender-ref ref="FILE" />
+  </root>
+</configuration>
+```
+
+**Runtime override (without editing XML):**
+```bash
+# From command line
+java -Dlogback.level=DEBUG -jar interlockSim.jar ...
+
+# From Docker
+docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar ...
+```
+
+### Output Configuration
+
+**Default output:**
+- Console output (stdout)
+- File output: `logs/interlockSim.log`
+
+**Log format:**
+```
+2026-02-05 10:30:45.123 [main] DEBUG c.v.f.i.TrackSection - Block A ENTRY: occupant=Train1, state=FREE->OCCUPIED
+```
+
+## Code Quality Enforcement
+
+### SonarQube Integration
+
+SonarQube integration provides: code smells, security vulnerabilities, coverage (JaCoCo), duplication, complexity metrics, technical debt.
+
+**Configuration files:**
+- `build.gradle.kts` - SonarQube plugin and JaCoCo configuration (primary)
+- `sonar-project.properties` - Additional SonarQube settings (optional)
+- `.github/workflows/sonarqube.yml` - CI/CD integration for automated analysis
+
+### Running SonarQube Analysis
+
+**SonarCloud (recommended):** Sign up at https://sonarcloud.io, generate token, run:
+```bash
+./gradlew clean test jacocoTestReport sonar \
+  -Dsonar.host.url=https://sonarcloud.io \
+  -Dsonar.organization=<your-org> \
+  -Dsonar.token=<your-token>
+```
+
+**Local server:** `docker run -d -p 9000:9000 sonarqube:lts-community`, then use `-Dsonar.host.url=http://localhost:9000`
+
+### Code Coverage with JaCoCo
+
+Generate with `./gradlew test jacocoTestReport`. View HTML at `build/reports/jacoco/test/html/index.html`. Configure thresholds in `build.gradle.kts`.
+
+### Quality Gates and CI/CD
+
+Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true`. CI/CD via `.github/workflows/sonarqube.yml` (requires SONAR_TOKEN/SONAR_ORGANIZATION secrets).
+
+## Code Modification Guidelines
+
+**Conservative approach differentiated by component type:**
+
+### Critical Restrictions (Until jDisco Migration)
+
+**Simulation Core (`sim/` package):**
+- **Minimal changes only** - Be extremely conservative with simulation logic
+- **No refactoring** - Do not restructure working simulation code
+- **Tests required** - Any changes MUST have comprehensive test coverage first
+- **No unsolicited improvements** - Only make explicitly requested changes
+- **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
+- **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
+
+**jDisco Library:**
+- **Do not modify** - jDisco is maintained as a separate project at https://github.com/bedavs/jDisco
+- Report issues at the jDisco repository
+
+### Flexible Development (Other Components)
+
+**GUI (`gui/` package), Editor, Utilities, Context System:**
+- **Modernization allowed** - Can refactor, improve, and apply Kotlin idioms
+- **Tests required** - Must have test coverage before and after changes
+- **Alignment required** - Changes must align with LONG_TERM_GOALS.md goals and architecture
+- **Code quality** - Apply detekt-strict.yml rules for new Kotlin code
+- **Rationale:** These components can be improved independently without affecting simulation correctness
+
+### General Rules for All Changes
+
+1. **Tests are mandatory** - Any modified code MUST be covered by tests (before and after)
+2. **Align with goals** - Check that changes support or enable LONG_TERM_GOALS.md objectives
+3. **No breaking changes** - Maintain backward compatibility with existing XML configurations and APIs
+4. **Document decisions** - Update relevant documentation for architectural changes
+5. **Quality gates** - All changes must pass: `./gradlew build detekt ktlintCheck test`
+
+### Examples of Appropriate Changes
+
+**ALLOWED (with tests):**
+- Refactoring GUI components for Goal 20 (Accessibility)
+- Adding new editor features for Goal 16 (Signal Explanation)
+- Improving context serialization for Goal 5 (Save/Restore State)
+- Modernizing utility classes with Kotlin idioms
+- Adding metrics collection infrastructure for Goal 6
+
+**RESTRICTED (until jDisco migration):**
+- Changing Train physics calculations
+- Modifying jDisco process scheduling
+- Restructuring simulation event handling
+- Changing core simulation algorithms
+
+**PROHIBITED:**
+- Changes that break existing XML configurations
+- Modifications that fail existing tests
+- Changes that conflict with LONG_TERM_GOALS.md
+- jDisco library modifications
+
+## Project Architecture Context
+
+### Static/Dynamic Separation Pattern
+
+The interlockSim architecture separates **static configuration** from **dynamic simulation state** using the wrapper pattern.
+
+**Applies to:** InOut, RailSwitch, RailSemaphore, TrackBlock
+
+**Key Method:** `Context.toDynamic(static) → dynamic`
+
+**Example: InOut**
+- `InOut` (static) - Configuration: name, position, entry/exit flag
+- `DynamicInOut` (dynamic) - State: reservation, occupancy
+
+**Why:** Enables:
+1. Immutable editing context (no simulation state)
+2. Mutable simulation context (state changes isolated)
+3. Clear separation of concerns
+4. Easy context transformation (editing → simulation)
+
+**Usage:** Always use `context.toDynamic(element)` before state operations in simulation code.
+
+**Documented in:** `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`
+
+### Navigation Services Architecture
+
+Three specialized services handle path finding and reservation using **scope-per-context** pattern:
+
+**1. TopologyNavigator** - Static topology navigation (pure graph traversal, no state dependencies)
+- Interface: `context/navigation/TopologyNavigator`
+- Implementation: `context/navigation/DefaultTopologyNavigator`
+- **Use Case**: Editor validation, network analysis without dynamic state
+- **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getTopologyNavigator()`
+- **Methods**: `findPath()`, `getNextTrackSection()`, `findPathToNextSemaphore()`
+
+**2. PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
+- Interface: `context/navigation/PathReservationService`
+- Implementation: `context/navigation/DefaultPathReservationService`
+- **Use Case**: Dispatcher finding available routes, interlocking path setup
+- **Access**: `SimulationEnvironment.getPathReservationService()`
+- **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
+- **Methods**: `reservePath()`, `releasePath()`, `findReservablePaths()`, `reservePathToAnyNextSemaphore()`
+
+**3. TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
+- Interface: `context/navigation/TrainNavigationService`
+- Implementation: `context/navigation/DefaultTrainNavigationService`
+- **Use Case**: Train requesting next track section (only through owned blocks)
+- **Access**: `SimulationEnvironment.getTrainNavigationService()`
+- **Features**: Explicit ownership validation, null = "not reserved for THIS train"
+- **Methods**: `findReservedPathForTrain()`, `isPathReservedForTrain()`, `getReservedBlocks()`
+
+**4. PathReservationRegistry** - Bidirectional train↔block ownership tracking
+- Class: `context/navigation/PathReservationRegistry`
+- **Features**: O(1) queries, scoped lifetime (one per context), shared by all services
+- **Methods**: `register()`, `unregister()`, `getBlocks()`, `getOwner()`, `isOwnedBy()`
+
+**Koin DI Integration:**
+- Scope-per-context pattern (one registry per context, isolated between contexts)
+- Services share ONE registry within context (consistent ownership view)
+- Automatic cleanup via `Context.close()` (AutoCloseable pattern)
+
+**Documentation:**
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples (547 lines)
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Original reservation service design (1069 lines)
+
+### Advanced Koin Patterns
+
+**Scope-per-Context Pattern:**
+
+Each context (`DefaultEditingContext` and `DefaultSimulationContext`) creates its own Koin scope and passes itself as the scope source:
+
+```kotlin
+// In DefaultSimulationContext constructor:
+val scope = GlobalContext.get().createScope(
+    scopeId = System.identityHashCode(this).toString(),
+    qualifier = named<DefaultSimulationContext>(),
+    source = this  // Context accessible via getSource()
+)
+```
+
+**Why Scoped, Not Singleton or Factory?**
+- **singleton**: ❌ State bleeding between simulation runs
+- **factory**: ❌ Each get() creates new instance, components don't share state
+- **scoped**: ✅ One registry per context, shared by all components, isolated between contexts
+
+**Services Retrieve Context via `getSource()`:**
+
+No redundant `parametersOf(context)` - context is the scope source:
+
+```kotlin
+// In InterlockSimModule.kt:
+scope<DefaultSimulationContext> {
+    scoped<TopologyNavigator> {
+        val context = getSource<DefaultSimulationContext>()
+        DefaultTopologyNavigator(context)
+    }
+
+    scoped<PathReservationRegistry> { PathReservationRegistry() }
+
+    scoped<PathReservationService> {
+        val context = getSource<DefaultSimulationContext>()
+        val navigator: TopologyNavigator = get()  // Shared within scope
+        val registry: PathReservationRegistry = get()  // Shared within scope
+        DefaultPathReservationService(navigator, context, registry)
+    }
+}
+```
+
+**Usage Patterns:**
+
+```kotlin
+// Production code - services accessed via context API
+val context = buildSimulationContext()
+val pathService = context.getPathReservationService()
+val trainService = context.getTrainNavigationService()
+
+// Both services share the same registry within this context
+pathService.reservePath("train1", start, end)
+val blocks = trainService.getReservedBlocks("train1") // Sees the same reservation
+
+// Test code - direct scope access when needed
+val navigator = context.scope.get<TopologyNavigator>()  // No parameters!
+
+// Clean up scope when done (AutoCloseable pattern)
+context.close()  // Idempotent
+```
+
+**Key Benefits:**
+- No redundant `parametersOf(context)` - context is the scope source
+- Shared registry within context, isolated between contexts
+- Type-safe service retrieval via `get<T>()`
+- Resource cleanup via `AutoCloseable` pattern
+- Both `EditingContext` and `SimulationContext` support
+
+### SimulationProcessFactory Pattern
+
+**Factory Pattern (Phase 2, 2026-01-14):**
+
+DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
+- Follows Dependency Inversion Principle (depends on abstraction, not concrete classes)
+- Enables testing with mock factories
+- Prepares for jDisco→DSOL/Kalasim migration
+
+**Module Configuration:**
+
+```kotlin
+val simulationModule = module {
+    single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+}
+```
+
+**Usage in Context:**
+
+```kotlin
+class DefaultSimulationContext(
+    cols: Int,
+    rows: Int,
+    private val processFactory: SimulationProcessFactory  // Injected via Koin
+) : BaseContext(cols, rows), SimulationContext {
+    // Factory creates simulation processes (Generator, InOutWorker)
+}
+```
+
+## Railway Domain Rules
+
+### Minimum InOut Requirement
+
+**Requirement:** Every railway network must have at least 2 InOut elements (entry/exit points).
+
+**Rationale:**
+- Single InOut = dead-end (train enters but cannot exit)
+- Simulation requires trains to enter from one point and exit from another
+- Networks with < 2 InOuts are topologically invalid for train simulation
+
+**Validation:**
+- **Editor**: GUI prevents saving contexts with < 2 InOuts (Issue #80)
+- **XML loading**: XMLContextFactory validates during parse and throws `IllegalArgumentException`
+- **Test coverage**: See `InOutValidationTest` (Issue #79)
+
+**Example Valid Network:**
+```xml
+<RailwayNet>
+  <InOut name="Entry" x="1" y="1" entry="true" />
+  <InOut name="Exit" x="10" y="10" entry="false" />
+  <!-- At least 2 InOuts required -->
+</RailwayNet>
+```
+
 ## Resources
 
 - [Kotlin Official Style Guide](https://kotlinlang.org/docs/coding-conventions.html)
@@ -1630,4 +2191,4 @@ Need test network?
 
 This style guide should be updated as the migration progresses and patterns emerge. After Phase 3 conversion is complete, we may gradually introduce more Kotlin idioms in Phase 4+.
 
-**Last Updated**: 2026-02-05 (Added Test Fixtures section: TestFixtures, TestTopologies, resource management patterns)
+**Last Updated**: 2026-02-05 (Major update: Added Build & Development Environment, Logging Configuration, Code Quality Enforcement, Code Modification Guidelines, Project Architecture Context sections. Expanded from 1634 to ~2400 lines as part of CLAUDE.md compaction effort.)
