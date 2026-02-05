@@ -69,7 +69,7 @@ class InOutIntegrationTest {
 	fun `vyhybna xml loads with 2 InOuts`() {
 		TestFixtures.loadShuntingXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val editingCtx = context.asEditingContext()
 				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
@@ -93,7 +93,7 @@ class InOutIntegrationTest {
 	fun `InOut names preserved after XML load`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val editingCtx = context.asEditingContext()
 				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
@@ -117,7 +117,7 @@ class InOutIntegrationTest {
 	fun `InOut entry and exit flags preserved`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val editingCtx = context.asEditingContext()
 				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
@@ -142,7 +142,7 @@ class InOutIntegrationTest {
 	fun `Multiple InOuts can coexist in network`() {
 		TestFixtures.loadShuntingXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val editingCtx = context.asEditingContext()
 				val inOuts = editingCtx.getInOutsList()
 
 				// Shunting loop has 2 InOuts
@@ -157,4 +157,11 @@ class InOutIntegrationTest {
 			}
 		}
 	}
+
+	/**
+	 * Helper function to safely cast Context to DefaultEditingContext.
+	 * Reduces duplication and improves type safety.
+	 */
+	private fun Context<*, *>.asEditingContext(): DefaultEditingContext =
+		this as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 }

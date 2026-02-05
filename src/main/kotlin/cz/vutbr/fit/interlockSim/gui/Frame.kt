@@ -120,7 +120,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		val northContainer = JPanel()
 		northContainer.layout = BoxLayout(northContainer, BoxLayout.PAGE_AXIS)
 		northContainer.add(toolBar)
-		controlPanel.isVisible = false  // Initially hidden (shown only in simulation mode)
+		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(controlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
@@ -227,7 +227,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * **Must be called from EDT.**
 	 */
 	fun setContext(context: Context<*, *>) {
-		stopAnimationUpdates()  // Cleanup existing timer
+		stopAnimationUpdates() // Cleanup existing timer
 
 		when (context) {
 			is SimulationContext -> {
@@ -274,12 +274,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"startAnimationUpdates must be called from EDT"
 		}
 
-		animationUpdateTimer = Timer(100) { // 10 Hz update rate
-			val controller = railwayNetGridCanvas.getAnimationController()
-			controller?.getCurrentState()?.let { state ->
-				controlPanel.updateTime(state.simulationTime)
+		animationUpdateTimer =
+			Timer(100) {
+				// 10 Hz update rate
+				val controller = railwayNetGridCanvas.getAnimationController()
+				controller?.getCurrentState()?.let { state ->
+					controlPanel.updateTime(state.simulationTime)
+				}
 			}
-		}
 		animationUpdateTimer?.start()
 	}
 
@@ -368,8 +370,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Only exit if save was successful
 		if (saved) {
-			stopAnimationUpdates()  // Stop Frame's 10 Hz timer
-			railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
+			stopAnimationUpdates() // Stop Frame's 10 Hz timer
+			railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 			exitWithoutSaving()
 		}
 	}
@@ -378,8 +380,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
-		stopAnimationUpdates()  // Stop Frame's 10 Hz timer
-		railwayNetGridCanvas.cleanupAnimation()  // Stop AnimationController - CRITICAL for GC
+		stopAnimationUpdates() // Stop Frame's 10 Hz timer
+		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 		dispose()
 		System.exit(0)
 	}

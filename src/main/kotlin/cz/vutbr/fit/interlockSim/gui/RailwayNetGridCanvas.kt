@@ -168,23 +168,25 @@ class RailwayNetGridCanvas :
 							is InOut -> {
 								// Auto-generate sequential names for InOuts (IO1, IO2, ...)
 								// Users can customize via toolbar nameString or rename dialog afterward
-								val name = if (editingContext.currentNameString.isNotEmpty()) {
-									logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
-									editingContext.currentNameString
-								} else {
-									val autoName = AutoNameGenerator.generateName(newCell.javaClass, editingContext)
-									logger.debug { "InOut: Auto-generated name: '$autoName'" }
-									autoName
-								}
+								val name =
+									if (editingContext.currentNameString.isNotEmpty()) {
+										logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
+										editingContext.currentNameString
+									} else {
+										val autoName = AutoNameGenerator.generateName(newCell.javaClass, editingContext)
+										logger.debug { "InOut: Auto-generated name: '$autoName'" }
+										autoName
+									}
 								newCell.setName(name)
 								logger.debug { "InOut: After setName(), getName() returns: '${newCell.getName()}'" }
 							}
 							is RailSemaphore, is RailSwitch -> {
 								// Auto-generate sequential names for semaphores and switches
-								val autoName = AutoNameGenerator.generateName(
-									newCell.javaClass,
-									editingContext
-								)
+								val autoName =
+									AutoNameGenerator.generateName(
+										newCell.javaClass,
+										editingContext
+									)
 								newCell.setName(autoName)
 								logger.debug {
 									"${newCell.javaClass.simpleName}: Auto-named as '$autoName', " +
@@ -324,11 +326,12 @@ class RailwayNetGridCanvas :
 		animationController = AnimationController(simulationContext, this, eventTimelinePanel)
 
 		// Create animated renderer with state-based coloring
-		animatedRenderer = AnimatedSimulationCellRenderer(
-			CELL_WIDTH,
-			CELL_HEIGHT,
-			animationController!!
-		)
+		animatedRenderer =
+			AnimatedSimulationCellRenderer(
+				CELL_WIDTH,
+				CELL_HEIGHT,
+				animationController!!
+			)
 
 		// Start animation loop (30 FPS rendering)
 		animationController?.start()

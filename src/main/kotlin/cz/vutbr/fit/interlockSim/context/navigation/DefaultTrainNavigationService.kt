@@ -73,7 +73,7 @@ class DefaultTrainNavigationService(
 	private val registry: PathReservationRegistry,
 	@Suppress("UNUSED_PARAMETER")
 	// TODO(Issue #297): Remove in next major version after all DI configurations updated
-	private val topologyNavigator: TopologyNavigator  // Kept for backward compatibility with Koin DI
+	private val topologyNavigator: TopologyNavigator // Kept for backward compatibility with Koin DI
 ) : TrainNavigationService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -128,18 +128,20 @@ class DefaultTrainNavigationService(
 		// segment and not present in the new path built from the separator forward.
 		// Determine the previous track section (the one train just left to arrive at separator)
 		val currentTrackSection = getCurrentTrackSection(dynamicSeparator, pathInfo)
-		val finalPath = if (currentTrackSection != null &&
-			currentTrackSection != nextTrackSection &&
-			!candidatePath.contains(currentTrackSection)) {
-			// Train is transitioning from old PathInfo to new merged PathInfo
-			// Wrap path to handle getNext(currentTrackSection) correctly
-			logger.debug {
-				"findReservedPathForTrain: wrapping path for transition from $currentTrackSection"
+		val finalPath =
+			if (currentTrackSection != null &&
+				currentTrackSection != nextTrackSection &&
+				!candidatePath.contains(currentTrackSection)
+			) {
+				// Train is transitioning from old PathInfo to new merged PathInfo
+				// Wrap path to handle getNext(currentTrackSection) correctly
+				logger.debug {
+					"findReservedPathForTrain: wrapping path for transition from $currentTrackSection"
+				}
+				TransitionAwarePath(candidatePath, currentTrackSection, nextTrackSection)
+			} else {
+				candidatePath
 			}
-			TransitionAwarePath(candidatePath, currentTrackSection, nextTrackSection)
-		} else {
-			candidatePath
-		}
 
 		// Step 4: Extract all track blocks from the path
 		val blocks = extractDynamicTrackBlocks(finalPath)
@@ -155,7 +157,7 @@ class DefaultTrainNavigationService(
 					"findReservedPathForTrain: block $block is not reserved for train '$trainId' " +
 						"(owner: ${owner ?: "none"}), path not available"
 				}
-				return null  // Block not owned by this train, return null (train waits)
+				return null // Block not owned by this train, return null (train waits)
 			}
 		}
 
@@ -207,7 +209,7 @@ class DefaultTrainNavigationService(
 				logger.trace {
 					"isPathReservedForTrain: block $block not owned by train '$trainId' (owner: ${owner ?: "none"})"
 				}
-				return false  // Early exit on first conflict
+				return false // Early exit on first conflict
 			}
 		}
 
@@ -278,7 +280,7 @@ class DefaultTrainNavigationService(
 								"determineNextFromPathInfo: Reached target separator $nextElement, " +
 									"no more tracks in reserved path for train at $separator"
 							}
-							null  // Expected: train has reached destination
+							null // Expected: train has reached destination
 						}
 						else -> {
 							// Unexpected element type - path structure error
@@ -286,7 +288,7 @@ class DefaultTrainNavigationService(
 								"determineNextFromPathInfo: Unexpected element type after separator: " +
 									"${nextElement.javaClass.simpleName}, path may be malformed"
 							}
-							null  // Unexpected structure
+							null // Unexpected structure
 						}
 					}
 				} else {
@@ -430,7 +432,7 @@ class DefaultTrainNavigationService(
 			if (directedPosition in visited) {
 				logger.warn {
 					"buildPathWithDirection: cycle detected at $separator from $previous, " +
-					"path length ${path.length()} elements"
+						"path length ${path.length()} elements"
 				}
 				// Cycle detected - check if we're at a valid stopping point
 				if (separator is OrientedPathSeparator) {
@@ -438,7 +440,7 @@ class DefaultTrainNavigationService(
 						path.add(separator)
 						logger.debug {
 							"buildPathWithDirection: completed circular route, " +
-							"final path length ${path.length()} elements"
+								"final path length ${path.length()} elements"
 						}
 						return path
 					}
@@ -446,7 +448,7 @@ class DefaultTrainNavigationService(
 				// Cycle but not at valid exit point - path incomplete
 				logger.error {
 					"buildPathWithDirection: cycle detected but not at oriented semaphore, " +
-					"path incomplete (${path.length()} elements)"
+						"path incomplete (${path.length()} elements)"
 				}
 				return null
 			}
@@ -513,7 +515,7 @@ class DefaultTrainNavigationService(
 
 			// Only include DynamicTrackBlock instances (not TrackBlockPart)
 			if (block is DynamicTrackBlock) {
-				seen.add(block)  // LinkedHashSet ensures uniqueness
+				seen.add(block) // LinkedHashSet ensures uniqueness
 			}
 		}
 
@@ -522,5 +524,4 @@ class DefaultTrainNavigationService(
 		}
 		return seen.toList()
 	}
-
 }

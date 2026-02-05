@@ -110,8 +110,7 @@ class TransitionAwarePath(
 		return delegate.getNext(current)
 	}
 
-	override fun toString(): String {
-		return "TransitionAwarePath(delegate=$delegate, " +
+	override fun toString(): String =
+		"TransitionAwarePath(delegate=$delegate, " +
 			"transitionCurrent=$transitionCurrent, transitionNext=$transitionNext)"
-	}
 }

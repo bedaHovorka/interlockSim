@@ -158,6 +158,7 @@ class DynamicRailSwitch(
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		val map = staticRef.confs.getJoinedNodesAndEdges(from)
+
 		// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
 		// Note: Java Map.entrySet() provides entries, cast needed for destructuring
 		@Suppress("UNCHECKED_CAST")
@@ -175,7 +176,7 @@ class DynamicRailSwitch(
 	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun lock() {
-		if (locked) return  // Already locked, no change needed
+		if (locked) return // Already locked, no change needed
 
 		val oldLocked = locked
 		locked = true
@@ -192,7 +193,7 @@ class DynamicRailSwitch(
 	 * Idempotent: Safe to call multiple times. Event only fired if state changes.
 	 */
 	fun unlock() {
-		if (!locked) return  // Already unlocked, no change needed
+		if (!locked) return // Already unlocked, no change needed
 
 		val oldLocked = locked
 		locked = false

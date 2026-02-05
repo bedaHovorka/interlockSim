@@ -56,7 +56,10 @@ interface DynamicTrackBehavior {
 	 * @param reservingTrainId
 	 * @throws TrackOperationException if track is not FREE
 	 */
-	fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String)
+	fun setUpPath(
+		from: DynamicPathSeparator,
+		reservingTrainId: String
+	)
 
 	/**
 	 * Checks if a path is set up from the given separator.

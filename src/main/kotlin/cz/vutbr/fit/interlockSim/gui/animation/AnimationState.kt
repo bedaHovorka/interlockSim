@@ -77,13 +77,14 @@ data class AnimationState(
 		 * All collections are empty, simulation time is 0.0.
 		 * Used as initial state before first update.
 		 */
-		val EMPTY = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = emptyMap(),
-			switchStates = emptyMap()
-		)
+		val EMPTY =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = emptyMap(),
+				switchStates = emptyMap()
+			)
 	}
 }
 

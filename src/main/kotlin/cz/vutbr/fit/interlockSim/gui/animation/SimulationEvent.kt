@@ -75,9 +75,7 @@ data class SimulationEvent(
 	 *
 	 * @return Formatted event string
 	 */
-	fun formatForDisplay(): String {
-		return "[${formatTime()}] [${eventType.name}] $message"
-	}
+	fun formatForDisplay(): String = "[${formatTime()}] [${eventType.name}] $message"
 
 	companion object {
 		/**
@@ -94,13 +92,12 @@ data class SimulationEvent(
 			trainId: String,
 			position: Double,
 			velocity: Double
-		): SimulationEvent {
-			return SimulationEvent(
+		): SimulationEvent =
+			SimulationEvent(
 				simulationTime = simulationTime,
 				eventType = ReportType.TRAIN_CONTINUOUS,
 				message = "Train $trainId: pos=%.2fm, vel=%.2fm/s".format(position, velocity)
 			)
-		}
 
 		/**
 		 * Create a train discrete event.
@@ -114,13 +111,12 @@ data class SimulationEvent(
 			simulationTime: Double,
 			trainId: String,
 			event: String
-		): SimulationEvent {
-			return SimulationEvent(
+		): SimulationEvent =
+			SimulationEvent(
 				simulationTime = simulationTime,
 				eventType = ReportType.TRAIN_EVENTS,
 				message = "Train $trainId: $event"
 			)
-		}
 
 		/**
 		 * Create a node state change event.
@@ -134,13 +130,12 @@ data class SimulationEvent(
 			simulationTime: Double,
 			nodeId: String,
 			event: String
-		): SimulationEvent {
-			return SimulationEvent(
+		): SimulationEvent =
+			SimulationEvent(
 				simulationTime = simulationTime,
 				eventType = ReportType.NODE_EVENTS,
 				message = "Node $nodeId: $event"
 			)
-		}
 
 		/**
 		 * Create a path setting event.
@@ -154,12 +149,11 @@ data class SimulationEvent(
 			simulationTime: Double,
 			pathId: String,
 			action: String
-		): SimulationEvent {
-			return SimulationEvent(
+		): SimulationEvent =
+			SimulationEvent(
 				simulationTime = simulationTime,
 				eventType = ReportType.PATH_SETTING,
 				message = "Path $pathId: $action"
 			)
-		}
 	}
 }

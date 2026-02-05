@@ -255,9 +255,10 @@ class DefaultTopologyNavigator(
 			// Incoming dx=-1 (entered from LEFT) → exit dx=+1 (continue RIGHT)
 			// Incoming dx=+1 (entered from RIGHT) → exit dx=-1 (continue LEFT)
 			// Note: dx * incomingDx < 0 means opposite signs
-			val forward = candidates.filter { candidate ->
-				candidate.dx * incomingDx < 0
-			}
+			val forward =
+				candidates.filter { candidate ->
+					candidate.dx * incomingDx < 0
+				}
 
 			if (forward.isNotEmpty()) {
 				// Return first from sorted for determinism
@@ -557,7 +558,6 @@ class DefaultTopologyNavigator(
 		}
 		return false
 	}
-
 
 	/**
 	 * Build path by following parent pointers from target node back to start.

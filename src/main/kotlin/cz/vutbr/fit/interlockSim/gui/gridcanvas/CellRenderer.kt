@@ -152,8 +152,9 @@ abstract class CellRenderer(
 		try {
 			// Try to find the most specific draw method for this cell type
 			// Search up the class hierarchy to handle private subclasses
-			val method = findDrawMethod(cell.javaClass)
-				?: error("No draw method found for cell type: ${cell.javaClass.name}")
+			val method =
+				findDrawMethod(cell.javaClass)
+					?: error("No draw method found for cell type: ${cell.javaClass.name}")
 			method.invoke(this, g, cell)
 		} catch (e: Exception) {
 			error("Failed to draw cell: $e")

@@ -67,7 +67,6 @@ class ArrayPath(
 	override fun getLast(): OrientedPathSeparator = Util.assertInstanceOf(OrientedPathSeparator::class.java, deque.last())
 
 	override fun getNext(current: TrackSection?): TrackSection? {
-
 // 		var trackBlock: DynamicTrackBlock? = null
 // 		if (current != null) {
 // 			val block = current.getTrackBlock()

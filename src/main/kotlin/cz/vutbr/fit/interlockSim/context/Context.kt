@@ -75,7 +75,7 @@ private val logger = KotlinLogging.logger {}
  *
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface Context<out C : Cell, T : TrackBlock>: AutoCloseable {
+interface Context<out C : Cell, T : TrackBlock> : AutoCloseable {
 	val scope: Scope
 
 	/**

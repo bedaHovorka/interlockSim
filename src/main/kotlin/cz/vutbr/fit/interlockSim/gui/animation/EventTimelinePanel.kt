@@ -81,38 +81,40 @@ private val logger = KotlinLogging.logger {}
  * @see AnimationController
  */
 class EventTimelinePanel : JPanel() {
-
 	/**
 	 * Text area for displaying events.
 	 */
-	private val eventTextArea: JTextArea = JTextArea().apply {
-		isEditable = false
-		font = Font(Font.MONOSPACED, Font.PLAIN, 11)
-		lineWrap = false
-	}
+	private val eventTextArea: JTextArea =
+		JTextArea().apply {
+			isEditable = false
+			font = Font(Font.MONOSPACED, Font.PLAIN, 11)
+			lineWrap = false
+		}
 
 	/**
 	 * Scroll pane for text area.
 	 */
-	private val scrollPane: JScrollPane = JScrollPane(eventTextArea).apply {
-		// Configure auto-scroll behavior
-		val caret = eventTextArea.caret as DefaultCaret
-		caret.updatePolicy = DefaultCaret.ALWAYS_UPDATE
+	private val scrollPane: JScrollPane =
+		JScrollPane(eventTextArea).apply {
+			// Configure auto-scroll behavior
+			val caret = eventTextArea.caret as DefaultCaret
+			caret.updatePolicy = DefaultCaret.ALWAYS_UPDATE
 
-		// Set preferred size to prevent panel from growing too large
-		// and pushing the canvas out of view (Issue: grid disappears when "Train Updates" enabled)
-		preferredSize = java.awt.Dimension(400, 150)
-	}
+			// Set preferred size to prevent panel from growing too large
+			// and pushing the canvas out of view (Issue: grid disappears when "Train Updates" enabled)
+			preferredSize = java.awt.Dimension(400, 150)
+		}
 
 	/**
 	 * Filter checkboxes for event types.
 	 */
-	private val filterCheckboxes: Map<ReportType, JCheckBox> = mapOf(
-		ReportType.PATH_SETTING to JCheckBox("Path Commands", true),
-		ReportType.NODE_EVENTS to JCheckBox("Node Events", true),
-		ReportType.TRAIN_EVENTS to JCheckBox("Train Events", true),
-		ReportType.TRAIN_CONTINUOUS to JCheckBox("Train Updates", false) // Initially disabled (high frequency)
-	)
+	private val filterCheckboxes: Map<ReportType, JCheckBox> =
+		mapOf(
+			ReportType.PATH_SETTING to JCheckBox("Path Commands", true),
+			ReportType.NODE_EVENTS to JCheckBox("Node Events", true),
+			ReportType.TRAIN_EVENTS to JCheckBox("Train Events", true),
+			ReportType.TRAIN_CONTINUOUS to JCheckBox("Train Updates", false) // Initially disabled (high frequency)
+		)
 
 	/**
 	 * List of all events (unfiltered).
@@ -258,9 +260,7 @@ class EventTimelinePanel : JPanel() {
 	 * @param eventType Event type to check
 	 * @return true if events of this type should be displayed
 	 */
-	private fun isEventTypeVisible(eventType: ReportType): Boolean {
-		return filterCheckboxes[eventType]?.isSelected ?: false
-	}
+	private fun isEventTypeVisible(eventType: ReportType): Boolean = filterCheckboxes[eventType]?.isSelected ?: false
 
 	/**
 	 * Append a single event to the display (without refresh).
@@ -282,14 +282,15 @@ class EventTimelinePanel : JPanel() {
 		}
 
 		// Build text from filtered events
-		val text = buildString {
-			allEvents.forEach { event ->
-				if (isEventTypeVisible(event.eventType)) {
-					append(event.formatForDisplay())
-					append("\n")
+		val text =
+			buildString {
+				allEvents.forEach { event ->
+					if (isEventTypeVisible(event.eventType)) {
+						append(event.formatForDisplay())
+						append("\n")
+					}
 				}
 			}
-		}
 
 		// Update display
 		eventTextArea.text = text
@@ -305,9 +306,7 @@ class EventTimelinePanel : JPanel() {
 	 *
 	 * @return Number of visible events
 	 */
-	private fun countVisibleEvents(): Int {
-		return allEvents.count { isEventTypeVisible(it.eventType) }
-	}
+	private fun countVisibleEvents(): Int = allEvents.count { isEventTypeVisible(it.eventType) }
 
 	/**
 	 * Get filter state for specific event type.
@@ -315,9 +314,7 @@ class EventTimelinePanel : JPanel() {
 	 * @param eventType Event type to query
 	 * @return true if filter is enabled (events visible)
 	 */
-	fun isFilterEnabled(eventType: ReportType): Boolean {
-		return filterCheckboxes[eventType]?.isSelected ?: false
-	}
+	fun isFilterEnabled(eventType: ReportType): Boolean = filterCheckboxes[eventType]?.isSelected ?: false
 
 	/**
 	 * Set filter state for specific event type.
@@ -325,7 +322,10 @@ class EventTimelinePanel : JPanel() {
 	 * @param eventType Event type to configure
 	 * @param enabled Whether to show events of this type
 	 */
-	fun setFilterEnabled(eventType: ReportType, enabled: Boolean) {
+	fun setFilterEnabled(
+		eventType: ReportType,
+		enabled: Boolean
+	) {
 		require(SwingUtilities.isEventDispatchThread()) {
 			"setFilterEnabled() must be called from EDT"
 		}

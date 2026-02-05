@@ -127,12 +127,16 @@ open class DefaultSimulationContext(
 	 * @see navigationModule
 	 * @see close
 	 */
-	override val scope = org.koin.core.context.GlobalContext.get()
-		.createScope(
-			scopeId = System.identityHashCode(this).toString(),
-			qualifier = org.koin.core.qualifier.named<DefaultSimulationContext>(),
-			source = this
-		)
+	override val scope =
+		org.koin.core.context.GlobalContext
+			.get()
+			.createScope(
+				scopeId = System.identityHashCode(this).toString(),
+				qualifier =
+					org.koin.core.qualifier
+						.named<DefaultSimulationContext>(),
+				source = this
+			)
 
 	/**
 	 * Set of allowed report types for simulation output
@@ -449,12 +453,13 @@ open class DefaultSimulationContext(
 						cache[cell] = Point(x, y)
 					} else if (cell is DynamicPathSeparator) {
 						// Cell is DynamicPathSeparator - add static reference
-						val staticRef = when (cell) {
-							is DynamicInOut -> cell.staticRef
-							is DynamicRailSemaphore -> cell.staticRef
-							is DynamicRailSwitch -> cell.staticRef
-							else -> null
-						}
+						val staticRef =
+							when (cell) {
+								is DynamicInOut -> cell.staticRef
+								is DynamicRailSemaphore -> cell.staticRef
+								is DynamicRailSwitch -> cell.staticRef
+								else -> null
+							}
 						if (staticRef != null) {
 							cache[staticRef] = Point(x, y)
 						}
@@ -1277,7 +1282,10 @@ open class DefaultSimulationContext(
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
 	 */
-	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock) {
+	override fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	) {
 		val pathService = getPathReservationService()
 		pathService.unregisterBlock(trainId, block)
 	}
