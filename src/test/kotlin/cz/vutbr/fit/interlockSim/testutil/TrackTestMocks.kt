@@ -424,6 +424,44 @@ fun createMockSwitch(name: String): RailSwitch {
 // ==================== Mock Implementations ====================
 
 /**
+ * Creates a mock NodeCell for testing track operations.
+ *
+ * This factory function replaces direct instantiation of MockNodeCell with a factory pattern
+ * following the approach established in Phase 1 (Issue #332).
+ *
+ * NodeCell represents connection points (endpoints) on a track in the railway network.
+ * This mock provides all necessary behavior for track testing including:
+ * - Name and speed configuration
+ * - Spatial type (HORIZONTAL by default)
+ * - Segment joining (F and A segments for HORIZONTAL)
+ * - Empty follower sets (no routing by default)
+ *
+ * Note: Returns a concrete MockNodeCell instance (not a pure MockK mock) because NodeCell
+ * is an abstract class. This preserves the structure of the original implementation while
+ * providing the factory pattern for consistent test setup.
+ *
+ * @param name Node name (default: "MockNode")
+ * @param speed Maximum speed through node in m/s (default: 80.0)
+ * @param spatialType Spatial orientation (default: HORIZONTAL)
+ * @return Concrete MockNodeCell instance implementing NodeCell and DynamicPathSeparator
+ *
+ * @since Phase 2 (2026-02-05) - MockK migration
+ * @see createMockTrackBlock Similar factory pattern from Phase 1
+ *
+ * Example usage:
+ * ```kotlin
+ * val node = createMockNodeCell(name = "TestNode", speed = 100.0)
+ * assertThat(node.getName()).isEqualTo("TestNode")
+ * assertThat(node.allowedSpeed()).isEqualTo(100.0)
+ * ```
+ */
+fun createMockNodeCell(
+	name: String = "MockNode",
+	speed: Double = 80.0,
+	spatialType: SpatialType = SpatialType.HORIZONTAL
+): MockNodeCell = MockNodeCell(name, speed, spatialType)
+
+/**
  * Mock implementation of NodeCell for testing track endpoints.
  *
  * NodeCell is a PathSeparator that represents connection points on a track.
