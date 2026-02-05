@@ -16,13 +16,12 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.testutil.createMockDynamicSemaphore
+import cz.vutbr.fit.interlockSim.testutil.createMockRailSemaphore
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlockPart
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -353,40 +352,5 @@ class AnimatedSimulationCellRendererTest {
 	}
 
 	// ========== Helper Methods ==========
-
-	/**
-	 * Create a mock TrackBlockPart that returns the given TrackBlock.
-	 */
-	private fun createMockTrackBlockPart(trackBlock: TrackBlock): TrackBlockPart {
-		val mock = mockk<TrackBlockPart>(relaxed = true)
-		every { mock.getTrackBlock() } returns trackBlock
-		every { mock.getSpatialType() } returns null
-		every { mock.getSegments() } returns arrayOf(Cell.Segment.A, Cell.Segment.F)
-		return mock
-	}
-
-	/**
-	 * Create a mock RailSemaphore.
-	 */
-	private fun createMockRailSemaphore(): RailSemaphore {
-		val mock = mockk<RailSemaphore>(relaxed = true)
-		every { mock.getSpatialType() } returns Cell.SpatialType.HORIZONTAL
-		every { mock.getOrientation() } returns true
-		every { mock.getName() } returns "TestSemaphore"
-		return mock
-	}
-
-	/**
-	 * Create a mock DynamicRailSemaphore with the given static reference and signal.
-	 */
-	private fun createMockDynamicSemaphore(
-		staticRef: RailSemaphore,
-		signal: Signal
-	): DynamicRailSemaphore {
-		val mock = mockk<DynamicRailSemaphore>(relaxed = true)
-		every { mock.staticRef } returns staticRef
-		every { mock.signal } returns signal
-		every { mock.getSpatialType() } returns staticRef.getSpatialType()
-		return mock
-	}
+	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
 }

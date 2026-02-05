@@ -21,40 +21,14 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.util.Point
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.Runs
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-
-/**
- * Creates a MockK-based TrackBlock for testing grid operations.
- */
-private fun createMockTrackBlock(): TrackBlock = mockk<TrackBlock>(relaxed = true) {
-	every { name } returns null
-	every { getNextTrackSection(any(), any()) } returns null
-	every { isInnerElement(any()) } returns false
-	every { getJoin(any(), any()) } returns Cell.Segment.A
-	every { isFreeFrom(any()) } returns true
-	every { setUpPath(any(), any()) } just Runs
-	every { isSetUpPath(any()) } returns false
-	every { cancelPathSetup(any()) } just Runs
-	every { getSecondEnd(any()) } answers { firstArg() }
-	every { length() } returns 100.0
-	every { maxSpeed(any()) } returns 80.0
-	every { ends() } returns emptyArray()
-	every { getState() } returns cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
-	every { enter(any()) } just Runs
-	every { leave(any()) } just Runs
-	every { getTrackOccupant() } throws UnsupportedOperationException("Mock implementation")
-}
 
 /**
  * Comprehensive unit tests for [DefaultRailWayNetGrid].

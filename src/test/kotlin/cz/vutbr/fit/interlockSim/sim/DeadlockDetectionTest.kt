@@ -14,18 +14,16 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
-import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockInOut
+import cz.vutbr.fit.interlockSim.testutil.createMockOccupiedTrack
+import cz.vutbr.fit.interlockSim.testutil.createMockPath
+import cz.vutbr.fit.interlockSim.testutil.createMockReservedTrack
+import cz.vutbr.fit.interlockSim.testutil.createMockSemaphoreReal
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockSwitch
+import cz.vutbr.fit.interlockSim.testutil.createMockTrack
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.*
 import org.junit.jupiter.api.BeforeEach
@@ -361,8 +359,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 		@Test
 		fun `semaphore signal prevents forward progress in gridlock scenario`() {
 			// Arrange: Create two semaphores in series
-			val sem1 = createMockSemaphore("SEM1", isAllowing = false) // STOP signal
-			val sem2 = createMockSemaphore("SEM2", isAllowing = true) // PROCEED signal
+			val sem1 = createMockSemaphoreReal("SEM1", isAllowing = false) // STOP signal
+			val sem2 = createMockSemaphoreReal("SEM2", isAllowing = true) // PROCEED signal
 
 			val track1 = createMockTrack("TRACK1", 100.0)
 			val track2 = createMockTrack("TRACK2", 100.0)
@@ -385,9 +383,9 @@ class DeadlockDetectionTest : KoinTestBase() {
 		fun `circular signal dependencies create gridlock`() {
 			// Arrange: Create three semaphores where each blocks the previous one
 			// This represents a circular signal dependency
-			val sem1 = createMockSemaphore("SEM1", isAllowing = false) // Needs Sem3 to clear
-			val sem2 = createMockSemaphore("SEM2", isAllowing = false) // Needs Sem1 to clear
-			val sem3 = createMockSemaphore("SEM3", isAllowing = false) // Needs Sem2 to clear
+			val sem1 = createMockSemaphoreReal("SEM1", isAllowing = false) // Needs Sem3 to clear
+			val sem2 = createMockSemaphoreReal("SEM2", isAllowing = false) // Needs Sem1 to clear
+			val sem3 = createMockSemaphoreReal("SEM3", isAllowing = false) // Needs Sem2 to clear
 
 			val entries = (1..3).map { createMockInOut("E$it") }
 			val exits = (1..3).map { createMockInOut("X$it") }
@@ -409,8 +407,8 @@ class DeadlockDetectionTest : KoinTestBase() {
 		@Test
 		fun `semaphore allows forward progress when signals are correctly sequenced`() {
 			// Arrange: Create properly sequenced signals (no circular dependencies)
-			val sem1 = createMockSemaphore("SEM1", isAllowing = true) // PROCEED
-			val sem2 = createMockSemaphore("SEM2", isAllowing = true) // PROCEED
+			val sem1 = createMockSemaphoreReal("SEM1", isAllowing = true) // PROCEED
+			val sem2 = createMockSemaphoreReal("SEM2", isAllowing = true) // PROCEED
 
 			val track1 = createMockTrack("TRACK1", 100.0)
 			val track2 = createMockTrack("TRACK2", 100.0)
@@ -579,68 +577,5 @@ class DeadlockDetectionTest : KoinTestBase() {
 	}
 
 	// ==================== Helper Methods ====================
-
-	private fun createMockInOut(name: String): DynamicInOut {
-		val inOut = mockk<DynamicInOut>()
-		every { inOut.name } returns name
-		every { inOut.toString() } returns "InOut:$name"
-		return inOut
-	}
-
-	private fun createMockTrack(
-		name: String,
-		length: Double,
-		maxSpeed: Double = 20.0
-	): SimpleTrack {
-		val track = mockk<SimpleTrack>()
-		every { track.length() } returns length
-		every { track.maxSpeed(any()) } returns maxSpeed
-		every { track.toString() } returns "Track:$name"
-		return track
-	}
-
-	private fun createMockReservedTrack(
-		name: String,
-		length: Double
-	): SimpleTrack {
-		val track = mockk<SimpleTrack>()
-		every { track.length() } returns length
-		every { track.toString() } returns "Track:$name[RESERVED]"
-		return track
-	}
-
-	private fun createMockOccupiedTrack(
-		name: String,
-		length: Double
-	): SimpleTrack {
-		val track = mockk<SimpleTrack>()
-		every { track.length() } returns length
-		every { track.toString() } returns "Track:$name[OCCUPIED]"
-		return track
-	}
-
-	private fun createMockPath(vararg tracks: SimpleTrack): ArrayPath {
-		val path = mockk<ArrayPath>()
-		val totalLength = tracks.sumOf { it.length() }
-		every { path.length() } returns totalLength
-		every { path.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
-		return path
-	}
-
-	private fun createMockSemaphore(
-		name: String,
-		isAllowing: Boolean
-	): DynamicRailSemaphore {
-		val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
-		val signal = if (isAllowing) Signal.FREE else Signal.STOP
-		dynamicSemaphore.signal = signal
-		return dynamicSemaphore
-	}
-
-	private fun createMockSwitch(name: String): RailSwitch {
-		val switch = mockk<RailSwitch>()
-		every { switch.toString() } returns "Switch:$name"
-		return switch
-	}
+	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
 }
