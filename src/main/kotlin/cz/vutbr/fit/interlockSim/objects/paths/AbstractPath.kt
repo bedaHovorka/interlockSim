@@ -65,12 +65,13 @@ abstract class AbstractPath protected constructor(
 			}
 
 			// Polymorphic contribution - no instanceof checks needed
+			val oldMin = min
 			val contribution = e.contributeToPathMaxSpeed(prevSep, min)
 			min = contribution.minSpeed
 			prevSep = contribution.updatedPreviousSeparator
 
-			// Log only for tracks (when speed actually changed)
-			if (contribution.minSpeed < min || (min < Double.MAX_VALUE && contribution.minSpeed == min)) {
+			// Log only when track actually reduces the max speed
+			if (contribution.minSpeed < oldMin) {
 				logger.trace { "Element $e contributes max speed: ${contribution.minSpeed}" }
 			}
 		}
