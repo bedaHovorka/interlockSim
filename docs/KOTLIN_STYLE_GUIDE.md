@@ -1392,6 +1392,233 @@ cat -A src/main/kotlin/cz/vutbr/fit/interlockSim/util/Doubleton.kt | head -20
 cat -A <file>.kt | grep '^	'  # Should show leading tabs
 ```
 
+## Test Fixtures and Utilities
+
+### Overview
+
+The `testutil` package provides centralized test fixtures and utilities to reduce duplication and improve test maintainability. **Always use these fixtures instead of creating inline test data.**
+
+### TestFixtures: XML Configuration Loading
+
+`TestFixtures` provides standardized loading of XML configuration files.
+
+**Usage Pattern:**
+
+```kotlin
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+
+@Test
+fun testWithShuntingLoop() {
+    TestFixtures.loadShuntingXml().use { stream ->
+        val context = factory.createContext(stream)
+        // Test with context
+    }
+}
+```
+
+**Available Fixtures:**
+
+- `loadShuntingXml()` - Main shunting loop (vyhybna.xml)
+- `loadLinearTrackXml()` - Simple A→B track
+- `loadMinimalNetworkXml()` - Minimal valid network
+- `loadSwitchBasicXml()` - Basic switch topology
+- `loadSemaphoreBasicXml()` - Basic semaphore configuration
+- Plus 10+ other fixtures (see TestFixtures.kt)
+
+**Benefits:**
+- ✅ Consistent resource paths (no hardcoded strings)
+- ✅ Proper resource management (returns InputStream)
+- ✅ Clear error messages when fixtures missing
+- ✅ Single source of truth for fixture locations
+
+### TestTopologies: Programmatic Network Creation
+
+`TestTopologies` provides reusable network topologies for tests that don't need XML.
+
+**Context Type Variants:**
+
+Each topology has two variants:
+- **EditingContext** - For editor/topology tests (e.g., `simpleLinearPath()`)
+- **SimulationContext** - For simulation/train tests (e.g., `simpleLinearPathSimulation()`)
+
+**Example: EditingContext Variant**
+
+```kotlin
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+
+@Test
+fun testTopologyNavigation() {
+    TestTopologies.simpleLinearPath().use { context ->
+        val navigator = context.getTopologyNavigator()
+        // Test navigation logic
+    }
+}
+```
+
+**Example: SimulationContext Variant**
+
+```kotlin
+@Test
+fun testTrainMovement() {
+    TestTopologies.simpleLinearPathSimulation().use { context ->
+        val trainService = context.getTrainNavigationService()
+        // Test train navigation
+    }
+}
+```
+
+**Available Topologies:**
+
+| Topology | EditingContext | SimulationContext | Description |
+|----------|----------------|-------------------|-------------|
+| Simple Linear (A→B) | `simpleLinearPath()` | `simpleLinearPathSimulation()` | 100m track, 80 m/s |
+| Linear with Semaphore | `linearPathWithSemaphore(allowing)` | `linearPathWithSemaphoreSimulation(allowing)` | A→[S]→B with signal |
+| Dead-End | `deadEndSingleInOut()` | `deadEndSingleInOutSimulation()` | Single InOut, no connections |
+
+**When to Use Which:**
+- **XML Fixtures** - For complex real-world topologies (vyhybna.xml, switches with multiple branches)
+- **TestTopologies** - For simple, focused test scenarios (linear paths, single signals)
+- **TestContextBuilder** - Only when you need custom coordinates or unique configurations
+
+### Resource Management with .use {}
+
+**All contexts implement `AutoCloseable` - always use `.use {}`:**
+
+**Pattern 1: Single Context**
+
+```kotlin
+@Test
+fun testSingleContext() {
+    TestTopologies.simpleLinearPath().use { context ->
+        // Context auto-closes at end of block
+    }
+}
+```
+
+**Pattern 2: Nested Contexts (XML → Editing → Simulation)**
+
+```kotlin
+@Test
+fun testWithXmlContext() {
+    TestFixtures.loadShuntingXml().use { xmlStream ->
+        editingFactory.createContext(xmlStream).use { editingCtx ->
+            simulationFactory.createContext(editingCtx).use { simCtx ->
+                // All 3 resources auto-close in reverse order
+            }
+        }
+    }
+}
+```
+
+**Pattern 3: Shared Context (setUp/tearDown)**
+
+When context is shared across multiple tests:
+
+```kotlin
+class MyTestSuite {
+    private lateinit var context: SimulationContext
+
+    @BeforeEach
+    fun setUp() {
+        context = TestTopologies.simpleLinearPathSimulation()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        context.close()  // Manual close in tearDown
+    }
+
+    @Test
+    fun test1() {
+        // Use shared context
+    }
+
+    @Test
+    fun test2() {
+        // Use shared context
+    }
+}
+```
+
+### Anti-Patterns to Avoid
+
+❌ **Don't hardcode XML paths:**
+```kotlin
+// BAD
+val file = File("src/main/resources/.../vyhybna.xml")
+val stream = javaClass.getResourceAsStream("/cz/.../vyhybna.xml")
+
+// GOOD
+val stream = TestFixtures.loadShuntingXml()
+```
+
+❌ **Don't create duplicate topologies:**
+```kotlin
+// BAD - duplicated 15 times across tests
+val context = TestContextBuilder()
+    .withInOut("A", 1, 1, true)
+    .withInOut("B", 5, 5, false)
+    .withConnection(1, 1, 5, 5, 100.0, 80.0)
+    .buildEditingContext()
+
+// GOOD - reusable fixture
+val context = TestTopologies.simpleLinearPath()
+```
+
+❌ **Don't forget to close contexts:**
+```kotlin
+// BAD - resource leak
+val context = factory.createContext(stream)
+// ... test code ...
+// context never closed!
+
+// GOOD - auto-closes
+factory.createContext(stream).use { context ->
+    // ... test code ...
+}
+```
+
+❌ **Don't mix context types:**
+```kotlin
+// BAD - simulation test using EditingContext
+val context = TestTopologies.simpleLinearPath()  // Returns EditingContext
+context.getTrainNavigationService()  // Won't work!
+
+// GOOD - use simulation variant
+val context = TestTopologies.simpleLinearPathSimulation()
+context.getTrainNavigationService()  // Works!
+```
+
+### TestContextBuilder: Custom Topologies
+
+Use `TestContextBuilder` only when TestTopologies doesn't fit:
+
+```kotlin
+// When you need custom coordinates or unique topology
+val context = TestContextBuilder()
+    .withInOut("Entry", 2, 3, true)     // Custom position
+    .withInOut("Exit", 8, 9, false)
+    .withConnection(2, 3, 8, 9, 150.0, 100.0)  // Custom length/speed
+    .buildEditingContext()
+```
+
+### Summary: Decision Tree
+
+```
+Need test network?
+├─ Is it vyhybna.xml or other real-world config?
+│  └─ Use: TestFixtures.loadShuntingXml()
+│
+├─ Is it simple A→B, A→[S]→B, or dead-end?
+│  ├─ For editor/topology tests?
+│  │  └─ Use: TestTopologies.simpleLinearPath()
+│  └─ For simulation/train tests?
+│     └─ Use: TestTopologies.simpleLinearPathSimulation()
+│
+└─ Need custom coordinates or unique topology?
+   └─ Use: TestContextBuilder()
+```
+
 ## Resources
 
 - [Kotlin Official Style Guide](https://kotlinlang.org/docs/coding-conventions.html)
@@ -1403,4 +1630,4 @@ cat -A <file>.kt | grep '^	'  # Should show leading tabs
 
 This style guide should be updated as the migration progresses and patterns emerge. After Phase 3 conversion is complete, we may gradually introduce more Kotlin idioms in Phase 4+.
 
-**Last Updated**: 2026-01-12 (Added Koin DI section, consolidated from KOIN-ADOPTION.md)
+**Last Updated**: 2026-02-05 (Added Test Fixtures section: TestFixtures, TestTopologies, resource management patterns)
