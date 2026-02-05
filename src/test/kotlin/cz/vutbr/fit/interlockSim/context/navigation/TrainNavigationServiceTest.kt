@@ -138,7 +138,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain returns path with multiple blocks all owned`() {
 			// Arrange: Load vyhybna.xml (7 blocks, complex topology)
 			val editingContextFactory: EditingContextFactory by inject()
-			TestFixtures.loadShuntingXml()!!.use { xmlStream ->
+			TestFixtures.loadShuntingXml().use { xmlStream ->
 				editingContextFactory.createContext(xmlStream).use { editingCtx ->
 					val editingContext = editingCtx as DefaultEditingContext
 					simulationContextFactory.createContext(editingContext).use { simCtx ->
@@ -195,11 +195,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks) for realistic multi-block ownership scenarios
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			service = context.getTrainNavigationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				service = context.getTrainNavigationService()
+			}
 		}
 
 		@AfterEach
@@ -392,53 +392,53 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain filters out non-DynamicTrackBlocks`() {
 			// Arrange: Use vyhybna.xml (has TrackSections with blocks)
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			val service = context.getTrainNavigationService()
-			val pathService = context.getPathReservationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				val service = context.getTrainNavigationService()
+				val pathService = context.getPathReservationService()
 
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve path
-			pathService.reservePath("train1", inOutA, inOutB)
+				// Reserve path
+				pathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
+				// Act
+				val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: Should succeed (filters out separators, only validates blocks)
-			assertThat(result).isNotNull()
+				// Assert: Should succeed (filters out separators, only validates blocks)
+				assertThat(result).isNotNull()
 
-			context.close()
+				context.close()
+			}
 		}
 
 		@Test
 		fun `findReservedPathForTrain deduplicates blocks in path`() {
 			// Arrange: vyhybna.xml has switches that may create duplicate block references
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			val service = context.getTrainNavigationService()
-			val pathService = context.getPathReservationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				val service = context.getTrainNavigationService()
+				val pathService = context.getPathReservationService()
 
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve path
-			pathService.reservePath("train1", inOutA, inOutB)
+				// Reserve path
+				pathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
+				// Act
+				val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: Should succeed (deduplication works)
-			assertThat(result).isNotNull()
+				// Assert: Should succeed (deduplication works)
+				assertThat(result).isNotNull()
 
-			context.close()
+				context.close()
+			}
 		}
 
 		@Test
@@ -555,11 +555,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (complex path with separators and blocks)
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			service = context.getTrainNavigationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				service = context.getTrainNavigationService()
+			}
 		}
 
 		@AfterEach
@@ -671,15 +671,15 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks, 2 alternative paths via switches vA/vB)
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			// Get real services from context scope
-			navService = context.getTrainNavigationService()
-			pathService = context.getPathReservationService()
-			registry = context.scope.get()
+				// Get real services from context scope
+				navService = context.getTrainNavigationService()
+				pathService = context.getPathReservationService()
+				registry = context.scope.get()
+			}
 		}
 
 		@AfterEach

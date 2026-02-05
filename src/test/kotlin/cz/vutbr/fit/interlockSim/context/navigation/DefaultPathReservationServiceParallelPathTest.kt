@@ -54,10 +54,10 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load the shunting loop network from XML (with proper resource management)
-		TestFixtures.loadShuntingXml()?.use { xmlStream ->
+		TestFixtures.loadShuntingXml().use { xmlStream ->
 			editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-		} ?: throw IllegalStateException("Test resource vyhybna.xml not found")
+		}
 
 		pathReservationService = context.getPathReservationService()
 		navigator = context.getTopologyNavigator()

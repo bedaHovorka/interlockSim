@@ -43,11 +43,10 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		return TestFixtures.loadShuntingXml().use { xmlStream ->
+			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		}
 	}
 
 	/**
