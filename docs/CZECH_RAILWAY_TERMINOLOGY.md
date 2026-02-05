@@ -4,7 +4,7 @@
 
 **Status:** Verified 2026-02-05 (Issue #175)
 **Language:** Czech (cs) → English (en)
-**Domain:** Railway interlocking systems, Czech Railways (České dráhy)
+**Domain:** Railway interlocking systems, Správa železnic (Czech Railway Infrastructure Administration)
 
 ---
 
@@ -30,23 +30,28 @@ The interlockSim project uses Czech railway terminology primarily in:
 
 ### 1. File Names and Network Configurations
 
-| Czech Term | English Translation | Usage | Technical Accuracy |
-|------------|---------------------|-------|-------------------|
-| **vyhybna.xml** | "shunting loop.xml" | Main example railway network configuration | ✅ CORRECT |
-| **praha-hlavni-nadrazi.xml** | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points | ✅ CORRECT |
-| **rudyUjezd.xml** | "Rudý Újezd.xml" (place name) | Test network configuration | ✅ CORRECT (place name) |
+| Filename (ASCII) | Czech Name (with diacritics) | English Translation | Usage |
+|------------------|-------------------------------|---------------------|-------|
+| **vyhybna.xml** | výhybna | "shunting loop.xml" | Main example railway network configuration |
+| **praha-hlavni-nadrazi.xml** | Praha Hlavní Nádraží | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points |
+| **rudyUjezd.xml** | Rudý Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
 
-**Notes:**
+**Filename Convention:**
+- **All filenames use ASCII without diacritics** for filesystem compatibility and encoding safety
+- File content and documentation use proper Czech spelling with diacritics
+- Examples: `vyhybna.xml` (not "výhybna.xml"), `praha-hlavni-nadrazi.xml` (not "praha-hlavní-nádraží.xml")
+
+**Term Explanations:**
 - **vyhybna** - Czech term for "shunting loop" or "marshaling yard switching area"
-- **hlavní nádraží** - "main station" (capitalization correct in file comment)
+- **hlavní nádraží** - "main station" (with diacritics: nádraží, not nadrazi)
 - **Praha** - Prague (capital city of Czech Republic)
-- **Rudý Újezd** - Historical place name (correctly spelled with diacritics)
+- **Rudý Újezd** - Fictional place name for testing purposes
 
 ---
 
 ### 2. InOut Element Names (Entry/Exit Points)
 
-InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi.xml`:
+InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi.xml` (fictional example for this project):
 
 | Czech Name | English Translation | Location | Technical Meaning |
 |------------|---------------------|----------|------------------|
@@ -71,7 +76,7 @@ InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi
 
 ### 3. Semaphore and Switch Names
 
-Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
+Semaphore/switch names in `vyhybna.xml` use Czech abbreviations (fictional example for this project):
 
 | Czech Name | English Translation | Technical Meaning |
 |------------|---------------------|-------------------|
@@ -98,7 +103,7 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 
 | Czech Term | English Translation | Definition | Usage in Project |
 |------------|---------------------|------------|------------------|
-| **vyhybna** | shunting loop, marshaling yard | Railway switching area for train assembly/disassembly | Main example network (vyhybna.xml) |
+| **vyhybna** | shunting loop, marshaling yard | Railway switching area for train assembly/disassembly | Main example network (vyhybna.xml) - see https://cs.wikipedia.org/wiki/V%C3%BDhybna |
 | **nádraží** | station | Railway station | Prague Main Station configuration |
 | **výhybka** | railway switch, turnout | Track switch allowing trains to change tracks | Switch elements (vA, vB) |
 | **návěstidlo** | semaphore, signal | Railway signal controlling train movements | Semaphore elements in configurations |
@@ -130,7 +135,7 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 ### Spelling Accuracy
 
 **All Czech terms verified against:**
-- České dráhy (Czech Railways) official terminology
+- Správa železnic (Czech Railway Infrastructure Administration) official terminology
 - Czech Orthographic Dictionary (Český pravopisný slovník)
 - Prague city district official names (Magistrát hlavního města Prahy)
 
@@ -139,9 +144,9 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 ### Diacritic Usage
 
 **Czech diacritics correctly used:**
-- ✅ **ř** (r with háček) - Vršovice
-- ✅ **š** (s with háček) - Vysočany
-- ✅ **á** (a with čárka) - nádraží, výhybka, vyhybna
+- ✅ **ř** (r with háček) - Vršovice, Řečkovice (https://en.wikipedia.org/wiki/%C5%98e%C4%8Dkovice)
+- ✅ **š** (s with háček) - Vysočany, Šumperk (https://cs.wikipedia.org/wiki/%C5%A0umperk)
+- ✅ **á** (a with čárka) - nádraží (note: výhybka, vyhybna use 'y' not 'á')
 - ✅ **ň** (n with háček) - Libeň
 - ✅ **ě** (e with háček) - návěstidlo (not currently used, but referenced)
 
@@ -298,14 +303,27 @@ Found **1 Czech comment** in source code:
 ❌ **WRONG:** `Praha hlavní nádraží` (lowercase in formal context)
 ✅ **CORRECT:** `Praha Hlavní Nádraží` (title case for station name)
 
+### 4. Filename Conventions
+
+❌ **WRONG:** Creating files with diacritics: `výhybna.xml`, `nádraží.xml`
+✅ **CORRECT:** Use ASCII filenames: `vyhybna.xml`, `nadrazi.xml`
+
+**Rationale:** Diacritics in filenames can cause issues with:
+- Cross-platform compatibility (Windows, Linux, macOS)
+- Version control systems (git)
+- Build tools and CI/CD pipelines
+- URL encoding in web applications
+
+**Best Practice:** Keep filenames ASCII-only, use proper Czech spelling with diacritics in file content and documentation.
+
 ---
 
 ## References
 
 ### Czech Railway Standards
 
-- **ČD (České dráhy)** - Czech Railways official terminology
-  - https://www.cd.cz (Czech Railways official site)
+- **Správa železnic** - Czech Railway Infrastructure Administration
+  - https://www.spravazeleznic.cz/ (Czech Railway Infrastructure official site)
   - ČSN 73 6380 - Railway signaling systems standard
 
 ### Czech Orthography
