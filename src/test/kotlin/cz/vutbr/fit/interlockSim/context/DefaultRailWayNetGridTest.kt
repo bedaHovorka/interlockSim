@@ -21,64 +21,39 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathElement
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.util.Point
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.Runs
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Mock implementation of TrackBlock for testing grid operations.
+ * Creates a MockK-based TrackBlock for testing grid operations.
  */
-private class MockTrackBlock : TrackBlock {
-	// TrackBlock methods
-	override var name: String? = null
-
-	override fun getNextTrackSection(
-		separator: PathSeparator,
-		current: TrackSection?
-	): TrackSection? = null
-
-	override fun isInnerElement(element: PathElement): Boolean = false
-
-	override fun getJoin(
-		separator: PathSeparator,
-		current: TrackSection
-	): Cell.Segment = Cell.Segment.A
-
-	// Track methods
-	override fun isFreeFrom(sep: DynamicPathSeparator): Boolean = true
-
-	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String) {}
-
-	override fun isSetUpPath(from: DynamicPathSeparator): Boolean = false
-
-	override fun cancelPathSetup(from: DynamicPathSeparator) {}
-
-	override fun getSecondEnd(sep: PathSeparator): PathSeparator = sep
-
-	override fun length(): Double = 100.0
-
-	override fun maxSpeed(from: PathSeparator?): Double = 80.0
-
-	override fun ends(): Array<PathSeparator> = emptyArray()
-
-	override fun getState(): cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State =
-		cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
-
-	override fun enter(occupant: cz.vutbr.fit.interlockSim.objects.core.TrackOccupant) {}
-
-	override fun leave(occupant: cz.vutbr.fit.interlockSim.objects.core.TrackOccupant) {}
-
-	override fun getTrackOccupant(): cz.vutbr.fit.interlockSim.objects.core.TrackOccupant =
-		throw UnsupportedOperationException("Mock implementation")
+private fun createMockTrackBlock(): TrackBlock = mockk<TrackBlock>(relaxed = true) {
+	every { name } returns null
+	every { getNextTrackSection(any(), any()) } returns null
+	every { isInnerElement(any()) } returns false
+	every { getJoin(any(), any()) } returns Cell.Segment.A
+	every { isFreeFrom(any()) } returns true
+	every { setUpPath(any(), any()) } just Runs
+	every { isSetUpPath(any()) } returns false
+	every { cancelPathSetup(any()) } just Runs
+	every { getSecondEnd(any()) } answers { firstArg() }
+	every { length() } returns 100.0
+	every { maxSpeed(any()) } returns 80.0
+	every { ends() } returns emptyArray()
+	every { getState() } returns cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
+	every { enter(any()) } just Runs
+	every { leave(any()) } just Runs
+	every { getTrackOccupant() } throws UnsupportedOperationException("Mock implementation")
 }
 
 /**
@@ -94,7 +69,7 @@ private class MockTrackBlock : TrackBlock {
 class DefaultRailWayNetGridTest {
 	companion object {
 		// Shared mock TrackBlock instance for all tests
-		private val mockTrackBlock = MockTrackBlock()
+		private val mockTrackBlock = createMockTrackBlock()
 
 		// Helper function to create TrackBlockPart for testing
 		private fun createTestTrackBlockPart(): TrackBlockPart =
