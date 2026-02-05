@@ -167,23 +167,6 @@ fun Assert<String?>.containsAnyOf(vararg substrings: String) =
 	}
 
 /**
- * Extension function for backwards compatibility with AssertJ's assertThatThrownBy.
- *
- * This function captures an exception thrown by a block and returns an Assert<Throwable>
- * so that AssertK's built-in isInstanceOf can be used directly.
- *
- * Usage: assertThatThrownBy { /* code that throws */ }.isInstanceOf(Exception::class)
- */
-fun assertThatThrownBy(block: () -> Unit): Assert<Throwable> {
-	val result = runCatching { block() }
-	val exception = result.exceptionOrNull()
-	if (exception == null) {
-		throw AssertionError("Expected block to throw an exception, but it completed successfully")
-	}
-	return assertk.assertThat(exception)
-}
-
-/**
  * Extension function to assert on a lambda/block - compatible with both Unit and non-Unit returns.
  *
  * Usage: assertThat { someCode() }.isFailure()

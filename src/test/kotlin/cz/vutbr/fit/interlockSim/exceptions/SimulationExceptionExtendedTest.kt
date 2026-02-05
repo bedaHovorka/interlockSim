@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
@@ -17,7 +18,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -341,14 +341,14 @@ class SimulationExceptionExtendedTest : KoinTestBase() {
 		@Test
 		fun `all constructors are throwable`() {
 			// Act & Assert
-			assertThatThrownBy { throw SimulationException() }
-				.isInstanceOf(SimulationException::class)
+			assertFailure { throw SimulationException() }
+				.isInstanceOf<SimulationException>()
 
-			assertThatThrownBy { throw SimulationException(testObj) }
-				.isInstanceOf(SimulationException::class)
+			assertFailure { throw SimulationException(testObj) }
+				.isInstanceOf<SimulationException>()
 
-			assertThatThrownBy { throw SimulationException(testCause, testObj) }
-				.isInstanceOf(SimulationException::class)
+			assertFailure { throw SimulationException(testCause, testObj) }
+				.isInstanceOf<SimulationException>()
 		}
 
 		@Test

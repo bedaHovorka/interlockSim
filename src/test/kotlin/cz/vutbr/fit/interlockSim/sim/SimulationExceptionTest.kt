@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
@@ -23,7 +24,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
@@ -200,8 +200,8 @@ class SimulationExceptionTest : KoinTestBase() {
 			val exception = SimulationException(testMessage, testCause, mockTrack)
 
 			// Act & Assert
-			assertThatThrownBy { throw exception }
-				.isInstanceOf(SimulationException::class)
+			assertFailure { throw exception }
+				.isInstanceOf<SimulationException>()
 		}
 
 		@Test
@@ -331,8 +331,8 @@ class SimulationExceptionTest : KoinTestBase() {
 			val exception = TrackOperationException(testMessage, mockTrack)
 
 			// Act & Assert
-			assertThatThrownBy { throw exception }
-				.isInstanceOf(TrackOperationException::class)
+			assertFailure { throw exception }
+				.isInstanceOf<TrackOperationException>()
 		}
 
 		@Test
@@ -468,8 +468,8 @@ class SimulationExceptionTest : KoinTestBase() {
 			val exception = PathSeparatorChangeException(testMessage, mockSeparator)
 
 			// Act & Assert
-			assertThatThrownBy { throw exception }
-				.isInstanceOf(PathSeparatorChangeException::class)
+			assertFailure { throw exception }
+				.isInstanceOf<PathSeparatorChangeException>()
 		}
 
 		@Test

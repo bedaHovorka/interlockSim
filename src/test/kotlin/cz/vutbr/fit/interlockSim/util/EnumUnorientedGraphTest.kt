@@ -13,6 +13,7 @@
 
 package cz.vutbr.fit.interlockSim.util
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.hasSize
@@ -23,7 +24,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.containsEntry
 import cz.vutbr.fit.interlockSim.testutil.doesNotContainValue
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -352,44 +352,44 @@ class EnumUnorientedGraphTest {
 	inner class NotImplementedOperations {
 		@Test
 		fun get_byNode_throwsNotImplementedException() {
-			assertThatThrownBy { graph.get(Direction.NORTH) }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.get(Direction.NORTH) }
+				.isInstanceOf<NotImplementedException>()
 		}
 
 		@Test
 		fun nodeSet_throwsNotImplementedException() {
-			assertThatThrownBy { graph.nodeSet() }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.nodeSet() }
+				.isInstanceOf<NotImplementedException>()
 		}
 
 		@Test
 		fun remove_byNodes_throwsNotImplementedException() {
 			graph.put(Direction.NORTH, Direction.SOUTH, 100)
 
-			assertThatThrownBy { graph.remove(Direction.NORTH, Direction.SOUTH) }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.remove(Direction.NORTH, Direction.SOUTH) }
+				.isInstanceOf<NotImplementedException>()
 		}
 
 		@Test
 		fun remove_byEdge_throwsNotImplementedException() {
 			graph.put(Direction.NORTH, Direction.SOUTH, 100)
 
-			assertThatThrownBy { graph.remove(100) }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.remove(100) }
+				.isInstanceOf<NotImplementedException>()
 		}
 
 		@Test
 		fun removeAll_throwsNotImplementedException() {
 			graph.put(Direction.NORTH, Direction.SOUTH, 100)
 
-			assertThatThrownBy { graph.removeAll(Direction.NORTH) }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.removeAll(Direction.NORTH) }
+				.isInstanceOf<NotImplementedException>()
 		}
 
 		@Test
 		fun values_throwsNotImplementedException() {
-			assertThatThrownBy { graph.values() }
-				.isInstanceOf(NotImplementedException::class.java)
+			assertFailure { graph.values() }
+				.isInstanceOf<NotImplementedException>()
 		}
 	}
 }

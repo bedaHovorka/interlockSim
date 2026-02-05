@@ -20,7 +20,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import org.junit.jupiter.api.BeforeEach
@@ -64,18 +63,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException when false`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulation(false) { "Test failure message" }
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Test failure message")
 		}
 
 		@Test
 		fun `uses default message when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulation(false)
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Simulation requirement failed")
 		}
 
@@ -105,9 +104,9 @@ class RequireFunctionsTest : KoinTestBase() {
 			}
 
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulation(false, lazyMessage)
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Lazy message evaluated")
 
 			assertThat(messageEvaluated).isEqualTo(true)
@@ -159,9 +158,9 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `uses default message with severity when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulation(false, Severity.ERROR)
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Simulation requirement failed")
 		}
 	}
@@ -184,18 +183,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException when null`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulationNotNull(null) { "Value was null" }
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Value was null")
 		}
 
 		@Test
 		fun `uses default message when null and no message provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulationNotNull(null)
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Required value was null")
 		}
 
@@ -242,18 +241,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws SimulationException when state is invalid`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulationState(false) { "Invalid state message" }
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Invalid state message")
 		}
 
 		@Test
 		fun `uses default message when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulationState(false)
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("Invalid simulation state")
 		}
 
@@ -288,18 +287,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws EditorException when false`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireEditor(false) { "Test editor failure" }
-			}.isInstanceOf(EditorException::class)
+			}.isInstanceOf<EditorException>()
 				.hasMessageContaining("Test editor failure")
 		}
 
 		@Test
 		fun `uses default message when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireEditor(false)
-			}.isInstanceOf(EditorException::class)
+			}.isInstanceOf<EditorException>()
 				.hasMessageContaining("Editor requirement failed")
 		}
 
@@ -365,9 +364,9 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `uses default message with severity when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireEditor(false, Severity.ERROR)
-			}.isInstanceOf(EditorException::class)
+			}.isInstanceOf<EditorException>()
 				.hasMessageContaining("Editor requirement failed")
 		}
 	}
@@ -390,18 +389,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws EditorException when null`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireEditorNotNull(null) { "Editor value was null" }
-			}.isInstanceOf(EditorException::class)
+			}.isInstanceOf<EditorException>()
 				.hasMessageContaining("Editor value was null")
 		}
 
 		@Test
 		fun `uses default message when null and no message provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireEditorNotNull(null)
-			}.isInstanceOf(EditorException::class)
+			}.isInstanceOf<EditorException>()
 				.hasMessageContaining("Required value was null")
 		}
 
@@ -450,18 +449,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws IllegalArgumentException when false`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidArgument(false) { "Invalid argument message" }
-			}.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf<IllegalArgumentException>()
 				.hasMessageContaining("Invalid argument message")
 		}
 
 		@Test
 		fun `uses default message when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidArgument(false)
-			}.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf<IllegalArgumentException>()
 				.hasMessageContaining("Invalid argument")
 		}
 
@@ -488,9 +487,9 @@ class RequireFunctionsTest : KoinTestBase() {
 			val value = -5
 
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidArgument(value >= 0) { "Parameter $paramName must be non-negative, got $value" }
-			}.isInstanceOf(IllegalArgumentException::class)
+			}.isInstanceOf<IllegalArgumentException>()
 				.hasMessageContaining("speed")
 				.hasMessageContaining("-5")
 				.hasMessageContaining("non-negative")
@@ -509,18 +508,18 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `throws IllegalStateException when false`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidState(false) { "Invalid state message" }
-			}.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf<IllegalStateException>()
 				.hasMessageContaining("Invalid state message")
 		}
 
 		@Test
 		fun `uses default message when not provided`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidState(false)
-			}.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf<IllegalStateException>()
 				.hasMessageContaining("Invalid state")
 		}
 
@@ -547,9 +546,9 @@ class RequireFunctionsTest : KoinTestBase() {
 			val expectedState = "STOPPED"
 
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireValidState(false) { "Expected state $expectedState but was $currentState" }
-			}.isInstanceOf(IllegalStateException::class)
+			}.isInstanceOf<IllegalStateException>()
 				.hasMessageContaining("RUNNING")
 				.hasMessageContaining("STOPPED")
 		}
@@ -621,9 +620,9 @@ class RequireFunctionsTest : KoinTestBase() {
 		@Test
 		fun `message with special characters is preserved`() {
 			// Act & Assert
-			assertThatThrownBy {
+			assertFailure {
 				requireSimulation(false) { "Error: [test] with {brackets} and \"quotes\"" }
-			}.isInstanceOf(SimulationException::class)
+			}.isInstanceOf<SimulationException>()
 				.hasMessageContaining("[test]")
 				.hasMessageContaining("{brackets}")
 				.hasMessageContaining("\"quotes\"")
