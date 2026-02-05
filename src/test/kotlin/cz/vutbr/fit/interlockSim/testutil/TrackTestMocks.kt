@@ -462,6 +462,40 @@ fun createMockNodeCell(
 ): MockNodeCell = MockNodeCell(name, speed, spatialType)
 
 /**
+ * Creates a mock TrackOccupant for testing enter/leave operations.
+ *
+ * This factory function replaces the manual MockTrackOccupant class with MockK,
+ * completing the factory pattern migration from Phase 1 & 2 (Issue #332).
+ *
+ * TrackOccupant is an interface with 3 methods, making it ideal for MockK.
+ *
+ * @param name Occupant name (default: "MockTrain")
+ * @param distanceToSemaphore Distance to next semaphore in meters (default: 100.0)
+ * @param nextSemaphore Next semaphore in path (default: null)
+ * @return MockK instance of TrackOccupant
+ *
+ * @since Phase 3 (2026-02-05) - Complete manual mock cleanup
+ * @see createMockTrackBlock Similar pattern from Phase 1
+ * @see createMockNodeCell Similar pattern from Phase 2
+ *
+ * Example usage:
+ * ```kotlin
+ * val train = createMockTrackOccupant("Train1")
+ * track.enter(train)
+ * ```
+ */
+fun createMockTrackOccupant(
+	name: String = "MockTrain",
+	distanceToSemaphore: Double = 100.0,
+	nextSemaphore: OrientedPathSeparator? = null
+): TrackOccupant = mockk(relaxed = true) {
+	every { this@mockk.name } returns name
+	every { this@mockk.distanceToSemaphore() } returns distanceToSemaphore
+	every { this@mockk.nextSemaphore() } returns nextSemaphore
+	every { this@mockk.toString() } returns name
+}
+
+/**
  * Mock implementation of NodeCell for testing track endpoints.
  *
  * NodeCell is a PathSeparator that represents connection points on a track.
