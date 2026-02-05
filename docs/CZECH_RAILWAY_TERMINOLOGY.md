@@ -4,7 +4,7 @@
 
 **Status:** Verified 2026-02-05 (Issue #175)
 **Language:** Czech (cs) → English (en)
-**Domain:** Railway interlocking systems, Czech Railways (České dráhy)
+**Domain:** Railway interlocking systems, Správa železnic (Czech Railway Infrastructure Administration)
 
 ---
 
@@ -34,19 +34,19 @@ The interlockSim project uses Czech railway terminology primarily in:
 |------------|---------------------|-------|-------------------|
 | **vyhybna.xml** | "shunting loop.xml" | Main example railway network configuration | ✅ CORRECT |
 | **praha-hlavni-nadrazi.xml** | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points | ✅ CORRECT |
-| **rudyUjezd.xml** | "Rudý Újezd.xml" (place name) | Test network configuration | ✅ CORRECT (place name) |
+| **rudyUjezd.xml** | "Rudý Újezd.xml" (fictional place name) | Test network configuration | ✅ CORRECT (fictional place name) |
 
 **Notes:**
 - **vyhybna** - Czech term for "shunting loop" or "marshaling yard switching area"
 - **hlavní nádraží** - "main station" (capitalization correct in file comment)
 - **Praha** - Prague (capital city of Czech Republic)
-- **Rudý Újezd** - Historical place name (correctly spelled with diacritics)
+- **Rudý Újezd** - Fictional place name (correctly spelled with diacritics for this example)
 
 ---
 
 ### 2. InOut Element Names (Entry/Exit Points)
 
-InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi.xml`:
+InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi.xml` (fictional example for this project):
 
 | Czech Name | English Translation | Location | Technical Meaning |
 |------------|---------------------|----------|------------------|
@@ -71,7 +71,7 @@ InOut elements use abbreviated Czech geographical terms in `praha-hlavni-nadrazi
 
 ### 3. Semaphore and Switch Names
 
-Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
+Semaphore/switch names in `vyhybna.xml` use Czech abbreviations (fictional example for this project):
 
 | Czech Name | English Translation | Technical Meaning |
 |------------|---------------------|-------------------|
@@ -98,7 +98,7 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 
 | Czech Term | English Translation | Definition | Usage in Project |
 |------------|---------------------|------------|------------------|
-| **vyhybna** | shunting loop, marshaling yard | Railway switching area for train assembly/disassembly | Main example network (vyhybna.xml) |
+| **vyhybna** | shunting loop, marshaling yard | Railway switching area for train assembly/disassembly | Main example network (vyhybna.xml) - see https://cs.wikipedia.org/wiki/V%C3%BDhybna |
 | **nádraží** | station | Railway station | Prague Main Station configuration |
 | **výhybka** | railway switch, turnout | Track switch allowing trains to change tracks | Switch elements (vA, vB) |
 | **návěstidlo** | semaphore, signal | Railway signal controlling train movements | Semaphore elements in configurations |
@@ -130,7 +130,7 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 ### Spelling Accuracy
 
 **All Czech terms verified against:**
-- České dráhy (Czech Railways) official terminology
+- Správa železnic (Czech Railway Infrastructure Administration) official terminology
 - Czech Orthographic Dictionary (Český pravopisný slovník)
 - Prague city district official names (Magistrát hlavního města Prahy)
 
@@ -139,9 +139,9 @@ Semaphore/switch names in `vyhybna.xml` use Czech abbreviations:
 ### Diacritic Usage
 
 **Czech diacritics correctly used:**
-- ✅ **ř** (r with háček) - Vršovice
-- ✅ **š** (s with háček) - Vysočany
-- ✅ **á** (a with čárka) - nádraží, výhybka, vyhybna
+- ✅ **ř** (r with háček) - Vršovice, Řečkovice (https://en.wikipedia.org/wiki/%C5%98e%C4%8Dkovice)
+- ✅ **š** (s with háček) - Vysočany, Šumperk (https://cs.wikipedia.org/wiki/%C5%A0umperk)
+- ✅ **á** (a with čárka) - nádraží (note: výhybka, vyhybna use 'y' not 'á')
 - ✅ **ň** (n with háček) - Libeň
 - ✅ **ě** (e with háček) - návěstidlo (not currently used, but referenced)
 
@@ -304,8 +304,8 @@ Found **1 Czech comment** in source code:
 
 ### Czech Railway Standards
 
-- **ČD (České dráhy)** - Czech Railways official terminology
-  - https://www.cd.cz (Czech Railways official site)
+- **Správa železnic** - Czech Railway Infrastructure Administration
+  - https://www.spravazeleznic.cz/ (Czech Railway Infrastructure official site)
   - ČSN 73 6380 - Railway signaling systems standard
 
 ### Czech Orthography
