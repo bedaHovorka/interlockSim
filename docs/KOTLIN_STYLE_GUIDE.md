@@ -2001,19 +2001,77 @@ The interlockSim architecture separates **static configuration** from **dynamic 
 
 **Key Method:** `Context.toDynamic(static) → dynamic`
 
-**Example: InOut**
-- `InOut` (static) - Configuration: name, position, entry/exit flag
-- `DynamicInOut` (dynamic) - State: reservation, occupancy
+#### Pattern Overview
 
-**Why:** Enables:
-1. Immutable editing context (no simulation state)
-2. Mutable simulation context (state changes isolated)
-3. Clear separation of concerns
-4. Easy context transformation (editing → simulation)
+**Static Objects** (Editing Context):
+- Immutable configuration set during network design
+- Grid position, names, types, connections, speeds
+- Used in `EditingContext` (mutable operations allowed)
+- Examples: `InOut`, `RailSwitch`, `RailSemaphore`, `SimpleTrackBlock`
 
-**Usage:** Always use `context.toDynamic(element)` before state operations in simulation code.
+**Dynamic Wrappers** (Simulation Context):
+- Mutable simulation state (occupancy, signals, reservations)
+- Wraps static object (delegates configuration queries)
+- Used in `SimulationContext` (immutable network structure)
+- Examples: `DynamicInOut`, `DynamicRailSwitch`, `DynamicRailSemaphore`, `DynamicTrack`
 
-**Documented in:** `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md`
+**Identity Contract:**
+- Wrappers use `System.identityHashCode(static)` for stable hash
+- Same static object always returns same wrapper (IdentityHashMap caching)
+- `===` reference equality based on wrapped object
+
+#### Example: InOut (Entry/Exit Points)
+
+**Static InOut:**
+```kotlin
+// In editing context (network design)
+val editingContext: EditingContext = factory.createContext()
+val staticInOut = InOut(
+    name = "A",
+    isEntry = false,  // Exit point
+    spatialType = SpatialType.HORIZONTAL
+)
+editingContext.putCell(Point(11, 8), staticInOut)
+
+// Static configuration queries:
+staticInOut.getName()  // "A"
+staticInOut.isEntry    // false
+staticInOut.getPoint() // Point(11, 8)
+```
+
+**Dynamic InOut:**
+```kotlin
+// Transform to simulation context (immutable network)
+val simContext = ContextTransformer.createSimulationContext(editingContext, factory)
+
+// Get dynamic wrapper
+val dynamicInOut = simContext.toDynamic(staticInOut) as DynamicInOut
+
+// Wrapper delegates configuration to static:
+assert(dynamicInOut.name == staticInOut.getName())      // ✓ Same
+assert(dynamicInOut.isEntry == staticInOut.isEntry)      // ✓ Same
+assert(dynamicInOut === simContext.toDynamic(staticInOut)) // ✓ Same wrapper instance
+
+// Wrapper manages simulation state:
+dynamicInOut.lastTrain = train  // Mutable operation (OK in simulation)
+```
+
+**Railway Domain Context:**
+- **InOut elements** represent network boundaries (train spawn/despawn points)
+- **Minimum 2 InOuts required** per network (validated by XMLContextFactory)
+- **Entry points** (`isEntry == true`) - trains enter network here
+- **Exit points** (`isEntry == false`) - trains leave network here
+
+**Why This Pattern:**
+1. **Immutable editing context** - No simulation state during network design
+2. **Mutable simulation context** - State changes isolated from configuration
+3. **Clear separation of concerns** - Configuration vs runtime state
+4. **Easy context transformation** - Editing → simulation conversion
+5. **Stable identity** - Object identity preserved across state changes (enables deterministic testing)
+
+**Usage Rule:** Always use `context.toDynamic(element)` before state operations in simulation code.
+
+**Documented in:** `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` (983 lines, comprehensive pattern documentation)
 
 ### Navigation Services Architecture
 
