@@ -1,5 +1,8 @@
 # Railway Interlocking Simulator
 
+[![Gradle Build](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml)
+[![SonarQube Analysis](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
+
 A discrete-event/continuous combined simulation system for railway interlocking 
 with a graphical track editor and XML-based configuration.
 
@@ -609,6 +612,45 @@ This repository includes:
 - GitHub Actions CI/CD workflows
 - LaTeX thesis source and images
 - Documentation (JavaDoc, README, CLAUDE.md)
+
+---
+
+## CI/CD and Quality Assurance
+
+### Build Status
+
+The project uses GitHub Actions for continuous integration and quality assurance:
+
+- **Gradle Build (Java 21)** - Compiles, tests, and creates JAR artifacts
+- **SonarQube Analysis** - Code quality analysis and coverage reporting
+- **Claude Code Review** - Automated code review for pull requests
+
+View workflow status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
+
+### Test Coverage
+
+**Current Status:**
+- **662 tests** (628 passing, 34 skipped, 0 failing)
+- **51% code coverage** (8,824/17,070 instructions covered)
+- **36 test classes** with comprehensive unit and integration tests
+
+**Coverage Reports:**
+- JaCoCo reports generated with every build
+- Available in CI artifacts: `jacoco-coverage-report-{sha}`
+- View locally: `./gradlew jacocoTestReport` → `build/reports/jacoco/test/html/index.html`
+
+### Contributing
+
+For information on:
+- Running CI checks locally
+- Verifying test coverage improvements
+- Creating PRs with proper documentation
+- Understanding CI/CD workflows
+
+See:
+- **[Contributing Guide](.github/CONTRIBUTING.md)** - Complete contribution guidelines
+- **[PR Template](.github/PULL_REQUEST_TEMPLATE.md)** - Pull request checklist
+- **[CI/CD Quick Reference](.github/CI_CD_QUICK_REFERENCE.md)** - CI status badges and commands
 
 ---
 
