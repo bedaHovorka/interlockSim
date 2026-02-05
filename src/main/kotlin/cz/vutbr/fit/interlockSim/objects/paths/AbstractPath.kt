@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -65,12 +66,13 @@ abstract class AbstractPath protected constructor(
 			}
 
 			// Polymorphic contribution - no instanceof checks needed
+			val oldMin = min
 			val contribution = e.contributeToPathMaxSpeed(prevSep, min)
 			min = contribution.minSpeed
 			prevSep = contribution.updatedPreviousSeparator
 
 			// Log only for tracks (when speed actually changed)
-			if (contribution.minSpeed < min || (min < Double.MAX_VALUE && contribution.minSpeed == min)) {
+			if (contribution.minSpeed < oldMin && contribution.minSpeed < Double.MAX_VALUE) {
 				logger.trace { "Element $e contributes max speed: ${contribution.minSpeed}" }
 			}
 		}
@@ -193,7 +195,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${toTrackFacility(nextTrack).getState()}"
+								"state=${(nextTrack as? TrackFacility)?.getState() ?: "unknown"}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -290,9 +292,16 @@ abstract class AbstractPath protected constructor(
 					// Track element: store for semaphore configuration
 					previousTrack = element
 				}
+				element is DynamicInOut -> {
+					// InOut elements at path ends - no speed setup needed
+					// Continue iteration
+				}
 				else -> {
 					// Should not happen in valid paths
-					logger.warn { "Unexpected path element type: ${element::class.simpleName}" }
+					logger.warn {
+						"Skipping path element type ${element::class.simpleName}; " +
+							"non-track/non-semaphore elements (e.g. DynamicInOut endpoints) do not need semaphore speed setup"
+					}
 				}
 			}
 		}
