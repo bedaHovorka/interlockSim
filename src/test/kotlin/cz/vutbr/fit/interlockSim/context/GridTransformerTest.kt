@@ -32,7 +32,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.io.File
 import kotlin.system.measureTimeMillis
 
 /**
@@ -47,10 +46,6 @@ import kotlin.system.measureTimeMillis
  */
 @DisplayName("GridTransformer")
 class GridTransformerTest : KoinTestBase() {
-	companion object {
-		private val VYHYBNA_XML = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-	}
-
 	@Nested
 	@DisplayName("Basic Transformation")
 	inner class BasicTransformation {

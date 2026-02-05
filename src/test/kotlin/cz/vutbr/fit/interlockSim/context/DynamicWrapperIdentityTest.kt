@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Regression tests for wrapper identity preservation after PR #95.
@@ -30,11 +31,10 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		return TestFixtures.loadShuntingXml().use { xmlStream ->
+			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		}
 	}
 
 	/**
@@ -50,18 +50,17 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	@Test
 	fun `getInOuts returns same instances as staticToDynamicMap`() {
 		// Given: Simulation context with InOuts
-		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-				// When: Retrieving InOuts via getInOuts()
-				val inoutsFromGetter = context.getInOuts()
+		TestFixtures.loadShuntingXml().use { xmlStream ->
+			(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
+				(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
+					// When: Retrieving InOuts via getInOuts()
+					val inoutsFromGetter = context.getInOuts()
 
-				// Then: Each InOut wrapper must be same instance as in staticToDynamicMap
-				for (dynamicInOut in inoutsFromGetter) {
-					val fromMap = context.toDynamic(dynamicInOut.staticRef)
-					assertThat(fromMap).isSameAs(dynamicInOut)
+					// Then: Each InOut wrapper must be same instance as in staticToDynamicMap
+					for (dynamicInOut in inoutsFromGetter) {
+						val fromMap = context.toDynamic(dynamicInOut.staticRef)
+						assertThat(fromMap).isSameAs(dynamicInOut)
+					}
 				}
 			}
 		}
@@ -80,7 +79,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `grid cells match staticToDynamicMap entries`() {
 		// Given: Simulation context with dynamic grid
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
@@ -130,7 +129,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `toDynamic returns same instance for repeated calls`() {
 		// Given: Simulation context
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
@@ -160,7 +159,7 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	fun `InOut semaphores are properly mapped to dynamic wrappers`() {
 		// Given: Simulation context with InOuts
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
 			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->

@@ -94,11 +94,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B (1 block)
-			context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildSimulationContext()
+			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 			// Get real services from context scope
 			service = context.getTrainNavigationService()
@@ -142,29 +138,31 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain returns path with multiple blocks all owned`() {
 			// Arrange: Load vyhybna.xml (7 blocks, complex topology)
 			val editingContextFactory: EditingContextFactory by inject()
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			val vyhybnaContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					val editingContext = editingCtx as DefaultEditingContext
+					simulationContextFactory.createContext(editingContext).use { simCtx ->
+						val vyhybnaContext = simCtx as DefaultSimulationContext
 
-			val vyhybnaService = vyhybnaContext.getTrainNavigationService()
-			val vyhybnaPathService = vyhybnaContext.getPathReservationService()
+						val vyhybnaService = vyhybnaContext.getTrainNavigationService()
+						val vyhybnaPathService = vyhybnaContext.getPathReservationService()
 
-			val grid = vyhybnaContext.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						val grid = vyhybnaContext.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve full path from A to B (spans all 7 blocks)
-			vyhybnaPathService.reservePath("train1", inOutA, inOutB)
+						// Reserve full path from A to B (spans all 7 blocks)
+						vyhybnaPathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
+						// Act
+						val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
 
-			// Assert
-			assertThat(result).isNotNull()
-			assertThat(result!!.size).isGreaterThan(0)
-
-			vyhybnaContext.close()
+						// Assert
+						assertThat(result).isNotNull()
+						assertThat(result!!.size).isGreaterThan(0)
+					}
+				}
+			}
 		}
 
 		@Test
@@ -197,11 +195,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks) for realistic multi-block ownership scenarios
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			service = context.getTrainNavigationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				service = context.getTrainNavigationService()
+			}
 		}
 
 		@AfterEach
@@ -376,9 +374,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns null when single InOut has no connections`() {
 			// Arrange: Single InOut (no connections = no path topologically)
-			val context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.buildSimulationContext()
+			val context = TestTopologies.deadEndSingleInOutSimulation()
 
 			val service = context.getTrainNavigationService()
 			val grid = context.getRailWayNetGrid()
@@ -396,53 +392,53 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain filters out non-DynamicTrackBlocks`() {
 			// Arrange: Use vyhybna.xml (has TrackSections with blocks)
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			val service = context.getTrainNavigationService()
-			val pathService = context.getPathReservationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				val service = context.getTrainNavigationService()
+				val pathService = context.getPathReservationService()
 
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve path
-			pathService.reservePath("train1", inOutA, inOutB)
+				// Reserve path
+				pathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
+				// Act
+				val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: Should succeed (filters out separators, only validates blocks)
-			assertThat(result).isNotNull()
+				// Assert: Should succeed (filters out separators, only validates blocks)
+				assertThat(result).isNotNull()
 
-			context.close()
+				context.close()
+			}
 		}
 
 		@Test
 		fun `findReservedPathForTrain deduplicates blocks in path`() {
 			// Arrange: vyhybna.xml has switches that may create duplicate block references
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			val service = context.getTrainNavigationService()
-			val pathService = context.getPathReservationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				val service = context.getTrainNavigationService()
+				val pathService = context.getPathReservationService()
 
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve path
-			pathService.reservePath("train1", inOutA, inOutB)
+				// Reserve path
+				pathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
+				// Act
+				val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: Should succeed (deduplication works)
-			assertThat(result).isNotNull()
+				// Assert: Should succeed (deduplication works)
+				assertThat(result).isNotNull()
 
-			context.close()
+				context.close()
+			}
 		}
 
 		@Test
@@ -476,11 +472,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B
-			context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildSimulationContext()
+			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 			service = context.getTrainNavigationService()
 		}
@@ -563,11 +555,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (complex path with separators and blocks)
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-			service = context.getTrainNavigationService()
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+				service = context.getTrainNavigationService()
+			}
 		}
 
 		@AfterEach
@@ -679,15 +671,15 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Use vyhybna.xml (7 blocks, 2 alternative paths via switches vA/vB)
-			val editingContext = editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")!!
-			) as DefaultEditingContext
-			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
+				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			// Get real services from context scope
-			navService = context.getTrainNavigationService()
-			pathService = context.getPathReservationService()
-			registry = context.scope.get()
+				// Get real services from context scope
+				navService = context.getTrainNavigationService()
+				pathService = context.getPathReservationService()
+				registry = context.scope.get()
+			}
 		}
 
 		@AfterEach

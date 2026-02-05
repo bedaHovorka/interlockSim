@@ -19,7 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
@@ -60,11 +60,7 @@ class TransitionAwarePathTest {
 			}
 		}
 
-		context = TestContextBuilder()
-			.withInOut("A", 1, 1, true)
-			.withInOut("B", 5, 5, false)
-			.withConnection(1, 1, 5, 5, 100.0, 80.0)
-			.buildSimulationContext()
+		context = TestTopologies.simpleLinearPathSimulation()
 
 		// Create mock delegate path
 		mockDelegate = mockk<Path>()

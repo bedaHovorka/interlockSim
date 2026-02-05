@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
@@ -52,7 +53,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 	fun setUp() {
 		// Load vyhybna.xml to get real DynamicTrackBlock instances
 		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext

@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 private val logger = KotlinLogging.logger {}
 
@@ -42,11 +42,10 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		return TestFixtures.loadShuntingXml().use { xmlStream ->
+			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		}
 	}
 
 	/**

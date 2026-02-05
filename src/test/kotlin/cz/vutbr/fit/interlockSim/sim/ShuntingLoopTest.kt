@@ -16,6 +16,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
@@ -45,7 +46,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_validVyhybnaContext_succeeds() {
 			// Load vyhybna.xml fixture
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			// Create ShuntingLoop with end time of 60 seconds
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
@@ -56,7 +57,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_withEndTime_storesEndTime() {
 			// Load vyhybna.xml fixture
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			val expectedEndTime = 120L
 			val shuntingLoop = ShuntingLoop(simContext, expectedEndTime)
@@ -98,7 +99,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@BeforeEach
 		fun setUpValidContext() {
 			// Load vyhybna.xml fixture
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 			validContext = simContext
 		}
 
@@ -137,7 +138,7 @@ class ShuntingLoopTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUpValidContext() {
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 			validContext = simContext
 		}
 
@@ -173,7 +174,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_requiresTwoInOuts() {
 			// vyhybna.xml has InOut A and InOut B
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			// Should find InOut A at (11, 8) and InOut B at (30, 8)
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
@@ -183,7 +184,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_requiresSixSemaphores() {
 			// vyhybna.xml has 6 semaphores: zA, doA1, doA2, doB1, doB2, zB
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
 			assertThat(shuntingLoop).isNotNull()
@@ -192,7 +193,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_requiresTwoSwitches() {
 			// vyhybna.xml has 2 switches: vA and vB
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
 			assertThat(shuntingLoop).isNotNull()
@@ -201,7 +202,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		@Test
 		fun constructor_requiresFourTrackBlocks() {
 			// vyhybna.xml has 4 main track blocks: k1, k2, kA, kB
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
 			assertThat(shuntingLoop).isNotNull()
@@ -256,7 +257,7 @@ class ShuntingLoopTest : KoinTestBase() {
 		fun maxTrains_constantValue_isTwo() {
 			// MAX_TRAINS is defined as 2 in ShuntingLoop
 			// This test documents the design constraint
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			val shuntingLoop = ShuntingLoop(simContext, 60L)
 
@@ -273,7 +274,7 @@ class ShuntingLoopTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUpValidContext() {
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 			validContext = simContext
 		}
 
@@ -318,7 +319,7 @@ class ShuntingLoopTest : KoinTestBase() {
 
 		@BeforeEach
 		fun setUpValidContext() {
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 			validContext = simContext
 		}
 

@@ -14,11 +14,11 @@ import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import java.io.InputStream
 
 /**
  * Integration test for Frame → RailwayNetGridCanvas → AnimationController cleanup chain.
@@ -57,7 +57,7 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 	fun frameCleanupUnregistersListener() {
 		// Create Frame and simulation context (outside EDT to avoid nested invokeAndWait)
 		val frame = createFrame()
-		context = createMockSimulationContext(shuntingXml())
+		context = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 		runOnEDT {
 			// Set simulation context on Frame (starts animation)
@@ -115,13 +115,5 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 		val field = AnimationController::class.java.getDeclaredField("isRunning")
 		field.isAccessible = true
 		return field.getBoolean(controller)
-	}
-
-	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-
-	private fun xml(name: String): InputStream {
-		val xml = javaClass.getResourceAsStream(name)
-		requireNotNull(xml) { "$name must exist in resources" }
-		return xml
 	}
 }

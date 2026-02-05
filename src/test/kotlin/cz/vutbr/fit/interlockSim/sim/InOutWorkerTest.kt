@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
@@ -265,7 +266,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_vyhybnaContext_succeeds() {
 			// Load vyhybna.xml fixture
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			// Get InOut A from vyhybna.xml
 			val inOutA = simContext.getInOuts().first { it.name == "A" }
@@ -282,7 +283,7 @@ class InOutWorkerTest : KoinTestBase() {
 		@Test
 		fun constructor_multipleWorkersForSameContext_succeed() {
 			// Load vyhybna.xml fixture
-			val simContext = createMockSimulationContext(shuntingXml())
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
 			// Get both InOuts from vyhybna.xml
 			val inOutList = simContext.getInOuts().toList()
@@ -301,8 +302,6 @@ class InOutWorkerTest : KoinTestBase() {
 			assertThat(workerA.getQueqe()).isNotSameInstanceAs(workerB.getQueqe())
 		}
 	}
-
-	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {
 		val xml = javaClass.getResourceAsStream(name)

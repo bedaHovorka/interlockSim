@@ -14,7 +14,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Integration tests for parallel path discovery in [DefaultPathReservationService].
@@ -43,6 +43,7 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private lateinit var context: DefaultSimulationContext
+	private lateinit var editingContext: EditingContext
 	private lateinit var pathReservationService: PathReservationService
 	private lateinit var navigator: TopologyNavigator
 	private lateinit var inOutA: DynamicPathSeparator
@@ -52,13 +53,11 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		// Load the shunting loop network from XML
-		val xmlStream: InputStream =
-			javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-				?: throw IllegalStateException("Test resource vyhybna.xml not found")
-
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		// Load the shunting loop network from XML (with proper resource management)
+		TestFixtures.loadShuntingXml().use { xmlStream ->
+			editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		}
 
 		pathReservationService = context.getPathReservationService()
 		navigator = context.getTopologyNavigator()
@@ -81,6 +80,9 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@AfterEach
 	fun tearDown() {
 		context.close()
+		if (::editingContext.isInitialized) {
+			editingContext.close()
+		}
 	}
 
 	/**

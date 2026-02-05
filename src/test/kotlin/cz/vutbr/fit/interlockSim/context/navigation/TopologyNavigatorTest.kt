@@ -30,6 +30,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.*
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
 
@@ -67,12 +68,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackSection - linear path - returns single section`() {
 		// Arrange: Build linear track A -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.simpleLinearPath()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -104,14 +100,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackSection - through semaphore - ignores semaphore state`() {
 		// Arrange: Build A -> Semaphore -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(3, 3, false) // false = RED (but topology ignores this)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false)
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -137,10 +126,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackSection - dead end - returns null`() {
 		// Arrange: Build A -> dead-end (single InOut, no exit)
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.buildEditingContext()
+		val context = TestTopologies.deadEndSingleInOut()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -217,14 +203,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackBlock - returns next block in sequence`() {
 		// Arrange: Build A -> B -> C
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(3, 3, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0) // block1
-				.withConnection(3, 3, 5, 5, 100.0, 80.0) // block2
-				.buildEditingContext()
+		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true)
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -246,10 +225,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackBlock - dead end - returns null`() {
 		// Arrange: Build A (single InOut, no connections)
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.buildEditingContext()
+		val context = TestTopologies.deadEndSingleInOut()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -276,12 +252,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - linear path - returns single path`() {
 		// Arrange: Build linear A -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.simpleLinearPath()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -334,14 +305,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - through semaphore - finds path`() {
 		// Arrange: Build A -> Semaphore(RED) -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(3, 3, false) // RED
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false)
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -367,12 +331,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	fun `findAllTopologicalPaths - loop detection - does not hang`() {
 		// Arrange: Build simple linear path (loop not implemented in this test)
 		// Testing that maxDepth prevents infinite exploration
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.simpleLinearPath()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -452,12 +411,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - same start and target - returns empty path`() {
 		// Arrange: Build simple A -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.simpleLinearPath()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -477,12 +431,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackSection - within same block - returns next section`() {
 		// Arrange: Build simple A -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.simpleLinearPath()
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
@@ -575,14 +524,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 	@Test
 	fun `getNextTrackSection - with Dynamic wrapper - unwraps correctly`() {
 		// Arrange: Build A -> Semaphore -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(3, 3, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true)
 
 		val navigator: TopologyNavigator = context.scope.get()
 		val grid = context.getRailWayNetGrid()
