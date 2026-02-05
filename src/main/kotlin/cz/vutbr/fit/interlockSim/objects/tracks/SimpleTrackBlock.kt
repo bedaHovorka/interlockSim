@@ -91,7 +91,10 @@ class SimpleTrackBlock :
 				"Use DynamicTrack wrapper for path operations."
 		)
 
-	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String): Unit =
+	override fun setUpPath(
+		from: DynamicPathSeparator,
+		reservingTrainId: String
+	): Unit =
 		throw UnsupportedOperationException(
 			"Phase 1 (#100.2): Dynamic behavior removed from SimpleTrack. " +
 				"Use DynamicTrack wrapper for path operations."

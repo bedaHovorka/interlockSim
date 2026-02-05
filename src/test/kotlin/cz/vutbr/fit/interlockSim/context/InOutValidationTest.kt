@@ -103,22 +103,22 @@ class InOutValidationTest {
 	fun `XML with 2 InOuts passes validation`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			xmlFactory.createContext(stream).use { context ->
-				assertThat((context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext).getInOutsList()).hasSize(2)
+				assertThat(context.asEditingContext().getInOutsList()).hasSize(2)
 			}
 		}
 	}
 
 	/**
-	 * Test: Context with 10+ InOuts passes validation.
+	 * Test: Context with 2 or more InOuts passes validation.
 	 *
 	 * Expected: Context created successfully with correct InOut count.
 	 */
 	@Test
-	fun `XML with 10 InOuts passes validation`() {
+	fun `XML with 2 or more InOuts passes validation`() {
 		// Use shunting loop which has 2 InOuts (adjust if fixture changes)
 		TestFixtures.loadShuntingXml().use { stream ->
 			xmlFactory.createContext(stream).use { ctx ->
-				val context = ctx as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val context = ctx.asEditingContext()
 				val inOutCount = context.getInOutsList().size
 				assertThat(inOutCount).isEqualTo(2)
 			}
@@ -191,4 +191,11 @@ class InOutValidationTest {
 			.transform { it.message ?: "" }
 			.contains("entry and exit points")
 	}
+
+	/**
+	 * Helper function to safely cast Context to DefaultEditingContext.
+	 * Reduces duplication and improves type safety.
+	 */
+	private fun Context<*, *>.asEditingContext(): DefaultEditingContext =
+		this as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 }

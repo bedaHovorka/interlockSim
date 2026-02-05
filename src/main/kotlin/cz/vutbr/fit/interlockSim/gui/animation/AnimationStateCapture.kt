@@ -50,7 +50,6 @@ private val logger = KotlinLogging.logger {}
  * @see AnimationController
  */
 object AnimationStateCapture {
-
 	/**
 	 * Capture complete simulation state as immutable snapshot.
 	 *
@@ -77,8 +76,8 @@ object AnimationStateCapture {
 		context: SimulationContext,
 		semaphoreCache: List<DynamicRailSemaphore>,
 		switchCache: List<DynamicRailSwitch>
-	): AnimationState {
-		return try {
+	): AnimationState =
+		try {
 			AnimationState(
 				simulationTime = captureSimulationTime(),
 				trainStates = captureTrainStates(context),
@@ -90,7 +89,6 @@ object AnimationStateCapture {
 			logger.error(e) { "Failed to capture animation state from simulation context" }
 			throw e
 		}
-	}
 
 	/**
 	 * Capture current simulation time.
@@ -99,9 +97,7 @@ object AnimationStateCapture {
 	 *
 	 * @return Current simulation time in seconds
 	 */
-	private fun captureSimulationTime(): Double {
-		return jDisco.Process.time()
-	}
+	private fun captureSimulationTime(): Double = jDisco.Process.time()
 
 	/**
 	 * Capture state of all active trains in simulation.
@@ -126,14 +122,15 @@ object AnimationStateCapture {
 		for (graphBlock in graph.values()) {
 			// After Issue #277, graph already contains DynamicTrackBlock instances
 			// with the occupant property - no need to unwrap/rewrap
-			val occupant = when (graphBlock) {
-				is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock -> graphBlock.occupant
-				is cz.vutbr.fit.interlockSim.objects.core.TrackFacility -> {
-					// Fallback for legacy code paths (should not happen after Issue #277)
-					context.toDynamic(graphBlock).occupant
+			val occupant =
+				when (graphBlock) {
+					is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock -> graphBlock.occupant
+					is cz.vutbr.fit.interlockSim.objects.core.TrackFacility -> {
+						// Fallback for legacy code paths (should not happen after Issue #277)
+						context.toDynamic(graphBlock).occupant
+					}
+					else -> null
 				}
-				else -> null
-			}
 
 			// Check if occupant is a Train
 			if (occupant is Train) {
@@ -146,11 +143,12 @@ object AnimationStateCapture {
 
 		// Create position calculator for grid location interpolation
 		// Pass separator position cache for O(1) lookups (2,500× faster than grid scan)
-		val positionCalculator = TrainPositionCalculator(
-			context,
-			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.getSeparatorPositionCache()
-				?: emptyMap()
-		)
+		val positionCalculator =
+			TrainPositionCalculator(
+				context,
+				(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)?.getSeparatorPositionCache()
+					?: emptyMap()
+			)
 
 		return trains.associate { train ->
 			train.getNumber() to captureTrainState(train, positionCalculator, context)
@@ -184,11 +182,12 @@ object AnimationStateCapture {
 		// Calculate grid location for train front
 		val currentSection = train.getFrontSection()
 		val frontPosition = train.getFrontPosition()
-		val frontGridLocation = positionCalculator.calculateTrainGridLocation(
-			train = train,
-			currentSection = currentSection,
-			distanceAlongSection = frontPosition
-		)
+		val frontGridLocation =
+			positionCalculator.calculateTrainGridLocation(
+				train = train,
+				currentSection = currentSection,
+				distanceAlongSection = frontPosition
+			)
 
 		// Determine train color based on origin InOut
 		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
@@ -264,11 +263,12 @@ object AnimationStateCapture {
 
 		return trackBlocks.associate { graphBlock ->
 			// Extract static block from DynamicTrackBlock wrapper
-			val staticBlock = if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
-				graphBlock.staticRef as TrackBlock
-			} else {
-				graphBlock as TrackBlock
-			}
+			val staticBlock =
+				if (graphBlock is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock) {
+					graphBlock.staticRef as TrackBlock
+				} else {
+					graphBlock as TrackBlock
+				}
 			// Use static block as both key and parameter
 			staticBlock to captureTrackState(staticBlock, context)
 		}
@@ -283,7 +283,10 @@ object AnimationStateCapture {
 	 * @param context Simulation context (for dynamic wrapper access)
 	 * @return Immutable track state snapshot
 	 */
-	private fun captureTrackState(staticTrackBlock: TrackBlock, context: SimulationContext): TrackState {
+	private fun captureTrackState(
+		staticTrackBlock: TrackBlock,
+		context: SimulationContext
+	): TrackState {
 		// Access DynamicTrack wrapper via toDynamic() to get current state
 		// This returns the canonical DynamicTrack instance with mutable state
 		val dynamicTrack = context.toDynamic(staticTrackBlock as cz.vutbr.fit.interlockSim.objects.core.TrackFacility)
@@ -291,11 +294,11 @@ object AnimationStateCapture {
 		val capturedState = dynamicTrack.state
 		logger.trace {
 			"Captured track state: block@${System.identityHashCode(staticTrackBlock)} " +
-			"(${staticTrackBlock.toString().take(15)}), state=$capturedState"
+				"(${staticTrackBlock.toString().take(15)}), state=$capturedState"
 		}
 
 		return TrackState(
-			trackBlock = staticTrackBlock,  // Use static block as key for renderer lookup
+			trackBlock = staticTrackBlock, // Use static block as key for renderer lookup
 			state = capturedState
 		)
 	}

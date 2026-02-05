@@ -80,7 +80,6 @@ class TrainPositionCalculator(
 	private val context: SimulationContext,
 	private val separatorPositionCache: Map<PathSeparator, Point>
 ) {
-
 	companion object {
 		/**
 		 * Tolerance for comparing PathSeparator grid positions (in grid cell units).
@@ -179,33 +178,34 @@ class TrainPositionCalculator(
 
 		// Try to use entry separator to determine correct direction
 		// Try both orderings and pick the one where first separator matches entry
-		val (entryPos, exitPos) = if (entrySeparator != null) {
-			// Try to find which end matches the entry separator
-			// Compare by getting grid positions (handles static/dynamic wrapper mismatch)
-			val entryGridPos = getGridPosition(entrySeparator)
-			val end0GridPos = getGridPosition(ends[0])
-			val end1GridPos = getGridPosition(ends[1])
+		val (entryPos, exitPos) =
+			if (entrySeparator != null) {
+				// Try to find which end matches the entry separator
+				// Compare by getting grid positions (handles static/dynamic wrapper mismatch)
+				val entryGridPos = getGridPosition(entrySeparator)
+				val end0GridPos = getGridPosition(ends[0])
+				val end1GridPos = getGridPosition(ends[1])
 
-			when {
-				positionsMatch(entryGridPos, end0GridPos) -> {
-					// entrySeparator matches ends[0] - use normal order
-					Pair(end0GridPos!!, end1GridPos ?: return null)
+				when {
+					positionsMatch(entryGridPos, end0GridPos) -> {
+						// entrySeparator matches ends[0] - use normal order
+						Pair(end0GridPos!!, end1GridPos ?: return null)
+					}
+					positionsMatch(entryGridPos, end1GridPos) -> {
+						// entrySeparator matches ends[1] - use reversed order
+						Pair(end1GridPos!!, end0GridPos ?: return null)
+					}
+					else -> {
+						// Can't match entry separator (race condition) - use arbitrary order
+						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
+					}
 				}
-				positionsMatch(entryGridPos, end1GridPos) -> {
-					// entrySeparator matches ends[1] - use reversed order
-					Pair(end1GridPos!!, end0GridPos ?: return null)
-				}
-				else -> {
-					// Can't match entry separator (race condition) - use arbitrary order
-					Pair(end0GridPos ?: return null, end1GridPos ?: return null)
-				}
+			} else {
+				// No entry separator available yet - use arbitrary order
+				val end0Pos = getGridPosition(ends[0]) ?: return null
+				val end1Pos = getGridPosition(ends[1]) ?: return null
+				Pair(end0Pos, end1Pos)
 			}
-		} else {
-			// No entry separator available yet - use arbitrary order
-			val end0Pos = getGridPosition(ends[0]) ?: return null
-			val end1Pos = getGridPosition(ends[1]) ?: return null
-			Pair(end0Pos, end1Pos)
-		}
 
 		// Handle zero-length sections
 		if (sectionLength <= 0.0) {
@@ -234,7 +234,10 @@ class TrainPositionCalculator(
 	 * @param p2 Second position (or null)
 	 * @return True if positions match within POSITION_MATCH_EPSILON tolerance, false otherwise
 	 */
-	private fun positionsMatch(p1: Point?, p2: Point?): Boolean {
+	private fun positionsMatch(
+		p1: Point?,
+		p2: Point?
+	): Boolean {
 		if (p1 == null || p2 == null) return false
 		return abs(p1.x - p2.x) < POSITION_MATCH_EPSILON &&
 			abs(p1.y - p2.y) < POSITION_MATCH_EPSILON

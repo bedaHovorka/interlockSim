@@ -17,8 +17,8 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -129,7 +129,7 @@ class Train :
 					// Use hold() with timeout instead of passivate() to prevent permanent freezing
 					// If path becomes available (dispatcher reserves), train will be reactivated
 					// If timeout expires, train will retry path request
-					hold(5.0)  // Wait 5 seconds before retrying
+					hold(5.0) // Wait 5 seconds before retrying
 					continue // Restart loop to retry path request
 				}
 				val nextLength: Double = next!!.length()
@@ -638,7 +638,8 @@ class Train :
 
 		// Wait for InOutWorker to reserve initial path before starting Front
 		// This prevents race condition where Front checks for reserved path before InOutWorker completes
-		waitUntil { // Check if we have any reserved blocks (path has been reserved)
+		waitUntil {
+			// Check if we have any reserved blocks (path has been reserved)
 			trainNavService.isPathReservedForTrain(name, inout)
 		}
 		logger.info { "Train $number path is reserved, starting Front process" }

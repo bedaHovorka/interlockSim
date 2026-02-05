@@ -60,8 +60,7 @@ import kotlin.getValue
 /**
  * XML implementation of {@link EditingContextFactory}
  */
-class XMLContextFactory :
-	EditingContextFactory {
+class XMLContextFactory : EditingContextFactory {
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
@@ -113,7 +112,7 @@ class XMLContextFactory :
 									arrayOf(name as Any, orientation as Any, spatialType as Any)
 								}
 								RailSemaphore::class.java -> {
-									val name = parseNameAttribute(uri, attributes)  // Use helper
+									val name = parseNameAttribute(uri, attributes) // Use helper
 									if (name != null) {
 										arrayOf(name as Any, orientation as Any, spatialType as Any)
 									} else {
@@ -125,7 +124,7 @@ class XMLContextFactory :
 						}
 						clazz == RailSwitch::class.java -> {
 							val type = getEnum(uri, attributes, Type::class.java)
-							val name = parseNameAttribute(uri, attributes)  // Use helper
+							val name = parseNameAttribute(uri, attributes) // Use helper
 							if (name != null) {
 								arrayOf(name as Any, spatialType as Any, type as Any)
 							} else {

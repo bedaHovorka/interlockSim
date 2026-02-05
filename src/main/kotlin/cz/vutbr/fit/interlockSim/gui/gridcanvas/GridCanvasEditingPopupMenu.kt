@@ -22,11 +22,12 @@ class GridCanvasEditingPopupMenu : GridCanvasPopupMenu() {
 	private inner class RenameAction : PopupMenuAction("Rename...") {
 		override fun nodeCellAction(e: ActionEvent) {
 			// Show rename dialog
-			val dialog = RenameDialog(
-				canvas,
-				nodeCell!!.getName(),
-				nodeCell!!.javaClass.simpleName
-			)
+			val dialog =
+				RenameDialog(
+					canvas,
+					nodeCell!!.getName(),
+					nodeCell!!.javaClass.simpleName
+				)
 
 			val (result, newName) = dialog.showDialog()
 

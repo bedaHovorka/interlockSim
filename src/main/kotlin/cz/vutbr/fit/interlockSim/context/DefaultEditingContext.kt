@@ -88,12 +88,17 @@ open class DefaultEditingContext(
 	 * @see navigationModule
 	 * @see close
 	 */
-	override val scope = org.koin.core.context.GlobalContext.get()
-		.createScope(
-			scopeId = System.identityHashCode(this).toString(),
-			qualifier = org.koin.core.qualifier.named<DefaultEditingContext>(),
-			source = this
-		)
+	override val scope =
+		org.koin.core.context.GlobalContext
+			.get()
+			.createScope(
+				scopeId = System.identityHashCode(this).toString(),
+				qualifier =
+					org.koin.core.qualifier
+						.named<DefaultEditingContext>(),
+				source = this
+			)
+
 	companion object {
 		/**
 		 * Logger for general class operations.
@@ -165,8 +170,7 @@ open class DefaultEditingContext(
 	 * @see cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
 	 * @since Issue #292 Phase 5
 	 */
-	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
-		scope.get()
+	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator = scope.get()
 
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)

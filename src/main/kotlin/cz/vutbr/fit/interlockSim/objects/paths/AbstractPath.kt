@@ -132,7 +132,10 @@ abstract class AbstractPath protected constructor(
 			toTrackFacility(track).isSetUpPath(separator)
 		}
 
-	override fun setUpPath(from: DynamicPathSeparator, reservingTrainId: String) {
+	override fun setUpPath(
+		from: DynamicPathSeparator,
+		reservingTrainId: String
+	) {
 		logger.debug { "PATH_RESERVATION_START: from=$from, pathSize=$size" }
 		var blockCount = 0
 		pathIterating(from, SET_UP_PATH) { track, separator ->

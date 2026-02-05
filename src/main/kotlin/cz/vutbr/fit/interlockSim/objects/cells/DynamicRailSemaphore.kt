@@ -94,7 +94,11 @@ sealed class DynamicRailSemaphore(
 		setUpSpeed(from, to, allowedSpeed)
 	}
 
-	fun setUpSpeed(from: Cell.Segment?, to: Cell.Segment?, allowedSpeed: Double) {
+	fun setUpSpeed(
+		from: Cell.Segment?,
+		to: Cell.Segment?,
+		allowedSpeed: Double
+	) {
 		val isValidDirection = checkPathSegments(from, to)
 
 		if (isValidDirection) {

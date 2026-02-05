@@ -444,5 +444,8 @@ interface SimulationEnvironment {
 	 * @param trainId The train identifier
 	 * @param block The block to unregister
 	 */
-	fun unregisterBlock(trainId: String, block: DynamicTrackBlock)
+	fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	)
 }

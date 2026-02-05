@@ -54,8 +54,9 @@ object NameValidator {
 					category = ErrorCategory.CONFIGURATION,
 					severity = Severity.ERROR,
 					message = "Name too long (max $MAX_NAME_LENGTH characters, got ${name.length})",
-					explanation = "Railway element names are limited to $MAX_NAME_LENGTH characters " +
-						"to ensure compatibility with XML schema and database storage."
+					explanation =
+						"Railway element names are limited to $MAX_NAME_LENGTH characters " +
+							"to ensure compatibility with XML schema and database storage."
 				)
 			)
 		}
@@ -67,8 +68,9 @@ object NameValidator {
 					category = ErrorCategory.CONFIGURATION,
 					severity = Severity.ERROR,
 					message = "Name contains invalid characters",
-					explanation = "Railway element names may only contain letters (a-z, A-Z), digits (0-9), " +
-						"underscores (_), and hyphens (-). No spaces or special characters are allowed."
+					explanation =
+						"Railway element names may only contain letters (a-z, A-Z), digits (0-9), " +
+							"underscores (_), and hyphens (-). No spaces or special characters are allowed."
 				)
 			)
 		}

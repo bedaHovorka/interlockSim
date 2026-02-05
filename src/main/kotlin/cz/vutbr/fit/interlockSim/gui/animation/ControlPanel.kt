@@ -37,7 +37,6 @@ import javax.swing.JPanel
  * @see AnimationController
  */
 class ControlPanel : JPanel() {
-
 	/**
 	 * Label displaying formatted simulation time (HH:MM:SS.mmm).
 	 */

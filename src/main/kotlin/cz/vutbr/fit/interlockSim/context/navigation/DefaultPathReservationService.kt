@@ -116,8 +116,7 @@ class DefaultPathReservationService(
 
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
-
-				// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
+			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
 			val blocks = extractUniqueBlocks(path)
 			logger.trace { "reservePath: Path has ${blocks.size} unique block(s)" }
 
@@ -126,9 +125,10 @@ class DefaultPathReservationService(
 			// 1. OCCUPIED: Train has already been there (blocks behind the train)
 			// 2. RESERVED: Already reserved from a (possibly different) separator
 			// Including owned blocks causes TOCTOU conflicts when trying to re-reserve from different separator.
-			val forwardBlocks = blocks.filterNot { block ->
-				block.trainName == trainId
-			}
+			val forwardBlocks =
+				blocks.filterNot { block ->
+					block.trainName == trainId
+				}
 
 			if (forwardBlocks.isEmpty()) {
 				// All blocks in this path are already owned by this train
@@ -144,7 +144,9 @@ class DefaultPathReservationService(
 							val maxSpeed = firstBlock.maxSpeed(start)
 							start.inSemaphore.setUpSpeed(
 								from = start.direction(),
-								to = cz.vutbr.fit.interlockSim.objects.core.anti(start.direction()),
+								to =
+									cz.vutbr.fit.interlockSim.objects.core
+										.anti(start.direction()),
 								allowedSpeed = maxSpeed
 							)
 						}
@@ -188,11 +190,12 @@ class DefaultPathReservationService(
 					logger.debug {
 						"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
 					}
-					val pathInfo = pathInfoBuilder.buildPathInfo(
-						start = start,
-						target = target,
-						trackSections = path  // path is List<TrackSection> here
-					)
+					val pathInfo =
+						pathInfoBuilder.buildPathInfo(
+							start = start,
+							target = target,
+							trackSections = path // path is List<TrackSection> here
+						)
 
 					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
 					registry.registerPathInfo(trainId, pathInfo)
@@ -241,8 +244,11 @@ class DefaultPathReservationService(
 								// For valid direction: from=anti(inSem.dir), to=inSem.dir
 								// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
 								start.inSemaphore.setUpSpeed(
-									from = start.direction(),  // InOut's direction
-									to = cz.vutbr.fit.interlockSim.objects.core.anti(start.direction()),  // Anti = inSemaphore's direction
+									from = start.direction(), // InOut's direction
+									to =
+										cz.vutbr.fit.interlockSim.objects.core
+											.anti(start.direction()),
+									// Anti = inSemaphore's direction
 									allowedSpeed = maxSpeed
 								)
 								logger.debug {
@@ -483,11 +489,12 @@ class DefaultPathReservationService(
 		// Step 2: Get next track section based on separator's orientation
 		// For oriented separators, use the direction() method to get the forward segment
 		// SPECIAL CASE: InOut connects bidirectionally at direction() (not anti-direction)
-		val forwardSegment = when (start) {
-			is InOut -> start.getTrackConnectionDirection()  // Track connection at direction()
-			is DynamicInOut -> start.getTrackConnectionDirection()  // Track connection at direction()
-			else -> start.direction()  // Semaphores: direction is forward travel
-		}
+		val forwardSegment =
+			when (start) {
+				is InOut -> start.getTrackConnectionDirection() // Track connection at direction()
+				is DynamicInOut -> start.getTrackConnectionDirection() // Track connection at direction()
+				else -> start.direction() // Semaphores: direction is forward travel
+			}
 		logger.debug {
 			"reservePathToAnyNextSemaphore: START=$start orientation=${start.getOrientation()} forwardSegment=$forwardSegment"
 		}
@@ -518,7 +525,6 @@ class DefaultPathReservationService(
 			"reservePathToAnyNextSemaphore: Selected next track section: $next"
 		}
 
-
 		// Step 4: Delegate to existing overload
 		logger.debug {
 			"reservePathToAnyNextSemaphore: Delegating to existing overload with next=$next"
@@ -526,7 +532,10 @@ class DefaultPathReservationService(
 		return reservePathToAnyNextSemaphore(trainId, dynamicStart, next)
 	}
 
-	override fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean {
+	override fun isPathToAnyNextSemaphoreAvailable(
+		start: PathSeparator,
+		next: TrackSection?
+	): Boolean {
 		// Handle null next parameter (no direction to search)
 		if (next == null) {
 			logger.debug { "isPathToAnyNextSemaphoreAvailable: next is null, no path exists" }
@@ -727,39 +736,42 @@ class DefaultPathReservationService(
 		// **Why partition before sorting:**
 		// - Ensures ALL opposite-side targets tried before ANY same-side target
 		// - Even if same-side target is closer, opposite-side is preferred
-		val sortedInOuts = when (start) {
-			is OrientedPathSeparator -> {
-				val startOrientation = start.getOrientation()
+		val sortedInOuts =
+			when (start) {
+				is OrientedPathSeparator -> {
+					val startOrientation = start.getOrientation()
 
-				// Partition InOuts by orientation: opposite-side first, same-side last
-				// Example: if start.orientation = false (points left/backward)
-				//   - oppositeSide = InOuts with orientation = true (right/forward)
-				//   - sameSide = InOuts with orientation = false (left/backward)
-				val (oppositeSide, sameSide) = inouts.partition { it.getOrientation() != startOrientation }
+					// Partition InOuts by orientation: opposite-side first, same-side last
+					// Example: if start.orientation = false (points left/backward)
+					//   - oppositeSide = InOuts with orientation = true (right/forward)
+					//   - sameSide = InOuts with orientation = false (left/backward)
+					val (oppositeSide, sameSide) = inouts.partition { it.getOrientation() != startOrientation }
 
-				// Sort each partition by path length (shortest first)
-				// Note: findAllTopologicalPaths returns empty list if no path exists
-				// Using firstOrNull() gets shortest path (navigator returns sorted by length)
-				// Int.MAX_VALUE ensures unreachable targets sorted last
-				val sortedOpposite = oppositeSide.sortedBy { target ->
-					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+					// Sort each partition by path length (shortest first)
+					// Note: findAllTopologicalPaths returns empty list if no path exists
+					// Using firstOrNull() gets shortest path (navigator returns sorted by length)
+					// Int.MAX_VALUE ensures unreachable targets sorted last
+					val sortedOpposite =
+						oppositeSide.sortedBy { target ->
+							navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+						}
+					val sortedSame =
+						sameSide.sortedBy { target ->
+							navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+						}
+
+					// Combine: [shortest opposite-side, ..., longest opposite-side,
+					//           shortest same-side, ..., longest same-side]
+					sortedOpposite + sortedSame
 				}
-				val sortedSame = sameSide.sortedBy { target ->
-					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+				else -> {
+					// Start has no orientation info (shouldn't happen for semaphores, but handle gracefully)
+					// Just sort by distance - no orientation preference
+					inouts.sortedBy { target ->
+						navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
+					}
 				}
-
-				// Combine: [shortest opposite-side, ..., longest opposite-side,
-				//           shortest same-side, ..., longest same-side]
-				sortedOpposite + sortedSame
 			}
-			else -> {
-				// Start has no orientation info (shouldn't happen for semaphores, but handle gracefully)
-				// Just sort by distance - no orientation preference
-				inouts.sortedBy { target ->
-					navigator.findAllTopologicalPaths(start, target).firstOrNull()?.size ?: Int.MAX_VALUE
-				}
-			}
-		}
 
 		// ========================================
 		// STEP 3: Target Prioritization
@@ -865,7 +877,11 @@ class DefaultPathReservationService(
 
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
-				val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+				val cell =
+					grid[
+						cz.vutbr.fit.interlockSim.util
+							.Point(x, y)
+					]
 				if (cell is DynamicRailSemaphore) {
 					semaphores.add(cell)
 				}
@@ -1003,11 +1019,11 @@ class DefaultPathReservationService(
 		separator: PathSeparator,
 		travelDirection: cz.vutbr.fit.interlockSim.objects.core.Cell.Segment,
 		validTargets: MutableList<DynamicPathSeparator>
-	): Boolean {
-		return when {
+	): Boolean =
+		when {
 			// InOut is always a valid endpoint (bidirectional) - stop exploration
 			separator is cz.vutbr.fit.interlockSim.objects.cells.InOut ||
-			separator is DynamicInOut -> {
+				separator is DynamicInOut -> {
 				val dynamicSep = environment.toDynamic(separator)
 				logger.trace { "findNextSemaphoresVia: Found InOut: $dynamicSep" }
 				validTargets.add(dynamicSep)
@@ -1030,7 +1046,6 @@ class DefaultPathReservationService(
 
 			else -> false // Continue exploring
 		}
-	}
 
 	/**
 	 * Explore all outgoing paths from a separator.
@@ -1046,13 +1061,15 @@ class DefaultPathReservationService(
 		val grid = environment.getRailWayNetGrid()
 		val graph = environment.getGraph()
 		val location = grid.getLocation(separator) ?: return
+
 		@Suppress("UNCHECKED_CAST")
 		val edges = graph.assignedEdges(location) as Map<*, *>
 
-		val outgoingEdges = edges.entries.filter { (_, block) ->
-			val trackSection = block as? TrackSection
-			trackSection != null && trackSection != currentSection
-		}
+		val outgoingEdges =
+			edges.entries.filter { (_, block) ->
+				val trackSection = block as? TrackSection
+				trackSection != null && trackSection != currentSection
+			}
 
 		when {
 			outgoingEdges.size > 1 -> {
@@ -1110,8 +1127,9 @@ class DefaultPathReservationService(
 		start: PathSeparator,
 		next: TrackSection
 	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment {
-		val location = environment.getRailWayNetGrid().getLocation(start)
-			?: throw IllegalStateException("No location for $start")
+		val location =
+			environment.getRailWayNetGrid().getLocation(start)
+				?: throw IllegalStateException("No location for $start")
 
 		@Suppress("UNCHECKED_CAST")
 		val edges = environment.getGraph().assignedEdges(location) as kotlin.collections.Map<*, *>
@@ -1164,7 +1182,7 @@ class DefaultPathReservationService(
 			val block = section.getTrackBlock()
 			when {
 				block is DynamicTrackBlock && seen.add(block) -> block
-				block is DynamicTrackBlock && !seen.add(block) -> null  // Duplicate, expected
+				block is DynamicTrackBlock && !seen.add(block) -> null // Duplicate, expected
 				else -> {
 					// Should never happen in SimulationContext, but log for debugging
 					logger.warn {
@@ -1257,11 +1275,12 @@ class DefaultPathReservationService(
 
 		// Safe cast: environment is always SimulationContext in practice (provides getSegment())
 		// Note: getSegment() is in SimulationContext interface, not SimulationEnvironment
-		val context = environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
-			?: throw IllegalStateException(
-				"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
-				"but got ${environment::class.simpleName}"
-			)
+		val context =
+			environment as? cz.vutbr.fit.interlockSim.context.SimulationContext
+				?: throw IllegalStateException(
+					"configureSwitchesInPath requires SimulationContext for getSegment() access, " +
+						"but got ${environment::class.simpleName}"
+				)
 
 		// Track count of successfully configured switches
 		var configuredCount = 0
@@ -1294,7 +1313,7 @@ class DefaultPathReservationService(
 						"configureSwitchesInPath: Switch ${element.staticRef.getName()} " +
 							"has no next track, skipping configuration"
 					}
-					return@forEachIndexed  // Kotlin lambda: use return@label instead of continue
+					return@forEachIndexed // Kotlin lambda: use return@label instead of continue
 				}
 
 				// Calculate from/to segments using context.getSegment()
@@ -1465,9 +1484,10 @@ class DefaultPathReservationService(
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if still occupied or not owned
 	 */
-	override fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
-		return registry.unregisterBlock(trainId, block)
-	}
+	override fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean = registry.unregisterBlock(trainId, block)
 
 	/**
 	 * Minimal TrackOccupant implementation for switch configuration.
@@ -1482,8 +1502,9 @@ class DefaultPathReservationService(
 		private val trainId: String
 	) : TrackOccupant {
 		override val name: String get() = trainId
+
 		override fun distanceToSemaphore(): Double = 0.0
+
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
-
 }

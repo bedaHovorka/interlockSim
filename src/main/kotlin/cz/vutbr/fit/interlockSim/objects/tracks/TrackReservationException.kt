@@ -51,7 +51,6 @@ sealed class TrackReservationException(
 	message: String,
 	cause: Throwable? = null
 ) : RuntimeException(message, cause) {
-
 	/**
 	 * Block already reserved from a different separator.
 	 *
@@ -83,9 +82,9 @@ sealed class TrackReservationException(
 		val existingSeparator: PathSeparator,
 		val attemptedSeparator: PathSeparator
 	) : TrackReservationException(
-		"Block $block already reserved from $existingSeparator " +
-			"(attempted reservation from $attemptedSeparator)"
-	)
+			"Block $block already reserved from $existingSeparator " +
+				"(attempted reservation from $attemptedSeparator)"
+		)
 
 	/**
 	 * Invalid state transition attempted.
@@ -125,7 +124,7 @@ sealed class TrackReservationException(
 		val fromState: TrackFacility.State,
 		val operation: String
 	) : TrackReservationException(
-		"Invalid state transition for $block: " +
-			"Cannot $operation from state $fromState"
-	)
+			"Invalid state transition for $block: " +
+				"Cannot $operation from state $fromState"
+		)
 }
