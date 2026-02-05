@@ -63,7 +63,13 @@ fun testSimulation() {
 |----------|----------------|-------------------|
 | A→B (100m) | `simpleLinearPath()` | `simpleLinearPathSimulation()` |
 | A→[S]→B | `linearPathWithSemaphore(allowing)` | `linearPathWithSemaphoreSimulation(allowing)` |
+| **Y-Junction** (2 entries, 1 switch, 2 exits) | `yJunctionWithSwitch()` | `yJunctionWithSwitchSimulation()` |
+| **Multi-Semaphore** (A→[S1]→...→[Sn]→B) | `linearPathWithSemaphoreSequence(count, allowing)` | `linearPathWithSemaphoreSequenceSimulation(count, allowing)` |
 | Dead-end | `deadEndSingleInOut()` | `deadEndSingleInOutSimulation()` |
+
+**Note:** For complex switch patterns with multiple switches AND semaphore sequences on each route, use XML fixtures:
+- Simple switch: `TestFixtures.loadSwitchBasicXml()`
+- Complex routing: `TestFixtures.loadShuntingXml()` (vyhybna.xml)
 
 ### 3. Building Custom Topologies
 
@@ -234,6 +240,46 @@ When adding new test fixtures:
 3. **Common topologies** → Consider adding to `TestTopologies`
 4. **Update docs** → Update this README and KOTLIN_STYLE_GUIDE.md
 
+## New Topologies (Issue #253 Post-Implementation)
+
+The following topologies were added based on common duplication patterns found in tests:
+
+### Y-Junction with Switch
+
+```kotlin
+TestTopologies.yJunctionWithSwitch().use { context ->
+    // Two entries (EntryA, EntryB) converge at a central switch,
+    // then diverge to two exits (ExitC, ExitD)
+    // 4 track segments: 250m each, speeds 80-100 m/s
+    // Grid: 60x60, switch at (30,30)
+}
+```
+
+**Use cases:**
+- Multi-route path finding tests
+- Switch configuration testing
+- Complex network topology validation
+
+### Linear Path with Multiple Semaphores
+
+```kotlin
+TestTopologies.linearPathWithSemaphoreSequence(
+    semaphoreCount = 5,
+    semaphoresAllowing = false
+).use { context ->
+    // Creates A→[S1]→[S2]→[S3]→[S4]→[S5]→B
+    // Semaphores evenly spaced (5 grid units apart)
+    // 100m track segments, 80 m/s speed
+    // Grid size auto-calculated
+}
+```
+
+**Use cases:**
+- Multi-signal coordination testing
+- Complex path reservation scenarios
+- Train progression through multiple control points
+- Signal sequencing validation
+
 ---
 
-**Last Updated**: 2026-02-05 (Created as part of Issue #253)
+**Last Updated**: 2026-02-05 (Issue #253 Post-Implementation Review)

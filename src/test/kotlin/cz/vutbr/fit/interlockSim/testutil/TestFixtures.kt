@@ -1,7 +1,18 @@
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.util.Point
+import org.koin.java.KoinJavaComponent.getKoin
 import java.io.InputStream
 
 /**
@@ -283,6 +294,22 @@ object TestFixtures {
  * }
  * ```
  *
+ * ### Y-Junction with Switch (EntryA/EntryB → Junction → ExitC/ExitD)
+ * ```kotlin
+ * TestTopologies.yJunctionWithSwitch().use { context ->
+ *     // Two entries converge at switch, diverge to two exits
+ *     // Switch at (30,30), 4 track segments (250m each)
+ * }
+ * ```
+ *
+ * ### Linear Path with Multiple Semaphores (A→[S1]→[S2]→...→B)
+ * ```kotlin
+ * TestTopologies.linearPathWithSemaphoreSequence(semaphoreCount = 3).use { context ->
+ *     // Configurable number of semaphores in series
+ *     // Each semaphore 5 grid units apart, 100m track segments
+ * }
+ * ```
+ *
  * ### Dead-End Single InOut
  * ```kotlin
  * TestTopologies.deadEndSingleInOut().use { context ->
@@ -297,6 +324,15 @@ object TestFixtures {
  *   - Use for: Editor tests, topology validation, static structure tests
  * - **Simulation variants** (e.g., `simpleLinearPathSimulation()`) - Return `SimulationContext`
  *   - Use for: Train navigation, path reservation, simulation execution tests
+ *
+ * ## Complex Switch Patterns
+ *
+ * For topologies with multiple switches AND semaphore sequences on each route,
+ * use XML fixtures instead of programmatic builders:
+ * - Simple switch: `TestFixtures.loadSwitchBasicXml()`
+ * - Complex routing: `TestFixtures.loadShuntingXml()` (vyhybna.xml with multiple switches and signals)
+ *
+ * These patterns are too complex for fluent builders and benefit from visual XML editing.
  *
  * ## Design Notes
  * - Contexts are NOT frozen (mutable for test setup)
@@ -359,8 +395,144 @@ object TestTopologies {
 			.buildEditingContext()
 
 	/**
-	 * Note: For switch topologies, use `TestFixtures.loadSwitchBasicXml()` instead.
-	 * Switch configuration requires more complex setup than the fluent builder provides.
+	 * Creates a Y-junction topology: two entry points converge at switch, diverge to two exits.
+	 *
+	 * Configuration:
+	 * - InOut "EntryA" at (5,20) - first entry point
+	 * - InOut "EntryB" at (5,40) - second entry point
+	 * - RailSwitch "Junction" at (30,30) - convergence/divergence point (SIMPLE_RIGHT_FALSE)
+	 * - InOut "ExitC" at (55,20) - first exit (switch MAIN route)
+	 * - InOut "ExitD" at (55,40) - second exit (switch BRANCH route)
+	 * - Four track segments:
+	 *   - EntryA → Switch: 250m, 80 m/s
+	 *   - EntryB → Switch: 250m, 80 m/s
+	 *   - Switch → ExitC: 250m, 100 m/s (main route)
+	 *   - Switch → ExitD: 250m, 90 m/s (branch route)
+	 * - Grid size: 60x60
+	 *
+	 * Common use cases:
+	 * - Multi-route path finding
+	 * - Switch configuration testing
+	 * - Complex network topology validation
+	 *
+	 * Note: For multiple switches with semaphore sequences, use `TestFixtures.loadShuntingXml()`
+	 *
+	 * @return EditingContext with Y-junction topology (must close)
+	 */
+	fun yJunctionWithSwitch(): EditingContext {
+		val context = DefaultEditingContext(60, 60)
+
+		// Create entry points
+		val entryA = InOut("EntryA", false, Cell.SpatialType.HORIZONTAL)
+		val entryB = InOut("EntryB", false, Cell.SpatialType.HORIZONTAL)
+
+		// Create exit points
+		val exitC = InOut("ExitC", true, Cell.SpatialType.HORIZONTAL)
+		val exitD = InOut("ExitD", true, Cell.SpatialType.HORIZONTAL)
+
+		// Create central junction with switch
+		val switch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		switch.setName("Junction")
+
+		// Place elements on grid
+		context.putCell(Point(5, 20), entryA)
+		context.putCell(Point(5, 40), entryB)
+		context.putCell(Point(30, 30), switch)
+		context.putCell(Point(55, 20), exitC)
+		context.putCell(Point(55, 40), exitD)
+
+		// Create track connections
+		val trackA = SimpleTrackBlock(entryA, switch, 250.0, 80.0)
+		val trackB = SimpleTrackBlock(entryB, switch, 250.0, 80.0)
+		val trackC = SimpleTrackBlock(switch, exitC, 250.0, 100.0)
+		val trackD = SimpleTrackBlock(switch, exitD, 250.0, 90.0)
+
+		context.joinCells(Point(5, 20), Point(30, 30), trackA)
+		context.joinCells(Point(5, 40), Point(30, 30), trackB)
+		context.joinCells(Point(30, 30), Point(55, 20), trackC)
+		context.joinCells(Point(30, 30), Point(55, 40), trackD)
+
+		return context
+	}
+
+	/**
+	 * Creates a linear path with multiple semaphores in sequence: A→[S1]→[S2]→...→[Sn]→B.
+	 *
+	 * Configuration:
+	 * - InOut "A" at (1,5) - entry point
+	 * - N semaphores evenly spaced (5 units apart) along horizontal path
+	 * - InOut "B" at calculated end position - exit point
+	 * - Track segments connecting each element (100m, 80 m/s each)
+	 * - Grid size: dynamically calculated based on semaphore count
+	 *
+	 * Common use cases:
+	 * - Multi-signal coordination testing
+	 * - Complex path reservation scenarios
+	 * - Train progression through multiple control points
+	 * - Signal sequencing validation
+	 *
+	 * @param semaphoreCount Number of semaphores (default 3, min 1)
+	 * @param semaphoresAllowing Initial state for all semaphores (true=GREEN/allowing, false=RED/blocking)
+	 * @return EditingContext with multi-semaphore topology (must close)
+	 * @throws IllegalArgumentException if semaphoreCount < 1
+	 */
+	fun linearPathWithSemaphoreSequence(
+		semaphoreCount: Int = 3,
+		semaphoresAllowing: Boolean = false
+	): EditingContext {
+		require(semaphoreCount >= 1) { "semaphoreCount must be at least 1, got $semaphoreCount" }
+
+		// Calculate grid size (entry + semaphores + exit + padding)
+		val gridSize = (semaphoreCount + 2) * 5 + 10
+
+		val context = DefaultEditingContext(gridSize, gridSize)
+
+		// Create entry point
+		val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
+		context.putCell(Point(1, 5), inA)
+
+		var previousX = 1
+		var previousElement: NodeCell = inA
+
+		// Create semaphores
+		for (i in 1..semaphoreCount) {
+			val semaphore = RailSemaphore(semaphoresAllowing, Cell.SpatialType.HORIZONTAL)
+			semaphore.setName("Sem$i")
+
+			val currentX = 1 + (i * 5)
+			context.putCell(Point(currentX, 5), semaphore)
+
+			// Connect previous element to this semaphore
+			val track = SimpleTrackBlock(previousElement, semaphore, 100.0, 80.0)
+			context.joinCells(Point(previousX, 5), Point(currentX, 5), track)
+
+			previousX = currentX
+			previousElement = semaphore
+		}
+
+		// Create exit point
+		val exitX = 1 + ((semaphoreCount + 1) * 5)
+		val outB = InOut("B", false, Cell.SpatialType.HORIZONTAL)
+		context.putCell(Point(exitX, 5), outB)
+
+		// Connect last semaphore to exit
+		val finalTrack = SimpleTrackBlock(previousElement, outB, 100.0, 80.0)
+		context.joinCells(Point(previousX, 5), Point(exitX, 5), finalTrack)
+
+		return context
+	}
+
+	/**
+	 * ## Complex Switch + Semaphore Patterns
+	 *
+	 * For topologies with multiple switches AND semaphore sequences on each route,
+	 * use XML fixtures instead of programmatic builders:
+	 *
+	 * - Simple switch: `TestFixtures.loadSwitchBasicXml()`
+	 * - Complex routing: `TestFixtures.loadShuntingXml()` (vyhybna.xml)
+	 *
+	 * These patterns are too complex for fluent builders and benefit from
+	 * visual XML editing.
 	 */
 
 	/**
@@ -421,6 +593,41 @@ object TestTopologies {
 			.withConnection(1, 1, 3, 3, 100.0, 80.0)
 			.withConnection(3, 3, 5, 5, 100.0, 80.0)
 			.buildSimulationContext()
+
+	/**
+	 * Creates a Y-junction topology: two entries converge at switch, diverge to two exits (SimulationContext variant).
+	 *
+	 * Same configuration as [yJunctionWithSwitch] but returns SimulationContext
+	 * for use in simulation tests.
+	 *
+	 * @return SimulationContext with Y-junction topology (must close)
+	 * @see yJunctionWithSwitch
+	 */
+	fun yJunctionWithSwitchSimulation(): SimulationContext {
+		val editingContext = yJunctionWithSwitch()
+		val processFactory = getKoin().get<SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
+
+	/**
+	 * Creates a linear path with multiple semaphores in sequence: A→[S1]→...→[Sn]→B (SimulationContext variant).
+	 *
+	 * Same configuration as [linearPathWithSemaphoreSequence] but returns SimulationContext
+	 * for use in simulation tests.
+	 *
+	 * @param semaphoreCount Number of semaphores (default 3, min 1)
+	 * @param semaphoresAllowing Initial state for all semaphores (true=GREEN/allowing, false=RED/blocking)
+	 * @return SimulationContext with multi-semaphore topology (must close)
+	 * @see linearPathWithSemaphoreSequence
+	 */
+	fun linearPathWithSemaphoreSequenceSimulation(
+		semaphoreCount: Int = 3,
+		semaphoresAllowing: Boolean = false
+	): SimulationContext {
+		val editingContext = linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing)
+		val processFactory = getKoin().get<SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	}
 
 	/**
 	 * Creates a dead-end topology: single InOut with no connections (SimulationContext variant).
