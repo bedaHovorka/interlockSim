@@ -138,29 +138,31 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain returns path with multiple blocks all owned`() {
 			// Arrange: Load vyhybna.xml (7 blocks, complex topology)
 			val editingContextFactory: EditingContextFactory by inject()
-			val editingContext = editingContextFactory.createContext(
-				TestFixtures.loadShuntingXml()!!
-			) as DefaultEditingContext
-			val vyhybnaContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+			TestFixtures.loadShuntingXml()!!.use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					val editingContext = editingCtx as DefaultEditingContext
+					simulationContextFactory.createContext(editingContext).use { simCtx ->
+						val vyhybnaContext = simCtx as DefaultSimulationContext
 
-			val vyhybnaService = vyhybnaContext.getTrainNavigationService()
-			val vyhybnaPathService = vyhybnaContext.getPathReservationService()
+						val vyhybnaService = vyhybnaContext.getTrainNavigationService()
+						val vyhybnaPathService = vyhybnaContext.getPathReservationService()
 
-			val grid = vyhybnaContext.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						val grid = vyhybnaContext.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-			// Reserve full path from A to B (spans all 7 blocks)
-			vyhybnaPathService.reservePath("train1", inOutA, inOutB)
+						// Reserve full path from A to B (spans all 7 blocks)
+						vyhybnaPathService.reservePath("train1", inOutA, inOutB)
 
-			// Act
-			val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
+						// Act
+						val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
 
-			// Assert
-			assertThat(result).isNotNull()
-			assertThat(result!!.size).isGreaterThan(0)
-
-			vyhybnaContext.close()
+						// Assert
+						assertThat(result).isNotNull()
+						assertThat(result!!.size).isGreaterThan(0)
+					}
+				}
+			}
 		}
 
 		@Test
