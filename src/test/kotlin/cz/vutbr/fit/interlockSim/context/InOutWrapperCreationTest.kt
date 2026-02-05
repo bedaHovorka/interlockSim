@@ -7,7 +7,6 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.InputStream
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
