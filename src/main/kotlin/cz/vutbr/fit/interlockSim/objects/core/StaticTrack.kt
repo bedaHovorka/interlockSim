@@ -84,4 +84,38 @@ interface StaticTrack : PathElement {
 	 * @return The other end of the track
 	 */
 	fun getSecondEnd(sep: PathSeparator): PathSeparator
+
+	/**
+	 * Tracks contribute their physical length to path length calculation.
+	 *
+	 * Overrides default [PathElement.contributeToPathLength] to return actual track length.
+	 *
+	 * @return Track length in meters
+	 * @since 2026-02 (Issue #93 - eliminate instanceof checks)
+	 * @see length for implementation
+	 */
+	override fun contributeToPathLength(): Double = length()
+
+	/**
+	 * Tracks contribute their directional max speed to path speed calculation.
+	 *
+	 * Overrides default [PathElement.contributeToPathMaxSpeed] to compute minimum
+	 * speed considering this track's directional limit.
+	 *
+	 * @param previousSeparator Previous separator for directional speed lookup
+	 * @param currentMinSpeed Current minimum speed along path
+	 * @return Contribution with updated min speed (min of current and track speed)
+	 * @since 2026-02 (Issue #93 - eliminate instanceof checks)
+	 * @see maxSpeed for directional speed limits
+	 */
+	override fun contributeToPathMaxSpeed(
+		previousSeparator: PathSeparator?,
+		currentMinSpeed: Double
+	): PathMaxSpeedContribution {
+		val trackSpeed = maxSpeed(previousSeparator)
+		return PathMaxSpeedContribution(
+			minSpeed = minOf(currentMinSpeed, trackSpeed),
+			updatedPreviousSeparator = previousSeparator
+		)
+	}
 }

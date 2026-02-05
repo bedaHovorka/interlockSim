@@ -287,14 +287,49 @@ class XMLContextFactory : EditingContextFactory {
 			}
 		}
 
+		/**
+		 * Called when XML parsing completes. Validates the parsed railway network structure.
+		 *
+		 * **Validation Rules:**
+		 * - Minimum [MIN_INOUT_ELEMENTS] InOut elements required (entry and exit points)
+		 * - InOut elements define where trains enter/exit the railway network
+		 * - Single InOut networks are invalid (dead-end, train cannot exit)
+		 * - Context must be initialized (non-null editingContext)
+		 *
+		 * This method is called automatically by the SAX parser after all XML elements
+		 * have been processed via [startElement] and [endElement] callbacks.
+		 *
+		 * **Example Valid Network:**
+		 * ```xml
+		 * <net X="10" Y="10">
+		 *   <InOut name="ENTRY" ... />
+		 *   <InOut name="EXIT" ... />
+		 *   <!-- other elements -->
+		 * </net>
+		 * ```
+		 *
+		 * **Example Invalid Network (throws exception):**
+		 * ```xml
+		 * <net X="10" Y="10">
+		 *   <InOut name="ENTRY" ... />  <!-- Only 1 InOut = invalid -->
+		 * </net>
+		 * ```
+		 *
+		 * @throws SAXException if:
+		 *   - Context not initialized (null editingContext)
+		 *   - InOut count < [MIN_INOUT_ELEMENTS] (minimum requirement)
+		 * @since 2006-2007 (original thesis)
+		 * @see startElement for XML element processing
+		 * @see MIN_INOUT_ELEMENTS for validation threshold
+		 */
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
 			val ctx = editingContext ?: throw SAXException("Context not initialized")
 			// Access inouts via public method from BaseContext
 			val inOutsCount = ctx.getInOutsList().size
-			if (inOutsCount < 2) {
+			if (inOutsCount < MIN_INOUT_ELEMENTS) {
 				throw SAXException(
-					"Railway network must have at least 2 InOut elements (entry and exit points). " +
+					"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
 						"Found: $inOutsCount"
 				)
 			}
@@ -383,6 +418,17 @@ class XMLContextFactory : EditingContextFactory {
 		private const val NAME = "name"
 
 		private const val DEFAULT_GRID_SIZE = 100
+
+		/**
+		 * Minimum number of InOut elements required in a railway network.
+		 *
+		 * Railway networks must have at least 2 InOut elements (entry and exit points)
+		 * to allow trains to enter and exit the simulation. Single InOut networks
+		 * are invalid (dead-end configuration).
+		 *
+		 * @since 2026-01 (Issue #76 validation, Issue #77 code quality)
+		 */
+		private const val MIN_INOUT_ELEMENTS = 2
 	}
 
 	override fun createEmptyContext(): EditingContext = DefaultEditingContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)

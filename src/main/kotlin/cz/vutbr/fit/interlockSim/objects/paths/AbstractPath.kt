@@ -19,7 +19,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
@@ -61,23 +60,18 @@ abstract class AbstractPath protected constructor(
 			val e = it.next()
 
 			if (e == getLast() || e == getFirst()) {
-				// EMPTY
-			} else {
-				val es: Double
-				if (e is Track) {
-					val track = e
-					es = track.maxSpeed(prevSep)
-					logger.trace { "Track $track max speed: $es" }
-					// prevTrack = track;
-				} else {
-					val ps = Util.assertInstanceOf(PathSeparator::class.java, e)
-					prevSep = ps
-					continue // DEBUG
-// 					if (ps instanceof OrientedPathSeparator &&
-// 							!context.isSeparatorInDirection((OrientedPathSeparator)sep, null, prevTrack)) continue;
-// 					es = ps.allowedSpeed();
-				}
-				min = if (es < min) es else min
+				// Skip path endpoints
+				continue
+			}
+
+			// Polymorphic contribution - no instanceof checks needed
+			val contribution = e.contributeToPathMaxSpeed(prevSep, min)
+			min = contribution.minSpeed
+			prevSep = contribution.updatedPreviousSeparator
+
+			// Log only for tracks (when speed actually changed)
+			if (contribution.minSpeed < min || (min < Double.MAX_VALUE && contribution.minSpeed == min)) {
+				logger.trace { "Element $e contributes max speed: ${contribution.minSpeed}" }
 			}
 		}
 		logger.trace { "Path max speed calculation result: $min" }
@@ -87,10 +81,10 @@ abstract class AbstractPath protected constructor(
 	override fun length(): Double {
 		var sum = 0.0
 		for (e in this) {
-			if (e is Track) {
-				val trackLength = e.length()
-				sum += trackLength
-				logger.trace { "Track $e length: $trackLength, cumulative path length: $sum" }
+			val elementLength = e.contributeToPathLength()
+			if (elementLength > 0.0) {
+				sum += elementLength
+				logger.trace { "Element $e length: $elementLength, cumulative path length: $sum" }
 			}
 		}
 		logger.trace { "Total path length calculation: $sum" }
@@ -199,7 +193,7 @@ abstract class AbstractPath protected constructor(
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
 							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
-								"state=${if (nextTrack is TrackFacility) toTrackFacility(nextTrack).getState() else "unknown"}"
+								"state=${toTrackFacility(nextTrack).getState()}"
 						}
 					}
 					logger.debug { "Track operation returned false for operation: $operationName" }
@@ -275,21 +269,31 @@ abstract class AbstractPath protected constructor(
 		val iterator = getIterator(getSecondEnd(sep))
 		while (iterator.hasNext()) {
 			val element = iterator.next()
-			// Use polymorphic method instead of instanceof check
-			if (element is DynamicPathSeparator && element.isSwitch()) {
-				previousSwitch = element
-			} else if (element is OrientedPathSeparator && element is DynamicPathSeparator) {
-				if (previousTrack == null) continue
-				val semaphore = element as DynamicRailSemaphore
-				if (context.isSeparatorInDirection(semaphore, previousTrack, null)) {
-					val speed = previousSwitch?.allowedSpeed() ?: PathElement.ABSOLUTE_MAX_SPEED
-					val segment = context.getSegment(semaphore, null, previousTrack)
-					val segment2 = context.getSegment(semaphore, previousTrack, null)
-					semaphore.setUpSpeed(segment, segment2, speed)
-					previousSwitch = null
+			// Type-safe pattern matching without unsafe casts
+			when {
+				element is DynamicPathSeparator && element.isSwitch() -> {
+					// Switch element: store for speed calculation
+					previousSwitch = element
 				}
-			} else {
-				previousTrack = Util.assertInstanceOf(Track::class.java, element)
+				element is DynamicRailSemaphore -> {
+					// Semaphore element: configure with previous track and switch speed
+					if (previousTrack == null) continue
+					if (context.isSeparatorInDirection(element, previousTrack, null)) {
+						val speed = previousSwitch?.allowedSpeed() ?: PathElement.ABSOLUTE_MAX_SPEED
+						val segment = context.getSegment(element, null, previousTrack)
+						val segment2 = context.getSegment(element, previousTrack, null)
+						element.setUpSpeed(segment, segment2, speed)
+						previousSwitch = null
+					}
+				}
+				element is Track -> {
+					// Track element: store for semaphore configuration
+					previousTrack = element
+				}
+				else -> {
+					// Should not happen in valid paths
+					logger.warn { "Unexpected path element type: ${element::class.simpleName}" }
+				}
 			}
 		}
 		context.report("", this, ReportType.PATH_SETTING)
