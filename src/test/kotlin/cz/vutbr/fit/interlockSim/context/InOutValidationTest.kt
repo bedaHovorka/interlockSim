@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.getKoin
-import org.xml.sax.SAXException
 
 /**
  * Test suite for InOut validation rules.

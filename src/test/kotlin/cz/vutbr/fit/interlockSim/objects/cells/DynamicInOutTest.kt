@@ -21,7 +21,6 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach

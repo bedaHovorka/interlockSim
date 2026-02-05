@@ -69,7 +69,8 @@ class InOutIntegrationTest {
 	fun `vyhybna xml loads with 2 InOuts`() {
 		TestFixtures.loadShuntingXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val inOuts = (context as cz.vutbr.fit.interlockSim.context.EditingContext as cz.vutbr.fit.interlockSim.context.DefaultEditingContext).getInOutsList()
+				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
 
@@ -92,7 +93,8 @@ class InOutIntegrationTest {
 	fun `InOut names preserved after XML load`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val inOuts = (context as cz.vutbr.fit.interlockSim.context.EditingContext as cz.vutbr.fit.interlockSim.context.DefaultEditingContext).getInOutsList()
+				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
 
@@ -115,7 +117,8 @@ class InOutIntegrationTest {
 	fun `InOut entry and exit flags preserved`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val inOuts = (context as cz.vutbr.fit.interlockSim.context.EditingContext as cz.vutbr.fit.interlockSim.context.DefaultEditingContext).getInOutsList()
+				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val inOuts = editingCtx.getInOutsList()
 
 				assertThat(inOuts).hasSize(2)
 
@@ -139,7 +142,8 @@ class InOutIntegrationTest {
 	fun `Multiple InOuts can coexist in network`() {
 		TestFixtures.loadShuntingXml().use { stream ->
 			factory.createContext(stream).use { context ->
-				val inOuts = (context as cz.vutbr.fit.interlockSim.context.EditingContext as cz.vutbr.fit.interlockSim.context.DefaultEditingContext).getInOutsList()
+				val editingCtx = context as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				val inOuts = editingCtx.getInOutsList()
 
 				// Shunting loop has 2 InOuts
 				assertThat(inOuts.size).isEqualTo(2)
