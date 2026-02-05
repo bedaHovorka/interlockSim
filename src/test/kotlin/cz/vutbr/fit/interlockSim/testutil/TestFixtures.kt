@@ -1,6 +1,7 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import java.io.InputStream
 
 /**
@@ -25,14 +26,19 @@ import java.io.InputStream
  *
  * ### Common Network Topologies
  * ```kotlin
- * // Simple A→B linear path
+ * // Simple A→B linear path (EditingContext for editor/topology tests)
  * TestTopologies.simpleLinearPath().use { context ->
- *     // Use context
+ *     // Use editing context
+ * }
+ *
+ * // Same topology but SimulationContext (for simulation/train tests)
+ * TestTopologies.simpleLinearPathSimulation().use { context ->
+ *     // Use simulation context
  * }
  *
  * // Linear path with semaphore
  * TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true).use { context ->
- *     // Use context
+ *     // EditingContext variant
  * }
  * ```
  *
@@ -284,8 +290,15 @@ object TestFixtures {
  * }
  * ```
  *
+ * ## Context Type Variants
+ *
+ * Each topology is available in two variants:
+ * - **Base functions** (e.g., `simpleLinearPath()`) - Return `EditingContext`
+ *   - Use for: Editor tests, topology validation, static structure tests
+ * - **Simulation variants** (e.g., `simpleLinearPathSimulation()`) - Return `SimulationContext`
+ *   - Use for: Train navigation, path reservation, simulation execution tests
+ *
  * ## Design Notes
- * - All functions return `EditingContext` (not `SimulationContext`)
  * - Contexts are NOT frozen (mutable for test setup)
  * - Grid coordinates are consistent across similar topologies
  * - Use `.use {}` for automatic resource cleanup
@@ -369,4 +382,57 @@ object TestTopologies {
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
 			.buildEditingContext()
+
+	// ========================================================================
+	// SimulationContext Variants (for simulation/train tests)
+	// ========================================================================
+
+	/**
+	 * Creates a simple linear path topology: A→B (SimulationContext variant).
+	 *
+	 * Same configuration as [simpleLinearPath] but returns SimulationContext
+	 * for use in simulation tests (TrainNavigationService, path reservation, etc.).
+	 *
+	 * @return SimulationContext with simple linear topology (must close)
+	 * @see simpleLinearPath
+	 */
+	fun simpleLinearPathSimulation(): SimulationContext =
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.withInOut("B", 5, 5, false)
+			.withConnection(1, 1, 5, 5, 100.0, 80.0)
+			.buildSimulationContext()
+
+	/**
+	 * Creates a linear path with semaphore: A→[S]→B (SimulationContext variant).
+	 *
+	 * Same configuration as [linearPathWithSemaphore] but returns SimulationContext
+	 * for use in simulation tests.
+	 *
+	 * @param semaphoreAllowing Initial semaphore state (true=GREEN/allowing, false=RED/blocking)
+	 * @return SimulationContext with semaphore topology (must close)
+	 * @see linearPathWithSemaphore
+	 */
+	fun linearPathWithSemaphoreSimulation(semaphoreAllowing: Boolean = false): SimulationContext =
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.withSemaphore(3, 3, semaphoreAllowing)
+			.withInOut("B", 5, 5, false)
+			.withConnection(1, 1, 3, 3, 100.0, 80.0)
+			.withConnection(3, 3, 5, 5, 100.0, 80.0)
+			.buildSimulationContext()
+
+	/**
+	 * Creates a dead-end topology: single InOut with no connections (SimulationContext variant).
+	 *
+	 * Same configuration as [deadEndSingleInOut] but returns SimulationContext
+	 * for use in simulation tests.
+	 *
+	 * @return SimulationContext with dead-end topology (must close)
+	 * @see deadEndSingleInOut
+	 */
+	fun deadEndSingleInOutSimulation(): SimulationContext =
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.buildSimulationContext()
 }

@@ -94,11 +94,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B (1 block)
-			context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildSimulationContext()
+			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 			// Get real services from context scope
 			service = context.getTrainNavigationService()
@@ -376,9 +372,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns null when single InOut has no connections`() {
 			// Arrange: Single InOut (no connections = no path topologically)
-			val context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.buildSimulationContext()
+			val context = TestTopologies.deadEndSingleInOutSimulation()
 
 			val service = context.getTrainNavigationService()
 			val grid = context.getRailWayNetGrid()
@@ -476,11 +470,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Simple linear network: A → B
-			context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.buildSimulationContext()
+			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 			service = context.getTrainNavigationService()
 		}
