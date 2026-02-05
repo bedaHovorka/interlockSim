@@ -25,10 +25,6 @@ import cz.vutbr.fit.interlockSim.testutil.assertThatCode
 import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.doesNotThrowAnyException
 import cz.vutbr.fit.interlockSim.util.Point
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.Runs
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested

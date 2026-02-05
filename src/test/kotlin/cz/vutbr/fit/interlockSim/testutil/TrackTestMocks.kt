@@ -495,6 +495,273 @@ fun createMockTrackOccupant(
 	every { this@mockk.toString() } returns name
 }
 
+// ==================== Track Facilities ====================
+
+/**
+ * Creates a mock SimpleTrack for testing path operations.
+ *
+ * Consolidated from DeadlockDetectionTest and TrainPathInteractionTest.
+ *
+ * @param name Track identifier for toString()
+ * @param length Track length in meters
+ * @param maxSpeed Maximum allowed speed in m/s (default: 20.0)
+ * @return MockK instance of SimpleTrack
+ *
+ * @since Phase 4 (2026-02-05) - Factory consolidation
+ * @see createMockReservedTrack Track in RESERVED state
+ * @see createMockOccupiedTrack Track in OCCUPIED state
+ */
+fun createMockTrack(
+	name: String,
+	length: Double,
+	maxSpeed: Double = 20.0
+): SimpleTrack {
+	val mock = mockk<SimpleTrack>(relaxed = true)
+	every { mock.length() } returns length
+	every { mock.maxSpeed(any()) } returns maxSpeed
+	every { mock.toString() } returns "Track:$name"
+	return mock
+}
+
+/**
+ * Creates a mock SimpleTrack in RESERVED state.
+ *
+ * Extracted from DeadlockDetectionTest.
+ *
+ * @param name Track identifier
+ * @param length Track length in meters
+ * @return MockK instance of SimpleTrack (RESERVED state)
+ */
+fun createMockReservedTrack(
+	name: String,
+	length: Double
+): SimpleTrack {
+	val mock = mockk<SimpleTrack>(relaxed = true)
+	every { mock.length() } returns length
+	every { mock.toString() } returns "Track:$name[RESERVED]"
+	return mock
+}
+
+/**
+ * Creates a mock SimpleTrack in OCCUPIED state.
+ *
+ * Extracted from DeadlockDetectionTest.
+ *
+ * @param name Track identifier
+ * @param length Track length in meters
+ * @return MockK instance of SimpleTrack (OCCUPIED state)
+ */
+fun createMockOccupiedTrack(
+	name: String,
+	length: Double
+): SimpleTrack {
+	val mock = mockk<SimpleTrack>(relaxed = true)
+	every { mock.length() } returns length
+	every { mock.toString() } returns "Track:$name[OCCUPIED]"
+	return mock
+}
+
+/**
+ * Creates a mock SimpleTrack marked as blocked.
+ *
+ * Extracted from TrainPathInteractionTest.
+ *
+ * @param name Track identifier
+ * @param length Track length in meters
+ * @return MockK instance of SimpleTrack (blocked)
+ */
+fun createMockBlockedTrack(
+	name: String,
+	length: Double
+): SimpleTrack {
+	val mock = mockk<SimpleTrack>(relaxed = true)
+	every { mock.length() } returns length
+	every { mock.toString() } returns "Track:$name"
+	return mock
+}
+
+/**
+ * Creates a mock TrackBlock with endpoints.
+ *
+ * Extracted from DefaultRailWayNetGridTest.
+ *
+ * @return MockK instance of TrackBlock
+ */
+fun createMockTrackBlock(): TrackBlock = mockk<TrackBlock>(relaxed = true) {
+	every { name } returns null
+	every { getNextTrackSection(any(), any()) } returns null
+	every { isInnerElement(any()) } returns false
+	every { getJoin(any(), any()) } returns Cell.Segment.A
+	every { isFreeFrom(any()) } returns true
+	every { setUpPath(any(), any()) } just Runs
+	every { isSetUpPath(any()) } returns false
+	every { cancelPathSetup(any()) } just Runs
+	every { getSecondEnd(any()) } answers { firstArg() }
+	every { length() } returns 100.0
+	every { maxSpeed(any()) } returns 80.0
+	every { ends() } returns emptyArray()
+	every { getState() } returns cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
+	every { enter(any()) } just Runs
+	every { leave(any()) } just Runs
+	every { getTrackOccupant() } throws UnsupportedOperationException("Mock implementation")
+}
+
+/**
+ * Creates a mock TrackBlockPart segment.
+ *
+ * Extracted from AnimatedSimulationCellRendererTest.
+ *
+ * @param trackBlock Parent TrackBlock reference
+ * @param name Part identifier (optional)
+ * @return MockK instance of TrackBlockPart
+ */
+fun createMockTrackBlockPart(
+	trackBlock: TrackBlock,
+	name: String = "MockPart"
+): TrackBlockPart {
+	val mock = mockk<TrackBlockPart>(relaxed = true)
+	every { mock.getTrackBlock() } returns trackBlock
+	every { mock.getSpatialType() } returns null
+	every { mock.getSegments() } returns arrayOf(Cell.Segment.A, Cell.Segment.F)
+	return mock
+}
+
+// ==================== Semaphores ====================
+
+/**
+ * Creates a real RailSemaphore instance (integration-style).
+ *
+ * Extracted from DeadlockDetectionTest.
+ * Uses actual RailSemaphore object wrapped in DynamicRailSemaphore.
+ *
+ * **Note:** This is NOT a pure mock - it uses real RailSemaphore objects.
+ * For pure mocks, use createMockSemaphoreMock().
+ *
+ * @param name Semaphore identifier
+ * @param isAllowing true = FREE signal, false = STOP signal
+ * @return Real DynamicRailSemaphore instance
+ *
+ * @see createMockSemaphoreMock Pure MockK alternative
+ */
+fun createMockSemaphoreReal(
+	name: String,
+	isAllowing: Boolean
+): DynamicRailSemaphore {
+	val staticSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+	val dynamicSemaphore = createDynamicInstance(staticSemaphore)
+	val signal = if (isAllowing) Signal.FREE else Signal.STOP
+	dynamicSemaphore.signal = signal
+	return dynamicSemaphore
+}
+
+/**
+ * Creates a pure MockK semaphore (unit-testing style).
+ *
+ * Extracted from TrainPathInteractionTest.
+ * Pure MockK object without real RailSemaphore.
+ *
+ * **Note:** This is a pure mock. For integration-style real objects,
+ * use createMockSemaphoreReal().
+ *
+ * @param isAllowing true = FREE signal, false = STOP signal
+ * @return MockK instance of DynamicRailSemaphore
+ *
+ * @see createMockSemaphoreReal Real RailSemaphore alternative
+ */
+fun createMockSemaphoreMock(isAllowing: Boolean): DynamicRailSemaphore {
+	val semaphore = mockk<DynamicRailSemaphore>(relaxed = true)
+	val signal = if (isAllowing) Signal.FREE else Signal.STOP
+	every { semaphore.signal } returns signal
+	every { semaphore.toString() } returns "Semaphore:$signal"
+	return semaphore
+}
+
+/**
+ * Creates a mock RailSemaphore.
+ *
+ * Extracted from AnimatedSimulationCellRendererTest.
+ *
+ * @return MockK instance of RailSemaphore
+ */
+fun createMockRailSemaphore(): RailSemaphore {
+	val mock = mockk<RailSemaphore>(relaxed = true)
+	every { mock.getSpatialType() } returns Cell.SpatialType.HORIZONTAL
+	every { mock.getOrientation() } returns true
+	every { mock.getName() } returns "TestSemaphore"
+	return mock
+}
+
+/**
+ * Creates a mock DynamicRailSemaphore with signal control.
+ *
+ * Extracted from AnimatedSimulationCellRendererTest.
+ *
+ * @param staticRef Static RailSemaphore reference
+ * @param signal Initial signal state
+ * @return MockK instance of DynamicRailSemaphore
+ */
+fun createMockDynamicSemaphore(
+	staticRef: RailSemaphore,
+	signal: Signal
+): DynamicRailSemaphore {
+	val mock = mockk<DynamicRailSemaphore>(relaxed = true)
+	every { mock.staticRef } returns staticRef
+	every { mock.signal } returns signal
+	every { mock.getSpatialType() } returns staticRef.getSpatialType()
+	return mock
+}
+
+// ==================== Path & Network Elements ====================
+
+/**
+ * Creates a mock ArrayPath from track segments.
+ *
+ * Consolidated from DeadlockDetectionTest and TrainPathInteractionTest.
+ *
+ * @param tracks Variable number of track segments
+ * @return MockK instance of ArrayPath
+ *
+ * @since Phase 4 (2026-02-05) - Factory consolidation
+ */
+fun createMockPath(vararg tracks: SimpleTrack): ArrayPath {
+	val totalLength = tracks.sumOf { it.length() }
+	val mock = mockk<ArrayPath>(relaxed = true)
+	every { mock.length() } returns totalLength
+	every { mock.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
+	return mock
+}
+
+/**
+ * Creates a mock DynamicInOut (entry/exit point).
+ *
+ * Extracted from DeadlockDetectionTest.
+ *
+ * @param name InOut identifier
+ * @return MockK instance of DynamicInOut
+ */
+fun createMockInOut(name: String): DynamicInOut {
+	val mock = mockk<DynamicInOut>()
+	every { mock.name } returns name
+	every { mock.toString() } returns "InOut:$name"
+	return mock
+}
+
+/**
+ * Creates a mock RailSwitch junction.
+ *
+ * Extracted from DeadlockDetectionTest.
+ *
+ * @param name Switch identifier
+ * @return MockK instance of RailSwitch
+ */
+fun createMockSwitch(name: String): RailSwitch {
+	val mock = mockk<RailSwitch>()
+	every { mock.toString() } returns "Switch:$name"
+	return mock
+}
+
+// ==================== Mock Implementations ====================
+
 /**
  * Mock implementation of NodeCell for testing track endpoints.
  *
