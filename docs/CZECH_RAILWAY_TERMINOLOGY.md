@@ -30,17 +30,22 @@ The interlockSim project uses Czech railway terminology primarily in:
 
 ### 1. File Names and Network Configurations
 
-| Czech Term | English Translation | Usage | Technical Accuracy |
-|------------|---------------------|-------|-------------------|
-| **vyhybna.xml** | "shunting loop.xml" | Main example railway network configuration | ✅ CORRECT |
-| **praha-hlavni-nadrazi.xml** | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points | ✅ CORRECT |
-| **rudyUjezd.xml** | "Rudý Újezd.xml" (fictional place name) | Test network configuration | ✅ CORRECT (fictional place name) |
+| Filename (ASCII) | Czech Name (with diacritics) | English Translation | Usage |
+|------------------|-------------------------------|---------------------|-------|
+| **vyhybna.xml** | výhybna | "shunting loop.xml" | Main example railway network configuration |
+| **praha-hlavni-nadrazi.xml** | Praha Hlavní Nádraží | "Prague Main Station.xml" | Complex station network with 4 entry + 6 exit points |
+| **rudyUjezd.xml** | Rudý Újezd | "Red Settlement.xml" (fictional) | Test network configuration |
 
-**Notes:**
+**Filename Convention:**
+- **All filenames use ASCII without diacritics** for filesystem compatibility and encoding safety
+- File content and documentation use proper Czech spelling with diacritics
+- Examples: `vyhybna.xml` (not "výhybna.xml"), `praha-hlavni-nadrazi.xml` (not "praha-hlavní-nádraží.xml")
+
+**Term Explanations:**
 - **vyhybna** - Czech term for "shunting loop" or "marshaling yard switching area"
-- **hlavní nádraží** - "main station" (capitalization correct in file comment)
+- **hlavní nádraží** - "main station" (with diacritics: nádraží, not nadrazi)
 - **Praha** - Prague (capital city of Czech Republic)
-- **Rudý Újezd** - Fictional place name (correctly spelled with diacritics for this example)
+- **Rudý Újezd** - Fictional place name for testing purposes
 
 ---
 
@@ -297,6 +302,19 @@ Found **1 Czech comment** in source code:
 
 ❌ **WRONG:** `Praha hlavní nádraží` (lowercase in formal context)
 ✅ **CORRECT:** `Praha Hlavní Nádraží` (title case for station name)
+
+### 4. Filename Conventions
+
+❌ **WRONG:** Creating files with diacritics: `výhybna.xml`, `nádraží.xml`
+✅ **CORRECT:** Use ASCII filenames: `vyhybna.xml`, `nadrazi.xml`
+
+**Rationale:** Diacritics in filenames can cause issues with:
+- Cross-platform compatibility (Windows, Linux, macOS)
+- Version control systems (git)
+- Build tools and CI/CD pipelines
+- URL encoding in web applications
+
+**Best Practice:** Keep filenames ASCII-only, use proper Czech spelling with diacritics in file content and documentation.
 
 ---
 
