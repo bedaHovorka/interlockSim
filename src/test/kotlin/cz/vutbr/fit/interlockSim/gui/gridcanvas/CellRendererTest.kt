@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
