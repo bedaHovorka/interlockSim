@@ -30,4 +30,20 @@ interface PathSeparator :
 	 * @return true if this is a RailSwitch, false otherwise
 	 */
 	fun isSwitch(): Boolean = false
+
+	/**
+	 * PathSeparators update the previous separator reference but don't affect path speed.
+	 *
+	 * Overrides default [PathElement.contributeToPathMaxSpeed] to update the
+	 * previous separator reference (used for directional speed calculations by Tracks).
+	 *
+	 * @param previousSeparator Ignored (will be replaced with this separator)
+	 * @param currentMinSpeed Current minimum speed (returned unchanged)
+	 * @return Contribution with this separator as new previous, speed unchanged
+	 * @since 2026-02 (Issue #93 - eliminate instanceof checks)
+	 */
+	override fun contributeToPathMaxSpeed(
+		previousSeparator: PathSeparator?,
+		currentMinSpeed: Double
+	): PathMaxSpeedContribution = PathMaxSpeedContribution(currentMinSpeed, this)
 }
