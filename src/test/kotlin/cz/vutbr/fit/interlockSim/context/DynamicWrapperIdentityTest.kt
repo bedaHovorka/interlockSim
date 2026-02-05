@@ -31,11 +31,10 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		return simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		return TestFixtures.loadShuntingXml().use { xmlStream ->
+			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+		}
 	}
 
 	/**
@@ -51,18 +50,17 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	@Test
 	fun `getInOuts returns same instances as staticToDynamicMap`() {
 		// Given: Simulation context with InOuts
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-				// When: Retrieving InOuts via getInOuts()
-				val inoutsFromGetter = context.getInOuts()
+		TestFixtures.loadShuntingXml().use { xmlStream ->
+			(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
+				(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
+					// When: Retrieving InOuts via getInOuts()
+					val inoutsFromGetter = context.getInOuts()
 
-				// Then: Each InOut wrapper must be same instance as in staticToDynamicMap
-				for (dynamicInOut in inoutsFromGetter) {
-					val fromMap = context.toDynamic(dynamicInOut.staticRef)
-					assertThat(fromMap).isSameAs(dynamicInOut)
+					// Then: Each InOut wrapper must be same instance as in staticToDynamicMap
+					for (dynamicInOut in inoutsFromGetter) {
+						val fromMap = context.toDynamic(dynamicInOut.staticRef)
+						assertThat(fromMap).isSameAs(dynamicInOut)
+					}
 				}
 			}
 		}
