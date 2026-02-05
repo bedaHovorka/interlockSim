@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
@@ -93,7 +94,6 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 					.firstOrNull { it is DynamicRailSemaphore }
 
 			// Assert: Grid contains DynamicRailSemaphore (not static RailSemaphore)
-			assertThat(semaphoreCell).isNotNull()
 			assertThat(semaphoreCell!!).isInstanceOf(DynamicRailSemaphore::class)
 
 			// Verify it's a DynamicRailSemaphore (sealed class)
@@ -159,7 +159,6 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 					.firstOrNull { it is DynamicInOut }
 
 			// Assert: Grid contains DynamicInOut (not static InOut)
-			assertThat(inoutCell).isNotNull()
 			assertThat(inoutCell!!).isInstanceOf(DynamicInOut::class)
 
 			// Verify it's NOT the static InOut type
@@ -230,7 +229,6 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val cell = grid.getCellAt(semaphorePoint!!.x, semaphorePoint.y)
 
 			// Assert: Grid navigation returns DynamicRailSemaphore directly
-			assertThat(cell).isNotNull()
 			assertThat(cell!!).isInstanceOf<DynamicRailSemaphore>()
 		}
 
@@ -262,7 +260,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val cell2 = grid.getCellAt(semaphorePoint.x, semaphorePoint.y)
 
 			// Assert: Same object instance (reference equality)
-			assertThat(cell1 === cell2).isEqualTo(true)
+			assertThat(cell1).isSameInstanceAs(cell2)
 		}
 	}
 
@@ -443,7 +441,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val dynamicViaToDynamic = context.toDynamic(staticSemaphore)
 
 			// Assert: Same instance as in grid (identity consistency)
-			assertThat(dynamicViaToDynamic === dynamicSemaphore).isEqualTo(true)
+			assertThat(dynamicViaToDynamic).isSameInstanceAs(dynamicSemaphore)
 		}
 	}
 }

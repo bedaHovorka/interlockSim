@@ -157,9 +157,13 @@ class TrainNavigationServiceTest : KoinTestBase() {
 						// Act
 						val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
 
-						// Assert
+						// Assert - Path should contain facilities connecting inOutA to inOutB
 						assertThat(result).isNotNull()
-						assertThat(result!!.size).isGreaterThan(0)
+						assertThat(result!!).isNotEmpty()
+						// Verify path starts at inOutA
+						assertThat(result.first()).isEqualTo(inOutA)
+						// Verify result contains all elements of the path (blocks + separators)
+						assertThat(result.size).isGreaterThan(1)
 					}
 				}
 			}
@@ -316,7 +320,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				.map { it.getTrackBlock() }
 				.filterIsInstance<DynamicTrackBlock>()
 				.toSet()
-			assertThat(blocksInPath.size).isGreaterThan(0)
+			assertThat(blocksInPath).isNotEmpty()
+			assertThat(blocksInPath.size).isLessThan(allBlocks.size) // Path to semaphore is shorter than full path
 
 			// Simulate conflict: train2 steals the FIRST block in the navigation path
 			// IMPORTANT: Must update BOTH block state AND registry
@@ -751,7 +756,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Verify navigation blocks are subset of reserved blocks
 			// (navigation returns path to NEXT semaphore, not full path to target)
-			assertThat(train1NavBlocks.size).isGreaterThan(0)
+			assertThat(train1NavBlocks).isNotEmpty()
+			assertThat(train1NavBlocks.size).isLessThan(train1ReservedBlocks.size + 1) // Nav path ≤ reserved blocks
 			train1NavBlocks.forEach { block ->
 				assertThat(train1ReservedBlocks).contains(block)
 			}
@@ -765,7 +771,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				val train2NavBlocks = extractNavigationBlocks(navPath2!!)
 
 				// Verify navigation blocks are subset of reserved blocks
-				assertThat(train2NavBlocks.size).isGreaterThan(0)
+				assertThat(train2NavBlocks).isNotEmpty()
+				assertThat(train2NavBlocks.size).isLessThan(train2ReservedBlocks.size + 1) // Nav path ≤ reserved blocks
 				train2NavBlocks.forEach { block ->
 					assertThat(train2ReservedBlocks).contains(block)
 				}

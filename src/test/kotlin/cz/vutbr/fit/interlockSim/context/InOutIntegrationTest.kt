@@ -18,6 +18,7 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.AfterEach
@@ -153,7 +154,7 @@ class InOutIntegrationTest {
 				val inOut2 = inOuts[1] as InOut
 
 				// Reference inequality (different objects)
-				assertThat(inOut1 === inOut2).isEqualTo(false)
+				assertThat(inOut1).isNotSameInstanceAs(inOut2)
 			}
 		}
 	}

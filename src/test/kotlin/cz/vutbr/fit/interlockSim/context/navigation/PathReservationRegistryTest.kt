@@ -16,6 +16,7 @@ import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -191,7 +192,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 			// Verify first blocks are NOT owned by train2
 			blocks.dropLast(1).forEach { block ->
 				val owner = registry.getOwner(block)
-				assertThat(owner == null || owner != "train2").isEqualTo(true)
+				assertThat(owner == null || owner != "train2").isTrue()
 			}
 
 			// Verify train1 still owns last block

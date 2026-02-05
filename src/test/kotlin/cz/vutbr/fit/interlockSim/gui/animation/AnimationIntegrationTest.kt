@@ -125,9 +125,13 @@ class AnimationIntegrationTest : KoinTestBase() {
 		// When: Getting current animation state
 		val state = animationController.getCurrentState()
 
-		// Then: State should contain signal states
+		// Then: State should contain signal states from the simulation context
 		assertThat(state.signalStates).isNotEmpty()
-		assertThat(state.signalStates.size).isGreaterThan(0)
+		// Verify each signal state has valid properties (semaphore and signal)
+		state.signalStates.values.forEach { signalState ->
+			assertThat(signalState.semaphore).isNotNull()
+			assertThat(signalState.signal).isNotNull()
+		}
 	}
 
 	@Test

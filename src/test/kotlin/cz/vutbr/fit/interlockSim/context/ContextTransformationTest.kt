@@ -285,14 +285,12 @@ class ContextTransformationTest : KoinTestBase() {
 
 				// Check cell at Point(1, 1) - MUST be DynamicInOut in grid
 				val cellAt1 = grid.getCellAt(1, 1)
-				assertThat(cellAt1).isNotNull()
 				assertThat(cellAt1!!).isInstanceOf(DynamicInOut::class)
 				val dynInOut1 = cellAt1 as DynamicInOut
 				assertThat(dynInOut1.staticRef).isNotNull()
 
 				// Check cell at Point(5, 5) - MUST be DynamicInOut in grid
 				val cellAt2 = grid.getCellAt(5, 5)
-				assertThat(cellAt2).isNotNull()
 				assertThat(cellAt2!!).isInstanceOf(DynamicInOut::class)
 				val dynInOut2 = cellAt2 as DynamicInOut
 				assertThat(dynInOut2.staticRef).isNotNull()

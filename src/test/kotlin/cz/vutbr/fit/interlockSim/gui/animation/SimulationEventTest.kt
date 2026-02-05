@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import org.junit.jupiter.api.Test
 
@@ -182,7 +183,7 @@ class SimulationEventTest {
 		)
 
 		assertThat(event1).isEqualTo(event2)
-		assertThat(event1 == event3).isEqualTo(false)
+		assertThat(event1).isNotEqualTo(event3)
 	}
 
 	@Test

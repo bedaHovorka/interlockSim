@@ -75,7 +75,6 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
-			assertThat(path).isNotNull()
 
 			// Extract blocks from path returned by TrainNavigationService
 			val blocksFromPath = path!!.filterIsInstance<TrackSection>()
@@ -145,14 +144,14 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			pathService.reservePath("train1", inOutA, inOutB)
 
 			// Assert - TrainNavigationService is instantiated and functional
-			assertThat(trainService).isNotNull()
 			assertThat(trainService).isInstanceOf(TrainNavigationService::class)
 
 			// Verify the service can perform ownership checks
 			// Note: isPathReservedForTrain requires a path to a semaphore to exist
 			// Our test context has no semaphore, so it returns false (no topological path)
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
-			// This correctly returns false because there's no semaphore in the test network
+			// Assert - This correctly returns false because there's no semaphore in the test network
+			assertThat(isReserved).isEqualTo(false)
 		}
 	}
 

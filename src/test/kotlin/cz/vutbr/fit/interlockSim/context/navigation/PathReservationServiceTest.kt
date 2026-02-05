@@ -1114,7 +1114,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result1 = service.reservePath("train1", inOut1, inOut2)
 			assertThat(result1).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val train1Blocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
-			assertThat(train1Blocks.size).isGreaterThan(0)
+			assertThat(train1Blocks).isNotEmpty()
+			// Verify all blocks are owned by train1
+			train1Blocks.forEach { block ->
+				assertThat(block.trainName).isEqualTo("train1")
+			}
 
 			// Step 2: Train2 attempts same explicit path
 			val result2 = service.reservePath("train2", inOut1, inOut2)
@@ -1529,8 +1533,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Assert
 			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 			val success = result as PathReservationService.ReservationResult.Success
-			assertThat(success.reservedBlocks).isNotNull()
-			assertThat(success.reservedBlocks.size).isGreaterThan(0)
+			assertThat(success.reservedBlocks).isNotEmpty()
+			// Verify all blocks are dynamic wrappers
+			success.reservedBlocks.forEach { block ->
+				assertThat(block).isInstanceOf<DynamicTrackBlock>()
+			}
 		}
 
 		@Test

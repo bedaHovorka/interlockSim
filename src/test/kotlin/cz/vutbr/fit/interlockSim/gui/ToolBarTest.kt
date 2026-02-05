@@ -62,9 +62,8 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Verify toolbar is not floatable
 			assertThat(toolBar.isFloatable).isFalse()
-			
+
 			// Verify preferred size is set
-			assertThat(toolBar.preferredSize).isNotNull()
 			assertThat(toolBar.preferredSize.width).isEqualTo(100)
 			assertThat(toolBar.preferredSize.height).isEqualTo(30)
 		}
@@ -77,13 +76,18 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Count toggle buttons (excludes separators)
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
-			
+
 			// Toolbar should have multiple buttons:
-			// - Semaphore buttons (2 per spatial type)
+			// - Semaphore buttons (2 per spatial type: HORIZONTAL, VERTICAL)
 			// - Switch buttons (2 switch types × spatial types)
 			// - InOut buttons (2 per spatial type)
 			// - Grid toggle button
-			assertThat(toggleButtons.size).isGreaterThan(0)
+			// Expected: 2 + 4 + 2 + 1 = 9 buttons minimum
+			assertThat(toggleButtons.size).isGreaterThan(8)
+			// Verify all buttons have actions
+			toggleButtons.forEach { button ->
+				assertThat(button.action).isNotNull()
+			}
 		}
 	}
 
@@ -94,13 +98,13 @@ class ToolBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Find grid toggle button (last toggle button)
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
-			assertThat(toggleButtons.size).isGreaterThan(0)
-			
+			assertThat(toggleButtons.size).isGreaterThan(8) // Should have at least 9 buttons
+
 			val gridToggleButton = toggleButtons.last()
-			assertThat(gridToggleButton).isNotNull()
-			
-			// Verify action is set
+
+			// Verify action is set and button is configured correctly
 			assertThat(gridToggleButton.action).isNotNull()
+			assertThat(gridToggleButton.isSelected).isFalse() // Initially not selected
 		}
 	}
 

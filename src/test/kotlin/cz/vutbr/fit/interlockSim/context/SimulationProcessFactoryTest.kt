@@ -37,7 +37,6 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 	@DisplayName("factory is injectable from Koin")
 	fun factoryIsInjectable() {
 		// Assert
-		assertThat(processFactory).isNotNull()
 		assertThat(processFactory).isInstanceOf<DefaultSimulationProcessFactory>()
 	}
 
@@ -51,7 +50,6 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 		val mainProcess = processFactory.createMainProcess(mockContext)
 
 		// Assert
-		assertThat(mainProcess).isNotNull()
 		assertThat(mainProcess).isInstanceOf<Generator>()
 	}
 
@@ -69,7 +67,6 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 		val worker = processFactory.createInOutWorker(context, inOut)
 
 		// Assert
-		assertThat(worker).isNotNull()
 		assertThat(worker).isInstanceOf<InOutWorker>()
 	}
 }

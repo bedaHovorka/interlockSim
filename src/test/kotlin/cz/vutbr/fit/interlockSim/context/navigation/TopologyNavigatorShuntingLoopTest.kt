@@ -17,6 +17,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -119,7 +120,13 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 
 			// Assert: At least one forward path exists
 			assertThat(paths).isNotEmpty()
-			assertThat(paths.size).isGreaterThan(0)
+			// Verify each path is non-empty and contains TrackSections
+			paths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			// Log discovered paths for debugging
 			logger.info { "✓ Forward paths A → B: Found ${paths.size} path(s)" }
@@ -146,7 +153,13 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 
 			// Assert: At least one reverse path exists
 			assertThat(paths).isNotEmpty()
-			assertThat(paths.size).isGreaterThan(0)
+			// Verify each path is non-empty and contains TrackSections
+			paths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			// Log discovered paths for debugging
 			logger.info { "✓ Reverse paths B → A: Found ${paths.size} path(s)" }
@@ -173,8 +186,15 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			val forwardPaths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 100)
 
 			// Assert: Multiple paths exist (due to switches providing alternatives)
-			// Note: Exact count depends on TopologyNavigator's BFS traversal order
-			assertThat(forwardPaths.size).isGreaterThan(0)
+			// The vyhybna.xml has 2 switches, so expect at least 2 distinct paths
+			assertThat(forwardPaths.size).isGreaterThan(1)
+			// Verify all paths are non-empty and contain TrackSections
+			forwardPaths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			logger.info { "✓ Multiple paths A → B: ${forwardPaths.size} path(s) discovered" }
 

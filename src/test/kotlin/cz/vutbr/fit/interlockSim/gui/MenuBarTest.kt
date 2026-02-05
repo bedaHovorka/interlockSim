@@ -65,7 +65,6 @@ class MenuBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Get first menu (File)
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			assertThat(fileMenu).isNotNull()
 			assertThat(fileMenu.text).isEqualTo("File")
 		}
 	}
@@ -77,7 +76,6 @@ class MenuBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			// Get second menu (Help)
 			val helpMenu = menuBar.getMenu(1) as JMenu
-			assertThat(helpMenu).isNotNull()
 			assertThat(helpMenu.text).isEqualTo("Help")
 		}
 	}
@@ -97,7 +95,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find Save action
 			val saveItem = menuItems.find { it.text == "Save as..." }
-			assertThat(saveItem).isNotNull()
+			assertThat(saveItem!!.text).isEqualTo("Save as...")
 		}
 	}
 
@@ -116,7 +114,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find Exit action
 			val exitItem = menuItems.find { it.text == "Exit" }
-			assertThat(exitItem).isNotNull()
+			assertThat(exitItem!!.text).isEqualTo("Exit")
 		}
 	}
 
@@ -151,7 +149,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find Usage action
 			val usageItem = menuItems.find { it.text == "Usage" }
-			assertThat(usageItem).isNotNull()
+			assertThat(usageItem!!.text).isEqualTo("Usage")
 		}
 	}
 
@@ -170,7 +168,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find About action
 			val aboutItem = menuItems.find { it.text == "About" }
-			assertThat(aboutItem).isNotNull()
+			assertThat(aboutItem!!.text).isEqualTo("About")
 		}
 	}
 

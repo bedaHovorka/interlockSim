@@ -46,13 +46,8 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 	@Test
 	fun `Koin XMLContextFactory always returns same singleton instance`() {
 		val instance1 = get<EditingContextFactory>()
-		assertThat(instance1).isNotNull()
-
 		val instance2 = get<EditingContextFactory>()
-		assertThat(instance2).isNotNull()
-
 		val instance3 = get<EditingContextFactory>()
-		assertThat(instance3).isNotNull()
 
 		// Verify they are all the exact same instance (same reference)
 		assertThat(instance2).isSameInstanceAs(instance1)
@@ -68,10 +63,7 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 	@Test
 	fun `Koin EditingContextFactory is same instance as XMLContextFactory`() {
 		val xmlFactory = get<EditingContextFactory>()
-		assertThat(xmlFactory).isNotNull()
-
 		val editingFactory = get<EditingContextFactory>()
-		assertThat(editingFactory).isNotNull()
 
 		// Verify they are the exact same instance
 		assertThat(editingFactory).isSameInstanceAs(xmlFactory)
@@ -86,12 +78,9 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 	@Test
 	fun `Koin SimulationContextFactory is not same instance as XMLContextFactory`() {
 		val xmlFactory = get<EditingContextFactory>()
-		assertThat(xmlFactory).isNotNull()
-
 		val simulationFactory = get<SimulationContextFactory>()
-		assertThat(simulationFactory).isNotNull()
 
-		// Verify they are the exact same instance
+		// Verify they are not the same instance
 		assertThat(simulationFactory).isNotSameInstanceAs(xmlFactory)
 	}
 
@@ -107,13 +96,9 @@ class KoinSingletonConsistencyTest : KoinTestBase() {
 		val koinEditingFactory = get<EditingContextFactory>()
 		val koinSimulationFactory = get<SimulationContextFactory>()
 
-		// Verify all are non-null
-		assertThat(koinXmlFactory).isNotNull()
-		assertThat(koinEditingFactory).isNotNull()
-		assertThat(koinSimulationFactory).isNotNull()
-
-		// Verify all are the exact same instance
+		// Verify editing factory is same instance as XML factory
 		assertThat(koinEditingFactory).isSameInstanceAs(koinXmlFactory)
+		// Verify simulation factory is different instance
 		assertThat(koinSimulationFactory).isNotSameInstanceAs(koinXmlFactory)
 	}
 }

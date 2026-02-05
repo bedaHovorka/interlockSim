@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import org.junit.jupiter.api.Test
@@ -56,9 +57,9 @@ class AnimationColorsTest {
 		val occupiedColor = AnimationColors.forTrackState(TrackFacility.State.OCCUPIED)
 
 		// Verify all colors are distinct
-		assertThat(freeColor == reservedColor).isEqualTo(false)
-		assertThat(freeColor == occupiedColor).isEqualTo(false)
-		assertThat(reservedColor == occupiedColor).isEqualTo(false)
+		assertThat(freeColor).isNotEqualTo(reservedColor)
+		assertThat(freeColor).isNotEqualTo(occupiedColor)
+		assertThat(reservedColor).isNotEqualTo(occupiedColor)
 	}
 
 	// ========== Signal State Color Tests ==========

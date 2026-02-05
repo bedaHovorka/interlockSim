@@ -58,7 +58,6 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("status bar has correct preferred size")
 	fun statusBarHasCorrectPreferredSize() {
 		// Verify preferred size is set
-		assertThat(statusBar.preferredSize).isNotNull()
 		assertThat(statusBar.preferredSize.width).isEqualTo(100)
 		assertThat(statusBar.preferredSize.height).isEqualTo(25)
 	}
