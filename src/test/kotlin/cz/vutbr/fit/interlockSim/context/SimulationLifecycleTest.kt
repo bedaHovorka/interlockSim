@@ -9,9 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
@@ -132,14 +134,10 @@ class SimulationLifecycleTest : KoinTestBase() {
 
 		// Try to stop without starting
 		// Should throw exception due to requireSimulationNotNull check
-		try {
+		assertFailure {
 			simulationContext.stop()
-			throw AssertionError("stop() should throw when mainProcess is null")
-		} catch (e: Exception) {
-			// Expected behavior - stop() checks that mainProcess is initialized
-			// Message should contain "Main process must be initialized"
-			assertThat(e.message).isNotNull()
-		}
+		}.message()
+			.isNotNull()
 	}
 
 	/**

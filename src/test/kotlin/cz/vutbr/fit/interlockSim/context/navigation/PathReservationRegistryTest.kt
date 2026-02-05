@@ -9,8 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -216,16 +218,13 @@ class PathReservationRegistryTest : KoinTestBase() {
 			registry.registerAtomic("train1", blocks)
 
 			// Act & Assert
-			try {
+			assertFailure {
 				@Suppress("DEPRECATION")
 				registry.register("train2", blocks)
-				throw AssertionError("Expected IllegalStateException")
-			} catch (e: IllegalStateException) {
-				// Expected
-				assertThat(e.message).isEqualTo(
+			}.isInstanceOf(IllegalStateException::class)
+				.hasMessage(
 					"Block ${blocks.first()} already reserved by train1 (attempted reservation by train2)"
 				)
-			}
 		}
 	}
 

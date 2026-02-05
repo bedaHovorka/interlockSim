@@ -10,10 +10,14 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
+import assertk.all
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.hasMessage
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
@@ -121,53 +125,35 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `throws SimulationException with FATAL severity`() {
-			// Act
-			val exception =
-				try {
-					requireSimulation(false, Severity.FATAL) { "Fatal error" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: SimulationException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(SimulationException::class)
-			assertThat(exception.message).isEqualTo("Fatal error")
-			assertThat(exception.severity).isEqualTo(Severity.FATAL)
+			// Act & Assert
+			assertFailure {
+				requireSimulation(false, Severity.FATAL) { "Fatal error" }
+			}.isInstanceOf<SimulationException>().all {
+				hasMessage("Fatal error")
+				prop(SimulationException::severity).isEqualTo(Severity.FATAL)
+			}
 		}
 
 		@Test
 		fun `throws SimulationException with ERROR severity`() {
-			// Act
-			val exception =
-				try {
-					requireSimulation(false, Severity.ERROR) { "Error message" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: SimulationException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(SimulationException::class)
-			assertThat(exception.message).isEqualTo("Error message")
-			assertThat(exception.severity).isEqualTo(Severity.ERROR)
+			// Act & Assert
+			assertFailure {
+				requireSimulation(false, Severity.ERROR) { "Error message" }
+			}.isInstanceOf<SimulationException>().all {
+				hasMessage("Error message")
+				prop(SimulationException::severity).isEqualTo(Severity.ERROR)
+			}
 		}
 
 		@Test
 		fun `throws SimulationException with WARN severity`() {
-			// Act
-			val exception =
-				try {
-					requireSimulation(false, Severity.WARN) { "Warning message" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: SimulationException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(SimulationException::class)
-			assertThat(exception.message).isEqualTo("Warning message")
-			assertThat(exception.severity).isEqualTo(Severity.WARN)
+			// Act & Assert
+			assertFailure {
+				requireSimulation(false, Severity.WARN) { "Warning message" }
+			}.isInstanceOf<SimulationException>().all {
+				hasMessage("Warning message")
+				prop(SimulationException::severity).isEqualTo(Severity.WARN)
+			}
 		}
 
 		@Test
@@ -345,53 +331,35 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `throws EditorException with FATAL severity`() {
-			// Act
-			val exception =
-				try {
-					requireEditor(false, Severity.FATAL) { "Fatal editor error" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: EditorException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(EditorException::class)
-			assertThat(exception.message).isEqualTo("Fatal editor error")
-			assertThat(exception.severity).isEqualTo(Severity.FATAL)
+			// Act & Assert
+			assertFailure {
+				requireEditor(false, Severity.FATAL) { "Fatal editor error" }
+			}.isInstanceOf<EditorException>().all {
+				hasMessage("Fatal editor error")
+				prop(EditorException::severity).isEqualTo(Severity.FATAL)
+			}
 		}
 
 		@Test
 		fun `throws EditorException with ERROR severity`() {
-			// Act
-			val exception =
-				try {
-					requireEditor(false, Severity.ERROR) { "Editor error" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: EditorException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(EditorException::class)
-			assertThat(exception.message).isEqualTo("Editor error")
-			assertThat(exception.severity).isEqualTo(Severity.ERROR)
+			// Act & Assert
+			assertFailure {
+				requireEditor(false, Severity.ERROR) { "Editor error" }
+			}.isInstanceOf<EditorException>().all {
+				hasMessage("Editor error")
+				prop(EditorException::severity).isEqualTo(Severity.ERROR)
+			}
 		}
 
 		@Test
 		fun `throws EditorException with WARN severity`() {
-			// Act
-			val exception =
-				try {
-					requireEditor(false, Severity.WARN) { "Editor warning" }
-					throw AssertionError("Expected exception to be thrown")
-				} catch (e: EditorException) {
-					e
-				}
-
-			// Assert
-			assertThat(exception).isInstanceOf(EditorException::class)
-			assertThat(exception.message).isEqualTo("Editor warning")
-			assertThat(exception.severity).isEqualTo(Severity.WARN)
+			// Act & Assert
+			assertFailure {
+				requireEditor(false, Severity.WARN) { "Editor warning" }
+			}.isInstanceOf<EditorException>().all {
+				hasMessage("Editor warning")
+				prop(EditorException::severity).isEqualTo(Severity.WARN)
+			}
 		}
 
 		@Test
@@ -611,44 +579,22 @@ class RequireFunctionsTest : KoinTestBase() {
 
 		@Test
 		fun `different exception types are thrown by different functions`() {
-			// Act - capture different exception types
-			val simulationException =
-				try {
-					requireSimulation(false) { "Simulation error" }
-					throw AssertionError("Expected SimulationException")
-				} catch (e: SimulationException) {
-					e
-				}
+			// Act & Assert - verify all different exception types
+			assertFailure {
+				requireSimulation(false) { "Simulation error" }
+			}.isInstanceOf(SimulationException::class)
 
-			val editorException =
-				try {
-					requireEditor(false) { "Editor error" }
-					throw AssertionError("Expected EditorException")
-				} catch (e: EditorException) {
-					e
-				}
+			assertFailure {
+				requireEditor(false) { "Editor error" }
+			}.isInstanceOf(EditorException::class)
 
-			val argumentException =
-				try {
-					requireValidArgument(false) { "Argument error" }
-					throw AssertionError("Expected IllegalArgumentException")
-				} catch (e: IllegalArgumentException) {
-					e
-				}
+			assertFailure {
+				requireValidArgument(false) { "Argument error" }
+			}.isInstanceOf(IllegalArgumentException::class)
 
-			val stateException =
-				try {
-					requireValidState(false) { "State error" }
-					throw AssertionError("Expected IllegalStateException")
-				} catch (e: IllegalStateException) {
-					e
-				}
-
-			// Assert - verify all exceptions are different types
-			assertThat(simulationException).isInstanceOf(SimulationException::class)
-			assertThat(editorException).isInstanceOf(EditorException::class)
-			assertThat(argumentException).isInstanceOf(IllegalArgumentException::class)
-			assertThat(stateException).isInstanceOf(IllegalStateException::class)
+			assertFailure {
+				requireValidState(false) { "State error" }
+			}.isInstanceOf(IllegalStateException::class)
 		}
 
 		@Test
