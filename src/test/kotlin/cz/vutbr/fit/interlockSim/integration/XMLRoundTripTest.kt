@@ -141,9 +141,9 @@ class XMLRoundTripTest : KoinTestBase() {
 		assertThat(switchType).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		val switchSpatialType: Cell.SpatialType = switch.getSpatialType()
 		assertThat(switchSpatialType).isEqualTo(Cell.SpatialType.HORIZONTAL)
-		// NOTE: Cell names are not preserved in XML serialization - see issue #250
-		// val switchName: String = switch.getName()
-		// assertThat(switchName).isEqualTo("Switch_001")
+		// Cell names ARE now preserved in XML serialization (fixed in PR #306)
+		val switchName: String = switch.getName()
+		assertThat(switchName).isEqualTo("Switch_001")
 	}
 
 	/**
@@ -196,11 +196,11 @@ class XMLRoundTripTest : KoinTestBase() {
 		assertThat(sem1Orientation).isTrue()
 		val sem2Orientation = sem2.getOrientation()
 		assertThat(sem2Orientation).isEqualTo(false)
-		// NOTE: Cell names are not preserved in XML serialization - see issue #250
-		// val sem1Name = sem1.getName()
-		// assertThat(sem1Name).isEqualTo("Signal_Oriented")
-		// val sem2Name = sem2.getName()
-		// assertThat(sem2Name).isEqualTo("Signal_NotOriented")
+		// Cell names ARE now preserved in XML serialization (fixed in PR #306)
+		val sem1Name = sem1.getName()
+		assertThat(sem1Name).isEqualTo("Signal_Oriented")
+		val sem2Name = sem2.getName()
+		assertThat(sem2Name).isEqualTo("Signal_NotOriented")
 	}
 
 	/**
