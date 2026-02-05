@@ -25,7 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
@@ -80,8 +80,8 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `path rejects duplicate tracks`() {
 			// Arrange
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			val path = ArrayPath(mockContext)
 
@@ -117,12 +117,12 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `path with disconnected tracks fails validation`() {
 			// Arrange - create two separate simple tracks not connected
-			val end1a = MockNodeCell("end1a")
-			val end1b = MockNodeCell("end1b")
+			val end1a = createMockNodeCell(name = "end1a")
+			val end1b = createMockNodeCell(name = "end1b")
 			val track1 = SimpleTrackBlock(end1a, end1b, 100.0, 80.0, 80.0)
 
-			val end2a = MockNodeCell("end2a")
-			val end2b = MockNodeCell("end2b")
+			val end2a = createMockNodeCell(name = "end2a")
+			val end2b = createMockNodeCell(name = "end2b")
 			val track2 = SimpleTrackBlock(end2a, end2b, 150.0, 80.0, 80.0)
 
 			// Act & Assert - these are separate objects with no connection
@@ -137,8 +137,8 @@ class PathValidationTest : KoinTestBase() {
 			val path = ArrayPath(mockContext)
 
 			// Act - attempt to create circular reference by adding path elements
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			path.addLast(track)
 
@@ -187,8 +187,8 @@ class PathValidationTest : KoinTestBase() {
 		@Test
 		fun `path operation respects track state changes`() {
 			// Arrange
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
 			// Act - query track properties
@@ -232,12 +232,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path modification preserves iterator state`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			// Act - add elements and get iterator
@@ -288,8 +288,8 @@ class PathValidationTest : KoinTestBase() {
 		fun `concurrent path reads are safe`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			path.addLast(track)
 
@@ -305,12 +305,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path clear operation works safely`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			path.addLast(track1)
@@ -333,8 +333,8 @@ class PathValidationTest : KoinTestBase() {
 		fun `path with single track segment is valid`() {
 			// Arrange - single track represents minimum viable path segment
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 50.0, 80.0, 80.0)
 
 			// Act
@@ -400,12 +400,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path length calculation accounts for all track segments`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			// Act
@@ -426,16 +426,16 @@ class PathValidationTest : KoinTestBase() {
 		fun `path maintains deque ordering semantics`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
-			val end5 = MockNodeCell("end5")
-			val end6 = MockNodeCell("end6")
+			val end5 = createMockNodeCell(name = "end5")
+			val end6 = createMockNodeCell(name = "end6")
 			val track3 = SimpleTrackBlock(end5, end6, 200.0, 80.0, 80.0)
 
 			// Act - add elements in order
@@ -456,12 +456,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path contains query is accurate`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val otherTrack = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			// Act
@@ -476,12 +476,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path remove operations maintain consistency`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			path.addLast(track1)
@@ -501,12 +501,12 @@ class PathValidationTest : KoinTestBase() {
 		fun `path poll operations follow FIFO semantics`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
 			path.addLast(track1)
@@ -529,14 +529,14 @@ class PathValidationTest : KoinTestBase() {
 			// Act & Assert
 			assertThat(path.size).isEqualTo(0)
 
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			path.addLast(track1)
 			assertThat(path.size).isEqualTo(1)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 			path.addLast(track2)
 			assertThat(path.size).isEqualTo(2)
@@ -556,8 +556,8 @@ class PathValidationTest : KoinTestBase() {
 
 			// Act - add 100 tracks to path
 			for (i in 0..99) {
-				val end1 = MockNodeCell("start_$i")
-				val end2 = MockNodeCell("end_$i")
+				val end1 = createMockNodeCell(name = "start_$i")
+				val end2 = createMockNodeCell(name = "end_$i")
 				val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 				path.addLast(track)
 			}
@@ -575,8 +575,8 @@ class PathValidationTest : KoinTestBase() {
 			// Arrange - Note: SimpleTrackBlock enforces minimum length > 0
 			// So we test with a valid length
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			// Use valid minimum length
 			val minTrack = SimpleTrackBlock(end1, end2, 10.0, 80.0, 80.0)
 
@@ -591,16 +591,16 @@ class PathValidationTest : KoinTestBase() {
 		fun `path descending iterator reverses order correctly`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
-			val end3 = MockNodeCell("end3")
-			val end4 = MockNodeCell("end4")
+			val end3 = createMockNodeCell(name = "end3")
+			val end4 = createMockNodeCell(name = "end4")
 			val track2 = SimpleTrackBlock(end3, end4, 150.0, 80.0, 80.0)
 
-			val end5 = MockNodeCell("end5")
-			val end6 = MockNodeCell("end6")
+			val end5 = createMockNodeCell(name = "end5")
+			val end6 = createMockNodeCell(name = "end6")
 			val track3 = SimpleTrackBlock(end5, end6, 200.0, 80.0, 80.0)
 
 			path.addLast(track1)
@@ -620,8 +620,8 @@ class PathValidationTest : KoinTestBase() {
 		fun `path toString produces meaningful representation`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			path.addLast(track)
 
@@ -752,8 +752,8 @@ class PathValidationTest : KoinTestBase() {
 		fun `path provides iterator for traversal`() {
 			// Arrange
 			val path = ArrayPath(mockContext)
-			val end1 = MockNodeCell("end1")
-			val end2 = MockNodeCell("end2")
+			val end1 = createMockNodeCell(name = "end1")
+			val end2 = createMockNodeCell(name = "end2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			path.addLast(track)
 

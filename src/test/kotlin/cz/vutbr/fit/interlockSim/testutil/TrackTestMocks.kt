@@ -6,7 +6,22 @@
  *
  * Railway Interlocking Simulator - Test Utilities
  *
- * Mock implementations for track testing
+ * Test utility mock factories and delegation wrappers for railway simulation testing.
+ *
+ * ## Contents
+ *
+ * - **createMockNodeCell()**: MockK factory for NodeCell mocks (track endpoints)
+ *   - Replaces manual MockNodeCell class (Phase 2 migration, 2026-02-05)
+ *   - Pattern: Follows createMockTrackBlock() from Phase 1
+ *
+ * ## MockK Migration History
+ *
+ * - Phase 1 (2026-01-20): Mockito → MockK (8 simulation tests)
+ * - Phase 1 (2026-02-05): MockTrainOccupant, MockTrackBlock → MockK factories (Issue #332)
+ * - Phase 2 (2026-02-05): MockNodeCell → createMockNodeCell(), remove Mockito dependency
+ *
+ * @since 2006/2007 (Original thesis project)
+ * @see Issue #332 - MockK migration plan
  */
 package cz.vutbr.fit.interlockSim.testutil
 
@@ -18,15 +33,61 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 
 /**
+ * Creates a mock NodeCell for testing track operations.
+ *
+ * This factory function replaces direct instantiation of MockNodeCell with a factory pattern
+ * following the approach established in Phase 1 (Issue #332).
+ *
+ * NodeCell represents connection points (endpoints) on a track in the railway network.
+ * This mock provides all necessary behavior for track testing including:
+ * - Name and speed configuration
+ * - Spatial type (HORIZONTAL by default)
+ * - Segment joining (F and A segments for HORIZONTAL)
+ * - Empty follower sets (no routing by default)
+ *
+ * Note: Returns a concrete MockNodeCell instance (not a pure MockK mock) because NodeCell
+ * is an abstract class. This preserves the structure of the original implementation while
+ * providing the factory pattern for consistent test setup.
+ *
+ * @param name Node name (default: "MockNode")
+ * @param speed Maximum speed through node in m/s (default: 80.0)
+ * @param spatialType Spatial orientation (default: HORIZONTAL)
+ * @return Concrete MockNodeCell instance implementing NodeCell and DynamicPathSeparator
+ *
+ * @since Phase 2 (2026-02-05) - MockK migration
+ * @see createMockTrackBlock Similar factory pattern from Phase 1
+ *
+ * Example usage:
+ * ```kotlin
+ * val node = createMockNodeCell(name = "TestNode", speed = 100.0)
+ * assertThat(node.getName()).isEqualTo("TestNode")
+ * assertThat(node.allowedSpeed()).isEqualTo(100.0)
+ * ```
+ */
+fun createMockNodeCell(
+	name: String = "MockNode",
+	speed: Double = 80.0,
+	spatialType: SpatialType = SpatialType.HORIZONTAL
+): MockNodeCell = MockNodeCell(name, speed, spatialType)
+
+/**
  * Mock implementation of NodeCell for testing track endpoints.
  *
  * NodeCell is a PathSeparator that represents connection points on a track.
  * This mock provides minimal implementation for track testing.
+ *
+ * Note: This class is preserved from the original implementation to maintain compatibility
+ * with abstract NodeCell. Use createMockNodeCell() factory function for consistent test setup.
+ *
+ * @param name Node name
+ * @param speed Maximum speed through node in m/s
+ * @param spatialType Spatial orientation (default: HORIZONTAL)
  */
 class MockNodeCell(
 	private val name: String,
-	private val speed: Double = 80.0
-) : NodeCell(SpatialType.HORIZONTAL),
+	private val speed: Double = 80.0,
+	spatialType: SpatialType = SpatialType.HORIZONTAL
+) : NodeCell(spatialType),
 	DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Segment?,

@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
@@ -84,10 +84,10 @@ class RaceConditionTest : KoinTestBase() {
 		private const val STRESS_TEST_ITERATIONS = 10
 	}
 
-	private val end1 = MockNodeCell("End1")
-	private val end2 = MockNodeCell("End2")
-	private val end3 = MockNodeCell("End3")
-	private val end4 = MockNodeCell("End4")
+	private val end1 = createMockNodeCell(name = "End1")
+	private val end2 = createMockNodeCell(name = "End2")
+	private val end3 = createMockNodeCell(name = "End3")
+	private val end4 = createMockNodeCell(name = "End4")
 
 	/**
 	 * Nested tests for concurrent path reservation attempts.
@@ -667,7 +667,7 @@ class RaceConditionTest : KoinTestBase() {
 						try {
 							startLatch.await()
 
-							val cell = MockNodeCell("Cell$i")
+							val cell = createMockNodeCell(name = "Cell$i")
 							val x = 10 + i
 							val y = 10 + i
 

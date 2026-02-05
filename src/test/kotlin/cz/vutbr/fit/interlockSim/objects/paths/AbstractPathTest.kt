@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -68,9 +69,9 @@ class AbstractPathTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		mockContext = createMockSimulationContext()
-		end1 = MockNodeCell("End1")
-		end2 = MockNodeCell("End2")
-		end3 = MockNodeCell("End3")
+		end1 = createMockNodeCell(name = "End1")
+		end2 = createMockNodeCell(name = "End2")
+		end3 = createMockNodeCell(name = "End3")
 	}
 
 	/**
@@ -806,7 +807,7 @@ class AbstractPathTest : KoinTestBase() {
 				.isTrue()
 
 			// Assert non-existent element
-			val otherEnd = MockNodeCell("Other")
+			val otherEnd = createMockNodeCell(name = "Other")
 			assertThat(path.contains(otherEnd))
 				.withMessage("path should not contain unrelated element")
 				.isFalse()

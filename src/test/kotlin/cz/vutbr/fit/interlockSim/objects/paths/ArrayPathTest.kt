@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -77,9 +78,9 @@ class ArrayPathTest : KoinTestBase() {
 	fun setUp() {
 		mockContext = createMockSimulationContext()
 		path = ArrayPath(mockContext)
-		end1 = MockNodeCell("End1")
-		end2 = MockNodeCell("End2")
-		end3 = MockNodeCell("End3")
+		end1 = createMockNodeCell(name = "End1")
+		end2 = createMockNodeCell(name = "End2")
+		end3 = createMockNodeCell(name = "End3")
 		semaphore1 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 		semaphore2 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 		track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0)

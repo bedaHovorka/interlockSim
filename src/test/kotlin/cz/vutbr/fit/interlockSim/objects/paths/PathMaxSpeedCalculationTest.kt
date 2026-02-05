@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -75,7 +75,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		fun `maxSpeed accounts for switch branch speed`() {
 			// Arrange - switch with main speed 80.0, branch speed 50.0
 			// Use MockNodeCell with 50.0 speed to simulate branch speed limit
-			val end1 = MockNodeCell("End1", speed = 50.0)
+			val end1 = createMockNodeCell(name = "End1", speed = 50.0)
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -103,9 +103,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed through switch main line uses main speed`() {
 			// Arrange - switch with main speed 100.0, branch speed 40.0
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -137,7 +137,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		fun `maxSpeed with multiple switches takes minimum`() {
 			// Arrange - two switches with different speeds
 			// Use MockNodeCell with slowest branch speed (40.0)
-			val end1 = MockNodeCell("End1", speed = 40.0)
+			val end1 = createMockNodeCell(name = "End1", speed = 40.0)
 			val switch1 =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -175,7 +175,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with switch and slow track takes minimum`() {
 			// Arrange - switch with fast branch but slow track
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -183,7 +183,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 					mainSpeed = 100.0,
 					branchSpeed = 80.0
 				)
-			val slowTrack = SimpleTrackBlock(end1, MockNodeCell("End2"), 200.0, 30.0, 30.0) // slow track
+			val slowTrack = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 200.0, 30.0, 30.0) // slow track
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -210,9 +210,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with multiple speed limits returns minimum`() {
 			// Arrange - tracks with different speeds
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 100.0, 100.0) // fast
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 40.0, 40.0) // slow
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -234,10 +234,10 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with three tracks takes global minimum`() {
 			// Arrange - three tracks with different speeds
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
-			val end4 = MockNodeCell("End4")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
+			val end4 = createMockNodeCell(name = "End4")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 60.0, 60.0)
 			val track3 = SimpleTrackBlock(end3, end4, 200.0, 50.0, 50.0) // slowest
@@ -262,9 +262,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with uniform speed returns that speed`() {
 			// Arrange - all tracks have same speed
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 70.0, 70.0)
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -287,8 +287,8 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		fun `maxSpeed calculation is consistent across separators`() {
 			// Arrange - test that maxSpeed uses minimum of track speeds
 			// Path must start and end with separators (first/last)
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 60.0, 60.0)
 			val staticSemaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 			val semaphore = createConstantInstance(staticSemaphore, Signal.FREE)
@@ -319,11 +319,11 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with curved track segments respects curve limits`() {
 			// Arrange - simulate curved track with reduced speed
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val curvedTrack =
 				SimpleTrackBlock(
 					end1,
-					MockNodeCell("End2"),
+					createMockNodeCell(name = "End2"),
 					150.0, // length
 					45.0, // maxSpeed1 - curve speed limit
 					45.0 // maxSpeed2
@@ -345,9 +345,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with S-curve uses lowest curve speed`() {
 			// Arrange - S-curve with two curved sections
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val curve1 = SimpleTrackBlock(end1, end2, 120.0, 50.0, 50.0) // first curve
 			val curve2 = SimpleTrackBlock(end2, end3, 130.0, 40.0, 40.0) // tighter curve
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -369,9 +369,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with straight and curved sections uses minimum`() {
 			// Arrange - mix of straight and curved track
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val straightTrack = SimpleTrackBlock(end1, end2, 200.0, 100.0, 100.0) // straight, fast
 			val curvedTrack = SimpleTrackBlock(end2, end3, 150.0, 55.0, 55.0) // curved, slower
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -401,8 +401,8 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with single track returns track speed`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 65.0, 65.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 65.0, 65.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -420,12 +420,12 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with very long path maintains minimum`() {
 			// Arrange - long path with one slow section
-			val start = MockNodeCell("Start")
+			val start = createMockNodeCell(name = "Start")
 			val pathWithSlow = ArrayPath(mockContext)
 			pathWithSlow.addLast(start)
 
 			// Add one slow track at the beginning
-			val slowEnd = MockNodeCell("SlowEnd")
+			val slowEnd = createMockNodeCell(name = "SlowEnd")
 			val slowTrack = SimpleTrackBlock(start, slowEnd, 100.0, 35.0, 35.0)
 			pathWithSlow.addLast(slowTrack)
 			pathWithSlow.addLast(slowEnd)
@@ -433,7 +433,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 			// Add several fast tracks
 			var current = slowEnd
 			for (i in 1..5) {
-				val next = MockNodeCell("Fast$i")
+				val next = createMockNodeCell(name = "Fast$i")
 				val track = SimpleTrackBlock(current, next, 200.0, 100.0, 100.0)
 				pathWithSlow.addLast(track)
 				pathWithSlow.addLast(next)
@@ -455,8 +455,8 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed with high speed track is limited by separator`() {
 			// Arrange - very fast track, but separator limits speed
-			val end1 = MockNodeCell("End1") // separator with default speed
-			val fastTrack = SimpleTrackBlock(end1, MockNodeCell("End2"), 500.0, 200.0, 200.0)
+			val end1 = createMockNodeCell(name = "End1") // separator with default speed
+			val fastTrack = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 500.0, 200.0, 200.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -474,8 +474,8 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed calculation includes path length information`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 250.0, 75.0, 75.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 250.0, 75.0, 75.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -503,9 +503,9 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		@Test
 		fun `maxSpeed through station approach with speed reduction`() {
 			// Arrange - simulate station approach with progressive speed reduction
-			val end1 = MockNodeCell("Approach")
-			val end2 = MockNodeCell("Station Entry")
-			val end3 = MockNodeCell("Platform")
+			val end1 = createMockNodeCell(name = "Approach")
+			val end2 = createMockNodeCell(name = "Station Entry")
+			val end3 = createMockNodeCell(name = "Platform")
 			val approachTrack = SimpleTrackBlock(end1, end2, 500.0, 90.0, 90.0) // approach
 			val stationTrack = SimpleTrackBlock(end2, end3, 200.0, 40.0, 40.0) // station
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -528,7 +528,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		fun `maxSpeed through diverging junction uses branch speeds`() {
 			// Arrange - junction with two diverging routes
 			// Use MockNodeCell with branch speed (40.0)
-			val end1 = MockNodeCell("Junction", speed = 40.0)
+			val end1 = createMockNodeCell(name = "Junction", speed = 40.0)
 			val switchJunction =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -557,7 +557,7 @@ class PathMaxSpeedCalculationTest : KoinTestBase() {
 		fun `maxSpeed with mixed switch types takes minimum`() {
 			// Arrange - path through different switch types
 			// Use MockNodeCell with slowest branch speed (35.0)
-			val end1 = MockNodeCell("Start", speed = 35.0)
+			val end1 = createMockNodeCell(name = "Start", speed = 35.0)
 			val simpleSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,

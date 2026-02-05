@@ -18,7 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -77,8 +77,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setUpPath reserves tracks from starting separator`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -101,8 +101,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setUpPath is idempotent for already set path`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -125,10 +125,10 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setUpPath validates path structure`() {
 			// Arrange - valid path structure
-			val end1 = MockNodeCell("End1")
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end2 = MockNodeCell("End2")
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track1 = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end2 = createMockNodeCell(name = "End2")
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -151,9 +151,9 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setUpPath processes all tracks in sequence`() {
 			// Arrange - multiple tracks
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
@@ -188,8 +188,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `cancelPathSetup releases track reservations`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -211,8 +211,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `cancelPathSetup is idempotent for non-setup path`() {
 			// Arrange - path never set up
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -234,10 +234,10 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `cancelPathSetup processes all tracks in sequence`() {
 			// Arrange - multiple tracks
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -261,10 +261,10 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `partial path setup can be cancelled`() {
 			// Arrange - simulating partial setup scenario
-			val end1 = MockNodeCell("End1")
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end2 = MockNodeCell("End2")
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track1 = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end2 = createMockNodeCell(name = "End2")
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -302,8 +302,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `isFreeFrom checks track availability`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -325,8 +325,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `isSetUpPath checks reservation state`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -348,8 +348,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `isFreeFrom returns false when path is occupied`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -372,8 +372,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `isSetUpPath returns true after setup`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -404,8 +404,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `path setup failure leaves tracks in consistent state`() {
 			// Arrange - path that may fail setup
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -429,10 +429,10 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `tracks remain accessible after failed setup`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end2 = MockNodeCell("End2")
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track1 = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end2 = createMockNodeCell(name = "End2")
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -457,8 +457,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `path structure preserved after cancellation`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -483,9 +483,9 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `path elements remain in order after operations`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val track1 = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end2 = createMockNodeCell(name = "End2")
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -521,8 +521,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setup followed by teardown returns path to initial state`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -545,8 +545,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `multiple setup-teardown cycles maintain consistency`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -570,8 +570,8 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `concurrent path setup attempts are serialized`() {
 			// Arrange - single path instance
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -594,10 +594,10 @@ class PathSetupTeardownTest : KoinTestBase() {
 		@Test
 		fun `setup requires all tracks to be available`() {
 			// Arrange - path with multiple tracks
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
