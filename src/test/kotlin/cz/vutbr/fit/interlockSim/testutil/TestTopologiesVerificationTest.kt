@@ -20,18 +20,18 @@ import org.junit.jupiter.api.Test
 class TestTopologiesVerificationTest : KoinTestBase() {
 
 	@Test
-	@DisplayName("yJunctionWithSwitch creates topology with 4 InOuts and 1 switch")
+	@DisplayName("yJunctionWithSwitch creates topology with 3 InOuts and 1 switch (diverging Y)")
 	fun yJunctionWithSwitch_createsCorrectTopology() {
 		// Act
 		TestTopologies.yJunctionWithSwitch().use { context ->
-			// Assert - Verify structure
-			assertThat(context.getInOuts()).hasSize(4)
+			// Assert - Verify structure (1 entry + 2 exits = 3 InOuts)
+			assertThat(context.getInOuts()).hasSize(3)
 			val inOuts = context.getInOuts()
 			val names = inOuts.map { it.toString() }
 			// Names are prefixed with "InOut:"
-			assertThat(names).containsAtLeast("InOut:EntryA", "InOut:EntryB", "InOut:ExitC", "InOut:ExitD")
+			assertThat(names).containsAtLeast("InOut:Entry", "InOut:ExitMain", "InOut:ExitBranch")
 
-			// Verify switch exists
+			// Verify switch exists at center
 			val switch = context.getRailWayNetGrid().getCellAt(30, 30)
 			assertThat(switch).isNotNull()
 		}
@@ -42,10 +42,11 @@ class TestTopologiesVerificationTest : KoinTestBase() {
 	fun yJunctionWithSwitchSimulation_createsSimulationContext() {
 		// Act
 		TestTopologies.yJunctionWithSwitchSimulation().use { context ->
-			// Assert - Verify it's a simulation context
-			assertThat(context.getInOuts()).hasSize(4)
-			// Graph contains track blocks - Y-junction has 4 connections but graph may differ
-			assertThat(context.getGraph().size()).isEqualTo(3) // SimpleTrackBlock uses bidirectional edges
+			// Assert - Verify it's a simulation context (1 entry + 2 exits = 3 InOuts)
+			assertThat(context.getInOuts()).hasSize(3)
+			// Graph contains track blocks - Y-junction has 3 connections (1 entry → 2 exits)
+			// Each SimpleTrackBlock creates 1 bidirectional edge, so 3 tracks = 3 edges
+			assertThat(context.getGraph().size()).isEqualTo(3)
 		}
 	}
 

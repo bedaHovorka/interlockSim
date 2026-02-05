@@ -395,62 +395,65 @@ object TestTopologies {
 			.buildEditingContext()
 
 	/**
-	 * Creates a Y-junction topology: two entry points converge at switch, diverge to two exits.
+	 * Creates a Y-junction topology: single entry diverges at switch to two exits (diverging Y).
+	 *
+	 * **IMPORTANT:** A SIMPLE switch only has 3 segments, supporting only 3 connections total.
+	 * This topology uses: 1 entry → switch → 2 exits (diverging Y-junction).
 	 *
 	 * Configuration:
-	 * - InOut "EntryA" at (5,20) - first entry point
-	 * - InOut "EntryB" at (5,40) - second entry point
-	 * - RailSwitch "Junction" at (30,30) - convergence/divergence point (SIMPLE_RIGHT_FALSE)
-	 * - InOut "ExitC" at (55,20) - first exit (switch MAIN route)
-	 * - InOut "ExitD" at (55,40) - second exit (switch BRANCH route)
-	 * - Four track segments:
-	 *   - EntryA → Switch: 250m, 80 m/s
-	 *   - EntryB → Switch: 250m, 80 m/s
-	 *   - Switch → ExitC: 250m, 100 m/s (main route)
-	 *   - Switch → ExitD: 250m, 90 m/s (branch route)
-	 * - Grid size: 60x60
+	 * - InOut "Entry" at (5,30) - single entry point from west
+	 * - RailSwitch "Junction" at (30,30) - divergence point (SIMPLE_RIGHT_FALSE, HORIZONTAL)
+	 * - InOut "ExitMain" at (55,30) - main route exit (straight through, segment F)
+	 * - InOut "ExitBranch" at (50,40) - branch route exit (diverging southeast, segment G)
+	 * - Three track segments (SIMPLE switch supports exactly 3 connections):
+	 *   - Entry → Switch: 250m, 80 m/s (segment A - west)
+	 *   - Switch → ExitMain: 250m, 100 m/s (segment F - east, main route)
+	 *   - Switch → ExitBranch: 180m, 90 m/s (segment G - southeast, branch route)
+	 * - Grid size: 60x50
+	 *
+	 * Switch segments (SIMPLE_RIGHT_FALSE + HORIZONTAL):
+	 * - A (West) - stem/entry from left
+	 * - F (East) - main direction to right
+	 * - G (Southeast) - branch direction diagonal down-right
 	 *
 	 * Common use cases:
 	 * - Multi-route path finding
 	 * - Switch configuration testing
-	 * - Complex network topology validation
+	 * - Diverging traffic flow simulation
 	 *
-	 * Note: For multiple switches with semaphore sequences, use `TestFixtures.loadShuntingXml()`
+	 * For converging Y-junction (2 entries → 1 exit), see XMLRoundTripTest examples.
+	 * For multiple switches with semaphores, use `TestFixtures.loadShuntingXml()`.
 	 *
-	 * @return EditingContext with Y-junction topology (must close)
+	 * @return EditingContext with valid diverging Y-junction topology (must close)
 	 */
 	fun yJunctionWithSwitch(): EditingContext {
-		val context = DefaultEditingContext(60, 60)
+		val context = DefaultEditingContext(60, 50)
 
-		// Create entry points
-		val entryA = InOut("EntryA", false, Cell.SpatialType.HORIZONTAL)
-		val entryB = InOut("EntryB", false, Cell.SpatialType.HORIZONTAL)
+		// Create single entry point (from west)
+		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
 
-		// Create exit points
-		val exitC = InOut("ExitC", true, Cell.SpatialType.HORIZONTAL)
-		val exitD = InOut("ExitD", true, Cell.SpatialType.HORIZONTAL)
+		// Create two exit points
+		val exitMain = InOut("ExitMain", true, Cell.SpatialType.HORIZONTAL)
+		val exitBranch = InOut("ExitBranch", true, Cell.SpatialType.HORIZONTAL)
 
-		// Create central junction with switch
+		// Create central junction with switch (SIMPLE_RIGHT_FALSE - diverges right/southeast)
 		val switch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		switch.setName("Junction")
 
-		// Place elements on grid
-		context.putCell(Point(5, 20), entryA)
-		context.putCell(Point(5, 40), entryB)
-		context.putCell(Point(30, 30), switch)
-		context.putCell(Point(55, 20), exitC)
-		context.putCell(Point(55, 40), exitD)
+		// Place elements on grid (aligned for proper segment connections)
+		context.putCell(Point(5, 30), entry)        // West of switch
+		context.putCell(Point(30, 30), switch)      // Center
+		context.putCell(Point(55, 30), exitMain)    // East of switch (straight, segment F)
+		context.putCell(Point(50, 40), exitBranch)  // Southeast of switch (diagonal, segment G)
 
-		// Create track connections
-		val trackA = SimpleTrackBlock(entryA, switch, 250.0, 80.0)
-		val trackB = SimpleTrackBlock(entryB, switch, 250.0, 80.0)
-		val trackC = SimpleTrackBlock(switch, exitC, 250.0, 100.0)
-		val trackD = SimpleTrackBlock(switch, exitD, 250.0, 90.0)
+		// Create track connections (only 3 - matching switch's 3 segments)
+		val trackEntry = SimpleTrackBlock(entry, switch, 250.0, 80.0)          // Segment A
+		val trackMain = SimpleTrackBlock(switch, exitMain, 250.0, 100.0)       // Segment F
+		val trackBranch = SimpleTrackBlock(switch, exitBranch, 180.0, 90.0)    // Segment G
 
-		context.joinCells(Point(5, 20), Point(30, 30), trackA)
-		context.joinCells(Point(5, 40), Point(30, 30), trackB)
-		context.joinCells(Point(30, 30), Point(55, 20), trackC)
-		context.joinCells(Point(30, 30), Point(55, 40), trackD)
+		context.joinCells(Point(5, 30), Point(30, 30), trackEntry)
+		context.joinCells(Point(30, 30), Point(55, 30), trackMain)
+		context.joinCells(Point(30, 30), Point(50, 40), trackBranch)
 
 		return context
 	}

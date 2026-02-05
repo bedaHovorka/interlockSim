@@ -63,7 +63,7 @@ fun testSimulation() {
 |----------|----------------|-------------------|
 | A→B (100m) | `simpleLinearPath()` | `simpleLinearPathSimulation()` |
 | A→[S]→B | `linearPathWithSemaphore(allowing)` | `linearPathWithSemaphoreSimulation(allowing)` |
-| **Y-Junction** (2 entries, 1 switch, 2 exits) | `yJunctionWithSwitch()` | `yJunctionWithSwitchSimulation()` |
+| **Y-Junction** (1 entry, 1 switch, 2 exits - diverging) | `yJunctionWithSwitch()` | `yJunctionWithSwitchSimulation()` |
 | **Multi-Semaphore** (A→[S1]→...→[Sn]→B) | `linearPathWithSemaphoreSequence(count, allowing)` | `linearPathWithSemaphoreSequenceSimulation(count, allowing)` |
 | Dead-end | `deadEndSingleInOut()` | `deadEndSingleInOutSimulation()` |
 
@@ -248,10 +248,12 @@ The following topologies were added based on common duplication patterns found i
 
 ```kotlin
 TestTopologies.yJunctionWithSwitch().use { context ->
-    // Two entries (EntryA, EntryB) converge at a central switch,
-    // then diverge to two exits (ExitC, ExitD)
-    // 4 track segments: 250m each, speeds 80-100 m/s
-    // Grid: 60x60, switch at (30,30)
+    // Diverging Y-junction: single entry splits at switch to two exits
+    // Entry → Switch → ExitMain (straight, segment F - main route)
+    //              → ExitBranch (diagonal, segment G - branch route)
+    // 3 track segments: 180-250m, speeds 80-100 m/s
+    // Grid: 60x50, switch at (30,30)
+    // IMPORTANT: SIMPLE switch supports exactly 3 connections (segments A, F, G)
 }
 ```
 
