@@ -91,11 +91,12 @@ object AnimationColors {
 	 * @param state The track facility state to map
 	 * @return The corresponding color for rendering
 	 */
-	fun forTrackState(state: TrackFacility.State): Color = when (state) {
-		TrackFacility.State.FREE -> TRACK_FREE
-		TrackFacility.State.RESERVED -> TRACK_RESERVED
-		TrackFacility.State.OCCUPIED -> TRACK_OCCUPIED
-	}
+	fun forTrackState(state: TrackFacility.State): Color =
+		when (state) {
+			TrackFacility.State.FREE -> TRACK_FREE
+			TrackFacility.State.RESERVED -> TRACK_RESERVED
+			TrackFacility.State.OCCUPIED -> TRACK_OCCUPIED
+		}
 
 	/**
 	 * Returns the rendering color for a semaphore signal.
@@ -111,9 +112,10 @@ object AnimationColors {
 	 * @param signal The signal aspect to map
 	 * @return The corresponding color for rendering
 	 */
-	fun forSignal(signal: Signal): Color = when (signal) {
-		Signal.STOP -> SIGNAL_STOP
-		Signal.S40 -> SIGNAL_ALLOW_40
-		Signal.S30, Signal.S60, Signal.S80, Signal.S100, Signal.FREE -> SIGNAL_ALLOW
-	}
+	fun forSignal(signal: Signal): Color =
+		when (signal) {
+			Signal.STOP -> SIGNAL_STOP
+			Signal.S40 -> SIGNAL_ALLOW_40
+			Signal.S30, Signal.S60, Signal.S80, Signal.S100, Signal.FREE -> SIGNAL_ALLOW
+		}
 }

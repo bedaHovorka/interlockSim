@@ -34,8 +34,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
  *
  * @return true if ALL blocks are FREE, false if any is RESERVED or OCCUPIED
  */
-fun List<DynamicTrackBlock>.areAllFree(): Boolean =
-	all { it.getState() == TrackFacility.State.FREE }
+fun List<DynamicTrackBlock>.areAllFree(): Boolean = all { it.getState() == TrackFacility.State.FREE }
 
 /**
  * Check if this block is reserved by a specific train.
@@ -92,8 +91,7 @@ fun DynamicTrackBlock.isOccupiedBy(trainId: String): Boolean =
  *
  * @return true if block has a non-null trainId, false otherwise
  */
-fun DynamicTrackBlock.isOwnedByAnyTrain(): Boolean =
-	this.trainName != null
+fun DynamicTrackBlock.isOwnedByAnyTrain(): Boolean = this.trainName != null
 
 /**
  * Get the count of blocks in this list that are FREE.
@@ -107,24 +105,21 @@ fun DynamicTrackBlock.isOwnedByAnyTrain(): Boolean =
  *
  * @return Number of blocks in FREE state
  */
-fun List<DynamicTrackBlock>.countFree(): Int =
-	count { it.getState() == TrackFacility.State.FREE }
+fun List<DynamicTrackBlock>.countFree(): Int = count { it.getState() == TrackFacility.State.FREE }
 
 /**
  * Get the count of blocks in this list that are RESERVED.
  *
  * @return Number of blocks in RESERVED state
  */
-fun List<DynamicTrackBlock>.countReserved(): Int =
-	count { it.getState() == TrackFacility.State.RESERVED }
+fun List<DynamicTrackBlock>.countReserved(): Int = count { it.getState() == TrackFacility.State.RESERVED }
 
 /**
  * Get the count of blocks in this list that are OCCUPIED.
  *
  * @return Number of blocks in OCCUPIED state
  */
-fun List<DynamicTrackBlock>.countOccupied(): Int =
-	count { it.getState() == TrackFacility.State.OCCUPIED }
+fun List<DynamicTrackBlock>.countOccupied(): Int = count { it.getState() == TrackFacility.State.OCCUPIED }
 
 /**
  * Check if all blocks in this list are available for a specific train.
@@ -157,5 +152,5 @@ fun List<DynamicTrackBlock>.countOccupied(): Int =
 fun List<DynamicTrackBlock>.areAllFreeOrOwnedBy(trainId: String): Boolean =
 	all { block ->
 		block.getState() == TrackFacility.State.FREE ||
-		block.trainName == trainId
+			block.trainName == trainId
 	}

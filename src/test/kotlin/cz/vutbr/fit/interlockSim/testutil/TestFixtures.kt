@@ -244,6 +244,25 @@ object TestFixtures {
 	}
 
 	/**
+	 * Loads invalid InOut count fixtures (InOut validation tests).
+	 *
+	 * **Available fixtures:**
+	 * - "zero-inouts.xml" - Network with 0 InOut elements
+	 * - "single-inout.xml" - Network with 1 InOut element
+	 *
+	 * **Validation rule:** Minimum 2 InOut elements required (entry and exit points).
+	 * Single InOut networks are dead-ends (train enters but cannot exit).
+	 *
+	 * @param fixtureName Fixture filename (e.g., "zero-inouts.xml", "single-inout.xml")
+	 * @return InputStream to invalid InOut fixture
+	 * @throws IllegalStateException if fixture not found
+	 * @see cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+	 */
+	fun loadInvalidInOutXml(fixtureName: String): InputStream {
+		return loadTestFixture(fixtureName)
+	}
+
+	/**
 	 * Loads resource from main resources directory.
 	 *
 	 * @param resourceName Resource filename (e.g., "vyhybna.xml")

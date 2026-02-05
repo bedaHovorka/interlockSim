@@ -92,8 +92,8 @@ class AnimationController(
 	private val context: SimulationContext,
 	private val canvas: Component,
 	private val eventPanel: EventTimelinePanel? = null
-) : PropertyChangeListener, AutoCloseable {
-
+) : PropertyChangeListener,
+	AutoCloseable {
 	/**
 	 * Current animation state (immutable snapshot).
 	 *
@@ -113,13 +113,14 @@ class AnimationController(
 	 *
 	 * Fires at 30 FPS (33ms interval) to trigger rendering updates.
 	 */
-	private val repaintTimer: Timer = Timer(REPAINT_INTERVAL_MS) { _ ->
-		// Timer callbacks execute on EDT
-		require(SwingUtilities.isEventDispatchThread()) {
-			"Timer callback must execute on EDT"
+	private val repaintTimer: Timer =
+		Timer(REPAINT_INTERVAL_MS) { _ ->
+			// Timer callbacks execute on EDT
+			require(SwingUtilities.isEventDispatchThread()) {
+				"Timer callback must execute on EDT"
+			}
+			canvas.repaint()
 		}
-		canvas.repaint()
-	}
 
 	/**
 	 * Whether the animation controller is currently running.
@@ -310,11 +311,12 @@ class AnimationController(
 
 		try {
 			// Pass caches to avoid O(n²) grid scans on every PropertyChangeEvent
-			val newState = AnimationStateCapture.captureState(
-				context,
-				semaphoreCache ?: emptyList(),
-				switchCache ?: emptyList()
-			)
+			val newState =
+				AnimationStateCapture.captureState(
+					context,
+					semaphoreCache ?: emptyList(),
+					switchCache ?: emptyList()
+				)
 			updateState(newState)
 
 			// Reset failure counter on success
@@ -333,7 +335,7 @@ class AnimationController(
 			consecutiveFailures++
 			logger.error(e) {
 				"Failed to capture simulation state for animation " +
-				"(consecutive failures: $consecutiveFailures/$MAX_CONSECUTIVE_FAILURES)"
+					"(consecutive failures: $consecutiveFailures/$MAX_CONSECUTIVE_FAILURES)"
 			}
 
 			// Circuit breaker: Stop animation on persistent failures
@@ -349,13 +351,13 @@ class AnimationController(
 	 */
 	private fun handlePersistentFailure(lastException: Exception) {
 		if (isInErrorState) {
-			return  // Already handled
+			return // Already handled
 		}
 
 		isInErrorState = true
 		logger.error(lastException) {
 			"Animation stopped due to persistent state capture failures " +
-			"($consecutiveFailures consecutive failures)"
+				"($consecutiveFailures consecutive failures)"
 		}
 
 		// Stop repaint timer
@@ -366,9 +368,9 @@ class AnimationController(
 			javax.swing.JOptionPane.showMessageDialog(
 				canvas,
 				"The simulation animation has been paused due to errors.\n" +
-				"The simulation continues running, but visual updates are stopped.\n\n" +
-				"Technical details: ${lastException.javaClass.simpleName}: ${lastException.message}\n\n" +
-				"Check logs for more information.",
+					"The simulation continues running, but visual updates are stopped.\n\n" +
+					"Technical details: ${lastException.javaClass.simpleName}: ${lastException.message}\n\n" +
+					"Check logs for more information.",
 				"Animation Paused",
 				javax.swing.JOptionPane.ERROR_MESSAGE
 			)
@@ -409,11 +411,12 @@ class AnimationController(
 		if (evt == null) return null
 
 		// Try to extract report type from property name
-		val reportType = try {
-			SimulationContext.ReportType.valueOf(evt.propertyName ?: return null)
-		} catch (e: IllegalArgumentException) {
-			return null
-		}
+		val reportType =
+			try {
+				SimulationContext.ReportType.valueOf(evt.propertyName ?: return null)
+			} catch (e: IllegalArgumentException) {
+				return null
+			}
 
 		// Extract message from new value (format: "time object message")
 		val fullMessage = evt.newValue?.toString() ?: return null

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!-- Test fixture: Network with 0 InOut elements (INVALID) -->
+<net X="10" Y="10">
+  <!-- No InOut elements - should fail validation -->
+</net>

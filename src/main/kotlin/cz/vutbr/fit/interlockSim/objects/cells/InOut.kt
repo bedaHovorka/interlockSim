@@ -63,7 +63,7 @@ class InOut(
 	 */
 	override fun setName(name: String) {
 		this.name = name
-		super.setName(name)  // Also update parent's name for consistency
+		super.setName(name) // Also update parent's name for consistency
 	}
 
 	/**

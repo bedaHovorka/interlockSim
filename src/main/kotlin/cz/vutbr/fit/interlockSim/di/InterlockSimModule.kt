@@ -27,9 +27,9 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
-import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
+import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -199,8 +199,9 @@ val navigationModule: Module =
 			// TopologyNavigator: scoped to this editing context
 			// Context is automatically provided via getSource()
 			scoped<TopologyNavigator> {
-				val context = getSource<DefaultEditingContext>()
-					?: throw IllegalStateException("DefaultEditingContext source not found in scope")
+				val context =
+					getSource<DefaultEditingContext>()
+						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
 		}
@@ -210,8 +211,9 @@ val navigationModule: Module =
 			// TopologyNavigator: scoped to this simulation context
 			// Context is automatically provided via getSource()
 			scoped<TopologyNavigator> {
-				val context = getSource<DefaultSimulationContext>()
-					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
 
@@ -220,24 +222,27 @@ val navigationModule: Module =
 			// Different scopes (contexts) have isolated registries
 			// Issue #296 Phase 8: Now requires SimulationContext for PathInfo merging
 			scoped<PathReservationRegistry> {
-				val context = getSource<DefaultSimulationContext>()
-					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				PathReservationRegistry(context)
 			}
 
 			// PathInfoBuilder: scoped to this simulation context (Issue #295/#296 Phase 4)
 			// Used by PathReservationService to build entry direction metadata
 			scoped<PathInfoBuilder> {
-				val context = getSource<DefaultSimulationContext>()
-					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				PathInfoBuilder(context)
 			}
 
 			// PathReservationService: scoped to this simulation context
 			// Navigator, registry, and pathInfoBuilder are injected from the same scope (shared instances)
 			scoped<PathReservationService> {
-				val context = getSource<DefaultSimulationContext>()
-					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
@@ -248,8 +253,9 @@ val navigationModule: Module =
 			// Registry is SHARED with PathReservationService (same scoped instance)
 			// TopologyNavigator is used for pure topology traversal (no recursion)
 			scoped<TrainNavigationService> {
-				val context = getSource<DefaultSimulationContext>()
-					?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val registry: PathReservationRegistry = get()
 				val navigator: TopologyNavigator = get()
 				DefaultTrainNavigationService(context, registry, navigator)

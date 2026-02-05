@@ -60,8 +60,7 @@ import kotlin.getValue
 /**
  * XML implementation of {@link EditingContextFactory}
  */
-class XMLContextFactory :
-	EditingContextFactory {
+class XMLContextFactory : EditingContextFactory {
 	private val myResourceBundle: MyResourceBundle by getKoin().inject()
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
@@ -113,7 +112,7 @@ class XMLContextFactory :
 									arrayOf(name as Any, orientation as Any, spatialType as Any)
 								}
 								RailSemaphore::class.java -> {
-									val name = parseNameAttribute(uri, attributes)  // Use helper
+									val name = parseNameAttribute(uri, attributes) // Use helper
 									if (name != null) {
 										arrayOf(name as Any, orientation as Any, spatialType as Any)
 									} else {
@@ -125,7 +124,7 @@ class XMLContextFactory :
 						}
 						clazz == RailSwitch::class.java -> {
 							val type = getEnum(uri, attributes, Type::class.java)
-							val name = parseNameAttribute(uri, attributes)  // Use helper
+							val name = parseNameAttribute(uri, attributes) // Use helper
 							if (name != null) {
 								arrayOf(name as Any, spatialType as Any, type as Any)
 							} else {
@@ -388,6 +387,22 @@ class XMLContextFactory :
 
 	override fun createEmptyContext(): EditingContext = DefaultEditingContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
 
+	/**
+	 * Creates an EditingContext by parsing an XML file conforming to data.xsd schema.
+	 *
+	 * **Validation Requirements:**
+	 * - Minimum 2 InOut elements required (entry and exit points)
+	 * - InOut elements define where trains enter/exit the railway network
+	 * - Single InOut networks are invalid (dead-end, train cannot exit)
+	 *
+	 * @param file XML file containing railway network definition
+	 * @return Parsed EditingContext with validated network structure
+	 * @throws ContextCreationException if:
+	 *   - File not found
+	 *   - XML validation fails against schema
+	 *   - InOut count < 2 (minimum requirement)
+	 *   - Network structure is invalid
+	 */
 	@Throws(ContextCreationException::class)
 	override fun createContext(file: File): Context<*, *> =
 		try {
@@ -420,6 +435,21 @@ class XMLContextFactory :
 		}
 	}
 
+	/**
+	 * Creates an EditingContext by parsing an XML stream conforming to data.xsd schema.
+	 *
+	 * **Validation Requirements:**
+	 * - Minimum 2 InOut elements required (entry and exit points)
+	 * - InOut elements define where trains enter/exit the railway network
+	 * - Single InOut networks are invalid (dead-end, train cannot exit)
+	 *
+	 * @param stream InputStream containing XML railway network definition
+	 * @return Parsed EditingContext with validated network structure
+	 * @throws ContextCreationException if:
+	 *   - XML validation fails against schema
+	 *   - InOut count < 2 (minimum requirement)
+	 *   - Network structure is invalid
+	 */
 	@Throws(ContextCreationException::class)
 	override fun createContext(stream: InputStream): Context<*, *> = createContext(InputStreamReader(stream))
 

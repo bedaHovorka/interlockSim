@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Track
  */
 interface TrackBlock : Track {
 	var name: String?
+
 	/**
 	 * Move in block
 	 * @param separator for determine direction

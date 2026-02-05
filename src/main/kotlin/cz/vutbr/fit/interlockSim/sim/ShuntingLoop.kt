@@ -69,7 +69,8 @@ class ShuntingLoop(
 	private val enableRealTimeSync: Boolean = false,
 	private val speedMultiplier: Double = 1.0,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
-) : Interlocking(context), KoinComponent {
+) : Interlocking(context),
+	KoinComponent {
 	init {
 		require(speedMultiplier > 0.0) { "Speed multiplier must be positive, got: $speedMultiplier" }
 	}
@@ -78,8 +79,10 @@ class ShuntingLoop(
 	private val registry: PathReservationRegistry by lazy {
 		context.scope.get<PathReservationRegistry>()
 	}
+
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
 		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
 		// MAX_TRAINS = 2 enforces physical capacity constraint
 		// All 5 generated trains complete sequentially via queueing mechanism
@@ -89,7 +92,7 @@ class ShuntingLoop(
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
 	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
 	private val approwedTrains: MutableList<Train> = mutableListOf()
-	private val generator: InnerGenerator =  InnerGenerator(context)
+	private val generator: InnerGenerator = InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
@@ -288,7 +291,7 @@ class ShuntingLoop(
 					"Path already extends beyond ${to.name} for ${occupant.name}, " +
 						"skipping redundant reservation"
 				}
-				return true  // ← Early exit, like working tag's pattern
+				return true // ← Early exit, like working tag's pattern
 			}
 
 			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }

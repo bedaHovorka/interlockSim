@@ -39,27 +39,29 @@ class InOutWorker(
 
 	private val queqe = Head()
 	private var myIdle = true
-	private val next: TrackSection = requireNotNull(
-		navigator.getNextTrackSection(inOut, null)
-	) {
-		"InOut ${inOut.name} has no outgoing track section. " +
-			"This is a configuration error - InOut must be connected to the network."
-	}
-
-	private val pathFree = Condition {
-		try {
-			// next is guaranteed non-null by init check
-			pathReservationService.isPathToAnyNextSemaphoreAvailable(inOut, next)
-		} catch (e: TrackOperationException) {
-			logger.error {
-				"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
-					"path check failed: ${e.message}"
-			}
-			logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
-			env.errorStop(e)
-			false
+	private val next: TrackSection =
+		requireNotNull(
+			navigator.getNextTrackSection(inOut, null)
+		) {
+			"InOut ${inOut.name} has no outgoing track section. " +
+				"This is a configuration error - InOut must be connected to the network."
 		}
-	}
+
+	private val pathFree =
+		Condition {
+			try {
+				// next is guaranteed non-null by init check
+				pathReservationService.isPathToAnyNextSemaphoreAvailable(inOut, next)
+			} catch (e: TrackOperationException) {
+				logger.error {
+					"${Process.time()} APPROVAL_ERROR: InOut ${inOut.name} - " +
+						"path check failed: ${e.message}"
+				}
+				logger.error(e) { "InOutWorker ${inOut.name} pathFree condition failed with exception" }
+				env.errorStop(e)
+				false
+			}
+		}
 
 	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
 	override fun iteration() {
@@ -75,12 +77,14 @@ class InOutWorker(
 				// Use integrated path setup like working version
 				// This reserves blocks AND sets up semaphore signals in one call
 				val train = first as? Train
-				val trainId = train?.name ?: throw SimulationException(
-					"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
-				)
+				val trainId =
+					train?.name ?: throw SimulationException(
+						"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
+					)
 				// next is guaranteed non-null by init check
-				val result = pathReservationService
-					.reservePathToAnyNextSemaphore(trainId, inOut, next)
+				val result =
+					pathReservationService
+						.reservePathToAnyNextSemaphore(trainId, inOut, next)
 
 				// Handle reservation result
 				when (result) {
@@ -93,8 +97,9 @@ class InOutWorker(
 						// Train can now proceed
 					}
 					is PathReservationService.ReservationResult.NoPathExists -> {
-						val errorMsg = "InOut ${inOut.name} - No path exists to any semaphore. " +
-							"This is a network configuration error."
+						val errorMsg =
+							"InOut ${inOut.name} - No path exists to any semaphore. " +
+								"This is a network configuration error."
 						logger.error { "${time()} APPROVAL_DENIED: $errorMsg" }
 						throw SimulationException(errorMsg)
 					}
@@ -110,14 +115,14 @@ class InOutWorker(
 						continue
 					}
 					is PathReservationService.ReservationResult.Conflict -> {
-						val errorMsg = "InOut ${inOut.name} - Reservation conflict: " +
-							"block ${result.conflictingBlock} already owned by ${result.existingOwner}. " +
-							"This indicates a race condition or logic error."
+						val errorMsg =
+							"InOut ${inOut.name} - Reservation conflict: " +
+								"block ${result.conflictingBlock} already owned by ${result.existingOwner}. " +
+								"This indicates a race condition or logic error."
 						logger.error { "${time()} APPROVAL_ERROR: $errorMsg" }
 						throw SimulationException(errorMsg)
 					}
 				}
-
 			} catch (e: Exception) {
 				logger.warn {
 					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +

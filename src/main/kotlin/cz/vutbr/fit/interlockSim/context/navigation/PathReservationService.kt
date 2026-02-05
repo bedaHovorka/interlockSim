@@ -90,7 +90,9 @@ interface PathReservationService {
 		 *
 		 * @property reservedBlocks List of blocks reserved in path order (start to target)
 		 */
-		data class Success(val reservedBlocks: List<DynamicTrackBlock>) : ReservationResult()
+		data class Success(
+			val reservedBlocks: List<DynamicTrackBlock>
+		) : ReservationResult()
 
 		/**
 		 * No topological path exists between start and target.
@@ -104,7 +106,9 @@ interface PathReservationService {
 		 *
 		 * @property attemptedPaths Number of candidate paths that were checked
 		 */
-		data class AllPathsBlocked(val attemptedPaths: Int) : ReservationResult()
+		data class AllPathsBlocked(
+			val attemptedPaths: Int
+		) : ReservationResult()
 
 		/**
 		 * Reservation conflict detected during atomic reservation.
@@ -256,8 +260,11 @@ interface PathReservationService {
 	 * @see reservePath
 	 * @see isPathToAnyNextSemaphoreAvailable
 	 */
-	fun reservePathToAnyNextSemaphore(trainId: String, start: DynamicPathSeparator, next: TrackSection): ReservationResult
-
+	fun reservePathToAnyNextSemaphore(
+		trainId: String,
+		start: DynamicPathSeparator,
+		next: TrackSection
+	): ReservationResult
 
 	/**
 	 * Find and reserve path from oriented separator to any next semaphore.
@@ -302,7 +309,10 @@ interface PathReservationService {
 	 * @see reservePath
 	 * @see isPathToAnyNextSemaphoreAvailable
 	 */
-	fun reservePathToAnyNextSemaphore(trainId: String, start: OrientedPathSeparator): ReservationResult
+	fun reservePathToAnyNextSemaphore(
+		trainId: String,
+		start: OrientedPathSeparator
+	): ReservationResult
 
 	/**
 	 * Check if a path from separator to any next semaphore is currently available.
@@ -338,7 +348,10 @@ interface PathReservationService {
 	 * @see isPathAvailable
 	 * @see reservePathToAnyNextSemaphore
 	 */
-	fun isPathToAnyNextSemaphoreAvailable(start: PathSeparator, next: TrackSection?): Boolean
+	fun isPathToAnyNextSemaphoreAvailable(
+		start: PathSeparator,
+		next: TrackSection?
+	): Boolean
 
 	/**
 	 * Find and reserve path from separator to ANY available target.
@@ -427,5 +440,8 @@ interface PathReservationService {
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if block is still occupied or not owned
 	 */
-	fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean
+	fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean
 }

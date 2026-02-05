@@ -92,7 +92,6 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
-
 	/**
 	 * Render track block part with occupancy state coloring.
 	 *
@@ -222,14 +221,15 @@ class AnimatedSimulationCellRenderer(
 		val capturedState = state.switchStates[staticSwitch]
 
 		// Use captured state if available, otherwise fall back to current state
-		val activeSegments = if (capturedState != null) {
-			// Use historical state from animation
-			getActiveSegmentsForConf(staticSwitch, capturedState.conf)
-		} else {
-			// Fall back to current state (should not happen during playback)
-			logger.trace { "No captured state for switch ${staticSwitch.getName()}, using current conf" }
-			cell.getActiveSegments()
-		}
+		val activeSegments =
+			if (capturedState != null) {
+				// Use historical state from animation
+				getActiveSegmentsForConf(staticSwitch, capturedState.conf)
+			} else {
+				// Fall back to current state (should not happen during playback)
+				logger.trace { "No captured state for switch ${staticSwitch.getName()}, using current conf" }
+				cell.getActiveSegments()
+			}
 
 		// Draw only the active direction (inherits graphics context color)
 		drawSegments(g, *activeSegments.toTypedArray())
@@ -322,11 +322,12 @@ class AnimatedSimulationCellRenderer(
 		val borderWidth = 2
 
 		// Select body color based on origin InOut
-		val bodyColor = if (trainState.travelingRight) {
-			AnimationColors.TRAIN_FROM_B  // Blue (InOut B)
-		} else {
-			AnimationColors.TRAIN_FROM_A  // Orange (InOut A)
-		}
+		val bodyColor =
+			if (trainState.travelingRight) {
+				AnimationColors.TRAIN_FROM_B // Blue (InOut B)
+			} else {
+				AnimationColors.TRAIN_FROM_A // Orange (InOut A)
+			}
 
 		// Draw train body (filled circle)
 		g.color = bodyColor

@@ -37,7 +37,6 @@ class RenameDialog(
 	private val currentName: String,
 	private val elementType: String
 ) : JDialog(SwingUtilities.getWindowAncestor(parent), "Rename $elementType", ModalityType.APPLICATION_MODAL) {
-
 	private val logger = KotlinLogging.logger {}
 	private var userChoice: DialogResult = DialogResult.CANCEL
 	private var newName: String = currentName
@@ -49,6 +48,7 @@ class RenameDialog(
 	enum class DialogResult {
 		/** User clicked OK button or pressed Enter */
 		OK,
+
 		/** User clicked Cancel button, pressed Escape, or closed the dialog */
 		CANCEL
 	}
@@ -57,61 +57,68 @@ class RenameDialog(
 		logger.info { "RenameDialog: Opening rename dialog for $elementType with current name: '$currentName'" }
 
 		// Create content panel with vertical layout
-		val contentPanel = JPanel().apply {
-			layout = BoxLayout(this, BoxLayout.Y_AXIS)
-			border = EmptyBorder(10, 10, 10, 10)
-		}
+		val contentPanel =
+			JPanel().apply {
+				layout = BoxLayout(this, BoxLayout.Y_AXIS)
+				border = EmptyBorder(10, 10, 10, 10)
+			}
 
 		// Add instruction label
-		val instructionLabel = JLabel("Enter new name:").apply {
-			font = font.deriveFont(Font.BOLD, 14f)
-			alignmentX = Component.LEFT_ALIGNMENT
-		}
+		val instructionLabel =
+			JLabel("Enter new name:").apply {
+				font = font.deriveFont(Font.BOLD, 14f)
+				alignmentX = Component.LEFT_ALIGNMENT
+			}
 		contentPanel.add(instructionLabel)
 
 		// Add vertical spacing
 		contentPanel.add(javax.swing.Box.createVerticalStrut(5))
 
 		// Create and configure text field
-		nameTextField = JTextField(currentName, 20).apply {
-			alignmentX = Component.LEFT_ALIGNMENT
-			maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
-			// Select all text when dialog opens for easy replacement
-			SwingUtilities.invokeLater {
-				selectAll()
-				requestFocusInWindow()
+		nameTextField =
+			JTextField(currentName, 20).apply {
+				alignmentX = Component.LEFT_ALIGNMENT
+				maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height)
+				// Select all text when dialog opens for easy replacement
+				SwingUtilities.invokeLater {
+					selectAll()
+					requestFocusInWindow()
+				}
 			}
-		}
 		contentPanel.add(nameTextField)
 
 		// Add vertical spacing
 		contentPanel.add(javax.swing.Box.createVerticalStrut(5))
 
 		// Add current name label
-		val currentNameLabel = JLabel("Current name: $currentName").apply {
-			font = font.deriveFont(Font.ITALIC, 11f)
-			foreground = java.awt.Color.GRAY
-			alignmentX = Component.LEFT_ALIGNMENT
-		}
+		val currentNameLabel =
+			JLabel("Current name: $currentName").apply {
+				font = font.deriveFont(Font.ITALIC, 11f)
+				foreground = java.awt.Color.GRAY
+				alignmentX = Component.LEFT_ALIGNMENT
+			}
 		contentPanel.add(currentNameLabel)
 
 		// Create button panel
-		val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
-			border = EmptyBorder(5, 0, 0, 0)
-		}
+		val buttonPanel =
+			JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
+				border = EmptyBorder(5, 0, 0, 0)
+			}
 
 		// Create Cancel button with mnemonic
-		val cancelButton = JButton("Cancel").apply {
-			mnemonic = KeyEvent.VK_C
-			addActionListener { handleCancel() }
-		}
+		val cancelButton =
+			JButton("Cancel").apply {
+				mnemonic = KeyEvent.VK_C
+				addActionListener { handleCancel() }
+			}
 		buttonPanel.add(cancelButton)
 
 		// Create OK button with mnemonic
-		val okButton = JButton("OK").apply {
-			mnemonic = KeyEvent.VK_O
-			addActionListener { handleOk() }
-		}
+		val okButton =
+			JButton("OK").apply {
+				mnemonic = KeyEvent.VK_O
+				addActionListener { handleOk() }
+			}
 		buttonPanel.add(okButton)
 
 		// Set OK button as default (activated by Enter key)
@@ -140,11 +147,14 @@ class RenameDialog(
 		// Escape key → Cancel
 		val escapeKey = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0)
 		rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(escapeKey, "ESCAPE")
-		rootPane.actionMap.put("ESCAPE", object : AbstractAction() {
-			override fun actionPerformed(e: ActionEvent) {
-				handleCancel()
+		rootPane.actionMap.put(
+			"ESCAPE",
+			object : AbstractAction() {
+				override fun actionPerformed(e: ActionEvent) {
+					handleCancel()
+				}
 			}
-		})
+		)
 
 		// Enter key is already handled by defaultButton mechanism
 	}

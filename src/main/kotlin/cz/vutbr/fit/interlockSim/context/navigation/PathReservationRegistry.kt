@@ -323,7 +323,10 @@ class PathReservationRegistry(
 	 * @param block The block to unregister
 	 * @return true if block was unregistered, false if block is still occupied or not owned
 	 */
-	fun unregisterBlock(trainId: String, block: DynamicTrackBlock): Boolean {
+	fun unregisterBlock(
+		trainId: String,
+		block: DynamicTrackBlock
+	): Boolean {
 		// Validate block is owned by this train
 		val owner = blockToTrain[block]
 		if (owner != trainId) {
@@ -461,8 +464,7 @@ class PathReservationRegistry(
 	 * @return List of switches owned by the train (empty if none)
 	 * @since Issue #291 Fix Trains 4 & 5 Deadlock - Tier 2
 	 */
-	fun getSwitches(trainId: String): List<DynamicRailSwitch> =
-		trainToSwitches[trainId]?.toList() ?: emptyList()
+	fun getSwitches(trainId: String): List<DynamicRailSwitch> = trainToSwitches[trainId]?.toList() ?: emptyList()
 
 	/**
 	 * Get the train ID that owns a switch (Tier 2).
@@ -479,8 +481,7 @@ class PathReservationRegistry(
 	 * @param trainId The train identifier
 	 * @return List of blocks reserved by this train (empty if no reservations)
 	 */
-	fun getBlocks(trainId: String): List<DynamicTrackBlock> =
-		trainToBlocks[trainId]?.toList() ?: emptyList()
+	fun getBlocks(trainId: String): List<DynamicTrackBlock> = trainToBlocks[trainId]?.toList() ?: emptyList()
 
 	/**
 	 * Check if a block is registered to any train.
@@ -508,7 +509,10 @@ class PathReservationRegistry(
 	 * @since Issue #295/#296 Phase 3
 	 * @since Issue #296 Phase 8 (PathInfo extension fix)
 	 */
-	fun registerPathInfo(trainId: String, newPathInfo: PathInfo) {
+	fun registerPathInfo(
+		trainId: String,
+		newPathInfo: PathInfo
+	) {
 		val oldPathInfo = trainToPathInfo[trainId]
 
 		if (oldPathInfo == null) {
@@ -594,7 +598,11 @@ class PathReservationRegistry(
 	 * @since Issue #296 Phase 8
 	 */
 	@Suppress("LongMethod", "CyclomaticComplexMethod")
-	private fun mergePathInfo(trainId: String, old: PathInfo, new: PathInfo): PathInfo {
+	private fun mergePathInfo(
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo
+	): PathInfo {
 		logger.trace {
 			"mergePathInfo: merging old path ${old.start}->${old.target} " +
 				"with new ${new.start}->${new.target} for '$trainId'"
@@ -620,27 +628,29 @@ class PathReservationRegistry(
 		var actualTarget: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator = new.target
 
 		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
-		val truncatedSwitches = mutableListOf<DynamicRailSwitch>()  // Tier 3: Track truncated switches
+		val truncatedSwitches = mutableListOf<DynamicRailSwitch>() // Tier 3: Track truncated switches
 		for (element in new.reservedPath) {
 			if (cycleDetected) {
 				// Tier 3: Collect switches from truncated portion of path
 				if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
-					element.isSwitch() && element is DynamicRailSwitch) {
+					element.isSwitch() &&
+					element is DynamicRailSwitch
+				) {
 					truncatedSwitches.add(element)
 				}
-				continue  // Keep collecting truncated switches
+				continue // Keep collecting truncated switches
 			}
 
 			if (skipFirst && !skipped && element == new.start) {
-				skipped = true  // Skip this occurrence (already in old path)
+				skipped = true // Skip this occurrence (already in old path)
 				logger.trace {
 					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
 				}
 			} else {
 				// Smart cycle detection: allow ONE full circular loop (2 occurrences), prevent infinite loops (3+)
 				if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
-					mergedPath.any { it == element }) {
-
+					mergedPath.any { it == element }
+				) {
 					// Count how many times this separator already appears in merged path
 					val occurrenceCount = mergedPath.count { it == element }
 
@@ -662,10 +672,12 @@ class PathReservationRegistry(
 						}
 						// Tier 3: Collect THIS element if it's a switch (first truncated element)
 						if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
-							element.isSwitch() && element is DynamicRailSwitch) {
+							element.isSwitch() &&
+							element is DynamicRailSwitch
+						) {
 							truncatedSwitches.add(element)
 						}
-						continue  // Keep collecting truncated switches
+						continue // Keep collecting truncated switches
 					} else {
 						// 2nd occurrence - legitimate circular route (train completing one loop)
 						logger.info {
@@ -721,8 +733,8 @@ class PathReservationRegistry(
 		}
 
 		return PathInfo(
-			start = old.start,  // Keep original start (where Tail might still be)
-			target = actualTarget,  // Use actual target (updated if cycle detected)
+			start = old.start, // Keep original start (where Tail might still be)
+			target = actualTarget, // Use actual target (updated if cycle detected)
 			reservedPath = mergedPath,
 			entryDirections = mergedDirections
 		)

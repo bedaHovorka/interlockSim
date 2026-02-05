@@ -252,13 +252,34 @@ class DynamicRailSemaphore(val static: RailSemaphore) : PathSeparator by static 
 
 #### DynamicInOut
 
+**Purpose:** Wraps static InOut (entry/exit point) to track simulation state for train entry/exit operations.
+
+**Static InOut** (`cz.vutbr.fit.interlockSim.objects.cells.InOut`):
+- Immutable configuration properties
+- Grid position (x, y coordinates)
+- Entry/exit flag (`isEntry: Boolean`)
+- Name (e.g., "A", "B", "N-Lib-1", "S-Vrs-2")
+- Connection topology to track blocks
+- SpatialType and orientation
+
+**Dynamic InOut** (`cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut`):
+- Wraps static InOut
+- Mutable state: reservation status, occupancy, last train
+- Identity based on wrapped static object
+- Shared PathReservationRegistry access
+
 ```kotlin
 class DynamicInOut(val static: InOut) : PathSeparator by static {
     // Dynamic properties:
-    var lastTrain: Train? = null  // Last train processed
-    
+    var lastTrain: Train? = null  // Last train processed at this entry/exit point
+
+    // Delegation to static configuration:
+    val name: String get() = static.getName()
+    val isEntry: Boolean get() = static.isEntry
+    val position: Point get() = static.getPoint()
+
     // Identity based on static object:
-    override fun equals(other: Any?) = 
+    override fun equals(other: Any?) =
         other is DynamicInOut && static === other.static
     override fun hashCode() = System.identityHashCode(static)
 }
@@ -266,8 +287,49 @@ class DynamicInOut(val static: InOut) : PathSeparator by static {
 
 **Key Features:**
 - Wraps static InOut (entry/exit point)
-- Tracks last train processed
-- Identity based on static object reference
+- Tracks last train processed at this boundary point
+- Delegates configuration to static object (name, isEntry, position)
+- Identity based on static object reference (stable across state changes)
+
+**Usage Pattern:**
+
+```kotlin
+// Editing context - uses static InOut
+val editingContext: EditingContext = factory.createContext()
+val staticInOut: InOut = editingContext.getGraph().vertexSet()
+    .find { it is InOut && it.getName() == "A" } as InOut
+
+// Transform to simulation context
+val simContext: SimulationContext = transformer.fromEditingContext(editingContext)
+
+// Simulation context - uses DynamicInOut
+val dynamicInOut: DynamicInOut = simContext.toDynamic(staticInOut) as DynamicInOut
+
+// Dynamic wrapper delegates configuration to static
+assert(dynamicInOut.name == staticInOut.getName())
+assert(dynamicInOut.isEntry == staticInOut.isEntry)
+
+// Dynamic wrapper manages simulation state
+dynamicInOut.lastTrain = train  // Mutable operation (simulation state)
+```
+
+**Identity Contract:**
+- `DynamicInOut` uses `System.identityHashCode(static)` for stable hash
+- Same static InOut always returns same dynamic wrapper (IdentityHashMap in context)
+- `===` reference equality based on wrapped object
+- Enables stable train tracking across simulation cycles
+
+**Railway Domain Context:**
+- **InOut elements** represent entry/exit points for trains (network boundaries)
+- **Minimum 2 InOuts required** per network (at least one entry, one exit)
+- **Entry points** (`isEntry == true`) - trains spawn here
+- **Exit points** (`isEntry == false`) - trains despawn here
+- **Examples:** "A" (entry), "B" (exit) in vyhybna.xml; "N-Lib-1" (north entry), "S-Vrs-2" (south exit) in praha-hlavni-nadrazi.xml
+
+**Testing:**
+- See `DynamicInOutTest.kt` - 8 tests for identity and state management
+- See `InOutIntegrationTest.kt` - 4 integration tests for simulation scenarios
+- See `InOutValidationTest.kt` - 8 tests for InOut validation rules
 
 ### Track Wrapper
 

@@ -103,7 +103,7 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrackBlock(
 	val staticRef: TrackBlock,
 	private val end1: DynamicPathSeparator,
-	private val end2: DynamicPathSeparator,
+	private val end2: DynamicPathSeparator
 ) : TrackBlock by staticRef,
 	TrackSection,
 	TrackFacility {
@@ -193,9 +193,7 @@ class DynamicTrackBlock(
 	 * @return Current occupant, or throws if track is not occupied
 	 * @throws IllegalStateException if track is not occupied
 	 */
-	override fun getTrackOccupant(): TrackOccupant? {
-		return occupant
-	}
+	override fun getTrackOccupant(): TrackOccupant? = occupant
 
 	override fun ends(): Array<PathSeparator> = arrayOf(end1, end2)
 

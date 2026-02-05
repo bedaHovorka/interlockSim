@@ -37,7 +37,10 @@ object AutoNameGenerator {
 	 * @param context The editing context to check for existing names
 	 * @return A unique sequential name
 	 */
-	fun generateName(cellClass: Class<out NodeCell>, context: EditingContext): String {
+	fun generateName(
+		cellClass: Class<out NodeCell>,
+		context: EditingContext
+	): String {
 		val prefix = getPrefixForClass(cellClass)
 		val counter = counters.getOrDefault(prefix, 0)
 
@@ -52,7 +55,7 @@ object AutoNameGenerator {
 
 		// Update counter AND cache
 		counters[prefix] = candidateNumber
-		nameCache?.add(candidateName)  // Add new name to cache
+		nameCache?.add(candidateName) // Add new name to cache
 
 		logger.debug { "Generated name '$candidateName' for ${cellClass.simpleName}" }
 		return candidateName
@@ -66,14 +69,17 @@ object AutoNameGenerator {
 			RailSemaphore::class.java -> "S"
 			RailSwitch::class.java -> "SW"
 			InOut::class.java -> "IO"
-			else -> "E"  // Generic element
+			else -> "E" // Generic element
 		}
 
 	/**
 	 * Checks if a name already exists in the context.
 	 * Uses lazy name cache for O(1) lookups instead of O(n²) grid scan.
 	 */
-	private fun nameExists(name: String, context: EditingContext): Boolean {
+	private fun nameExists(
+		name: String,
+		context: EditingContext
+	): Boolean {
 		// Build cache on first use or context change
 		if (nameCache == null || cachedContext !== context) {
 			buildNameCache(context)
@@ -90,7 +96,9 @@ object AutoNameGenerator {
 		val grid = context.getRailWayNetGrid()
 		for (x in 0 until grid.getCols()) {
 			for (y in 0 until grid.getRows()) {
-				val point = cz.vutbr.fit.interlockSim.util.Point(x, y)
+				val point =
+					cz.vutbr.fit.interlockSim.util
+						.Point(x, y)
 				val cell = grid[point]
 				if (cell is NodeCell) {
 					val name = cell.getName()
