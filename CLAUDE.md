@@ -1,6 +1,17 @@
 # CLAUDE.md
 
+**Last Updated:** 2026-02-05
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Status Marker Convention
+
+Throughout this documentation, the following status markers are used:
+- ✅ **COMPLETE** - Work finished and merged
+- 🟡 **IN PROGRESS** - Active work underway
+- ⏸️ **BLOCKED** - Waiting on dependencies
+- 🆕 **OPEN/NEW** - Not started but planned
+- ❌ **CANCELLED** - Work abandoned
 
 ## Agent Team Structure
 
@@ -39,7 +50,7 @@ This project uses Gradle with Kotlin DSL. Java 21 LTS is required.
 # Run application
 ./gradlew runSim                  # Pre-configured shunting loop
 ./gradlew runEditor               # Launch editor GUI
-./gradlew runExampleGui           # Animated GUI simulation
+./gradlew runExampleGui           # Animated GUI simulation (Issue #268, milestone complete 2026-02-04)
 
 # Other tasks
 ./gradlew javadoc                 # Generate documentation
@@ -105,8 +116,8 @@ For X11 forwarding troubleshooting, authentication setup, SELinux configuration 
   - Grid parameterization (static cells vs dynamic wrappers)
   - Runtime immutability enforcement (freeze/isFrozen/checkNotFrozen)
   - **Timeline:** 8 days actual vs 18 estimated (70% faster), zero regressions across 927+ tests
-  - **Status:** Phase 5.5 (#182) NEW, Phase 6 (#166, #168, #167) IN PROGRESS
-- **Issue #94 (2026-01-21):** SimulationEnvironment facade interface for DSOL/Kalasim migration readiness
+  - **Status:** Phase 5.5 (#182) 🆕 PENDING, Phase 6 (#167) ✅ COMPLETE, (#166) ⏸️ IN PROGRESS, (#168) ⏸️ BLOCKED
+- **Issue #94 (2026-01-21) ✅ COMPLETE:** SimulationEnvironment facade interface for DSOL/Kalasim migration readiness
 
 **For detailed context refactoring documentation:**
 - `docs/CONTEXT_REFACTORING_DESIGN.md` - Architecture design and implementation history
@@ -136,8 +147,9 @@ Three specialized services replaced the removed `pathToNextSemaphore()` API:
 For complete navigation services architecture, Koin DI integration patterns, and usage examples, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Project Architecture Context".
 
 **Additional architecture documentation:**
-- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases
-- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with before/after examples
+- `docs/PATH_DISCOVERY_ARCHITECTURE.md` - Design rationale, trade-offs, implementation phases (808 lines)
+- `docs/PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration examples with before/after code (547 lines)
+- `docs/PATH_RESERVATION_ARCHITECTURE.md` - Atomic reservation algorithm and graph theory (1069 lines)
 - `docs/STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern
 
 **Object model:**
@@ -152,6 +164,10 @@ For complete navigation services architecture, Koin DI integration patterns, and
 
 **GUI:**
 - Swing-based editor in `gui/` package
+- AnimatedSim: Real-time animated GUI simulation (Issue #268, milestone complete 2026-02-04)
+  - Physics-accurate rendering with velocity/acceleration visualization
+  - Visual train movement with smooth interpolation
+  - See `docs/ANIMATION_ARCHITECTURE.md` for technical details
 
 **XML Configuration:**
 - Railway networks defined in XML format (schema: `src/main/resources/.../data.xsd`)
@@ -272,10 +288,10 @@ Comprehensive JUnit 5.11.4 test suite with AssertK assertions.
 - **Unit tests** - Run with `./gradlew test` (excludes integration tests)
 - **Integration tests** - Tagged with `@Tag("integration-test")`, run with `./gradlew integrationTest`
 
-**Test coverage (January 2026):**
-- **662 tests total** (628 passing, 34 skipped)
+**Test coverage (February 2026):**
+- **1840 tests total** (1836 passing, 4 skipped, 0 failing)
 - **51% code coverage** (8,824/17,070 instructions)
-- **36 test classes**
+- **145 test classes**
 
 **Test utilities:**
 - `TestFixtures` - Centralized XML fixture loading
@@ -348,13 +364,23 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 **JavaDoc:** Generate with `./gradlew javadoc` (outputs to `build/docs/javadoc/`)
 
 **Architecture Documentation (docs/):**
-- `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions, DI patterns, build environment
+- `KOTLIN_STYLE_GUIDE.md` - Kotlin coding conventions, DI patterns, build environment (2253 lines)
 - `PATH_DISCOVERY_ARCHITECTURE.md` - Navigation services design (808 lines)
 - `PATH_DISCOVERY_MIGRATION_GUIDE.md` - Migration guide with examples (547 lines)
 - `PATH_RESERVATION_ARCHITECTURE.md` - Reservation service design (1069 lines)
-- `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98)
+- `CONTEXT_REFACTORING_DESIGN.md` - Context system design (Issue #98, #153)
+- `CONTEXT_REFACTORING_PHASE6_SUMMARY.md` - Phase 6 status and completion plan (2026-02-05)
+- `ISSUE_153_RETROSPECTIVE.md` - Phases 1-5 detailed retrospective (927 lines)
+- `CONTEXT_INHERITANCE_INCOMPATIBILITY.md` - Problem analysis and solution design
 - `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` - Static/dynamic wrapper pattern (Issue #100)
-- `GRID_PARAMETERIZATION_*.md` - Type-safe grid parameterization (Issue #131)
+- `GRID_PARAMETERIZATION_INDEX.md` - Overview and document roadmap
+- `GRID_PARAMETERIZATION_DESIGN.md` - Complete design specification (1591 lines)
+- `GRID_PARAMETERIZATION_IMPLEMENTATION.md` - Implementation notes
+- `GRID_PARAMETERIZATION_SUMMARY.md` - Implementation status
+- `ANIMATION_ARCHITECTURE.md` - AnimatedSim real-time GUI architecture
+- `ANIMATED_SIM_MILESTONE_COMPLETE.md` - AnimatedSim milestone summary
+- `CZECH_RAILWAY_TERMINOLOGY.md` - Czech terminology verification and translation guide (373 lines)
+- `TRAIN_PASSIVATION_FIX.md` - Train physics passivation fix (Issue #291)
 
 ## Known Issues
 
@@ -365,7 +391,7 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 - **DEFERRED-001:** XMLContextFactoryTest missing exception type predicates (9 occurrences)
 - Minor simulation issues (SIM-001 to SIM-006) documented in code comments
 
-**Test coverage:** 662 tests (628 passing, 34 skipped), 51% code coverage.
+**Test coverage:** 1840 tests (1836 passing, 4 skipped), 51% code coverage.
 
 ## Future Development Considerations
 

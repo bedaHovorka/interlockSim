@@ -621,20 +621,15 @@ Required test categories:
 
 ## Technical Debt
 
-### ContextImmutabilityTest.kt.disabled (15 tests)
+### ContextImmutabilityTest.kt.disabled (15 tests) - ✅ RESOLVED
 
-**Location:** `src/test/kotlin/cz/vutbr/fit/interlockSim/context/ContextImmutabilityTest.kt.disabled`
+**UPDATE (2026-02-05):** This technical debt has been **RESOLVED**. The test file is now active at `src/test/kotlin/cz/vutbr/fit/interlockSim/context/ContextImmutabilityTest.kt` and all 15 tests pass successfully.
 
-**Problem:** Cannot compile due to missing freeze/isFrozen API in EditingContext interface
+**Original Problem:** Cannot compile due to missing freeze/isFrozen API in EditingContext interface
 
-**Impact:**
-- 15 comprehensive immutability tests are disabled
-- Temporary gap in immutability test coverage
-- Tests exist and are ready, just cannot run
+**Resolution:** The freeze/isFrozen API was added to the EditingContext interface, and the tests were re-enabled. All 15 immutability tests now pass without modifications.
 
-**Resolution:** Sub-issue #182 will expose freeze/isFrozen API, then #168 will re-enable tests
-
-**Expected Outcome:** All 15 tests pass immediately after rename (no modifications needed)
+**Status:** Technical debt eliminated. Test coverage for immutability is complete.
 
 ---
 

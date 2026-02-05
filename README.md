@@ -504,11 +504,11 @@ The following loggers are pre-configured in `logback.xml`:
 
 Comprehensive JUnit 5.11.4 test suite with AssertK 0.28.1 assertions located in `src/test/kotlin/cz/vutbr/fit/interlockSim/`.
 
-**Test coverage statistics (January 2026):**
-- **662 tests total** (628 passing, 34 skipped, 0 failing)
+**Test coverage statistics (February 2026):**
+- **1840 tests total** (1836 passing, 4 skipped, 0 failing)
 - **51% code coverage** (8,824/17,070 instructions covered)
-- **36 test classes** across 6 expansion phases
-- **+420 tests added** in test coverage expansion initiative (baseline: 242 tests → 662 tests)
+- **145 test classes** across 6 expansion phases
+- **+1598 tests added** in test coverage expansion initiative (baseline: 242 tests → 1840 tests)
 
 **Coverage by package:**
 - objects.tracks/ - 85% (excellent), xml/ - 85% (excellent)

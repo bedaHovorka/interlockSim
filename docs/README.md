@@ -1,5 +1,6 @@
-# Grid Parameterization Design Documentation
+# Grid Parameterization Documentation Index
 
+**Purpose:** Navigation guide for grid parameterization design and implementation documents
 **Issue:** [#139](https://github.com/bedaHovorka/interlockSim/issues/139) - Grid Parameterization Design (Phase 1 of [#131](https://github.com/bedaHovorka/interlockSim/issues/131))
 **Status:** Design Phase Complete - Awaiting Review
 **Created:** 2026-01-18
