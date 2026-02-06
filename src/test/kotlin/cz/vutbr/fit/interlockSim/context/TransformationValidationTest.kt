@@ -66,7 +66,7 @@ class TransformationValidationTest : KoinTestBase() {
 	 */
 	@Test
 	fun `validation succeeds for complete transformation`() {
-		editingContextFactory.createEmptyContext().use { editingContext ->
+		editingContextFactory.createEmptyContext().use { editingContext: EditingContext ->
 			// Arrange - Build valid network with 2 InOuts and track block
 			editingContext.putCell(Point(1, 1), inA)
 			editingContext.putCell(Point(5, 5), outB)
@@ -74,7 +74,7 @@ class TransformationValidationTest : KoinTestBase() {
 			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 			// Act - Transform should succeed without throwing exception
-			simulationContextFactory.createContext(editingContext).use { simulationContext ->
+			simulationContextFactory.createContext(editingContext).use { simulationContext: SimulationContext ->
 				// Assert - Context created successfully
 				assertThat(simulationContext).isNotNull()
 				assertThat(simulationContext.getRailWayNetGrid()).isNotNull()
@@ -224,7 +224,7 @@ class TransformationValidationTest : KoinTestBase() {
 	 */
 	@Test
 	fun `validation succeeds for complex network transformation`() {
-		editingContextFactory.createEmptyContext().use { editingContext ->
+		editingContextFactory.createEmptyContext().use { editingContext: EditingContext ->
 			// Arrange - Build complex network
 			val inC = InOut("C", false, SpatialType.VERTICAL)
 			val outD = InOut("D", true, SpatialType.VERTICAL)
@@ -247,7 +247,7 @@ class TransformationValidationTest : KoinTestBase() {
 			editingContext.currentNameString = "ComplexNetwork"
 
 			// Act - Transform should succeed
-			simulationContextFactory.createContext(editingContext).use { simulationContext ->
+			simulationContextFactory.createContext(editingContext).use { simulationContext: SimulationContext ->
 				// Assert - All properties preserved
 				assertThat(simulationContext).isNotNull()
 				assertThat(simulationContext.getInOuts().size).isNotNull()
