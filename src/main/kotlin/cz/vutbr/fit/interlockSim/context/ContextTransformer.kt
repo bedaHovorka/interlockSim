@@ -94,6 +94,10 @@ object ContextTransformer {
 				processFactory
 			)
 
+		// Animation and testing code paths access dynamic wrappers before run(), so
+		// eagerly initialize the mapping here to guarantee consistent state snapshots.
+		simulationContext.initializeDynamicMapping()
+
 		logger.info {
 			"Successfully transformed EditingContext to SimulationContext: " +
 				"${simulationContext.getInOuts().size} InOuts, " +
