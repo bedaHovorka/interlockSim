@@ -80,18 +80,60 @@ class DefaultPathReservationService(
 	private val pathInfoBuilder: PathInfoBuilder
 ) : PathReservationService {
 	/**
+	 * Round-robin path selection state.
+	 *
+	 * Tracks the next path index to try for each (start, target) route pair.
+	 * This ensures fair distribution across multiple available paths.
+	 *
+	 * ## Why Per-Route?
+	 *
+	 * Each route (A→B) may have different number of paths, so tracking must be independent.
+	 * Example:
+	 * - Route InOutA → InOutB: 2 paths (k1, k2) → alternates between indices 0,1
+	 * - Route SemaphoreX → InOutB: 1 path → always index 0
+	 *
+	 * ## Thread Safety
+	 *
+	 * NOT thread-safe (single-threaded simulation assumption documented in class KDoc).
+	 *
+	 * ## State Lifetime
+	 *
+	 * State is NOT persisted across simulation runs. Each simulation starts fresh with
+	 * empty map, ensuring deterministic behavior for repeated runs.
+	 *
+	 * @see reservePath for round-robin algorithm
+	 * @since Issue #311 (Phase 2 of Issue #291)
+	 */
+	private val pathSelectionIndex = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
+
+	/**
 	 * Find and reserve a free path from start to target separator.
 	 *
 	 * ## Algorithm Implementation
 	 *
 	 * 1. Use navigator.findAllTopologicalPaths() to get all possible routes
-	 * 2. For each path in priority order (BFS = shortest first):
+	 * 2. Apply round-robin rotation to distribute load across paths:
+	 *    - Track last-used path index per (start, target) route
+	 *    - Rotate starting index for each reservation attempt
+	 *    - Example: [path0, path1] → Train1 tries [path0, path1], Train2 tries [path1, path0]
+	 * 3. For each path in rotated order:
 	 *    a. Extract unique DynamicTrackBlocks from TrackSections
 	 *    b. Validate all blocks are FREE
 	 *    c. Atomically reserve all blocks with rollback on failure
 	 *    d. Register ownership in registry
-	 *    e. Return Success if all steps succeed
-	 * 3. If all paths fail, return appropriate failure result
+	 *    e. Update round-robin index for next train
+	 *    f. Return Success if all steps succeed
+	 * 4. If all paths fail, return appropriate failure result
+	 *
+	 * ## Round-Robin Load Balancing (Issue #311)
+	 *
+	 * When multiple paths exist (e.g., k1 and k2 parallel tracks), this method
+	 * distributes trains fairly across all paths using round-robin selection:
+	 * - Train1: tries path0 first → uses path0 if available
+	 * - Train2: tries path1 first → uses path1 if available (balancing load)
+	 * - Train3: tries path0 first → continues rotation
+	 *
+	 * This prevents all trains from using the same path even when alternatives exist.
 	 *
 	 * ## Error Handling
 	 *
@@ -114,13 +156,31 @@ class DefaultPathReservationService(
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
-		// Step 2: Try each candidate path until we find a free one
-		for ((index, path) in candidatePaths.withIndex()) {
-			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
+		// Step 2: Apply round-robin rotation for fair load distribution (Issue #311)
+		val route = Pair(start.staticRef, target.staticRef)
+		val startIndex = pathSelectionIndex.getOrDefault(route, 0)
+
+		logger.trace {
+			"reservePath: Found ${candidatePaths.size} candidate path(s) from $start to $target, " +
+				"round-robin starting at index $startIndex"
+		}
+
+		// Step 3: Try each candidate path in rotated order until we find a free one
+		for (offset in candidatePaths.indices) {
+			// Calculate rotated index: (startIndex + offset) % size
+			// Example with 2 paths and startIndex=1: offset=0 → idx=1, offset=1 → idx=0
+			val pathIndex = (startIndex + offset) % candidatePaths.size
+			val path = candidatePaths[pathIndex]
+
+			logger.trace {
+				"reservePath: Trying path index $pathIndex (offset $offset from startIndex $startIndex)"
+			}
+
+			// Step 3a: Extract unique DynamicTrackBlocks from TrackSections
 			val blocks = extractUniqueBlocks(path)
 			logger.trace { "reservePath: Path has ${blocks.size} unique block(s)" }
 
-			// Step 2a.5: Bug fix (Issue #296) - Filter out blocks already owned by this train
+			// Step 3b: Bug fix (Issue #296) - Filter out blocks already owned by this train
 			// Blocks already owned (RESERVED or OCCUPIED) by this train should be excluded because:
 			// 1. OCCUPIED: Train has already been there (blocks behind the train)
 			// 2. RESERVED: Already reserved from a (possibly different) separator
@@ -159,7 +219,7 @@ class DefaultPathReservationService(
 				return PathReservationService.ReservationResult.Success(blocks)
 			}
 
-			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
+			// Step 3c: Check if all forward blocks are available (FREE or RESERVED by THIS train)
 			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
 				continue
 			}
@@ -170,7 +230,7 @@ class DefaultPathReservationService(
 			// - tryAtomicReservation() has rollback logic if state changed
 			// - Worst case: false positive on free check, caught during reservation, try next path
 			//
-			// Step 2c: Attempt atomic reservation with rollback (only forward blocks)
+			// Step 3d: Attempt atomic reservation with rollback (only forward blocks)
 			val reservationResult = tryAtomicReservation(trainId, start, forwardBlocks)
 			if (reservationResult != null) {
 				// Reservation failed, try next path
@@ -181,12 +241,18 @@ class DefaultPathReservationService(
 				continue
 			}
 
-			// Step 2d: Register ownership in registry (atomic operation, only forward blocks)
+			// Step 3e: Register ownership in registry (atomic operation, only forward blocks)
 			return when (val result = registry.registerAtomic(trainId, forwardBlocks)) {
 				is PathReservationRegistry.RegistrationResult.Success -> {
 					// Success - path reserved and registered
 
-					// Step 2e: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
+					// Step 3e.1: Update round-robin index for next train on this route (Issue #311)
+					pathSelectionIndex[route] = (pathIndex + 1) % candidatePaths.size
+					logger.debug {
+						"reservePath: Reserved path index $pathIndex, next train will start at ${pathSelectionIndex[route]}"
+					}
+
+					// Step 3f: Build PathInfo with entry directions (Issue #295/#296 Phase 4)
 					logger.debug {
 						"reservePath: Building PathInfo for $trainId from $start to $target with ${path.size} track sections"
 					}
@@ -197,14 +263,14 @@ class DefaultPathReservationService(
 							trackSections = path // path is List<TrackSection> here
 						)
 
-					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
+					// Step 3g: Register PathInfo metadata (Issue #295/#296 Phase 4)
 					registry.registerPathInfo(trainId, pathInfo)
 					logger.debug {
 						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
 							"reserved path has ${pathInfo.reservedPath.length()} elements"
 					}
 
-					// Step 2f.1: Register switches (Tier 2 - Issue #291)
+					// Step 3g.1: Register switches (Tier 2 - Issue #291)
 					val switches = extractUniqueSwitches(pathInfo)
 					if (switches.isNotEmpty()) {
 						registry.registerSwitches(trainId, switches)
@@ -213,7 +279,7 @@ class DefaultPathReservationService(
 						}
 					}
 
-					// Step 2f.2: Configure switches based on path topology (Issue #300)
+					// Step 3g.2: Configure switches based on path topology (Issue #300)
 					// Switches must be configured BEFORE semaphore signals are set up
 					// This ensures switches are in correct position (MAIN/BRANCH) for the reserved route
 					if (switches.isNotEmpty()) {
@@ -223,7 +289,7 @@ class DefaultPathReservationService(
 						}
 					}
 
-					// Step 2g: Configure semaphore signal after successful reservation
+					// Step 3h: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
 						when {
