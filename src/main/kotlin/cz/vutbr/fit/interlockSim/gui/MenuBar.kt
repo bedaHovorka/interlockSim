@@ -30,17 +30,20 @@ class MenuBar : JMenuBar() {
 	/**
 	 * Opens a railway network file from disk into the EDITOR.
 	 *
-	 * Issue #258: Validation behavior for editor mode:
-	 * - EDITOR MODE: Show WARNING only, allow opening files with validation errors
+	 * Issue #258 & Enhancement: Lenient validation behavior for editor mode:
+	 * - EDITOR MODE: Show WARNING for parseable XML with validation errors, allow "Open Anyway"
 	 *   (Users need to be able to open broken files to fix them)
+	 * - UNPARSEABLE XML (malformed syntax): BLOCK with error message
 	 * - SIMULATION MODE: BLOCK invalid XML from transforming to simulation context
 	 *   (Invalid configurations must not be allowed to run simulations)
-	 * - If file cannot be loaded (malformed/unparseable XML), show simple error
 	 * - Validation will occur on SAVE to prevent creating invalid files
 	 *
-	 * Current implementation: If XML is malformed (unparseable), shows error and
-	 * doesn't open. For future enhancement, could show ValidationDialog with warnings
-	 * for validation errors but still allow editing.
+	 * Implementation (2026-02-06):
+	 * 1. Try lenient parsing via XMLContextFactory.createContextLenient()
+	 * 2. If unparseable (malformed XML): Show error dialog and block
+	 * 3. If parseable but has validation errors: Show ValidationDialog with "Open Anyway"
+	 * 4. If user clicks "Open Anyway": Load the context into editor for fixing
+	 * 5. If no errors: Load context directly
 	 */
 	private inner class OpenAction : AbstractAction("Open...") {
 		override fun actionPerformed(e: ActionEvent) {
@@ -53,24 +56,58 @@ class MenuBar : JMenuBar() {
 			val selectedFile: File = fileChooser.selectedFile
 
 			try {
-				// Try to load the context from the selected file
-				val editingContextFactory = getKoin().get<EditingContextFactory>()
-				val context = editingContextFactory.createContext(selectedFile)
+				// Use lenient parsing to separate unparseable XML from validation errors
+				val editingContextFactory = getKoin().get<cz.vutbr.fit.interlockSim.xml.XMLContextFactory>()
+				val parseResult = editingContextFactory.createContextLenient(selectedFile)
 
-				// Success - update the frame with the loaded context
-				val frame = getKoin().get<Frame>()
-				frame.setContext(context)
+				when {
+					// Case 1: Successfully parsed with no errors
+					parseResult.isParseable && parseResult.validationResult.isValid -> {
+						val context = parseResult.context!!
+						val frame = getKoin().get<Frame>()
+						frame.setContext(context)
+						frame.modificationTracker.setCurrentFile(selectedFile)
+						frame.modificationTracker.markClean()
+					}
 
-				// Update modification tracker with loaded file
-				frame.modificationTracker.setCurrentFile(selectedFile)
-				frame.modificationTracker.markClean()
+					// Case 2: Parseable but has validation errors - show ValidationDialog with "Open Anyway"
+					parseResult.isParseable && !parseResult.validationResult.isValid -> {
+						val context = parseResult.context!!
+						val dialogResult =
+							ValidationDialog.show(
+								this@MenuBar,
+								parseResult.validationResult,
+								selectedFile,
+								allowOpenAnyway = true
+							)
+
+						if (dialogResult == ValidationDialog.DialogResult.OPEN_ANYWAY) {
+							// User chose to open anyway - load context
+							val frame = getKoin().get<Frame>()
+							frame.setContext(context)
+							frame.modificationTracker.setCurrentFile(selectedFile)
+							frame.modificationTracker.markClean()
+						}
+						// If CANCEL, do nothing (file remains closed)
+					}
+
+					// Case 3: Unparseable XML (malformed syntax) - show error and block
+					else -> {
+						JOptionPane.showMessageDialog(
+							this@MenuBar,
+							"Cannot open file: The XML is malformed and cannot be parsed.\n\n" +
+								"Please check the file for syntax errors (missing tags, invalid characters, etc.).",
+							"Unparseable XML",
+							JOptionPane.ERROR_MESSAGE
+						)
+					}
+				}
 			} catch (exception: Exception) {
-				// Issue #258: Failed to load file - show simple error, don't block with validation dialog
-				// This allows the editor to remain open so user can create a new file or try another file
+				// Unexpected error during parsing
 				JOptionPane.showMessageDialog(
 					this@MenuBar,
 					"Failed to open file: ${exception.message}\n\n" +
-						"The file may be malformed or contain invalid data.",
+						"An unexpected error occurred while loading the file.",
 					"Cannot Open File",
 					JOptionPane.ERROR_MESSAGE
 				)

@@ -34,10 +34,10 @@ import javax.swing.WindowConstants
  * - BEFORE: ValidationDialog shown when opening files → blocked opening invalid files
  * - AFTER:  ValidationDialog shown only on SAVE → warns before saving invalid files
  *
- * Current Usage Pattern:
- * - EDITOR MODE: Opening files with errors shows simple error dialog (not this)
- *   - Unparseable XML (malformed): Shows error, doesn't open
- *   - Future: Parseable XML with warnings: Allow opening (show this dialog with warnings)
+ * Current Usage Pattern (2026-02-06 Update):
+ * - EDITOR MODE: Opening files with errors shows ValidationDialog with "Open Anyway" option
+ *   - Unparseable XML (malformed): Shows error, blocks opening
+ *   - Parseable XML with validation warnings: Shows dialog, allows "Open Anyway"
  * - SIMULATION MODE: Transformation to simulation blocks invalid XML
  * - SAVE OPERATION: Show this dialog as WARNING before saving (TODO: implement)
  *
@@ -64,16 +64,23 @@ import javax.swing.WindowConstants
  * @param parent Parent component for modal dialog
  * @param validationResult Result of validation containing errors/warnings
  * @param filePath Optional file path being validated
+ * @param allowOpenAnyway If true, shows "Open Anyway" button alongside Cancel
  */
 class ValidationDialog(
 	parent: Component?,
 	private val validationResult: ValidationResult,
-	private val filePath: File? = null
+	private val filePath: File? = null,
+	private val allowOpenAnyway: Boolean = false
 ) : JDialog() {
 	private var userChoice: DialogResult = DialogResult.CANCEL
 
 	init {
-		title = "⚠ Validation Error"
+		title =
+			if (allowOpenAnyway) {
+				"⚠ Validation Warning"
+			} else {
+				"⚠ Validation Error"
+			}
 		isModal = true
 		defaultCloseOperation = WindowConstants.DISPOSE_ON_CLOSE
 
@@ -179,9 +186,24 @@ class ValidationDialog(
 				}
 			}
 
+		// Open Anyway button (only if allowed)
+		if (allowOpenAnyway) {
+			val openAnywayButton =
+				JButton("Open Anyway").apply {
+					addActionListener {
+						userChoice = DialogResult.OPEN_ANYWAY
+						dispose()
+					}
+					// Make this button stand out as the action button
+					isFocusPainted = true
+				}
+			panel.add(openAnywayButton)
+		}
+
 		panel.add(cancelButton)
 
-		// Focus on Cancel button by default
+		// Focus on appropriate button by default
+		// Always focus Cancel to make user make a conscious choice
 		cancelButton.requestFocusInWindow()
 
 		return panel
@@ -202,7 +224,13 @@ class ValidationDialog(
 		/**
 		 * User clicked Cancel or closed the dialog.
 		 */
-		CANCEL
+		CANCEL,
+
+		/**
+		 * User clicked "Open Anyway" to proceed despite validation errors.
+		 * Only available when allowOpenAnyway is true.
+		 */
+		OPEN_ANYWAY
 	}
 
 	companion object {
@@ -212,14 +240,16 @@ class ValidationDialog(
 		 * @param parent Parent component for modal dialog
 		 * @param validationResult Result of validation
 		 * @param filePath Optional file path being validated
+		 * @param allowOpenAnyway If true, shows "Open Anyway" button alongside Cancel
 		 * @return User's choice from the dialog
 		 */
 		fun show(
 			parent: Component?,
 			validationResult: ValidationResult,
-			filePath: File? = null
+			filePath: File? = null,
+			allowOpenAnyway: Boolean = false
 		): DialogResult {
-			val dialog = ValidationDialog(parent, validationResult, filePath)
+			val dialog = ValidationDialog(parent, validationResult, filePath, allowOpenAnyway)
 			return dialog.showDialog()
 		}
 	}

@@ -29,6 +29,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.gui.ValidationResult
+import cz.vutbr.fit.interlockSim.gui.ValidationUtils
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -65,7 +67,7 @@ class XMLContextFactory : EditingContextFactory {
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
-	private inner class Handler : DefaultHandler() {
+	private inner class Handler(private val skipStructuralValidation: Boolean = false) : DefaultHandler() {
 		private var editingContext: DefaultEditingContext? = null
 		private var ended: Boolean = false
 		private var netElementDepth: Int = 0
@@ -325,19 +327,25 @@ class XMLContextFactory : EditingContextFactory {
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
 			val ctx = editingContext ?: throw SAXException("Context not initialized")
-			// Access inouts via public method from BaseContext
-			val inOutsCount = ctx.getInOutsList().size
-			if (inOutsCount < MIN_INOUT_ELEMENTS) {
-				throw SAXException(
-					"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
-						"Found: $inOutsCount"
-				)
+			
+			// Only validate InOut count if not skipping structural validation
+			if (!skipStructuralValidation) {
+				// Access inouts via public method from BaseContext
+				val inOutsCount = ctx.getInOutsList().size
+				if (inOutsCount < MIN_INOUT_ELEMENTS) {
+					throw SAXException(
+						"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
+							"Found: $inOutsCount"
+					)
+				}
 			}
 			ended = true
 		}
 
 		/**
 		 * Returns the parsed context as a DefaultEditingContext.
+		 *
+		 * When skipStructuralValidation is true, returns context even if validation would fail.
 		 */
 		fun getContext(): DefaultEditingContext? =
 			if (ended && editingContext != null) {
@@ -498,6 +506,154 @@ class XMLContextFactory : EditingContextFactory {
 	 */
 	@Throws(ContextCreationException::class)
 	override fun createContext(stream: InputStream): Context<*, *> = createContext(InputStreamReader(stream))
+
+	/**
+	 * Result of lenient XML parsing for editor mode.
+	 *
+	 * Separates unparseable XML (malformed syntax) from parseable XML with validation warnings.
+	 *
+	 * @property context The parsed context (null if XML is unparseable)
+	 * @property validationResult Validation errors/warnings
+	 * @property isParseable Whether the XML could be parsed (even if invalid)
+	 */
+	data class LenientParseResult(
+		val context: DefaultEditingContext?,
+		val validationResult: ValidationResult,
+		val isParseable: Boolean
+	)
+
+	/**
+	 * Attempts to parse XML file with lenient validation for editor mode.
+	 *
+	 * This method separates parsing from validation:
+	 * 1. **Unparseable XML** (malformed syntax): Returns null context, isParseable = false
+	 * 2. **Parseable XML with validation errors**: Returns context, isParseable = true, validationResult has errors
+	 *
+	 * This allows the editor to open files with validation errors so users can fix them.
+	 *
+	 * @param file XML file containing railway network definition
+	 * @return LenientParseResult with context (if parseable) and validation result
+	 */
+	fun createContextLenient(file: File): LenientParseResult =
+		try {
+			// Read file content so we can retry parsing without validation if needed
+			val xmlContent = file.readText()
+			createContextLenient(xmlContent)
+		} catch (e: FileNotFoundException) {
+			LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		} catch (e: IOException) {
+			LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		}
+
+	/**
+	 * Attempts to parse XML string with lenient validation for editor mode.
+	 *
+	 * @param xmlContent String containing XML railway network definition
+	 * @return LenientParseResult with context (if parseable) and validation result
+	 */
+	private fun createContextLenient(xmlContent: String): LenientParseResult {
+		val validator = validator
+		if (validator == null) {
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException("Validator not initialized")),
+				isParseable = false
+			)
+		}
+
+		// First attempt: Parse with full validation (schema + structural)
+		try {
+			val inputSource = InputSource(java.io.StringReader(xmlContent))
+			val handler = Handler(skipStructuralValidation = false)
+			
+			// Try to validate with schema - this will throw on both parse and validation errors
+			validator.validate(SAXSource(inputSource), SAXResult(handler))
+			
+			val context = handler.getContext()
+			if (context == null) {
+				return LenientParseResult(
+					context = null,
+					validationResult = ValidationUtils.fromException(ContextCreationException("Failed to parse context from XML")),
+					isParseable = false
+				)
+			} else {
+				// Successfully parsed and validated
+				return LenientParseResult(
+					context = context,
+					validationResult = ValidationResult.success(),
+					isParseable = true
+				)
+			}
+		} catch (e: org.xml.sax.SAXParseException) {
+			// SAXParseException = unparseable XML (malformed syntax)
+			// Line/column info available - definitely a parse error
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		} catch (e: SAXException) {
+			// SAXException (not SAXParseException) = validation error
+			// Could be schema validation or structural validation (e.g., InOut count < 2)
+			// Try parsing without validation to see if we can get a context
+			
+			val validationError = ContextCreationException(e)
+			
+			// Second attempt: Parse without schema validation but WITH structural validation disabled
+			return try {
+				val inputSource = InputSource(java.io.StringReader(xmlContent))
+				val handler = Handler(skipStructuralValidation = true)
+				
+				// Parse without schema validation - use SAX parser directly
+				val saxParserFactory = javax.xml.parsers.SAXParserFactory.newInstance()
+				saxParserFactory.isNamespaceAware = true  // Keep namespace awareness
+				val saxParser = saxParserFactory.newSAXParser()
+				saxParser.parse(inputSource, handler)
+				
+				val context = handler.getContext()
+				
+				if (context != null) {
+					// Successfully parsed without validation - it's parseable with errors
+					LenientParseResult(
+						context = context,
+						validationResult = ValidationUtils.fromException(validationError),
+						isParseable = true
+					)
+				} else {
+					// Couldn't get context even without validation
+					LenientParseResult(
+						context = null,
+						validationResult = ValidationUtils.fromException(validationError),
+						isParseable = false
+					)
+				}
+			} catch (parseException: Exception) {
+				// Even without validation, we couldn't parse - it's malformed
+				LenientParseResult(
+					context = null,
+					validationResult = ValidationUtils.fromException(ContextCreationException(parseException)),
+					isParseable = false
+				)
+			}
+		} catch (e: Exception) {
+			// Other exceptions (e.g., context creation errors)
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(
+					if (e is ContextCreationException) e else ContextCreationException(e)
+				),
+				isParseable = false
+			)
+		}
+	}
 
 	/**
 	 * Generates XML representation of a Context.
