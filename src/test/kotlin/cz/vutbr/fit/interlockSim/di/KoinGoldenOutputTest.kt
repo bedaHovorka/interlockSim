@@ -17,12 +17,16 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.core.module.Module
 import org.koin.test.get
 
 /**
@@ -41,6 +45,8 @@ import org.koin.test.get
  */
 @Tag("integration-test")
 class KoinGoldenOutputTest : KoinTestBase() {
+	override fun getTestModule(): Module = integrationTestModule
+
 	/**
 	 * Basic Koin initialization and simulation execution test
 	 *
@@ -217,8 +223,12 @@ class KoinGoldenOutputTest : KoinTestBase() {
 				
 				// Make a reservation to populate internal state
 				val grid = context.getRailWayNetGrid()
-				val inOutA = context.toDynamic(grid.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
-				val inOutB = context.toDynamic(grid.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+				val cellA = grid.getCellAt(1, 1)
+				val cellB = grid.getCellAt(5, 5)
+				require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+				require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+				val inOutA = context.toDynamic(cellA)
+				val inOutB = context.toDynamic(cellB)
 				service.reservePath("train-$iteration", inOutA, inOutB)
 				
 				// Verify reservation exists in this context
@@ -233,8 +243,12 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		buildTestContext().use { context1 ->
 			val service1 = context1.getPathReservationService()
 			val grid1 = context1.getRailWayNetGrid()
-			val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
-			val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			val cellA1 = grid1.getCellAt(1, 1)
+			val cellB1 = grid1.getCellAt(5, 5)
+			require(cellA1 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA1?.javaClass?.simpleName}" }
+			require(cellB1 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB1?.javaClass?.simpleName}" }
+			val inOutA1 = context1.toDynamic(cellA1)
+			val inOutB1 = context1.toDynamic(cellB1)
 			
 			// Create multiple reservations in context1
 			service1.reservePath("train-alpha", inOutA1, inOutB1)
@@ -259,8 +273,12 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			
 			// Verify context2 can use the same train names without conflict
 			val grid2 = context2.getRailWayNetGrid()
-			val inOutA2 = context2.toDynamic(grid2.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
-			val inOutB2 = context2.toDynamic(grid2.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			val cellA2 = grid2.getCellAt(1, 1)
+			val cellB2 = grid2.getCellAt(5, 5)
+			require(cellA2 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA2?.javaClass?.simpleName}" }
+			require(cellB2 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB2?.javaClass?.simpleName}" }
+			val inOutA2 = context2.toDynamic(cellA2)
+			val inOutB2 = context2.toDynamic(cellB2)
 			service2.reservePath("train-alpha", inOutA2, inOutB2) // Same name as context1
 			
 			// Verify reservation works in context2 (proves it's a different scope)
@@ -287,16 +305,16 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	
 	/**
 	 * Helper method to build a simple test context with InOut A -> InOut B.
-	 * Each call creates a NEW context with its own Koin scope.
+	 * Each call creates a NEW TestContextBuilder instance to avoid reusing frozen EditingContext.
+	 * Each context gets its own Koin scope.
 	 */
 	private fun buildTestContext(): DefaultSimulationContext {
-		// Get SimulationContextFactory from Koin
-		val factory = get<SimulationContextFactory>()
-		
-		// Load vyhybna.xml and create simulation context
-		val xml = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		requireNotNull(xml) { "vyhybna.xml not found" }
-		
-		return factory.createContext(xml) as DefaultSimulationContext
+		// Get a fresh TestContextBuilder for each call (avoids frozen EditingContext reuse)
+		val builder: TestContextBuilder = getKoin().get()
+		return builder
+			.withInOut("A", 1, 1, true)
+			.withInOut("B", 5, 5, false)
+			.withConnection(1, 1, 5, 5, 100.0, 80.0)
+			.buildSimulationContext()
 	}
 }
