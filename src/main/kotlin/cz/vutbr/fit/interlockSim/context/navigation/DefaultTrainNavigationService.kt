@@ -32,7 +32,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * - **SimulationContext**: Simulation environment for dynamic type conversion
  * - **PathReservationRegistry**: Provides block ownership information and PathInfo
- * - **TopologyNavigator**: ⚠️ UNUSED (kept for backward compatibility)
  *
  * All dependencies are injected via constructor (Koin DI).
  *
@@ -62,7 +61,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param context Simulation environment for dynamic type conversion
  * @param registry Registry for checking block ownership
- * @param topologyNavigator ⚠️ UNUSED (kept for backward compatibility, may be removed)
  * @see TrainNavigationService
  * @since Issue #295 (Phase 3 of Issue #292)
  * @since Issue #296 Phase 5 (Removed indirect recursion)
@@ -70,10 +68,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  */
 class DefaultTrainNavigationService(
 	private val context: SimulationContext,
-	private val registry: PathReservationRegistry,
-	@Suppress("UNUSED_PARAMETER")
-	// TODO(Issue #297): Remove in next major version after all DI configurations updated
-	private val topologyNavigator: TopologyNavigator // Kept for backward compatibility with Koin DI
+	private val registry: PathReservationRegistry
 ) : TrainNavigationService {
 	companion object {
 		private val logger = KotlinLogging.logger {}
