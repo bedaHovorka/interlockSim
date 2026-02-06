@@ -66,8 +66,10 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			}
 				.isInstanceOf<IllegalStateException>()
 				.transform { it.message ?: "" }
-				.contains("Dynamic wrapper not found for track" as CharSequence)
-				.contains("This indicates the track was not registered during initialization" as CharSequence)
+				.contains(
+					"Dynamic wrapper not found for track" as CharSequence,
+					"This indicates the track was not registered during initialization" as CharSequence
+				)
 		}
 
 		/**
