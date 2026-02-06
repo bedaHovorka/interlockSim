@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.xml
 
 import assertk.assertThat
-import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
@@ -200,7 +199,10 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 				appendLine("""<net X="50" Y="50">""")
 				// Add many InOut elements to create a larger file
 				for (i in 1..100) {
-					appendLine("""  <InOut X="${i % 50}" Y="${i / 50}" SpatialType="HORIZONTAL" orientation="false" name="InOut$i"/>""")
+					appendLine(
+						"""  <InOut X="${i % 50}" Y="${i / 50}" """ +
+							"""SpatialType="HORIZONTAL" orientation="false" name="InOut$i"/>"""
+					)
 				}
 				appendLine("""</net>""")
 			}
