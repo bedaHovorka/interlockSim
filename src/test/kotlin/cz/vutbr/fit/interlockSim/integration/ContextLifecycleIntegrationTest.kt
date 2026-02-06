@@ -220,9 +220,18 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// We verify that the context is properly configured for simulation
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
 
-		// Phase 5: Verify property setters work (no events fired - see issue #249)
+		// Phase 5: Verify property setters work and fire events
+		val propertyListener = TestPropertyChangeListener()
+		simBase.addPropertyChangeListener(propertyListener)
+		
 		simBase.currentMaxSpeed = 120.0
 		assertThat(simBase.currentMaxSpeed).isEqualTo(120.0)
+		
+		// Verify event was fired
+		assertThat(propertyListener.events).hasSize(1)
+		val event = propertyListener.events[0]
+		assertThat(event.propertyName).isEqualTo("currentMaxSpeed")
+		assertThat(event.newValue).isEqualTo(120.0)
 
 		// Phase 6: Teardown (implicit - context goes out of scope)
 		// Verify context is still accessible and consistent
@@ -305,5 +314,16 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 
 		// Phase 8: Verify loaded context is not frozen
 		assertThat(loadedContext.isFrozen()).isFalse()
+	}
+
+	/**
+	 * Test PropertyChangeListener implementation that captures all events.
+	 */
+	private class TestPropertyChangeListener : java.beans.PropertyChangeListener {
+		val events: MutableList<java.beans.PropertyChangeEvent> = mutableListOf()
+
+		override fun propertyChange(evt: java.beans.PropertyChangeEvent) {
+			events.add(evt)
+		}
 	}
 }
