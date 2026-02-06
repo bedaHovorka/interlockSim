@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -298,7 +299,7 @@ abstract class AbstractPath protected constructor(
 			}
 		}
 		context.report("", this, ReportType.PATH_SETTING)
-		requireSimulation(maxSpeed(sep) >= PathElement.MINIMAL_MAX_SPEED) {
+		requireSimulation(maxSpeed(sep) >= MINIMAL_MAX_SPEED) {
 			"Max speed must be at least MINIMAL_MAX_SPEED, got: ${maxSpeed(sep)}"
 		}
 	}
