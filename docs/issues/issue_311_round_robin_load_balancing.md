@@ -3,22 +3,69 @@
 **GitHub Issue**: https://github.com/bedaHovorka/interlockSim/issues/311
 
 ## Status
-🔴 **OPEN** - Required for Issue #291 completion
+✅ **IMPLEMENTED** - Round-robin load balancing complete (2026-02-06)
 
 ## Type
-Bug Fix / Enhancement (Part of Issue #291 solution)
+Enhancement - Round-robin path selection for fair load distribution
 
 ## Priority
-HIGH - Blocks Issue #291 closure
+HIGH - Part of Issue #291 completion
 
 ## Relationship to Issue #291
-⚠️ **Issue #291 remains OPEN until this is implemented**
+✅ **Implementation Complete** - Issue #311 resolved
 - Phase 1 (Issue #291 commit 2606463): ✅ Topology discovery fixed
-- Phase 2 (Issue #311): ⏭️ Load balancing implementation needed
-- Issue #291 closes when BOTH phases complete
+- Phase 2 (Issue #311): ✅ Load balancing implemented (commits 95cb75d, d098057)
+- **Issue #291 can now close** - both phases complete
 
 ## Created
 2026-02-02
+
+## Implemented
+2026-02-06
+
+---
+
+## Implementation Summary
+
+### Changes Made
+
+#### 1. DefaultPathReservationService.kt
+**Added round-robin state tracking:**
+```kotlin
+private val pathSelectionIndex = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
+```
+
+**Modified reservePath() algorithm:**
+- Step 2: Calculate round-robin starting index from map
+- Step 3: Loop with rotated index `(startIndex + offset) % size`
+- Step 3e.1: Update index after successful reservation `(pathIndex + 1) % size`
+
+**Key implementation details:**
+- Per-route tracking using `Pair(start.staticRef, target.staticRef)` as key
+- Rotation algorithm ensures fair distribution
+- Fallback to next path if preferred path blocked
+- Comprehensive logging for debugging
+
+#### 2. RoundRobinLoadBalancingTest.kt (NEW)
+Comprehensive test suite with 6 tests:
+1. `vyhybna network has multiple parallel paths` - Verifies 2 paths exist
+2. `round-robin alternates paths for sequential trains` - Tests rotation
+3. `round-robin provides balanced distribution` - 10 trains → 5 on each path
+4. `round-robin tries alternative when blocked` - Fallback behavior
+5. `round-robin state is independent per route` - Per-route verification
+6. `round-robin returns AllPathsBlocked` - Exhaustion handling
+
+#### 3. PATH_RESERVATION_ARCHITECTURE.md (UPDATED)
+Added comprehensive documentation:
+- Section 7.5: Round-Robin Load Balancing (Issue #311)
+- Problem statement and solution
+- Implementation details with code examples
+- Benefits, testing strategy, performance analysis
+- Future enhancement options
+
+### Commits
+- **95cb75d**: Initial implementation (code + tests)
+- **d098057**: Documentation update
 
 ---
 
@@ -335,12 +382,31 @@ These may be addressed in future enhancements if needed.
 ## References
 
 - **PATH_DISCOVERY_ARCHITECTURE.md**: Path discovery design rationale
-- **PATH_RESERVATION_ARCHITECTURE.md**: Atomic reservation design
+- **PATH_RESERVATION_ARCHITECTURE.md**: Atomic reservation design + Round-robin section (7.5)
 - **Issue #291**: Topology discovery fix (prerequisite)
 - **vyhybna.xml**: Example network with k1/k2 parallel paths
 
 ---
 
 *Issue created: 2026-02-02*
-*Last updated: 2026-02-02*
-*Status: Open*
+*Last updated: 2026-02-06*
+*Status: ✅ Implemented*
+
+## Verification Checklist
+
+- [x] Round-robin state tracking added to DefaultPathReservationService
+- [x] reservePath() implements rotation algorithm
+- [x] Round-robin index updated after successful reservation
+- [x] Comprehensive test suite created (RoundRobinLoadBalancingTest.kt)
+- [x] Documentation updated (PATH_RESERVATION_ARCHITECTURE.md)
+- [x] Issue documentation updated (this file)
+- [ ] Tests verified passing (requires build environment)
+- [ ] Integration testing with ShuntingLoop simulation
+- [ ] Code quality checks passed (detekt, ktlint)
+
+## Next Steps
+
+1. **Build verification** - Run full test suite to confirm implementation
+2. **Integration testing** - Verify ShuntingLoop simulation uses both k1 and k2
+3. **Performance testing** - Measure overhead of round-robin map lookup
+4. **Close Issue #291** - Both phases now complete
