@@ -169,7 +169,7 @@ class TrainPositionCalculator(
 		}
 
 		// NORMAL CASE: Calculate interpolated position using entry separator
-		val entrySeparator = train.getEntrySeparator()
+		val entrySeparator = train.trainEntrySeparator
 		val ends = currentSection.ends()
 		if (ends.size < 2) {
 			// Section has less than 2 ends - can't interpolate
