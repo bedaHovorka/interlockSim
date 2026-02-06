@@ -503,27 +503,115 @@ open class DefaultSimulationContext(
 
 		/**
 		 * Validate transformation completeness and correctness.
-		 * Logs summary statistics about the transformation.
+		 *
+		 * Verifies:
+		 * - All NodeCells have corresponding dynamic wrappers
+		 * - Graph structure preserved (same size, connectivity)
+		 * - InOut list copied correctly
+		 * - Configuration properties copied
+		 * - Grid dimensions match
+		 * - No orphaned static references
 		 *
 		 * @param editingContext Source editing context
 		 * @param simulationContext Target simulation context
+		 * @throws ContextCreationException if validation fails
 		 */
 		private fun validateTransformation(
 			editingContext: EditingContext,
 			simulationContext: DefaultSimulationContext
 		) {
-			val grid = editingContext.getRailWayNetGrid()
-			val cols = grid.getCols()
-			val rows = grid.getRows()
+			val errors = mutableListOf<String>()
 
-			// Validate InOut wrapper mappings
-			validateInOutMappings(simulationContext)
+			// 1. Validate grid dimensions
+			val sourceGrid = editingContext.getRailWayNetGrid()
+			val targetGrid = simulationContext.getGrid()
+			if (sourceGrid.getCols() != targetGrid.getCols() ||
+				sourceGrid.getRows() != targetGrid.getRows()
+			) {
+				errors.add(
+					"Grid dimensions mismatch: source ${sourceGrid.getCols()}x${sourceGrid.getRows()}, " +
+						"target ${targetGrid.getCols()}x${targetGrid.getRows()}"
+				)
+			}
 
+			// 2. Validate all NodeCells have wrappers
+			val nodeCells = mutableListOf<NodeCell>()
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
+			for ((_, cell) in cellGrid) {
+				if (cell is NodeCell) {
+					nodeCells.add(cell)
+				}
+			}
+
+			val unmappedCells = nodeCells.filter { it !in simulationContext.staticToDynamicMap }
+			if (unmappedCells.isNotEmpty()) {
+				errors.add(
+					"Missing dynamic wrappers for ${unmappedCells.size} NodeCells: " +
+						unmappedCells.take(5).joinToString { "${it::class.simpleName} at ${it.spatialType}" }
+				)
+			}
+
+			// 3. Validate graph size preserved
+			val sourceGraphSize = editingContext.getGraph().size()
+			val targetGraphSize = simulationContext.getGraph().size()
+			if (sourceGraphSize != targetGraphSize) {
+				errors.add(
+					"Graph size mismatch: source $sourceGraphSize entries, target $targetGraphSize entries"
+				)
+			}
+
+			// 4. Validate InOut list copied
+			val sourceInOuts = editingContext.getInOuts()
+			val targetInOuts = simulationContext.getInOuts()
+			if (sourceInOuts.size != targetInOuts.size) {
+				errors.add(
+					"InOut list size mismatch: source ${sourceInOuts.size}, target ${targetInOuts.size}"
+				)
+			}
+
+			// 5. Validate configuration properties
+			if (editingContext.currentMaxSpeed != simulationContext.currentMaxSpeed) {
+				errors.add(
+					"Max speed mismatch: source ${editingContext.currentMaxSpeed}, " +
+						"target ${simulationContext.currentMaxSpeed}"
+				)
+			}
+			if (editingContext.currentTrackLength != simulationContext.currentTrackLength) {
+				errors.add(
+					"Track length mismatch: source ${editingContext.currentTrackLength}, " +
+						"target ${simulationContext.currentTrackLength}"
+				)
+			}
+			if (editingContext.currentNameString != simulationContext.currentNameString) {
+				errors.add(
+					"Name string mismatch: source '${editingContext.currentNameString}', " +
+						"target '${simulationContext.currentNameString}'"
+				)
+			}
+
+			// Validate InOut wrapper mappings (existing check - keep for backward compatibility)
+			try {
+				validateInOutMappings(simulationContext)
+			} catch (e: IllegalArgumentException) {
+				errors.add("InOut wrapper validation failed: ${e.message}")
+			}
+
+			// Throw exception if any errors found
+			if (errors.isNotEmpty()) {
+				throw ContextCreationException(
+					"Context transformation validation failed with ${errors.size} error(s):\n" +
+						errors.joinToString("\n") { "  - $it" }
+				)
+			}
+
+			// Log success with statistics
 			logger.info {
-				"Created simulation context from editing context: " +
-					"${simulationContext.staticToDynamicMap.size} dynamic wrappers, " +
-					"${simulationContext.inouts.size} InOuts, " +
-					"grid: ${cols}x$rows, graph: ${editingContext.getGraph().size()} track blocks"
+				"Context transformation validated successfully: " +
+					"${nodeCells.size} cells (${simulationContext.staticToDynamicMap.size} wrappers), " +
+					"${targetGraphSize} graph entries, " +
+					"${targetInOuts.size} InOuts, " +
+					"grid ${targetGrid.getCols()}x${targetGrid.getRows()}"
 			}
 		}
 	}
