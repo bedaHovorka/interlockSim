@@ -40,4 +40,16 @@ data class PointF(
 		val dy = this.y - other.y
 		return sqrt(dx * dx + dy * dy)
 	}
+
+	/**
+	 * Linear interpolation between this point and another.
+	 *
+	 * @param other Target point
+	 * @param t Interpolation parameter (0.0 = this point, 1.0 = other point)
+	 * @return Interpolated point at position t
+	 */
+	fun lerp(other: PointF, t: Float): PointF = PointF(
+		x + (other.x - x) * t,
+		y + (other.y - y) * t
+	)
 }

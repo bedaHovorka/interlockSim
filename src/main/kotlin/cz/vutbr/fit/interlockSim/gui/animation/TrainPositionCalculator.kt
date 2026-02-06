@@ -177,26 +177,30 @@ class TrainPositionCalculator(
 		}
 
 		// Try to use entry separator to determine correct direction
-		// Try both orderings and pick the one where first separator matches entry
+		// Use identity-based comparison (===) instead of position-based comparison
+		// This eliminates false positives from floating-point precision and cache misses
 		val (entryPos, exitPos) =
 			if (entrySeparator != null) {
-				// Try to find which end matches the entry separator
-				// Compare by getting grid positions (handles static/dynamic wrapper mismatch)
-				val entryGridPos = getGridPosition(entrySeparator)
+				// Unwrap to static references for identity comparison
+				val entryStatic = DynamicWrapperUtils.unwrapToStatic(entrySeparator)
+				val end0Static = DynamicWrapperUtils.unwrapToStatic(ends[0])
+				val end1Static = DynamicWrapperUtils.unwrapToStatic(ends[1])
+
+				// Get grid positions for the final result
 				val end0GridPos = getGridPosition(ends[0])
 				val end1GridPos = getGridPosition(ends[1])
 
 				when {
-					positionsMatch(entryGridPos, end0GridPos) -> {
+					entryStatic === end0Static -> {
 						// entrySeparator matches ends[0] - use normal order
-						Pair(end0GridPos!!, end1GridPos ?: return null)
+						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
 					}
-					positionsMatch(entryGridPos, end1GridPos) -> {
+					entryStatic === end1Static -> {
 						// entrySeparator matches ends[1] - use reversed order
-						Pair(end1GridPos!!, end0GridPos ?: return null)
+						Pair(end1GridPos ?: return null, end0GridPos ?: return null)
 					}
 					else -> {
-						// Can't match entry separator (race condition) - use arbitrary order
+						// Fallback: Can't match entry separator - use arbitrary order
 						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
 					}
 				}
