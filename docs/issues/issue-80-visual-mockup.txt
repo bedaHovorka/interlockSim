@@ -1,0 +1,270 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│  ⚠  Cannot Save - Insufficient InOut Elements                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Railway network must have at least 2 InOut elements (entry and      │
+│  exit points).                                                        │
+│                                                                       │
+│  Current count: 1                                                    │
+│                                                                       │
+│  InOut elements define where trains enter and exit the railway       │
+│  network.                                                            │
+│  Please add more InOut elements before saving.                       │
+│                                                                       │
+│                                                                       │
+│                           ┌────────┐                                 │
+│                           │   OK   │                                 │
+│                           └────────┘                                 │
+│                                                                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+                    Figure 1: Error Dialog Preview
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  Railway Interlocking Simulator - Editor                             │
+├──────────────────────────────────────────────────────────────────────┤
+│  File  Help                                                          │
+├──────────────────────────────────────────────────────────────────────┤
+│  [Tool Buttons...]                                                   │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│   Railway Network Canvas                                             │
+│                                                                       │
+│   ┌────┐                                                             │
+│   │ A  │  (InOut "A" - Entry point)                                 │
+│   └─┬──┘                                                             │
+│     │                                                                │
+│     │  Track Section (100m)                                         │
+│     │                                                                │
+│     ?  ← User tries to save with only 1 InOut                       │
+│        This triggers the validation error!                          │
+│                                                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│  Status: Ready                                                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+         Figure 2: Editor State When Validation Triggers
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  ⚠  Cannot Save - Insufficient InOut Elements                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Railway network must have at least 2 InOut elements (entry and      │
+│  exit points).                                                        │
+│                                                                       │
+│  Current count: 0                                                    │
+│                                                                       │
+│  InOut elements define where trains enter and exit the railway       │
+│  network.                                                            │
+│  Please add more InOut elements before saving.                       │
+│                                                                       │
+│                                                                       │
+│                           ┌────────┐                                 │
+│                           │   OK   │                                 │
+│                           └────────┘                                 │
+│                                                                       │
+└──────────────────────────────────────────────────────────────────────┘
+
+          Figure 3: Error Dialog with 0 InOuts (Empty Network)
+
+VALIDATION SCENARIOS:
+─────────────────────
+
+Scenario 1: Empty Network (0 InOuts)
+┌───────────┐
+│  Network  │  User creates empty network
+│  (empty)  │  User attempts: File > Save
+└─────┬─────┘
+      │
+      ▼
+┌───────────────┐
+│ Validation ❌ │  InOut count: 0 < 2
+│ Show Dialog   │  Message: "Current count: 0"
+└───────────────┘
+
+Scenario 2: Single Entry Point (1 InOut)
+┌───────────┐
+│  Network  │  User adds 1 InOut ("Entry")
+│  [Entry]  │  User attempts: File > Save
+└─────┬─────┘
+      │
+      ▼
+┌───────────────┐
+│ Validation ❌ │  InOut count: 1 < 2
+│ Show Dialog   │  Message: "Current count: 1"
+└───────────────┘
+
+Scenario 3: Valid Network (2 InOuts)
+┌──────────────┐
+│   Network    │  User adds 2 InOuts ("Entry", "Exit")
+│ [Entry][Exit]│  User attempts: File > Save
+└──────┬───────┘
+       │
+       ▼
+┌───────────────┐
+│ Validation ✅ │  InOut count: 2 >= 2
+│ Save Success  │  File written to disk
+└───────────────┘
+
+Scenario 4: Complex Network (3+ InOuts)
+┌────────────────────┐
+│      Network       │  User adds 3 InOuts
+│ [E1][Exit][E2]     │  User attempts: File > Save
+└─────────┬──────────┘
+          │
+          ▼
+┌───────────────┐
+│ Validation ✅ │  InOut count: 3 >= 2
+│ Save Success  │  File written to disk
+└───────────────┘
+
+USER INTERACTION FLOW:
+──────────────────────
+
+1. User creates network with insufficient InOuts
+   └─> Editor allows editing (no restrictions)
+
+2. User attempts to save (File > Save or File > Save As...)
+   └─> MenuBar.performSave() validates InOut count
+
+3a. Validation FAILS (< 2 InOuts)
+    └─> Error dialog shown (JOptionPane.ERROR_MESSAGE)
+    └─> User clicks OK to dismiss dialog
+    └─> Editor remains open with unsaved changes
+    └─> File NOT created/updated
+    └─> User can add more InOuts and try again
+
+3b. Validation PASSES (>= 2 InOuts)
+    └─> File saved successfully
+    └─> Status bar shows: "✓ Saved: filename.xml"
+    └─> Modification tracker updated
+    └─> File CAN be reloaded without errors
+
+COMPARISON WITH XML VALIDATION:
+────────────────────────────────
+
+OLD BEHAVIOR (Before Issue #80):
+┌─────────┐    ┌─────────┐    ┌──────────┐    ┌──────────┐
+│  Edit   │ -> │  Save   │ -> │ File OK  │ -> │ Reload ❌│
+│ (1 InOut)│   │   ✅    │    │ on disk  │    │  ERROR   │
+└─────────┘    └─────────┘    └──────────┘    └──────────┘
+                                                     ↑
+                                             User confused!
+                                             File saved but
+                                             can't be loaded
+
+NEW BEHAVIOR (After Issue #80):
+┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Edit   │ -> │  Save    │ -> │ Add more │ -> │  Save    │
+│ (1 InOut)│   │   ❌     │    │  InOuts  │    │   ✅     │
+└─────────┘    └────┬─────┘    └──────────┘    └────┬─────┘
+                    │                                 │
+                    ▼                                 ▼
+              ┌──────────┐                      ┌──────────┐
+              │  Error   │                      │ Reload ✅│
+              │  Dialog  │                      │   OK     │
+              └──────────┘                      └──────────┘
+                    ↑
+            User informed
+            immediately!
+            Clear guidance
+            provided
+
+TECHNICAL IMPLEMENTATION:
+─────────────────────────
+
+Location: MenuBar.kt, line 131-149
+
+```kotlin
+private fun performSave(file: File): Boolean {
+    // ... (get factories and context)
+    
+    // Validate InOut count before saving (Issue #80)
+    val inOutCount = editingContext.getInOuts().size
+    if (inOutCount < MIN_INOUT_ELEMENTS) {  // MIN_INOUT_ELEMENTS = 2
+        JOptionPane.showMessageDialog(
+            this,  // Parent component (MenuBar)
+            "Railway network must have at least $MIN_INOUT_ELEMENTS " +
+                "InOut elements (entry and exit points).\n\n" +
+                "Current count: $inOutCount\n\n" +
+                "InOut elements define where trains enter and exit " +
+                "the railway network.\n" +
+                "Please add more InOut elements before saving.",
+            "Cannot Save - Insufficient InOut Elements",  // Dialog title
+            JOptionPane.ERROR_MESSAGE  // Error icon
+        )
+        return false  // Block save operation
+    }
+    
+    // Continue with save if validation passes...
+    val success = editingContextFactory.saveContext(editingContext, file)
+    // ...
+}
+```
+
+KEY FEATURES:
+─────────────
+
+✅ User-Friendly Error Message
+   - Clear title
+   - Explains requirement (minimum 2 InOuts)
+   - Shows current count
+   - Explains what InOuts are
+   - Provides actionable guidance
+
+✅ Non-Intrusive Validation
+   - Only validates on save operation
+   - Doesn't block editing
+   - Allows work-in-progress networks
+
+✅ Fail-Fast Approach
+   - Error shown immediately at save time
+   - Prevents invalid saves
+   - No file created when validation fails
+
+✅ Comprehensive Coverage
+   - All save operations validated
+   - Consistent with XML validation rules
+   - Well-tested (5 test cases)
+
+TESTING:
+────────
+
+Test Class: InOutSaveValidationTest.kt
+
+Test Cases:
+1. contextWith0InOutsCannotBeSaved
+   - Creates empty context (0 InOuts)
+   - Attempts save
+   - Verifies: save returns false, file not created
+
+2. contextWith1InOutCannotBeSaved
+   - Creates context with 1 InOut
+   - Attempts save
+   - Verifies: save returns false, file not created
+
+3. contextWith2InOutsCanBeSaved
+   - Creates context with 2 InOuts
+   - Attempts save
+   - Verifies: save returns true, file created
+
+4. contextWith3InOutsCanBeSaved
+   - Creates context with 3 InOuts
+   - Attempts save
+   - Verifies: save returns true, file created
+
+5. validationMessageIncludesCurrentInOutCount
+   - Verifies InOut count is accurate
+
+All tests use:
+- AbstractFrameTestBase for proper EDT handling
+- TempDir for isolated test files
+- TestContextBuilder for context creation
+- Reflection to test private performSave() method
+
+─────────────────────────────────────────────────────────────────────
+Issue #80 Implementation - Complete
+Date: 2026-02-06
+Author: GitHub Copilot Agent
+Status: ✅ Ready for CI Validation
+─────────────────────────────────────────────────────────────────────
