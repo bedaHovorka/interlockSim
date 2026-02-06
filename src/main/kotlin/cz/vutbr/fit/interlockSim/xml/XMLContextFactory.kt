@@ -429,11 +429,12 @@ class XMLContextFactory : EditingContextFactory {
 		/**
 		 * Minimum number of InOut elements required in a railway network.
 		 *
-		 * Railway networks must have at least 2 InOut elements (entry and exit points)
-		 * to allow trains to enter and exit the simulation. Single InOut networks
-		 * are invalid (dead-end configuration).
+		 * Railway networks must have at least 1 InOut element (entry/exit point).
+		 * With bidirectional train operation (Issue #356), a single InOut can serve
+		 * as both entry and exit point.
 		 *
 		 * @since 2026-01 (Issue #76 validation, Issue #77 code quality)
+		 * @since 2026-02 (Issue #341, PR #356 - reduced from 2 to 1 for bidirectional support)
 		 */
 		const val MIN_INOUT_ELEMENTS = 1
 	}

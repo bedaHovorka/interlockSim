@@ -84,8 +84,9 @@ class InvalidNetworkTest : KoinTestBase() {
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
 			// With bidirectional operation, single InOut is now valid
-			assertThatBlock { editingContextFactory.createContext(stream) }
-				.isSuccess()
+			val context = editingContextFactory.createContext(stream)
+			assertThat(context).isNotNull()
+			context.close()
 		}
 
 		/**
