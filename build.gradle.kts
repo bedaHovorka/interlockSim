@@ -38,6 +38,9 @@ plugins {
 
     // Detekt plugin for Kotlin static code analysis
     id("io.gitlab.arturbosch.detekt") version "1.23.7"
+
+    // JMH plugin for microbenchmarking
+    id("me.champeau.jmh") version "0.7.2"
 }
 
 // Load versions from gradle.properties
@@ -53,6 +56,7 @@ val mockkVersion: String by project
 val koinVersion: String by project
 val javaVersion: String by project
 val kotlinVersion: String by project
+val jmhVersion: String by project
 
 // Project group and version
 group = "cz.vutbr.fit"
@@ -1098,3 +1102,88 @@ tasks.register("koinStatus") {
 tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
     enabled = false
 }
+
+// ===========================================
+// JMH (Java Microbenchmark Harness) Configuration
+// ===========================================
+
+/**
+ * JMH configuration for performance benchmarking
+ *
+ * JMH is the industry-standard tool for accurate microbenchmarking in Java/Kotlin.
+ * It handles JIT warmup, dead code elimination, and statistical analysis automatically.
+ *
+ * Benchmark source location:
+ * - src/jmh/kotlin/ - Benchmark implementations
+ *
+ * Available tasks:
+ * - ./gradlew jmh                      - Run all benchmarks
+ * - ./gradlew jmhJar                   - Create benchmark JAR
+ * - ./gradlew jmhReport                - Generate benchmark report
+ *
+ * Related Issues:
+ * - Issue #216: Array2DMap performance benchmarks
+ * - Issue #219: Koin performance benchmarks
+ */
+jmh {
+    // JMH version - use string literal to avoid circular dependency
+    jmhVersion.set("1.37")
+
+    // Include patterns (run all benchmarks by default)
+    includes.set(listOf(".*"))
+
+    // Exclude patterns (none by default)
+    excludes.set(emptyList())
+
+    // Number of warmup iterations (default: 5)
+    warmupIterations.set(3)
+
+    // Number of measurement iterations (default: 5)
+    iterations.set(5)
+
+    // Number of forks (separate JVM invocations, default: 5)
+    // Reduced to 3 for faster local execution while maintaining statistical significance
+    fork.set(3)
+
+    // Fail build if benchmark fails (default: false)
+    failOnError.set(false)
+
+    // Force garbage collection between iterations
+    forceGC.set(true)
+
+    // JVM arguments for benchmarks
+    jvmArgs.set(listOf("-Xmx2g", "-Xms2g"))
+
+    // Benchmark results output format (default: JSON)
+    resultFormat.set("JSON")
+
+    // Benchmark results file location
+    resultsFile.set(file("${layout.buildDirectory.get()}/reports/jmh/results.json"))
+
+    // Human-readable format (also generate text format)
+    humanOutputFile.set(file("${layout.buildDirectory.get()}/reports/jmh/results.txt"))
+
+    // Time unit for benchmark results (default: SECONDS)
+    timeUnit.set("ms")
+
+    // ZIP output for benchmark JAR (default: true)
+    zip64.set(true)
+}
+
+// JMH plugin automatically creates jmh source set, no need to create it manually
+// Just configure classpath dependencies
+configurations {
+    // Make test classes and dependencies available to JMH benchmarks
+    named("jmhImplementation") {
+        extendsFrom(configurations.testImplementation.get())
+    }
+    named("jmhRuntimeOnly") {
+        extendsFrom(configurations.testRuntimeOnly.get())
+    }
+}
+
+// Ensure JMH tasks depend on test compilation (for test utilities)
+tasks.named("jmhCompileGeneratedClasses") {
+    dependsOn("compileTestKotlin")
+}
+
