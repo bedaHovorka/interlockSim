@@ -165,48 +165,48 @@ object TrainIconGenerator {
 		val cy = SPRITE_HEIGHT / 2
 
 		// Arrow size
-		val arrowSize = 5
+		val arrowSize = 4
 
-		// Calculate arrow points based on segment direction
-		// Arrow points in direction of (dx, dy)
+		// Calculate arrow points based on segment direction (dx, dy)
+		// Arrow triangle points in the direction of movement
 		val (xPoints, yPoints) =
 			when (segment) {
 				// Horizontal directions
-				Cell.Segment.A -> { // Left (-1, 0)
-					Triple(cx - arrowSize, cy, cx + arrowSize) to
-						Triple(cy, cy - arrowSize, cy)
+				Cell.Segment.A -> { // Left (-1, 0) - arrow points left
+					Triple(cx - arrowSize, cx + arrowSize, cx + arrowSize) to
+						Triple(cy, cy - arrowSize, cy + arrowSize)
 				}
-				Cell.Segment.F -> { // Right (1, 0)
-					Triple(cx - arrowSize, cy, cx + arrowSize) to
-						Triple(cy, cy - arrowSize, cy)
+				Cell.Segment.F -> { // Right (1, 0) - arrow points right
+					Triple(cx + arrowSize, cx - arrowSize, cx - arrowSize) to
+						Triple(cy, cy - arrowSize, cy + arrowSize)
 				}
 
 				// Vertical directions
-				Cell.Segment.C -> { // Top (0, -1)
+				Cell.Segment.C -> { // Top (0, -1) - arrow points up
 					Triple(cx, cx - arrowSize, cx + arrowSize) to
 						Triple(cy - arrowSize, cy + arrowSize, cy + arrowSize)
 				}
-				Cell.Segment.H -> { // Bottom (0, 1)
+				Cell.Segment.H -> { // Bottom (0, 1) - arrow points down
 					Triple(cx, cx - arrowSize, cx + arrowSize) to
 						Triple(cy + arrowSize, cy - arrowSize, cy - arrowSize)
 				}
 
-				// Diagonal directions
-				Cell.Segment.B -> { // Left-Top (-1, -1)
-					Triple(cx - arrowSize, cx, cx + arrowSize) to
-						Triple(cy, cy - arrowSize, cy)
+				// Diagonal directions - simplified diagonal arrows
+				Cell.Segment.B -> { // Left-Top (-1, -1) - arrow points upper-left
+					Triple(cx - arrowSize, cx + arrowSize, cx) to
+						Triple(cy - arrowSize, cy, cy + arrowSize)
 				}
-				Cell.Segment.D -> { // Left-Bottom (-1, 1)
-					Triple(cx - arrowSize, cx, cx + arrowSize) to
-						Triple(cy, cy + arrowSize, cy)
+				Cell.Segment.D -> { // Left-Bottom (-1, 1) - arrow points lower-left
+					Triple(cx - arrowSize, cx + arrowSize, cx) to
+						Triple(cy + arrowSize, cy, cy - arrowSize)
 				}
-				Cell.Segment.E -> { // Right-Top (1, -1)
-					Triple(cx - arrowSize, cx, cx + arrowSize) to
-						Triple(cy, cy - arrowSize, cy)
+				Cell.Segment.E -> { // Right-Top (1, -1) - arrow points upper-right
+					Triple(cx + arrowSize, cx - arrowSize, cx) to
+						Triple(cy - arrowSize, cy, cy + arrowSize)
 				}
-				Cell.Segment.G -> { // Right-Bottom (1, 1)
-					Triple(cx - arrowSize, cx, cx + arrowSize) to
-						Triple(cy, cy + arrowSize, cy)
+				Cell.Segment.G -> { // Right-Bottom (1, 1) - arrow points lower-right
+					Triple(cx + arrowSize, cx - arrowSize, cx) to
+						Triple(cy + arrowSize, cy, cy - arrowSize)
 				}
 			}
 
