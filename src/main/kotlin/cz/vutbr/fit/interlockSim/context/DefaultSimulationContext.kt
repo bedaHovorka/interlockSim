@@ -830,25 +830,22 @@ open class DefaultSimulationContext(
 		var trackMappedCount = 0
 		val graph = getGraph()
 		for (trackBlock in graph.values()) {
-			// TrackBlock extends TrackFacility, so we can safely cast
-			val trackFacility = trackBlock as TrackFacility
+			// TrackBlock extends TrackFacility, but graph stores DynamicTrackBlock wrappers
+			val dynamicBlock = trackBlock as DynamicTrackBlock
+			val staticTrack = dynamicBlock.staticRef as TrackFacility
 
-			// Skip if already mapped
-			if (staticTrackToDynamicMap.containsKey(trackFacility)) {
-				logger.trace { "Skipping TrackBlock ${trackFacility.hashCode()} - already mapped" }
-				continue
+			if (!staticTrackToDynamicMap.containsKey(staticTrack)) {
+				val dynamicTrack = DynamicTrack(staticTrack)
+				staticTrackToDynamicMap[staticTrack] = dynamicTrack
+				trackMappedCount++
+				logger.trace { "Mapped TrackBlock ${staticTrack.hashCode()} to dynamic wrapper" }
 			}
 
-			// Create DynamicTrack wrapper for each TrackBlock
-			val dynamicTrack = DynamicTrack(trackFacility)
-			staticTrackToDynamicMap[trackFacility] = dynamicTrack
-			trackMappedCount++
-			logger.trace { "Mapped TrackBlock ${trackFacility.hashCode()} to dynamic wrapper" }
+			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
+			staticTrackToDynamicMap.putIfAbsent(dynamicBlock, staticTrackToDynamicMap[staticTrack]!!)
 
 			// Recursively map any internal TrackSection objects
-			// For SimpleTrackBlock (current impl), this is a no-op
-			// For future CompoundTrackBlock, ensures all internal sections are mapped
-			mapInternalSections(trackBlock)
+			mapInternalSections(dynamicBlock)
 		}
 		logger.debug {
 			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"
@@ -1067,15 +1064,20 @@ open class DefaultSimulationContext(
 	 * Uses identity-based mapping to ensure each static track maps to exactly one wrapper.
 	 */
 	override fun toDynamic(track: TrackFacility): DynamicTrack {
-		// All tracks should be wrapped during initialization
-		return staticTrackToDynamicMap[track]
-			?: throw IllegalStateException(
-				"Dynamic wrapper not found for track: ${System.identityHashCode(track)} " +
-					"(${track.javaClass.simpleName}). " +
-					"Map contains ${staticTrackToDynamicMap.size} entries. " +
-					"This indicates the track was not registered during initialization. " +
-					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
-			)
+		staticTrackToDynamicMap[track]?.let { return it }
+
+		val staticKey = (track as? DynamicTrackBlock)?.staticRef as? TrackFacility
+		if (staticKey != null) {
+			staticTrackToDynamicMap[staticKey]?.let { return it }
+		}
+
+		throw IllegalStateException(
+			"Dynamic wrapper not found for track: ${System.identityHashCode(track)} " +
+				"(${track.javaClass.simpleName}). " +
+				"Map contains ${staticTrackToDynamicMap.size} entries. " +
+				"This indicates the track was not registered during initialization. " +
+				"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+		)
 	}
 
 	@Throws(EmptyContextException::class, SimulationException::class)

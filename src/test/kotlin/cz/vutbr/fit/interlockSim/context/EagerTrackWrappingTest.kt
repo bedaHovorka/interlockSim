@@ -21,6 +21,7 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
@@ -121,6 +122,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			for (trackBlock in graph.values()) {
 				totalTracks++
 				val trackFacility = trackBlock as TrackFacility
+				val staticRef = (trackBlock as DynamicTrackBlock).staticRef as TrackFacility
 
 				// toDynamic should find wrapper (no lazy creation)
 				val dynamicTrack = context.toDynamic(trackFacility)
@@ -131,8 +133,8 @@ class EagerTrackWrappingTest : KoinTestBase() {
 
 				// Verify wrapper points to correct static track
 				assertThat(dynamicTrack.staticRef)
-					.withMessage("Wrapper should reference original track")
-					.isEqualTo(trackFacility)
+					.withMessage("Wrapper should reference original static track")
+					.isEqualTo(staticRef)
 			}
 
 			// Verify we have tracks
@@ -158,6 +160,30 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			assertThat(graph.size())
 				.withMessage("vyhybna.xml should have at least 5 track segments")
 				.isGreaterThan(4)
+		}
+
+		/**
+		 * Integration test: Verify static track blocks map to dynamic wrappers
+		 */
+		@Test
+		@DisplayName("vyhybna.xml - static track blocks map to dynamic wrappers")
+		fun vyhybnaXml_staticTrackLookupsReturnDynamicWrapper() {
+			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+
+			context.initializeDynamicMapping()
+
+			val graph = context.getGraph()
+			val staticBlocks = graph.values()
+			assertThat(staticBlocks).isNotNull()
+
+			for (trackBlock in staticBlocks) {
+				val staticRef = (trackBlock as DynamicTrackBlock).staticRef as TrackFacility
+				val dynamicWrapper = context.toDynamic(staticRef)
+				assertThat(dynamicWrapper.staticRef)
+					.withMessage("Static track ${System.identityHashCode(staticRef)} must resolve to dynamic wrapper")
+					.isEqualTo(staticRef)
+			}
 		}
 	}
 

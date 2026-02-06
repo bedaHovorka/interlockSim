@@ -73,6 +73,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
 		linearContext = simulationContextFactory.createContext(linearFile) as DefaultSimulationContext
 		switchContext = simulationContextFactory.createContext(switchFile) as DefaultSimulationContext
+
+		// Initialize dynamic mappings for both contexts
+		// This is required because tests use toDynamic() without calling run()
+		// (Issue #214: Tracks are now wrapped eagerly, not lazily)
+		linearContext.initializeDynamicMapping()
+		switchContext.initializeDynamicMapping()
 	}
 
 	/**
