@@ -109,15 +109,14 @@ object ValidationUtils {
 	 */
 	private fun parseErrorMessage(message: String): String =
 		when {
-			message.contains("InOut") && message.contains("at least 2") -> {
+			message.contains("InOut") && message.contains("at least 1") -> {
 				"""
-				|Minimum 2 InOut elements required (found fewer).
+				|Minimum 1 InOut element required (found none).
 				|
-				|InOut elements define entry/exit points for trains. At least 2 are required for simulation:
-				|- One for trains to enter the network
-				|- One for trains to exit the network
+				|InOut elements define entry/exit points for trains. At least 1 is required for simulation.
+				|With bidirectional train operation, a single InOut can serve as both entry and exit point.
 				|
-				|Please add more InOut elements to your railway network.
+				|Please add an InOut element to your railway network.
 				""".trimMargin()
 			}
 

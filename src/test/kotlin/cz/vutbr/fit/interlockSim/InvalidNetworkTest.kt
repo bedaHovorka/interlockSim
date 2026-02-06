@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isSuccess
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.*
@@ -55,7 +56,7 @@ class InvalidNetworkTest : KoinTestBase() {
 	inner class MissingElementsTests {
 		/**
 		 * Test: Network with no InOut elements must be rejected (strict validation)
-		 * Rationale: Railway networks require at least 2 InOut elements (entry and exit points)
+		 * Rationale: Railway networks require at least 1 InOut element (entry/exit point)
 		 */
 		@Test
 		fun createContext_noInOutElements_throwsException() {
@@ -71,11 +72,11 @@ class InvalidNetworkTest : KoinTestBase() {
 		}
 
 		/**
-		 * Test: Network with single InOut must be rejected (strict validation)
-		 * Rationale: Railway networks require at least 2 InOut elements (entry and exit points)
+		 * Test: Network with single InOut is now valid (with bidirectional operation)
+		 * Rationale: With bidirectional train operation, a single InOut can serve as both entry and exit
 		 */
 		@Test
-		fun createContext_singleInOutNoTracks_throwsException() {
+		fun createContext_singleInOutNoTracks_isValid() {
 			val networkXML = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -83,9 +84,9 @@ class InvalidNetworkTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(networkXML.toByteArray())
 
-			// Strict validation: single InOut is insufficient
+			// With bidirectional operation, single InOut is now valid
 			assertThatBlock { editingContextFactory.createContext(stream) }
-				.isFailure()
+				.isSuccess()
 		}
 
 		/**

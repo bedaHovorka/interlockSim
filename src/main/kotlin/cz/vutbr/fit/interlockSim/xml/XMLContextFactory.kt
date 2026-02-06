@@ -293,9 +293,9 @@ class XMLContextFactory : EditingContextFactory {
 		 * Called when XML parsing completes. Validates the parsed railway network structure.
 		 *
 		 * **Validation Rules:**
-		 * - Minimum [MIN_INOUT_ELEMENTS] InOut elements required (entry and exit points)
+		 * - Minimum [MIN_INOUT_ELEMENTS] InOut element required (entry/exit point)
 		 * - InOut elements define where trains enter/exit the railway network
-		 * - Single InOut networks are invalid (dead-end, train cannot exit)
+		 * - With bidirectional operation, a single InOut can serve as both entry and exit
 		 * - Context must be initialized (non-null editingContext)
 		 *
 		 * This method is called automatically by the SAX parser after all XML elements
@@ -305,15 +305,14 @@ class XMLContextFactory : EditingContextFactory {
 		 * ```xml
 		 * <net X="10" Y="10">
 		 *   <InOut name="ENTRY" ... />
-		 *   <InOut name="EXIT" ... />
-		 *   <!-- other elements -->
+		 *   <!-- Optional: Additional InOut for dedicated exit -->
 		 * </net>
 		 * ```
 		 *
 		 * **Example Invalid Network (throws exception):**
 		 * ```xml
 		 * <net X="10" Y="10">
-		 *   <InOut name="ENTRY" ... />  <!-- Only 1 InOut = invalid -->
+		 *   <!-- No InOut = invalid -->
 		 * </net>
 		 * ```
 		 *
@@ -325,9 +324,9 @@ class XMLContextFactory : EditingContextFactory {
 		 * @see MIN_INOUT_ELEMENTS for validation threshold
 		 */
 		override fun endDocument() {
-			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
+			// Strict validation: Railway networks must have at least 1 InOut element (entry/exit point)
 			val ctx = editingContext ?: throw SAXException("Context not initialized")
-			
+
 			// Only validate InOut count if not skipping structural validation
 			if (!skipStructuralValidation) {
 				// Access inouts via public method from BaseContext
@@ -436,7 +435,7 @@ class XMLContextFactory : EditingContextFactory {
 		 *
 		 * @since 2026-01 (Issue #76 validation, Issue #77 code quality)
 		 */
-		private const val MIN_INOUT_ELEMENTS = 2
+		const val MIN_INOUT_ELEMENTS = 1
 	}
 
 	override fun createEmptyContext(): EditingContext = DefaultEditingContext(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE)
@@ -445,16 +444,16 @@ class XMLContextFactory : EditingContextFactory {
 	 * Creates an EditingContext by parsing an XML file conforming to data.xsd schema.
 	 *
 	 * **Validation Requirements:**
-	 * - Minimum 2 InOut elements required (entry and exit points)
+	 * - Minimum 1 InOut element required (entry/exit point)
 	 * - InOut elements define where trains enter/exit the railway network
-	 * - Single InOut networks are invalid (dead-end, train cannot exit)
+	 * - With bidirectional operation, a single InOut can serve as both entry and exit
 	 *
 	 * @param file XML file containing railway network definition
 	 * @return Parsed EditingContext with validated network structure
 	 * @throws ContextCreationException if:
 	 *   - File not found
 	 *   - XML validation fails against schema
-	 *   - InOut count < 2 (minimum requirement)
+	 *   - InOut count < 1 (minimum requirement)
 	 *   - Network structure is invalid
 	 */
 	@Throws(ContextCreationException::class)
@@ -493,15 +492,15 @@ class XMLContextFactory : EditingContextFactory {
 	 * Creates an EditingContext by parsing an XML stream conforming to data.xsd schema.
 	 *
 	 * **Validation Requirements:**
-	 * - Minimum 2 InOut elements required (entry and exit points)
+	 * - Minimum 1 InOut element required (entry/exit point)
 	 * - InOut elements define where trains enter/exit the railway network
-	 * - Single InOut networks are invalid (dead-end, train cannot exit)
+	 * - With bidirectional operation, a single InOut can serve as both entry and exit
 	 *
 	 * @param stream InputStream containing XML railway network definition
 	 * @return Parsed EditingContext with validated network structure
 	 * @throws ContextCreationException if:
 	 *   - XML validation fails against schema
-	 *   - InOut count < 2 (minimum requirement)
+	 *   - InOut count < 1 (minimum requirement)
 	 *   - Network structure is invalid
 	 */
 	@Throws(ContextCreationException::class)
@@ -573,10 +572,10 @@ class XMLContextFactory : EditingContextFactory {
 		try {
 			val inputSource = InputSource(java.io.StringReader(xmlContent))
 			val handler = Handler(skipStructuralValidation = false)
-			
+
 			// Try to validate with schema - this will throw on both parse and validation errors
 			validator.validate(SAXSource(inputSource), SAXResult(handler))
-			
+
 			val context = handler.getContext()
 			if (context == null) {
 				return LenientParseResult(
@@ -604,22 +603,22 @@ class XMLContextFactory : EditingContextFactory {
 			// SAXException (not SAXParseException) = validation error
 			// Could be schema validation or structural validation (e.g., InOut count < 2)
 			// Try parsing without validation to see if we can get a context
-			
+
 			val validationError = ContextCreationException(e)
-			
+
 			// Second attempt: Parse without schema validation but WITH structural validation disabled
 			return try {
 				val inputSource = InputSource(java.io.StringReader(xmlContent))
 				val handler = Handler(skipStructuralValidation = true)
-				
+
 				// Parse without schema validation - use SAX parser directly
 				val saxParserFactory = javax.xml.parsers.SAXParserFactory.newInstance()
 				saxParserFactory.isNamespaceAware = true  // Keep namespace awareness
 				val saxParser = saxParserFactory.newSAXParser()
 				saxParser.parse(inputSource, handler)
-				
+
 				val context = handler.getContext()
-				
+
 				if (context != null) {
 					// Successfully parsed without validation - it's parseable with errors
 					LenientParseResult(

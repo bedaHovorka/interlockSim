@@ -2058,9 +2058,10 @@ dynamicInOut.lastTrain = train  // Mutable operation (OK in simulation)
 
 **Railway Domain Context:**
 - **InOut elements** represent network boundaries (train spawn/despawn points)
-- **Minimum 2 InOuts required** per network (validated by XMLContextFactory)
+- **Minimum 1 InOut required** per network (validated by XMLContextFactory)
 - **Entry points** (`isEntry == true`) - trains enter network here
 - **Exit points** (`isEntry == false`) - trains leave network here
+- With bidirectional operation, a single InOut can serve as both entry and exit
 
 **Why This Pattern:**
 1. **Immutable editing context** - No simulation state during network design
@@ -2217,24 +2218,23 @@ class DefaultSimulationContext(
 
 ### Minimum InOut Requirement
 
-**Requirement:** Every railway network must have at least 2 InOut elements (entry/exit points).
+**Requirement:** Every railway network must have at least 1 InOut element (entry/exit point).
 
 **Rationale:**
-- Single InOut = dead-end (train enters but cannot exit)
-- Simulation requires trains to enter from one point and exit from another
-- Networks with < 2 InOuts are topologically invalid for train simulation
+- With bidirectional train operation (PR #356), a single InOut can serve as both entry and exit
+- Train can enter, travel through the network, reverse direction, and exit through the same InOut
+- Networks with < 1 InOuts are invalid (no way for trains to enter/exit)
 
 **Validation:**
-- **Editor**: GUI prevents saving contexts with < 2 InOuts (Issue #80)
+- **Editor**: GUI prevents saving contexts with < 1 InOuts (Issue #80)
 - **XML loading**: XMLContextFactory validates during parse and throws `IllegalArgumentException`
 - **Test coverage**: See `InOutValidationTest` (Issue #79)
 
-**Example Valid Network:**
+**Example Valid Network (single InOut):**
 ```xml
 <RailwayNet>
-  <InOut name="Entry" x="1" y="1" entry="true" />
-  <InOut name="Exit" x="10" y="10" entry="false" />
-  <!-- At least 2 InOuts required -->
+  <InOut name="EntryExit" x="1" y="1" entry="true" />
+  <!-- At least 1 InOut required; with bidirectional trains, this can serve as both entry and exit -->
 </RailwayNet>
 ```
 
