@@ -139,15 +139,27 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Current maximum speed for path elements.
 	 * Inherited from EditingContext interface.
 	 * Open to allow subclass override if needed.
+	 * Fires PropertyChangeEvent when value changes.
 	 */
 	open var currentMaxSpeed: Double = COMMON_MAX_SPEED
+		set(value) {
+			val old = field
+			field = value
+			firePropertyChangeAlways("currentMaxSpeed", old, value)
+		}
 
 	/**
 	 * Current track length for new track elements.
 	 * Inherited from EditingContext interface.
 	 * Open to allow subclass override if needed.
+	 * Fires PropertyChangeEvent when value changes.
 	 */
 	open var currentTrackLength: Double = StaticTrack.COMMON_TRACK_LENGTH
+		set(value) {
+			val old = field
+			field = value
+			firePropertyChangeAlways("currentTrackLength", old, value)
+		}
 
 	/**
 	 * Railway network grid structure.
@@ -279,11 +291,14 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Current name string for train generation.
 	 * Property with custom getter/setter for null handling.
 	 * Open to allow subclass override (DefaultSimulationContext adds random generation).
+	 * Fires PropertyChangeEvent when value changes.
 	 */
 	open var currentNameString: String
 		get() = nameString ?: ""
 		set(value) {
+			val old = nameString ?: ""
 			nameString = value
+			firePropertyChangeAlways("currentNameString", old, value)
 		}
 
 	/**
@@ -335,5 +350,13 @@ abstract class BaseContext<T : TrackBlock>(
 					"Use EditingContext for network modifications."
 			)
 		}
+	}
+
+	private fun firePropertyChangeAlways(propertyName: String, oldValue: Any?, newValue: Any?) {
+		if (oldValue == newValue) {
+			return
+		}
+
+		changeSupport.firePropertyChange(propertyName, oldValue, newValue)
 	}
 }
