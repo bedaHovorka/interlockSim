@@ -381,6 +381,7 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 - `ANIMATED_SIM_MILESTONE_COMPLETE.md` - AnimatedSim milestone summary
 - `CZECH_RAILWAY_TERMINOLOGY.md` - Czech terminology verification and translation guide (373 lines)
 - `TRAIN_PASSIVATION_FIX.md` - Train physics passivation fix (Issue #291)
+- `KOIN_SCOPE_LIFECYCLE_TESTS.md` - Koin scope lifecycle test documentation (Issue #220)
 
 ## Known Issues
 

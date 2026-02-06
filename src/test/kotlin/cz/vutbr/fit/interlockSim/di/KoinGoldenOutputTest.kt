@@ -9,17 +9,24 @@
  */
 package cz.vutbr.fit.interlockSim.di
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.koin.core.module.Module
 import org.koin.test.get
 
 /**
@@ -38,6 +45,8 @@ import org.koin.test.get
  */
 @Tag("integration-test")
 class KoinGoldenOutputTest : KoinTestBase() {
+	override fun getTestModule(): Module = integrationTestModule
+
 	/**
 	 * Basic Koin initialization and simulation execution test
 	 *
@@ -186,17 +195,121 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	/**
 	 * Context lifecycle test - Validate context scope management
 	 *
-	 * Once context lifecycle is moved to Koin, this test validates
-	 * that contexts are properly created and destroyed without state leakage.
+	 * This test validates that Koin scopes are properly managed in the scope-per-context pattern:
+	 * 1. Each context creates its own isolated scope
+	 * 2. Scopes are properly closed when contexts are closed
+	 * 3. No state leakage between sequential contexts
+	 * 4. Resources are cleaned up properly
+	 * 5. Closed scopes cannot be accessed
 	 *
-	 * TODO: Implement when context module is enhanced
+	 * The scope-per-context architecture ensures:
+	 * - One PathReservationRegistry per context (shared by all services)
+	 * - Different contexts have isolated registries
+	 * - Closing context releases all scoped resources
+	 *
+	 * @see navigationModule in InterlockSimModule
+	 * @see DefaultSimulationContext.scope
 	 */
 	@Test
-	@Disabled("Context module not yet enhanced for scope testing. See Issue #220.")
+	@Tag("integration-test")
 	fun `validate context lifecycle with Koin scopes`() {
-		// TODO: Implement context scope tests
-		// 1. Create multiple contexts sequentially
-		// 2. Verify no state leakage between runs
-		// 3. Verify proper cleanup (memory, resources)
+		// TEST 1: Rapid sequential creation stress test (memory leak detection)
+		// Create many contexts in succession to verify scopes are actually closed
+		repeat(50) { iteration ->
+			buildTestContext().use { context ->
+				// Verify scope is active and services are accessible
+				val service = context.getPathReservationService()
+				assertThat(service).isNotNull()
+				
+				// Make a reservation to populate internal state
+				val grid = context.getRailWayNetGrid()
+				val cellA = grid.getCellAt(1, 1)
+				val cellB = grid.getCellAt(5, 5)
+				require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+				require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+				val inOutA = context.toDynamic(cellA)
+				val inOutB = context.toDynamic(cellB)
+				service.reservePath("train-$iteration", inOutA, inOutB)
+				
+				// Verify reservation exists in this context
+				assertThat(service.getReservedBlocks("train-$iteration")).isNotNull()
+			}
+			// After use{} block: context.close() called automatically, scope should be closed
+		}
+		// Success if we reach here without OutOfMemoryError or scope accumulation
+		
+		// TEST 2: Deep state isolation - verify no data bleeding between contexts
+		// Create first context with significant state
+		buildTestContext().use { context1 ->
+			val service1 = context1.getPathReservationService()
+			val grid1 = context1.getRailWayNetGrid()
+			val cellA1 = grid1.getCellAt(1, 1)
+			val cellB1 = grid1.getCellAt(5, 5)
+			require(cellA1 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA1?.javaClass?.simpleName}" }
+			require(cellB1 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB1?.javaClass?.simpleName}" }
+			val inOutA1 = context1.toDynamic(cellA1)
+			val inOutB1 = context1.toDynamic(cellB1)
+			
+			// Reserve path for train-alpha in context1
+			// Note: Only one train can reserve a path at a time
+			service1.reservePath("train-alpha", inOutA1, inOutB1)
+			
+			// Verify reservation exists in context1
+			assertThat(service1.getReservedBlocks("train-alpha").size).isEqualTo(1)
+		}
+		// context1 is now closed, scope should be destroyed
+		
+		// Create second context and verify complete isolation
+		buildTestContext().use { context2 ->
+			val service2 = context2.getPathReservationService()
+			
+			// Verify context2's registry is completely clean (no leakage from context1)
+			assertThat(service2.getReservedBlocks("train-alpha")).isEmpty()
+			
+			// Verify context2 can use the same train name without conflict
+			val grid2 = context2.getRailWayNetGrid()
+			val cellA2 = grid2.getCellAt(1, 1)
+			val cellB2 = grid2.getCellAt(5, 5)
+			require(cellA2 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA2?.javaClass?.simpleName}" }
+			require(cellB2 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB2?.javaClass?.simpleName}" }
+			val inOutA2 = context2.toDynamic(cellA2)
+			val inOutB2 = context2.toDynamic(cellB2)
+			service2.reservePath("train-alpha", inOutA2, inOutB2) // Same name as context1
+			
+			// Verify reservation works in context2 (proves it's a different scope)
+			assertThat(service2.getReservedBlocks("train-alpha").size).isEqualTo(1)
+		}
+		
+		// TEST 3: Manual scope closure and access denial
+		val context3 = buildTestContext()
+		val scope3 = context3.scope
+		
+		// Verify scope is active before close
+		val serviceBeforeClose = context3.getPathReservationService()
+		assertThat(serviceBeforeClose).isNotNull()
+		
+		// Manually close the context (and its scope)
+		context3.close()
+		
+		// Attempting to get service from closed scope should fail
+		// Koin 3.5.6 throws org.koin.core.error.ClosedScopeException
+		assertFailure {
+			scope3.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationService>()
+		}.isInstanceOf(org.koin.core.error.ClosedScopeException::class)
+	}
+	
+	/**
+	 * Helper method to build a simple test context with InOut A -> InOut B.
+	 * Each call creates a NEW TestContextBuilder instance to avoid reusing frozen EditingContext.
+	 * Each context gets its own Koin scope.
+	 */
+	private fun buildTestContext(): DefaultSimulationContext {
+		// Get a fresh TestContextBuilder for each call (avoids frozen EditingContext reuse)
+		val builder: TestContextBuilder = getKoin().get()
+		return builder
+			.withInOut("A", 1, 1, true)
+			.withInOut("B", 5, 5, false)
+			.withConnection(1, 1, 5, 5, 100.0, 80.0)
+			.buildSimulationContext()
 	}
 }
