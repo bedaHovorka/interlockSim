@@ -12,12 +12,12 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
-import assertk.assertions.messageContains
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -65,8 +65,10 @@ class EagerTrackWrappingTest : KoinTestBase() {
 				context.toDynamic(orphanTrack as TrackFacility)
 			}
 				.isInstanceOf<IllegalStateException>()
-				.messageContains("Dynamic wrapper not found for track")
-				.messageContains("This indicates the track was not registered during initialization")
+				.message()
+				.isNotNull()
+				.contains("Dynamic wrapper not found for track")
+				.contains("This indicates the track was not registered during initialization")
 		}
 
 		/**
