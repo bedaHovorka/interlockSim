@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.di
 
 import assertk.assertThat
-import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
