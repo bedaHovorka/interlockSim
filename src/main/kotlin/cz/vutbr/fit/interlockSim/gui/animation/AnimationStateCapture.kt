@@ -174,14 +174,14 @@ object AnimationStateCapture {
 		context: SimulationContext
 	): TrainState {
 		val trainNumber = train.getNumber()
-		val position = train.getTotalDistance()
+		val position = train.totalDistance
 		val velocity = train.getVelocity()
 		val acceleration = train.getAcceleration()
 		val length = train.getLength()
 
 		// Calculate grid location for train front
-		val currentSection = train.getFrontSection()
-		val frontPosition = train.getFrontPosition()
+		val currentSection = train.frontSection
+		val frontPosition = train.frontPosition
 		val frontGridLocation =
 			positionCalculator.calculateTrainGridLocation(
 				train = train,
@@ -234,7 +234,7 @@ object AnimationStateCapture {
 	private fun determineOriginColorVariant(
 		train: Train
 	): Boolean {
-		val originInOut = train.getOriginInOut()
+		val originInOut = train.originInOut
 		val inOutName = originInOut.name
 		return inOutName == "B"
 	}

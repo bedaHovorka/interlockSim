@@ -28,14 +28,14 @@ import org.junit.jupiter.api.Test
 /**
  * Unit tests for Train Public API for animation and external observation.
  *
- * Tests the Kotlin property-style accessors added to support idiomatic Kotlin usage
- * alongside existing Java-style getters.
+ * Tests the Kotlin property-style accessors for idiomatic Kotlin usage.
+ * These properties replaced Java-style getters to follow Kotlin best practices.
  *
  * Coverage:
  * - Kotlin property accessors (trainNumber, trainVelocity, trainAcceleration, trainLength)
  * - Position properties (totalDistance, frontPosition, frontSection)
  * - Origin and separator properties (originInOut, trainEntrySeparator)
- * - Compatibility with Java-style getters
+ * - Property value validation
  *
  * @since 2026-02-06 (Public Train API for animation)
  */
@@ -130,48 +130,42 @@ class TrainPublicAPITest : KoinTestBase() {
 	@DisplayName("Position property accessors")
 	inner class PositionPropertyTests {
 		@Test
-		fun totalDistance_delegatesToGetTotalDistance() {
+		fun totalDistance_returnsExpectedValue() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val distanceFromProperty = train.totalDistance
-			val distanceFromGetter = train.getTotalDistance()
+			val distance = train.totalDistance
 
-			// Assert - Both should return the same value (initially 0.0)
-			assertThat(distanceFromProperty).isEqualTo(distanceFromGetter)
-			assertThat(distanceFromProperty).isEqualTo(0.0)
+			// Assert - Initially 0.0 before train starts moving
+			assertThat(distance).isEqualTo(0.0)
 		}
 
 		@Test
-		fun frontPosition_delegatesToGetFrontPosition() {
+		fun frontPosition_returnsExpectedValue() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val positionFromProperty = train.frontPosition
-			val positionFromGetter = train.getFrontPosition()
+			val position = train.frontPosition
 
-			// Assert - Both should return the same value (initially 0.0)
-			assertThat(positionFromProperty).isEqualTo(positionFromGetter)
-			assertThat(positionFromProperty).isEqualTo(0.0)
+			// Assert - Initially 0.0 before train starts moving
+			assertThat(position).isEqualTo(0.0)
 		}
 
 		@Test
-		fun frontSection_delegatesToGetFrontSection() {
+		fun frontSection_returnsExpectedValue() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val sectionFromProperty = train.frontSection
-			val sectionFromGetter = train.getFrontSection()
+			val section = train.frontSection
 
-			// Assert - Both should return the same value (initially null)
-			assertThat(sectionFromProperty).isEqualTo(sectionFromGetter)
-			// Note: Initially null until train starts moving
+			// Assert - Initially null until train starts moving
+			assertThat(section).isEqualTo(null)
 		}
 	}
 
@@ -179,33 +173,29 @@ class TrainPublicAPITest : KoinTestBase() {
 	@DisplayName("Origin and separator property accessors")
 	inner class OriginPropertyTests {
 		@Test
-		fun originInOut_delegatesToGetOriginInOut() {
+		fun originInOut_returnsExpectedValue() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val originFromProperty = train.originInOut
-			val originFromGetter = train.getOriginInOut()
+			val origin = train.originInOut
 
-			// Assert - Both should return the same value
-			assertThat(originFromProperty).isEqualTo(originFromGetter)
-			assertThat(originFromProperty).isNotNull()
+			// Assert - Should return the origin InOut from timetable
+			assertThat(origin).isNotNull()
 		}
 
 		@Test
-		fun trainEntrySeparator_delegatesToGetEntrySeparator() {
+		fun trainEntrySeparator_returnsExpectedValue() {
 			// Arrange
 			val timetable = createTimetableWithLength(150.0)
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val separatorFromProperty = train.trainEntrySeparator
-			val separatorFromGetter = train.getEntrySeparator()
+			val separator = train.trainEntrySeparator
 
-			// Assert - Both should return the same value (initially null)
-			assertThat(separatorFromProperty).isEqualTo(separatorFromGetter)
-			// Note: Initially null until train enters a section
+			// Assert - Initially null until train enters a section
+			assertThat(separator).isEqualTo(null)
 		}
 	}
 
@@ -213,22 +203,23 @@ class TrainPublicAPITest : KoinTestBase() {
 	@DisplayName("API consistency validation")
 	inner class APIConsistencyTests {
 		@Test
-		fun allPropertiesConsistentWithGetters() {
+		fun allPropertiesReturnExpectedValues() {
 			// Arrange
 			val expectedLength = 100.0
 			val timetable = createTimetableWithLength(expectedLength)
 			val train = Train(mockContext, timetable)
 
-			// Act & Assert - Validate all properties delegate correctly
-			assertThat(train.trainNumber).isEqualTo(train.getNumber())
-			assertThat(train.trainVelocity).isEqualTo(train.getVelocity())
-			assertThat(train.trainAcceleration).isEqualTo(train.getAcceleration())
-			assertThat(train.trainLength).isEqualTo(train.getLength())
-			assertThat(train.totalDistance).isEqualTo(train.getTotalDistance())
-			assertThat(train.frontPosition).isEqualTo(train.getFrontPosition())
-			assertThat(train.frontSection).isEqualTo(train.getFrontSection())
-			assertThat(train.originInOut).isEqualTo(train.getOriginInOut())
-			assertThat(train.trainEntrySeparator).isEqualTo(train.getEntrySeparator())
+			// Act & Assert - Validate all properties return expected values
+			assertThat(train.trainNumber).isNotNull()
+			assertThat(train.trainVelocity).isEqualTo(0.0)
+			assertThat(train.trainAcceleration).isEqualTo(0.0)
+			assertThat(train.trainLength).isEqualTo(expectedLength)
+			assertThat(train.totalDistance).isEqualTo(0.0)
+			assertThat(train.frontPosition).isEqualTo(0.0)
+			// frontSection is null before train starts
+			// originInOut is set from timetable
+			assertThat(train.originInOut).isNotNull()
+			// trainEntrySeparator is null before train enters section
 		}
 
 		@Test
@@ -239,12 +230,11 @@ class TrainPublicAPITest : KoinTestBase() {
 			val train = Train(mockContext, timetable)
 
 			// Act
-			val lengthFromProperty = train.trainLength
-			val lengthFromGetter = train.getLength()
+			val length = train.trainLength
 
-			// Assert - Both methods should return timetable length
-			assertThat(lengthFromProperty).isEqualTo(expectedLength)
-			assertThat(lengthFromGetter).isEqualTo(expectedLength)
+			// Assert - Should return timetable length
+			assertThat(length).isEqualTo(expectedLength)
+			assertThat(train.getLength()).isEqualTo(expectedLength)
 		}
 	}
 }
