@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -238,6 +239,62 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 			// the companion method exists and the dialog can be created
 			val dialog = ValidationDialog(null, validationResult)
 			assertThat(dialog).isNotNull()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("dialog with allowOpenAnyway has Open Anyway button")
+	fun dialogWithAllowOpenAnywayHasOpenAnywayButton() {
+		runOnEDT {
+			val dialog = ValidationDialog(null, validationResult, null, allowOpenAnyway = true)
+			val openAnywayButton = findButton(dialog, "Open Anyway")
+			assertThat(openAnywayButton).isNotNull()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("dialog without allowOpenAnyway has no Open Anyway button")
+	fun dialogWithoutAllowOpenAnywayHasNoOpenAnywayButton() {
+		runOnEDT {
+			val dialog = ValidationDialog(null, validationResult, null, allowOpenAnyway = false)
+			val openAnywayButton = findButton(dialog, "Open Anyway")
+			assertThat(openAnywayButton).isNull()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("dialog with allowOpenAnyway has Warning title")
+	fun dialogWithAllowOpenAnywayHasWarningTitle() {
+		runOnEDT {
+			val dialog = ValidationDialog(null, validationResult, null, allowOpenAnyway = true)
+			assertThat(dialog.title).contains("Warning")
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("dialog without allowOpenAnyway has Error title")
+	fun dialogWithoutAllowOpenAnywayHasErrorTitle() {
+		runOnEDT {
+			val dialog = ValidationDialog(null, validationResult, null, allowOpenAnyway = false)
+			assertThat(dialog.title).contains("Error")
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("dialog has both Cancel and Open Anyway buttons when allowed")
+	fun dialogHasBothButtonsWhenAllowed() {
+		runOnEDT {
+			val dialog = ValidationDialog(null, validationResult, null, allowOpenAnyway = true)
+			val cancelButton = findButton(dialog, "Cancel")
+			val openAnywayButton = findButton(dialog, "Open Anyway")
+			
+			assertThat(cancelButton).isNotNull()
+			assertThat(openAnywayButton).isNotNull()
 		}
 	}
 
