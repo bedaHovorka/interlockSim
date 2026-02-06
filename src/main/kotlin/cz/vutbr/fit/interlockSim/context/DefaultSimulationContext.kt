@@ -1062,18 +1062,20 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a TrackFacility to its DynamicTrack wrapper.
-	 * Creates wrapper lazily if not yet created (for tracks discovered during simulation).
+	 * All tracks are wrapped eagerly during initialization (via initializeDynamicMapping).
+	 * If a track has no wrapper, this indicates an initialization error.
 	 * Uses identity-based mapping to ensure each static track maps to exactly one wrapper.
 	 */
 	override fun toDynamic(track: TrackFacility): DynamicTrack {
-		// Return existing wrapper if already mapped
-		staticTrackToDynamicMap[track]?.let { return it }
-
-		// Create new wrapper for unmapped track (lazy initialization)
-		val dynamicTrack = DynamicTrack(track)
-		staticTrackToDynamicMap[track] = dynamicTrack
-		logger.debug { "Lazy-created DynamicTrack wrapper for track ${System.identityHashCode(track)}" }
-		return dynamicTrack
+		// All tracks should be wrapped during initialization
+		return staticTrackToDynamicMap[track]
+			?: throw IllegalStateException(
+				"Dynamic wrapper not found for track: ${System.identityHashCode(track)} " +
+					"(${track.javaClass.simpleName}). " +
+					"Map contains ${staticTrackToDynamicMap.size} entries. " +
+					"This indicates the track was not registered during initialization. " +
+					"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+			)
 	}
 
 	@Throws(EmptyContextException::class, SimulationException::class)

@@ -12,7 +12,9 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFailure
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -29,9 +31,10 @@ import java.io.File
  * Tests for Track-to-Dynamic mapping in SimulationContext
  *
  * Validates:
- * - All tracks in the railway network graph get DynamicTrack wrappers on context.run()
- * - toDynamic() method returns appropriate wrapper for any track
- * - Existing tests continue to pass (no behavior changes)
+ * - All tracks in the railway network graph get DynamicTrack wrappers during initialization
+ * - toDynamic() method returns appropriate wrapper for any track in the context
+ * - toDynamic() throws exception for tracks not in the context (no lazy creation)
+ * - Consistent behavior with path separator wrapping (Issue #214)
  */
 @DisplayName("Track-to-Dynamic Mapping")
 class TrackDynamicMappingTest : KoinTestBase() {
@@ -59,11 +62,12 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		}
 
 		/**
-		 * Validates that toDynamic() creates wrapper lazily for unmapped tracks
+		 * Validates that toDynamic() throws exception for tracks not wrapped during initialization
+		 * (Issue #214: Tracks are wrapped eagerly, not lazily)
 		 */
 		@Test
-		@DisplayName("toDynamic creates wrapper lazily for unmapped track")
-		fun toDynamic_unmappedTrack_createsLazily() {
+		@DisplayName("toDynamic throws exception for unmapped track")
+		fun toDynamic_unmappedTrack_throwsException() {
 			// Arrange
 			val context = factory.createEmptyContext()
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
@@ -73,13 +77,11 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			val graph = contextWithTracks.getGraph()
 			val trackFacility = graph.values().first() as TrackFacility
 
-			// Act - call toDynamic on different context (should create wrapper lazily)
-			val dynamicTrack1 = context.toDynamic(trackFacility)
-			val dynamicTrack2 = context.toDynamic(trackFacility)
-
-			// Assert - should create wrapper and return same instance on subsequent calls
-			assertThat(dynamicTrack1).isNotNull()
-			assertThat(dynamicTrack2).isSameInstanceAs(dynamicTrack1)
+			// Act & Assert - calling toDynamic on different context should throw
+			// (tracks are no longer created lazily)
+			assertThat {
+				context.toDynamic(trackFacility)
+			}.isFailure().isInstanceOf<IllegalStateException>()
 		}
 	}
 
@@ -88,20 +90,24 @@ class TrackDynamicMappingTest : KoinTestBase() {
 	@Tag("integration-test")
 	inner class VyhybnaIntegrationTests {
 		/**
-		 * Integration test: Load vyhybna.xml and verify track mapping works with lazy creation
+		 * Integration test: Load vyhybna.xml and verify track mapping works with eager creation
 		 *
-		 * Validates that toDynamic creates wrappers lazily for all tracks in the network.
+		 * Validates that toDynamic returns wrappers for all tracks after initialization.
+		 * (Issue #214: Tracks are wrapped eagerly during initializeDynamicMapping)
 		 *
 		 * Railway context: vyhybna.xml is a test network with switches and multiple track segments
 		 */
 		@Test
-		@DisplayName("vyhybna.xml - track mapping with lazy creation")
-		fun vyhybnaXml_trackMappingLazyCreation() {
+		@DisplayName("vyhybna.xml - track mapping with eager creation")
+		fun vyhybnaXml_trackMappingEagerCreation() {
 			// Arrange - Load vyhybna.xml configuration
 			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			val context = factory.createContext(xmlFile) as DefaultSimulationContext
 
-			// Assert - Graph should have tracks and toDynamic creates wrappers lazily
+			// Initialize dynamic mapping (normally called by run())
+			context.initializeDynamicMapping()
+
+			// Assert - Graph should have tracks and all should have wrappers after initialization
 			val graph = context.getGraph()
 			var totalTracks = 0
 
@@ -109,12 +115,12 @@ class TrackDynamicMappingTest : KoinTestBase() {
 				totalTracks++
 				val trackFacility = trackBlock as TrackFacility
 
-				// toDynamic should create wrapper lazily
+				// toDynamic should return existing wrapper (no lazy creation)
 				val dynamicTrack1 = context.toDynamic(trackFacility)
 				val dynamicTrack2 = context.toDynamic(trackFacility)
 
 				assertThat(dynamicTrack1)
-					.withMessage("toDynamic should create wrapper for track")
+					.withMessage("toDynamic should return wrapper for track")
 					.isNotNull()
 				assertThat(dynamicTrack2)
 					.withMessage("toDynamic should return same wrapper instance")
