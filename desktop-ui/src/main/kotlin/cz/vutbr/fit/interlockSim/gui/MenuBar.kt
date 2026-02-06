@@ -27,6 +27,14 @@ class MenuBar : JMenuBar() {
 	private val saveAction = SaveAction()
 	private val saveAsAction = SaveAsAction()
 
+	companion object {
+		/**
+		 * Minimum number of InOut elements required for a valid railway network.
+		 * Issue #80: GUI validation to prevent saving contexts with insufficient InOut elements
+		 */
+		private const val MIN_INOUT_ELEMENTS = 2
+	}
+
 	/**
 	 * Opens a railway network file from disk into the EDITOR.
 	 *
@@ -164,21 +172,14 @@ class MenuBar : JMenuBar() {
 	 * Performs the actual save operation to the specified file.
 	 * Updates modification tracker on success.
 	 *
-	 * DEFERRED: Save-time validation (Issue #258)
-	 * Decision: Defer to follow-up issue for comprehensive validation framework
+	 * **Validation (Issue #80):**
+	 * - Pre-save validation checks InOut element count (minimum 2 required)
+	 * - Shows user-friendly error dialog if validation fails
+	 * - Prevents saving invalid contexts that cannot be reloaded
 	 *
-	 * Rationale:
-	 * - Current implementation: Editor allows opening/editing any file (including broken ones)
-	 * - Save validation would be inconsistent without load validation
-	 * - Comprehensive solution requires:
-	 *   1. Define validation rules (structural, safety, configuration)
-	 *   2. Implement validators for each category
-	 *   3. Add validation on both load AND save
-	 *   4. Support warnings (allow save) vs errors (block save)
-	 *   5. Provide user choice dialog for warnings
-	 *
-	 * Current behavior: Saves all files without validation
-	 * Future enhancement: Track in separate issue for comprehensive validation system
+	 * **Deferred validation (Issue #258):**
+	 * - Other validation rules deferred for comprehensive validation framework
+	 * - Future: Track constraints, path connectivity, etc.
 	 *
 	 * @return true if save succeeded, false otherwise
 	 */
@@ -186,6 +187,21 @@ class MenuBar : JMenuBar() {
 		val editingContextFactory = getKoin().get<EditingContextFactory>()
 		val frame = getKoin().get<Frame>()
 		val editingContext = frame.railwayNetGridCanvas.getEditingContext()
+
+		// Validate InOut count before saving (Issue #80)
+		val inOutCount = editingContext.getInOuts().size
+		if (inOutCount < MIN_INOUT_ELEMENTS) {
+			JOptionPane.showMessageDialog(
+				this,
+				"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points).\n\n" +
+					"Current count: $inOutCount\n\n" +
+					"InOut elements define where trains enter and exit the railway network.\n" +
+					"Please add more InOut elements before saving.",
+				"Cannot Save - Insufficient InOut Elements",
+				JOptionPane.ERROR_MESSAGE
+			)
+			return false
+		}
 
 		val success = editingContextFactory.saveContext(editingContext, file)
 
