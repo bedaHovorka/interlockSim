@@ -78,24 +78,22 @@ open class KoinPerformanceBenchmark {
 	 * Measures overhead introduced by DI container for context factory resolution.
 	 * Target: < 10ms overhead compared to baseline.
 	 *
+	 * Note: Uses pre-initialized DI container to measure only factory resolution
+	 * and network loading overhead, not container startup cost.
+	 *
 	 * Railway Domain: Same network loading but through DI-managed factory.
 	 */
 	@Benchmark
-	fun railwayNetworkLoading_WithKoin(blackhole: Blackhole) {
-		startKoin { modules(interlockSimModule) }
-		try {
-			val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
-				SimulationContextFactory::class.java
-			)
-			val networkStream = railwayNetworkXml()
-			val railwayNetwork = factoryFromDI.createContext(networkStream)
-			networkStream.close()
-			
-			blackhole.consume(railwayNetwork)
-			railwayNetwork.close()
-		} finally {
-			stopKoin()
-		}
+	fun railwayNetworkLoading_WithKoin(blackhole: Blackhole, diState: DIContainerState) {
+		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
+			SimulationContextFactory::class.java
+		)
+		val networkStream = railwayNetworkXml()
+		val railwayNetwork = factoryFromDI.createContext(networkStream)
+		networkStream.close()
+		
+		blackhole.consume(railwayNetwork)
+		railwayNetwork.close()
 	}
 
 	/**
@@ -126,27 +124,25 @@ open class KoinPerformanceBenchmark {
 	 * Measures DI overhead in simulation process creation.
 	 * Target: < 5% increase over baseline.
 	 *
+	 * Note: Uses pre-initialized DI container to measure only factory resolution
+	 * and simulation setup overhead, not container startup cost.
+	 *
 	 * Railway Domain: Same simulation setup through DI-managed components.
 	 */
 	@Benchmark
-	fun trainSimulationSetup_WithKoin(blackhole: Blackhole) {
-		startKoin { modules(interlockSimModule) }
-		try {
-			val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
-				SimulationContextFactory::class.java
-			)
-			val networkStream = railwayNetworkXml()
-			val railwayNetwork = factoryFromDI.createContext(networkStream) as DefaultSimulationContext
-			networkStream.close()
-			
-			val mockContext = MockSimulationContext(railwayNetwork)
-			val simulationScenario = ShuntingLoop(mockContext, 60L)
-			
-			blackhole.consume(simulationScenario)
-			railwayNetwork.close()
-		} finally {
-			stopKoin()
-		}
+	fun trainSimulationSetup_WithKoin(blackhole: Blackhole, diState: DIContainerState) {
+		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
+			SimulationContextFactory::class.java
+		)
+		val networkStream = railwayNetworkXml()
+		val railwayNetwork = factoryFromDI.createContext(networkStream) as DefaultSimulationContext
+		networkStream.close()
+		
+		val mockContext = MockSimulationContext(railwayNetwork)
+		val simulationScenario = ShuntingLoop(mockContext, 60L)
+		
+		blackhole.consume(simulationScenario)
+		railwayNetwork.close()
 	}
 
 	/**
@@ -168,6 +164,24 @@ open class KoinPerformanceBenchmark {
 			SimulationContextFactory::class.java
 		)
 		blackhole.consume(factoryInstance)
+	}
+
+	/**
+	 * Benchmark: Koin container initialization cost.
+	 *
+	 * Measures one-time cost of starting Koin with interlockSimModule.
+	 * This overhead is paid once at application startup, not per-operation.
+	 *
+	 * Railway Domain: Application startup time impact for operators.
+	 * Should be negligible compared to GUI initialization.
+	 */
+	@Benchmark
+	@BenchmarkMode(Mode.AverageTime)
+	@OutputTimeUnit(TimeUnit.MILLISECONDS)
+	fun containerStartup_FullInitialization(blackhole: Blackhole) {
+		startKoin { modules(interlockSimModule) }
+		blackhole.consume(org.koin.java.KoinJavaComponent.getKoin())
+		stopKoin()
 	}
 
 	/**

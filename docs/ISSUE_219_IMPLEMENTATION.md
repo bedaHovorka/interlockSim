@@ -24,7 +24,7 @@ This implementation successfully migrates the Koin performance test from JUnit t
 
 **File:** `src/jmh/kotlin/cz/vutbr/fit/interlockSim/di/KoinPerformanceBenchmark.kt`
 
-Implemented 5 railway-specific benchmarks:
+Implemented 6 railway-specific benchmarks:
 
 1. **railwayNetworkLoading_WithoutDI()**
    - Baseline: Direct XMLContextFactory instantiation
@@ -32,9 +32,9 @@ Implemented 5 railway-specific benchmarks:
    - Railway context: Loading track layouts, switches, signals
 
 2. **railwayNetworkLoading_WithKoin()**
-   - DI version: Factory resolution through Koin
+   - DI version: Factory resolution through Koin (pre-initialized container)
    - Target: < 10ms overhead vs baseline
-   - Same railway network loading through DI
+   - Isolates factory resolution overhead from container startup
 
 3. **trainSimulationSetup_WithoutDI()**
    - Baseline: ShuntingLoop initialization without DI
@@ -42,14 +42,19 @@ Implemented 5 railway-specific benchmarks:
    - Railway context: Train schedules, routes, initial positions
 
 4. **trainSimulationSetup_WithKoin()**
-   - DI version: Simulation setup through Koin
+   - DI version: Simulation setup through Koin (pre-initialized container)
    - Target: < 5% increase vs baseline
-   - Same simulation initialization with DI
+   - Isolates simulation setup overhead from container startup
 
 5. **factoryResolution_RepeatedLookups()**
    - High-frequency DI resolution performance
    - Target: Sub-microsecond after warmup
    - Railway context: Batch testing scenarios
+
+6. **containerStartup_FullInitialization()**
+   - One-time cost of Koin container initialization
+   - Measures application startup impact
+   - Railway context: Operator startup experience
 
 ### 3. Test Migration
 

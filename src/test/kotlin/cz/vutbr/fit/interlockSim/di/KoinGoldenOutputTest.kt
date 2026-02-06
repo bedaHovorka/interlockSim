@@ -180,6 +180,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		// 3. trainSimulationSetup_WithoutDI() - Baseline
 		// 4. trainSimulationSetup_WithKoin() - DI overhead measurement
 		// 5. factoryResolution_RepeatedLookups() - Resolution performance
+		// 6. containerStartup_FullInitialization() - One-time startup cost
 	}
 
 	/**
