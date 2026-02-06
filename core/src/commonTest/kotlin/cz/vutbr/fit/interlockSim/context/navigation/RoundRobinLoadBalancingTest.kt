@@ -130,9 +130,10 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 		// Verify: Trains alternate between two different sets of blocks (k1 and k2)
 		// Train1 and Train3 should use the same path (path 0)
 		// Train2 and Train4 should use the same path (path 1)
-		assertThat(train1Blocks).isEqualTo(train3Blocks)
-		assertThat(train2Blocks).isEqualTo(train4Blocks)
-		assertThat(train1Blocks).isNotEqualTo(train2Blocks)
+		// Convert to sets for order-independent comparison
+		assertThat(train1Blocks.toSet()).isEqualTo(train3Blocks.toSet())
+		assertThat(train2Blocks.toSet()).isEqualTo(train4Blocks.toSet())
+		assertThat(train1Blocks.toSet()).isNotEqualTo(train2Blocks.toSet())
 	}
 
 	/**
@@ -149,8 +150,8 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 		val path1Blocks = reserveAndGetBlocks("probe1")
 		pathReservationService.releasePath("probe1")
 
-		// Sanity check: paths are different
-		assertThat(path0Blocks).isNotEqualTo(path1Blocks)
+		// Sanity check: paths are different (compare as sets for order-independence)
+		assertThat(path0Blocks.toSet()).isNotEqualTo(path1Blocks.toSet())
 
 		// Act: Reserve paths for 10 trains and track which path each uses
 		var path0Count = 0
@@ -161,9 +162,9 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 			val blocks = reserveAndGetBlocks(trainId)
 			pathReservationService.releasePath(trainId)
 
-			when (blocks) {
-				path0Blocks -> path0Count++
-				path1Blocks -> path1Count++
+			when (blocks.toSet()) {
+				path0Blocks.toSet() -> path0Count++
+				path1Blocks.toSet() -> path1Count++
 			}
 		}
 
@@ -186,8 +187,8 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 		// Act: Reserve path for train2 (should use the other path)
 		val train2Blocks = reserveAndGetBlocks("train2")
 
-		// Assert: Train2 uses a different path than Train1
-		assertThat(train2Blocks).isNotEqualTo(train1Blocks)
+		// Assert: Train2 uses a different path than Train1 (compare as sets)
+		assertThat(train2Blocks.toSet()).isNotEqualTo(train1Blocks.toSet())
 
 		// Cleanup
 		pathReservationService.releasePath("train1")
@@ -214,8 +215,8 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 		val blocks3 = reserveAndGetBlocks("train3")
 		pathReservationService.releasePath("train3")
 
-		// Assert: Train1 and Train3 use the same path (full rotation)
-		assertThat(blocks1).isEqualTo(blocks3)
+		// Assert: Train1 and Train3 use the same path (full rotation, compare as sets)
+		assertThat(blocks1.toSet()).isEqualTo(blocks3.toSet())
 	}
 
 	/**
