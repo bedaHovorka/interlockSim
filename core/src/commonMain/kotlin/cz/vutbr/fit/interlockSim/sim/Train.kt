@@ -858,28 +858,23 @@ class Train :
 			maxDepth = 100
 		)
 		
-		if (paths.isEmpty()) {
-			// No path exists - this is a critical error
-			throw IllegalArgumentException(
-				"Train length validation failed: No route exists between " +
-					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
-					"Railway network must provide at least one path between entry and exit points."
-			)
+		require(paths.isNotEmpty()) {
+			"Train length validation failed: No route exists between " +
+				"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+				"Railway network must provide at least one path between entry and exit points."
 		}
 		
-		// Calculate distance for each path and find the shortest
-		val shortestPathDistance = paths.minOfOrNull { path ->
+		// Calculate distance for each path and find the shortest using idiomatic Kotlin
+		val shortestPathDistance = paths.minOf { path ->
 			path.sumOf { section -> section.length() }
-		} ?: throw IllegalStateException("Path list is not empty but minOfOrNull returned null")
+		}
 		
 		// Validate train length against shortest path
-		if (trainLength > shortestPathDistance) {
-			throw IllegalArgumentException(
-				"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
-					"between InOut '${inOut.name}' and InOut '${outOut.name}'. " +
-					"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
-					"Reduce train length or increase track distance to resolve this issue."
-			)
+		require(trainLength <= shortestPathDistance) {
+			"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
+				"between InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+				"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
+				"Reduce train length or increase track distance to resolve this issue."
 		}
 		
 		logger.debug {

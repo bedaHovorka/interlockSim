@@ -26,7 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
-import cz.vutbr.fit.interlockSim.testutil.withMessage
+import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -118,13 +118,12 @@ class TrainLengthValidationTest : KoinTestBase() {
 			val timetable = Timetable(inOut, outOut, Time(0.0), Time(100.0), 150.0) // 150m train > 100m track
 
 			// Act & Assert - Should throw exception with clear error message
-			assertThatThrownBy { Train(context, timetable) }
+			val exception = assertThatThrownBy { Train(context, timetable) }
 				.isInstanceOf(IllegalArgumentException::class)
-				.withMessage { message ->
-					message.contains("Train length (150.0 m) exceeds track distance (100.0 m)")
-					message.contains("InOut 'A' and InOut 'B'")
-					message.contains("Minimum track length required: 150.0 m, available: 100.0 m")
-				}
+			
+			exception.hasMessageContaining("Train length (150.0 m) exceeds track distance (100.0 m)")
+			exception.hasMessageContaining("InOut 'A' and InOut 'B'")
+			exception.hasMessageContaining("Minimum track length required: 150.0 m, available: 100.0 m")
 		}
 
 		@Test
@@ -136,12 +135,11 @@ class TrainLengthValidationTest : KoinTestBase() {
 			val timetable = Timetable(inOut, outOut, Time(0.0), Time(100.0), 500.0) // 500m train >> 50m track
 
 			// Act & Assert - Should throw exception with clear error message
-			assertThatThrownBy { Train(context, timetable) }
+			val exception = assertThatThrownBy { Train(context, timetable) }
 				.isInstanceOf(IllegalArgumentException::class)
-				.withMessage { message ->
-					message.contains("Train length (500.0 m) exceeds track distance (50.0 m)")
-					message.contains("InOut 'A' and InOut 'B'")
-				}
+			
+			exception.hasMessageContaining("Train length (500.0 m) exceeds track distance (50.0 m)")
+			exception.hasMessageContaining("InOut 'A' and InOut 'B'")
 		}
 
 		@Test
@@ -155,9 +153,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should throw exception indicating no path exists
 			assertThatThrownBy { Train(context, timetable) }
 				.isInstanceOf(IllegalArgumentException::class)
-				.withMessage { message ->
-					message.contains("No route exists between InOut 'A' and InOut 'B'")
-				}
+				.hasMessageContaining("No route exists between InOut 'A' and InOut 'B'")
 		}
 	}
 
@@ -179,9 +175,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should throw exception based on shortest path
 			assertThatThrownBy { Train(context, timetable) }
 				.isInstanceOf(IllegalArgumentException::class)
-				.withMessage { message ->
-					message.contains("Train length (150.0 m) exceeds track distance (100.0 m)")
-				}
+				.hasMessageContaining("Train length (150.0 m) exceeds track distance (100.0 m)")
 		}
 
 		@Test
