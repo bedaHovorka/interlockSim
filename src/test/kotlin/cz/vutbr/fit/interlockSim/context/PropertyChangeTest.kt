@@ -191,7 +191,7 @@ class PropertyChangeTest : KoinTestBase() {
 		assertThat(listener.events).hasSize(1)
 		val event = listener.events[0]
 		assertThat(event.propertyName).isEqualTo("currentNameString")
-		// oldValue will be null in the event (the backing field)
+		assertThat(event.oldValue).isEqualTo(oldValue)  // Now we can assert old value too
 		assertThat(event.newValue).isEqualTo(newValue)
 	}
 

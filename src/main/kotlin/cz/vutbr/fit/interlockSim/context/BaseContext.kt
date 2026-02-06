@@ -296,7 +296,7 @@ abstract class BaseContext<T : TrackBlock>(
 	open var currentNameString: String
 		get() = nameString ?: ""
 		set(value) {
-			val old = nameString
+			val old = currentNameString  // Use getter to get consistent value
 			nameString = value
 			changeSupport.firePropertyChange("currentNameString", old, value)
 		}
