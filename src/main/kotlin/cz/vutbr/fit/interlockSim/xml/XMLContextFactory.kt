@@ -67,7 +67,7 @@ class XMLContextFactory : EditingContextFactory {
 
 	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
 
-	private inner class Handler : DefaultHandler() {
+	private inner class Handler(private val skipStructuralValidation: Boolean = false) : DefaultHandler() {
 		private var editingContext: DefaultEditingContext? = null
 		private var ended: Boolean = false
 		private var netElementDepth: Int = 0
@@ -327,19 +327,25 @@ class XMLContextFactory : EditingContextFactory {
 		override fun endDocument() {
 			// Strict validation: Railway networks must have at least 2 InOut elements (entry/exit points)
 			val ctx = editingContext ?: throw SAXException("Context not initialized")
-			// Access inouts via public method from BaseContext
-			val inOutsCount = ctx.getInOutsList().size
-			if (inOutsCount < MIN_INOUT_ELEMENTS) {
-				throw SAXException(
-					"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
-						"Found: $inOutsCount"
-				)
+			
+			// Only validate InOut count if not skipping structural validation
+			if (!skipStructuralValidation) {
+				// Access inouts via public method from BaseContext
+				val inOutsCount = ctx.getInOutsList().size
+				if (inOutsCount < MIN_INOUT_ELEMENTS) {
+					throw SAXException(
+						"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
+							"Found: $inOutsCount"
+					)
+				}
 			}
 			ended = true
 		}
 
 		/**
 		 * Returns the parsed context as a DefaultEditingContext.
+		 * 
+		 * When skipStructuralValidation is true, returns context even if validation would fail.
 		 */
 		fun getContext(): DefaultEditingContext? =
 			if (ended && editingContext != null) {
@@ -563,10 +569,10 @@ class XMLContextFactory : EditingContextFactory {
 			)
 		}
 
-		// First attempt: Parse with schema validation
+		// First attempt: Parse with full validation (schema + structural)
 		try {
 			val inputSource = InputSource(java.io.StringReader(xmlContent))
-			val handler = Handler()
+			val handler = Handler(skipStructuralValidation = false)
 			
 			// Try to validate with schema - this will throw on both parse and validation errors
 			validator.validate(SAXSource(inputSource), SAXResult(handler))
@@ -595,27 +601,27 @@ class XMLContextFactory : EditingContextFactory {
 				isParseable = false
 			)
 		} catch (e: SAXException) {
-			// SAXException (not SAXParseException) could be either:
-			// 1. Validation error (e.g., missing required attributes, wrong element order)
-			// 2. Structural error (e.g., InOut count < 2)
-			// We treat these as validation errors that still allow opening the file
-			// The user can then fix the issues in the editor
+			// SAXException (not SAXParseException) = validation error
+			// Could be schema validation or structural validation (e.g., InOut count < 2)
+			// Try parsing without validation to see if we can get a context
 			
 			val validationError = ContextCreationException(e)
 			
-			// Second attempt: Parse without schema validation to see if we can get a context
+			// Second attempt: Parse without schema validation but WITH structural validation disabled
 			return try {
 				val inputSource = InputSource(java.io.StringReader(xmlContent))
-				val handler = Handler()
+				val handler = Handler(skipStructuralValidation = true)
 				
-				// Parse without validation - use SAX parser directly
-				val saxParser = javax.xml.parsers.SAXParserFactory.newInstance().newSAXParser()
+				// Parse without schema validation - use SAX parser directly
+				val saxParserFactory = javax.xml.parsers.SAXParserFactory.newInstance()
+				saxParserFactory.isNamespaceAware = true  // Keep namespace awareness
+				val saxParser = saxParserFactory.newSAXParser()
 				saxParser.parse(inputSource, handler)
 				
 				val context = handler.getContext()
 				
 				if (context != null) {
-					// Parseable but has validation errors
+					// Successfully parsed without validation - it's parseable with errors
 					LenientParseResult(
 						context = context,
 						validationResult = ValidationUtils.fromException(validationError),
