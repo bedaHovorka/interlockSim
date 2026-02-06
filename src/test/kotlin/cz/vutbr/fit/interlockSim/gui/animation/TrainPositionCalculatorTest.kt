@@ -169,8 +169,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(ends.size >= 2).isEqualTo(true)
 
 		// Create mock train with entry separator matching first end
+		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[0]
+		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
@@ -192,8 +193,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(ends.size >= 2).isEqualTo(true)
 
 		// Create mock train with entry separator matching second end
+		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[1]
+		every { trainWithEntry.getEntrySeparator() } returns ends[1] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
@@ -217,7 +219,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Create mock train with entry separator that doesn't match either end
 		// Use a different separator from the network
 		val allSeparators = context.getRailWayNetGrid().getAllCells()
-			.filterIsInstance<cz.vutbr.fit.interlockSim.objects.core.PathSeparator>()
+			.filterIsInstance<cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator>()
 
 		val differentSeparator = allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
 		assertThat(differentSeparator).isNotNull()
@@ -246,8 +248,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(ends.size >= 2).isEqualTo(true)
 
 		// If ends[0] is a dynamic wrapper, it should still match via unwrapping
+		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[0]
+		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 		// Test at start (distance = 0)
 		val gridLocationStart = calculator.calculateTrainGridLocation(trainWithEntry, trackSection, 0.0)
@@ -274,11 +277,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(ends.size >= 2).isEqualTo(true)
 
 		// Create two trains, one entering from each end
+		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainFromEnd0 = mockk<Train>(relaxed = true)
-		every { trainFromEnd0.getEntrySeparator() } returns ends[0]
+		every { trainFromEnd0.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 		val trainFromEnd1 = mockk<Train>(relaxed = true)
-		every { trainFromEnd1.getEntrySeparator() } returns ends[1]
+		every { trainFromEnd1.getEntrySeparator() } returns ends[1] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 		// Both trains at midpoint
 		val sectionLength = trackSection.length()
