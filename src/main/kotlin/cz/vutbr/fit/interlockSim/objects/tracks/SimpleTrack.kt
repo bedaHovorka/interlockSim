@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
+import cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
@@ -42,16 +43,13 @@ abstract class SimpleTrack(
 	StaticTrack {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		// Track minimum length constant
-		private const val MIN_LENGTH = StaticTrack.MIN_LENGTH
 	}
 
 	private val speeds: IdentityHashMap<PathSeparator, Double> = IdentityHashMap()
 	private val ends: Array<PathSeparator>
 
 	init {
-		if (length < MIN_LENGTH || maxSpeed1 < MINIMAL_MAX_SPEED || maxSpeed2 < MINIMAL_MAX_SPEED) {
+		if (length < MIN_TRACK_LENGTH || maxSpeed1 < MINIMAL_MAX_SPEED || maxSpeed2 < MINIMAL_MAX_SPEED) {
 			throw IllegalArgumentException("length or maxspeed is very small")
 		}
 		ends = arrayOf(end1, end2)
