@@ -117,12 +117,12 @@ class ValidationUtilsTest {
 	@Test
 	@DisplayName("parseErrorMessage handles InOut validation error")
 	fun parseErrorMessageHandlesInOutValidation() {
-		val saxException = SAXParseException("InOut must have at least 2 elements", null, null, 10, 5)
+		val saxException = SAXParseException("InOut must have at least 1 element", null, null, 10, 5)
 		val exception = ContextCreationException("Failed", saxException)
 
 		val result = ValidationUtils.fromException(exception)
 
-		assertThat(result.errors[0].explanation).contains("Minimum 2 InOut elements required")
+		assertThat(result.errors[0].explanation).contains("Minimum 1 InOut element required")
 		assertThat(result.errors[0].explanation).contains("entry/exit points for trains")
 	}
 

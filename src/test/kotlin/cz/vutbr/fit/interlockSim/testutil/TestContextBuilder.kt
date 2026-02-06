@@ -251,7 +251,7 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 
 /**
  * Creates a minimal context with two InOut elements (entry and exit).
- * Updated to comply with strict validation requiring minimum 2 InOut elements.
+ * Two InOuts are used for conventional bidirectional operation scenarios.
  *
  * @return context with two InOut elements
  */
