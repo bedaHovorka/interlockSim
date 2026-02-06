@@ -61,7 +61,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Create mock train for tests
 		// For simplicity, return null for entrySeparator (uses fallback arbitrary order)
 		mockTrain = mockk<Train>(relaxed = true)
-		every { mockTrain.getEntrySeparator() } returns null
+		every { mockTrain.trainEntrySeparator } returns null
 	}
 
 	@Test

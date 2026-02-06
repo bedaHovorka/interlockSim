@@ -162,7 +162,7 @@ class SimpleTestProcess(
 	 */
 	fun getTrainState(): TrainState = TrainState(
 		velocity = train.getVelocity(),
-		position = train.getFrontPosition(),
+		position = train.frontPosition,
 		terminated = train.terminated()
 	)
 
