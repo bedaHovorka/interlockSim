@@ -144,6 +144,69 @@ class PropertyChangeTest : KoinTestBase() {
 		assertThat(listener.events).isEmpty()
 	}
 
+	@Test
+	@DisplayName("currentMaxSpeed setter fires property change event")
+	fun currentMaxSpeed_setter_firesPropertyChange() {
+		val baseContext = context as BaseContext<*>
+		listener.events.clear()
+
+		val oldValue = baseContext.currentMaxSpeed
+		val newValue = 120.0
+		baseContext.currentMaxSpeed = newValue
+
+		assertThat(listener.events).hasSize(1)
+		val event = listener.events[0]
+		assertThat(event.propertyName).isEqualTo("currentMaxSpeed")
+		assertThat(event.oldValue).isEqualTo(oldValue)
+		assertThat(event.newValue).isEqualTo(newValue)
+	}
+
+	@Test
+	@DisplayName("currentTrackLength setter fires property change event")
+	fun currentTrackLength_setter_firesPropertyChange() {
+		val baseContext = context as BaseContext<*>
+		listener.events.clear()
+
+		val oldValue = baseContext.currentTrackLength
+		val newValue = 150.0
+		baseContext.currentTrackLength = newValue
+
+		assertThat(listener.events).hasSize(1)
+		val event = listener.events[0]
+		assertThat(event.propertyName).isEqualTo("currentTrackLength")
+		assertThat(event.oldValue).isEqualTo(oldValue)
+		assertThat(event.newValue).isEqualTo(newValue)
+	}
+
+	@Test
+	@DisplayName("currentNameString setter fires property change event")
+	fun currentNameString_setter_firesPropertyChange() {
+		val baseContext = context as BaseContext<*>
+		listener.events.clear()
+
+		val oldValue = baseContext.currentNameString  // empty string initially
+		val newValue = "TestName"
+		baseContext.currentNameString = newValue
+
+		assertThat(listener.events).hasSize(1)
+		val event = listener.events[0]
+		assertThat(event.propertyName).isEqualTo("currentNameString")
+		// oldValue will be null in the event (the backing field)
+		assertThat(event.newValue).isEqualTo(newValue)
+	}
+
+	@Test
+	@DisplayName("setting property to same value does not fire event")
+	fun setPropertyToSameValue_doesNotFireEvent() {
+		val baseContext = context as BaseContext<*>
+		listener.events.clear()
+
+		val value = baseContext.currentMaxSpeed
+		baseContext.currentMaxSpeed = value
+
+		assertThat(listener.events).isEmpty()
+	}
+
 	/**
 	 * Test PropertyChangeListener implementation that captures all events.
 	 */

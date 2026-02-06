@@ -195,13 +195,20 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		val contextInOuts: Collection<*> = contextCtx.getInOuts()
 		assertThat(contextInOuts).hasSize(2)
 
-		// Verify that the context supports property access
-		// NOTE: Property change events are not yet implemented - see issue #249
+		// Verify that the context supports property access with event firing
 		val baseContext = context as BaseContext<*>
+		val propertyListener = TestPropertyChangeListener()
+		baseContext.addPropertyChangeListener(propertyListener)
 
-		// Verify property setters work
+		// Verify property setter fires event
 		baseContext.currentMaxSpeed = 100.0
 		assertThat(baseContext.currentMaxSpeed).isEqualTo(100.0)
+		
+		// Verify event was fired
+		assertThat(propertyListener.events).hasSize(1)
+		val event = propertyListener.events[0]
+		assertThat(event.propertyName).isEqualTo("currentMaxSpeed")
+		assertThat(event.newValue).isEqualTo(100.0)
 	}
 
 	/**
@@ -223,8 +230,11 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		val trackBlock = SimpleTrackBlock(inA, inB, 200.0, 80.0)
 		editingContext.joinCells(Point(5, 5), Point(25, 5), trackBlock)
 
-		// Change properties in editing context
-		// NOTE: Property change events are not yet implemented - see issue #249
+		// Listen for property changes
+		val propertyListener = TestPropertyChangeListener()
+		editingContext.addPropertyChangeListener(propertyListener)
+
+		// Change properties in editing context and verify events are fired
 		editingContext.currentMaxSpeed = 150.0
 		editingContext.currentTrackLength = 200.0
 		editingContext.currentNameString = "Test Railway"
@@ -233,6 +243,12 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(editingContext.currentMaxSpeed).isEqualTo(150.0)
 		assertThat(editingContext.currentTrackLength).isEqualTo(200.0)
 		assertThat(editingContext.currentNameString).isEqualTo("Test Railway")
+		
+		// Verify events were fired
+		assertThat(propertyListener.events).hasSize(3)
+		assertThat(propertyListener.events[0].propertyName).isEqualTo("currentMaxSpeed")
+		assertThat(propertyListener.events[1].propertyName).isEqualTo("currentTrackLength")
+		assertThat(propertyListener.events[2].propertyName).isEqualTo("currentNameString")
 
 		// Transform to simulation context
 		val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
@@ -243,8 +259,26 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(simBase.currentTrackLength).isEqualTo(200.0)
 		assertThat(simBase.currentNameString).isEqualTo("Test Railway")
 
-		// Verify property setters work in simulation context
+		// Listen for property changes in simulation context
+		val simPropertyListener = TestPropertyChangeListener()
+		simBase.addPropertyChangeListener(simPropertyListener)
+
+		// Verify property setters work in simulation context and fire events
 		simBase.currentMaxSpeed = 180.0
 		assertThat(simBase.currentMaxSpeed).isEqualTo(180.0)
+		assertThat(simPropertyListener.events).hasSize(1)
+		assertThat(simPropertyListener.events[0].propertyName).isEqualTo("currentMaxSpeed")
+		assertThat(simPropertyListener.events[0].newValue).isEqualTo(180.0)
+	}
+
+	/**
+	 * Test PropertyChangeListener implementation that captures all events.
+	 */
+	private class TestPropertyChangeListener : java.beans.PropertyChangeListener {
+		val events: MutableList<java.beans.PropertyChangeEvent> = mutableListOf()
+
+		override fun propertyChange(evt: java.beans.PropertyChangeEvent) {
+			events.add(evt)
+		}
 	}
 }
