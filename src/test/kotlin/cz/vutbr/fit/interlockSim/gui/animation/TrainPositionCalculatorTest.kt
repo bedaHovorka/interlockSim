@@ -218,10 +218,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		// Create mock train with entry separator that doesn't match either end
 		// Use a different separator from the network
-		val allSeparators = context.getRailWayNetGrid().getAllCells()
+		val allSeparators = context.getRailWayNetGrid()
+			.map { it.value }
 			.filterIsInstance<cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator>()
 
-		val differentSeparator = allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
+		val differentSeparator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator? = 
+			allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
 		assertThat(differentSeparator).isNotNull()
 
 		val trainWithDifferentEntry = mockk<Train>(relaxed = true)
