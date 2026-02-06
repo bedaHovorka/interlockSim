@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED
+import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
