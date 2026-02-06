@@ -1,8 +1,8 @@
 # Path Reservation Architecture
 
-**Document Version:** 1.0
-**Last Updated:** 2026-01-26
-**Related Issue:** #292 Phase 2 Enhancement
+**Document Version:** 1.1
+**Last Updated:** 2026-02-06
+**Related Issue:** #292 Phase 2 Enhancement, #311 Round-Robin Load Balancing
 
 ## Table of Contents
 
@@ -13,6 +13,7 @@
 5. [TOCTOU Trade-Off Analysis](#toctou-trade-off-analysis)
 6. [Design Decisions](#design-decisions)
 7. [Sequence Diagrams](#sequence-diagrams)
+7.5. [Round-Robin Load Balancing](#75-round-robin-load-balancing-issue-311)
 8. [Future Considerations](#future-considerations)
 
 ---
@@ -832,6 +833,160 @@ sequenceDiagram
         Registry-->>Service: Conflict(B2, "Train-2")
     end
 ```
+
+---
+
+## 7.5. Round-Robin Load Balancing (Issue #311)
+
+**Status:** ✅ Implemented (2026-02-06)
+**Related Issues:** #311 (Phase 2 of #291)
+
+### Problem Statement
+
+After Issue #291 fix, the topology navigator correctly discovers **ALL available paths** between two points (e.g., k1 MAIN branch and k2 BRANCH branch through vyhybna.xml switch network).
+
+However, `PathReservationService.reservePath()` always picked the **FIRST path** in the list:
+
+```kotlin
+// OLD: Always tries paths in order: path[0], path[1], ...
+for (path in allPaths) {
+    val result = tryReservePath(trainId, path, start)
+    if (result is Success) return result
+}
+```
+
+**Result:** Even though both k1 and k2 paths were discovered, all trains used the same route (whichever was listed first), creating:
+- ❌ Unbalanced load (one path overused, other path idle)
+- ❌ Potential bottlenecks and congestion
+- ❌ Missed opportunity for parallel train movement
+
+### Solution: Round-Robin Path Selection
+
+Rotate through available paths in order for each train:
+
+```kotlin
+class DefaultPathReservationService {
+    // Per-route path selection state
+    private val pathSelectionIndex = mutableMapOf<Pair<PathSeparator, PathSeparator>, Int>()
+
+    fun reservePath(trainId: String, start: PathSeparator, target: PathSeparator): Result {
+        val allPaths = navigator.findAllTopologicalPaths(start, target)
+        if (allPaths.isEmpty()) return NoPathExists
+
+        // Round-robin: rotate starting index for fairness
+        val route = Pair(start.staticRef, target.staticRef)
+        val startIndex = pathSelectionIndex.getOrDefault(route, 0)
+
+        // Try paths starting from rotated index: [startIndex, startIndex+1, ..., 0, 1, ...]
+        for (offset in allPaths.indices) {
+            val index = (startIndex + offset) % allPaths.size
+            val path = allPaths[index]
+
+            val result = tryReservePath(trainId, path, start)
+            if (result is Success) {
+                // Update index for next train
+                pathSelectionIndex[route] = (index + 1) % allPaths.size
+                return result
+            }
+        }
+
+        return AllPathsBlocked
+    }
+}
+```
+
+### Benefits
+
+1. **Fair Distribution** - Trains evenly distributed across all available paths
+2. **Balanced Load** - All k1 and k2 tracks utilized equally
+3. **Reduced Congestion** - No single path becomes a bottleneck
+4. **Increased Throughput** - Parallel train movement on independent paths
+
+### Example: vyhybna.xml Network
+
+Network has 2 parallel paths between InOut A and InOut B:
+- **Path 0:** Through k1 track (MAIN branch)
+- **Path 1:** Through k2 track (BRANCH branch)
+
+**Reservation sequence:**
+```
+Train 1: startIndex=0, tries [path0, path1] → reserves path0 → nextIndex=1
+Train 2: startIndex=1, tries [path1, path0] → reserves path1 → nextIndex=0
+Train 3: startIndex=0, tries [path0, path1] → reserves path0 → nextIndex=1
+Train 4: startIndex=1, tries [path1, path0] → reserves path1 → nextIndex=0
+```
+
+**Result:** 50% of trains use k1, 50% use k2 (perfect balance).
+
+### Implementation Details
+
+**State Management:**
+- `pathSelectionIndex: Map<Pair<PathSeparator, PathSeparator>, Int>`
+- Tracks next path index for each (start→target) route
+- Independent rotation per route (different routes don't interfere)
+
+**Rotation Algorithm:**
+```kotlin
+val route = Pair(start.staticRef, target.staticRef)
+val startIndex = pathSelectionIndex.getOrDefault(route, 0)
+
+for (offset in allPaths.indices) {
+    val pathIndex = (startIndex + offset) % allPaths.size
+    val path = allPaths[pathIndex]
+    
+    // Try to reserve...
+    if (success) {
+        pathSelectionIndex[route] = (pathIndex + 1) % allPaths.size
+        return Success
+    }
+}
+```
+
+**Fallback Behavior:**
+- If preferred path (rotated index) is blocked, tries next path in rotation
+- Example: Train expects path1 but it's blocked → tries path0 instead
+- Ensures trains don't wait unnecessarily when alternative paths exist
+
+### Thread Safety
+
+**NOT thread-safe** (consistent with existing single-threaded simulation model).
+
+If future multi-threaded support is added, synchronization required:
+```kotlin
+synchronized(pathSelectionIndex) {
+    val startIndex = pathSelectionIndex.getOrDefault(route, 0)
+    // ... reservation logic ...
+    pathSelectionIndex[route] = nextIndex
+}
+```
+
+### Testing
+
+Comprehensive test suite in `RoundRobinLoadBalancingTest.kt`:
+
+1. **Basic Rotation** - Verifies alternating path selection
+2. **Balanced Distribution** - 10 trains → 5 on path0, 5 on path1
+3. **Fallback Behavior** - Blocked path skipped, alternative used
+4. **Per-Route Independence** - Different routes maintain separate rotation
+5. **Exhaustion Handling** - Returns AllPathsBlocked when all paths occupied
+
+### Performance Impact
+
+**Minimal:** Round-robin adds O(1) map lookup per reservation (negligible overhead).
+
+**No increase in path discovery cost:** Navigator still uses same BFS algorithm.
+
+### Alternative Strategies (Future)
+
+Other selection strategies considered but not implemented:
+
+1. **Shortest Path First** - Minimize travel time (may favor one path)
+2. **Occupancy-Based** - Select least congested path (dynamic adaptation)
+3. **Randomized** - Stateless random selection (non-deterministic)
+
+Round-robin chosen for simplicity, predictability, and guaranteed fairness.
+
+**Future Enhancement:** Configurable strategy selection via DI or configuration file.
 
 ---
 
