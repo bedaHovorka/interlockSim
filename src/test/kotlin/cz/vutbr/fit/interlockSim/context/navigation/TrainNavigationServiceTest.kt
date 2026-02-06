@@ -17,7 +17,6 @@ import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
-import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -354,7 +353,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		private val simulationContextFactory: SimulationContextFactory by inject()
 
 		@Test
-		fun `findReservedPathForTrain returns NoTopologicalPath when no topological path exists`() {
+		fun `findReservedPathForTrain returns OwnershipConflict when no reserved path exists`() {
 			// Arrange: Disconnected InOuts (no track connection)
 			val context = TestContextBuilder()
 				.withInOut("A", 1, 1, true)
@@ -369,14 +368,14 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Act
 			val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: No topological path exists (permanent condition)
+			// Assert: Without PathInfo the train must wait for dispatcher (OwnershipConflict semantics)
 			assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
 
 			context.close()
 		}
 
 		@Test
-		fun `findReservedPathForTrain returns NoTopologicalPath when single InOut has no connections`() {
+		fun `findReservedPathForTrain returns OwnershipConflict when single InOut has no connections`() {
 			// Arrange: Single InOut (no connections = no path topologically)
 			val context = TestTopologies.deadEndSingleInOutSimulation()
 
@@ -387,7 +386,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Act
 			val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Assert: No topological path exists (single InOut with no connections)
+			// Assert: Dispatcher never registered a path, so navigation reports OwnershipConflict
 			assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
 
 			context.close()
@@ -499,7 +498,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val isAvailable = service.isPathReservedForTrain("train1", inOutA)
 
 			// Assert
-			assertThat(foundPath).isNotNull()
+			assertThat(foundPath).isInstanceOf(PathResult.Available::class)
 			assertThat(isAvailable).isTrue()
 		}
 
@@ -869,7 +868,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			assertThat(reserveResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
 			val navPathBefore = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(navPathBefore).isNotNull()
+			assertThat(navPathBefore).isInstanceOf(PathResult.Available::class)
 
 			// Release path
 			pathService.releasePath("train1")
@@ -1149,7 +1148,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val train1Path = navService.findReservedPathForTrain("train1", inOutA)
 			val train1Reserved = navService.isPathReservedForTrain("train1", inOutA)
 
-			assertThat(train1Path).isNotNull()
+			assertThat(train1Path).isInstanceOf(PathResult.Available::class)
 			assertThat(train1Reserved).isTrue()
 
 			// Train2 (no reservation) navigation methods should agree
