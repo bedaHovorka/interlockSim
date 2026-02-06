@@ -745,7 +745,10 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Navigate train1
 			val navPath1 = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(navPath1).isNotNull()
+			assertThat(navPath1).isInstanceOf(PathResult.Available::class)
+
+			// Extract blocks from navigation path (to NEXT semaphore, not full path)
+			val train1NavBlocks = extractNavigationBlocks((navPath1 as PathResult.Available).path)
 
 			// Verify navigation blocks are subset of reserved blocks
 			// (navigation returns path to NEXT semaphore, not full path to target)
@@ -916,7 +919,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Get the navigation path (to next semaphore)
 			val initialNavPath = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(initialNavPath).isNotNull()
+			assertThat(initialNavPath).isInstanceOf(PathResult.Available::class)
 			val navBlocks = pathService.getReservedBlocks("train1").toSet()
 			assertThat(navBlocks.size).isGreaterThan(0)
 
@@ -983,7 +986,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Get blocks from navigation (path to next semaphore)
 			val navPath = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(navPath).isNotNull()
+			assertThat(navPath).isInstanceOf(PathResult.Available::class)
 
 			// Verify navigation blocks are subset of registry blocks
 			assertThat(registryBlocks.size).isGreaterThan(0)
@@ -1033,7 +1036,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Navigate (returns path to next semaphore)
 			val navPath = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(navPath).isNotNull()
+			assertThat(navPath).isInstanceOf(PathResult.Available::class)
 
 			// Verify navigation blocks are subset of reserved blocks
 			assertThat(reservedBlocks.size).isGreaterThan(0)
@@ -1088,7 +1091,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 				// Navigate (returns path to next semaphore)
 				val navPath = navService.findReservedPathForTrain(trainId, inOutA)
-				assertThat(navPath).isNotNull()
+				assertThat(navPath).isInstanceOf(PathResult.Available::class)
 
 				// Verify navigation blocks are subset of reservation blocks
 				assertThat(reservedBlocks.size).isGreaterThan(0)
