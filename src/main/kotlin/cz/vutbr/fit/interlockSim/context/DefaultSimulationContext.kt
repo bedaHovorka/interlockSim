@@ -583,7 +583,12 @@ open class DefaultSimulationContext(
 						"target ${simulationContext.currentTrackLength}"
 				)
 			}
-			if (editingContext.currentNameString != simulationContext.currentNameString) {
+			// Note: currentNameString validation is skipped when source is empty because
+			// DefaultSimulationContext.currentNameString getter auto-generates a random name
+			// when empty (see line 1400). Empty source names are expected and valid.
+			if (editingContext.currentNameString.isNotEmpty() &&
+				editingContext.currentNameString != simulationContext.currentNameString
+			) {
 				errors.add(
 					"Name string mismatch: source '${editingContext.currentNameString}', " +
 						"target '${simulationContext.currentNameString}'"
