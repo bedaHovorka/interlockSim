@@ -65,8 +65,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 				context.toDynamic(orphanTrack as TrackFacility)
 			}
 				.isInstanceOf<IllegalStateException>()
-				.message()
-				.isNotNull()
+				.transform { it.message ?: "" }
 				.contains("Dynamic wrapper not found for track")
 				.contains("This indicates the track was not registered during initialization")
 		}
