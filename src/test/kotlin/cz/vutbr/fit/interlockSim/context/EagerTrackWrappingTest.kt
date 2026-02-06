@@ -18,6 +18,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
 import assertk.assertions.messageContains
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -54,7 +56,9 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			// Arrange
 			val context = factory.createEmptyContext() as DefaultSimulationContext
 			// Create an orphan track that's not in the context
-			val orphanTrack = SimpleTrackBlock.getInstance(100.0, null, null)
+			val end1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+			val end2 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+			val orphanTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 
 			// Act & Assert - should throw because track not in context
 			assertThat {

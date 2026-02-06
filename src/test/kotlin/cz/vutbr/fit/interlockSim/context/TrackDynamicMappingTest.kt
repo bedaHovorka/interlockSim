@@ -81,6 +81,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			// (tracks are no longer created lazily)
 			assertThat {
 				context.toDynamic(trackFacility)
+				Unit // Explicit return type for type inference
 			}.isFailure().isInstanceOf<IllegalStateException>()
 		}
 	}
