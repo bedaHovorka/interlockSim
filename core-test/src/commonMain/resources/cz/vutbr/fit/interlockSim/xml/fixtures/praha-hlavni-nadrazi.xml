@@ -14,7 +14,7 @@
      - Car train terminal siding (Y=22)
 
      Grid: 70x25
-     Total elements: 42+ switches, 55+ signals, 11 InOuts, 110+ track blocks
+     Total elements: 41 switches, 55 signals, 12 InOuts, 111 track blocks
 -->
 <net X="70" Y="25">
   <!-- North entry points -->
@@ -139,8 +139,7 @@
   <!-- South Layer 3 switches - MERGE switches (tracks converge here) -->
   <RailSwitch X="52" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
   <RailSwitch X="52" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="52" Y="22" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
+  <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE"/>
 
   <!-- South Layer 4 signals (between merge and diverge switches) -->
   <RailSemaphore X="54" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
