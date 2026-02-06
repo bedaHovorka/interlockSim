@@ -157,7 +157,20 @@ class DefaultPathReservationService(
 		}
 
 		// Step 2: Apply round-robin rotation for fair load distribution (Issue #311)
-		val route = Pair(start.staticRef, target.staticRef)
+		// Extract static references for route key
+		val startStatic = when (start) {
+			is DynamicInOut -> start.staticRef
+			is DynamicRailSemaphore -> start.staticRef
+			is DynamicRailSwitch -> start.staticRef
+			else -> start as PathSeparator
+		}
+		val targetStatic = when (target) {
+			is DynamicInOut -> target.staticRef
+			is DynamicRailSemaphore -> target.staticRef
+			is DynamicRailSwitch -> target.staticRef
+			else -> target as PathSeparator
+		}
+		val route = Pair(startStatic, targetStatic)
 		val startIndex = pathSelectionIndex.getOrDefault(route, 0)
 
 		logger.trace {
