@@ -154,6 +154,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			// 1. It reaches an OrientedPathSeparator (semaphore/switch) in the direction, OR
 			// 2. It reaches the end of track (no more tracks available)
 			// In this test, path goes InOut A → Block → InOut B (all reserved for train1)
+			// Note: InOut elements ARE OrientedPathSeparators (via OrientedNodeCell)
+			// and contain semaphores, so the path IS valid and returns true
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
 			// Assert - Returns true because all blocks in the path are owned by train1
 			assertThat(isReserved).isEqualTo(true)
