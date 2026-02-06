@@ -369,4 +369,56 @@ class TimetableTest {
 			assertThat(timetable.getLength()).isEqualTo(0.0)
 		}
 	}
+
+	@Nested
+	@DisplayName("Bidirectional Operation (GitHub #62)")
+	inner class BidirectionalOperationTests {
+		@Test
+		fun `reverseDirection swaps In and Out points`() {
+			// Arrange
+			val timetable = Timetable(mockInPoint, mockOutPoint, Time(0.0), Time(10.0), 100.0)
+			val originalIn = timetable.getIn()
+			val originalOut = timetable.getOut()
+
+			// Act
+			timetable.reverseDirection()
+
+			// Assert
+			assertThat(timetable.getIn()).isEqualTo(originalOut)
+			assertThat(timetable.getOut()).isEqualTo(originalIn)
+		}
+
+		@Test
+		fun `reverseDirection can be called multiple times`() {
+			// Arrange
+			val timetable = Timetable(mockInPoint, mockOutPoint, Time(0.0), Time(10.0), 100.0)
+			val originalIn = timetable.getIn()
+			val originalOut = timetable.getOut()
+
+			// Act
+			timetable.reverseDirection() // First reversal
+			timetable.reverseDirection() // Second reversal (should restore original)
+
+			// Assert
+			assertThat(timetable.getIn()).isEqualTo(originalIn)
+			assertThat(timetable.getOut()).isEqualTo(originalOut)
+		}
+
+		@Test
+		fun `reverseDirection does not affect times or length`() {
+			// Arrange
+			val inTime = Time(5.0)
+			val outTime = Time(15.0)
+			val length = 150.0
+			val timetable = Timetable(mockInPoint, mockOutPoint, inTime, outTime, length)
+
+			// Act
+			timetable.reverseDirection()
+
+			// Assert
+			assertThat(timetable.getInTime()).isEqualTo(inTime)
+			assertThat(timetable.getOutTime()).isEqualTo(outTime)
+			assertThat(timetable.getLength()).isEqualTo(length)
+		}
+	}
 }

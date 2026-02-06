@@ -686,6 +686,51 @@ class Train :
 	}
 
 	/**
+	 * Reverse the train's direction of travel.
+	 *
+	 * This simulates the train engineer moving to the opposite end of the train
+	 * and driving in the reverse direction. This is a simulation simplification
+	 * of real-world locomotive coupling/uncoupling operations.
+	 *
+	 * **Preconditions:**
+	 * - Train must be completely stopped (velocity = 0)
+	 * - Motor must not be accelerating
+	 *
+	 * **Operation:**
+	 * - Validates train is stopped
+	 * - Simulates engineer movement delay (30 seconds)
+	 * - Swaps In/Out destinations in timetable
+	 * - Reports the reversal event
+	 *
+	 * **Usage:** This method should be called as a discrete process during simulation
+	 * when the train is stopped (e.g., at a semaphore or station).
+	 *
+	 * @throws IllegalStateException if train is not stopped
+	 * @since GitHub #62: Bidirectional train operation support
+	 */
+	fun reverseDirection() {
+		// Validate preconditions
+		requireSimulation(getVelocity() == 0.0) {
+			"Train $number must be stopped (velocity = 0) to reverse direction. Current velocity: ${getVelocity()}"
+		}
+
+		logger.info { "Train $number: Engineer moving to opposite end (reversing direction)" }
+		env.report("reversing direction", this, ReportType.TRAIN_EVENTS)
+
+		// Simulate time for engineer to walk to opposite end of train
+		// Typical walking speed: 1.5 m/s, train length varies (e.g., 200m)
+		// Use fixed 30 second delay for simulation consistency
+		hold(30.0)
+
+		// Swap In and Out destinations
+		timetable.reverseDirection()
+
+		val newDestination = timetable.getOut().name
+		logger.info { "Train $number: Direction reversed, new destination: $newDestination" }
+		env.report("reversed, destination now $newDestination", this, ReportType.TRAIN_EVENTS)
+	}
+
+	/**
 	 * Get train number for identification and rendering.
 	 *
 	 * Each train is assigned a unique sequential number starting from 1.
