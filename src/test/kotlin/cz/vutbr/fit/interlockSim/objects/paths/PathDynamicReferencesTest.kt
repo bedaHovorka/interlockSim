@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -230,10 +231,12 @@ class PathDynamicReferencesTest : KoinTestBase() {
 			val path = trainService.findReservedPathForTrain("train1", inOut1)
 
 			// Assert - Path should exist and contain dynamic separators
-			assertThat(path).isNotNull()
+			assertThat(path).isInstanceOf(PathResult.Available::class)
+
+			val pathElements = (path as PathResult.Available).path
 
 			var separatorCount = 0
-			for (element in path!!) {
+			for (element in pathElements) {
 				if (element is PathSeparator) {
 					separatorCount++
 					// All separators must be DynamicPathSeparator
