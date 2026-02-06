@@ -14,10 +14,7 @@
 
 package cz.vutbr.fit.interlockSim.context
 
-import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.contains
-import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
