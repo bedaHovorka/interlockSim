@@ -225,7 +225,7 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		assertThat(differentSeparator).isNotNull()
 
 		val trainWithDifferentEntry = mockk<Train>(relaxed = true)
-		every { trainWithDifferentEntry.getEntrySeparator() } returns differentSeparator
+		every { trainWithDifferentEntry.getEntrySeparator() } returns differentSeparator!!
 
 		// Calculate position - should fall back to arbitrary order
 		val sectionLength = trackSection.length()
