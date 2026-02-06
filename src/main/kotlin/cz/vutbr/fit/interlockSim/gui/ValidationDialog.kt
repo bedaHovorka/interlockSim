@@ -203,12 +203,8 @@ class ValidationDialog(
 		panel.add(cancelButton)
 
 		// Focus on appropriate button by default
-		if (allowOpenAnyway) {
-			// Don't auto-focus either button to force user to make conscious choice
-			cancelButton.requestFocusInWindow()
-		} else {
-			cancelButton.requestFocusInWindow()
-		}
+		// Always focus Cancel to make user make a conscious choice
+		cancelButton.requestFocusInWindow()
 
 		return panel
 	}
