@@ -29,6 +29,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.gui.ValidationResult
+import cz.vutbr.fit.interlockSim.gui.ValidationUtils
 import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -498,6 +500,154 @@ class XMLContextFactory : EditingContextFactory {
 	 */
 	@Throws(ContextCreationException::class)
 	override fun createContext(stream: InputStream): Context<*, *> = createContext(InputStreamReader(stream))
+
+	/**
+	 * Result of lenient XML parsing for editor mode.
+	 *
+	 * Separates unparseable XML (malformed syntax) from parseable XML with validation warnings.
+	 *
+	 * @property context The parsed context (null if XML is unparseable)
+	 * @property validationResult Validation errors/warnings
+	 * @property isParseable Whether the XML could be parsed (even if invalid)
+	 */
+	data class LenientParseResult(
+		val context: DefaultEditingContext?,
+		val validationResult: ValidationResult,
+		val isParseable: Boolean
+	)
+
+	/**
+	 * Attempts to parse XML file with lenient validation for editor mode.
+	 *
+	 * This method separates parsing from validation:
+	 * 1. **Unparseable XML** (malformed syntax): Returns null context, isParseable = false
+	 * 2. **Parseable XML with validation errors**: Returns context, isParseable = true, validationResult has errors
+	 *
+	 * This allows the editor to open files with validation errors so users can fix them.
+	 *
+	 * @param file XML file containing railway network definition
+	 * @return LenientParseResult with context (if parseable) and validation result
+	 */
+	fun createContextLenient(file: File): LenientParseResult =
+		try {
+			// Read file content so we can retry parsing without validation if needed
+			val xmlContent = file.readText()
+			createContextLenient(xmlContent)
+		} catch (e: FileNotFoundException) {
+			LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		} catch (e: IOException) {
+			LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		}
+
+	/**
+	 * Attempts to parse XML string with lenient validation for editor mode.
+	 *
+	 * @param xmlContent String containing XML railway network definition
+	 * @return LenientParseResult with context (if parseable) and validation result
+	 */
+	private fun createContextLenient(xmlContent: String): LenientParseResult {
+		val validator = validator
+		if (validator == null) {
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException("Validator not initialized")),
+				isParseable = false
+			)
+		}
+
+		// First attempt: Parse with schema validation
+		try {
+			val inputSource = InputSource(java.io.StringReader(xmlContent))
+			val handler = Handler()
+			
+			// Try to validate with schema - this will throw on both parse and validation errors
+			validator.validate(SAXSource(inputSource), SAXResult(handler))
+			
+			val context = handler.getContext()
+			if (context == null) {
+				return LenientParseResult(
+					context = null,
+					validationResult = ValidationUtils.fromException(ContextCreationException("Failed to parse context from XML")),
+					isParseable = false
+				)
+			} else {
+				// Successfully parsed and validated
+				return LenientParseResult(
+					context = context,
+					validationResult = ValidationResult.success(),
+					isParseable = true
+				)
+			}
+		} catch (e: org.xml.sax.SAXParseException) {
+			// SAXParseException = unparseable XML (malformed syntax)
+			// Line/column info available - definitely a parse error
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(ContextCreationException(e)),
+				isParseable = false
+			)
+		} catch (e: SAXException) {
+			// SAXException (not SAXParseException) could be either:
+			// 1. Validation error (e.g., missing required attributes, wrong element order)
+			// 2. Structural error (e.g., InOut count < 2)
+			// We treat these as validation errors that still allow opening the file
+			// The user can then fix the issues in the editor
+			
+			val validationError = ContextCreationException(e)
+			
+			// Second attempt: Parse without schema validation to see if we can get a context
+			return try {
+				val inputSource = InputSource(java.io.StringReader(xmlContent))
+				val handler = Handler()
+				
+				// Parse without validation - use SAX parser directly
+				val saxParser = javax.xml.parsers.SAXParserFactory.newInstance().newSAXParser()
+				saxParser.parse(inputSource, handler)
+				
+				val context = handler.getContext()
+				
+				if (context != null) {
+					// Parseable but has validation errors
+					LenientParseResult(
+						context = context,
+						validationResult = ValidationUtils.fromException(validationError),
+						isParseable = true
+					)
+				} else {
+					// Couldn't get context even without validation
+					LenientParseResult(
+						context = null,
+						validationResult = ValidationUtils.fromException(validationError),
+						isParseable = false
+					)
+				}
+			} catch (parseException: Exception) {
+				// Even without validation, we couldn't parse - it's malformed
+				LenientParseResult(
+					context = null,
+					validationResult = ValidationUtils.fromException(ContextCreationException(parseException)),
+					isParseable = false
+				)
+			}
+		} catch (e: Exception) {
+			// Other exceptions (e.g., context creation errors)
+			return LenientParseResult(
+				context = null,
+				validationResult = ValidationUtils.fromException(
+					if (e is ContextCreationException) e else ContextCreationException(e)
+				),
+				isParseable = false
+			)
+		}
+	}
 
 	/**
 	 * Generates XML representation of a Context.
