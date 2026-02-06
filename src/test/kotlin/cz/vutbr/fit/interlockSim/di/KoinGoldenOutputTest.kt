@@ -9,7 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.di
 
+import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -186,17 +189,114 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	/**
 	 * Context lifecycle test - Validate context scope management
 	 *
-	 * Once context lifecycle is moved to Koin, this test validates
-	 * that contexts are properly created and destroyed without state leakage.
+	 * This test validates that Koin scopes are properly managed in the scope-per-context pattern:
+	 * 1. Each context creates its own isolated scope
+	 * 2. Scopes are properly closed when contexts are closed
+	 * 3. No state leakage between sequential contexts
+	 * 4. Resources are cleaned up properly
+	 * 5. Closed scopes cannot be accessed
 	 *
-	 * TODO: Implement when context module is enhanced
+	 * The scope-per-context architecture ensures:
+	 * - One PathReservationRegistry per context (shared by all services)
+	 * - Different contexts have isolated registries
+	 * - Closing context releases all scoped resources
+	 *
+	 * @see navigationModule in InterlockSimModule
+	 * @see DefaultSimulationContext.scope
 	 */
 	@Test
-	@Disabled("Context module not yet enhanced for scope testing. See Issue #220.")
+	@Tag("integration-test")
 	fun `validate context lifecycle with Koin scopes`() {
-		// TODO: Implement context scope tests
-		// 1. Create multiple contexts sequentially
-		// 2. Verify no state leakage between runs
-		// 3. Verify proper cleanup (memory, resources)
+		// TEST 1: Rapid sequential creation stress test (memory leak detection)
+		// Create many contexts in succession to verify scopes are actually closed
+		repeat(50) { iteration ->
+			buildTestContext().use { context ->
+				// Verify scope is active and services are accessible
+				val service = context.getPathReservationService()
+				assertThat(service).isNotNull()
+				
+				// Make a reservation to populate internal state
+				val grid = context.getRailWayNetGrid()
+				val inOutA = context.toDynamic(grid.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+				val inOutB = context.toDynamic(grid.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+				service.reservePath("train-$iteration", inOutA, inOutB)
+				
+				// Verify reservation exists in this context
+				assertThat(service.getReservedBlocks("train-$iteration")).isNotNull()
+			}
+			// After use{} block: context.close() called automatically, scope should be closed
+		}
+		// Success if we reach here without OutOfMemoryError or scope accumulation
+		
+		// TEST 2: Deep state isolation - verify no data bleeding between contexts
+		// Create first context with significant state
+		buildTestContext().use { context1 ->
+			val service1 = context1.getPathReservationService()
+			val grid1 = context1.getRailWayNetGrid()
+			val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			
+			// Create multiple reservations in context1
+			service1.reservePath("train-alpha", inOutA1, inOutB1)
+			service1.reservePath("train-beta", inOutA1, inOutB1)
+			service1.reservePath("train-gamma", inOutA1, inOutB1)
+			
+			// Verify all reservations exist in context1
+			assertThat(service1.getReservedBlocks("train-alpha").size).isEqualTo(1)
+			assertThat(service1.getReservedBlocks("train-beta").size).isEqualTo(1)
+			assertThat(service1.getReservedBlocks("train-gamma").size).isEqualTo(1)
+		}
+		// context1 is now closed, scope should be destroyed
+		
+		// Create second context and verify complete isolation
+		buildTestContext().use { context2 ->
+			val service2 = context2.getPathReservationService()
+			
+			// Verify context2's registry is completely clean (no leakage from context1)
+			assertThat(service2.getReservedBlocks("train-alpha")).isEmpty()
+			assertThat(service2.getReservedBlocks("train-beta")).isEmpty()
+			assertThat(service2.getReservedBlocks("train-gamma")).isEmpty()
+			
+			// Verify context2 can use the same train names without conflict
+			val grid2 = context2.getRailWayNetGrid()
+			val inOutA2 = context2.toDynamic(grid2.getCellAt(1, 1) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			val inOutB2 = context2.toDynamic(grid2.getCellAt(5, 5) as cz.vutbr.fit.interlockSim.objects.core.PathSeparator)
+			service2.reservePath("train-alpha", inOutA2, inOutB2) // Same name as context1
+			
+			// Verify reservation works in context2 (proves it's a different scope)
+			assertThat(service2.getReservedBlocks("train-alpha").size).isEqualTo(1)
+		}
+		
+		// TEST 3: Manual scope closure and access denial
+		val context3 = buildTestContext()
+		val scope3 = context3.scope
+		
+		// Verify scope is active before close
+		val serviceBeforeClose = context3.getPathReservationService()
+		assertThat(serviceBeforeClose).isNotNull()
+		
+		// Manually close the context (and its scope)
+		context3.close()
+		
+		// Attempting to get service from closed scope should fail
+		// Koin 3.5.6 throws org.koin.core.error.ClosedScopeException
+		assertFailure {
+			scope3.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationService>()
+		}.isInstanceOf(org.koin.core.error.ClosedScopeException::class)
+	}
+	
+	/**
+	 * Helper method to build a simple test context with InOut A -> InOut B.
+	 * Each call creates a NEW context with its own Koin scope.
+	 */
+	private fun buildTestContext(): DefaultSimulationContext {
+		// Get SimulationContextFactory from Koin
+		val factory = get<SimulationContextFactory>()
+		
+		// Load vyhybna.xml and create simulation context
+		val xml = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		requireNotNull(xml) { "vyhybna.xml not found" }
+		
+		return factory.createContext(xml) as DefaultSimulationContext
 	}
 }
