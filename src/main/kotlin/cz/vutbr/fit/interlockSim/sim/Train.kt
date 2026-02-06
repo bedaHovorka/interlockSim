@@ -702,8 +702,28 @@ class Train :
 	 * - Swaps In/Out destinations in timetable
 	 * - Reports the reversal event
 	 *
-	 * **Usage:** This method should be called as a discrete process during simulation
-	 * when the train is stopped (e.g., at a semaphore or station).
+	 * **Usage Example:**
+	 * ```kotlin
+	 * // In a custom interlocking/dispatcher process
+	 * class CustomInterlocking(context: SimulationContext) : Interlocking(context) {
+	 *     override fun actions() {
+	 *         val train = Train(env, timetable)
+	 *         activate(train)
+	 *
+	 *         // Wait for train to reach station
+	 *         waitUntil { train.getVelocity() == 0.0 }
+	 *
+	 *         // Reverse direction (this will hold for 30 seconds)
+	 *         train.reverseDirection()
+	 *
+	 *         // Train can now continue in opposite direction
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * **Note:** This method uses `hold(30.0)` and must be called from within
+	 * a jDisco Process context (e.g., from another Process or from the train's
+	 * own actions() method).
 	 *
 	 * @throws IllegalStateException if train is not stopped
 	 * @since GitHub #62: Bidirectional train operation support
