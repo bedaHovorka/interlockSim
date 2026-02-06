@@ -759,7 +759,10 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			if (reserveResult2 is PathReservationService.ReservationResult.Success) {
 				val train2ReservedBlocks = reserveResult2.reservedBlocks.toSet()
 				val navPath2Result = navService.findReservedPathForTrain("train2", inOutB)
-				assertThat(navPath2Result).isNotNull()
+				assertThat(navPath2Result).isInstanceOf(PathResult.Available::class)
+
+				val navPath2 = (navPath2Result as PathResult.Available).path
+				val train2NavBlocks = extractNavigationBlocks(navPath2)
 
 				// Verify navigation blocks are subset of reserved blocks
 				assertThat(train2ReservedBlocks).isNotEmpty()
@@ -815,8 +818,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			assertThat(result2).isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
 
 			// Train1 navigation succeeds
-			val navPath1 = navService.findReservedPathForTrain("train1", inOutA)
-			assertThat(navPath1).isNotNull()
+			val navPath1Result = navService.findReservedPathForTrain("train1", inOutA)
+			assertThat(navPath1Result).isInstanceOf(PathResult.Available::class)
 
 			// Train2 navigation fails (no blocks reserved)
 			val navPath2Result = navService.findReservedPathForTrain("train2", inOutA)
