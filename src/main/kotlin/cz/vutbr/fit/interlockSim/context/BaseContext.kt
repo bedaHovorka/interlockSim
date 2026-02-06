@@ -145,7 +145,7 @@ abstract class BaseContext<T : TrackBlock>(
 		set(value) {
 			val old = field
 			field = value
-			changeSupport.firePropertyChange("currentMaxSpeed", old, value)
+			firePropertyChangeAlways("currentMaxSpeed", old, value)
 		}
 
 	/**
@@ -158,7 +158,7 @@ abstract class BaseContext<T : TrackBlock>(
 		set(value) {
 			val old = field
 			field = value
-			changeSupport.firePropertyChange("currentTrackLength", old, value)
+			firePropertyChangeAlways("currentTrackLength", old, value)
 		}
 
 	/**
@@ -296,9 +296,9 @@ abstract class BaseContext<T : TrackBlock>(
 	open var currentNameString: String
 		get() = nameString ?: ""
 		set(value) {
-			val old = currentNameString  // Use getter to get consistent value
+			val old = nameString ?: ""
 			nameString = value
-			changeSupport.firePropertyChange("currentNameString", old, value)
+			firePropertyChangeAlways("currentNameString", old, value)
 		}
 
 	/**
@@ -350,5 +350,13 @@ abstract class BaseContext<T : TrackBlock>(
 					"Use EditingContext for network modifications."
 			)
 		}
+	}
+
+	private fun firePropertyChangeAlways(propertyName: String, oldValue: Any?, newValue: Any?) {
+		if (oldValue == newValue) {
+			return
+		}
+
+		changeSupport.firePropertyChange(propertyName, oldValue, newValue)
 	}
 }
