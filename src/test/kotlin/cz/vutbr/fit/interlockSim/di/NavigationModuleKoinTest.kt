@@ -147,11 +147,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			assertThat(trainService).isInstanceOf(TrainNavigationService::class)
 
 			// Verify the service can perform ownership checks
-			// Note: isPathReservedForTrain requires a path to a semaphore to exist
-			// Our test context has no semaphore, so it returns false (no topological path)
+			// Note: InOut elements ARE OrientedPathSeparators (via OrientedNodeCell)
+			// and contain semaphores, so the path IS valid and returns true
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
-			// Assert - This correctly returns false because there's no semaphore in the test network
-			assertThat(isReserved).isEqualTo(false)
+			// Assert - This correctly returns true because the path is reserved for train1
+			// and InOut elements are valid oriented path separators with semaphores
+			assertThat(isReserved).isEqualTo(true)
 		}
 	}
 
