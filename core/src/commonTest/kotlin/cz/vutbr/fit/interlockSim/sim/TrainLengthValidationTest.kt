@@ -15,19 +15,18 @@ import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
-import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import cz.vutbr.fit.interlockSim.util.Point
+import org.koin.test.inject
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -60,6 +59,8 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Train Length Validation (Issue #60)")
 class TrainLengthValidationTest : KoinTestBase() {
+	private val simulationContextFactory: SimulationContextFactory by inject()
+	
 	@Nested
 	@DisplayName("Valid train lengths")
 	inner class ValidTrainLengthTests {
@@ -212,14 +213,15 @@ class TrainLengthValidationTest : KoinTestBase() {
 	 * @return SimulationContext with the network
 	 */
 	private fun createSimpleNetwork(trackLength: Double): SimulationContext {
-		val builder = TestContextBuilder.create(10, 10)
+		// Create an editing context manually
+		val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(10, 10)
 
 		// Create two InOuts at different positions
 		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val inOutB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 
-		builder.putCell(Point(1, 5), inOutA)
-		builder.putCell(Point(8, 5), inOutB)
+		editingContext.putCell(Point(1, 5), inOutA)
+		editingContext.putCell(Point(8, 5), inOutB)
 
 		// Connect them with a track block
 		val trackBlock = SimpleTrackBlock(
@@ -230,7 +232,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			24.0  // maxSpeed2
 		)
 
-		builder.hardJoin(
+		editingContext.hardJoin(
 			Cell.Segment.F,
 			Cell.Segment.A,
 			Point(1, 5),
@@ -238,9 +240,8 @@ class TrainLengthValidationTest : KoinTestBase() {
 			trackBlock
 		)
 
-		// Convert to simulation context
-		val editingContext = builder.build()
-		return DefaultSimulationContext.fromEditingContext(editingContext)
+		// Convert to simulation context using factory
+		return simulationContextFactory.createContext(editingContext)
 	}
 
 	/**
@@ -255,20 +256,20 @@ class TrainLengthValidationTest : KoinTestBase() {
 	 * @return SimulationContext with disconnected InOuts
 	 */
 	private fun createDisconnectedNetwork(): SimulationContext {
-		val builder = TestContextBuilder.create(10, 10)
+		// Create an editing context manually
+		val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(10, 10)
 
 		// Create two InOuts without connecting them
 		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val inOutB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 
-		builder.putCell(Point(1, 5), inOutA)
-		builder.putCell(Point(8, 5), inOutB)
+		editingContext.putCell(Point(1, 5), inOutA)
+		editingContext.putCell(Point(8, 5), inOutB)
 
 		// Do NOT add any track blocks - leave them disconnected
 
-		// Convert to simulation context
-		val editingContext = builder.build()
-		return DefaultSimulationContext.fromEditingContext(editingContext)
+		// Convert to simulation context using factory
+		return simulationContextFactory.createContext(editingContext)
 	}
 
 	/**
