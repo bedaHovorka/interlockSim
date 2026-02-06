@@ -2,6 +2,41 @@
 
 This directory contains Java Microbenchmark Harness (JMH) benchmarks for the Railway Interlocking Simulator.
 
+## Prerequisites
+
+### jDisco Dependency
+
+Benchmarks require the jDisco simulation library to compile. Two options:
+
+**Option 1: GitHub Packages (Recommended for CI/CD)**
+
+Set environment variables:
+```bash
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-personal-access-token
+```
+
+**Option 2: Local Maven Install (Recommended for Development)**
+
+```bash
+# Clone jDisco repository
+cd ~/work
+git clone https://github.com/bedaHovorka/jdisco.git
+cd jdisco
+
+# Build and install to local Maven repository
+mvn clean install
+
+# Return to interlockSim
+cd ~/work/interlockSim
+```
+
+Verify installation:
+```bash
+ls ~/.m2/repository/dk/ruc/keld/jdisco/1.2.0/
+# Should show: jdisco-1.2.0.jar, jdisco-1.2.0.pom
+```
+
 ## Overview
 
 JMH is the industry-standard tool for accurate microbenchmarking in Java/Kotlin applications. It handles:
