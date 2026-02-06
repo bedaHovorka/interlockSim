@@ -344,7 +344,7 @@ class XMLContextFactory : EditingContextFactory {
 
 		/**
 		 * Returns the parsed context as a DefaultEditingContext.
-		 * 
+		 *
 		 * When skipStructuralValidation is true, returns context even if validation would fail.
 		 */
 		fun getContext(): DefaultEditingContext? =
