@@ -162,9 +162,10 @@ class RoundRobinLoadBalancingTest : KoinTestBase() {
 			val blocks = reserveAndGetBlocks(trainId)
 			pathReservationService.releasePath(trainId)
 
-			when (blocks.toSet()) {
-				path0Blocks.toSet() -> path0Count++
-				path1Blocks.toSet() -> path1Count++
+			// Compare sets using explicit equality check
+			when {
+				blocks.toSet() == path0Blocks.toSet() -> path0Count++
+				blocks.toSet() == path1Blocks.toSet() -> path1Count++
 			}
 		}
 
