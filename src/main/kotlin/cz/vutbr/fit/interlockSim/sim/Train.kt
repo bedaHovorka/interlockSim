@@ -686,6 +686,71 @@ class Train :
 	}
 
 	/**
+	 * Reverse the train's direction of travel.
+	 *
+	 * This simulates the train engineer moving to the opposite end of the train
+	 * and driving in the reverse direction. This is a simulation simplification
+	 * of real-world locomotive coupling/uncoupling operations.
+	 *
+	 * **Preconditions:**
+	 * - Train must be completely stopped (velocity = 0)
+	 * - Motor must not be accelerating
+	 *
+	 * **Operation:**
+	 * - Validates train is stopped
+	 * - Simulates engineer movement delay (30 seconds)
+	 * - Swaps In/Out destinations in timetable
+	 * - Reports the reversal event
+	 *
+	 * **Usage Example:**
+	 * ```kotlin
+	 * // In a custom interlocking/dispatcher process
+	 * class CustomInterlocking(context: SimulationContext) : Interlocking(context) {
+	 *     override fun actions() {
+	 *         val train = Train(env, timetable)
+	 *         activate(train)
+	 *
+	 *         // Wait for train to reach station
+	 *         waitUntil { train.getVelocity() == 0.0 }
+	 *
+	 *         // Reverse direction (this will hold for 30 seconds)
+	 *         train.reverseDirection()
+	 *
+	 *         // Train can now continue in opposite direction
+	 *     }
+	 * }
+	 * ```
+	 *
+	 * **Note:** This method uses `hold(30.0)` and must be called from within
+	 * a jDisco Process context (e.g., from another Process or from the train's
+	 * own actions() method).
+	 *
+	 * @throws IllegalStateException if train is not stopped
+	 * @since GitHub #62: Bidirectional train operation support
+	 */
+	fun reverseDirection() {
+		// Validate preconditions
+		requireSimulation(getVelocity() == 0.0) {
+			"Train $number must be stopped (velocity = 0) to reverse direction. Current velocity: ${getVelocity()}"
+		}
+
+		logger.info { "Train $number: Engineer moving to opposite end (reversing direction)" }
+		env.report("reversing direction", this, ReportType.TRAIN_EVENTS)
+
+		// Simulate time for engineer to walk to opposite end of train
+		// Typical walking speed: 1.5 m/s, train length varies (e.g., 200m)
+		// Use fixed 30 second delay for simulation consistency
+		hold(30.0)
+
+		// Swap In and Out destinations
+		timetable.reverseDirection()
+
+		val newDestination = timetable.getOut().name
+		logger.info { "Train $number: Direction reversed, new destination: $newDestination" }
+		env.report("reversed, destination now $newDestination", this, ReportType.TRAIN_EVENTS)
+	}
+
+	/**
 	 * Get train number for identification and rendering.
 	 *
 	 * Each train is assigned a unique sequential number starting from 1.
