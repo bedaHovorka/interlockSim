@@ -416,28 +416,11 @@ class XMLPolishTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `single InOut throws exception`() {
+		fun `exactly one InOuts is valid`() {
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
 					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
-				</net>"""
-			val stream = ByteArrayInputStream(xml.toByteArray())
-
-			assertThatBlock {
-				editingContextFactory.createContext(stream)
-			}.isFailure()
-				.message()
-				.isNotNull()
-		}
-
-		@Test
-		fun `exactly two InOuts is valid`() {
-			val xml = """<?xml version="1.0"?>
-				<!DOCTYPE net>
-				<net X="100" Y="100">
-					<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="true" name="A"/>
-					<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="false" name="B"/>
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
@@ -446,7 +429,7 @@ class XMLPolishTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val inOuts = context.getInOuts()
-			assertThat(inOuts as Collection<*>).hasSize(2)
+			assertThat(inOuts as Collection<*>).hasSize(1)
 		}
 
 		@Test

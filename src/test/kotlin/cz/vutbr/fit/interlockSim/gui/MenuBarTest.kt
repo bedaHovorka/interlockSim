@@ -14,6 +14,7 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -38,7 +39,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@BeforeEach
 	override fun setUp() {
 		super.setUp()
-		
+
 		// Create Frame and MenuBar on EDT
 		runOnEDT {
 			frame = Frame()
@@ -85,13 +86,13 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun fileMenuHasSaveAction() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			
+
 			// Get menu items (excluding separators)
 			val menuItems =
 				(0 until fileMenu.itemCount)
 					.map { fileMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
-			
+
 			// Find Save action
 			val saveItem = menuItems.find { it.text == "Save as..." }
 			assertThat(saveItem).isNotNull()
@@ -108,13 +109,13 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun fileMenuHasExitAction() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			
+
 			// Get menu items (excluding separators)
 			val menuItems =
 				(0 until fileMenu.itemCount)
 					.map { fileMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
-			
+
 			// Find Exit action
 			val exitItem = menuItems.find { it.text == "Exit" }
 			assertThat(exitItem).isNotNull()
@@ -131,12 +132,12 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun fileMenuHasSeparator() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			
+
 			// Count separators
 			val separatorCount =
 				(0 until fileMenu.itemCount)
 					.count { fileMenu.getItem(it) == null }
-			
+
 			assertThat(separatorCount).isEqualTo(1)
 		}
 	}
@@ -147,13 +148,13 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun helpMenuHasUsageAction() {
 		runOnEDT {
 			val helpMenu = menuBar.getMenu(1) as JMenu
-			
+
 			// Get menu items
 			val menuItems =
 				(0 until helpMenu.itemCount)
 					.map { helpMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
-			
+
 			// Find Usage action
 			val usageItem = menuItems.find { it.text == "Usage" }
 			assertThat(usageItem!!.text).isEqualTo("Usage")
@@ -166,13 +167,13 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun helpMenuHasAboutAction() {
 		runOnEDT {
 			val helpMenu = menuBar.getMenu(1) as JMenu
-			
+
 			// Get menu items
 			val menuItems =
 				(0 until helpMenu.itemCount)
 					.map { helpMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
-			
+
 			// Find About action
 			val aboutItem = menuItems.find { it.text == "About" }
 			assertThat(aboutItem!!.text).isEqualTo("About")
@@ -185,13 +186,13 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun helpMenuHasExactlyTwoItems() {
 		runOnEDT {
 			val helpMenu = menuBar.getMenu(1) as JMenu
-			
+
 			// Get menu items
 			val menuItems =
 				(0 until helpMenu.itemCount)
 					.map { helpMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
-			
+
 			assertThat(menuItems).hasSize(2)
 		}
 	}
@@ -215,14 +216,14 @@ class MenuBarTest : AbstractFrameTestBase() {
 	fun exitActionHasCorrectText() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			
+
 			// Get last item (Exit, after separator)
 			val menuItems =
 				(0 until fileMenu.itemCount)
 					.map { fileMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
 			val exitItem = menuItems.last()
-			
+
 			assertThat(exitItem.text).isEqualTo("Exit")
 		}
 	}
@@ -234,7 +235,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
 			val helpMenu = menuBar.getMenu(1) as JMenu
-			
+
 			// Verify File menu items are enabled
 			val fileItems =
 				(0 until fileMenu.itemCount)
@@ -243,7 +244,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			fileItems.forEach { item ->
 				assertThat(item.isEnabled).isEqualTo(true)
 			}
-			
+
 			// Verify Help menu items are enabled
 			val helpItems =
 				(0 until helpMenu.itemCount)

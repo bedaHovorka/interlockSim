@@ -94,10 +94,10 @@ class StatusBarTest : KoinTestBase() {
 	fun updatesStatusOnMouseMoveFromProducer() {
 		// Create a real producer that can handle mouse events
 		val producer = TestStatusProducerImpl()
-		
+
 		// Register producer
 		statusBar.registerProducer(producer)
-		
+
 		// Simulate mouse move
 		val mouseEvent =
 			MouseEvent(
@@ -110,10 +110,10 @@ class StatusBarTest : KoinTestBase() {
 				0,
 				false
 			)
-		
+
 		// Trigger mouse moved event
 		producer.fireMouseMove(mouseEvent)
-		
+
 		// Verify status bar text was updated
 		assertThat(statusBar.text).isEqualTo("Test status: 10, 20")
 	}
@@ -129,10 +129,10 @@ class StatusBarTest : KoinTestBase() {
 				"old",
 				"New status message"
 			)
-		
+
 		// Trigger property change
 		statusBar.propertyChange(event)
-		
+
 		// Verify text was updated
 		assertThat(statusBar.text).isEqualTo("New status message")
 	}
@@ -148,10 +148,10 @@ class StatusBarTest : KoinTestBase() {
 				null,
 				12345
 			)
-		
+
 		// Trigger property change
 		statusBar.propertyChange(event)
-		
+
 		// Verify text was updated with toString()
 		assertThat(statusBar.text).isEqualTo("12345")
 	}
@@ -161,7 +161,7 @@ class StatusBarTest : KoinTestBase() {
 	fun handlesPropertyChangeWithNullValue() {
 		// Set initial text
 		statusBar.text = "Initial text"
-		
+
 		// Create property change event with null new value
 		val event =
 			PropertyChangeEvent(
@@ -170,10 +170,10 @@ class StatusBarTest : KoinTestBase() {
 				"old",
 				null
 			)
-		
+
 		// Trigger property change
 		statusBar.propertyChange(event)
-		
+
 		// Verify text remains unchanged when new value is null
 		assertThat(statusBar.text).isEqualTo("Initial text")
 	}
