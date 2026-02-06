@@ -39,7 +39,8 @@ import java.lang.reflect.InvocationTargetException
  */
 class XMLContextFactory : EditingContextFactory {
 
-	// TODO: Validate track length >= train length - see issue #60 (relates to Goals 3 & 4)
+	// Issue #60: Track length validation implemented in Train constructor
+	// Validation occurs at train creation time when both train length and topology are available
 
 	private val xmlValidator = XmlSchemaValidator()
 

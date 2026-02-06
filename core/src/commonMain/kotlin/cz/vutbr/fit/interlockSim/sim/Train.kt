@@ -804,6 +804,7 @@ class Train :
 	 * Create train
 	 * @param env The simulation environment
 	 * @param timetable Train timetable
+	 * @throws IllegalArgumentException if train length exceeds track distance between InOuts
 	 */
 	constructor(env: SimulationEnvironment?, timetable: Timetable?) {
 		this.env = requireSimulationNotNull(env) { "env must not be null" }
@@ -815,7 +816,76 @@ class Train :
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
 		trainNavService = env.getTrainNavigationService()
+		
+		// Issue #60: Validate train length against track distance between InOuts
+		validateTrainLength(env, validatedTimetable, this.length)
+		
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
+	}
+	
+	/**
+	 * Validates that train length does not exceed the shortest track distance between InOuts.
+	 *
+	 * **Issue #60: Track Length Validation**
+	 * - Calculates shortest path distance between origin and destination InOuts
+	 * - Ensures train can physically fit on the track
+	 * - Prevents runtime simulation errors from track being too short
+	 *
+	 * **Implementation:**
+	 * - Uses TopologyNavigator to find all possible paths
+	 * - Calculates total track distance for each path
+	 * - Validates train length against shortest available path
+	 *
+	 * @param env Simulation environment providing topology navigator
+	 * @param timetable Train timetable with origin and destination InOuts
+	 * @param trainLength Length of the train in meters
+	 * @throws IllegalArgumentException if train length exceeds shortest track distance
+	 * @since 2026-02-06 (Issue #60)
+	 */
+	private fun validateTrainLength(
+		env: SimulationEnvironment,
+		timetable: Timetable,
+		trainLength: Double
+	) {
+		val inOut = timetable.getIn()
+		val outOut = timetable.getOut()
+		val topologyNavigator = env.getTopologyNavigator()
+		
+		// Find all topologically possible paths between InOuts
+		val paths = topologyNavigator.findAllTopologicalPaths(
+			start = inOut,
+			target = outOut,
+			maxDepth = 100
+		)
+		
+		if (paths.isEmpty()) {
+			// No path exists - this is a critical error
+			throw IllegalArgumentException(
+				"Train length validation failed: No route exists between " +
+					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+					"Railway network must provide at least one path between entry and exit points."
+			)
+		}
+		
+		// Calculate distance for each path and find the shortest
+		val shortestPathDistance = paths.minOfOrNull { path ->
+			path.sumOf { section -> section.length() }
+		} ?: throw IllegalStateException("Path list is not empty but minOfOrNull returned null")
+		
+		// Validate train length against shortest path
+		if (trainLength > shortestPathDistance) {
+			throw IllegalArgumentException(
+				"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
+					"between InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+					"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
+					"Reduce train length or increase track distance to resolve this issue."
+			)
+		}
+		
+		logger.debug {
+			"Train length validation passed: train=$trainLength m, " +
+				"shortest path=$shortestPathDistance m (${inOut.name} → ${outOut.name})"
+		}
 	}
 
 	override fun distanceToSemaphore(): Double =
