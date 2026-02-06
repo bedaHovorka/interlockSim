@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -78,7 +79,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	@Test
 	fun testCalculateTrainGridLocation_nullSection() {
 		// Null track section - should return null
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, null, 50.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			null,
+			50.0
+		)
 
 		assertThat(gridLocation).isNull()
 	}
@@ -87,7 +92,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testCalculateTrainGridLocation_atStart() {
 		// Train at start of section (distance = 0)
 		val trackSection = getFirstTrackSection()
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, trackSection, 0.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			trackSection,
+			0.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be at one of the endpoints
@@ -99,7 +108,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train at midpoint of section
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, trackSection, sectionLength / 2.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			trackSection,
+			sectionLength / 2.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be between the two endpoints
@@ -111,7 +124,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train at end of section (distance = length)
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, trackSection, sectionLength)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			trackSection,
+			sectionLength
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be at one of the endpoints
@@ -123,7 +140,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train beyond end of section (distance > length) - should clamp to 1.0
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, trackSection, sectionLength * 2.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			trackSection,
+			sectionLength * 2.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be clamped to end of section
@@ -134,7 +155,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testCalculateTrainGridLocation_negativeDistance() {
 		// Train before start (negative distance) - should clamp to 0.0
 		val trackSection = getFirstTrackSection()
-		val gridLocation = calculator.calculateTrainGridLocation(mockTrain, trackSection, -10.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			mockTrain,
+			trackSection,
+			-10.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be clamped to start of section
@@ -171,11 +196,15 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Create mock train with entry separator matching first end
 		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? DynamicPathSeparator
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
-		val gridLocation = calculator.calculateTrainGridLocation(trainWithEntry, trackSection, sectionLength / 2.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			trainWithEntry,
+			trackSection,
+			sectionLength / 2.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should interpolate from ends[0] to ends[1]
@@ -195,11 +224,15 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Create mock train with entry separator matching second end
 		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[1] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		every { trainWithEntry.getEntrySeparator() } returns ends[1] as? DynamicPathSeparator
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
-		val gridLocation = calculator.calculateTrainGridLocation(trainWithEntry, trackSection, sectionLength / 2.0)
+		val gridLocation = calculator.calculateTrainGridLocation(
+			trainWithEntry,
+			trackSection,
+			sectionLength / 2.0
+		)
 
 		assertThat(gridLocation).isNotNull()
 		// Should interpolate from ends[1] to ends[0] (reversed order)
@@ -220,9 +253,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Use a different separator from the network
 		val allSeparators = context.getRailWayNetGrid()
 			.map { it.value }
-			.filterIsInstance<cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator>()
+			.filterIsInstance<DynamicPathSeparator>()
 
-		val differentSeparator: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator? = 
+		val differentSeparator: DynamicPathSeparator? =
 			allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
 		assertThat(differentSeparator).isNotNull()
 
@@ -252,15 +285,23 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// If ends[0] is a dynamic wrapper, it should still match via unwrapping
 		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		every { trainWithEntry.getEntrySeparator() } returns ends[0] as? DynamicPathSeparator
 
 		// Test at start (distance = 0)
-		val gridLocationStart = calculator.calculateTrainGridLocation(trainWithEntry, trackSection, 0.0)
+		val gridLocationStart = calculator.calculateTrainGridLocation(
+			trainWithEntry,
+			trackSection,
+			0.0
+		)
 		assertThat(gridLocationStart).isNotNull()
 
 		// Test at end (distance = length)
 		val sectionLength = trackSection.length()
-		val gridLocationEnd = calculator.calculateTrainGridLocation(trainWithEntry, trackSection, sectionLength)
+		val gridLocationEnd = calculator.calculateTrainGridLocation(
+			trainWithEntry,
+			trackSection,
+			sectionLength
+		)
 		assertThat(gridLocationEnd).isNotNull()
 
 		// Positions should be different (start vs end)
@@ -281,17 +322,25 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Create two trains, one entering from each end
 		// Cast to DynamicPathSeparator since we're in simulation context
 		val trainFromEnd0 = mockk<Train>(relaxed = true)
-		every { trainFromEnd0.getEntrySeparator() } returns ends[0] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		every { trainFromEnd0.getEntrySeparator() } returns ends[0] as? DynamicPathSeparator
 
 		val trainFromEnd1 = mockk<Train>(relaxed = true)
-		every { trainFromEnd1.getEntrySeparator() } returns ends[1] as? cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+		every { trainFromEnd1.getEntrySeparator() } returns ends[1] as? DynamicPathSeparator
 
 		// Both trains at midpoint
 		val sectionLength = trackSection.length()
 		val midpoint = sectionLength / 2.0
 
-		val positionFromEnd0 = calculator.calculateTrainGridLocation(trainFromEnd0, trackSection, midpoint)
-		val positionFromEnd1 = calculator.calculateTrainGridLocation(trainFromEnd1, trackSection, midpoint)
+		val positionFromEnd0 = calculator.calculateTrainGridLocation(
+			trainFromEnd0,
+			trackSection,
+			midpoint
+		)
+		val positionFromEnd1 = calculator.calculateTrainGridLocation(
+			trainFromEnd1,
+			trackSection,
+			midpoint
+		)
 
 		assertThat(positionFromEnd0).isNotNull()
 		assertThat(positionFromEnd1).isNotNull()
