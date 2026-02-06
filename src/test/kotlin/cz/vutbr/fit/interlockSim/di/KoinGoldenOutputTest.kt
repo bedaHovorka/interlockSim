@@ -16,7 +16,6 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -29,9 +28,6 @@ import org.junit.jupiter.api.Test
 import org.koin.test.get
 import java.beans.PropertyChangeListener
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.math.abs
 
 private val logger = KotlinLogging.logger {}
@@ -126,8 +122,8 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	 */
 	private fun loadBaseline(): List<SimulationEvent> {
 		val file = File(BASELINE_FILE)
-		require(file.exists()) { 
-			"Baseline file not found: $BASELINE_FILE. Run 'capture baseline without Koin' test first." 
+		require(file.exists()) {
+			"Baseline file not found: $BASELINE_FILE. Run 'capture baseline without Koin' test first."
 		}
 		return file.readLines()
 			.filter { it.isNotBlank() }
