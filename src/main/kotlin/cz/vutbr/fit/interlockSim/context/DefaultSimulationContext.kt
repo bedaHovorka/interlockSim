@@ -548,7 +548,7 @@ open class DefaultSimulationContext(
 			if (unmappedCells.isNotEmpty()) {
 				errors.add(
 					"Missing dynamic wrappers for ${unmappedCells.size} NodeCells: " +
-						unmappedCells.take(5).joinToString { "${it::class.simpleName} at ${it.spatialType}" }
+						unmappedCells.take(5).joinToString { "${it::class.simpleName} at ${it.getSpatialType()}" }
 				)
 			}
 
