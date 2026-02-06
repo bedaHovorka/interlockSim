@@ -129,7 +129,7 @@ For more details, see the Docker section below or `CLAUDE.md`.
 | `./gradlew build` | Compile all sources, run tests, create JAR (build fails if tests fail) |
 | `./gradlew test` | Run unit tests only |
 | `./gradlew integrationTest` | Run integration tests |
-| `./gradlew jmh` | Run JMH performance benchmarks (see `src/jmh/README.md`) |
+| `./gradlew jmh` | Run JMH performance benchmarks (see `src/jmh/kotlin/README.md`) |
 | `./gradlew clean` | Remove build artifacts |
 | `./gradlew shadowJar` | Create uber JAR file with all dependencies |
 | `./gradlew runSim` | Run pre-configured shunting loop simulation |
@@ -544,7 +544,7 @@ Run tests:
 
 Tests are automatically executed during the build process. The build will fail if any test fails.
 
-**Performance Benchmarks**: JMH benchmarks are available in `src/jmh/` for accurate performance measurements. See `src/jmh/README.md` for details.
+**Performance Benchmarks**: JMH benchmarks are available in `src/jmh/` for accurate performance measurements. See `src/jmh/kotlin/README.md` for details.
 
 ---
 
