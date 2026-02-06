@@ -147,21 +147,40 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	/**
 	 * Performance benchmark - Measure Koin overhead
 	 *
-	 * Validates that Koin introduction meets performance requirements:
-	 * - Context creation: < 10ms overhead
-	 * - Simulation startup: < 5% increase
-	 * - Event processing: < 2% decrease in throughput
+	 * MIGRATED TO JMH: This test has been converted to proper microbenchmarks.
 	 *
-	 * TODO: Enable after Koin initialization complete
+	 * Performance requirements (validated by JMH benchmarks):
+	 * - Railway network loading: < 10ms overhead with Koin
+	 * - Simulation initialization: < 5% increase with DI
+	 * - DI resolution: Sub-microsecond after warmup
+	 *
+	 * Run benchmarks:
+	 *   ./gradlew jmh --includes="KoinPerformanceBenchmark"
+	 *
+	 * View results:
+	 *   build/reports/jmh/results.txt (human-readable)
+	 *   build/reports/jmh/results.json (machine-readable)
+	 *
+	 * @see cz.vutbr.fit.interlockSim.di.KoinPerformanceBenchmark
 	 */
 	@Test
-	@Disabled("Performance test should use JMH, not JUnit. See Issue #219.")
+	@Disabled("Migrated to JMH benchmarks. Run: ./gradlew jmh --includes='KoinPerformanceBenchmark'")
 	fun `measure Koin performance overhead`() {
-		// TODO: Implement performance benchmarks
-		// 1. Measure context creation time with/without Koin
-		// 2. Measure simulation startup time
-		// 3. Measure event processing rate
-		// 4. Assert overhead within acceptable limits
+		// Migrated to: src/jmh/kotlin/cz/vutbr/fit/interlockSim/di/KoinPerformanceBenchmark.kt
+		//
+		// JMH provides:
+		// - Accurate warmup and measurement cycles
+		// - Statistical analysis of results
+		// - Protection against JIT optimizations
+		// - Comparison between DI and non-DI implementations
+		//
+		// Benchmarks implemented:
+		// 1. railwayNetworkLoading_WithoutDI() - Baseline
+		// 2. railwayNetworkLoading_WithKoin() - DI overhead measurement
+		// 3. trainSimulationSetup_WithoutDI() - Baseline
+		// 4. trainSimulationSetup_WithKoin() - DI overhead measurement
+		// 5. factoryResolution_RepeatedLookups() - Resolution performance
+		// 6. containerStartup_FullInitialization() - One-time startup cost
 	}
 
 	/**
