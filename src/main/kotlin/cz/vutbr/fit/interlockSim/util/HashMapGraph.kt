@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import java.util.AbstractCollection
-import java.util.AbstractSet
 import java.util.Collection
 import java.util.Iterator
 import java.util.Map

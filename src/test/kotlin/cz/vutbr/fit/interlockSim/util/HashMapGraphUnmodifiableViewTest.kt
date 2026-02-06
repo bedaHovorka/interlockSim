@@ -14,9 +14,7 @@
 package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
-import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import assertk.assertions.messageContains
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
