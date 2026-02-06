@@ -674,9 +674,25 @@ class Train :
 	fun getAcceleration(): Double = acceleration.state
 
 	/**
+	 * Current acceleration of train (Kotlin property accessor).
+	 * Delegates to [getAcceleration].
+	 * @since 2026-02-06 (Public Train API for animation)
+	 */
+	val trainAcceleration: Double
+		get() = getAcceleration()
+
+	/**
 	 * @return current speed of train
 	 */
 	fun getVelocity(): Double = velocity.state
+
+	/**
+	 * Current velocity of train in m/s (Kotlin property accessor).
+	 * Delegates to [getVelocity].
+	 * @since 2026-02-06 (Public Train API for animation)
+	 */
+	val trainVelocity: Double
+		get() = getVelocity()
 
 	/**
 	 * @return length of train
@@ -684,6 +700,15 @@ class Train :
 	fun getLength(): Double {
 		return length // pozdeji soucet vagonu
 	}
+
+	/**
+	 * Length of train in meters (Kotlin property accessor).
+	 * Delegates to [getLength].
+	 * @since 2026-02-06 (Public Train API for animation)
+	 */
+	val trainLength: Double
+		get() = getLength()
+
 
 	/**
 	 * Reverse the train's direction of travel.
@@ -762,7 +787,16 @@ class Train :
 	fun getNumber(): Int = number
 
 	/**
-	 * Get the origin InOut where this train entered the network.
+	 * Unique train number for identification (Kotlin property accessor).
+	 * Each train is assigned a sequential number starting from 1.
+	 * Delegates to [getNumber].
+	 * @since 2026-02-06 (Public Train API for animation)
+	 */
+	val trainNumber: Int
+		get() = getNumber()
+
+	/**
+	 * Origin InOut where this train entered the network.
 	 *
 	 * Used by animation system to determine train color coding based on entry point.
 	 * Color mapping: InOut "B" → blue, InOut "A" → orange (configurable in vyhybna.xml).
@@ -772,48 +806,58 @@ class Train :
 	 *
 	 * @return The DynamicInOut where the train originated
 	 * @since 2026-02-04 (Fix train color coding bug)
+	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
 	 */
-	fun getOriginInOut(): DynamicInOut = timetable.getIn()
+	val originInOut: DynamicInOut
+		get() = timetable.getIn()
 
 	/**
-	 * Get the track section where the train's front is currently located.
+	 * Track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.
 	 * Returns null if train has not yet started moving.
 	 *
 	 * @return Current track section for train front, or null
 	 * @since 2026-01-22 (Issue #203)
+	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
 	 */
-	fun getFrontSection(): TrackSection? = front.getFrontSection()
+	val frontSection: TrackSection?
+		get() = front.getFrontSection()
 
 	/**
-	 * Get the distance traveled by the train's front along current track section.
+	 * Distance traveled by the train's front along current track section.
 	 *
 	 * Used for train position interpolation in animation rendering.
 	 * Returns position within the current section (0.0 to section length).
 	 *
 	 * @return Distance along current section in meters
 	 * @since 2026-01-22 (Issue #203)
+	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
 	 */
-	fun getFrontPosition(): Double = front.getPosition()
+	val frontPosition: Double
+		get() = front.getPosition()
 
 	/**
-	 * Get the total distance traveled by the train's front since departure.
+	 * Total distance traveled by the train's front since departure.
 	 *
 	 * Includes all previously completed sections plus position in current section.
 	 * Used for train progress tracking and animation.
 	 *
 	 * @return Total distance traveled in meters
 	 * @since 2026-01-22 (Issue #203)
+	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
 	 */
-	fun getTotalDistance(): Double = front.getTotalDistance()
+	val totalDistance: Double
+		get() = front.getTotalDistance()
 
 	/**
-	 * Get the separator where train entered current section.
+	 * Separator where train entered current section.
 	 * Used for correct position interpolation in animation.
 	 * @return entry separator, or null if train hasn't entered any section yet
+	 * @since 2026-02-06 (Converted to Kotlin property for idiomatic API)
 	 */
-	fun getEntrySeparator(): DynamicPathSeparator? = entrySeparator
+	val trainEntrySeparator: DynamicPathSeparator?
+		get() = entrySeparator
 
 	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()

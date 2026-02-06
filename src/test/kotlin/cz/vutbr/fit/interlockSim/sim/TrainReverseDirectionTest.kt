@@ -191,7 +191,7 @@ class TrainReverseDirectionTest : KoinTestBase() {
 		val train = Train(context, timetable)
 
 		// Act - Check origin InOut (entry point)
-		val origin = train.getOriginInOut()
+		val origin = train.originInOut
 
 		// Assert
 		assertThat(origin).isEqualTo(inPoint)

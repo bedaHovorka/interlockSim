@@ -107,7 +107,7 @@ data class AnimationState(
  *   - Trains maintain their origin color throughout their entire journey
  *
  * **Implementation:**
- * Train origin is determined via `Train.getOriginInOut()` which accesses
+ * Train origin is determined via `Train.originInOut` property which accesses
  * the train's Timetable entry InOut. This provides accurate color coding
  * regardless of train creation order or Generator shuffling.
  *
