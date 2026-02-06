@@ -10,9 +10,9 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFailure
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -79,10 +79,9 @@ class TrackDynamicMappingTest : KoinTestBase() {
 
 			// Act & Assert - calling toDynamic on different context should throw
 			// (tracks are no longer created lazily)
-			assertThat {
+			assertFailure {
 				context.toDynamic(trackFacility)
-				Unit // Explicit return type for type inference
-			}.isFailure().isInstanceOf<IllegalStateException>()
+			}.isInstanceOf<IllegalStateException>()
 		}
 	}
 

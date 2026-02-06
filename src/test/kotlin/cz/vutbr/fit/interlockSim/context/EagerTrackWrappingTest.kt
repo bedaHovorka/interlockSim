@@ -10,9 +10,9 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFailure
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
@@ -61,10 +61,9 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			val orphanTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
 
 			// Act & Assert - should throw because track not in context
-			assertThat {
+			assertFailure {
 				context.toDynamic(orphanTrack as TrackFacility)
 			}
-				.isFailure()
 				.isInstanceOf<IllegalStateException>()
 				.messageContains("Dynamic wrapper not found for track")
 				.messageContains("This indicates the track was not registered during initialization")
