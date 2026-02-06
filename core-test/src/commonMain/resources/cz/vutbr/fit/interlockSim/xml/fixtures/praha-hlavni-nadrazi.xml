@@ -4,12 +4,17 @@
 
      Configuration for test XMLContextFactoryTest with:
      - 4 north entry points (Libeň, Vysočany lines)
+     - 1 north bypass entry point (N-Bypass)
      - 6 south exit points (Vinohrady, Vršovice)
+     - 1 south bypass exit point (S-Bypass)
+     - 1 car train terminal (S-CarTrain)
      - 3-layer switching in north and south throats
      - 9 platform tracks through central zone
+     - Direct bypass routing (N-Bypass → S-Bypass)
+     - Car train terminal siding (Y=22)
 
      Grid: 70x25
-     Total elements: 40+ switches, 40+ signals, 90+ track blocks
+     Total elements: 42+ switches, 55+ signals, 11 InOuts, 110+ track blocks
 -->
 <net X="70" Y="25">
   <!-- North entry points -->
@@ -17,18 +22,21 @@
   <InOut X="2" Y="8" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-2"/>
   <InOut X="2" Y="12" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-1"/>
   <InOut X="2" Y="16" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-2"/>
+  <InOut X="2" Y="20" SpatialType="HORIZONTAL" orientation="false" name="N-Bypass"/>
 
   <!-- North signals -->
   <RailSemaphore X="4" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
   <RailSemaphore X="4" Y="8" SpatialType="HORIZONTAL" orientation="false"/>
   <RailSemaphore X="4" Y="12" SpatialType="HORIZONTAL" orientation="false"/>
   <RailSemaphore X="4" Y="16" SpatialType="HORIZONTAL" orientation="false"/>
+  <RailSemaphore X="4" Y="20" SpatialType="HORIZONTAL" orientation="false"/>
 
   <!-- North Layer 1 switches -->
   <RailSwitch X="6" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
   <RailSwitch X="6" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
   <RailSwitch X="6" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
   <RailSwitch X="6" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
+  <RailSwitch X="6" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
 
   <!-- North L1 signals -->
   <RailSemaphore X="8" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
@@ -132,6 +140,7 @@
   <RailSwitch X="52" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
   <RailSwitch X="52" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
   <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
+  <RailSwitch X="52" Y="22" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
 
   <!-- South Layer 4 signals (between merge and diverge switches) -->
   <RailSemaphore X="54" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
@@ -151,24 +160,28 @@
   <InOut X="60" Y="14" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-2"/>
   <InOut X="60" Y="16" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-3"/>
   <InOut X="60" Y="20" SpatialType="HORIZONTAL" orientation="true" name="S-Bypass"/>
+  <InOut X="60" Y="22" SpatialType="HORIZONTAL" orientation="true" name="S-CarTrain"/>
 
   <!-- Track blocks: North approach -->
   <SimpleTrackBlock fromX="2" fromY="4" toX="4" toY="4" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="2" fromY="8" toX="4" toY="8" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="2" fromY="12" toX="4" toY="12" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="2" fromY="16" toX="4" toY="16" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
+  <SimpleTrackBlock fromX="2" fromY="20" toX="4" toY="20" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
 
   <!-- North signals to L1 switches -->
   <SimpleTrackBlock fromX="4" fromY="4" toX="6" toY="4" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="4" fromY="8" toX="6" toY="8" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="4" fromY="12" toX="6" toY="12" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="4" fromY="16" toX="6" toY="16" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
+  <SimpleTrackBlock fromX="4" fromY="20" toX="6" toY="20" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
 
   <!-- L1 switches straight -->
   <SimpleTrackBlock fromX="6" fromY="4" toX="8" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="6" fromY="8" toX="8" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="6" fromY="12" toX="8" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
   <SimpleTrackBlock fromX="6" fromY="16" toX="8" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
+  <SimpleTrackBlock fromX="6" fromY="20" toX="16" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="35.0" maxSpeedto="30.0"/>
 
   <!-- L1 switches diverge -->
   <SimpleTrackBlock fromX="6" fromY="4" toX="8" toY="6" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
@@ -279,6 +292,7 @@
   <SimpleTrackBlock fromX="52" fromY="4" toX="54" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="52" fromY="12" toX="54" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="52" fromY="20" toX="60" toY="20" fromSegment="F" toSegment="A" length="80.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
+  <SimpleTrackBlock fromX="52" fromY="20" toX="52" toY="22" fromSegment="D" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
 
   <!-- L4 signals to L5 DIVERGE switches -->
   <SimpleTrackBlock fromX="54" fromY="4" toX="56" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
@@ -295,5 +309,8 @@
   <!-- Y=14/16 branching from switch at 58,14 -->
   <SimpleTrackBlock fromX="58" fromY="14" toX="60" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="40.0"/>
   <SimpleTrackBlock fromX="58" fromY="14" toX="60" toY="16" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
+
+  <!-- Car train terminal (Y=22) -->
+  <SimpleTrackBlock fromX="52" fromY="22" toX="60" toY="22" fromSegment="F" toSegment="A" length="80.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
 
 </net>
