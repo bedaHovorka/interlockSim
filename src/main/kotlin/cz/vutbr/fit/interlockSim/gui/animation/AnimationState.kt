@@ -106,6 +106,13 @@ data class AnimationState(
  *   - false = Orange (trains from InOut "A" or other names)
  *   - Trains maintain their origin color throughout their entire journey
  *
+ * ## Direction Representation (Issue #297)
+ *
+ * - **travelSegment:** Direction of travel as Cell.Segment (nullable)
+ *   - Used to select appropriate directional train sprite icon
+ *   - Calculated from entry→exit positions during state capture
+ *   - null if direction cannot be determined
+ *
  * **Implementation:**
  * Train origin is determined via `Train.getOriginInOut()` which accesses
  * the train's Timetable entry InOut. This provides accurate color coding
@@ -120,6 +127,7 @@ data class AnimationState(
  * @property frontGridLocation Grid coordinates for train front rendering (nullable)
  * @property length Train length in meters
  * @property travelingRight Color selector: true for blue (InOut B), false for orange (InOut A)
+ * @property travelSegment Direction of travel (nullable if cannot be determined)
  */
 data class TrainState(
 	val trainNumber: Int,
@@ -128,7 +136,8 @@ data class TrainState(
 	val acceleration: Double,
 	val frontGridLocation: PointF?,
 	val length: Double,
-	val travelingRight: Boolean
+	val travelingRight: Boolean,
+	val travelSegment: cz.vutbr.fit.interlockSim.objects.core.Cell.Segment? = null
 )
 
 /**

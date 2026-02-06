@@ -193,6 +193,9 @@ object AnimationStateCapture {
 		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
 		val isBlueColorVariant = determineOriginColorVariant(train, context)
 
+		// Calculate travel direction segment (Issue #297)
+		val travelSegment = calculateTravelSegment(train, currentSection, positionCalculator)
+
 		return TrainState(
 			trainNumber = trainNumber,
 			position = position,
@@ -200,7 +203,8 @@ object AnimationStateCapture {
 			acceleration = acceleration,
 			frontGridLocation = frontGridLocation,
 			length = length,
-			travelingRight = isBlueColorVariant
+			travelingRight = isBlueColorVariant,
+			travelSegment = travelSegment
 		)
 	}
 
@@ -239,6 +243,90 @@ object AnimationStateCapture {
 		val originInOut = train.getOriginInOut()
 		val inOutName = originInOut.name
 		return inOutName == "B"
+	}
+
+	/**
+	 * Calculate travel direction segment from train's current section.
+	 *
+	 * Determines which Cell.Segment the train is traveling along by examining
+	 * the entry and exit separators of the current track section.
+	 *
+	 * ## Algorithm
+	 *
+	 * 1. Get entry separator from train (where it entered the section)
+	 * 2. Get section endpoints and match entry separator to determine direction
+	 * 3. Calculate grid position delta (dx, dy) from entry → exit
+	 * 4. Map delta to corresponding Cell.Segment
+	 *
+	 * ## Segment Mapping
+	 *
+	 * - (-1,  0) → Segment.A (left)
+	 * - (-1, -1) → Segment.B (left-top)
+	 * - ( 0, -1) → Segment.C (top)
+	 * - (-1,  1) → Segment.D (left-bottom)
+	 * - ( 1, -1) → Segment.E (right-top)
+	 * - ( 1,  0) → Segment.F (right)
+	 * - ( 1,  1) → Segment.G (right-bottom)
+	 * - ( 0,  1) → Segment.H (bottom)
+	 *
+	 * **Edge Cases:**
+	 * - No entry separator: returns null
+	 * - Section has < 2 ends: returns null
+	 * - Entry separator doesn't match section ends: returns null
+	 * - Delta doesn't map to valid segment: returns null
+	 *
+	 * @param train Train to calculate segment for
+	 * @param currentSection Current track section (nullable)
+	 * @param positionCalculator Calculator for accessing grid positions
+	 * @return Travel direction segment, or null if cannot be determined
+	 * @since 2026-02-06 (Issue #297 - Train visual enhancement)
+	 */
+	private fun calculateTravelSegment(
+		train: Train,
+		currentSection: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection?,
+		positionCalculator: TrainPositionCalculator
+	): cz.vutbr.fit.interlockSim.objects.core.Cell.Segment? {
+		if (currentSection == null) return null
+
+		val entrySeparator = train.getEntrySeparator() ?: return null
+		val ends = currentSection.ends()
+		if (ends.size < 2) return null
+
+		// Get grid positions for section endpoints
+		val entryGridPos = positionCalculator.getGridPosition(entrySeparator) ?: return null
+		val end0GridPos = positionCalculator.getGridPosition(ends[0]) ?: return null
+		val end1GridPos = positionCalculator.getGridPosition(ends[1]) ?: return null
+
+		// Determine entry and exit positions based on which end matches entry separator
+		val (entryPos, exitPos) =
+			when {
+				positionCalculator.positionsMatch(entryGridPos, end0GridPos) -> Pair(end0GridPos, end1GridPos)
+				positionCalculator.positionsMatch(entryGridPos, end1GridPos) -> Pair(end1GridPos, end0GridPos)
+				else -> return null // Entry separator doesn't match section ends
+			}
+
+		// Calculate direction delta
+		val dx = exitPos.x - entryPos.x
+		val dy = exitPos.y - entryPos.y
+
+		// Normalize delta to -1, 0, or 1
+		val ndx =
+			when {
+				dx > 0 -> 1
+				dx < 0 -> -1
+				else -> 0
+			}
+		val ndy =
+			when {
+				dy > 0 -> 1
+				dy < 0 -> -1
+				else -> 0
+			}
+
+		// Map normalized delta to Cell.Segment
+		return cz.vutbr.fit.interlockSim.objects.core.Cell.Segment.values().find { segment ->
+			segment.dx == ndx && segment.dy == ndy
+		}
 	}
 
 	/**

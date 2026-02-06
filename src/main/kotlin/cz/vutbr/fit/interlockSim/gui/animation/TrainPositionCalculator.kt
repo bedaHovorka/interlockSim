@@ -230,11 +230,13 @@ class TrainPositionCalculator(
 	 * - Floating-point precision errors from coordinate calculations
 	 * - Static/dynamic wrapper references to the same grid cell
 	 *
+	 * **Visibility:** Internal to allow AnimationStateCapture to calculate train direction.
+	 *
 	 * @param p1 First position (or null)
 	 * @param p2 Second position (or null)
 	 * @return True if positions match within POSITION_MATCH_EPSILON tolerance, false otherwise
 	 */
-	private fun positionsMatch(
+	internal fun positionsMatch(
 		p1: Point?,
 		p2: Point?
 	): Boolean {

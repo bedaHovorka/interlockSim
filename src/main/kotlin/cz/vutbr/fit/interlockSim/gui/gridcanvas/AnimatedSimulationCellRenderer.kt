@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.gui.animation.TrainIconGenerator
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -92,6 +93,11 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
+	init {
+		// Initialize train sprite cache on first use
+		TrainIconGenerator.initialize()
+	}
+
 	/**
 	 * Render track block part with occupancy state coloring.
 	 *
@@ -279,18 +285,20 @@ class AnimatedSimulationCellRenderer(
 	/**
 	 * Draw a train overlay on the canvas.
 	 *
-	 * Trains are rendered as colored circles with white ID numbers and black borders
+	 * Trains are rendered as directional locomotive sprites with white ID numbers
 	 * overlaid on top of the grid cells. This method should be called after all grid
 	 * cells have been rendered.
 	 *
-	 * ## Visual Design
+	 * ## Visual Design (Issue #297)
 	 *
-	 * - **Train body:** Colored circle (12x12 pixels) at interpolated grid position
+	 * - **Train body:** Directional sprite (20x12 pixels) showing direction of travel
+	 * - **Arrow indicator:** White triangle pointing in travel direction
 	 * - **Origin-based colors:** Blue for trains from InOut B, orange for trains from InOut A
 	 * - **Border:** Black 2px stroke for visibility on all backgrounds
-	 * - **Train ID:** White text centered in the circle
+	 * - **Train ID:** White text centered on the sprite
 	 * - **Multiple trains:** Positioned at different grid locations (no overlap if on different sections)
 	 * - **Color persistence:** Trains maintain their origin color throughout their entire journey
+	 * - **Fallback:** If direction unknown, renders simple blue/orange rectangle
 	 *
 	 * ## Coordinate System
 	 *
@@ -317,35 +325,65 @@ class AnimatedSimulationCellRenderer(
 		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).toInt()
 		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).toInt()
 
-		// Train size: 12x12 pixel circle (doubled from 6x6)
-		val trainSize = 12
+		// Select color based on origin InOut
+		val isBlue = trainState.travelingRight
+
+		// Try to use directional sprite if segment is available
+		val segment = trainState.travelSegment
+		if (segment != null) {
+			val sprite = TrainIconGenerator.getSprite(segment, isBlue)
+			if (sprite != null) {
+				// Draw sprite centered at train position
+				val spriteX = pixelX - sprite.width / 2
+				val spriteY = pixelY - sprite.height / 2
+				g.drawImage(sprite, spriteX, spriteY, null)
+
+				// Draw train ID (white text centered)
+				g.color = AnimationColors.TRAIN_ID
+				val idText = trainState.trainNumber.toString()
+				val fontMetrics = g.fontMetrics
+				val textWidth = fontMetrics.stringWidth(idText)
+				val textHeight = fontMetrics.ascent
+
+				// Center text on the sprite
+				g.drawString(
+					idText,
+					pixelX - textWidth / 2,
+					pixelY + textHeight / 2 - 1 // Adjust for baseline
+				)
+				return
+			}
+		}
+
+		// Fallback: render simple rectangle if no sprite available
+		val trainWidth = 20
+		val trainHeight = 12
 		val borderWidth = 2
 
-		// Select body color based on origin InOut
 		val bodyColor =
-			if (trainState.travelingRight) {
+			if (isBlue) {
 				AnimationColors.TRAIN_FROM_B // Blue (InOut B)
 			} else {
 				AnimationColors.TRAIN_FROM_A // Orange (InOut A)
 			}
 
-		// Draw train body (filled circle)
+		// Draw train body (filled rectangle)
 		g.color = bodyColor
-		g.fillOval(
-			pixelX - trainSize / 2,
-			pixelY - trainSize / 2,
-			trainSize,
-			trainSize
+		g.fillRect(
+			pixelX - trainWidth / 2,
+			pixelY - trainHeight / 2,
+			trainWidth,
+			trainHeight
 		)
 
 		// Draw black border (stroke)
 		g.color = AnimationColors.TRAIN_BORDER
 		g.stroke = java.awt.BasicStroke(borderWidth.toFloat())
-		g.drawOval(
-			pixelX - trainSize / 2,
-			pixelY - trainSize / 2,
-			trainSize,
-			trainSize
+		g.drawRect(
+			pixelX - trainWidth / 2,
+			pixelY - trainHeight / 2,
+			trainWidth,
+			trainHeight
 		)
 
 		// Draw train ID (white text centered)
@@ -355,7 +393,7 @@ class AnimatedSimulationCellRenderer(
 		val textWidth = fontMetrics.stringWidth(idText)
 		val textHeight = fontMetrics.ascent
 
-		// Center text in the circle
+		// Center text on the rectangle
 		g.drawString(
 			idText,
 			pixelX - textWidth / 2,
