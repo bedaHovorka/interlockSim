@@ -250,15 +250,12 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			val inOutA1 = context1.toDynamic(cellA1)
 			val inOutB1 = context1.toDynamic(cellB1)
 			
-			// Create multiple reservations in context1
+			// Reserve path for train-alpha in context1
+			// Note: Only one train can reserve a path at a time
 			service1.reservePath("train-alpha", inOutA1, inOutB1)
-			service1.reservePath("train-beta", inOutA1, inOutB1)
-			service1.reservePath("train-gamma", inOutA1, inOutB1)
 			
-			// Verify all reservations exist in context1
+			// Verify reservation exists in context1
 			assertThat(service1.getReservedBlocks("train-alpha").size).isEqualTo(1)
-			assertThat(service1.getReservedBlocks("train-beta").size).isEqualTo(1)
-			assertThat(service1.getReservedBlocks("train-gamma").size).isEqualTo(1)
 		}
 		// context1 is now closed, scope should be destroyed
 		
@@ -268,10 +265,8 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			
 			// Verify context2's registry is completely clean (no leakage from context1)
 			assertThat(service2.getReservedBlocks("train-alpha")).isEmpty()
-			assertThat(service2.getReservedBlocks("train-beta")).isEmpty()
-			assertThat(service2.getReservedBlocks("train-gamma")).isEmpty()
 			
-			// Verify context2 can use the same train names without conflict
+			// Verify context2 can use the same train name without conflict
 			val grid2 = context2.getRailWayNetGrid()
 			val cellA2 = grid2.getCellAt(1, 1)
 			val cellB2 = grid2.getCellAt(5, 5)
