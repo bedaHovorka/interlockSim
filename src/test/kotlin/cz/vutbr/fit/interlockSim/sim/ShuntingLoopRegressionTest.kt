@@ -80,7 +80,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		var trainsExited = 0
 
 		// Hook into train lifecycle (simplified - just run simulation)
-		// TODO: Add proper instrumentation to ShuntingLoop for tracking train state
+		// TODO(#365): Add proper instrumentation to ShuntingLoop for tracking train state
 
 		// When: Run shunting loop simulation for 60 time units (enough for 1-2 trains)
 		logger.info { "Starting ShuntingLoop regression test (60 time units)" }
@@ -93,7 +93,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		// Verify simulation ran to completion
 		// (If trains are stuck, simulation would timeout via @Timeout annotation)
 
-		// TODO: Add assertions on train metrics once instrumentation is added:
+		// TODO(#365): Add assertions on train metrics once instrumentation is added:
 		// - At least 3 trains should enter
 		// - All entered trains should exit
 		// - Each train should transition through ~7 blocks
@@ -161,6 +161,6 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		// Then: Simulation completes (verifies queue system doesn't deadlock)
 		logger.info { "ShuntingLoop with max 2 trains completed successfully" }
 
-		// TODO: Add instrumentation to verify at most 2 trains are active at any time
+		// TODO(#365): Add instrumentation to verify at most 2 trains are active at any time
 	}
 }
