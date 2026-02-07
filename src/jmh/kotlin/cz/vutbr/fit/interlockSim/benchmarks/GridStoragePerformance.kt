@@ -31,57 +31,57 @@ import kotlin.random.Random
 @Fork(value = 2, jvmArgs = ["-ea"])
 open class GridStoragePerformance {
 
-    // Railway grid dimensions for simulation
-    private val gridDimension = 1000
-    
-    // Test data: coordinates to lookup in grid
-    private lateinit var testCoordinates: List<Point>
-    
-    // Storage implementations to benchmark
-    private lateinit var customGridMap: Array2DMap<Int>
-    private lateinit var standardTreeMap: TreeMap<Point, Int>
+	// Railway grid dimensions for simulation
+	private val gridDimension = 1000
 
-    @Setup(Level.Trial)
-    fun prepareTestData() {
-        // Generate consistent test coordinates using seeded random
-        val coordinateGenerator = Random(42)
-        testCoordinates = List(gridDimension) {
-            Point(
-                coordinateGenerator.nextInt(gridDimension),
-                coordinateGenerator.nextInt(gridDimension)
-            )
-        }
-        
-        // Initialize Array2DMap with test data
-        customGridMap = Array2DMap()
-        testCoordinates.forEachIndexed { idx, coord ->
-            customGridMap[coord] = idx
-        }
-        
-        // Initialize TreeMap with same data and comparator
-        standardTreeMap = TreeMap(Array2DMap.POINT_COMPARATOR)
-        testCoordinates.forEachIndexed { idx, coord ->
-            standardTreeMap[coord] = idx
-        }
-    }
+	// Test data: coordinates to lookup in grid
+	private lateinit var testCoordinates: List<Point>
 
-    @Benchmark
-    fun measureCustomGridLookup(): Int {
-        // Test Array2DMap performance for railway grid cell access
-        var checksum = 0
-        for (coord in testCoordinates) {
-            checksum += customGridMap[coord] ?: 0
-        }
-        return checksum
-    }
+	// Storage implementations to benchmark
+	private lateinit var customGridMap: Array2DMap<Int>
+	private lateinit var standardTreeMap: TreeMap<Point, Int>
 
-    @Benchmark
-    fun measureStandardTreeLookup(): Int {
-        // Baseline: TreeMap performance for comparison
-        var checksum = 0
-        for (coord in testCoordinates) {
-            checksum += standardTreeMap[coord] ?: 0
-        }
-        return checksum
-    }
+	@Setup(Level.Trial)
+	fun prepareTestData() {
+		// Generate consistent test coordinates using seeded random
+		val coordinateGenerator = Random(42)
+		testCoordinates = List(gridDimension) {
+			Point(
+				coordinateGenerator.nextInt(gridDimension),
+				coordinateGenerator.nextInt(gridDimension)
+			)
+		}
+
+		// Initialize Array2DMap with test data
+		customGridMap = Array2DMap()
+		testCoordinates.forEachIndexed { idx, coord ->
+			customGridMap[coord] = idx
+		}
+
+		// Initialize TreeMap with same data and comparator
+		standardTreeMap = TreeMap(Array2DMap.POINT_COMPARATOR)
+		testCoordinates.forEachIndexed { idx, coord ->
+			standardTreeMap[coord] = idx
+		}
+	}
+
+	@Benchmark
+	fun measureCustomGridLookup(): Int {
+		// Test Array2DMap performance for railway grid cell access
+		var checksum = 0
+		for (coord in testCoordinates) {
+			checksum += customGridMap[coord] ?: 0
+		}
+		return checksum
+	}
+
+	@Benchmark
+	fun measureStandardTreeLookup(): Int {
+		// Baseline: TreeMap performance for comparison
+		var checksum = 0
+		for (coord in testCoordinates) {
+			checksum += standardTreeMap[coord] ?: 0
+		}
+		return checksum
+	}
 }
