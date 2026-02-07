@@ -22,6 +22,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -33,10 +34,10 @@ import org.koin.java.KoinJavaComponent.getKoin
  * Test suite for InOut validation rules.
  *
  * **Requirements:**
- * - Minimum 2 InOut elements required (entry and exit points)
- * - Single InOut networks are invalid (dead-end)
+ * - Minimum 1 InOut element required (entry/exit point)
  * - Networks with 0 InOuts are invalid
- * - Networks with 2+ InOuts are valid
+ * - Networks with 1+ InOuts are valid
+ * - With bidirectional operation, a single InOut can serve as both entry and exit
  *
  * **Coverage:**
  * - XMLContextFactory validation during XML parsing
@@ -65,33 +66,33 @@ class InOutValidationTest {
 	/**
 	 * Test: Context with 0 InOuts throws exception during XML loading.
 	 *
-	 * Expected: ContextCreationException with message about minimum 2 InOuts.
+	 * Expected: ContextCreationException with message about minimum 1 InOut.
 	 */
 	@Test
 	fun `XML with 0 InOuts throws ContextCreationException`() {
+		val min = XMLContextFactory.Companion.MIN_INOUT_ELEMENTS
 		assertFailure {
 			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
 				xmlFactory.createContext(stream)
 			}
 		}.isInstanceOf(ContextCreationException::class)
 			.transform { it.message ?: "" }
-			.contains("at least 2 InOut")
+			.contains("Railway network must have at least $min InOut elements (entry and exit points).")
 	}
 
 	/**
-	 * Test: Context with 1 InOut throws exception during XML loading.
+	 * Test: Context with 1 InOut passes validation.
 	 *
-	 * Expected: ContextCreationException with message about minimum 2 InOuts.
+	 * With bidirectional train operation, a single InOut is now valid.
+	 * Expected: Context created successfully with 1 InOut.
 	 */
 	@Test
-	fun `XML with 1 InOut throws ContextCreationException`() {
-		assertFailure {
-			TestFixtures.loadInvalidInOutXml("single-inout.xml").use { stream ->
-				xmlFactory.createContext(stream)
+	fun `XML with 1 InOut passes validation`() {
+		TestFixtures.loadInvalidInOutXml("single-inout.xml").use { stream ->
+			xmlFactory.createContext(stream).use { context ->
+				assertThat(context.asEditingContext().getInOuts()).hasSize(1)
 			}
-		}.isInstanceOf(ContextCreationException::class)
-			.transform { it.message ?: "" }
-			.contains("at least 2 InOut")
+		}
 	}
 
 	/**
@@ -103,7 +104,7 @@ class InOutValidationTest {
 	fun `XML with 2 InOuts passes validation`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			xmlFactory.createContext(stream).use { context ->
-				assertThat(context.asEditingContext().getInOutsList()).hasSize(2)
+				assertThat(context.asEditingContext().getInOuts()).hasSize(2)
 			}
 		}
 	}
@@ -119,7 +120,7 @@ class InOutValidationTest {
 		TestFixtures.loadShuntingXml().use { stream ->
 			xmlFactory.createContext(stream).use { ctx ->
 				val context = ctx.asEditingContext()
-				val inOutCount = context.getInOutsList().size
+				val inOutCount = context.getInOuts().size
 				assertThat(inOutCount).isEqualTo(2)
 			}
 		}
@@ -137,7 +138,7 @@ class InOutValidationTest {
 		val builder = TestContextBuilder()
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(0)
+		assertThat(editingContext.getInOuts()).hasSize(0)
 
 		// Transformation to SimulationContext should validate
 		// (This is future work - currently transformers don't validate InOut count)
@@ -157,7 +158,7 @@ class InOutValidationTest {
 
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(1)
+		assertThat(editingContext.getInOuts()).hasSize(1)
 		editingContext.close()
 	}
 
@@ -174,24 +175,42 @@ class InOutValidationTest {
 
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(2)
+		assertThat(editingContext.getInOuts()).hasSize(2)
 		editingContext.close()
 	}
 
 	/**
 	 * Test: Error message contains helpful explanation.
 	 *
-	 * Expected: Exception message explains why 2 InOuts are required.
+	 * Expected: Exception message explains why 1 InOut is required.
 	 */
 	@Test
 	fun `Error message explains InOut requirement clearly`() {
 		assertFailure {
-			TestFixtures.loadInvalidInOutXml("single-inout.xml").use { stream ->
+			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
 				xmlFactory.createContext(stream)
 			}
 		}.isInstanceOf(ContextCreationException::class)
 			.transform { it.message ?: "" }
-			.contains("entry and exit points")
+			.contains("entry/exit point")
+	}
+
+	/**
+	 * Test: Error message reflects MIN_INOUT_ELEMENTS constant value.
+	 *
+	 * Issue #XXX, PR #358: Ensure error message uses constant instead of hardcoded "2".
+	 * Expected: Message contains "at least 1" (current MIN_INOUT_ELEMENTS value).
+	 */
+	@Test
+	fun `Error message reflects MIN_INOUT_ELEMENTS constant value`() {
+		val min = XMLContextFactory.MIN_INOUT_ELEMENTS
+		assertFailure {
+			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
+				xmlFactory.createContext(stream)
+			}
+		}.isInstanceOf(ContextCreationException::class)
+			.transform { it.message ?: "" }
+			.contains("at least $min")
 	}
 
 	/**

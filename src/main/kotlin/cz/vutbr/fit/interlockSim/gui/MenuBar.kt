@@ -87,8 +87,26 @@ class MenuBar : JMenuBar() {
 							frame.setContext(context)
 							frame.modificationTracker.setCurrentFile(selectedFile)
 							frame.modificationTracker.markClean()
+
+							// Check if context has insufficient InOuts and show warning (Issue #XXX, PR #358)
+							val inOutsCount = context.getInOuts().size
+							val minRequired = cz.vutbr.fit.interlockSim.xml.XMLContextFactory.MIN_INOUT_ELEMENTS
+							if (inOutsCount < minRequired) {
+								JOptionPane.showMessageDialog(
+									this@MenuBar,
+									"WARNING: This railway network has insufficient InOut elements " +
+										"($inOutsCount found, $minRequired required).\n\n" +
+										"The editor will prevent saving this context until you add at least " +
+										"$minRequired InOut element(s).\n\n" +
+										"InOut elements define entry/exit points for trains.",
+									"Validation Warning",
+									JOptionPane.WARNING_MESSAGE
+								)
+							}
+						} else {
+							// User cancelled - close context to avoid resource leak
+							context.close()
 						}
-						// If CANCEL, do nothing (file remains closed)
 					}
 
 					// Case 3: Unparseable XML (malformed syntax) - show error and block
@@ -179,12 +197,28 @@ class MenuBar : JMenuBar() {
 			// Show non-intrusive success message in status bar
 			frame.statusBar.showTemporaryMessage("✓ Saved: ${file.name}", 5000)
 		} else {
-			JOptionPane.showMessageDialog(
-				this,
-				"Failed to save railway network to file: ${file.absolutePath}",
-				"Save Failed",
-				JOptionPane.ERROR_MESSAGE
-			)
+			// Check if failure was due to validation (Issue #XXX, PR #358)
+			val inOutsCount = editingContext.getInOuts().size
+			val minRequired = cz.vutbr.fit.interlockSim.xml.XMLContextFactory.MIN_INOUT_ELEMENTS
+			if (inOutsCount < minRequired) {
+				JOptionPane.showMessageDialog(
+					this,
+					"Cannot save: Railway network must have at least $minRequired InOut element(s).\n\n" +
+						"Current InOut count: $inOutsCount\n\n" +
+						"Add InOut elements (entry/exit points) before saving.",
+					"Save Failed - Validation Error",
+					JOptionPane.ERROR_MESSAGE
+				)
+			} else {
+				// General IO error
+				JOptionPane.showMessageDialog(
+					this,
+					"Failed to save railway network to file: ${file.absolutePath}\n\n" +
+						"Check file permissions and disk space.",
+					"Save Failed - IO Error",
+					JOptionPane.ERROR_MESSAGE
+				)
+			}
 		}
 
 		return success

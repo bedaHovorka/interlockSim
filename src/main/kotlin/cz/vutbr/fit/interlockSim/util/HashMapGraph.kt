@@ -14,15 +14,42 @@ import java.util.AbstractCollection
 import java.util.Collection
 import java.util.Iterator
 import java.util.Map
-import java.util.Map.Entry
 import java.util.Set
 
 /**
- * The ADT ExtendedUnorientedGraph prototype
+ * Hash map based implementation of an unoriented graph.
  *
  * @param <N> nodes
  * @param <E> edges
  * @param <X> {@link ExtendedUnorientedGraph}
+ *
+ * ## Thread Safety
+ *
+ * **This class is NOT thread-safe.**
+ *
+ * The nodeSet() cache (lines ~191-203) uses lazy initialization without synchronization:
+ * - Non-volatile fields: `nodeCollection`, `cachedNodeSet`
+ * - Check-then-act race condition in nodeSet()
+ * - No synchronization on cache invalidation
+ *
+ * ### Design Decision
+ *
+ * Thread safety is intentionally NOT implemented because:
+ * 1. BaseContext (which uses HashMapGraph) operates in a single thread
+ * 2. Swing GUI editor runs on Event Dispatch Thread (EDT)
+ * 3. jDisco discrete event simulation framework is single-threaded
+ * 4. No current use cases require concurrent access to the graph
+ * 5. Thread-safety would add complexity and performance overhead
+ *
+ * ### Usage Guidelines
+ *
+ * - ✅ Safe: Single-threaded access (GUI, simulation)
+ * - ✅ Safe: Frozen contexts with concurrent reads (70%+ success, see ContextConcurrencyTest)
+ * - ❌ Unsafe: Concurrent modifications from multiple threads
+ * - ❌ Unsafe: Mixed read/write access without synchronization
+ *
+ * @see cz.vutbr.fit.interlockSim.context.BaseContext for context-level thread-safety documentation
+ * @see cz.vutbr.fit.interlockSim.context.ContextConcurrencyTest for race condition behavior tests
  */
 class HashMapGraph<N, E, X> :
 	AbstractUnorientedGraph<N, E>(),
@@ -79,6 +106,7 @@ class HashMapGraph<N, E, X> :
 	}
 
 	private var nodeCollection: NodeCollection? = null
+	private var cachedNodeSet: java.util.Set<N>? = null
 
 	private val map: MutableMap<Doubleton<N, X>, E> = mutableMapOf()
 
@@ -91,6 +119,8 @@ class HashMapGraph<N, E, X> :
 		value: E
 	) {
 		map[Doubleton<N, X>(first, second)] = value
+		// Invalidate cached node set when graph structure changes
+		cachedNodeSet = null
 	}
 
 	override fun put(
@@ -101,6 +131,8 @@ class HashMapGraph<N, E, X> :
 		value: E
 	) {
 		map[Doubleton(first, second, firstAddInf, secondAddInf)] = value
+		// Invalidate cached node set when graph structure changes
+		cachedNodeSet = null
 	}
 
 	/* (non-Javadoc)
@@ -117,7 +149,12 @@ class HashMapGraph<N, E, X> :
 	override fun remove(
 		first: N,
 		second: N
-	): E? = map.remove(getReferencer(first, second))
+	): E? {
+		val result = map.remove(getReferencer(first, second))
+		// Invalidate cached node set when graph structure changes
+		if (result != null) cachedNodeSet = null
+		return result
+	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#removeAll(N)
@@ -132,14 +169,21 @@ class HashMapGraph<N, E, X> :
 		val collection = mutableListOf<E>()
 
 		val iterator = map.entries.iterator()
+		var hasRemoved = false
 		while (iterator.hasNext()) {
 			val next = iterator.next()
 			val key = next.key
 			if (key.contains(node)) {
 				collection.add(next.value)
-				if (remove) iterator.remove()
+				if (remove) {
+					iterator.remove()
+					hasRemoved = true
+				}
 			}
 		}
+		// Invalidate cached node set when graph structure changes
+		if (hasRemoved) cachedNodeSet = null
+		
 		// Safe: Kotlin MutableList is compatible with Java Collection
 		@Suppress("UNCHECKED_CAST")
 		return collection as java.util.Collection<E>
@@ -152,39 +196,63 @@ class HashMapGraph<N, E, X> :
 		requireValidState(h != null) { "Edge cannot be null" }
 		val collection = mutableSetOf<N>()
 		val iterator = map.entries.iterator()
+		var hasRemoved = false
 		while (iterator.hasNext()) {
 			val next = iterator.next()
 			if (h == next.value) {
 				collection.addAll(next.key)
 				iterator.remove()
+				hasRemoved = true
 			}
 		}
+		// Invalidate cached node set when graph structure changes
+		if (hasRemoved) cachedNodeSet = null
+		
 		// Safe: Kotlin MutableSet is compatible with Java Collection
 		@Suppress("UNCHECKED_CAST")
 		return collection as java.util.Collection<N>
 	}
 
-	/* (non-Javadoc)
-	 * @see cz.vutbr.fit.interlockSim.context.Graph#nodeSet()
+	/**
+	 * Returns an unmodifiable view of all nodes in the graph.
+	 *
+	 * **Caching Strategy:**
+	 * - Lazy initialization: nodeCollection and cachedNodeSet created on first access
+	 * - Cache invalidation: Set to null on any graph modification (put, remove, clear)
+	 * - Not thread-safe: No synchronization (see class-level documentation)
+	 *
+	 * **Thread-Safety Note:**
+	 * This method has a check-then-act race condition. Multiple threads calling this
+	 * method concurrently may create duplicate cached sets. This is acceptable because:
+	 * - HashMapGraph is documented as not thread-safe
+	 * - No current use cases involve concurrent access
+	 * - Frozen contexts (via BaseContext.freeze()) provide safer concurrent reads
+	 *
+	 * @return Unmodifiable set of all nodes
 	 */
 	override fun nodeSet(): Set<N> {
 		if (nodeCollection == null) nodeCollection = NodeCollection()
-		// TODO: Return unmodifiable view instead of copy - see issue #59
-		val set = nodeCollection!!.toMutableSet()
-		// for (Doubleton<N> c: map.keySet()) {
-		// 	set.addAll(c);
-		// }
-		// Safe: Kotlin MutableSet is compatible with Java Set
+
+		// Lazily build and cache the node set (materializes once, then reuses)
+		if (cachedNodeSet == null) {
+			@Suppress("UNCHECKED_CAST")
+			cachedNodeSet = nodeCollection!!.toMutableSet() as java.util.Set<N>
+		}
+
+		// Return unmodifiable view of cached set (O(1) performance)
 		@Suppress("UNCHECKED_CAST")
-		return set as java.util.Set<N>
+		return java.util.Collections.unmodifiableSet(cachedNodeSet as MutableSet<N>) as java.util.Set<N>
 	}
 
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#entrySet()
 	 */
 	override fun entrySet(): Set<Map.Entry<Doubleton<N, X>, E>> {
+		// Return unmodifiable view of map entries (O(1) performance)
 		@Suppress("UNCHECKED_CAST")
-		return map.entries as java.util.Set<Map.Entry<Doubleton<N, X>, E>>
+		return java.util.Collections.unmodifiableSet(
+			map.entries
+		) as java.util.Set<Map.Entry<Doubleton<N, X>, E>>
 	}
 
 	override fun putIfNotExists(
@@ -197,6 +265,8 @@ class HashMapGraph<N, E, X> :
 		val pair = Doubleton<N, X>(first, second, addInfFirst, addInfSecond)
 		if (!map.containsKey(pair)) {
 			map[pair] = edge
+			// Invalidate cached node set when graph structure changes
+			cachedNodeSet = null
 		}
 	}
 
@@ -204,8 +274,11 @@ class HashMapGraph<N, E, X> :
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#values()
 	 */
 	override fun values(): Collection<E> {
+		// Return unmodifiable view of values (O(1) performance)
 		@Suppress("UNCHECKED_CAST")
-		return map.values as Collection<E>
+		return java.util.Collections.unmodifiableCollection(
+			map.values
+		) as java.util.Collection<E>
 	}
 
 	override fun get(node: N): Collection<E> = allEdgesJoinsWith(node, false)
@@ -304,5 +377,7 @@ class HashMapGraph<N, E, X> :
 
 	override fun clear() {
 		map.clear()
+		// Invalidate cached node set when graph structure changes
+		cachedNodeSet = null
 	}
 }

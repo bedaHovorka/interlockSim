@@ -10,12 +10,10 @@
 package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.util.ArrayList
 import java.util.Collections
@@ -244,32 +242,7 @@ class Array2DMapTest {
 		return sum / c.size
 	}
 
-	/**
-	 * Performance benchmark for {@link cz.vutbr.fit.interlockSim.util.Array2DMap}.
-	 *
-	 * This test is disabled because:
-	 * 1. It's a performance benchmark, not a functional test
-	 * 2. It has inherent timing variability that causes flaky failures
-	 * 3. Historical results show minimal performance difference (see comments below)
-	 *
-	 * Original conclusion: "The speedup is almost none, but at least when calling
-	 * get(Int,Int) directly, the creation of key objects is eliminated."
-	 *
-	 * If you need to run performance benchmarks, consider using JMH (Java Microbenchmark Harness)
-	 * instead of JUnit assertions.
-	 */
-	@Disabled("Performance benchmark with timing variability - not a functional test. See Issue #216 for JMH migration.")
-	@Test
-	fun testSpeed() {
-		@Suppress("UNCHECKED_CAST")
-		val tst1 = tst(array2DMap as Map<Point, Int>)
-
-		@Suppress("UNCHECKED_CAST")
-		val tst2 = tst(treeMap as Map<Point, Int>)
-		// cil: zrychleni operace vyhledani polozky
-		println("Array2DMap: $tst1 ns, TreeMap: $tst2 ns")
-		assertThat(tst1).isLessThan(tst2)
-		// zaver: zrychleni neni skoro zadne
-		// vsak je aspon pri volani primo get(Int,Int) eliminovano vytvareni klicovacich objektu
-	}
+	// Note: testSpeed() performance benchmark removed in Issue #216
+	// See src/jmh/kotlin/cz/vutbr/fit/interlockSim/benchmarks/GridStoragePerformance.kt
+	// Run benchmarks with: ./gradlew jmh
 }

@@ -321,7 +321,7 @@ dynamicInOut.lastTrain = train  // Mutable operation (simulation state)
 
 **Railway Domain Context:**
 - **InOut elements** represent entry/exit points for trains (network boundaries)
-- **Minimum 2 InOuts required** per network (at least one entry, one exit)
+- **Minimum 1 InOut required** per network (with bidirectional operation, can serve as both entry and exit)
 - **Entry points** (`isEntry == true`) - trains spawn here
 - **Exit points** (`isEntry == false`) - trains despawn here
 - **Examples:** "A" (entry), "B" (exit) in vyhybna.xml; "N-Lib-1" (north entry), "S-Vrs-2" (south exit) in praha-hlavni-nadrazi.xml

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory.Companion.MIN_INOUT_ELEMENTS
 import org.xml.sax.SAXException
 import org.xml.sax.SAXParseException
 import java.io.FileNotFoundException
@@ -109,15 +110,14 @@ object ValidationUtils {
 	 */
 	private fun parseErrorMessage(message: String): String =
 		when {
-			message.contains("InOut") && message.contains("at least 2") -> {
+			message.contains("InOut") && message.contains("at least $MIN_INOUT_ELEMENTS") -> {
 				"""
-				|Minimum 2 InOut elements required (found fewer).
+				|Minimum $MIN_INOUT_ELEMENTS InOut element required (found none).
 				|
-				|InOut elements define entry/exit points for trains. At least 2 are required for simulation:
-				|- One for trains to enter the network
-				|- One for trains to exit the network
+				|InOut elements define entry/exit points for trains. At least $MIN_INOUT_ELEMENTS is required for simulation.
+				|With bidirectional train operation, a single InOut can serve as both entry and exit point.
 				|
-				|Please add more InOut elements to your railway network.
+				|Please add an InOut element to your railway network.
 				""".trimMargin()
 			}
 

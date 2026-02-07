@@ -16,8 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
  *
  */
 class Timetable(
-	private val `in`: DynamicInOut,
-	private val out: DynamicInOut,
+	private var `in`: DynamicInOut,
+	private var out: DynamicInOut,
 	private val inTime: Time,
 	private val outTime: Time,
 	private var length: Double
@@ -57,5 +57,17 @@ class Timetable(
 	fun getLength(): Double {
 		// EXTENSION with parameter time
 		return length
+	}
+
+	/**
+	 * Reverse the direction of travel by swapping In and Out points.
+	 * This simulates the train engineer moving to the opposite end of the train.
+	 *
+	 * GitHub #62: Bidirectional train operation support
+	 */
+	fun reverseDirection() {
+		val temp = `in`
+		`in` = out
+		out = temp
 	}
 }

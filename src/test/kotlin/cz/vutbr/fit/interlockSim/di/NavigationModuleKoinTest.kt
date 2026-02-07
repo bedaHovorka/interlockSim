@@ -15,9 +15,8 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -65,8 +64,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Reserve path using PathReservationService
 			val grid = context.getRailWayNetGrid()
-			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
-			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
+			val cellA = grid.getCellAt(1, 1)
+			val cellB = grid.getCellAt(5, 5)
+			require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+			require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+			val inOutA = context.toDynamic(cellA)
+			val inOutB = context.toDynamic(cellB)
 			pathReservationService.reservePath("train1", inOutA, inOutB)
 
 			// Assert - Both services see the same reservation (shared registry)
@@ -75,15 +78,15 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
-			assertThat(path).isNotNull()
+			assertThat(path).isInstanceOf(PathResult.Available::class)
+
+			val pathElements = (path as PathResult.Available).path
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath =
-				path!!
-					.filterIsInstance<TrackSection>()
-					.map { it.getTrackBlock() }
-					.filterIsInstance<DynamicTrackBlock>()
-					.toSet()
+			val blocksFromPath = pathElements.filterIsInstance<TrackSection>()
+				.map { it.getTrackBlock() }
+				.filterIsInstance<DynamicTrackBlock>()
+				.toSet()
 
 			// Compare with blocks from PathReservationService (should be identical)
 			val blocksFromReservation = blocks.toSet()
@@ -91,7 +94,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train2 cannot get path (ownership isolation)
 			val pathForTrain2 = trainNavigationService.findReservedPathForTrain("train2", inOutA)
-			assertThat(pathForTrain2).isNull()
+			assertThat(pathForTrain2).isInstanceOf(PathResult.OwnershipConflict::class)
 		}
 	}
 
@@ -103,8 +106,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 				// Act - reserve path in context1
 				val service1 = context1.getPathReservationService()
 				val grid1 = context1.getRailWayNetGrid()
-				val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as PathSeparator)
-				val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as PathSeparator)
+				val cellA1 = grid1.getCellAt(1, 1)
+				val cellB1 = grid1.getCellAt(5, 5)
+				require(cellA1 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA1?.javaClass?.simpleName}" }
+				require(cellB1 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB1?.javaClass?.simpleName}" }
+				val inOutA1 = context1.toDynamic(cellA1)
+				val inOutB1 = context1.toDynamic(cellB1)
 				service1.reservePath("train1", inOutA1, inOutB1)
 
 				// Assert - context2 should not see train1's reservation (different scope)
@@ -121,8 +128,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			// Act - get service from context and use it
 			val service = context.getPathReservationService()
 			val grid = context.getRailWayNetGrid()
-			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
-			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
+			val cellA = grid.getCellAt(1, 1)
+			val cellB = grid.getCellAt(5, 5)
+			require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+			require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+			val inOutA = context.toDynamic(cellA)
+			val inOutB = context.toDynamic(cellB)
 
 			val result = service.reservePath("test-train", inOutA, inOutB)
 
@@ -141,8 +152,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val trainService = context.getTrainNavigationService()
 
 			val grid = context.getRailWayNetGrid()
-			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
-			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
+			val cellA = grid.getCellAt(1, 1)
+			val cellB = grid.getCellAt(5, 5)
+			require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+			require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+			val inOutA = context.toDynamic(cellA)
+			val inOutB = context.toDynamic(cellB)
 
 			pathService.reservePath("train1", inOutA, inOutB)
 
@@ -150,12 +165,11 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			assertThat(trainService).isInstanceOf(TrainNavigationService::class)
 
 			// Verify the service can perform ownership checks
-			// isPathReservedForTrain builds a path from the separator until:
-			// 1. It reaches an OrientedPathSeparator (semaphore/switch) in the direction, OR
-			// 2. It reaches the end of track (no more tracks available)
-			// In this test, path goes InOut A → Block → InOut B (all reserved for train1)
+			// Note: InOut elements ARE OrientedPathSeparators (via OrientedNodeCell)
+			// and contain semaphores, so the path IS valid and returns true
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
-			// Assert - Returns true because all blocks in the path are owned by train1
+			// Assert - This correctly returns true because the path is reserved for train1
+			// and InOut elements are valid oriented path separators with semaphores
 			assertThat(isReserved).isEqualTo(true)
 		}
 	}
@@ -167,8 +181,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val service = context.getPathReservationService()
 
 			val grid = context.getRailWayNetGrid()
-			val inOutA = context.toDynamic(grid.getCellAt(1, 1) as PathSeparator)
-			val inOutB = context.toDynamic(grid.getCellAt(5, 5) as PathSeparator)
+			val cellA = grid.getCellAt(1, 1)
+			val cellB = grid.getCellAt(5, 5)
+			require(cellA is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA?.javaClass?.simpleName}" }
+			require(cellB is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB?.javaClass?.simpleName}" }
+			val inOutA = context.toDynamic(cellA)
+			val inOutB = context.toDynamic(cellB)
 			service.reservePath("train1", inOutA, inOutB)
 
 			// Verify reservation exists
@@ -192,8 +210,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			// Arrange - create first context and register trains
 			val service1 = context1.getPathReservationService()
 			val grid1 = context1.getRailWayNetGrid()
-			val inOutA1 = context1.toDynamic(grid1.getCellAt(1, 1) as PathSeparator)
-			val inOutB1 = context1.toDynamic(grid1.getCellAt(5, 5) as PathSeparator)
+			val cellA1 = grid1.getCellAt(1, 1)
+			val cellB1 = grid1.getCellAt(5, 5)
+			require(cellA1 is PathSeparator) { "Cell at (1,1) must be PathSeparator, but was ${cellA1?.javaClass?.simpleName}" }
+			require(cellB1 is PathSeparator) { "Cell at (5,5) must be PathSeparator, but was ${cellB1?.javaClass?.simpleName}" }
+			val inOutA1 = context1.toDynamic(cellA1)
+			val inOutB1 = context1.toDynamic(cellB1)
 			service1.reservePath("train1", inOutA1, inOutB1)
 
 			// Verify registration

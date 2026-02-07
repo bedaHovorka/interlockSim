@@ -503,27 +503,120 @@ open class DefaultSimulationContext(
 
 		/**
 		 * Validate transformation completeness and correctness.
-		 * Logs summary statistics about the transformation.
+		 *
+		 * Verifies:
+		 * - All NodeCells have corresponding dynamic wrappers
+		 * - Graph structure preserved (same size, connectivity)
+		 * - InOut list copied correctly
+		 * - Configuration properties copied
+		 * - Grid dimensions match
+		 * - No orphaned static references
 		 *
 		 * @param editingContext Source editing context
 		 * @param simulationContext Target simulation context
+		 * @throws ContextCreationException if validation fails
 		 */
 		private fun validateTransformation(
 			editingContext: EditingContext,
 			simulationContext: DefaultSimulationContext
 		) {
-			val grid = editingContext.getRailWayNetGrid()
-			val cols = grid.getCols()
-			val rows = grid.getRows()
+			val errors = mutableListOf<String>()
 
-			// Validate InOut wrapper mappings
-			validateInOutMappings(simulationContext)
+			// 1. Validate grid dimensions
+			val sourceGrid = editingContext.getRailWayNetGrid()
+			val targetGrid = simulationContext.getGrid()
+			if (sourceGrid.getCols() != targetGrid.getCols() ||
+				sourceGrid.getRows() != targetGrid.getRows()
+			) {
+				errors.add(
+					"Grid dimensions mismatch: source ${sourceGrid.getCols()}x${sourceGrid.getRows()}, " +
+						"target ${targetGrid.getCols()}x${targetGrid.getRows()}"
+				)
+			}
 
+			// 2. Validate all NodeCells have wrappers
+			val nodeCells = mutableListOf<NodeCell>()
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
+			for ((_, cell) in cellGrid) {
+				if (cell is NodeCell) {
+					nodeCells.add(cell)
+				}
+			}
+
+			val unmappedCells = nodeCells.filter { it !in simulationContext.staticToDynamicMap }
+			if (unmappedCells.isNotEmpty()) {
+				errors.add(
+					"Missing dynamic wrappers for ${unmappedCells.size} NodeCells: " +
+						unmappedCells.take(5).joinToString { "${it::class.simpleName} at ${it.getSpatialType()}" }
+				)
+			}
+
+			// 3. Validate graph size preserved
+			val sourceGraphSize = editingContext.getGraph().size()
+			val targetGraphSize = simulationContext.getGraph().size()
+			if (sourceGraphSize != targetGraphSize) {
+				errors.add(
+					"Graph size mismatch: source $sourceGraphSize entries, target $targetGraphSize entries"
+				)
+			}
+
+			// 4. Validate InOut list copied
+			val sourceInOuts = editingContext.getInOuts()
+			val targetInOuts = simulationContext.getInOuts()
+			if (sourceInOuts.size != targetInOuts.size) {
+				errors.add(
+					"InOut list size mismatch: source ${sourceInOuts.size}, target ${targetInOuts.size}"
+				)
+			}
+
+			// 5. Validate configuration properties
+			if (editingContext.currentMaxSpeed != simulationContext.currentMaxSpeed) {
+				errors.add(
+					"Max speed mismatch: source ${editingContext.currentMaxSpeed}, " +
+						"target ${simulationContext.currentMaxSpeed}"
+				)
+			}
+			if (editingContext.currentTrackLength != simulationContext.currentTrackLength) {
+				errors.add(
+					"Track length mismatch: source ${editingContext.currentTrackLength}, " +
+						"target ${simulationContext.currentTrackLength}"
+				)
+			}
+			// Note: currentNameString validation is skipped when source is empty because
+			// DefaultSimulationContext.currentNameString getter auto-generates a random name
+			// when empty (see line 1400). Empty source names are expected and valid.
+			if (editingContext.currentNameString.isNotEmpty() &&
+				editingContext.currentNameString != simulationContext.currentNameString
+			) {
+				errors.add(
+					"Name string mismatch: source '${editingContext.currentNameString}', " +
+						"target '${simulationContext.currentNameString}'"
+				)
+			}
+
+			// Validate InOut wrapper mappings (existing check - keep for backward compatibility)
+			try {
+				validateInOutMappings(simulationContext)
+			} catch (e: IllegalArgumentException) {
+				errors.add("InOut wrapper validation failed: ${e.message}")
+			}
+
+			// Throw exception if any errors found
+			if (errors.isNotEmpty()) {
+				throw ContextCreationException(
+					"Context transformation validation failed with ${errors.size} error(s):\n" +
+						errors.joinToString("\n") { "  - $it" }
+				)
+			}
+
+			// Log success with statistics
 			logger.info {
-				"Created simulation context from editing context: " +
-					"${simulationContext.staticToDynamicMap.size} dynamic wrappers, " +
-					"${simulationContext.inouts.size} InOuts, " +
-					"grid: ${cols}x$rows, graph: ${editingContext.getGraph().size()} track blocks"
+				"Context transformation validated successfully: " +
+					"${nodeCells.size} cells (${simulationContext.staticToDynamicMap.size} wrappers), " +
+					"${targetGraphSize} graph entries, " +
+					"${targetInOuts.size} InOuts, " +
+					"grid ${targetGrid.getCols()}x${targetGrid.getRows()}"
 			}
 		}
 	}
@@ -737,25 +830,22 @@ open class DefaultSimulationContext(
 		var trackMappedCount = 0
 		val graph = getGraph()
 		for (trackBlock in graph.values()) {
-			// TrackBlock extends TrackFacility, so we can safely cast
-			val trackFacility = trackBlock as TrackFacility
+			// TrackBlock extends TrackFacility, but graph stores DynamicTrackBlock wrappers
+			val dynamicBlock = trackBlock as DynamicTrackBlock
+			val staticTrack = dynamicBlock.staticRef as TrackFacility
 
-			// Skip if already mapped
-			if (staticTrackToDynamicMap.containsKey(trackFacility)) {
-				logger.trace { "Skipping TrackBlock ${trackFacility.hashCode()} - already mapped" }
-				continue
+			if (!staticTrackToDynamicMap.containsKey(staticTrack)) {
+				val dynamicTrack = DynamicTrack(staticTrack)
+				staticTrackToDynamicMap[staticTrack] = dynamicTrack
+				trackMappedCount++
+				logger.trace { "Mapped TrackBlock ${staticTrack.hashCode()} to dynamic wrapper" }
 			}
 
-			// Create DynamicTrack wrapper for each TrackBlock
-			val dynamicTrack = DynamicTrack(trackFacility)
-			staticTrackToDynamicMap[trackFacility] = dynamicTrack
-			trackMappedCount++
-			logger.trace { "Mapped TrackBlock ${trackFacility.hashCode()} to dynamic wrapper" }
+			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
+			staticTrackToDynamicMap.putIfAbsent(dynamicBlock, staticTrackToDynamicMap[staticTrack]!!)
 
 			// Recursively map any internal TrackSection objects
-			// For SimpleTrackBlock (current impl), this is a no-op
-			// For future CompoundTrackBlock, ensures all internal sections are mapped
-			mapInternalSections(trackBlock)
+			mapInternalSections(dynamicBlock)
 		}
 		logger.debug {
 			"Initialized $trackMappedCount dynamic track wrappers (total in map: ${staticTrackToDynamicMap.size})"
@@ -969,18 +1059,25 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Convert a TrackFacility to its DynamicTrack wrapper.
-	 * Creates wrapper lazily if not yet created (for tracks discovered during simulation).
+	 * All tracks are wrapped eagerly during initialization (via initializeDynamicMapping).
+	 * If a track has no wrapper, this indicates an initialization error.
 	 * Uses identity-based mapping to ensure each static track maps to exactly one wrapper.
 	 */
 	override fun toDynamic(track: TrackFacility): DynamicTrack {
-		// Return existing wrapper if already mapped
 		staticTrackToDynamicMap[track]?.let { return it }
 
-		// Create new wrapper for unmapped track (lazy initialization)
-		val dynamicTrack = DynamicTrack(track)
-		staticTrackToDynamicMap[track] = dynamicTrack
-		logger.debug { "Lazy-created DynamicTrack wrapper for track ${System.identityHashCode(track)}" }
-		return dynamicTrack
+		val staticKey = (track as? DynamicTrackBlock)?.staticRef as? TrackFacility
+		if (staticKey != null) {
+			staticTrackToDynamicMap[staticKey]?.let { return it }
+		}
+
+		throw IllegalStateException(
+			"Dynamic wrapper not found for track: ${System.identityHashCode(track)} " +
+				"(${track.javaClass.simpleName}). " +
+				"Map contains ${staticTrackToDynamicMap.size} entries. " +
+				"This indicates the track was not registered during initialization. " +
+				"Ensure initializeDynamicMapping() completed successfully before simulation starts."
+		)
 	}
 
 	@Throws(EmptyContextException::class, SimulationException::class)

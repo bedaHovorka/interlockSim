@@ -62,18 +62,18 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 	@DisplayName("Lenient parsing - Parseable XML with validation errors")
 	inner class ParseableWithErrorsTests {
 		@Test
-		fun singleInOut_shouldReturnParseableWithErrors() {
-			// Arrange: single-inout.xml has only 1 InOut (violates minimum 2 requirement)
+		fun singleInOut_shouldBeValidAfterBidirectionalSupport() {
+			// Arrange: single-inout.xml has only 1 InOut (meets minimum 1 requirement)
 			val fixtureFile = getFixtureFile("single-inout.xml")
 
 			// Act
 			val result = xmlContextFactory.createContextLenient(fixtureFile)
 
-			// Assert: Should be parseable but have validation errors
+			// Assert: Should be parseable and valid (minimum 1 InOut is now allowed)
 			assertThat(result.isParseable).isTrue()
 			assertThat(result.context).isNotNull()
-			assertThat(result.validationResult.isValid).isFalse()
-			assertThat(result.validationResult.errors).transform { it.isNotEmpty() }.isTrue()
+			assertThat(result.validationResult.isValid).isTrue()
+			assertThat(result.validationResult.errors).transform { it.isEmpty() }.isTrue()
 		}
 
 		@Test
@@ -173,7 +173,6 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 				<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="10" Y="10">
-					<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="false" name="TestName"/>
 				</net>
 			""".trimIndent())
 
@@ -192,7 +191,7 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 			// Arrange: Create a larger XML file with many elements
 			val largeFile = File.createTempFile("large", ".xml")
 			largeFile.deleteOnExit()
-			
+
 			val content = buildString {
 				appendLine("""<?xml version="1.0"?>""")
 				appendLine("""<!DOCTYPE net>""")
@@ -246,7 +245,7 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 		fun sequentialParsing_shouldWorkCorrectly() {
 			// Arrange: Get a valid fixture file
 			val fixtureFile = getFixtureFile("minimal-network.xml")
-			
+
 			// Act: Parse the same file multiple times sequentially
 			val results = (1..5).map {
 				xmlContextFactory.createContextLenient(fixtureFile)

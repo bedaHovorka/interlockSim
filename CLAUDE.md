@@ -176,15 +176,15 @@ For complete navigation services architecture, Koin DI integration patterns, and
 
 ### InOut Elements
 
-**Minimum Requirement:** Every railway network must have at least 2 InOut elements (entry/exit points).
+**Minimum Requirement:** Every railway network must have at least 1 InOut element (entry/exit point).
 
 **Rationale:**
-- Single InOut = dead-end (train enters but cannot exit)
-- Simulation requires trains to enter from one point and exit from another
+- With bidirectional train operation (PR #356), a single InOut can serve as both entry and exit
+- Train can enter, travel through the network, reverse direction, and exit through the same InOut
 - XML validation enforces this constraint via XMLContextFactory
 
 **Validation:**
-- Editor: GUI prevents saving contexts with < 2 InOuts (Issue #80)
+- Editor: GUI prevents saving contexts with < 1 InOuts (Issue #80)
 - XML loading: XMLContextFactory validates during parse
 - Test coverage: See InOutValidationTest (Issue #79)
 
@@ -381,6 +381,7 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 - `ANIMATED_SIM_MILESTONE_COMPLETE.md` - AnimatedSim milestone summary
 - `CZECH_RAILWAY_TERMINOLOGY.md` - Czech terminology verification and translation guide (373 lines)
 - `TRAIN_PASSIVATION_FIX.md` - Train physics passivation fix (Issue #291)
+- `KOIN_SCOPE_LIFECYCLE_TESTS.md` - Koin scope lifecycle test documentation (Issue #220)
 
 ## Known Issues
 

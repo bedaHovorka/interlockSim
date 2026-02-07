@@ -658,9 +658,26 @@ class RailwayNetGridCanvas :
 		toolbarCellClass = cellClass
 	}
 
-	// Internal test accessors for toolbar state
+	/**
+	 * Internal test accessor for toolbar cell class.
+	 *
+	 * This accessor is intended for testing purposes only. It allows tests to verify
+	 * that [setNodeOnToolbar] correctly stores the toolbar state.
+	 *
+	 * @return The currently selected cell class for toolbar operations, or null if none selected.
+	 * @see setNodeOnToolbar
+	 */
 	internal fun getToolbarCellClass(): Class<out NodeCell>? = toolbarCellClass
 
+	/**
+	 * Internal test accessor for toolbar constructor arguments.
+	 *
+	 * This accessor is intended for testing purposes only. It allows tests to verify
+	 * that [setNodeOnToolbar] correctly stores the toolbar state.
+	 *
+	 * @return The constructor arguments for the selected cell class, or null if none selected.
+	 * @see setNodeOnToolbar
+	 */
 	internal fun getToolbarArgs(): Array<Any?>? = toolbarArgs
 
 	// PropertyChangeListener for context updates

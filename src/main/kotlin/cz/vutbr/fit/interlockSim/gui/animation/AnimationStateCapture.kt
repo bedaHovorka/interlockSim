@@ -174,14 +174,14 @@ object AnimationStateCapture {
 		context: SimulationContext
 	): TrainState {
 		val trainNumber = train.getNumber()
-		val position = train.getTotalDistance()
+		val position = train.totalDistance
 		val velocity = train.getVelocity()
 		val acceleration = train.getAcceleration()
 		val length = train.getLength()
 
 		// Calculate grid location for train front
-		val currentSection = train.getFrontSection()
-		val frontPosition = train.getFrontPosition()
+		val currentSection = train.frontSection
+		val frontPosition = train.frontPosition
 		val frontGridLocation =
 			positionCalculator.calculateTrainGridLocation(
 				train = train,
@@ -191,7 +191,7 @@ object AnimationStateCapture {
 
 		// Determine train color based on origin InOut
 		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
-		val isBlueColorVariant = determineOriginColorVariant(train, context)
+		val isBlueColorVariant = determineOriginColorVariant(train)
 
 		return TrainState(
 			trainNumber = trainNumber,
@@ -228,15 +228,13 @@ object AnimationStateCapture {
 	 * - Future configurations with different names: only "B" maps to blue
 	 *
 	 * @param train Train to determine color variant for
-	 * @param context Simulation context (unused, kept for future extensibility)
 	 * @return True for blue color variant (InOut "B"), false for orange (InOut "A" or other)
 	 * @since 2026-02-04 (Fixed train color coding bug)
 	 */
 	private fun determineOriginColorVariant(
-		train: Train,
-		context: SimulationContext
+		train: Train
 	): Boolean {
-		val originInOut = train.getOriginInOut()
+		val originInOut = train.originInOut
 		val inOutName = originInOut.name
 		return inOutName == "B"
 	}

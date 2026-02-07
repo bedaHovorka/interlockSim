@@ -74,8 +74,9 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 			}
 
 			override fun remove() {
-				if (current == null) throw IllegalStateException()
-				this@Array2DMap.remove(current)
+				val key = current ?: throw IllegalStateException()
+				iterator.remove()
+				removeValueOnly(key)
 				current = null
 			}
 		}
@@ -84,6 +85,66 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 
 		override val size: Int
 			get() = _keys.size
+
+		/**
+		 * Remove an entry from the set (and underlying map).
+		 * Issue #58: Full Map contract compliance for modifiable EntrySet
+		 */
+		override fun remove(element: MutableMap.MutableEntry<Point, V>): Boolean {
+			if (!contains(element)) return false
+			this@Array2DMap.remove(element.key)
+			return true
+		}
+
+		/**
+		 * Remove all entries in the collection from the set (and underlying map).
+		 * Issue #58: Bulk operations for full Map contract compliance
+		 */
+		override fun removeAll(elements: Collection<MutableMap.MutableEntry<Point, V>>): Boolean {
+			if (elements.isEmpty()) return false
+
+			// Collect keys to remove for efficient batch processing
+			val keysToRemove = elements.mapNotNull { entry ->
+				if (contains(entry)) entry.key else null
+			}
+
+			if (keysToRemove.isEmpty()) return false
+
+			// Remove all keys from underlying map
+			keysToRemove.forEach { key ->
+				this@Array2DMap.remove(key)
+			}
+			return true
+		}
+
+		/**
+		 * Retain only the entries in the collection, removing all others.
+		 * Issue #58: Bulk operations for full Map contract compliance
+		 */
+		override fun retainAll(elements: Collection<MutableMap.MutableEntry<Point, V>>): Boolean {
+			// Convert to set of keys for O(1) lookup, but only for entries that actually exist
+			// (validates both key and value match according to Map.Entry contract)
+			val keysToRetain = elements.filter { contains(it) }.map { it.key }.toSet()
+
+			// Find all keys to remove (those not in retention set)
+			val keysToRemove = _keys.filter { it !in keysToRetain }
+
+			if (keysToRemove.isEmpty()) return false
+
+			// Remove all non-retained keys
+			keysToRemove.forEach { key ->
+				this@Array2DMap.remove(key)
+			}
+			return true
+		}
+
+		/**
+		 * Clear all entries from the set (and underlying map).
+		 * Issue #58: Full Map contract compliance for modifiable EntrySet
+		 */
+		override fun clear() {
+			this@Array2DMap.clear()
+		}
 	}
 
 	// seznam s dirama
@@ -182,8 +243,11 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 
 	override fun remove(key: Point): V? {
 		_keys.remove(key)
-		val iArray = array.get(key.y)
-		if (iArray == null) return null
+		return removeValueOnly(key)
+	}
+
+	private fun removeValueOnly(key: Point): V? {
+		val iArray = array.get(key.y) ?: return null
 		return iArray.removeAt(key.x)
 	}
 
@@ -196,7 +260,7 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 	fun getRow(y: Int): List<V> {
 		val list = array.get(y)
 
-		// TODO: Make modifiable EntrySet - see issue #58
+		// Note: EntrySet is now fully modifiable (Issue #58 complete)
 		@Suppress("UNCHECKED_CAST")
 		val result: java.util.List<V> =
 			if (list == null) {

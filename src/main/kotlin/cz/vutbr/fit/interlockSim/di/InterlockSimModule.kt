@@ -251,14 +251,12 @@ val navigationModule: Module =
 
 			// TrainNavigationService: scoped to this simulation context
 			// Registry is SHARED with PathReservationService (same scoped instance)
-			// TopologyNavigator is used for pure topology traversal (no recursion)
 			scoped<TrainNavigationService> {
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val registry: PathReservationRegistry = get()
-				val navigator: TopologyNavigator = get()
-				DefaultTrainNavigationService(context, registry, navigator)
+				DefaultTrainNavigationService(context, registry)
 			}
 		}
 	}

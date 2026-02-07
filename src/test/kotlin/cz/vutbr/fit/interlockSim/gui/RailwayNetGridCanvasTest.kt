@@ -270,14 +270,62 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 	@DisplayName("setNodeOnToolbar stores toolbar state")
 	fun setNodeOnToolbarStoresToolbarState() {
 		runOnEDT {
-			// When: Setting toolbar node
-			val args = arrayOf<Any?>("testArg1", "testArg2")
-			canvas.setNodeOnToolbar(InOut::class.java, args)
+			// Given: Initial state should be null
+			assertThat(canvas.getToolbarCellClass()).isEqualTo(null)
+			assertThat(canvas.getToolbarArgs()).isEqualTo(null)
 
-			// Then: Canvas should store the state (method completes successfully)
-			// We verify that subsequent operations work correctly after toolbar state is set
-			canvas.setContext(editingContext)
-			assertThat(canvas.getEditingContext()).isNotNull()
+			// When: Setting toolbar node with specific class and arguments
+			val expectedClass = InOut::class.java
+			val expectedArgs = arrayOf<Any?>("testArg1", "testArg2")
+			canvas.setNodeOnToolbar(expectedClass, expectedArgs)
+
+			// Then: Toolbar state should be stored correctly
+			assertThat(canvas.getToolbarCellClass()).isEqualTo(expectedClass)
+			assertThat(canvas.getToolbarArgs()).isNotNull()
+			assertThat(canvas.getToolbarArgs()!!.size).isEqualTo(2)
+			assertThat(canvas.getToolbarArgs()!![0]).isEqualTo("testArg1")
+			assertThat(canvas.getToolbarArgs()!![1]).isEqualTo("testArg2")
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setNodeOnToolbar can clear toolbar state")
+	fun setNodeOnToolbarCanClearToolbarState() {
+		runOnEDT {
+			// Given: Toolbar has been set
+			canvas.setNodeOnToolbar(InOut::class.java, arrayOf("test"))
+			assertThat(canvas.getToolbarCellClass()).isNotNull()
+
+			// When: Clearing toolbar by setting null
+			canvas.setNodeOnToolbar(null, null)
+
+			// Then: Toolbar state should be null
+			assertThat(canvas.getToolbarCellClass()).isEqualTo(null)
+			assertThat(canvas.getToolbarArgs()).isEqualTo(null)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setNodeOnToolbar can replace toolbar state")
+	fun setNodeOnToolbarCanReplaceToolbarState() {
+		runOnEDT {
+			// Given: Toolbar set with InOut
+			canvas.setNodeOnToolbar(InOut::class.java, arrayOf("initial"))
+			assertThat(canvas.getToolbarCellClass()).isEqualTo(InOut::class.java)
+
+			// When: Replacing with RailSemaphore
+			val newClass = cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore::class.java
+			val newArgs = arrayOf<Any?>(true, SpatialType.HORIZONTAL)
+			canvas.setNodeOnToolbar(newClass, newArgs)
+
+			// Then: Toolbar state should be updated
+			assertThat(canvas.getToolbarCellClass()).isEqualTo(newClass)
+			assertThat(canvas.getToolbarArgs()).isNotNull()
+			assertThat(canvas.getToolbarArgs()!!.size).isEqualTo(2)
+			assertThat(canvas.getToolbarArgs()!![0]).isEqualTo(true)
+			assertThat(canvas.getToolbarArgs()!![1]).isEqualTo(SpatialType.HORIZONTAL)
 		}
 	}
 
