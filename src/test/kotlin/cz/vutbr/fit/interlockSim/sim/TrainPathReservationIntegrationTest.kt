@@ -15,14 +15,15 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
-import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -182,7 +183,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 
 			// Verify train can see the path
 			val pathForTrain = trainNavService.findReservedPathForTrain(trainId, startInOut)
-			assertThat(pathForTrain).isNotNull()
+			assertThat(pathForTrain).isInstanceOf(PathResult.Available::class)
 
 			// Verify path availability check returns true
 			val isAvailable = trainNavService.isPathReservedForTrain(trainId, startInOut)
@@ -278,7 +279,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 			val ownedBlocks = reservationService.getReservedBlocks(trainId)
 
 			// Then: Verify train has no access
-			assertThat(pathForTrain).isNull()
+			assertThat(pathForTrain).isInstanceOf(PathResult.OwnershipConflict::class)
 			assertThat(isAvailable).isFalse()
 			assertThat(ownedBlocks).isEmpty()
 
@@ -323,7 +324,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 
 			// Verify train has access
 			val pathBefore = trainNavService.findReservedPathForTrain(trainId, startInOut)
-			assertThat(pathBefore).isNotNull()
+			assertThat(pathBefore).isInstanceOf(PathResult.Available::class)
 
 			// When: Release path
 			val releasedBlocks = reservationService.releasePath(trainId)
@@ -333,7 +334,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 			val pathAfter = trainNavService.findReservedPathForTrain(trainId, startInOut)
 			val ownedBlocks = reservationService.getReservedBlocks(trainId)
 
-			assertThat(pathAfter).isNull()
+			assertThat(pathAfter).isInstanceOf(PathResult.OwnershipConflict::class)
 			assertThat(ownedBlocks).isEmpty()
 
 			logger.info { "Train #4 correctly loses access after path release" }
@@ -397,8 +398,8 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 			val availableForTrain2 = trainNavService.isPathReservedForTrain(trainId2, startInOut)
 
 			// Then: Verify exclusive access
-			assertThat(pathForTrain1).isNotNull()
-			assertThat(pathForTrain2).isNull()
+			assertThat(pathForTrain1).isInstanceOf(PathResult.Available::class)
+			assertThat(pathForTrain2).isInstanceOf(PathResult.OwnershipConflict::class)
 
 			assertThat(availableForTrain1).isTrue()
 			assertThat(availableForTrain2).isFalse()
@@ -549,7 +550,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 
 			// Verify Train #10 is initially blocked
 			val pathForTrain2Before = trainNavService.findReservedPathForTrain(trainId2, startInOut)
-			assertThat(pathForTrain2Before).isNull()
+			assertThat(pathForTrain2Before).isInstanceOf(PathResult.OwnershipConflict::class)
 
 			// When: Train #9 releases path
 			val releasedBlocks = reservationService.releasePath(trainId1)
@@ -572,7 +573,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 
 					// Verify Train #10 can navigate
 					val pathForTrain2 = trainNavService.findReservedPathForTrain(trainId2, startInOut)
-					assertThat(pathForTrain2).isNotNull()
+					assertThat(pathForTrain2).isInstanceOf(PathResult.Available::class)
 
 					logger.info { "Path handover successful: Train #9 → Train #10" }
 				}
@@ -700,8 +701,8 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 			// Verify both waiting trains are blocked
 			val path2 = trainNavService.findReservedPathForTrain(trainId2, startInOut)
 			val path3 = trainNavService.findReservedPathForTrain(trainId3, startInOut)
-			assertThat(path2).isNull()
-			assertThat(path3).isNull()
+			assertThat(path2).isInstanceOf(PathResult.OwnershipConflict::class)
+			assertThat(path3).isInstanceOf(PathResult.OwnershipConflict::class)
 			logger.info { "Train #14 and #15 both blocked by Train #13" }
 
 			// Release Train #13
@@ -717,7 +718,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 
 					// Verify Train #15 is still blocked
 					val path3AfterTrain14 = trainNavService.findReservedPathForTrain(trainId3, startInOut)
-					assertThat(path3AfterTrain14).isNull()
+					assertThat(path3AfterTrain14).isInstanceOf(PathResult.OwnershipConflict::class)
 					logger.info { "Train #15 still blocked by Train #14" }
 
 					// Release Train #14
@@ -732,7 +733,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 							logger.info { "Train #15 successfully acquired path (final train in sequence)" }
 
 							val path3Final = trainNavService.findReservedPathForTrain(trainId3, startInOut)
-							assertThat(path3Final).isNotNull()
+							assertThat(path3Final).isInstanceOf(PathResult.Available::class)
 
 							logger.info { "Sequential path handover successful: #13 → #14 → #15" }
 						}

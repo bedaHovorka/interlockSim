@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
@@ -77,7 +79,7 @@ class DefaultTrainNavigationService(
 	override fun findReservedPathForTrain(
 		trainId: String,
 		separator: PathSeparator
-	): Path? {
+	): PathResult {
 		logger.info {
 			"findReservedPathForTrain: train '$trainId' requesting path from $separator"
 		}
@@ -88,21 +90,25 @@ class DefaultTrainNavigationService(
 			logger.info {
 				"findReservedPathForTrain: no PathInfo registered for train '$trainId'"
 			}
-			return null
+			return if (hasTopologicalContinuation(separator)) {
+				PathResult.OwnershipConflict
+			} else {
+				PathResult.NoTopologicalPath
+			}
 		}
 
 		// Step 2: Determine next track section from PathInfo
 		val dynamicSeparator = context.toDynamic(separator)
 		val nextTrackSection = determineNextFromPathInfo(dynamicSeparator, pathInfo)
 
-		// If separator not in PathInfo, return null (train should wait for proper reservation)
+		// If separator not in PathInfo, return OwnershipConflict (train should wait for proper reservation)
 		// Issue #296 Phase 8: Removed fallback mechanism - it returned wrong-direction blocks
 		if (nextTrackSection == null) {
 			logger.info {
 				"findReservedPathForTrain: separator $separator not in PathInfo, " +
-					"returning null (train should wait for new path reservation)"
+					"returning OwnershipConflict (train should wait for new path reservation)"
 			}
-			return null
+			return PathResult.OwnershipConflict
 		}
 
 		logger.trace {
@@ -115,7 +121,8 @@ class DefaultTrainNavigationService(
 			logger.debug {
 				"findReservedPathForTrain: no path found from $separator with direction $nextTrackSection"
 			}
-			return null
+			// No topological path = permanent condition
+			return PathResult.NoTopologicalPath
 		}
 
 		// Step 3.5: Handle path transitions (Issue #296 Phase 9)
@@ -152,7 +159,8 @@ class DefaultTrainNavigationService(
 					"findReservedPathForTrain: block $block is not reserved for train '$trainId' " +
 						"(owner: ${owner ?: "none"}), path not available"
 				}
-				return null // Block not owned by this train, return null (train waits)
+				// Block not owned by this train, return OwnershipConflict (train waits)
+				return PathResult.OwnershipConflict
 			}
 		}
 
@@ -161,7 +169,7 @@ class DefaultTrainNavigationService(
 			"findReservedPathForTrain: train '$trainId' owns all ${blocks.size} blocks in path, " +
 				"path length ${finalPath.length()}"
 		}
-		return finalPath
+		return PathResult.Available(finalPath)
 	}
 
 	override fun isPathReservedForTrain(
@@ -172,44 +180,16 @@ class DefaultTrainNavigationService(
 			"isPathReservedForTrain: checking availability for train '$trainId' from $separator"
 		}
 
-		// Step 1: Get PathInfo for this train (Issue #295/#296 Phase 5)
-		val pathInfo = registry.getPathInfo(trainId)
-		if (pathInfo == null) {
-			logger.trace { "isPathReservedForTrain: no PathInfo registered for train '$trainId'" }
-			return false
+		// Delegate to findReservedPathForTrain and check result type
+		val result = findReservedPathForTrain(trainId, separator)
+		val isAvailable = result is PathResult.Available
+
+		logger.trace {
+			val string = if (isAvailable) "IS" else "IS NOT"
+			"isPathReservedForTrain: path $string available for train '$trainId' (result: ${result::class.simpleName})"
 		}
 
-		// Step 2: Determine next track section from PathInfo
-		val dynamicSeparator = context.toDynamic(separator)
-		val nextTrackSection = determineNextFromPathInfo(dynamicSeparator, pathInfo)
-		if (nextTrackSection == null) {
-			logger.trace { "isPathReservedForTrain: cannot determine next track section from PathInfo" }
-			return false
-		}
-
-		// Step 3: Build path using known direction
-		val candidatePath = buildPathWithDirection(dynamicSeparator, nextTrackSection, pathInfo)
-		if (candidatePath == null) {
-			logger.trace { "isPathReservedForTrain: no path found with direction" }
-			return false
-		}
-
-		// Step 4: Extract blocks (reuse existing method)
-		val blocks = extractDynamicTrackBlocks(candidatePath)
-
-		// Step 5: Check ownership (early exit on first conflict)
-		for (block in blocks) {
-			val owner = registry.getOwner(block)
-			if (owner != trainId) {
-				logger.trace {
-					"isPathReservedForTrain: block $block not owned by train '$trainId' (owner: ${owner ?: "none"})"
-				}
-				return false // Early exit on first conflict
-			}
-		}
-
-		logger.trace { "isPathReservedForTrain: path IS available for train '$trainId'" }
-		return true
+		return isAvailable
 	}
 
 	/**
@@ -518,5 +498,20 @@ class DefaultTrainNavigationService(
 			"extractDynamicTrackBlocks: extracted ${seen.size} unique blocks from path with ${path.size} elements"
 		}
 		return seen.toList()
+	}
+
+	/**
+	 * Check if there is a topological continuation for the given separator.
+	 *
+	 * This method uses the TopologyNavigator to determine if there is a valid
+	 * next track block in the topology, starting from the given separator.
+	 *
+	 * @param separator The separator to check for topological continuation
+	 * @return True if there is a topological continuation, false otherwise
+	 */
+	private fun hasTopologicalContinuation(separator: PathSeparator): Boolean {
+		val navigator = context.getTopologyNavigator()
+		val nodeCell = (separator as? NodeCell) ?: CellUtilities.assertNodeCell(separator)
+		return navigator.getNextTrackBlock(nodeCell, null) != null
 	}
 }

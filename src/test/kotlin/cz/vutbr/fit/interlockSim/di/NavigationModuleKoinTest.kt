@@ -15,8 +15,8 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -78,9 +78,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
+			assertThat(path).isInstanceOf(PathResult.Available::class)
+
+			val pathElements = (path as PathResult.Available).path
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath = path!!.filterIsInstance<TrackSection>()
+			val blocksFromPath = pathElements.filterIsInstance<TrackSection>()
 				.map { it.getTrackBlock() }
 				.filterIsInstance<DynamicTrackBlock>()
 				.toSet()
@@ -91,7 +94,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train2 cannot get path (ownership isolation)
 			val pathForTrain2 = trainNavigationService.findReservedPathForTrain("train2", inOutA)
-			assertThat(pathForTrain2).isNull()
+			assertThat(pathForTrain2).isInstanceOf(PathResult.OwnershipConflict::class)
 		}
 	}
 
