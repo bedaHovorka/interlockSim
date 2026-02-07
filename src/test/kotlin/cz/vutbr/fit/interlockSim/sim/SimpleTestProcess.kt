@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
