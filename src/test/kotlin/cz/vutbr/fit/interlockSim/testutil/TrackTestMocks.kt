@@ -44,6 +44,17 @@
  * - Phase 3 (2026-02-05): MockTrackOccupant → createMockTrackOccupant(), remove class
  * - Phase 4 (2026-02-05): Consolidate 17 inline factories to central repository
  *
+ * ## File Size Management
+ *
+ * **Current:** 465 lines (15 factories)
+ * **Threshold:** 600 lines (split recommended above this)
+ * **Capacity:** ~5 more factories before split
+ *
+ * If file grows beyond 600 lines, consider splitting into:
+ * - `TrackFacilityMocks.kt` - Track, TrackBlock, TrackOccupant factories
+ * - `SemaphoreMocks.kt` - Semaphore, RailSemaphore, DynamicSemaphore factories
+ * - `NetworkElementMocks.kt` - Path, InOut, Switch, NodeCell factories
+ *
  * @since 2006/2007 (Original thesis project)
  * @see Issue #332 - MockK migration plan (Phases 1-4 complete)
  */

@@ -40,6 +40,23 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * - Follows existing LoopProcess patterns
  * - No modification of existing simulation classes
  *
+ * ## When to Use SimpleTestProcess vs ShuntingLoop
+ *
+ * **Use SimpleTestProcess when:**
+ * - Testing single train movement behavior in isolation
+ * - Need fine-grained control over train state observation
+ * - Want faster test execution (no queue management overhead)
+ *
+ * **Use ShuntingLoop when:**
+ * - Testing full interlocking system behavior
+ * - Need multiple trains with queuing logic
+ * - Validating dispatcher coordination patterns
+ * - Integration tests requiring vyhybna.xml fixture semantics
+ *
+ * **Note:** TrainMovementIntegrationTest currently uses ShuntingLoop approach
+ * because it validates end-to-end interlocking behavior. Future tests may migrate
+ * to SimpleTestProcess pattern for unit-level Train validation.
+ *
  * ## jDisco Process Lifecycle
  *
  * The Process lifecycle follows this pattern (from LoopProcess base class):
@@ -167,11 +184,20 @@ class SimpleTestProcess(
 		)
 
 	/**
-	 * Snapshot of train state at a specific simulation time.
+	 * Snapshot of train state at specific simulation time.
 	 *
-	 * @property velocity Train velocity in m/s
-	 * @property position Train front position in meters
-	 * @property terminated True if train has completed its journey
+	 * This data class provides a minimal, immutable view of train state for test assertions.
+	 * Additional state can be accessed directly via [SimpleTestProcess.train] property if needed.
+	 *
+	 * Future extensions should follow these principles:
+	 * - Add properties that are commonly asserted across multiple tests
+	 * - Keep properties immutable (val, not var)
+	 * - Document units (velocity in m/s, position in meters)
+	 * - Avoid exposing internal jDisco state (Process.time, Process.entity)
+	 *
+	 * @property velocity Current train velocity in meters per second (≥ 0.0)
+	 * @property position Current position along track in meters (≥ 0.0)
+	 * @property terminated Whether train process has terminated (true = done)
 	 */
 	data class TrainState(
 		val velocity: Double,
