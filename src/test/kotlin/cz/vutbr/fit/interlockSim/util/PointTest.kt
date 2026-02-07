@@ -86,7 +86,9 @@ class PointTest {
 		val p2: Point,
 		val expected: Double,
 		val description: String
-	)
+	) {
+		override fun toString(): String = description
+	}
 
 	companion object {
 		/**
