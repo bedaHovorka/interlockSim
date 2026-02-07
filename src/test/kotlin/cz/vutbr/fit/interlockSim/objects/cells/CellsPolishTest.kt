@@ -27,6 +27,10 @@ import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.ValueSource
 
 /**
  * Test coverage polish for cells package - targeting 85%+ coverage.
@@ -120,17 +124,15 @@ class CellsPolishTest {
 			assertThat(r2d(3.0f)).isEqualTo(5)
 		}
 
-		@Test
-		fun `d2r and r2d are inverse operations`() {
+		@ParameterizedTest(name = "d2r(r2d({0})) = {0}")
+		@ValueSource(ints = [-5, -1, 0, 1, 5, 10])
+		fun `d2r and r2d are inverse operations`(d: Int) {
 			// Round-trip conversion should preserve values
-			val testValues = listOf(-5, -1, 0, 1, 5, 10)
-			for (d in testValues) {
-				val converted = d2r(d)
-				val roundTripped = r2d(converted)
-				assertThat(roundTripped)
-					.withMessage("Round-trip conversion for d=$d")
-					.isEqualTo(d)
-			}
+			val converted = d2r(d)
+			val roundTripped = r2d(converted)
+			assertThat(roundTripped)
+				.withMessage("Round-trip conversion for d=$d")
+				.isEqualTo(d)
 		}
 	}
 
@@ -189,32 +191,16 @@ class CellsPolishTest {
 	@Nested
 	@DisplayName("OrientedNodeCell - Direction Edge Cases")
 	inner class OrientedNodeCellDirectionTests {
-		@Test
-		fun `direction returns correct segment for HORIZONTAL orientation true`() {
-			// HORIZONTAL segments: [F, A], orientation=true -> index 1 -> A
-			val cell = InOut("test", true, SpatialType.HORIZONTAL)
-			assertThat(cell.direction()).isEqualTo(Segment.A)
-		}
-
-		@Test
-		fun `direction returns correct segment for HORIZONTAL orientation false`() {
-			// HORIZONTAL segments: [F, A], orientation=false -> index 0 -> F
-			val cell = InOut("test", false, SpatialType.HORIZONTAL)
-			assertThat(cell.direction()).isEqualTo(Segment.F)
-		}
-
-		@Test
-		fun `direction returns correct segment for VERTICAL orientation true`() {
-			// VERTICAL segments: [H, C], orientation=true -> index 1 -> C
-			val cell = InOut("test", true, SpatialType.VERTICAL)
-			assertThat(cell.direction()).isEqualTo(Segment.C)
-		}
-
-		@Test
-		fun `direction returns correct segment for VERTICAL orientation false`() {
-			// VERTICAL segments: [H, C], orientation=false -> index 0 -> H
-			val cell = InOut("test", false, SpatialType.VERTICAL)
-			assertThat(cell.direction()).isEqualTo(Segment.H)
+		@ParameterizedTest(name = "{0} orientation={1} → {2}")
+		@CsvSource(
+			"HORIZONTAL, true, A",
+			"HORIZONTAL, false, F",
+			"VERTICAL, true, C",
+			"VERTICAL, false, H"
+		)
+		fun `direction returns correct segment`(spatialType: SpatialType, orientation: Boolean, expected: Segment) {
+			val cell = InOut("test", orientation, spatialType)
+			assertThat(cell.direction()).isEqualTo(expected)
 		}
 	}
 
@@ -275,33 +261,29 @@ class CellsPolishTest {
 			assertThat(transformed.x).isNotEqualTo(center.x)
 		}
 
-		@Test
-		fun `anti returns opposite segment`() {
-			assertThat(anti(Segment.A)).isEqualTo(Segment.F)
-			assertThat(anti(Segment.B)).isEqualTo(Segment.G)
-			assertThat(anti(Segment.C)).isEqualTo(Segment.H)
-			assertThat(anti(Segment.D)).isEqualTo(Segment.E)
+		@ParameterizedTest(name = "anti({0}) = {1}")
+		@CsvSource("A, F", "B, G", "C, H", "D, E")
+		fun `anti returns opposite segment`(input: Segment, expected: Segment) {
+			assertThat(anti(input)).isEqualTo(expected)
 		}
 
-		@Test
-		fun `anti is reflexive`() {
-			for (segment in Segment.values()) {
-				assertThat(anti(anti(segment)))
-					.withMessage("anti(anti($segment)) should equal $segment")
-					.isEqualTo(segment)
-			}
+		@ParameterizedTest(name = "anti(anti({0})) = {0}")
+		@EnumSource(Segment::class)
+		fun `anti is reflexive`(segment: Segment) {
+			assertThat(anti(anti(segment)))
+				.withMessage("anti(anti($segment)) should equal $segment")
+				.isEqualTo(segment)
 		}
 	}
 
 	@Nested
 	@DisplayName("RailSemaphore Edge Cases")
 	inner class RailSemaphoreEdgeCases {
-		@Test
-		fun `RailSemaphore with all spatial types`() {
-			for (spatialType in SpatialType.values()) {
-				val semaphore = RailSemaphore(true, spatialType)
-				assertThat(semaphore.getSpatialType()).isEqualTo(spatialType)
-			}
+		@ParameterizedTest(name = "RailSemaphore with {0}")
+		@EnumSource(SpatialType::class)
+		fun `RailSemaphore with all spatial types`(spatialType: SpatialType) {
+			val semaphore = RailSemaphore(true, spatialType)
+			assertThat(semaphore.getSpatialType()).isEqualTo(spatialType)
 		}
 
 		@Test

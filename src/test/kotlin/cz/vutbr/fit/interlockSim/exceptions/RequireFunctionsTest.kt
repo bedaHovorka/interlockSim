@@ -26,6 +26,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 
 /**
  * Unit tests for RequireFunctions utility validation functions.
@@ -122,36 +124,15 @@ class RequireFunctionsTest : KoinTestBase() {
 			requireSimulation(true, Severity.ERROR) { "Should not be thrown" }
 		}
 
-		@Test
-		fun `throws SimulationException with FATAL severity`() {
+		@ParameterizedTest(name = "severity {0}")
+		@EnumSource(Severity::class, names = ["FATAL", "ERROR", "WARN"])
+		fun `throws SimulationException with correct severity`(severity: Severity) {
 			// Act & Assert
 			assertFailure {
-				requireSimulation(false, Severity.FATAL) { "Fatal error" }
+				requireSimulation(false, severity) { "$severity message" }
 			}.isInstanceOf<SimulationException>().all {
-				hasMessage("Fatal error")
-				prop(SimulationException::severity).isEqualTo(Severity.FATAL)
-			}
-		}
-
-		@Test
-		fun `throws SimulationException with ERROR severity`() {
-			// Act & Assert
-			assertFailure {
-				requireSimulation(false, Severity.ERROR) { "Error message" }
-			}.isInstanceOf<SimulationException>().all {
-				hasMessage("Error message")
-				prop(SimulationException::severity).isEqualTo(Severity.ERROR)
-			}
-		}
-
-		@Test
-		fun `throws SimulationException with WARN severity`() {
-			// Act & Assert
-			assertFailure {
-				requireSimulation(false, Severity.WARN) { "Warning message" }
-			}.isInstanceOf<SimulationException>().all {
-				hasMessage("Warning message")
-				prop(SimulationException::severity).isEqualTo(Severity.WARN)
+				hasMessage("$severity message")
+				prop(SimulationException::severity).isEqualTo(severity)
 			}
 		}
 
@@ -328,36 +309,15 @@ class RequireFunctionsTest : KoinTestBase() {
 			requireEditor(true, Severity.ERROR) { "Should not be thrown" }
 		}
 
-		@Test
-		fun `throws EditorException with FATAL severity`() {
+		@ParameterizedTest(name = "severity {0}")
+		@EnumSource(Severity::class, names = ["FATAL", "ERROR", "WARN"])
+		fun `throws EditorException with correct severity`(severity: Severity) {
 			// Act & Assert
 			assertFailure {
-				requireEditor(false, Severity.FATAL) { "Fatal editor error" }
+				requireEditor(false, severity) { "$severity editor message" }
 			}.isInstanceOf<EditorException>().all {
-				hasMessage("Fatal editor error")
-				prop(EditorException::severity).isEqualTo(Severity.FATAL)
-			}
-		}
-
-		@Test
-		fun `throws EditorException with ERROR severity`() {
-			// Act & Assert
-			assertFailure {
-				requireEditor(false, Severity.ERROR) { "Editor error" }
-			}.isInstanceOf<EditorException>().all {
-				hasMessage("Editor error")
-				prop(EditorException::severity).isEqualTo(Severity.ERROR)
-			}
-		}
-
-		@Test
-		fun `throws EditorException with WARN severity`() {
-			// Act & Assert
-			assertFailure {
-				requireEditor(false, Severity.WARN) { "Editor warning" }
-			}.isInstanceOf<EditorException>().all {
-				hasMessage("Editor warning")
-				prop(EditorException::severity).isEqualTo(Severity.WARN)
+				hasMessage("$severity editor message")
+				prop(EditorException::severity).isEqualTo(severity)
 			}
 		}
 
