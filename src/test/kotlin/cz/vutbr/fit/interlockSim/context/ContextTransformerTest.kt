@@ -644,7 +644,7 @@ class ContextTransformerTest : KoinTestBase() {
 				(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
 					// Arrange - Load vyhybna.xml which creates EditingContext
 					simulationContextFactory.createContext(editingContext).use { simulationContext ->
-					val graph = simulationContext.getGraph()
+						val graph = simulationContext.getGraph()
 
 						// Assert - All graph entries are DynamicTrackBlock
 						assertThat(graph.size()).isGreaterThan(0)

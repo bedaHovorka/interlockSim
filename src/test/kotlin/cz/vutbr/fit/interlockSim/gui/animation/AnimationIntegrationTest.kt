@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
@@ -54,7 +53,6 @@ import javax.swing.SwingUtilities
  */
 @Tag("integration-test")
 class AnimationIntegrationTest : KoinTestBase() {
-
 	private lateinit var simulationContext: SimulationContext
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
@@ -145,10 +143,12 @@ class AnimationIntegrationTest : KoinTestBase() {
 
 		// When: Rendering a track block part cell
 		val grid = simulationContext.getRailWayNetGrid()
-		val firstTrackBlockPart = grid.asSequence()
-			.map { it.value }
-			.filterIsInstance<TrackBlockPart>()
-			.firstOrNull()
+		val firstTrackBlockPart =
+			grid
+				.asSequence()
+				.map { it.value }
+				.filterIsInstance<TrackBlockPart>()
+				.firstOrNull()
 
 		assertThat(firstTrackBlockPart).isNotNull()
 

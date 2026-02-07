@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
@@ -57,10 +56,11 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 	@DisplayName("createInOutWorker returns InOutWorker")
 	fun createInOutWorkerReturnsInOutWorker() {
 		// Arrange - Create a context with a properly connected InOut
-		val context = cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
-			inOutName = "TestInOut",
-			isEntry = true
-		)
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
+				inOutName = "TestInOut",
+				isEntry = true
+			)
 		val inOut = context.getInOuts().first()
 
 		// Act

@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test
  */
 @Tag("integration-test")
 class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
-
 	private var context: SimulationContext? = null
 
 	@AfterEach
@@ -95,13 +94,17 @@ class FrameAnimationCleanupIntegrationTest : AbstractFrameTestBase() {
 	// Helper to get registered listeners via reflection
 	private fun getListeners(context: SimulationContext): List<Any> {
 		// Unwrap MockSimulationContext to get BaseContext
-		val actualContext: Any = if (context is cz.vutbr.fit.interlockSim.testutil.MockSimulationContext) {
-			val delegateField = cz.vutbr.fit.interlockSim.testutil.MockSimulationContext::class.java.getDeclaredField("delegate")
-			delegateField.isAccessible = true
-			delegateField.get(context)
-		} else {
-			context
-		}
+		val actualContext: Any =
+			if (context is cz.vutbr.fit.interlockSim.testutil.MockSimulationContext) {
+				val delegateField =
+					cz.vutbr.fit.interlockSim.testutil.MockSimulationContext::class.java.getDeclaredField(
+						"delegate"
+					)
+				delegateField.isAccessible = true
+				delegateField.get(context)
+			} else {
+				context
+			}
 
 		val field = actualContext.javaClass.superclass.getDeclaredField("changeSupport")
 		field.isAccessible = true

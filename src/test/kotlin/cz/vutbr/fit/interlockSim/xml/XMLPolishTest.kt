@@ -44,7 +44,6 @@ class XMLPolishTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Nested Net Elements - Error Handling")
 	inner class NestedNetElementTests {
-
 		@Test
 		fun `nested net elements throw exception`() {
 			val xml = """<?xml version="1.0"?>

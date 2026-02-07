@@ -26,7 +26,6 @@ import java.awt.Color
  * @since 2026-01-22 (Issue #202)
  */
 class AnimationColorsTest {
-
 	// ========== Track State Color Tests ==========
 
 	@Test

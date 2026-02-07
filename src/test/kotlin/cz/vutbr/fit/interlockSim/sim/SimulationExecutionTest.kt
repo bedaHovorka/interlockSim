@@ -384,7 +384,7 @@ class SimulationExecutionTest : KoinTestBase() {
 		fun `train passivates when path unavailable without stopping simulation`() {
 			// Arrange
 			val context = createVyhybnaContext()
-			val endTime = 60L  // 60 seconds simulation time (ensures multiple trains generated)
+			val endTime = 60L // 60 seconds simulation time (ensures multiple trains generated)
 			val shuntingLoop = ShuntingLoop(context, endTime)
 			context.setMainProcess(shuntingLoop)
 
@@ -445,7 +445,7 @@ class SimulationExecutionTest : KoinTestBase() {
 		fun `multiple trains can passivate and resume independently`() {
 			// Arrange
 			val context = createVyhybnaContext()
-			val endTime = 60L  // 60 seconds for multiple train interactions
+			val endTime = 60L // 60 seconds for multiple train interactions
 			val shuntingLoop = ShuntingLoop(context, endTime)
 			context.setMainProcess(shuntingLoop)
 

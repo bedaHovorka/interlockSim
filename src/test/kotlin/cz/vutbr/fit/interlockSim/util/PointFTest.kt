@@ -22,7 +22,6 @@ import kotlin.math.sqrt
  * Tests floating-point coordinate handling and conversion methods.
  */
 class PointFTest {
-
 	@Test
 	fun testConstruction() {
 		val point = PointF(1.5f, 2.7f)

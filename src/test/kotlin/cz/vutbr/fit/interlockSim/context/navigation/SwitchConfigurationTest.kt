@@ -50,19 +50,18 @@ import java.io.File
  * @since Issue #300
  */
 class SwitchConfigurationTest : KoinTestBase() {
-
 	private lateinit var context: SimulationContext
 	private val processFactory by inject<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
 
 	// Grid elements (from vyhybna.xml)
-	private lateinit var vA: DynamicRailSwitch  // at (15,8)
-	private lateinit var vB: DynamicRailSwitch  // at (26,8)
-	private lateinit var zA: DynamicRailSemaphore  // at (14,8)
-	private lateinit var doA1: DynamicRailSemaphore  // at (16,8) - main route from vA
-	private lateinit var doA2: DynamicRailSemaphore  // at (17,9) - branch route from vA
-	private lateinit var doB1: DynamicRailSemaphore  // at (25,8) - main route to vB
-	private lateinit var doB2: DynamicRailSemaphore  // at (24,9) - branch route to vB
-	private lateinit var zB: DynamicRailSemaphore  // at (27,8)
+	private lateinit var vA: DynamicRailSwitch // at (15,8)
+	private lateinit var vB: DynamicRailSwitch // at (26,8)
+	private lateinit var zA: DynamicRailSemaphore // at (14,8)
+	private lateinit var doA1: DynamicRailSemaphore // at (16,8) - main route from vA
+	private lateinit var doA2: DynamicRailSemaphore // at (17,9) - branch route from vA
+	private lateinit var doB1: DynamicRailSemaphore // at (25,8) - main route to vB
+	private lateinit var doB2: DynamicRailSemaphore // at (24,9) - branch route to vB
+	private lateinit var zB: DynamicRailSemaphore // at (27,8)
 
 	@BeforeEach
 	fun setUp() {
@@ -87,10 +86,18 @@ class SwitchConfigurationTest : KoinTestBase() {
 	/**
 	 * Get element from grid by coordinates (same pattern as ShuntingLoop).
 	 */
-	private fun <T : Cell> elementAt(context: SimulationContext, clazz: Class<T>, x: Int, y: Int): T {
-		val point = cz.vutbr.fit.interlockSim.util.Point(x, y)
-		val cell = context.getRailWayNetGrid()[point]
-			?: throw IllegalArgumentException("No cell at ($x, $y)")
+	private fun <T : Cell> elementAt(
+		context: SimulationContext,
+		clazz: Class<T>,
+		x: Int,
+		y: Int
+	): T {
+		val point =
+			cz.vutbr.fit.interlockSim.util
+				.Point(x, y)
+		val cell =
+			context.getRailWayNetGrid()[point]
+				?: throw IllegalArgumentException("No cell at ($x, $y)")
 		return Util.assertInstanceOf(clazz, cell)
 	}
 
@@ -146,15 +153,17 @@ class SwitchConfigurationTest : KoinTestBase() {
 		var oldValue: RailSwitch.Conf? = null
 		var newValue: RailSwitch.Conf? = null
 
-		vA.addPropertyChangeListener(object : PropertyChangeListener {
-			override fun propertyChange(evt: PropertyChangeEvent?) {
-				if (evt?.propertyName == "conf") {
-					eventFired = true
-					oldValue = evt.oldValue as? RailSwitch.Conf
-					newValue = evt.newValue as? RailSwitch.Conf
+		vA.addPropertyChangeListener(
+			object : PropertyChangeListener {
+				override fun propertyChange(evt: PropertyChangeEvent?) {
+					if (evt?.propertyName == "conf") {
+						eventFired = true
+						oldValue = evt.oldValue as? RailSwitch.Conf
+						newValue = evt.newValue as? RailSwitch.Conf
+					}
 				}
 			}
-		})
+		)
 
 		// Get PathReservationService
 		val pathService = context.getPathReservationService()
@@ -228,13 +237,15 @@ class SwitchConfigurationTest : KoinTestBase() {
 		// Count PropertyChangeEvents for "conf" property
 		var confChangeCount = 0
 
-		vA.addPropertyChangeListener(object : PropertyChangeListener {
-			override fun propertyChange(evt: PropertyChangeEvent?) {
-				if (evt?.propertyName == "conf") {
-					confChangeCount++
+		vA.addPropertyChangeListener(
+			object : PropertyChangeListener {
+				override fun propertyChange(evt: PropertyChangeEvent?) {
+					if (evt?.propertyName == "conf") {
+						confChangeCount++
+					}
 				}
 			}
-		})
+		)
 
 		// Get PathReservationService
 		val pathService = context.getPathReservationService()

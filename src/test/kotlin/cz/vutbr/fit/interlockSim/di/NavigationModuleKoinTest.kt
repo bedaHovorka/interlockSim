@@ -15,7 +15,6 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
@@ -77,10 +76,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath = path!!.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-				.toSet()
+			val blocksFromPath =
+				path!!
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+					.toSet()
 
 			// Compare with blocks from PathReservationService (should be identical)
 			val blocksFromReservation = blocks.toSet()

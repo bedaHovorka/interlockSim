@@ -54,21 +54,21 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml().use { stream ->
 				val context = factory.createContext(stream) as DefaultSimulationContext
 
-			// Initialize dynamic wrappers for InOuts
-			val dynamicInOuts = context.getInOuts()
-			assertThat(dynamicInOuts).isNotNull()
+				// Initialize dynamic wrappers for InOuts
+				val dynamicInOuts = context.getInOuts()
+				assertThat(dynamicInOuts).isNotNull()
 
-			// Get a dynamic InOut (these are guaranteed to be registered)
-			val dynamicInOut = dynamicInOuts.first()
-			val staticInOut = dynamicInOut.staticRef
+				// Get a dynamic InOut (these are guaranteed to be registered)
+				val dynamicInOut = dynamicInOuts.first()
+				val staticInOut = dynamicInOut.staticRef
 
-			// Get the InOut's in semaphore (also registered)
-			val staticInSemaphore = staticInOut.getInSemaphore()
-			val dynamicSemaphore = context.toDynamic(staticInSemaphore)
-			assertThat(dynamicSemaphore).isInstanceOf(DynamicPathSeparator::class)
+				// Get the InOut's in semaphore (also registered)
+				val staticInSemaphore = staticInOut.getInSemaphore()
+				val dynamicSemaphore = context.toDynamic(staticInSemaphore)
+				assertThat(dynamicSemaphore).isInstanceOf(DynamicPathSeparator::class)
 
-			// Act - call toDynamic on already-dynamic separator
-			val result = context.toDynamic(dynamicSemaphore)
+				// Act - call toDynamic on already-dynamic separator
+				val result = context.toDynamic(dynamicSemaphore)
 
 				// Assert - should return same instance (identity function)
 				assertThat(result).isSameInstanceAs(dynamicSemaphore)
@@ -136,33 +136,33 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml().use { stream ->
 				val context = factory.createContext(stream) as DefaultSimulationContext
 
-			// Act - Trigger InOut initialization by calling getInOuts()
-			val dynamicInOuts = context.getInOuts()
+				// Act - Trigger InOut initialization by calling getInOuts()
+				val dynamicInOuts = context.getInOuts()
 
-			// Assert - InOut cells and their semaphores should be convertible
-			var testedInOuts = 0
-			var testedSemaphores = 0
+				// Assert - InOut cells and their semaphores should be convertible
+				var testedInOuts = 0
+				var testedSemaphores = 0
 
-			for (inOut in dynamicInOuts) {
-				// Test InOut itself
-				val dynamicInOut = context.toDynamic(inOut.staticRef)
-				assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
-				testedInOuts++
+				for (inOut in dynamicInOuts) {
+					// Test InOut itself
+					val dynamicInOut = context.toDynamic(inOut.staticRef)
+					assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
+					testedInOuts++
 
-				// Test InOut's semaphores (these are registered by getInOuts())
-				val staticInSem = inOut.staticRef.getInSemaphore()
-				val staticOutSem = inOut.staticRef.getOutSemaphore()
+					// Test InOut's semaphores (these are registered by getInOuts())
+					val staticInSem = inOut.staticRef.getInSemaphore()
+					val staticOutSem = inOut.staticRef.getOutSemaphore()
 
-				val dynamicInSem = context.toDynamic(staticInSem)
-				assertThat(dynamicInSem).isInstanceOf(DynamicPathSeparator::class)
-				assertThat(dynamicInSem).isInstanceOf(DynamicRailSemaphore::class)
-				testedSemaphores++
+					val dynamicInSem = context.toDynamic(staticInSem)
+					assertThat(dynamicInSem).isInstanceOf(DynamicPathSeparator::class)
+					assertThat(dynamicInSem).isInstanceOf(DynamicRailSemaphore::class)
+					testedSemaphores++
 
-				val dynamicOutSem = context.toDynamic(staticOutSem)
-				assertThat(dynamicOutSem).isInstanceOf(DynamicPathSeparator::class)
-				assertThat(dynamicOutSem).isInstanceOf(DynamicRailSemaphore::class)
-				testedSemaphores++
-			}
+					val dynamicOutSem = context.toDynamic(staticOutSem)
+					assertThat(dynamicOutSem).isInstanceOf(DynamicPathSeparator::class)
+					assertThat(dynamicOutSem).isInstanceOf(DynamicRailSemaphore::class)
+					testedSemaphores++
+				}
 
 				// Verify we tested InOuts and their semaphores
 				assertThat(testedInOuts).isNotNull()
@@ -181,16 +181,16 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml().use { stream ->
 				val context = factory.createContext(stream) as DefaultSimulationContext
 
-			// Act - Trigger initialization
-			val dynamicInOuts = context.getInOuts()
+				// Act - Trigger initialization
+				val dynamicInOuts = context.getInOuts()
 
-			// Assert - InOut semaphores should be convertible
-			for (dynamicInOut in dynamicInOuts) {
-				val staticInOut = dynamicInOut.staticRef
+				// Assert - InOut semaphores should be convertible
+				for (dynamicInOut in dynamicInOuts) {
+					val staticInOut = dynamicInOut.staticRef
 
-				// Convert InOut's semaphores
-				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
-				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
+					// Convert InOut's semaphores
+					val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
+					val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
 
 					assertThat(inSemaphore).isInstanceOf(DynamicPathSeparator::class)
 					assertThat(outSemaphore).isInstanceOf(DynamicPathSeparator::class)
@@ -209,14 +209,14 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 				val context = factory.createContext(stream) as DefaultSimulationContext
 				context.getInOuts()
 
-			// Get a static semaphore - use first InOut's in semaphore for reliability
-			val dynamicInOut = context.getInOuts().first()
-			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
+				// Get a static semaphore - use first InOut's in semaphore for reliability
+				val dynamicInOut = context.getInOuts().first()
+				val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
 
-			// Act - call toDynamic multiple times
-			val dynamic1 = context.toDynamic(staticSemaphore)
-			val dynamic2 = context.toDynamic(staticSemaphore)
-			val dynamic3 = context.toDynamic(staticSemaphore)
+				// Act - call toDynamic multiple times
+				val dynamic1 = context.toDynamic(staticSemaphore)
+				val dynamic2 = context.toDynamic(staticSemaphore)
+				val dynamic3 = context.toDynamic(staticSemaphore)
 
 				// Assert - all should be the same instance
 				assertThat(dynamic2).isSameInstanceAs(dynamic1)

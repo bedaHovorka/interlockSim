@@ -101,10 +101,11 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	 */
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()
-		val context = Util.assertInstanceOf(
-			DefaultSimulationContext::class.java,
-			factory.createContext(File(VYHYBNA_XML_PATH))
-		)
+		val context =
+			Util.assertInstanceOf(
+				DefaultSimulationContext::class.java,
+				factory.createContext(File(VYHYBNA_XML_PATH))
+			)
 
 		// Initialize dynamic wrapper map by calling getInOuts()
 		context.getInOuts()
@@ -367,9 +368,10 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			assertThat(pathsBtoA.size).isEqualTo(2)
 
 			// Verify paths use different blocks
-			val pathAtoB_blocks = pathsAtoB.map { path ->
-				path.mapNotNull { it.getTrackBlock() }.toSet()
-			}
+			val pathAtoB_blocks =
+				pathsAtoB.map { path ->
+					path.mapNotNull { it.getTrackBlock() }.toSet()
+				}
 			logger.info { "Path 0 A→B blocks: ${pathAtoB_blocks[0].map { it.name }}" }
 			logger.info { "Path 1 A→B blocks: ${pathAtoB_blocks[1].map { it.name }}" }
 
@@ -377,12 +379,14 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			assertThat(pathAtoB_blocks[0]).isNotEqualTo(pathAtoB_blocks[1])
 
 			// Verify one path uses k1, one uses k2 (explicit block name validation)
-			val hasK1Path = pathAtoB_blocks.any { blocks ->
-				blocks.any { it.name?.contains("k1") == true }
-			}
-			val hasK2Path = pathAtoB_blocks.any { blocks ->
-				blocks.any { it.name?.contains("k2") == true }
-			}
+			val hasK1Path =
+				pathAtoB_blocks.any { blocks ->
+					blocks.any { it.name?.contains("k1") == true }
+				}
+			val hasK2Path =
+				pathAtoB_blocks.any { blocks ->
+					blocks.any { it.name?.contains("k2") == true }
+				}
 			assertThat(hasK1Path, name = "Expected path using k1 blocks").isTrue()
 			assertThat(hasK2Path, name = "Expected path using k2 blocks").isTrue()
 
@@ -547,4 +551,3 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		}
 	}
 }
-

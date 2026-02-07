@@ -279,9 +279,10 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments returns correct segments for MAIN configuration`() {
 		// HORIZONTAL SIMPLE_LEFT_FALSE: MAIN direction is A-F (left-right)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+			)
 
 		// Initial configuration is MAIN
 		val segments = switch.getActiveSegments()
@@ -294,9 +295,10 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments returns correct segments for BRANCH configuration`() {
 		// HORIZONTAL SIMPLE_LEFT_FALSE: BRANCH direction is A-E (merging=A, branch=E)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+			)
 
 		// Change to BRANCH
 		switch.changeConf()
@@ -309,9 +311,10 @@ class DynamicRailSwitchTest {
 
 	@Test
 	fun `getActiveSegments updates after changeConf`() {
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_FALSE)
+			)
 
 		// Initially MAIN (A-F)
 		val mainSegments = switch.getActiveSegments()
@@ -331,9 +334,10 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments works for VERTICAL spatial type`() {
 		// VERTICAL SIMPLE_RIGHT_TRUE: MAIN direction is C-H (top-bottom)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.VERTICAL, Type.SIMPLE_RIGHT_TRUE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.VERTICAL, Type.SIMPLE_RIGHT_TRUE)
+			)
 
 		// MAIN configuration
 		val mainSegments = switch.getActiveSegments()
@@ -352,9 +356,10 @@ class DynamicRailSwitchTest {
 		// HORIZONTAL SIMPLE_RIGHT_FALSE:
 		// - MAIN configuration: straight route between A (left) and F (right)
 		// - BRANCH configuration: diverging route between A (common/merging) and G (right-bottom branch)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_FALSE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_FALSE)
+			)
 
 		// MAIN configuration: path A-F
 		val mainSegments = switch.getActiveSegments()
@@ -369,9 +374,10 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments works for SIMPLE_LEFT_TRUE type`() {
 		// HORIZONTAL SIMPLE_LEFT_TRUE: branch=D (left-bottom)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_TRUE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_LEFT_TRUE)
+			)
 
 		// MAIN configuration (A-F for horizontal)
 		val mainSegments = switch.getActiveSegments()
@@ -386,9 +392,10 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments works for SIMPLE_RIGHT_TRUE type`() {
 		// HORIZONTAL SIMPLE_RIGHT_TRUE: branch=B (left-top)
-		val switch = DynamicRailSwitch(
-			RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_TRUE)
-		)
+		val switch =
+			DynamicRailSwitch(
+				RailSwitch(Cell.SpatialType.HORIZONTAL, Type.SIMPLE_RIGHT_TRUE)
+			)
 
 		// MAIN configuration (A-F for horizontal)
 		val mainSegments = switch.getActiveSegments()
@@ -403,17 +410,19 @@ class DynamicRailSwitchTest {
 	@Test
 	fun `getActiveSegments returns exactly 2 segments`() {
 		// All switch configurations should return exactly 2 segments
-		val switchTypes = listOf(
-			Type.SIMPLE_LEFT_FALSE,
-			Type.SIMPLE_LEFT_TRUE,
-			Type.SIMPLE_RIGHT_FALSE,
-			Type.SIMPLE_RIGHT_TRUE
-		)
+		val switchTypes =
+			listOf(
+				Type.SIMPLE_LEFT_FALSE,
+				Type.SIMPLE_LEFT_TRUE,
+				Type.SIMPLE_RIGHT_FALSE,
+				Type.SIMPLE_RIGHT_TRUE
+			)
 
 		for (type in switchTypes) {
-			val switch = DynamicRailSwitch(
-				RailSwitch(Cell.SpatialType.HORIZONTAL, type)
-			)
+			val switch =
+				DynamicRailSwitch(
+					RailSwitch(Cell.SpatialType.HORIZONTAL, type)
+				)
 
 			// Test MAIN configuration
 			assertThat(switch.getActiveSegments()).hasSize(2)

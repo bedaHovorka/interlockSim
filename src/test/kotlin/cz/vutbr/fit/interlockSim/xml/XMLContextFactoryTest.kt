@@ -24,10 +24,10 @@ import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.exists
@@ -240,6 +240,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			var hasInOut = false
 			var hasSwitch = false
 			var hasSemaphore = false
+
 			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
 			// Cast to Cell grid to iterate without ClassCastException
 			@Suppress("UNCHECKED_CAST")
@@ -833,6 +834,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			endY: Int
 		): List<RailSemaphore> {
 			val signals = mutableListOf<RailSemaphore>()
+
 			// Phase 6: Grid is typed as RailwayNetGrid<NodeCell> but internally contains Cell (NodeCell + TrackBlockPart)
 			// Cast to Cell grid to access all cells without ClassCastException
 			@Suppress("UNCHECKED_CAST")
@@ -1044,7 +1046,11 @@ class XMLContextFactoryTest : KoinTestBase() {
 		/**
 		 * Reuses the existPath method from ValidXMLParsingTests for connectivity checking.
 		 */
-		private fun existPath(from: InOut, to: InOut, context: DefaultEditingContext): Boolean {
+		private fun existPath(
+			from: InOut,
+			to: InOut,
+			context: DefaultEditingContext
+		): Boolean {
 			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
 			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
 			if (fromLoc == toLoc) return true
@@ -1150,7 +1156,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		fun saveContext_withEmptyNames_omitsNameAttribute() {
 			val context = editingContextFactory.createEmptyContext()
 			val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			semaphore.setName("")  // Explicitly set empty name
+			semaphore.setName("") // Explicitly set empty name
 			context.putCell(Point(10, 10), semaphore)
 			val inOut1 = InOut("entry", true, Cell.SpatialType.HORIZONTAL)
 			val inOut2 = InOut("exit", false, Cell.SpatialType.HORIZONTAL)

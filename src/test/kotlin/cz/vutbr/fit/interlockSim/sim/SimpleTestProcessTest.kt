@@ -47,7 +47,6 @@ import org.junit.jupiter.api.Test
 @Tag("integration-test")
 @DisplayName("SimpleTestProcess Unit Tests")
 class SimpleTestProcessTest : KoinTestBase() {
-
 	private lateinit var context: DefaultSimulationContext
 
 	@AfterEach

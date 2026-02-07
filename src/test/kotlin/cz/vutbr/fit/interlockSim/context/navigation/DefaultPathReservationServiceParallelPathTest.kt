@@ -10,11 +10,11 @@ import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Integration tests for parallel path discovery in [DefaultPathReservationService].
@@ -105,11 +105,12 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@Test
 	fun `second train blocked when first train occupies shared entry from InOut A`() {
 		// Act: Train1 reserves to next semaphore via Block 9
-		val train1Result = pathReservationService.reservePathToAnyNextSemaphore(
-			trainId = "train1",
-			start = inOutA,
-			next = nextFromA
-		)
+		val train1Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				trainId = "train1",
+				start = inOutA,
+				next = nextFromA
+			)
 
 		// Assert: Train1 succeeds
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -119,11 +120,12 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 		println("Train1 reserved ${train1Blocks.size} blocks")
 
 		// Act: Train2 tries to reserve to next semaphore - should fail because shared entry blocked
-		val train2Result = pathReservationService.reservePathToAnyNextSemaphore(
-			trainId = "train2",
-			start = inOutA,
-			next = nextFromA
-		)
+		val train2Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				trainId = "train2",
+				start = inOutA,
+				next = nextFromA
+			)
 
 		// Assert: Train2 fails because shared entry (Block 9) is occupied by Train1
 		assertThat(train2Result).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
@@ -150,26 +152,35 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@Test
 	fun `path can be reserved after proper release`() {
 		// Reserve path for Train1
-		val train1Result = pathReservationService.reservePathToAnyNextSemaphore(
-			"train1", inOutA, nextFromA
-		)
+		val train1Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				"train1",
+				inOutA,
+				nextFromA
+			)
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		val train1Blocks = (train1Result as PathReservationService.ReservationResult.Success).reservedBlocks
 
 		// Verify Train2 is blocked (shared entry occupied)
-		val train2BlockedResult = pathReservationService.reservePathToAnyNextSemaphore(
-			"train2", inOutA, nextFromA
-		)
+		val train2BlockedResult =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				"train2",
+				inOutA,
+				nextFromA
+			)
 		assertThat(train2BlockedResult).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 
 		// Release Train1's reservation properly
 		pathReservationService.releasePath("train1")
 
 		// Now Train2 should succeed
-		val train2Result = pathReservationService.reservePathToAnyNextSemaphore(
-			"train2", inOutA, nextFromA
-		)
+		val train2Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				"train2",
+				inOutA,
+				nextFromA
+			)
 		assertThat(train2Result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 	}
 
@@ -184,14 +195,20 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 	@Test
 	fun `trains from opposite directions can reserve independently`() {
 		// Act: Train1 from InOut A → next semaphore
-		val train1Result = pathReservationService.reservePathToAnyNextSemaphore(
-			"train1", inOutA, nextFromA
-		)
+		val train1Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				"train1",
+				inOutA,
+				nextFromA
+			)
 
 		// Act: Train2 from InOut B → next semaphore (opposite direction)
-		val train2Result = pathReservationService.reservePathToAnyNextSemaphore(
-			"train2", inOutB, nextFromB
-		)
+		val train2Result =
+			pathReservationService.reservePathToAnyNextSemaphore(
+				"train2",
+				inOutB,
+				nextFromB
+			)
 
 		// Assert: Both succeed - independent entry points
 		assertThat(train1Result).isInstanceOf<PathReservationService.ReservationResult.Success>()

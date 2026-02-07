@@ -273,11 +273,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.RESERVED)
 
 			// Create a mock occupant (train) using MockK
-			val mockOccupant = mockk<TrackOccupant>(relaxed = true) {
-				every { name } returns "TestTrain"
-				every { distanceToSemaphore() } returns 50.0
-				every { nextSemaphore() } returns null
-			}
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 
 			// Act: Train enters track
 			context.toDynamic(track).enter(mockOccupant)
@@ -315,11 +316,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint = track.ends()[0]
 			context.toDynamic(track).setUpPath(endpoint)
 
-			val mockOccupant = mockk<TrackOccupant>(relaxed = true) {
-				every { name } returns "TestTrain"
-				every { distanceToSemaphore() } returns 50.0
-				every { nextSemaphore() } returns null
-			}
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(mockOccupant)
 
 			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.OCCUPIED)
@@ -367,11 +369,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint1 = track1.ends()[0]
 			context.toDynamic(track1).setUpPath(endpoint1)
 
-			val mockOccupant = mockk<TrackOccupant>(relaxed = true) {
-				every { name } returns "TestTrain"
-				every { distanceToSemaphore() } returns 50.0
-				every { nextSemaphore() } returns null
-			}
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track1).enter(mockOccupant)
 
 			// Also reserve track 2 (simulating path continuation)
@@ -428,11 +431,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// Set up and occupy
 			context.toDynamic(track).setUpPath(endpoint)
-			val mockOccupant = mockk<TrackOccupant>(relaxed = true) {
-				every { name } returns "TestTrain"
-				every { distanceToSemaphore() } returns 50.0
-				every { nextSemaphore() } returns null
-			}
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(mockOccupant)
 
 			// Act: Train exits, path is implicitly released
@@ -472,11 +476,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// First train: reserve, occupy, release
 			context.toDynamic(track).setUpPath(endpoint1)
-			val firstTrain = mockk<TrackOccupant>(relaxed = true) {
-				every { name } returns "Train1"
-				every { distanceToSemaphore() } returns 50.0
-				every { nextSemaphore() } returns null
-			}
+			val firstTrain =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "Train1"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(firstTrain)
 			context.toDynamic(track).leave(firstTrain)
 
@@ -592,11 +597,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 				context.toDynamic(track).setUpPath(endpoint)
 
 				// Simulate train occupancy and release
-				val mockTrain = mockk<TrackOccupant>(relaxed = true) {
-					every { name } returns "TestTrain"
-					every { distanceToSemaphore() } returns 50.0
-					every { nextSemaphore() } returns null
-				}
+				val mockTrain =
+					mockk<TrackOccupant>(relaxed = true) {
+						every { name } returns "TestTrain"
+						every { distanceToSemaphore() } returns 50.0
+						every { nextSemaphore() } returns null
+					}
 				context.toDynamic(track).enter(mockTrain)
 				context.toDynamic(track).leave(mockTrain)
 

@@ -53,7 +53,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 		// Create a context with a connected InOut
 		val (ctx, inOut) = createTestContextWithInOut("TEST_ENTRY", false, SpatialType.HORIZONTAL)
 		context = MockSimulationContext(ctx as cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-		testContext = context  // Track for cleanup
+		testContext = context // Track for cleanup
 		entryInOut = inOut
 		worker = InOutWorker(context, entryInOut)
 		queue = worker.getQueqe()
@@ -73,10 +73,11 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 		spatialType: SpatialType
 	): Pair<SimulationContext, DynamicInOut> {
 		// Create a context with a connected InOut
-		val context = cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
-			inOutName = name,
-			isEntry = !orientation  // orientation is inverted: false = entry, true = exit
-		)
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
+				inOutName = name,
+				isEntry = !orientation // orientation is inverted: false = entry, true = exit
+			)
 
 		// Return the context and the first InOut
 		val inOut = context.getInOuts().first()

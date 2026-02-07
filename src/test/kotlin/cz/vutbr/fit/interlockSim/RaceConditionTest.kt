@@ -20,10 +20,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName

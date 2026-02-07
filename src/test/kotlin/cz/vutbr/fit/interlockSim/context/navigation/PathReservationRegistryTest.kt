@@ -23,12 +23,12 @@ import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
@@ -72,12 +72,12 @@ class PathReservationRegistryTest : KoinTestBase() {
 		val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
 
 		blocks =
-			paths.first()
+			paths
+				.first()
 				.mapNotNull { section ->
 					val block = section.getTrackBlock()
 					if (block is DynamicTrackBlock) block else null
-				}
-				.distinct()
+				}.distinct()
 	}
 
 	@Nested

@@ -43,7 +43,6 @@ import javax.swing.Timer
  */
 @Tag("integration-test")
 class AnimationControllerErrorHandlingTest : KoinTestBase() {
-
 	private var context: SimulationContext? = null
 
 	@BeforeEach
@@ -95,13 +94,13 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 			assertThat(controller.getConsecutiveFailures()).isEqualTo(1)
 
 			// Trigger state captures (simulate PropertyChangeEvents)
-			triggerStateCapture(controller)  // Failure 2
+			triggerStateCapture(controller) // Failure 2
 			assertThat(controller.getConsecutiveFailures()).isEqualTo(2)
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(isRunning(controller)).isTrue()
 
-			triggerStateCapture(controller)  // Success
-			assertThat(controller.getConsecutiveFailures()).isEqualTo(0)  // Reset
+			triggerStateCapture(controller) // Success
+			assertThat(controller.getConsecutiveFailures()).isEqualTo(0) // Reset
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(isRunning(controller)).isTrue()
 
@@ -136,15 +135,15 @@ class AnimationControllerErrorHandlingTest : KoinTestBase() {
 			assertThat(timer.isRunning).isTrue()
 
 			// Trigger state captures (simulate PropertyChangeEvents)
-			triggerStateCapture(controller)  // Failure 2
+			triggerStateCapture(controller) // Failure 2
 			assertThat(controller.getConsecutiveFailures()).isEqualTo(2)
 			assertThat(controller.isInErrorState()).isFalse()
 			assertThat(timer.isRunning).isTrue()
 
-			triggerStateCapture(controller)  // Failure 3 - circuit breaker trips
+			triggerStateCapture(controller) // Failure 3 - circuit breaker trips
 			assertThat(controller.getConsecutiveFailures()).isEqualTo(3)
 			assertThat(controller.isInErrorState()).isTrue()
-			assertThat(timer.isRunning).isFalse()  // Timer stopped by circuit breaker
+			assertThat(timer.isRunning).isFalse() // Timer stopped by circuit breaker
 
 			// Note: Error dialog is shown via SwingUtilities.invokeLater (not tested here)
 

@@ -119,7 +119,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val pathSequence = createMockPath(trackBehind, trackCurrent, trackAhead)
 
 			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
-			every { mockOutOut.name} returns "EXIT"
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -140,7 +140,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val pathBlocked = createMockPath(blockedTrack)
 
 			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
-			every { mockOutOut.name} returns "EXIT"
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)

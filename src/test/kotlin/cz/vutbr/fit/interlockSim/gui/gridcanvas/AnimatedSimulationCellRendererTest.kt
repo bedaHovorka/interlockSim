@@ -40,7 +40,6 @@ import java.awt.Graphics2D
  * @since 2026-01-22 (Issue #202)
  */
 class AnimatedSimulationCellRendererTest {
-
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
 	private lateinit var graphics: Graphics2D
@@ -70,13 +69,14 @@ class AnimatedSimulationCellRendererTest {
 		val trackBlock = mockk<TrackBlock>()
 		val trackBlockPart = createMockTrackBlockPart(trackBlock)
 		val trackState = TrackState(trackBlock, TrackFacility.State.FREE)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap(),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = mapOf(trackBlock to trackState),
+				signalStates = emptyMap(),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
 
 		// When: Rendering the track block part
@@ -94,15 +94,15 @@ class AnimatedSimulationCellRendererTest {
 		val trackBlock = mockk<TrackBlock>()
 		val trackBlockPart = createMockTrackBlockPart(trackBlock)
 		val trackState = TrackState(trackBlock, TrackFacility.State.RESERVED)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap(),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = mapOf(trackBlock to trackState),
+				signalStates = emptyMap(),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -119,15 +119,15 @@ class AnimatedSimulationCellRendererTest {
 		val trackBlock = mockk<TrackBlock>()
 		val trackBlockPart = createMockTrackBlockPart(trackBlock)
 		val trackState = TrackState(trackBlock, TrackFacility.State.OCCUPIED)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = mapOf(trackBlock to trackState),
-			signalStates = emptyMap(),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = mapOf(trackBlock to trackState),
+				signalStates = emptyMap(),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
@@ -146,7 +146,6 @@ class AnimatedSimulationCellRendererTest {
 		val animationState = AnimationState.EMPTY // No track states
 		every { animationController.getCurrentState() } returns animationState
 
-
 		// When: Rendering the track block part
 		renderer.draw(graphics, trackBlockPart)
 
@@ -164,15 +163,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.STOP)
 		val signalState = SignalState(staticSemaphore, Signal.STOP)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -189,15 +188,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.S40)
 		val signalState = SignalState(staticSemaphore, Signal.S40)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -214,15 +213,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.FREE)
 		val signalState = SignalState(staticSemaphore, Signal.FREE)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -239,15 +238,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.S30)
 		val signalState = SignalState(staticSemaphore, Signal.S30)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -264,15 +263,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.S60)
 		val signalState = SignalState(staticSemaphore, Signal.S60)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -289,15 +288,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.S80)
 		val signalState = SignalState(staticSemaphore, Signal.S80)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -314,15 +313,15 @@ class AnimatedSimulationCellRendererTest {
 		val staticSemaphore = createMockRailSemaphore()
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.S100)
 		val signalState = SignalState(staticSemaphore, Signal.S100)
-		val animationState = AnimationState(
-			simulationTime = 0.0,
-			trainStates = emptyMap(),
-			trackStates = emptyMap(),
-			signalStates = mapOf(staticSemaphore to signalState),
-			switchStates = emptyMap()
-		)
+		val animationState =
+			AnimationState(
+				simulationTime = 0.0,
+				trainStates = emptyMap(),
+				trackStates = emptyMap(),
+				signalStates = mapOf(staticSemaphore to signalState),
+				switchStates = emptyMap()
+			)
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)
@@ -340,7 +339,6 @@ class AnimatedSimulationCellRendererTest {
 		val dynamicSemaphore = createMockDynamicSemaphore(staticSemaphore, Signal.STOP)
 		val animationState = AnimationState.EMPTY // No signal states
 		every { animationController.getCurrentState() } returns animationState
-
 
 		// When: Rendering the semaphore
 		renderer.draw(graphics, dynamicSemaphore)

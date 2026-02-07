@@ -25,8 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName

@@ -52,7 +52,6 @@ import org.junit.jupiter.api.Test
  * then verifies TopologyNavigator navigates correctly based only on static structure.
  */
 class TopologyNavigatorTest : KoinTestBase() {
-
 	// ========================================================================
 	// Linear Path Tests
 	// ========================================================================
@@ -107,7 +106,12 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
 		// Act: Navigate through semaphore (should work despite RED state)
-		val firstBlock = context.getGraph().assignedEdges(Point(1, 1)).values().first()
+		val firstBlock =
+			context
+				.getGraph()
+				.assignedEdges(Point(1, 1))
+				.values()
+				.first()
 		val firstSection = firstBlock.getNextTrackSection(semaphore, null)
 		val nextSection = navigator.getNextTrackSection(semaphore, firstSection)
 
@@ -210,7 +214,12 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
 		// Get block1 (A -> Semaphore)
-		val block1 = context.getGraph().assignedEdges(Point(1, 1)).values().first()
+		val block1 =
+			context
+				.getGraph()
+				.assignedEdges(Point(1, 1))
+				.values()
+				.first()
 
 		// Act: Get next block from semaphore
 		val nextBlock = navigator.getNextTrackBlock(semaphore, block1)
@@ -438,7 +447,12 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val inOutA = grid.getCellAt(1, 1) as InOut
 
 		// Get first section
-		val block = context.getGraph().assignedEdges(Point(1, 1)).values().first()
+		val block =
+			context
+				.getGraph()
+				.assignedEdges(Point(1, 1))
+				.values()
+				.first()
 		val firstSection = block.getNextTrackSection(inOutA, null)!!
 
 		// Act: Try to get next section within same block
@@ -534,7 +548,12 @@ class TopologyNavigatorTest : KoinTestBase() {
 		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
 
 		// Get first section from block 1
-		val block1 = context.getGraph().assignedEdges(Point(1, 1)).values().first()
+		val block1 =
+			context
+				.getGraph()
+				.assignedEdges(Point(1, 1))
+				.values()
+				.first()
 		val firstSection = block1.getNextTrackSection(staticSemaphore, null)
 
 		// Act: Navigate using Dynamic wrapper (should unwrap to static)

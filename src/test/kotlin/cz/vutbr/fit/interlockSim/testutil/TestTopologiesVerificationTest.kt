@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("TestTopologies New Topology Verification")
 class TestTopologiesVerificationTest : KoinTestBase() {
-
 	@Test
 	@DisplayName("yJunctionWithSwitch creates topology with 3 InOuts and 1 switch (diverging Y)")
 	fun yJunctionWithSwitch_createsCorrectTopology() {

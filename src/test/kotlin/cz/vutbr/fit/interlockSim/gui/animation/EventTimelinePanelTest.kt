@@ -29,7 +29,6 @@ import javax.swing.SwingUtilities
  * as EventTimelinePanel requires EDT for thread safety.
  */
 class EventTimelinePanelTest {
-
 	private lateinit var panel: EventTimelinePanel
 	private lateinit var textArea: JTextArea
 
@@ -54,11 +53,12 @@ class EventTimelinePanelTest {
 
 	@Test
 	fun `addEvent adds event to display`() {
-		val event = SimulationEvent(
-			simulationTime = 123.456,
-			eventType = ReportType.TRAIN_EVENTS,
-			message = "Train 1 stopped"
-		)
+		val event =
+			SimulationEvent(
+				simulationTime = 123.456,
+				eventType = ReportType.TRAIN_EVENTS,
+				message = "Train 1 stopped"
+			)
 
 		SwingUtilities.invokeAndWait {
 			panel.addEvent(event)
@@ -76,11 +76,12 @@ class EventTimelinePanelTest {
 			// Disable TRAIN_EVENTS filter
 			panel.setFilterEnabled(ReportType.TRAIN_EVENTS, false)
 
-			val event = SimulationEvent(
-				simulationTime = 1.0,
-				eventType = ReportType.TRAIN_EVENTS,
-				message = "Test"
-			)
+			val event =
+				SimulationEvent(
+					simulationTime = 1.0,
+					eventType = ReportType.TRAIN_EVENTS,
+					message = "Test"
+				)
 
 			panel.addEvent(event)
 
@@ -95,11 +96,12 @@ class EventTimelinePanelTest {
 			// Ensure PATH_SETTING filter is enabled
 			panel.setFilterEnabled(ReportType.PATH_SETTING, true)
 
-			val event = SimulationEvent(
-				simulationTime = 1.0,
-				eventType = ReportType.PATH_SETTING,
-				message = "Path reserved"
-			)
+			val event =
+				SimulationEvent(
+					simulationTime = 1.0,
+					eventType = ReportType.PATH_SETTING,
+					message = "Path reserved"
+				)
 
 			panel.addEvent(event)
 
@@ -133,11 +135,12 @@ class EventTimelinePanelTest {
 
 	@Test
 	fun `addEvents batch adds multiple events`() {
-		val events = listOf(
-			SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Event 1"),
-			SimulationEvent(2.0, ReportType.NODE_EVENTS, "Event 2"),
-			SimulationEvent(3.0, ReportType.PATH_SETTING, "Event 3")
-		)
+		val events =
+			listOf(
+				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Event 1"),
+				SimulationEvent(2.0, ReportType.NODE_EVENTS, "Event 2"),
+				SimulationEvent(3.0, ReportType.PATH_SETTING, "Event 3")
+			)
 
 		SwingUtilities.invokeAndWait {
 			panel.addEvents(events)

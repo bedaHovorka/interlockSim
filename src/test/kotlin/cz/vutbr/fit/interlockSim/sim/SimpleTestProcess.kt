@@ -95,7 +95,6 @@ class SimpleTestProcess(
 	private val train: Train,
 	private val endTime: Double
 ) : LoopProcess() {
-
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -108,7 +107,7 @@ class SimpleTestProcess(
 	 */
 	override fun startAction() {
 		logger.debug { "SimpleTestProcess: Starting test with train ${train.name}" }
-		activate(train)  // CRITICAL: activate the train process
+		activate(train) // CRITICAL: activate the train process
 	}
 
 	/**
@@ -127,7 +126,7 @@ class SimpleTestProcess(
 		}
 
 		if (isTerminated || currentTime >= endTime) {
-			terminate()  // Signal loop to exit
+			terminate() // Signal loop to exit
 			return
 		}
 	}
@@ -139,7 +138,7 @@ class SimpleTestProcess(
 	 * allowing the train to make progress between checks.
 	 */
 	override fun interLoopSleep() {
-		hold(1.0)  // Check every 1 second of simulation time
+		hold(1.0) // Check every 1 second of simulation time
 	}
 
 	/**
@@ -160,11 +159,12 @@ class SimpleTestProcess(
 	 *
 	 * @return TrainState snapshot containing velocity, position, and termination status
 	 */
-	fun getTrainState(): TrainState = TrainState(
-		velocity = train.getVelocity(),
-		position = train.getFrontPosition(),
-		terminated = train.terminated()
-	)
+	fun getTrainState(): TrainState =
+		TrainState(
+			velocity = train.getVelocity(),
+			position = train.getFrontPosition(),
+			terminated = train.terminated()
+		)
 
 	/**
 	 * Snapshot of train state at a specific simulation time.

@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -34,7 +35,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.koin.test.inject
 import java.io.InputStream
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Comprehensive tests for PathReservationRegistry PathInfo merging logic.
@@ -76,18 +76,18 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 
 	// Test network elements from vyhybna.xml (extracted by name for strong assertions)
 	// Network: B (30,8) → zB (27,8) → vB (26,8) → doB1 (25,8) → ... → vA (15,8) → zA (14,8) → A (11,8)
-	private lateinit var inOutB: DynamicPathSeparator  // InOut at (30, 8)
-	private lateinit var inOutA: DynamicPathSeparator  // InOut at (11, 8)
-	private lateinit var semaphoreZB: DynamicPathSeparator  // Semaphore "zB" at (27, 8)
-	private lateinit var switchVB: DynamicPathSeparator  // Switch "vB" at (26, 8)
-	private lateinit var semaphoreDoB1: DynamicPathSeparator  // Semaphore "doB1" at (25, 8)
-	private lateinit var switchVA: DynamicPathSeparator  // Switch "vA" at (15, 8)
-	private lateinit var semaphoreZA: DynamicPathSeparator  // Semaphore "zA" at (14, 8)
+	private lateinit var inOutB: DynamicPathSeparator // InOut at (30, 8)
+	private lateinit var inOutA: DynamicPathSeparator // InOut at (11, 8)
+	private lateinit var semaphoreZB: DynamicPathSeparator // Semaphore "zB" at (27, 8)
+	private lateinit var switchVB: DynamicPathSeparator // Switch "vB" at (26, 8)
+	private lateinit var semaphoreDoB1: DynamicPathSeparator // Semaphore "doB1" at (25, 8)
+	private lateinit var switchVA: DynamicPathSeparator // Switch "vA" at (15, 8)
+	private lateinit var semaphoreZA: DynamicPathSeparator // Semaphore "zA" at (14, 8)
 
 	// Track blocks between separators (extracted from path)
-	private lateinit var trackBtoZB: DynamicTrackBlock  // B → zB
-	private lateinit var trackZBtoVB: DynamicTrackBlock  // zB → vB
-	private lateinit var trackVBtoDoB1: DynamicTrackBlock  // vB → doB1
+	private lateinit var trackBtoZB: DynamicTrackBlock // B → zB
+	private lateinit var trackZBtoVB: DynamicTrackBlock // zB → vB
+	private lateinit var trackVBtoDoB1: DynamicTrackBlock // vB → doB1
 
 	@BeforeEach
 	fun setUp() {
@@ -134,26 +134,32 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 
 		// Get track blocks by finding paths between separators
 		// Path: B → zB → vB → doB1
-		val pathBtoZB = navigator.findAllTopologicalPaths(inOutB, semaphoreZB).firstOrNull()
-			?: throw IllegalStateException("No path from B to zB")
-		val pathZBtoVB = navigator.findAllTopologicalPaths(semaphoreZB, switchVB).firstOrNull()
-			?: throw IllegalStateException("No path from zB to vB")
-		val pathVBtoDoB1 = navigator.findAllTopologicalPaths(switchVB, semaphoreDoB1).firstOrNull()
-			?: throw IllegalStateException("No path from vB to doB1")
+		val pathBtoZB =
+			navigator.findAllTopologicalPaths(inOutB, semaphoreZB).firstOrNull()
+				?: throw IllegalStateException("No path from B to zB")
+		val pathZBtoVB =
+			navigator.findAllTopologicalPaths(semaphoreZB, switchVB).firstOrNull()
+				?: throw IllegalStateException("No path from zB to vB")
+		val pathVBtoDoB1 =
+			navigator.findAllTopologicalPaths(switchVB, semaphoreDoB1).firstOrNull()
+				?: throw IllegalStateException("No path from vB to doB1")
 
 		// Extract track blocks from paths (path contains alternating separators and tracks)
 		// Path structure can vary, so we filter for TrackBlocks
-		trackBtoZB = pathBtoZB.filterIsInstance<TrackSection>()
+		trackBtoZB = pathBtoZB
+			.filterIsInstance<TrackSection>()
 			.map { it.getTrackBlock() }
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull() ?: throw IllegalStateException("No track block from B to zB")
 
-		trackZBtoVB = pathZBtoVB.filterIsInstance<TrackSection>()
+		trackZBtoVB = pathZBtoVB
+			.filterIsInstance<TrackSection>()
 			.map { it.getTrackBlock() }
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull() ?: throw IllegalStateException("No track block from zB to vB")
 
-		trackVBtoDoB1 = pathVBtoDoB1.filterIsInstance<TrackSection>()
+		trackVBtoDoB1 = pathVBtoDoB1
+			.filterIsInstance<TrackSection>()
 			.map { it.getTrackBlock() }
 			.filterIsInstance<DynamicTrackBlock>()
 			.firstOrNull() ?: throw IllegalStateException("No track block from vB to doB1")
@@ -174,19 +180,20 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 
 			// When: Register first PathInfo for path B → zB
 			// Path: [InOut B, track(B→zB), Semaphore zB]
-			val pathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val pathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, pathInfo)
 
 			// Then: PathInfo should be stored correctly
 			val retrieved = registry.getPathInfo(trainId)
 			assertThat(retrieved).isNotNull()
-			assertThat(retrieved!!.start).isEqualTo(inOutB)  // Tail position at B
-			assertThat(retrieved.target).isEqualTo(semaphoreZB)  // Front position at zB
-			assertThat(retrieved.reservedPath.size).isEqualTo(3)  // [B, track, zB]
+			assertThat(retrieved!!.start).isEqualTo(inOutB) // Tail position at B
+			assertThat(retrieved.target).isEqualTo(semaphoreZB) // Front position at zB
+			assertThat(retrieved.reservedPath.size).isEqualTo(3) // [B, track, zB]
 		}
 
 		@Test
@@ -208,21 +215,23 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with existing path B → zB
 			// Path: [InOut B, track(B→zB), Semaphore zB]
 			val trainId = "train1"
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path zB → vB (overlaps with old.target)
 			// Path: [Semaphore zB, track(zB→vB), Switch vB]
 			// Overlap: old.target (zB) == new.start (zB) → SKIP zB in merge
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,  // Same as old.target
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB, // Same as old.target
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Merged path preserves original start (B) and updates to new target (vB)
@@ -230,36 +239,39 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Expected size: 3 + 3 - 1 = 5
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original Tail at B
-			assertThat(merged.target).isEqualTo(switchVB)  // New Front at vB
-			assertThat(merged.reservedPath.size).isEqualTo(5)  // 3 + 3 - 1 (overlap)
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original Tail at B
+			assertThat(merged.target).isEqualTo(switchVB) // New Front at vB
+			assertThat(merged.reservedPath.size).isEqualTo(5) // 3 + 3 - 1 (overlap)
 		}
 
 		@Test
 		fun `three-way merge preserves original start and final target`() {
 			// Given: Initial path B → zB
 			val trainId = "train1"
-			val path1 = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val path1 =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, path1)
 
 			// When: Add middle segment zB → vB (overlaps with path1.target)
-			val path2 = createPathInfo(
-				start = semaphoreZB,  // Overlap with path1.target
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val path2 =
+				createPathInfo(
+					start = semaphoreZB, // Overlap with path1.target
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 			registry.registerPathInfo(trainId, path2)
 
 			// And: Add final segment vB → doB1 (overlaps with path2.target)
-			val path3 = createPathInfo(
-				start = switchVB,  // Overlap with path2.target
-				target = semaphoreDoB1,
-				path = listOf(switchVB, trackVBtoDoB1, semaphoreDoB1)
-			)
+			val path3 =
+				createPathInfo(
+					start = switchVB, // Overlap with path2.target
+					target = semaphoreDoB1,
+					path = listOf(switchVB, trackVBtoDoB1, semaphoreDoB1)
+				)
 			registry.registerPathInfo(trainId, path3)
 
 			// Then: Final merged path has original start (B) and final target (doB1)
@@ -268,9 +280,9 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Expected size: 3 + (3-1) + (3-1) = 7
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start at B
-			assertThat(merged.target).isEqualTo(semaphoreDoB1)  // Final target at doB1
-			assertThat(merged.reservedPath.size).isEqualTo(7)  // 3 + (3-1) + (3-1)
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start at B
+			assertThat(merged.target).isEqualTo(semaphoreDoB1) // Final target at doB1
+			assertThat(merged.reservedPath.size).isEqualTo(7) // 3 + (3-1) + (3-1)
 		}
 	}
 
@@ -282,20 +294,22 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with path B → zB (using named elements)
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)  // [B, track(B→zB), zB]
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB) // [B, track(B→zB), zB]
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register path starting from DIFFERENT separator (no overlap)
 			// Use switchVA → zA (not adjacent to zB, creates no-overlap scenario)
-			val newPathInfo = createPathInfo(
-				start = switchVA,
-				target = semaphoreZA,
-				path = listOf(switchVA, trackZBtoVB, semaphoreZA)  // [vA, track, zA] - using available track
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = switchVA,
+					target = semaphoreZA,
+					path = listOf(switchVA, trackZBtoVB, semaphoreZA) // [vA, track, zA] - using available track
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Both paths should be concatenated without skipping
@@ -304,9 +318,9 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Expected size: 3 + 3 = 6 (no overlap, no skip)
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start at B
-			assertThat(merged.target).isEqualTo(semaphoreZA)  // New target at zA
-			assertThat(merged.reservedPath.size).isEqualTo(6)  // 3 + 3 (no overlap)
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start at B
+			assertThat(merged.target).isEqualTo(semaphoreZA) // New target at zA
+			assertThat(merged.reservedPath.size).isEqualTo(6) // 3 + 3 (no overlap)
 		}
 	}
 
@@ -319,20 +333,22 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Valid: path=[inOutB], start=inOutB, target=inOutB ✅
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = inOutB,  // ✅ Valid: single separator, target == start
-				path = listOf(inOutB)  // ✅ Valid: single separator path
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = inOutB, // ✅ Valid: single separator, target == start
+					path = listOf(inOutB) // ✅ Valid: single separator path
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path from different separator (no overlap)
 			// Use zB → vB (not adjacent to inOutB)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)  // [zB, track(zB→vB), vB]
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB) // [zB, track(zB→vB), vB]
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Both paths concatenated (no overlap)
@@ -340,9 +356,9 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Expected size: 1 + 3 = 4
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start preserved
-			assertThat(merged.target).isEqualTo(switchVB)  // New target at vB
-			assertThat(merged.reservedPath.size).isEqualTo(4)  // 1 + 3
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start preserved
+			assertThat(merged.target).isEqualTo(switchVB) // New target at vB
+			assertThat(merged.reservedPath.size).isEqualTo(4) // 1 + 3
 		}
 
 		@Test
@@ -350,20 +366,22 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with normal path B → zB
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)  // [B, track(B→zB), zB]
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB) // [B, track(B→zB), zB]
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register single-element new path (no overlap)
 			// Use switchVB (different from zB, no overlap)
-			val newPathInfo = createPathInfo(
-				start = switchVB,
-				target = switchVB,  // ✅ Valid: single separator
-				path = listOf(switchVB)  // ✅ Valid: single separator path
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = switchVB,
+					target = switchVB, // ✅ Valid: single separator
+					path = listOf(switchVB) // ✅ Valid: single separator path
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Should merge correctly (no overlap)
@@ -371,9 +389,9 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Expected size: 3 + 1 = 4
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start preserved
-			assertThat(merged.target).isEqualTo(switchVB)  // Target updated to vB
-			assertThat(merged.reservedPath.size).isEqualTo(4)  // 3 + 1
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start preserved
+			assertThat(merged.target).isEqualTo(switchVB) // Target updated to vB
+			assertThat(merged.reservedPath.size).isEqualTo(4) // 3 + 1
 		}
 	}
 
@@ -387,29 +405,33 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			val trainId = "train1"
 
 			// Get TrackSection for trackBtoZB to use as entry direction
-			val track1Section = trackBtoZB.getNextTrackSection(inOutB, null)
-				?: throw IllegalStateException("trackBtoZB has no TrackSections from inOutB")
+			val track1Section =
+				trackBtoZB.getNextTrackSection(inOutB, null)
+					?: throw IllegalStateException("trackBtoZB has no TrackSections from inOutB")
 
 			val oldDirections: Map<DynamicTrackBlock, TrackSection> = mapOf(trackBtoZB to track1Section)
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB),  // [B, track(B→zB), zB]
-				entryDirections = oldDirections
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB), // [B, track(B→zB), zB]
+					entryDirections = oldDirections
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path zB → vB with different entry directions (overlaps with old.target)
-			val track2Section = trackZBtoVB.getNextTrackSection(semaphoreZB, null)
-				?: throw IllegalStateException("trackZBtoVB has no TrackSections from semaphoreZB")
+			val track2Section =
+				trackZBtoVB.getNextTrackSection(semaphoreZB, null)
+					?: throw IllegalStateException("trackZBtoVB has no TrackSections from semaphoreZB")
 
 			val newDirections: Map<DynamicTrackBlock, TrackSection> = mapOf(trackZBtoVB to track2Section)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,  // Overlap with old.target
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB),  // [zB, track(zB→vB), vB]
-				entryDirections = newDirections
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB, // Overlap with old.target
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB), // [zB, track(zB→vB), vB]
+					entryDirections = newDirections
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Should merge successfully with both entry directions preserved
@@ -424,36 +446,40 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with entry direction for trackBtoZB
 			val trainId = "train1"
 
-			val track1Section = trackBtoZB.getNextTrackSection(inOutB, null)
-				?: throw IllegalStateException("trackBtoZB has no TrackSections")
+			val track1Section =
+				trackBtoZB.getNextTrackSection(inOutB, null)
+					?: throw IllegalStateException("trackBtoZB has no TrackSections")
 
 			val oldDirections: Map<DynamicTrackBlock, TrackSection> = mapOf(trackBtoZB to track1Section)
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB),
-				entryDirections = oldDirections
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB),
+					entryDirections = oldDirections
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path with DIFFERENT entry direction for trackBtoZB
-			val track2Section = trackZBtoVB.getNextTrackSection(semaphoreZB, null)
-				?: throw IllegalStateException("trackZBtoVB has no TrackSections")
+			val track2Section =
+				trackZBtoVB.getNextTrackSection(semaphoreZB, null)
+					?: throw IllegalStateException("trackZBtoVB has no TrackSections")
 
 			// New direction for trackBtoZB uses track2Section (different from old)
 			val newDirections: Map<DynamicTrackBlock, TrackSection> = mapOf(trackBtoZB to track2Section)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,  // Overlap with old.target
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB),
-				entryDirections = newDirections
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB, // Overlap with old.target
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB),
+					entryDirections = newDirections
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: New direction should overwrite old
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.entryDirections[trackBtoZB]).isEqualTo(track2Section)  // New overwrites old
+			assertThat(merged!!.entryDirections[trackBtoZB]).isEqualTo(track2Section) // New overwrites old
 		}
 
 		@Test
@@ -461,21 +487,23 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with no entry directions, path B → zB
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB),
-				entryDirections = emptyMap()
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB),
+					entryDirections = emptyMap()
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path zB → vB also without entry directions (overlap)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,  // Overlap with old.target
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB),
-				entryDirections = emptyMap()
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB, // Overlap with old.target
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB),
+					entryDirections = emptyMap()
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Should merge successfully with empty entry directions
@@ -493,31 +521,34 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with existing path B → zB
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Attempt to register path where start appears multiple times (circular)
 			// Create a path manually where semaphoreZB appears twice: [zB, track, zB]
 			val circularArrayPath = ArrayPath(simulationContext)
-			circularArrayPath.add(semaphoreZB)  // Start
-			circularArrayPath.add(trackZBtoVB.getNextTrackSection(semaphoreZB, null)!!)  // Track section
-			circularArrayPath.add(semaphoreZB)  // Same separator again! (circular)
+			circularArrayPath.add(semaphoreZB) // Start
+			circularArrayPath.add(trackZBtoVB.getNextTrackSection(semaphoreZB, null)!!) // Track section
+			circularArrayPath.add(semaphoreZB) // Same separator again! (circular)
 
-			val circularPath = PathInfo(
-				start = semaphoreZB,
-				target = semaphoreZB,
-				reservedPath = circularArrayPath,
-				entryDirections = emptyMap()
-			)
+			val circularPath =
+				PathInfo(
+					start = semaphoreZB,
+					target = semaphoreZB,
+					reservedPath = circularArrayPath,
+					entryDirections = emptyMap()
+				)
 
 			// Then: Should throw IllegalStateException with clear message
-			val exception = assertThrows<IllegalStateException> {
-				registry.registerPathInfo(trainId, circularPath)
-			}
+			val exception =
+				assertThrows<IllegalStateException> {
+					registry.registerPathInfo(trainId, circularPath)
+				}
 			assertThat(exception.message).isNotNull()
 			assertThat(exception.message!!).contains("Circular routes not supported")
 			assertThat(exception.message!!).contains("appears 2 times")
@@ -528,26 +559,28 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with existing path B → zB
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register path where start appears exactly once (at beginning): zB → vB
-			val validPath = createPathInfo(
-				start = semaphoreZB,  // Appears once at beginning
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val validPath =
+				createPathInfo(
+					start = semaphoreZB, // Appears once at beginning
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 			registry.registerPathInfo(trainId, validPath)
 
 			// Then: Should succeed
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start preserved
-			assertThat(merged.target).isEqualTo(switchVB)  // New target
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start preserved
+			assertThat(merged.target).isEqualTo(switchVB) // New target
 		}
 
 		@Test
@@ -556,11 +589,12 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			val trainId = "train1"
 
 			// When: Register first path B → zB (no merging, no validation)
-			val pathInfo = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val pathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 			registry.registerPathInfo(trainId, pathInfo)
 
 			// Then: Should succeed (validation only happens during merging)
@@ -580,20 +614,22 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Single separator path: [inOutB], start=inOutB, target=inOutB ✅
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = inOutB,  // ✅ Valid: single separator, target == start
-				path = listOf(inOutB)  // ✅ Valid: single separator
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = inOutB, // ✅ Valid: single separator, target == start
+					path = listOf(inOutB) // ✅ Valid: single separator
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path also with single separator (no overlap)
 			// Use semaphoreZB (different from inOutB)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,
-				target = semaphoreZB,  // ✅ Valid: single separator
-				path = listOf(semaphoreZB)  // ✅ Valid: single separator
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB,
+					target = semaphoreZB, // ✅ Valid: single separator
+					path = listOf(semaphoreZB) // ✅ Valid: single separator
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Should merge correctly (no overlap)
@@ -603,7 +639,7 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			assertThat(merged).isNotNull()
 			assertThat(merged!!.start).isEqualTo(inOutB)
 			assertThat(merged.target).isEqualTo(semaphoreZB)
-			assertThat(merged.reservedPath.size).isEqualTo(2)  // 1 + 1
+			assertThat(merged.reservedPath.size).isEqualTo(2) // 1 + 1
 		}
 
 		@Test
@@ -611,26 +647,28 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with path at B (Tail position)
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,  // Tail position at B
-				target = inOutB,
-				path = listOf(inOutB)
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB, // Tail position at B
+					target = inOutB,
+					path = listOf(inOutB)
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path zB → vB (no overlap with B)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Merged path should preserve original start (Tail position at B)
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original Tail position preserved
-			assertThat(merged.target).isEqualTo(switchVB)  // New Front position
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original Tail position preserved
+			assertThat(merged.target).isEqualTo(switchVB) // New Front position
 		}
 
 		@Test
@@ -638,26 +676,28 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			// Given: Train with single separator path at B (Old Front position)
 			val trainId = "train1"
 
-			val oldPathInfo = createPathInfo(
-				start = inOutB,
-				target = inOutB,  // Old Front position at B
-				path = listOf(inOutB)
-			)
+			val oldPathInfo =
+				createPathInfo(
+					start = inOutB,
+					target = inOutB, // Old Front position at B
+					path = listOf(inOutB)
+				)
 			registry.registerPathInfo(trainId, oldPathInfo)
 
 			// When: Register new path zB → vB with new Front position (no overlap)
-			val newPathInfo = createPathInfo(
-				start = semaphoreZB,
-				target = switchVB,  // New Front position at vB
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val newPathInfo =
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB, // New Front position at vB
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 			registry.registerPathInfo(trainId, newPathInfo)
 
 			// Then: Merged path should update target to new Front position
 			val merged = registry.getPathInfo(trainId)
 			assertThat(merged).isNotNull()
-			assertThat(merged!!.start).isEqualTo(inOutB)  // Original start
-			assertThat(merged.target).isEqualTo(switchVB)  // New Front position at vB
+			assertThat(merged!!.start).isEqualTo(inOutB) // Original start
+			assertThat(merged.target).isEqualTo(switchVB) // New Front position at vB
 		}
 	}
 
@@ -671,18 +711,20 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			val train2 = "train2"
 
 			// Train1: Single separator at B
-			val path1 = createPathInfo(
-				start = inOutB,
-				target = inOutB,
-				path = listOf(inOutB)
-			)
+			val path1 =
+				createPathInfo(
+					start = inOutB,
+					target = inOutB,
+					path = listOf(inOutB)
+				)
 
 			// Train2: Path zB → vB
-			val path2 = createPathInfo(
-				start = semaphoreZB,
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val path2 =
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 
 			// When: Register paths for both trains
 			registry.registerPathInfo(train1, path1)
@@ -707,18 +749,20 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 			val train2 = "train2"
 
 			// Train1 uses trackBtoZB
-			val path1 = createPathInfo(
-				start = inOutB,
-				target = semaphoreZB,
-				path = listOf(inOutB, trackBtoZB, semaphoreZB)
-			)
+			val path1 =
+				createPathInfo(
+					start = inOutB,
+					target = semaphoreZB,
+					path = listOf(inOutB, trackBtoZB, semaphoreZB)
+				)
 
 			// Train2 uses trackZBtoVB
-			val path2 = createPathInfo(
-				start = semaphoreZB,
-				target = switchVB,
-				path = listOf(semaphoreZB, trackZBtoVB, switchVB)
-			)
+			val path2 =
+				createPathInfo(
+					start = semaphoreZB,
+					target = switchVB,
+					path = listOf(semaphoreZB, trackZBtoVB, switchVB)
+				)
 
 			// Register both PathInfo and blocks (registry needs both for unregister to work)
 			registry.registerAtomic(train1, listOf(trackBtoZB))
@@ -742,7 +786,7 @@ class PathReservationRegistryMergingTest : KoinTestBase() {
 	private fun createPathInfo(
 		start: DynamicPathSeparator,
 		target: DynamicPathSeparator,
-		path: List<Any>,  // DynamicPathSeparator or DynamicTrackBlock
+		path: List<Any>, // DynamicPathSeparator or DynamicTrackBlock
 		entryDirections: Map<DynamicTrackBlock, TrackSection> = emptyMap()
 	): PathInfo {
 		val arrayPath = ArrayPath(simulationContext)

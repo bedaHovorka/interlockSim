@@ -16,7 +16,6 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
@@ -200,10 +199,14 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Verify the two paths are different (different sets of blocks)
 			// Path 0: through MAIN branch (doA1 → doB1)
 			// Path 1: through BRANCH branch (doA2 → doB2)
-			val path0Blocks = allPaths[0].map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-			val path1Blocks = allPaths[1].map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
+			val path0Blocks =
+				allPaths[0]
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+			val path1Blocks =
+				allPaths[1]
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
 
 			// Both paths must have blocks
 			assertThat(path0Blocks).isNotEmpty()
@@ -215,10 +218,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Use first path for rollback test
 			val path = allPaths.first()
 			val blocks =
-				path.map { section ->
-					val block = section.getTrackBlock()
-					block as DynamicTrackBlock
-				}.distinct()
+				path
+					.map { section ->
+						val block = section.getTrackBlock()
+						block as DynamicTrackBlock
+					}.distinct()
 
 			// Find blocks that exist in ALL paths to ensure conflict blocks all routes
 			// This prevents the test from being non-deterministic with multiple paths
@@ -406,6 +410,7 @@ class PathReservationServiceTest : KoinTestBase() {
 			val occupant =
 				object : TrackOccupant {
 					override val name: String = "test-occupant"
+
 					override fun distanceToSemaphore(): Double = 0.0
 
 					override fun nextSemaphore(): cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator? = null
@@ -602,7 +607,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			val grid = simulationContext.getRailWayNetGrid()
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
-					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
 					if (cell is DynamicRailSemaphore && cell.name == name) {
 						return cell
 					}
@@ -679,27 +688,33 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		private fun assertIsDirectedToOutSide(
-			blocks: List<DynamicTrackBlock>, nameOfOut: String
+			blocks: List<DynamicTrackBlock>,
+			nameOfOut: String
 		) {
 			val sem1 = "do${nameOfOut}1"
 			val sem2 = "do${nameOfOut}2"
-			assertThat(blocks.any { block ->
-				val (sep1, sep2) = block.ends()
-				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
-					(sep2 is DynamicInOut && sep2.name == nameOfOut) ||
-					(sep1 is DynamicRailSemaphore && (sep1.name == sem1 || sep1.name == sem2)) ||
-					(sep2 is DynamicRailSemaphore && (sep2.name == sem1 || sep2.name == sem2))
-			}).isTrue()
+			assertThat(
+				blocks.any { block ->
+					val (sep1, sep2) = block.ends()
+					(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+						(sep2 is DynamicInOut && sep2.name == nameOfOut) ||
+						(sep1 is DynamicRailSemaphore && (sep1.name == sem1 || sep1.name == sem2)) ||
+						(sep2 is DynamicRailSemaphore && (sep2.name == sem1 || sep2.name == sem2))
+				}
+			).isTrue()
 		}
 
 		private fun assertIsReachedOutSide(
-			blocks: List<DynamicTrackBlock>, nameOfOut: String
+			blocks: List<DynamicTrackBlock>,
+			nameOfOut: String
 		) {
-			assertThat(blocks.any { block ->
-				val (sep1, sep2) = block.ends()
-				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
-					(sep2 is DynamicInOut && sep2.name == nameOfOut)
-			}).isTrue()
+			assertThat(
+				blocks.any { block ->
+					val (sep1, sep2) = block.ends()
+					(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+						(sep2 is DynamicInOut && sep2.name == nameOfOut)
+				}
+			).isTrue()
 		}
 
 		@Test
@@ -933,7 +948,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			val grid = simulationContext.getRailWayNetGrid()
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
-					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
 					if (cell is DynamicRailSemaphore && cell.name == name) {
 						return cell
 					}
@@ -1328,7 +1347,6 @@ class PathReservationServiceTest : KoinTestBase() {
 	 */
 	@Nested
 	inner class SignalConfigurationTests {
-
 		@Test
 		fun `reservePath configures START semaphore signal when START is DynamicRailSemaphore`() {
 			// Arrange - Find semaphore doA1 by iterating grid (simulation grid uses dynamic cells)
@@ -1338,7 +1356,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Iterate through grid to find doA1 semaphore
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
-					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
 					if (cell is DynamicRailSemaphore && cell.name == "doA1") {
 						doA1Semaphore = cell
 						break
@@ -1582,7 +1604,11 @@ class PathReservationServiceTest : KoinTestBase() {
 			val grid = simulationContext.getRailWayNetGrid()
 			for (x in 0 until grid.getCols()) {
 				for (y in 0 until grid.getRows()) {
-					val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+					val cell =
+						grid[
+							cz.vutbr.fit.interlockSim.util
+								.Point(x, y)
+						]
 					if (cell is DynamicRailSemaphore && cell.name == name) {
 						return cell
 					}
@@ -1659,27 +1685,33 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 
 		private fun assertIsDirectedToOutSide(
-			blocks: List<DynamicTrackBlock>, nameOfOut: String
+			blocks: List<DynamicTrackBlock>,
+			nameOfOut: String
 		) {
 			val sem1 = "do${nameOfOut}1"
 			val sem2 = "do${nameOfOut}2"
-			assertThat(blocks.any { block ->
-				val (sep1, sep2) = block.ends()
-				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
-					(sep2 is DynamicInOut && sep2.name == nameOfOut) ||
-					(sep1 is DynamicRailSemaphore && (sep1.name == sem1 || sep1.name == sem2)) ||
-					(sep2 is DynamicRailSemaphore && (sep2.name == sem1 || sep2.name == sem2))
-			}).isTrue()
+			assertThat(
+				blocks.any { block ->
+					val (sep1, sep2) = block.ends()
+					(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+						(sep2 is DynamicInOut && sep2.name == nameOfOut) ||
+						(sep1 is DynamicRailSemaphore && (sep1.name == sem1 || sep1.name == sem2)) ||
+						(sep2 is DynamicRailSemaphore && (sep2.name == sem1 || sep2.name == sem2))
+				}
+			).isTrue()
 		}
 
 		private fun assertIsReachedOutSide(
-			blocks: List<DynamicTrackBlock>, nameOfOut: String
+			blocks: List<DynamicTrackBlock>,
+			nameOfOut: String
 		) {
-			assertThat(blocks.any { block ->
-				val (sep1, sep2) = block.ends()
-				(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
-					(sep2 is DynamicInOut && sep2.name == nameOfOut)
-			}).isTrue()
+			assertThat(
+				blocks.any { block ->
+					val (sep1, sep2) = block.ends()
+					(sep1 is DynamicInOut && sep1.name == nameOfOut) ||
+						(sep2 is DynamicInOut && sep2.name == nameOfOut)
+				}
+			).isTrue()
 		}
 
 		@Test
@@ -1740,7 +1772,10 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@ParameterizedTest
 		@CsvSource("A,B", "B,A")
-		fun `parallel from zX do to doYn via oriented overload`(first: String, second: String) {
+		fun `parallel from zX do to doYn via oriented overload`(
+			first: String,
+			second: String
+		) {
 			// Arrange - Find start semaphore (zA or zB)
 			val firstSemaphoreName = "z$first"
 			val secondSemaphoreName = "z$second"
@@ -1765,7 +1800,6 @@ class PathReservationServiceTest : KoinTestBase() {
 			// Assert path goes from start semaphore to expected doYn semaphore
 			assertPathContainsSeparators(blocks1, "z$first", "v$first", "do${second}1")
 			assertThat(blocks1.isEmpty()).isFalse()
-
 
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
@@ -1875,7 +1909,10 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@ParameterizedTest
 		@CsvSource("A,B", "B,A")
-		fun `parallel from doX1 do to X and doY2 do Y via oriented overload`(first: String, second: String) {
+		fun `parallel from doX1 do to X and doY2 do Y via oriented overload`(
+			first: String,
+			second: String
+		) {
 			// Arrange - Find start semaphore (doA1 or doB1)
 			val firstSemaphoreName = "do${first}1"
 			val secondSemaphoreName = "do${second}2"
@@ -1923,7 +1960,11 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		@ParameterizedTest
 		@CsvSource("A,1,2", "A,2,1", "B,1,2", "B,2,1")
-		fun `only first from doXn do to X and not doYm do X via oriented overload`(out: String, n: Int, m: Int) {
+		fun `only first from doXn do to X and not doYm do X via oriented overload`(
+			out: String,
+			n: Int,
+			m: Int
+		) {
 			// Arrange - Find start semaphore (doA1 or doB1)
 			val firstSemaphoreName = "do${out}$n"
 			val secondSemaphoreName = "do${out}$m"
@@ -1948,12 +1989,10 @@ class PathReservationServiceTest : KoinTestBase() {
 			assertPathContainsSeparators(blocks1, "do${out}$n", "v$out", out)
 			assertThat(blocks1.isEmpty()).isFalse()
 
-
 			// Act - second train
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
 		}
-
 	}
 }

@@ -6,11 +6,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Regression tests for wrapper identity preservation after PR #95.
@@ -30,12 +30,11 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		return TestFixtures.loadShuntingXml().use { xmlStream ->
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
-	}
 
 	/**
 	 * Test that getInOuts() returns the same wrapper instances that are in staticToDynamicMap.

@@ -51,7 +51,7 @@ class ContextTest : KoinTestBase() {
 
 			// Convert to simulation context for testing
 			context = simulationContextFactory.createContext(editingContext)
-			testContext = context  // Track for cleanup
+			testContext = context // Track for cleanup
 		} // editing context automatically closed here
 	}
 

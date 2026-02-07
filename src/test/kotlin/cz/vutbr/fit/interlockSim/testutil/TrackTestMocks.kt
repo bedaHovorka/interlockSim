@@ -136,12 +136,13 @@ fun createMockTrackOccupant(
 	name: String = "MockTrain",
 	distanceToSemaphore: Double = 100.0,
 	nextSemaphore: OrientedPathSeparator? = null
-): TrackOccupant = mockk(relaxed = true) {
-	every { this@mockk.name } returns name
-	every { this@mockk.distanceToSemaphore() } returns distanceToSemaphore
-	every { this@mockk.nextSemaphore() } returns nextSemaphore
-	every { this@mockk.toString() } returns name
-}
+): TrackOccupant =
+	mockk(relaxed = true) {
+		every { this@mockk.name } returns name
+		every { this@mockk.distanceToSemaphore() } returns distanceToSemaphore
+		every { this@mockk.nextSemaphore() } returns nextSemaphore
+		every { this@mockk.toString() } returns name
+	}
 
 // ==================== Track Facilities ====================
 
@@ -235,24 +236,25 @@ fun createMockBlockedTrack(
  *
  * @return MockK instance of TrackBlock
  */
-fun createMockTrackBlock(): TrackBlock = mockk<TrackBlock>(relaxed = true) {
-	every { name } returns null
-	every { getNextTrackSection(any(), any()) } returns null
-	every { isInnerElement(any()) } returns false
-	every { getJoin(any(), any()) } returns Cell.Segment.A
-	every { isFreeFrom(any()) } returns true
-	every { setUpPath(any(), any()) } just Runs
-	every { isSetUpPath(any()) } returns false
-	every { cancelPathSetup(any()) } just Runs
-	every { getSecondEnd(any()) } answers { firstArg() }
-	every { length() } returns 100.0
-	every { maxSpeed(any()) } returns 80.0
-	every { ends() } returns emptyArray()
-	every { getState() } returns cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
-	every { enter(any()) } just Runs
-	every { leave(any()) } just Runs
-	every { getTrackOccupant() } throws UnsupportedOperationException("Mock implementation")
-}
+fun createMockTrackBlock(): TrackBlock =
+	mockk<TrackBlock>(relaxed = true) {
+		every { name } returns null
+		every { getNextTrackSection(any(), any()) } returns null
+		every { isInnerElement(any()) } returns false
+		every { getJoin(any(), any()) } returns Cell.Segment.A
+		every { isFreeFrom(any()) } returns true
+		every { setUpPath(any(), any()) } just Runs
+		every { isSetUpPath(any()) } returns false
+		every { cancelPathSetup(any()) } just Runs
+		every { getSecondEnd(any()) } answers { firstArg() }
+		every { length() } returns 100.0
+		every { maxSpeed(any()) } returns 80.0
+		every { ends() } returns emptyArray()
+		every { getState() } returns cz.vutbr.fit.interlockSim.objects.core.TrackFacility.State.FREE
+		every { enter(any()) } just Runs
+		every { leave(any()) } just Runs
+		every { getTrackOccupant() } throws UnsupportedOperationException("Mock implementation")
+	}
 
 /**
  * Creates a mock TrackBlockPart segment.
