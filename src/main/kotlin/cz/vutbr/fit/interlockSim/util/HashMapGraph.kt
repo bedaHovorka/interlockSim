@@ -17,11 +17,39 @@ import java.util.Map
 import java.util.Set
 
 /**
- * The ADT ExtendedUnorientedGraph prototype
+ * Hash map based implementation of an unoriented graph.
  *
  * @param <N> nodes
  * @param <E> edges
  * @param <X> {@link ExtendedUnorientedGraph}
+ *
+ * ## Thread Safety
+ *
+ * **This class is NOT thread-safe.**
+ *
+ * The nodeSet() cache (lines ~191-203) uses lazy initialization without synchronization:
+ * - Non-volatile fields: `nodeCollection`, `cachedNodeSet`
+ * - Check-then-act race condition in nodeSet()
+ * - No synchronization on cache invalidation
+ *
+ * ### Design Decision
+ *
+ * Thread safety is intentionally NOT implemented because:
+ * 1. BaseContext (which uses HashMapGraph) operates in a single thread
+ * 2. Swing GUI editor runs on Event Dispatch Thread (EDT)
+ * 3. jDisco discrete event simulation framework is single-threaded
+ * 4. No current use cases require concurrent access to the graph
+ * 5. Thread-safety would add complexity and performance overhead
+ *
+ * ### Usage Guidelines
+ *
+ * - ✅ Safe: Single-threaded access (GUI, simulation)
+ * - ✅ Safe: Frozen contexts with concurrent reads (70%+ success, see ContextConcurrencyTest)
+ * - ❌ Unsafe: Concurrent modifications from multiple threads
+ * - ❌ Unsafe: Mixed read/write access without synchronization
+ *
+ * @see cz.vutbr.fit.interlockSim.context.BaseContext for context-level thread-safety documentation
+ * @see cz.vutbr.fit.interlockSim.context.ContextConcurrencyTest for race condition behavior tests
  */
 class HashMapGraph<N, E, X> :
 	AbstractUnorientedGraph<N, E>(),
@@ -185,18 +213,32 @@ class HashMapGraph<N, E, X> :
 		return collection as java.util.Collection<N>
 	}
 
-	/* (non-Javadoc)
-	 * @see cz.vutbr.fit.interlockSim.context.Graph#nodeSet()
+	/**
+	 * Returns an unmodifiable view of all nodes in the graph.
+	 *
+	 * **Caching Strategy:**
+	 * - Lazy initialization: nodeCollection and cachedNodeSet created on first access
+	 * - Cache invalidation: Set to null on any graph modification (put, remove, clear)
+	 * - Not thread-safe: No synchronization (see class-level documentation)
+	 *
+	 * **Thread-Safety Note:**
+	 * This method has a check-then-act race condition. Multiple threads calling this
+	 * method concurrently may create duplicate cached sets. This is acceptable because:
+	 * - HashMapGraph is documented as not thread-safe
+	 * - No current use cases involve concurrent access
+	 * - Frozen contexts (via BaseContext.freeze()) provide safer concurrent reads
+	 *
+	 * @return Unmodifiable set of all nodes
 	 */
 	override fun nodeSet(): Set<N> {
 		if (nodeCollection == null) nodeCollection = NodeCollection()
-		
+
 		// Lazily build and cache the node set (materializes once, then reuses)
 		if (cachedNodeSet == null) {
 			@Suppress("UNCHECKED_CAST")
 			cachedNodeSet = nodeCollection!!.toMutableSet() as java.util.Set<N>
 		}
-		
+
 		// Return unmodifiable view of cached set (O(1) performance)
 		@Suppress("UNCHECKED_CAST")
 		return java.util.Collections.unmodifiableSet(cachedNodeSet as MutableSet<N>) as java.util.Set<N>

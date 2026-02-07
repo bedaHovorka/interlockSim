@@ -330,7 +330,7 @@ class XMLContextFactory : EditingContextFactory {
 			// Only validate InOut count if not skipping structural validation
 			if (!skipStructuralValidation) {
 				// Access inouts via public method from BaseContext
-				val inOutsCount = ctx.getInOutsList().size
+				val inOutsCount = ctx.getInOuts().size
 				if (inOutsCount < MIN_INOUT_ELEMENTS) {
 					throw SAXException(
 						"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements (entry and exit points). " +
@@ -478,7 +478,10 @@ class XMLContextFactory : EditingContextFactory {
 			val message = e.message ?: "Unknown XML parsing error"
 			val enhancedMessage =
 				if (message.contains("InOut")) {
-					"$message\n\nInOut elements define entry/exit points for trains. At least 2 are required for simulation."
+					"$message\n\nInOut elements define entry/exit points for trains. " +
+						"At least $MIN_INOUT_ELEMENTS is required for simulation.\n" +
+						"Note: With bidirectional train operation (Issue #356), " +
+						"a single InOut can serve as both entry and exit."
 				} else {
 					message
 				}
@@ -732,11 +735,35 @@ class XMLContextFactory : EditingContextFactory {
 		return builder.toString()
 	}
 
+	/**
+	 * Saves an editing context to an output stream.
+	 *
+	 * Pre-save validation (Issue #XXX, PR #358):
+	 * - Validates InOut count before serialization
+	 * - Prevents saving invalid contexts (< MIN_INOUT_ELEMENTS InOuts)
+	 * - Returns false if validation fails
+	 *
+	 * @param context The editing context to save
+	 * @param stream Target output stream
+	 * @return true if saved successfully, false if validation failed or IO error occurred
+	 */
 	override fun saveContext(
 		context: Context<*, *>,
 		stream: OutputStream
-	): Boolean =
-		try {
+	): Boolean {
+		// Pre-save validation: Check InOut count
+		val editingContext = Util.assertInstanceOf(EditingContext::class.java, context)
+		val inOutsCount = editingContext.getInOuts().size
+		if (inOutsCount < MIN_INOUT_ELEMENTS) {
+			logger.warn {
+				"Cannot save context: Insufficient InOut elements. " +
+					"Found: $inOutsCount, Required: $MIN_INOUT_ELEMENTS"
+			}
+			return false
+		}
+
+		// Existing save logic
+		return try {
 			val xml = generateXML(context)
 			// Use UTF-8 encoding for consistent XML output
 			stream.write(xml.toByteArray(Charsets.UTF_8))
@@ -747,6 +774,7 @@ class XMLContextFactory : EditingContextFactory {
 			logger.error(e) { "Failed to save context to output stream" }
 			false
 		}
+	}
 
 	private fun appendAttribute(
 		builder: StringBuilder,
@@ -803,11 +831,35 @@ class XMLContextFactory : EditingContextFactory {
 		return appendAttribute(builder, Y, value.y)
 	}
 
+	/**
+	 * Saves an editing context to a file.
+	 *
+	 * Pre-save validation (Issue #XXX, PR #358):
+	 * - Validates InOut count before serialization
+	 * - Prevents saving invalid contexts (< MIN_INOUT_ELEMENTS InOuts)
+	 * - Returns false if validation fails
+	 *
+	 * @param context The editing context to save
+	 * @param file Target file path
+	 * @return true if saved successfully, false if validation failed or IO error occurred
+	 */
 	override fun saveContext(
 		context: Context<*, *>,
 		file: File
-	): Boolean =
-		try {
+	): Boolean {
+		// Pre-save validation: Check InOut count
+		val editingContext = Util.assertInstanceOf(EditingContext::class.java, context)
+		val inOutsCount = editingContext.getInOuts().size
+		if (inOutsCount < MIN_INOUT_ELEMENTS) {
+			logger.warn {
+				"Cannot save context: Insufficient InOut elements. " +
+					"Found: $inOutsCount, Required: $MIN_INOUT_ELEMENTS"
+			}
+			return false
+		}
+
+		// Existing save logic
+		return try {
 			val xml = generateXML(context)
 			FileWriter(file).use { writer ->
 				writer.write(xml)
@@ -818,6 +870,7 @@ class XMLContextFactory : EditingContextFactory {
 			logger.error(e) { "Failed to save context to file: ${file.absolutePath}" }
 			false
 		}
+	}
 
 	// Helper method to get simple class name
 	private fun classToString(clazz: Class<*>): String = clazz.simpleName

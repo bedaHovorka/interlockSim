@@ -537,6 +537,80 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 		}
 	}
 
+	@Nested
+	@DisplayName("Pre-Save Validation (Issue #XXX, PR #358)")
+	inner class PreSaveValidationTests {
+		@Test
+		@DisplayName("saveContext to File rejects context with 0 InOuts")
+		fun saveContext_fileWithZeroInOuts_returnsFalse() {
+			// Create empty context (0 InOuts)
+			val context = editingContextFactory.createEmptyContext()
+
+			// Create temp file path (but delete the file first to test that save doesn't create it)
+			val tempFile = kotlin.io.path.createTempFile("test", ".xml").toFile()
+			tempFile.delete() // Delete so we can verify save doesn't create it
+
+			try {
+				val success = editingContextFactory.saveContext(context, tempFile)
+
+				// Should reject save
+				assertThat(success).isFalse()
+				// File should not be created by save operation
+				assertThat(tempFile.exists()).isFalse()
+			} finally {
+				tempFile.delete() // Clean up in case test failed
+				context.close()
+			}
+		}
+
+		@Test
+		@DisplayName("saveContext to File accepts context with 1 InOut")
+		fun saveContext_fileWithOneInOut_returnsTrue() {
+			// Create context with 1 InOut
+			val context = editingContextFactory.createEmptyContext()
+			val inOut = InOut("ENTRY", false, cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType.HORIZONTAL)
+			context.putCell(Point(5, 5), inOut)
+
+			// Attempt to save to file
+			val tempFile = kotlin.io.path.createTempFile("test", ".xml").toFile()
+			try {
+				val success = editingContextFactory.saveContext(context, tempFile)
+
+				// Should succeed
+				assertThat(success).isTrue()
+				assertThat(tempFile.exists()).isTrue()
+
+				// Verify round-trip
+				val reloaded = editingContextFactory.createContext(tempFile)
+				val editContext = reloaded as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+				assertThat(editContext.getInOuts().size).isEqualTo(1)
+				editContext.close()
+			} finally {
+				tempFile.delete()
+				context.close()
+			}
+		}
+
+		@Test
+		@DisplayName("saveContext to OutputStream rejects context with 0 InOuts")
+		fun saveContext_streamWithZeroInOuts_returnsFalse() {
+			// Create empty context (0 InOuts)
+			val context = editingContextFactory.createEmptyContext()
+			val outputStream = ByteArrayOutputStream()
+
+			try {
+				val success = editingContextFactory.saveContext(context, outputStream)
+
+				// Should reject save
+				assertThat(success).isFalse()
+				// Stream should be empty
+				assertThat(outputStream.size()).isEqualTo(0)
+			} finally {
+				context.close()
+			}
+		}
+	}
+
 	// Helper method to load fixture files from resources
 	private fun getFixtureStream(fileName: String): InputStream {
 		val resourcePath = "/cz/vutbr/fit/interlockSim/xml/fixtures/$fileName"

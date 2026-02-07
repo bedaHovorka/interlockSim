@@ -90,7 +90,7 @@ class InOutValidationTest {
 	fun `XML with 1 InOut passes validation`() {
 		TestFixtures.loadInvalidInOutXml("single-inout.xml").use { stream ->
 			xmlFactory.createContext(stream).use { context ->
-				assertThat(context.asEditingContext().getInOutsList()).hasSize(1)
+				assertThat(context.asEditingContext().getInOuts()).hasSize(1)
 			}
 		}
 	}
@@ -104,7 +104,7 @@ class InOutValidationTest {
 	fun `XML with 2 InOuts passes validation`() {
 		TestFixtures.loadLinearTrackXml().use { stream ->
 			xmlFactory.createContext(stream).use { context ->
-				assertThat(context.asEditingContext().getInOutsList()).hasSize(2)
+				assertThat(context.asEditingContext().getInOuts()).hasSize(2)
 			}
 		}
 	}
@@ -120,7 +120,7 @@ class InOutValidationTest {
 		TestFixtures.loadShuntingXml().use { stream ->
 			xmlFactory.createContext(stream).use { ctx ->
 				val context = ctx.asEditingContext()
-				val inOutCount = context.getInOutsList().size
+				val inOutCount = context.getInOuts().size
 				assertThat(inOutCount).isEqualTo(2)
 			}
 		}
@@ -138,7 +138,7 @@ class InOutValidationTest {
 		val builder = TestContextBuilder()
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(0)
+		assertThat(editingContext.getInOuts()).hasSize(0)
 
 		// Transformation to SimulationContext should validate
 		// (This is future work - currently transformers don't validate InOut count)
@@ -158,7 +158,7 @@ class InOutValidationTest {
 
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(1)
+		assertThat(editingContext.getInOuts()).hasSize(1)
 		editingContext.close()
 	}
 
@@ -175,7 +175,7 @@ class InOutValidationTest {
 
 		val editingContext = builder.buildEditingContext()
 
-		assertThat(editingContext.getInOutsList()).hasSize(2)
+		assertThat(editingContext.getInOuts()).hasSize(2)
 		editingContext.close()
 	}
 
@@ -193,6 +193,24 @@ class InOutValidationTest {
 		}.isInstanceOf(ContextCreationException::class)
 			.transform { it.message ?: "" }
 			.contains("entry/exit point")
+	}
+
+	/**
+	 * Test: Error message reflects MIN_INOUT_ELEMENTS constant value.
+	 *
+	 * Issue #XXX, PR #358: Ensure error message uses constant instead of hardcoded "2".
+	 * Expected: Message contains "at least 1" (current MIN_INOUT_ELEMENTS value).
+	 */
+	@Test
+	fun `Error message reflects MIN_INOUT_ELEMENTS constant value`() {
+		val min = XMLContextFactory.MIN_INOUT_ELEMENTS
+		assertFailure {
+			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
+				xmlFactory.createContext(stream)
+			}
+		}.isInstanceOf(ContextCreationException::class)
+			.transform { it.message ?: "" }
+			.contains("at least $min")
 	}
 
 	/**
