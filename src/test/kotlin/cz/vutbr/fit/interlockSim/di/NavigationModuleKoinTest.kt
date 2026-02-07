@@ -15,9 +15,8 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
-import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -79,15 +78,15 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
-			assertThat(path).isNotNull()
+			assertThat(path).isInstanceOf(PathResult.Available::class)
+
+			val pathElements = (path as PathResult.Available).path
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath =
-				path!!
-					.filterIsInstance<TrackSection>()
-					.map { it.getTrackBlock() }
-					.filterIsInstance<DynamicTrackBlock>()
-					.toSet()
+			val blocksFromPath = pathElements.filterIsInstance<TrackSection>()
+				.map { it.getTrackBlock() }
+				.filterIsInstance<DynamicTrackBlock>()
+				.toSet()
 
 			// Compare with blocks from PathReservationService (should be identical)
 			val blocksFromReservation = blocks.toSet()
@@ -95,7 +94,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train2 cannot get path (ownership isolation)
 			val pathForTrain2 = trainNavigationService.findReservedPathForTrain("train2", inOutA)
-			assertThat(pathForTrain2).isNull()
+			assertThat(pathForTrain2).isInstanceOf(PathResult.OwnershipConflict::class)
 		}
 	}
 
@@ -166,14 +165,11 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			assertThat(trainService).isInstanceOf(TrainNavigationService::class)
 
 			// Verify the service can perform ownership checks
-			// isPathReservedForTrain builds a path from the separator until:
-			// 1. It reaches an OrientedPathSeparator (semaphore/switch) in the direction, OR
-			// 2. It reaches the end of track (no more tracks available)
-			// In this test, path goes InOut A → Block → InOut B (all reserved for train1)
 			// Note: InOut elements ARE OrientedPathSeparators (via OrientedNodeCell)
 			// and contain semaphores, so the path IS valid and returns true
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
-			// Assert - Returns true because all blocks in the path are owned by train1
+			// Assert - This correctly returns true because the path is reserved for train1
+			// and InOut elements are valid oriented path separators with semaphores
 			assertThat(isReserved).isEqualTo(true)
 		}
 	}

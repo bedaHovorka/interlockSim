@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -113,7 +114,32 @@ class Train :
 					break
 				}
 
-				val path = trainNavService.findReservedPathForTrain(name, where)
+				val pathResult = trainNavService.findReservedPathForTrain(name, where)
+				val path = when (pathResult) {
+					is PathResult.Available -> pathResult.path
+					is PathResult.NoTopologicalPath -> {
+						// Permanent condition - no path exists in network topology
+						if (where is DynamicInOut) {
+							// At destination InOut, this is expected (train has arrived)
+							null
+						} else {
+							// Not at destination, this is an error
+							logger.error {
+								"Train $number: No topological path exists from $where. " +
+									"Network may be misconfigured or train reached dead-end."
+							}
+							null
+						}
+					}
+					is PathResult.OwnershipConflict -> {
+						// Temporary condition - blocks reserved for different train
+						logger.debug {
+							"Train $number: Path blocked by ownership conflict at $where, " +
+								"halting and waiting for dispatcher (will retry after 5s)"
+						}
+						null
+					}
+				}
 				next = path?.getNext(current)
 
 				if (path == null || next == null) {
@@ -123,9 +149,6 @@ class Train :
 					motor.cancelAccelerating()
 					this@Train.stop()
 
-					logger.debug {
-						"Train $number: No reserved path available at $where, halting and waiting for dispatcher (will retry after 5s)"
-					}
 					// Use hold() with timeout instead of passivate() to prevent permanent freezing
 					// If path becomes available (dispatcher reserves), train will be reactivated
 					// If timeout expires, train will retry path request
@@ -227,7 +250,23 @@ class Train :
 
 			// Use train navigation service to find reserved path
 			// Finds paths that are reserved for this train
-			val path: Path? = trainNavService.findReservedPathForTrain(name, separator)
+			val pathResult = trainNavService.findReservedPathForTrain(name, separator)
+			val path: Path? = when (pathResult) {
+				is PathResult.Available -> pathResult.path
+				is PathResult.NoTopologicalPath -> {
+					logger.error {
+						"Train $number at semaphore ${semaphore.name}: No topological path exists. " +
+							"Network may be misconfigured."
+					}
+					null
+				}
+				is PathResult.OwnershipConflict -> {
+					logger.debug {
+						"Train $number at semaphore ${semaphore.name}: Path blocked by ownership conflict"
+					}
+					null
+				}
+			}
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
@@ -244,7 +283,24 @@ class Train :
 
 				// Re-fetch path after signal becomes allowing
 				// The signal should only become allowing when a path is reserved
-				val resumePath: Path? = trainNavService.findReservedPathForTrain(name, separator)
+				val resumeResult = trainNavService.findReservedPathForTrain(name, separator)
+				val resumePath: Path? = when (resumeResult) {
+					is PathResult.Available -> resumeResult.path
+					is PathResult.NoTopologicalPath -> {
+						logger.error {
+							"Train $number at semaphore ${semaphore.name}: Signal is allowing but no topological path exists. " +
+								"This indicates a logic error - signal should only allow when path exists."
+						}
+						null
+					}
+					is PathResult.OwnershipConflict -> {
+						logger.error {
+							"Train $number at semaphore ${semaphore.name}: Signal is allowing but path not reserved for this train. " +
+								"This indicates a logic error - signal should only allow when path is reserved."
+						}
+						null
+					}
+				}
 				requireSimulationNotNull(resumePath) {
 					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
 						"This indicates a logic error - signal should only allow when path is reserved."

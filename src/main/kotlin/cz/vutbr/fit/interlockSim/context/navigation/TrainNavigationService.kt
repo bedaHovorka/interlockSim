@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
-import cz.vutbr.fit.interlockSim.objects.paths.Path
 
 /**
  * Service for train-specific path navigation within reserved blocks.
@@ -82,8 +81,15 @@ interface TrainNavigationService {
 	 * 1. Build path from separator through next section to next semaphore (existing pathToNextSemaphore logic)
 	 * 2. Extract all track blocks from path
 	 * 3. For each block, validate it is RESERVED for trainId (via PathReservationRegistry)
-	 * 4. If ANY block is not owned by this train, return null (train waits)
-	 * 5. If all blocks are owned, return complete path (train continues)
+	 * 4. If no topological path exists, return NoTopologicalPath (permanent condition)
+	 * 5. If ANY block is not owned by this train, return OwnershipConflict (temporary condition)
+	 * 6. If all blocks are owned, return Available with complete path (train continues)
+	 *
+	 * ## Result Semantics
+	 *
+	 * - **Available(path)**: Path exists and all blocks are reserved for this train
+	 * - **NoTopologicalPath**: Network topology doesn't allow a path (permanent, train should stop)
+	 * - **OwnershipConflict**: Blocks are reserved for different train (temporary, train should wait)
 	 *
 	 * ## Ownership Validation
 	 *
@@ -91,36 +97,36 @@ interface TrainNavigationService {
 	 * for (block in path.blocks) {
 	 *     val owner = registry.getOwner(block)
 	 *     if (owner != trainId) {
-	 *         return null  // Block reserved for different train or not reserved
+	 *         return PathResult.OwnershipConflict  // Block reserved for different train
 	 *     }
 	 * }
-	 * return path  // All blocks owned by this train
+	 * return PathResult.Available(path)  // All blocks owned by this train
 	 * ```
-	 *
-	 * ## Waiting Behavior
-	 *
-	 * When this method returns null:
-	 * - Train should halt (fireStop)
-	 * - Train waits for path to become available (waitUntil with condition)
-	 * - Train retries periodically (via semaphore signal or timer)
 	 *
 	 * ## Example Usage
 	 *
 	 * ```kotlin
 	 * // In Train.Front.semaphoreAction():
-	 * val path = env.getTrainNavigationService().findReservedPathForTrain(
+	 * val result = env.getTrainNavigationService().findReservedPathForTrain(
 	 *     trainId = toString(),  // "Train #1"
-	 *     separator = semaphore,
-	 *     next = next
+	 *     separator = semaphore
 	 * )
 	 *
-	 * if (path == null) {
-	 *     // Path not reserved for this train, halt and wait
-	 *     fireStop()
-	 *     waitUntil { pathBecomesAvailable(separator, next) }
-	 * } else {
-	 *     // Path is reserved for us, continue
-	 *     accelerateToSignal(semaphore, path)
+	 * when (result) {
+	 *     is PathResult.Available -> {
+	 *         // Path is reserved for us, continue
+	 *         accelerateToSignal(semaphore, result.path)
+	 *     }
+	 *     is PathResult.NoTopologicalPath -> {
+	 *         // No path exists (dead-end or disconnected network)
+	 *         logger.error("No topological path from $separator")
+	 *         stopAndReportError()
+	 *     }
+	 *     is PathResult.OwnershipConflict -> {
+	 *         // Blocks reserved for different train, wait
+	 *         fireStop()
+	 *         hold(5.0) // Wait and retry
+	 *     }
 	 * }
 	 * ```
 	 *
@@ -133,19 +139,20 @@ interface TrainNavigationService {
 	 * val path = env.pathToNextSemaphore(separator, next)
 	 *
 	 * // New approach (with ownership validation):
-	 * val path = trainNavService.findReservedPathForTrain(trainId, separator, next)
+	 * val result = trainNavService.findReservedPathForTrain(trainId, separator)
 	 * ```
 	 *
-	 * The core path-finding logic remains unchanged; this method adds train-specific filtering.
+	 * The core path-finding logic remains unchanged; this method adds train-specific filtering
+	 * and better error reporting.
 	 *
 	 * @param trainId Unique identifier for the train (typically Train.toString())
 	 * @param separator Starting point (semaphore, InOut)
-	 * @return Path to next semaphore if all blocks are reserved for this train, null otherwise
+	 * @return PathResult indicating success (Available) or reason for failure
 	 */
 	fun findReservedPathForTrain(
 		trainId: String,
 		separator: PathSeparator
-	): Path?
+	): PathResult
 
 	/**
 	 * Check if a path to the next semaphore is currently reserved for the specified train.
