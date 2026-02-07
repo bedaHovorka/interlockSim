@@ -81,13 +81,8 @@ class NodeCellTest : KoinTestBase() {
 	inner class ConnectionTests {
 		@Test
 		fun `node connects to adjacent cells`() {
-			// Arrange
-			// Two nodes should be adjacent horizontally (one unit apart)
-			val nodeLeft = createMockNodeCell(name = "Left")
-			val nodeRight = createMockNodeCell(name = "Right")
-
-			// Act
-			// Simulate adding nodes to adjacent grid positions
+			// Arrange & Act
+			// Create two adjacent nodes horizontally (one unit apart)
 			val context =
 				get<TestContextBuilder>()
 					.withInOut("Left", 0, 0, true)
@@ -208,7 +203,7 @@ class NodeCellTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `getNeighbor returns null for unconnected direction`() {
+		fun `getFollowingSegment handles unconnected directions without errors`() {
 			// Arrange
 			val node = createMockNodeCell(name = "Isolated") as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 

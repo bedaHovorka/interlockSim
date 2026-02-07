@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
@@ -74,6 +75,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
+			assertThat(path).isNotNull()
 
 			// Extract blocks from path returned by TrainNavigationService
 			val blocksFromPath =

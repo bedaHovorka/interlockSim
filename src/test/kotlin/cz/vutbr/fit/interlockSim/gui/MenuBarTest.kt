@@ -95,6 +95,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find Save action
 			val saveItem = menuItems.find { it.text == "Save as..." }
+			assertThat(saveItem).isNotNull()
 			assertThat(saveItem!!.text).isEqualTo("Save as...")
 			// Verify menu item properties
 			assertThat(saveItem.isEnabled).isEqualTo(true)
@@ -117,6 +118,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 			
 			// Find Exit action
 			val exitItem = menuItems.find { it.text == "Exit" }
+			assertThat(exitItem).isNotNull()
 			assertThat(exitItem!!.text).isEqualTo("Exit")
 			// Verify menu item properties
 			assertThat(exitItem.isEnabled).isEqualTo(true)
