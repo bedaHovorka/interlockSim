@@ -62,14 +62,14 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 	@DisplayName("Lenient parsing - Parseable XML with validation errors")
 	inner class ParseableWithErrorsTests {
 		@Test
-		fun singleInOut_shouldReturnParseableWithErrors() {
-			// Arrange: single-inout.xml has only 1 InOut (violates minimum 2 requirement)
+		fun singleInOut_shouldBeValidAfterBidirectionalSupport() {
+			// Arrange: single-inout.xml has only 1 InOut (meets minimum 1 requirement)
 			val fixtureFile = getFixtureFile("single-inout.xml")
 
 			// Act
 			val result = xmlContextFactory.createContextLenient(fixtureFile)
 
-			// Assert: Should be parseable but have validation errors
+			// Assert: Should be parseable and valid (minimum 1 InOut is now allowed)
 			assertThat(result.isParseable).isTrue()
 			assertThat(result.context).isNotNull()
 			assertThat(result.validationResult.isValid).isTrue()

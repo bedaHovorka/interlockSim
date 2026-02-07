@@ -417,7 +417,7 @@ class XMLPolishTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `exactly one InOuts is valid`() {
+		fun `exactly one InOut is valid`() {
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">

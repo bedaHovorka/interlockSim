@@ -27,47 +27,55 @@ import org.koin.test.inject
 private val logger = KotlinLogging.logger {}
 
 /**
- * Integration tests for Train.reverseDirection() functionality.
+ * Unit tests for Timetable.reverseDirection() functionality.
  *
  * ## Purpose
  *
- * These tests verify that trains can reverse their direction of travel during simulation,
- * simulating the train engineer moving to the opposite end of the train.
+ * These tests verify the timetable reversal logic that supports bidirectional
+ * train operation. The reversal swaps the In/Out destinations and is used by
+ * Train.reverseDirection().
  *
  * ## Test Scenarios
  *
  * Uses vyhybna.xml network configuration:
- * - Train reverses direction when stopped
- * - Validates preconditions (train must be stopped)
- * - Verifies In/Out destinations are swapped
- * - Tests that reversed train can complete journey
+ * - Timetable reverses In/Out destinations
+ * - Validates destination swap is correct
+ * - Verifies other timetable properties remain unchanged
+ * - Tests that reversed timetable is usable for train creation
+ *
+ * ## Note on Train.reverseDirection()
+ *
+ * Train.reverseDirection() includes additional simulation behavior (hold(30.0)
+ * to simulate engineer movement) that requires running simulation. That full
+ * integration test scenario requires stopping a train mid-simulation in jDisco,
+ * which is complex to test. This test focuses on the core timetable reversal
+ * logic that Train.reverseDirection() delegates to.
  *
  * ## Conservative Approach
  *
  * Per CLAUDE.md guidance for sim/ package:
  * - Uses existing vyhybna.xml network (realistic topology)
- * - Short simulation times (30-60 seconds)
- * - Validates train state without modifying Train class internals
- * - Tests observe behavior through public APIs only
+ * - Tests core logic without running full simulation
+ * - Validates state through public APIs only
  *
  * ## Railway Context
  *
  * This feature simulates a simplified version of locomotive coupling/uncoupling:
  * - In reality, only possible with certain modern train types
  * - Simulation allows this for any train for flexibility
- * - Engineer movement delay (30s) provides realistic timing
+ * - Engineer movement delay (30s) in Train.reverseDirection() provides realistic timing
  *
  * @since 2026-02-06 (GitHub #62)
  */
 @Tag("integration-test")
-@DisplayName("Train Reverse Direction - Integration Tests")
+@DisplayName("Timetable Reverse Direction - Unit Tests")
 class TrainReverseDirectionTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var context: DefaultSimulationContext
 
 	@BeforeEach
 	fun setUp() {
-		logger.info { "Loading vyhybna.xml for train reverse direction testing" }
+		logger.info { "Loading vyhybna.xml for timetable reverse direction testing" }
 
 		// Load vyhybna.xml - realistic railway network
 		val xml =
@@ -78,20 +86,19 @@ class TrainReverseDirectionTest : KoinTestBase() {
 
 		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 
-		logger.info { "Train reverse direction test setup complete" }
+		logger.info { "Timetable reverse direction test setup complete" }
 	}
 
 	@AfterEach
 	fun tearDown() {
-		// Only stop if simulation was actually started
-		// These tests don't run the simulation, just test the API
+		// These tests don't run the simulation, just test the timetable API
 		if (::context.isInitialized) {
-			logger.info { "Train reverse direction test teardown complete" }
+			logger.info { "Timetable reverse direction test teardown complete" }
 		}
 	}
 
 	@Test
-	fun `train can reverse direction when stopped`() {
+	fun `timetable can reverse In and Out destinations`() {
 		// Arrange
 		val inOuts = context.getInOuts().toList()
 		assertThat(inOuts.size >= 2).isEqualTo(true)
@@ -114,20 +121,13 @@ class TrainReverseDirectionTest : KoinTestBase() {
 		assertThat(timetable.getIn()).isEqualTo(inPoint)
 		assertThat(timetable.getOut()).isEqualTo(outPoint)
 
-		// Act - Activate train but don't start simulation yet
-		// We'll test the reverseDirection method directly
-		// This is a unit-style test within an integration test framework
-
-		// Since we can't easily stop a train mid-simulation in jDisco without
-		// running the full simulation, we'll test the method when train is in
-		// initial stopped state (velocity = 0)
+		// Act - Test the timetable reversal logic directly
+		// Note: Train.reverseDirection() calls this same method, but also includes
+		// hold(30.0) simulation delay which requires running simulation context
 		assertThat(train.getVelocity()).isEqualTo(0.0)
-
-		// Reverse direction (this will use hold() internally, so we need to activate as Process)
-		// For this test, we'll verify the timetable swap happened correctly
 		timetable.reverseDirection()
 
-		// Assert
+		// Assert - Verify In/Out swap
 		assertThat(timetable.getIn()).isEqualTo(outPoint)
 		assertThat(timetable.getOut()).isEqualTo(inPoint)
 	}

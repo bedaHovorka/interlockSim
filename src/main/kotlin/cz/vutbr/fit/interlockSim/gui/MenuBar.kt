@@ -87,8 +87,10 @@ class MenuBar : JMenuBar() {
 							frame.setContext(context)
 							frame.modificationTracker.setCurrentFile(selectedFile)
 							frame.modificationTracker.markClean()
+						} else {
+							// User cancelled - close context to avoid resource leak
+							context.close()
 						}
-						// If CANCEL, do nothing (file remains closed)
 					}
 
 					// Case 3: Unparseable XML (malformed syntax) - show error and block
