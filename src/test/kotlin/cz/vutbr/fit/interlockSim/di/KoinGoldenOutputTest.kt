@@ -92,28 +92,25 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	}
 
 	/**
-	 * Baseline test for determinism validation (reimagined approach)
+	 * Validate simulation against deterministic baseline
 	 *
 	 * Since Koin is already integrated and working (validated by passing
 	 * "basic Koin initialization and simulation setup succeeds" test),
-	 * this test validates **simulation determinism** rather than before/after
-	 * comparison.
+	 * this test validates **simulation determinism** by comparing against
+	 * hardcoded baseline values.
 	 *
 	 * This test establishes the deterministic baseline by running ShuntingLoop
-	 * and capturing key metrics that will be compared in subsequent runs to
-	 * prove the simulation produces identical results across runs.
+	 * and validating key metrics against known expected values that prove
+	 * the simulation produces consistent results.
 	 *
 	 * **Determinism baseline metrics:**
 	 * - Number of trains that completed their journey
 	 * - Final graph state (number of reserved/occupied/free blocks)
-	 * - Path reservation registry state (number of active reservations)
-	 *
-	 * **Note:** Run this test first to observe the actual values, then update
-	 * the validation test constants with the observed baseline.
+	 * - Path reservation registry state (number of reserved blocks)
 	 */
 	@Test
 	@Tag("integration-test")
-	fun `capture baseline for determinism validation`() {
+	fun `validate simulation against deterministic baseline`() {
 		// Arrange: Create simulation context with ShuntingLoop (60s end time)
 		val factory = get<SimulationContextFactory>()
 		val defaultContext = TestFixtures.loadShuntingXml().use { xml ->
@@ -148,7 +145,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			assertThat(occupiedBlocks).isEqualTo(EXPECTED_OCCUPIED_BLOCKS)
 
 			val registry = ctx.scope.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry>()
-			assertThat(registry.blockCount()).isEqualTo(EXPECTED_ACTIVE_RESERVATIONS)
+			assertThat(registry.blockCount()).isEqualTo(EXPECTED_RESERVED_BLOCKS)
 			assertThat(registry.trainCount()).isEqualTo(EXPECTED_TRAIN_COUNT)
 		}
 	}
@@ -190,8 +187,8 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			.isEqualTo(run1.graphSize)
 		assertThat(run2.occupiedBlocks)
 			.isEqualTo(run1.occupiedBlocks)
-		assertThat(run2.activeReservations)
-			.isEqualTo(run1.activeReservations)
+		assertThat(run2.reservedBlocks)
+			.isEqualTo(run1.reservedBlocks)
 		assertThat(run2.trainCount)
 			.isEqualTo(run1.trainCount)
 
@@ -370,7 +367,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	private data class SimulationMetrics(
 		val graphSize: Int,
 		val occupiedBlocks: Int,
-		val activeReservations: Int,
+		val reservedBlocks: Int,
 		val trainCount: Int,
 	)
 
@@ -378,7 +375,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		/** Deterministic baseline for ShuntingLoop(60s) on vyhybna.xml */
 		private const val EXPECTED_GRAPH_SIZE = 10
 		private const val EXPECTED_OCCUPIED_BLOCKS = 1
-		private const val EXPECTED_ACTIVE_RESERVATIONS = 4
+		private const val EXPECTED_RESERVED_BLOCKS = 4
 		private const val EXPECTED_TRAIN_COUNT = 1
 	}
 }
