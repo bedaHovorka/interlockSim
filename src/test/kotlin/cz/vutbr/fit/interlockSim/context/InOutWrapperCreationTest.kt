@@ -4,10 +4,10 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Test that verifies InOut wrappers are created correctly without duplication.
@@ -22,12 +22,11 @@ class InOutWrapperCreationTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): SimulationContext {
-		return TestFixtures.loadShuntingXml().use { xmlStream ->
+	private fun loadVyhybnaContext(): SimulationContext =
+		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 			simulationContextFactory.createContext(editingContext)
 		}
-	}
 
 	/**
 	 * Test that getInOuts() successfully retrieves wrappers from staticToDynamicMap.

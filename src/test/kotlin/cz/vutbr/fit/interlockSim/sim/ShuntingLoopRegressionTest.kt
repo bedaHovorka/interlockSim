@@ -5,6 +5,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -12,7 +13,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 private val logger = KotlinLogging.logger {}
 
@@ -41,12 +41,11 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		return TestFixtures.loadShuntingXml().use { xmlStream ->
+	private fun loadVyhybnaContext(): DefaultSimulationContext =
+		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
-	}
 
 	/**
 	 * Test that trains complete full circuits and exit successfully.

@@ -73,6 +73,8 @@ import java.util.concurrent.TimeUnit
 class MainArgumentParsingTest {
 	private lateinit var systemErr: PrintStream
 	private lateinit var capturedErr: ByteArrayOutputStream
+	private lateinit var systemOut: PrintStream
+	private lateinit var capturedOut: ByteArrayOutputStream
 
 	@TempDir
 	private lateinit var tempDir: File
@@ -83,12 +85,20 @@ class MainArgumentParsingTest {
 		systemErr = System.err
 		capturedErr = ByteArrayOutputStream()
 		System.setErr(PrintStream(capturedErr))
+
+		// Capture System.out for logger.warn messages
+		systemOut = System.out
+		capturedOut = ByteArrayOutputStream()
+		System.setOut(PrintStream(capturedOut))
 	}
 
 	@AfterEach
 	fun tearDown() {
 		// Restore original System.err
 		System.setErr(systemErr)
+
+		// Restore original System.out
+		System.setOut(systemOut)
 
 		// Clean up Koin context if it was started by main()
 		try {
@@ -101,6 +111,11 @@ class MainArgumentParsingTest {
 	private fun getCapturedError(): String {
 		System.err.flush()
 		return capturedErr.toString()
+	}
+
+	private fun getCapturedOutput(): String {
+		System.out.flush()
+		return capturedOut.toString()
 	}
 
 	private fun createTempXmlFile(name: String = "test.xml"): File {
@@ -142,10 +157,6 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
-		@Disabled("FIXME: Test fails after AutoCloseable refactoring (commit 907cbde). " +
-			"Main.kt now uses context.use {} blocks which may interfere with capturing output. " +
-			"Need to investigate why 'example' mode detection is not working. " +
-			"See: https://github.com/bedaHovorka/interlockSim/issues/XXX")
 		fun `example mode selected with example argument`() {
 			// Arrange
 			val args = arrayOf("example")
@@ -154,9 +165,11 @@ class MainArgumentParsingTest {
 			main(args)
 
 			// Assert
-			// Example mode with no example name should print list of examples, not usage
-			val output = getCapturedError()
-			val isExampleMode = output.contains("example") || output.contains("Example")
+			// Example mode with no example name should print list of examples
+			val output = getCapturedOutput()
+			val isExampleMode = output.contains("Available examples") ||
+								output.contains("example") ||
+								output.contains("shuntingLoop")
 			assertThat(isExampleMode).isTrue()
 		}
 
@@ -199,10 +212,6 @@ class MainArgumentParsingTest {
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
 		@Test
-		@Disabled("FIXME: Test fails after AutoCloseable refactoring (commit 907cbde). " +
-			"Main.kt now uses context.use {} blocks which may interfere with output capture. " +
-			"Need to investigate proper test setup for example mode with optional arguments. " +
-			"See: https://github.com/bedaHovorka/interlockSim/issues/XXX")
 		fun `example mode accepts optional example name`() {
 			// Arrange
 			val args = arrayOf("example")
@@ -212,12 +221,11 @@ class MainArgumentParsingTest {
 
 			// Assert
 			// Example with no name should show available examples
-			val output = getCapturedError()
+			val output = getCapturedOutput()
 			val hasExampleList =
-				output.contains("example") ||
-					output.contains("Example") ||
-					output.contains("shuntingLoop") ||
-					output.contains("List of examples")
+				output.contains("Available examples") ||
+					output.contains("example") ||
+					output.contains("shuntingLoop")
 			assertThat(hasExampleList).isTrue()
 		}
 

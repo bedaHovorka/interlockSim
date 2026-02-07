@@ -20,10 +20,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
 import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.DisplayName
@@ -84,10 +84,10 @@ class RaceConditionTest : KoinTestBase() {
 		private const val STRESS_TEST_ITERATIONS = 10
 	}
 
-	private val end1 = MockNodeCell("End1")
-	private val end2 = MockNodeCell("End2")
-	private val end3 = MockNodeCell("End3")
-	private val end4 = MockNodeCell("End4")
+	private val end1 = createMockNodeCell(name = "End1")
+	private val end2 = createMockNodeCell(name = "End2")
+	private val end3 = createMockNodeCell(name = "End3")
+	private val end4 = createMockNodeCell(name = "End4")
 
 	/**
 	 * Nested tests for concurrent path reservation attempts.
@@ -434,7 +434,7 @@ class RaceConditionTest : KoinTestBase() {
 			// Act - Multiple threads attempt to enter same track
 			val threads = ArrayList<Thread>()
 			for (i in 0 until threadCount) {
-				val occupant = MockTrackOccupant("Train$i")
+				val occupant = createMockTrackOccupant("Train$i")
 				val thread =
 					Thread {
 						try {
@@ -482,7 +482,7 @@ class RaceConditionTest : KoinTestBase() {
 			val track3 = SimpleTrackBlock(end3, end4, 100.0, 80.0)
 			val tracks = listOf(track1, track2, track3)
 
-			val occupant = MockTrackOccupant("Train1")
+			val occupant = createMockTrackOccupant("Train1")
 			val iterations = STRESS_TEST_ITERATIONS
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(2)
@@ -559,7 +559,7 @@ class RaceConditionTest : KoinTestBase() {
 		fun trackOccupancyQueries_duringMod_returnsConsistentResults() {
 			// Arrange
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-			val occupant = MockTrackOccupant("Train1")
+			val occupant = createMockTrackOccupant("Train1")
 
 			val iterations = 20
 			val queryThreadCount = 2
@@ -667,7 +667,7 @@ class RaceConditionTest : KoinTestBase() {
 						try {
 							startLatch.await()
 
-							val cell = MockNodeCell("Cell$i")
+							val cell = createMockNodeCell(name = "Cell$i")
 							val x = 10 + i
 							val y = 10 + i
 
@@ -921,7 +921,7 @@ class RaceConditionTest : KoinTestBase() {
 		fun rapidStateChanges_noCorruption() {
 			// Arrange
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-			val occupant = MockTrackOccupant("Train1")
+			val occupant = createMockTrackOccupant("Train1")
 			val iterations = 5
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(2)

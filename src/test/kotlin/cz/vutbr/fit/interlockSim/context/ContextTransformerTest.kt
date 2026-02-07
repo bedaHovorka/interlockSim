@@ -156,8 +156,6 @@ class ContextTransformerTest : KoinTestBase() {
 					// Assert - Grid contains static cells (not dynamic wrappers)
 					val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as DynamicInOut
 					val cellB = simulationContext.getRailWayNetGrid().getCellAt(10, 10) as DynamicInOut
-					assertThat(cellA).isNotNull()
-					assertThat(cellB).isNotNull()
 					assertThat(cellA.staticRef).isSameInstanceAs(inA)
 					assertThat(cellB.staticRef).isSameInstanceAs(inB)
 
@@ -188,8 +186,6 @@ class ContextTransformerTest : KoinTestBase() {
 					// Assert - Grid contains static cells (not dynamic wrappers)
 					val cellA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as DynamicInOut
 					val cellSW = simulationContext.getRailWayNetGrid().getCellAt(5, 5) as DynamicRailSwitch
-					assertThat(cellA).isNotNull()
-					assertThat(cellSW).isNotNull()
 					assertThat(cellA.staticRef).isSameInstanceAs(inOut)
 					assertThat(cellSW.staticRef).isSameInstanceAs(railSwitch)
 
@@ -555,7 +551,6 @@ class ContextTransformerTest : KoinTestBase() {
 					val dynamicBlock = simulationContext.getGraph().get(Point(5, 5), Point(15, 5))
 
 					// Assert - Is DynamicTrackBlock and staticRef points to original
-					assertThat(dynamicBlock).isNotNull()
 					assertThat(dynamicBlock!!).isInstanceOf(DynamicTrackBlock::class)
 					assertThat(dynamicBlock.staticRef).isSameInstanceAs(originalBlock)
 				}
@@ -649,7 +644,7 @@ class ContextTransformerTest : KoinTestBase() {
 				(editingContextFactory.createContext(stream) as EditingContext).use { editingContext ->
 					// Arrange - Load vyhybna.xml which creates EditingContext
 					simulationContextFactory.createContext(editingContext).use { simulationContext ->
-					val graph = simulationContext.getGraph()
+						val graph = simulationContext.getGraph()
 
 						// Assert - All graph entries are DynamicTrackBlock
 						assertThat(graph.size()).isGreaterThan(0)

@@ -10,12 +10,12 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -442,8 +442,8 @@ class EditorExceptionTest {
 			val exception = EditorException(testMessage)
 
 			// Assert & Act
-			assertThatThrownBy { throw exception }
-				.isInstanceOf(EditorException::class)
+			assertFailure { throw exception }
+				.isInstanceOf<EditorException>()
 		}
 
 		@Test

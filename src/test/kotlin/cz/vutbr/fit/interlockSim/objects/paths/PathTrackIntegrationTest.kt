@@ -18,12 +18,13 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -271,8 +272,13 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			context.toDynamic(track).setUpPath(endpoint)
 			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.RESERVED)
 
-			// Create a mock occupant (train)
-			val mockOccupant = MockTrainOccupant("TestTrain")
+			// Create a mock occupant (train) using MockK
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 
 			// Act: Train enters track
 			context.toDynamic(track).enter(mockOccupant)
@@ -310,7 +316,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint = track.ends()[0]
 			context.toDynamic(track).setUpPath(endpoint)
 
-			val mockOccupant = MockTrainOccupant("TestTrain")
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(mockOccupant)
 
 			assertThat(context.toDynamic(track).state).isEqualTo(TrackFacility.State.OCCUPIED)
@@ -358,7 +369,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			val endpoint1 = track1.ends()[0]
 			context.toDynamic(track1).setUpPath(endpoint1)
 
-			val mockOccupant = MockTrainOccupant("TestTrain")
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track1).enter(mockOccupant)
 
 			// Also reserve track 2 (simulating path continuation)
@@ -415,7 +431,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// Set up and occupy
 			context.toDynamic(track).setUpPath(endpoint)
-			val mockOccupant = MockTrainOccupant("TestTrain")
+			val mockOccupant =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "TestTrain"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(mockOccupant)
 
 			// Act: Train exits, path is implicitly released
@@ -455,7 +476,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 			// First train: reserve, occupy, release
 			context.toDynamic(track).setUpPath(endpoint1)
-			val firstTrain = MockTrainOccupant("Train1")
+			val firstTrain =
+				mockk<TrackOccupant>(relaxed = true) {
+					every { name } returns "Train1"
+					every { distanceToSemaphore() } returns 50.0
+					every { nextSemaphore() } returns null
+				}
 			context.toDynamic(track).enter(firstTrain)
 			context.toDynamic(track).leave(firstTrain)
 
@@ -571,7 +597,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 				context.toDynamic(track).setUpPath(endpoint)
 
 				// Simulate train occupancy and release
-				val mockTrain = MockTrainOccupant("TestTrain")
+				val mockTrain =
+					mockk<TrackOccupant>(relaxed = true) {
+						every { name } returns "TestTrain"
+						every { distanceToSemaphore() } returns 50.0
+						every { nextSemaphore() } returns null
+					}
 				context.toDynamic(track).enter(mockTrain)
 				context.toDynamic(track).leave(mockTrain)
 
@@ -592,18 +623,4 @@ class PathTrackIntegrationTest : KoinTestBase() {
 			}
 		}
 	}
-}
-
-/**
- * Mock implementation of TrackOccupant for integration tests.
- * Represents a train occupying a track.
- */
-internal class MockTrainOccupant(
-	override val name: String
-) : TrackOccupant {
-	override fun distanceToSemaphore(): Double = 50.0
-
-	override fun nextSemaphore(): OrientedPathSeparator? = null
-
-	override fun toString(): String = name
 }

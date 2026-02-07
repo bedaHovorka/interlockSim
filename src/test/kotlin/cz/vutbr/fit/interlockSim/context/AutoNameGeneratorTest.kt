@@ -17,7 +17,6 @@ import org.koin.test.inject
 
 @DisplayName("AutoNameGenerator")
 class AutoNameGeneratorTest : KoinTestBase() {
-
 	private val editingFactory: EditingContextFactory by inject()
 	private lateinit var context: EditingContext
 
@@ -35,7 +34,6 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Name generation")
 	inner class NameGeneration {
-
 		@Test
 		fun `generates S1 for first RailSemaphore`() {
 			val name = AutoNameGenerator.generateName(RailSemaphore::class.java, context)
@@ -82,7 +80,6 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Uniqueness and conflict resolution")
 	inner class Uniqueness {
-
 		@Test
 		fun `skips existing names in grid`() {
 			// Pre-populate grid with S1 and S2
@@ -136,7 +133,6 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Performance and caching")
 	inner class Performance {
-
 		@Test
 		fun `caches names for repeated checks`() {
 			// Populate grid with 100 semaphores
@@ -185,7 +181,6 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Reset functionality")
 	inner class Reset {
-
 		@Test
 		fun `reset clears counters`() {
 			AutoNameGenerator.generateName(RailSemaphore::class.java, context) // S1
@@ -228,14 +223,23 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	/**
 	 * Adds a semaphore to the test context at the specified position with the given name.
 	 */
-	private fun addSemaphore(x: Int, y: Int, name: String) {
+	private fun addSemaphore(
+		x: Int,
+		y: Int,
+		name: String
+	) {
 		addSemaphoreToContext(context, x, y, name)
 	}
 
 	/**
 	 * Adds a semaphore to the specified context at the given position with the given name.
 	 */
-	private fun addSemaphoreToContext(ctx: EditingContext, x: Int, y: Int, name: String) {
+	private fun addSemaphoreToContext(
+		ctx: EditingContext,
+		x: Int,
+		y: Int,
+		name: String
+	) {
 		val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 		semaphore.setName(name)
 		ctx.putCell(Point(x, y), semaphore)

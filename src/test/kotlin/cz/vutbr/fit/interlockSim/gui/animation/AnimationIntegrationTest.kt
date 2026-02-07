@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
@@ -54,7 +53,6 @@ import javax.swing.SwingUtilities
  */
 @Tag("integration-test")
 class AnimationIntegrationTest : KoinTestBase() {
-
 	private lateinit var simulationContext: SimulationContext
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
@@ -125,9 +123,13 @@ class AnimationIntegrationTest : KoinTestBase() {
 		// When: Getting current animation state
 		val state = animationController.getCurrentState()
 
-		// Then: State should contain signal states
+		// Then: State should contain signal states from the simulation context
 		assertThat(state.signalStates).isNotEmpty()
-		assertThat(state.signalStates.size).isGreaterThan(0)
+		// Verify each signal state has valid properties (semaphore and signal)
+		state.signalStates.values.forEach { signalState ->
+			assertThat(signalState.semaphore).isNotNull()
+			assertThat(signalState.signal).isNotNull()
+		}
 	}
 
 	@Test
@@ -141,10 +143,12 @@ class AnimationIntegrationTest : KoinTestBase() {
 
 		// When: Rendering a track block part cell
 		val grid = simulationContext.getRailWayNetGrid()
-		val firstTrackBlockPart = grid.asSequence()
-			.map { it.value }
-			.filterIsInstance<TrackBlockPart>()
-			.firstOrNull()
+		val firstTrackBlockPart =
+			grid
+				.asSequence()
+				.map { it.value }
+				.filterIsInstance<TrackBlockPart>()
+				.firstOrNull()
 
 		assertThat(firstTrackBlockPart).isNotNull()
 

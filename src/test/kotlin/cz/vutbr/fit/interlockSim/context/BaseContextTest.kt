@@ -11,9 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
@@ -55,12 +53,9 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `create empty editing context succeeds`() {
 		editingContextFactory.createEmptyContext().use { context ->
-			// Assert
-			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid()).isNotNull()
-			assertThat(context.getGraph()).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
-			assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+			// Assert - Default empty context has 100x100 grid (XMLContextFactory.DEFAULT_GRID_SIZE)
+			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(100)
 		}
 	}
 
@@ -70,12 +65,9 @@ class BaseContextTest : KoinTestBase() {
 	@Test
 	fun `create empty simulation context succeeds`() {
 		simulationContextFactory.createEmptyContext().use { context ->
-			// Assert
-			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid()).isNotNull()
-			assertThat(context.getGraph()).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCols()).isGreaterThan(0)
-			assertThat(context.getRailWayNetGrid().getRows()).isGreaterThan(0)
+			// Assert - Default empty context has 100x100 grid (XMLContextFactory.DEFAULT_GRID_SIZE)
+			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(100)
 		}
 	}
 
@@ -141,7 +133,6 @@ class BaseContextTest : KoinTestBase() {
 
 			// Assert
 			val retrievedCell = context.getRailWayNetGrid().getCellAt(point.x, point.y)
-			assertThat(retrievedCell).isNotNull()
 			assertThat(retrievedCell!!).isInstanceOf<InOut>()
 			assertThat((retrievedCell as InOut).getName()).isEqualTo("A")
 		}
@@ -163,9 +154,11 @@ class BaseContextTest : KoinTestBase() {
 			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
 			context.joinCells(p1, p2, trackBlock)
 
-			// Assert - Graph contains the connection
+			// Assert - Graph contains the connection between p1 and p2
 			val graph = context.getGraph()
-			assertThat(graph.size()).isGreaterThan(0)
+			assertThat(graph.size()).isEqualTo(1) // One edge connecting the two points
+			assertThat(graph.contains(p1, p2)).isEqualTo(true)
+			assertThat(graph.get(p1, p2)).isEqualTo(trackBlock)
 		}
 	}
 

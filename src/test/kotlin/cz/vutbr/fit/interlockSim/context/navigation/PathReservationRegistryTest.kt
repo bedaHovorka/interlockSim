@@ -9,23 +9,26 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
+import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 
 /**
  * Comprehensive test suite for PathReservationRegistry atomic operations.
@@ -69,12 +72,12 @@ class PathReservationRegistryTest : KoinTestBase() {
 		val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
 
 		blocks =
-			paths.first()
+			paths
+				.first()
 				.mapNotNull { section ->
 					val block = section.getTrackBlock()
 					if (block is DynamicTrackBlock) block else null
-				}
-				.distinct()
+				}.distinct()
 	}
 
 	@Nested
@@ -189,7 +192,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 			// Verify first blocks are NOT owned by train2
 			blocks.dropLast(1).forEach { block ->
 				val owner = registry.getOwner(block)
-				assertThat(owner == null || owner != "train2").isEqualTo(true)
+				assertThat(owner == null || owner != "train2").isTrue()
 			}
 
 			// Verify train1 still owns last block
@@ -216,16 +219,13 @@ class PathReservationRegistryTest : KoinTestBase() {
 			registry.registerAtomic("train1", blocks)
 
 			// Act & Assert
-			try {
+			assertFailure {
 				@Suppress("DEPRECATION")
 				registry.register("train2", blocks)
-				throw AssertionError("Expected IllegalStateException")
-			} catch (e: IllegalStateException) {
-				// Expected
-				assertThat(e.message).isEqualTo(
+			}.isInstanceOf(IllegalStateException::class)
+				.hasMessage(
 					"Block ${blocks.first()} already reserved by train1 (attempted reservation by train2)"
 				)
-			}
 		}
 	}
 

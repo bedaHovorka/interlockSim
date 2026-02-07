@@ -225,9 +225,11 @@ class ContextTransformerDeepTest : KoinTestBase() {
 
 			// Assert - All semaphores preserved
 			assertThat(simulationContext.getRailWayNetGrid().getCellAt(5, 5))
-				.isNotNull().isInstanceOf(DynamicRailSemaphore::class)
+				.isNotNull()
+				.isInstanceOf(DynamicRailSemaphore::class)
 			assertThat(simulationContext.getRailWayNetGrid().getCellAt(10, 5))
-				.isNotNull().isInstanceOf(DynamicRailSemaphore::class)
+				.isNotNull()
+				.isInstanceOf(DynamicRailSemaphore::class)
 		}
 
 		@Test

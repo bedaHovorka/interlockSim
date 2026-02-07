@@ -39,7 +39,6 @@ import javax.swing.Timer
  */
 @Tag("integration-test")
 class AnimationControllerResourceCleanupTest : KoinTestBase() {
-
 	private var context: SimulationContext? = null
 
 	@AfterEach
@@ -195,13 +194,17 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 	// Helper to get registered listeners via reflection
 	private fun getListeners(context: SimulationContext): List<Any> {
 		// Unwrap MockSimulationContext to get BaseContext
-		val actualContext: Any = if (context is cz.vutbr.fit.interlockSim.testutil.MockSimulationContext) {
-			val delegateField = cz.vutbr.fit.interlockSim.testutil.MockSimulationContext::class.java.getDeclaredField("delegate")
-			delegateField.isAccessible = true
-			delegateField.get(context)
-		} else {
-			context
-		}
+		val actualContext: Any =
+			if (context is cz.vutbr.fit.interlockSim.testutil.MockSimulationContext) {
+				val delegateField =
+					cz.vutbr.fit.interlockSim.testutil.MockSimulationContext::class.java.getDeclaredField(
+						"delegate"
+					)
+				delegateField.isAccessible = true
+				delegateField.get(context)
+			} else {
+				context
+			}
 
 		val field = actualContext.javaClass.superclass.getDeclaredField("changeSupport")
 		field.isAccessible = true

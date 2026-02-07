@@ -14,7 +14,6 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
-import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
@@ -58,7 +57,6 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("status bar has correct preferred size")
 	fun statusBarHasCorrectPreferredSize() {
 		// Verify preferred size is set
-		assertThat(statusBar.preferredSize).isNotNull()
 		assertThat(statusBar.preferredSize.width).isEqualTo(100)
 		assertThat(statusBar.preferredSize.height).isEqualTo(25)
 	}
@@ -68,12 +66,12 @@ class StatusBarTest : KoinTestBase() {
 	fun registersStatusProducerMouseListener() {
 		// Create mock producer that is also a Component
 		val mockProducer = mockk<TestStatusProducer>(relaxed = true)
-		
+
 		// Register producer
 		statusBar.registerProducer(mockProducer)
-		
-		// Verify mouse motion listener was added
-		verify { mockProducer.addMouseMotionListener(any()) }
+
+		// Verify mouse motion listener was added (exactly once)
+		verify(exactly = 1) { mockProducer.addMouseMotionListener(any()) }
 	}
 
 	@Test
@@ -81,13 +79,14 @@ class StatusBarTest : KoinTestBase() {
 	fun unregistersStatusProducerMouseListener() {
 		// Create mock producer that is also a Component
 		val mockProducer = mockk<TestStatusProducer>(relaxed = true)
-		
+
 		// Register then unregister producer
 		statusBar.registerProducer(mockProducer)
 		statusBar.unregisterProducer(mockProducer)
-		
-		// Verify mouse motion listener was removed
-		verify { mockProducer.removeMouseMotionListener(any()) }
+
+		// Verify mouse motion listener was added and then removed
+		verify(exactly = 1) { mockProducer.addMouseMotionListener(any()) }
+		verify(exactly = 1) { mockProducer.removeMouseMotionListener(any()) }
 	}
 
 	@Test

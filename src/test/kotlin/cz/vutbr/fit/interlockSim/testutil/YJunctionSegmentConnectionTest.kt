@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Y-Junction Switch Segment Connection Test")
 class YJunctionSegmentConnectionTest : KoinTestBase() {
-
 	@Test
 	@DisplayName("SIMPLE_RIGHT_FALSE switch should only have 3 valid segments")
 	fun switchSupportsOnly3Segments() {
@@ -45,12 +44,13 @@ class YJunctionSegmentConnectionTest : KoinTestBase() {
 			val switchPos: Pair<Int, Int> = 30 to 30
 
 			// Check what segment each connection would use
-			val connections = listOf(
-				Triple("EntryA", 5 to 20, "Entry from West"),
-				Triple("EntryB", 5 to 40, "Entry from Southwest"),
-				Triple("ExitC", 55 to 20, "Exit to East"),
-				Triple("ExitD", 55 to 40, "Exit to Southeast")
-			)
+			val connections =
+				listOf(
+					Triple("EntryA", 5 to 20, "Entry from West"),
+					Triple("EntryB", 5 to 40, "Entry from Southwest"),
+					Triple("ExitC", 55 to 20, "Exit to East"),
+					Triple("ExitD", 55 to 40, "Exit to Southeast")
+				)
 
 			connections.forEach { (name: String, pos: Pair<Int, Int>, description: String) ->
 				val dx = switchPos.first - pos.first

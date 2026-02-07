@@ -18,7 +18,8 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -73,8 +74,8 @@ class SimpleTrackStateTest {
 	@BeforeEach
 	fun setUp() {
 		// Create mock NodeCell endpoints (NodeCell implements PathSeparator)
-		end1 = MockNodeCell("End1")
-		end2 = MockNodeCell("End2")
+		end1 = createMockNodeCell(name = "End1")
+		end2 = createMockNodeCell(name = "End2")
 
 		// Create static track configuration
 		staticTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
@@ -83,8 +84,8 @@ class SimpleTrackStateTest {
 		track = DynamicTrack(staticTrack)
 
 		// Create mock TrackOccupant implementations
-		mockOccupant = MockTrackOccupant("Train1")
-		otherOccupant = MockTrackOccupant("Train2")
+		mockOccupant = createMockTrackOccupant("Train1")
+		otherOccupant = createMockTrackOccupant("Train2")
 	}
 
 	@Nested

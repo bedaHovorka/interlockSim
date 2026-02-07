@@ -34,7 +34,6 @@ import java.io.File
  * along track sections using the vyhybna.xml test configuration.
  */
 class TrainPositionCalculatorTest : KoinTestBase() {
-
 	private lateinit var context: SimulationContext
 	private lateinit var calculator: TrainPositionCalculator
 	private lateinit var mockTrain: Train
@@ -53,8 +52,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get separator position cache from context (performance optimization)
-		val cache = (context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-			?.getSeparatorPositionCache() ?: emptyMap()
+		val cache =
+			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
+				?.getSeparatorPositionCache() ?: emptyMap()
 
 		calculator = TrainPositionCalculator(context, cache)
 
@@ -67,8 +67,9 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	@Test
 	fun testCacheIsPopulated() {
 		// Verify that cache was populated during context creation
-		val cache = (context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
-			?.getSeparatorPositionCache() ?: emptyMap()
+		val cache =
+			(context as? cz.vutbr.fit.interlockSim.context.DefaultSimulationContext)
+				?.getSeparatorPositionCache() ?: emptyMap()
 
 		// Cache should contain all PathSeparators from grid (InOuts, semaphores, switches)
 		assertThat(cache.size > 0).isEqualTo(true)

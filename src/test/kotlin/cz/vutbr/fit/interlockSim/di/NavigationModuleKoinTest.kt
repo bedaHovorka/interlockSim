@@ -78,10 +78,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			assertThat(path).isNotNull()
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath = path!!.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-				.toSet()
+			val blocksFromPath =
+				path!!
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+					.toSet()
 
 			// Compare with blocks from PathReservationService (should be identical)
 			val blocksFromReservation = blocks.toSet()
@@ -145,14 +147,16 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			pathService.reservePath("train1", inOutA, inOutB)
 
 			// Assert - TrainNavigationService is instantiated and functional
-			assertThat(trainService).isNotNull()
 			assertThat(trainService).isInstanceOf(TrainNavigationService::class)
 
 			// Verify the service can perform ownership checks
-			// Note: isPathReservedForTrain requires a path to a semaphore to exist
-			// Our test context has no semaphore, so it returns false (no topological path)
+			// isPathReservedForTrain builds a path from the separator until:
+			// 1. It reaches an OrientedPathSeparator (semaphore/switch) in the direction, OR
+			// 2. It reaches the end of track (no more tracks available)
+			// In this test, path goes InOut A → Block → InOut B (all reserved for train1)
 			val isReserved = trainService.isPathReservedForTrain("train1", inOutA)
-			// This correctly returns false because there's no semaphore in the test network
+			// Assert - Returns true because all blocks in the path are owned by train1
+			assertThat(isReserved).isEqualTo(true)
 		}
 	}
 

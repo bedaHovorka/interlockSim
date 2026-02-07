@@ -63,17 +63,16 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("PathElement Length Contribution Tests")
 class PathLengthContributionTest : KoinTestBase() {
-
 	private lateinit var mockContext: MockSimulationContext
 
 	companion object {
 		// Railway physics constants for testing
-		private const val COMMON_TRACK_LENGTH_M = 1000.0  // Typical track section length (meters)
-		private const val SHORT_TRACK_LENGTH_M = 200.0    // Short track section (meters)
-		private const val LONG_TRACK_LENGTH_M = 2500.0    // Long track section (meters)
-		private const val TYPICAL_MAX_SPEED_MPS = 80.0    // Typical max speed (m/s = 288 km/h)
-		private const val HIGH_SPEED_MPS = 120.0          // High speed limit (m/s = 432 km/h)
-		private const val LOW_SPEED_MPS = 40.0            // Low speed limit (m/s = 144 km/h)
+		private const val COMMON_TRACK_LENGTH_M = 1000.0 // Typical track section length (meters)
+		private const val SHORT_TRACK_LENGTH_M = 200.0 // Short track section (meters)
+		private const val LONG_TRACK_LENGTH_M = 2500.0 // Long track section (meters)
+		private const val TYPICAL_MAX_SPEED_MPS = 80.0 // Typical max speed (m/s = 288 km/h)
+		private const val HIGH_SPEED_MPS = 120.0 // High speed limit (m/s = 432 km/h)
+		private const val LOW_SPEED_MPS = 40.0 // Low speed limit (m/s = 144 km/h)
 	}
 
 	@BeforeEach
@@ -102,9 +101,7 @@ class PathLengthContributionTest : KoinTestBase() {
 		to: NodeCell,
 		length: Double = COMMON_TRACK_LENGTH_M,
 		maxSpeed: Double = TYPICAL_MAX_SPEED_MPS
-	): SimpleTrackBlock {
-		return SimpleTrackBlock(from, to, length, maxSpeed)
-	}
+	): SimpleTrackBlock = SimpleTrackBlock(from, to, length, maxSpeed)
 
 	/**
 	 * Creates a simple path with InOut -> Track -> InOut structure.
@@ -127,7 +124,6 @@ class PathLengthContributionTest : KoinTestBase() {
 	@Nested
 	@DisplayName("PathSeparator Length Contribution")
 	inner class PathSeparatorTests {
-
 		@Test
 		fun `InOut contributes zero length`() {
 			// Arrange: InOut separator
@@ -155,12 +151,13 @@ class PathLengthContributionTest : KoinTestBase() {
 		@Test
 		fun `RailSwitch contributes zero length`() {
 			// Arrange: RailSwitch separator
-			val railSwitch = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = TYPICAL_MAX_SPEED_MPS,
-				branchSpeed = LOW_SPEED_MPS
-			)
+			val railSwitch =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = TYPICAL_MAX_SPEED_MPS,
+					branchSpeed = LOW_SPEED_MPS
+				)
 
 			// Act: Get length contribution
 			val contribution = railSwitch.contributeToPathLength()
@@ -177,7 +174,6 @@ class PathLengthContributionTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Track Length Contribution")
 	inner class TrackTests {
-
 		@Test
 		fun `Track contributes actual length`() {
 			// Arrange: Two InOut points and a track connecting them
@@ -228,7 +224,6 @@ class PathLengthContributionTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Path Total Length Calculation")
 	inner class PathIntegrationTests {
-
 		@Test
 		fun `Path with single track calculates correct total length`() {
 			// Arrange: Simple path (InOut -> Track -> InOut)
@@ -277,12 +272,13 @@ class PathLengthContributionTest : KoinTestBase() {
 		fun `Path with tracks and multiple separator types calculates correctly`() {
 			// Arrange: Complex path with InOut, Switch, Semaphore, and tracks
 			val inA = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
-			val railSwitch = RailSwitch(
-				Cell.SpatialType.HORIZONTAL,
-				RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-				mainSpeed = TYPICAL_MAX_SPEED_MPS,
-				branchSpeed = LOW_SPEED_MPS
-			)
+			val railSwitch =
+				RailSwitch(
+					Cell.SpatialType.HORIZONTAL,
+					RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+					mainSpeed = TYPICAL_MAX_SPEED_MPS,
+					branchSpeed = LOW_SPEED_MPS
+				)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 			val outB = InOut("Exit", true, Cell.SpatialType.HORIZONTAL)
 

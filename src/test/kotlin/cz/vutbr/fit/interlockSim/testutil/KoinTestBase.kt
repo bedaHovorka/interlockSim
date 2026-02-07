@@ -94,6 +94,7 @@ abstract class KoinTestBase : KoinTest {
 	 * Will be closed automatically in tearDownKoin().
 	 */
 	protected var testContext: Context<*, *>? = null
+
 	/**
 	 * Override this method to use a different test module.
 	 * Default: testModuleLightweight (no GUI, faster)

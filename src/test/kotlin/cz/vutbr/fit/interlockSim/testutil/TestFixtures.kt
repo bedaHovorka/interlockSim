@@ -77,9 +77,7 @@ object TestFixtures {
 	 * @return InputStream to vyhybna.xml (caller must close)
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadShuntingXml(): InputStream {
-		return loadMainResource("vyhybna.xml")
-	}
+	fun loadShuntingXml(): InputStream = loadMainResource("vyhybna.xml")
 
 	/**
 	 * Loads linear-track.xml fixture (simple A→B track).
@@ -87,9 +85,7 @@ object TestFixtures {
 	 * @return InputStream to linear-track.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadLinearTrackXml(): InputStream {
-		return loadTestFixture("linear-track.xml")
-	}
+	fun loadLinearTrackXml(): InputStream = loadTestFixture("linear-track.xml")
 
 	/**
 	 * Loads minimal-network.xml fixture (smallest valid network).
@@ -97,9 +93,7 @@ object TestFixtures {
 	 * @return InputStream to minimal-network.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadMinimalNetworkXml(): InputStream {
-		return loadTestFixture("minimal-network.xml")
-	}
+	fun loadMinimalNetworkXml(): InputStream = loadTestFixture("minimal-network.xml")
 
 	/**
 	 * Loads switch-basic.xml fixture (basic switch topology).
@@ -107,9 +101,7 @@ object TestFixtures {
 	 * @return InputStream to switch-basic.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadSwitchBasicXml(): InputStream {
-		return loadTestFixture("switch-basic.xml")
-	}
+	fun loadSwitchBasicXml(): InputStream = loadTestFixture("switch-basic.xml")
 
 	/**
 	 * Loads semaphore-basic.xml fixture (basic semaphore configuration).
@@ -117,9 +109,7 @@ object TestFixtures {
 	 * @return InputStream to semaphore-basic.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadSemaphoreBasicXml(): InputStream {
-		return loadTestFixture("semaphore-basic.xml")
-	}
+	fun loadSemaphoreBasicXml(): InputStream = loadTestFixture("semaphore-basic.xml")
 
 	/**
 	 * Loads two-tracks-parallel.xml fixture (parallel track configuration).
@@ -127,9 +117,7 @@ object TestFixtures {
 	 * @return InputStream to two-tracks-parallel.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadTwoTracksParallelXml(): InputStream {
-		return loadTestFixture("two-tracks-parallel.xml")
-	}
+	fun loadTwoTracksParallelXml(): InputStream = loadTestFixture("two-tracks-parallel.xml")
 
 	/**
 	 * Loads empty-grid.xml fixture (empty network for editor tests).
@@ -137,9 +125,7 @@ object TestFixtures {
 	 * @return InputStream to empty-grid.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadEmptyGridXml(): InputStream {
-		return loadTestFixture("empty-grid.xml")
-	}
+	fun loadEmptyGridXml(): InputStream = loadTestFixture("empty-grid.xml")
 
 	/**
 	 * Loads praha-hlavni-nadrazi.xml fixture (complex real-world station).
@@ -147,9 +133,7 @@ object TestFixtures {
 	 * @return InputStream to praha-hlavni-nadrazi.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadPrahaHlavniNadraziXml(): InputStream {
-		return loadTestFixture("praha-hlavni-nadrazi.xml")
-	}
+	fun loadPrahaHlavniNadraziXml(): InputStream = loadTestFixture("praha-hlavni-nadrazi.xml")
 
 	/**
 	 * Loads rudyUjezd.xml fixture (Rudý Újezd station example).
@@ -157,9 +141,7 @@ object TestFixtures {
 	 * @return InputStream to rudyUjezd.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadRudyUjezdXml(): InputStream {
-		return loadTestFixture("rudyUjezd.xml")
-	}
+	fun loadRudyUjezdXml(): InputStream = loadTestFixture("rudyUjezd.xml")
 
 	/**
 	 * Loads legacy-network-no-names.xml fixture (network without element names).
@@ -167,9 +149,7 @@ object TestFixtures {
 	 * @return InputStream to legacy-network-no-names.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadLegacyNetworkNoNamesXml(): InputStream {
-		return loadTestFixture("legacy-network-no-names.xml")
-	}
+	fun loadLegacyNetworkNoNamesXml(): InputStream = loadTestFixture("legacy-network-no-names.xml")
 
 	/**
 	 * Loads valid-special-chars-names.xml fixture (tests name validation).
@@ -177,9 +157,7 @@ object TestFixtures {
 	 * @return InputStream to valid-special-chars-names.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadValidSpecialCharsNamesXml(): InputStream {
-		return loadTestFixture("valid-special-chars-names.xml")
-	}
+	fun loadValidSpecialCharsNamesXml(): InputStream = loadTestFixture("valid-special-chars-names.xml")
 
 	// Invalid fixtures for negative testing
 
@@ -189,9 +167,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-malformed-xml.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidMalformedXml(): InputStream {
-		return loadTestFixture("invalid-malformed-xml.xml")
-	}
+	fun loadInvalidMalformedXml(): InputStream = loadTestFixture("invalid-malformed-xml.xml")
 
 	/**
 	 * Loads invalid-missing-grid-size.xml fixture (schema validation tests).
@@ -199,9 +175,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-missing-grid-size.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidMissingGridSizeXml(): InputStream {
-		return loadTestFixture("invalid-missing-grid-size.xml")
-	}
+	fun loadInvalidMissingGridSizeXml(): InputStream = loadTestFixture("invalid-missing-grid-size.xml")
 
 	/**
 	 * Loads invalid-missing-spatial-type.xml fixture (schema validation tests).
@@ -209,9 +183,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-missing-spatial-type.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidMissingSpatialTypeXml(): InputStream {
-		return loadTestFixture("invalid-missing-spatial-type.xml")
-	}
+	fun loadInvalidMissingSpatialTypeXml(): InputStream = loadTestFixture("invalid-missing-spatial-type.xml")
 
 	/**
 	 * Loads invalid-wrong-root-element.xml fixture (schema validation tests).
@@ -219,9 +191,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-wrong-root-element.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidWrongRootElementXml(): InputStream {
-		return loadTestFixture("invalid-wrong-root-element.xml")
-	}
+	fun loadInvalidWrongRootElementXml(): InputStream = loadTestFixture("invalid-wrong-root-element.xml")
 
 	/**
 	 * Loads invalid-name-special-chars.xml fixture (name validation tests).
@@ -229,9 +199,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-name-special-chars.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidNameSpecialCharsXml(): InputStream {
-		return loadTestFixture("invalid-name-special-chars.xml")
-	}
+	fun loadInvalidNameSpecialCharsXml(): InputStream = loadTestFixture("invalid-name-special-chars.xml")
 
 	/**
 	 * Loads invalid-name-too-long.xml fixture (name validation tests).
@@ -239,9 +207,7 @@ object TestFixtures {
 	 * @return InputStream to invalid-name-too-long.xml
 	 * @throws IllegalStateException if resource not found
 	 */
-	fun loadInvalidNameTooLongXml(): InputStream {
-		return loadTestFixture("invalid-name-too-long.xml")
-	}
+	fun loadInvalidNameTooLongXml(): InputStream = loadTestFixture("invalid-name-too-long.xml")
 
 	/**
 	 * Loads invalid InOut count fixtures (InOut validation tests).
@@ -258,9 +224,7 @@ object TestFixtures {
 	 * @throws IllegalStateException if fixture not found
 	 * @see cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 	 */
-	fun loadInvalidInOutXml(fixtureName: String): InputStream {
-		return loadTestFixture(fixtureName)
-	}
+	fun loadInvalidInOutXml(fixtureName: String): InputStream = loadTestFixture(fixtureName)
 
 	/**
 	 * Loads resource from main resources directory.
@@ -269,11 +233,10 @@ object TestFixtures {
 	 * @return InputStream to resource
 	 * @throws IllegalStateException if resource not found
 	 */
-	private fun loadMainResource(resourceName: String): InputStream {
-		return javaClass.getResourceAsStream(
+	private fun loadMainResource(resourceName: String): InputStream =
+		javaClass.getResourceAsStream(
 			"/cz/vutbr/fit/interlockSim/resource/$resourceName"
 		) ?: error("Resource not found in main resources: $resourceName")
-	}
 
 	/**
 	 * Loads resource from test fixtures directory.
@@ -282,11 +245,10 @@ object TestFixtures {
 	 * @return InputStream to fixture
 	 * @throws IllegalStateException if fixture not found
 	 */
-	private fun loadTestFixture(fixtureFilename: String): InputStream {
-		return javaClass.getResourceAsStream(
+	private fun loadTestFixture(fixtureFilename: String): InputStream =
+		javaClass.getResourceAsStream(
 			"/cz/vutbr/fit/interlockSim/xml/fixtures/$fixtureFilename"
 		) ?: error("Test fixture not found: $fixtureFilename")
-	}
 }
 
 /**
@@ -460,15 +422,15 @@ object TestTopologies {
 		switch.setName("Junction")
 
 		// Place elements on grid (aligned for proper segment connections)
-		context.putCell(Point(5, 30), entry)        // West of switch
-		context.putCell(Point(30, 30), switch)      // Center
-		context.putCell(Point(55, 30), exitMain)    // East of switch (straight, segment F)
-		context.putCell(Point(50, 40), exitBranch)  // Southeast of switch (diagonal, segment G)
+		context.putCell(Point(5, 30), entry) // West of switch
+		context.putCell(Point(30, 30), switch) // Center
+		context.putCell(Point(55, 30), exitMain) // East of switch (straight, segment F)
+		context.putCell(Point(50, 40), exitBranch) // Southeast of switch (diagonal, segment G)
 
 		// Create track connections (only 3 - matching switch's 3 segments)
-		val trackEntry = SimpleTrackBlock(entry, switch, 250.0, 80.0)          // Segment A
-		val trackMain = SimpleTrackBlock(switch, exitMain, 250.0, 100.0)       // Segment F
-		val trackBranch = SimpleTrackBlock(switch, exitBranch, 180.0, 90.0)    // Segment G
+		val trackEntry = SimpleTrackBlock(entry, switch, 250.0, 80.0) // Segment A
+		val trackMain = SimpleTrackBlock(switch, exitMain, 250.0, 100.0) // Segment F
+		val trackBranch = SimpleTrackBlock(switch, exitBranch, 180.0, 90.0) // Segment G
 
 		context.joinCells(Point(5, 30), Point(30, 30), trackEntry)
 		context.joinCells(Point(30, 30), Point(55, 30), trackMain)

@@ -16,8 +16,10 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
-import cz.vutbr.fit.interlockSim.testutil.MockTrackOccupant
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -59,14 +61,14 @@ class SimpleTrackEnterLeaveTest {
 	private lateinit var track: DynamicTrack
 
 	// Mock TrackOccupant for enter/leave operations
-	private lateinit var train1: MockTrackOccupant
-	private lateinit var train2: MockTrackOccupant
+	private lateinit var train1: TrackOccupant
+	private lateinit var train2: TrackOccupant
 
 	@BeforeEach
 	fun setUp() {
 		// Create mock NodeCell endpoints
-		end1 = MockNodeCell("End1")
-		end2 = MockNodeCell("End2")
+		end1 = createMockNodeCell(name = "End1")
+		end2 = createMockNodeCell(name = "End2")
 
 		// Create static track configuration
 		staticTrack = SimpleTrackBlock(end1, end2, 100.0, 80.0)
@@ -75,8 +77,8 @@ class SimpleTrackEnterLeaveTest {
 		track = DynamicTrack(staticTrack)
 
 		// Create mock TrackOccupant implementations
-		train1 = MockTrackOccupant("Train1")
-		train2 = MockTrackOccupant("Train2")
+		train1 = createMockTrackOccupant("Train1")
+		train2 = createMockTrackOccupant("Train2")
 	}
 
 	@Nested

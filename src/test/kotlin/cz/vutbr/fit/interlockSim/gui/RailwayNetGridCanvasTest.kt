@@ -154,7 +154,6 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// Then: The grid should be accessible and match
 			val grid = canvas.getEditingContext().getRailWayNetGrid()
-			assertThat(grid).isNotNull()
 			assertThat(grid.getCols()).isEqualTo(100) // Default grid size from XMLContextFactory.createEmptyContext()
 		}
 	}
@@ -275,8 +274,10 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			val args = arrayOf<Any?>("testArg1", "testArg2")
 			canvas.setNodeOnToolbar(InOut::class.java, args)
 
-			// Then: Canvas should store the state (no exception, state is internal)
-			// This test verifies the method executes without error
+			// Then: Canvas should store the state (method completes successfully)
+			// We verify that subsequent operations work correctly after toolbar state is set
+			canvas.setContext(editingContext)
+			assertThat(canvas.getEditingContext()).isNotNull()
 		}
 	}
 
@@ -335,7 +336,6 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			val status = canvas.getStatus(mouseEvent)
 
 			// Then: Status should contain cell info
-			assertThat(status).isNotNull()
 			assertThat(status).isEqualTo(cell.toString())
 		}
 	}

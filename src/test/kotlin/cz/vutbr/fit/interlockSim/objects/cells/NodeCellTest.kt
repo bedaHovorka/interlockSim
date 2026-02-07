@@ -17,9 +17,9 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
@@ -51,8 +51,8 @@ import org.koin.test.get
 @DisplayName("NodeCell Tests")
 class NodeCellTest : KoinTestBase() {
 	private lateinit var context: DefaultSimulationContext
-	private lateinit var nodeA: MockNodeCell
-	private lateinit var nodeB: MockNodeCell
+	private lateinit var nodeA: NodeCell
+	private lateinit var nodeB: NodeCell
 
 	@BeforeEach
 	fun setUp() {
@@ -68,8 +68,8 @@ class NodeCellTest : KoinTestBase() {
 		val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
 
 		// Cast to NodeCell for testing (InOut is a NodeCell subclass)
-		nodeA = cellA as? MockNodeCell ?: MockNodeCell("TestNodeA")
-		nodeB = cellB as? MockNodeCell ?: MockNodeCell("TestNodeB")
+		nodeA = cellA as? NodeCell ?: createMockNodeCell(name = "TestNodeA")
+		nodeB = cellB as? NodeCell ?: createMockNodeCell(name = "TestNodeB")
 	}
 
 	/**
@@ -81,13 +81,8 @@ class NodeCellTest : KoinTestBase() {
 	inner class ConnectionTests {
 		@Test
 		fun `node connects to adjacent cells`() {
-			// Arrange
-			// Two nodes should be adjacent horizontally (one unit apart)
-			val nodeLeft = MockNodeCell("Left")
-			val nodeRight = MockNodeCell("Right")
-
-			// Act
-			// Simulate adding nodes to adjacent grid positions
+			// Arrange & Act
+			// Create two adjacent nodes horizontally (one unit apart)
 			val context =
 				get<TestContextBuilder>()
 					.withInOut("Left", 0, 0, true)
@@ -111,7 +106,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node rejects invalid connection direction`() {
 			// Arrange
-			val node = MockNodeCell("TestNode")
+			val node = createMockNodeCell(name = "TestNode")
 
 			// Act & Assert
 			// NodeCell enforces Cell.Segment enum values for connections
@@ -132,7 +127,7 @@ class NodeCellTest : KoinTestBase() {
 		fun `node limits maximum connections`() {
 			// Arrange
 			// A NodeCell can have maximum 8 connections (one for each Segment direction)
-			val node = MockNodeCell("Central")
+			val node = createMockNodeCell(name = "Central")
 
 			// Act
 			// Count the number of possible connection points
@@ -208,9 +203,9 @@ class NodeCellTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `getNeighbor returns null for unconnected direction`() {
+		fun `getFollowingSegment handles unconnected directions without errors`() {
 			// Arrange
-			val node = MockNodeCell("Isolated")
+			val node = createMockNodeCell(name = "Isolated") as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 
 			// Act
 			// An isolated node should have no neighbors in any direction
@@ -322,7 +317,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node name is set and retrieved correctly`() {
 			// Arrange
-			val node = MockNodeCell("StationA")
+			val node = createMockNodeCell(name = "StationA")
 
 			// Act
 			val retrievedName = node.getName()
@@ -336,7 +331,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node toString includes name`() {
 			// Arrange
-			val node = MockNodeCell("ShuntingPoint")
+			val node = createMockNodeCell(name = "ShuntingPoint")
 
 			// Act
 			val stringRepresentation = node.toString()
@@ -354,7 +349,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node name can be changed`() {
 			// Arrange
-			val node = MockNodeCell("OriginalName")
+			val node = createMockNodeCell(name = "OriginalName")
 
 			// Act
 			node.setName("NewName")
@@ -455,7 +450,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node has correct spatial type`() {
 			// Arrange
-			val horizontalNode = MockNodeCell("HorizontalNode")
+			val horizontalNode = createMockNodeCell(name = "HorizontalNode")
 
 			// Act
 			val spatialType = horizontalNode.getSpatialType()
@@ -469,7 +464,7 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `spatial type affects valid joins`() {
 			// Arrange
-			val horizontalNode = MockNodeCell("Horizontal")
+			val horizontalNode = createMockNodeCell(name = "Horizontal")
 
 			// Act
 			val joins = horizontalNode.joins()

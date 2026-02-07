@@ -17,6 +17,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.EditingContext
@@ -101,7 +102,6 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	@Nested
 	@DisplayName("InOut-to-InOut Path Discovery")
 	inner class InOutConnectivityTests {
-
 		/**
 		 * Test: Forward path from entry A to exit B.
 		 *
@@ -119,7 +119,13 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 
 			// Assert: At least one forward path exists
 			assertThat(paths).isNotEmpty()
-			assertThat(paths.size).isGreaterThan(0)
+			// Verify each path is non-empty and contains TrackSections
+			paths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			// Log discovered paths for debugging
 			logger.info { "✓ Forward paths A → B: Found ${paths.size} path(s)" }
@@ -146,7 +152,13 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 
 			// Assert: At least one reverse path exists
 			assertThat(paths).isNotEmpty()
-			assertThat(paths.size).isGreaterThan(0)
+			// Verify each path is non-empty and contains TrackSections
+			paths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			// Log discovered paths for debugging
 			logger.info { "✓ Reverse paths B → A: Found ${paths.size} path(s)" }
@@ -173,8 +185,15 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			val forwardPaths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 100)
 
 			// Assert: Multiple paths exist (due to switches providing alternatives)
-			// Note: Exact count depends on TopologyNavigator's BFS traversal order
-			assertThat(forwardPaths.size).isGreaterThan(0)
+			// The vyhybna.xml has 2 switches, so expect at least 2 distinct paths
+			assertThat(forwardPaths.size).isGreaterThan(1)
+			// Verify all paths are non-empty and contain TrackSections
+			forwardPaths.forEach { path ->
+				assertThat(path).isNotEmpty()
+				path.forEach { section ->
+					assertThat(section).isInstanceOf<TrackSection>()
+				}
+			}
 
 			logger.info { "✓ Multiple paths A → B: ${forwardPaths.size} path(s) discovered" }
 
@@ -194,7 +213,6 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Path Structure Validation")
 	inner class PathStructureValidation {
-
 		/**
 		 * Test: All discovered paths are acyclic (no loops).
 		 *
@@ -269,20 +287,19 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	 * Holds all separator coordinates from vyhybna.xml network.
 	 */
 	private data class NetworkCoordinates(
-		val zA: Point,        // Entry semaphore
-		val vA: Point,        // Entry switch
-		val doA1: Point,      // Upper entry route semaphore
-		val doA2: Point,      // Lower entry route semaphore
-		val doB2: Point,      // Lower exit route semaphore
-		val doB1: Point,      // Upper exit route semaphore
-		val vB: Point,        // Exit switch
-		val zB: Point         // Exit semaphore
+		val zA: Point, // Entry semaphore
+		val vA: Point, // Entry switch
+		val doA1: Point, // Upper entry route semaphore
+		val doA2: Point, // Lower entry route semaphore
+		val doB2: Point, // Lower exit route semaphore
+		val doB1: Point, // Upper exit route semaphore
+		val vB: Point, // Exit switch
+		val zB: Point // Exit semaphore
 	)
 
 	@Nested
 	@DisplayName("Network Topology Verification")
 	inner class TopologyVerification {
-
 		/**
 		 * Test: vyhybna.xml network has expected structure.
 		 *
@@ -355,16 +372,17 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			val inOutB = getInOut("B")
 
 			// Known separator coordinates from vyhybna.xml
-			val coords = NetworkCoordinates(
-				zA = Point(14, 8),
-				vA = Point(15, 8),
-				doA1 = Point(16, 8),
-				doA2 = Point(17, 9),
-				doB2 = Point(24, 9),
-				doB1 = Point(25, 8),
-				vB = Point(26, 8),
-				zB = Point(27, 8)
-			)
+			val coords =
+				NetworkCoordinates(
+					zA = Point(14, 8),
+					vA = Point(15, 8),
+					doA1 = Point(16, 8),
+					doA2 = Point(17, 9),
+					doB2 = Point(24, 9),
+					doB1 = Point(25, 8),
+					vB = Point(26, 8),
+					zB = Point(27, 8)
+				)
 
 			// Act: Find all paths in both directions
 			val forwardPaths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 100)
@@ -387,16 +405,18 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			logDiscoveredPaths("Reverse", "B → A", reversePaths)
 
 			// Verify Forward Paths contain expected patterns
-			val (upperRouteForward, lowerRouteForward) = verifyForwardPathPatterns(
-				forwardCoordSets,
-				coords
-			)
+			val (upperRouteForward, lowerRouteForward) =
+				verifyForwardPathPatterns(
+					forwardCoordSets,
+					coords
+				)
 
 			// Verify Reverse Paths contain expected patterns
-			val (upperRouteReverse, lowerRouteReverse) = verifyReversePathPatterns(
-				reverseCoordSets,
-				coords
-			)
+			val (upperRouteReverse, lowerRouteReverse) =
+				verifyReversePathPatterns(
+					reverseCoordSets,
+					coords
+				)
 
 			// Verify Key Network Separators Are Present
 			verifyKeySeparatorCoverage(
@@ -416,19 +436,24 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			coordinateDoB2: Point,
 			coordinateVB: Point,
 			coordinateZB: Point
-		): Boolean = forwardCoordSets.any { coords ->
-			coords.contains(coordinateZA) &&
-				coords.contains(coordinateVA) &&
-				coords.contains(coordinateDoA2) &&
-				coords.contains(coordinateDoB2) &&
-				coords.contains(coordinateVB) &&
-				coords.contains(coordinateZB)
-		}
+		): Boolean =
+			forwardCoordSets.any { coords ->
+				coords.contains(coordinateZA) &&
+					coords.contains(coordinateVA) &&
+					coords.contains(coordinateDoA2) &&
+					coords.contains(coordinateDoB2) &&
+					coords.contains(coordinateVB) &&
+					coords.contains(coordinateZB)
+			}
 
 		/**
 		 * Logs discovered paths with direction label.
 		 */
-		private fun logDiscoveredPaths(direction: String, arrow: String, paths: List<List<TrackSection>>) {
+		private fun logDiscoveredPaths(
+			direction: String,
+			arrow: String,
+			paths: List<List<TrackSection>>
+		) {
 			logger.info { "\n--- Discovered $direction Paths ($arrow) ---" }
 			paths.forEachIndexed { index, path ->
 				val coords = extractSeparatorCoordinates(path)
@@ -448,26 +473,28 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			logger.info { "\n--- Forward Path Pattern Verification (A → B) ---" }
 
 			// Check upper route
-			val upperRoute = containsAllCoord(
-				forwardCoordSets,
-				coords.zA,
-				coords.vA,
-				coords.doA1,
-				coords.doB1,
-				coords.vB,
-				coords.zB
-			)
+			val upperRoute =
+				containsAllCoord(
+					forwardCoordSets,
+					coords.zA,
+					coords.vA,
+					coords.doA1,
+					coords.doB1,
+					coords.vB,
+					coords.zB
+				)
 
 			// Check lower route
-			val lowerRoute = containsAllCoord(
-				forwardCoordSets,
-				coords.zA,
-				coords.vA,
-				coords.doA2,
-				coords.doB2,
-				coords.vB,
-				coords.zB
-			)
+			val lowerRoute =
+				containsAllCoord(
+					forwardCoordSets,
+					coords.zA,
+					coords.vA,
+					coords.doA2,
+					coords.doB2,
+					coords.vB,
+					coords.zB
+				)
 
 			// Assert at least one route exists
 			assertThat(upperRoute || lowerRoute).isEqualTo(true)
@@ -495,26 +522,28 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			logger.info { "\n--- Reverse Path Pattern Verification (B → A) ---" }
 
 			// Check upper route
-			val upperRoute = containsAllCoord(
-				reverseCoordSets,
-				coords.zB,
-				coords.vB,
-				coords.doB1,
-				coords.doA1,
-				coords.vA,
-				coords.zA
-			)
+			val upperRoute =
+				containsAllCoord(
+					reverseCoordSets,
+					coords.zB,
+					coords.vB,
+					coords.doB1,
+					coords.doA1,
+					coords.vA,
+					coords.zA
+				)
 
 			// Check lower route
-			val lowerRoute = containsAllCoord(
-				reverseCoordSets,
-				coords.zB,
-				coords.vB,
-				coords.doB2,
-				coords.doA2,
-				coords.vA,
-				coords.zA
-			)
+			val lowerRoute =
+				containsAllCoord(
+					reverseCoordSets,
+					coords.zB,
+					coords.vB,
+					coords.doB2,
+					coords.doA2,
+					coords.vA,
+					coords.zA
+				)
 
 			// Assert at least one route exists
 			assertThat(upperRoute || lowerRoute).isEqualTo(true)
@@ -544,25 +573,27 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 			val allCoordinates = (forwardCoordSets + reverseCoordSets).flatten().toSet()
 
 			// Common separators (entry/exit infrastructure)
-			val commonSeparators = listOf(
-				coords.zA to "zA (entry semaphore)",
-				coords.vA to "vA (entry switch)",
-				coords.vB to "vB (exit switch)",
-				coords.zB to "zB (exit semaphore)"
-			)
+			val commonSeparators =
+				listOf(
+					coords.zA to "zA (entry semaphore)",
+					coords.vA to "vA (entry switch)",
+					coords.vB to "vB (exit switch)",
+					coords.zB to "zB (exit semaphore)"
+				)
 
 			// Route-specific separators (depending on which route was discovered)
-			val routeSpecificSeparators = if (upperRouteForward || upperRouteReverse) {
-				listOf(
-					coords.doA1 to "doA1 (upper entry route)",
-					coords.doB1 to "doB1 (upper exit route)"
-				)
-			} else {
-				listOf(
-					coords.doA2 to "doA2 (lower entry route)",
-					coords.doB2 to "doB2 (lower exit route)"
-				)
-			}
+			val routeSpecificSeparators =
+				if (upperRouteForward || upperRouteReverse) {
+					listOf(
+						coords.doA1 to "doA1 (upper entry route)",
+						coords.doB1 to "doB1 (upper exit route)"
+					)
+				} else {
+					listOf(
+						coords.doA2 to "doA2 (lower entry route)",
+						coords.doB2 to "doB2 (lower exit route)"
+					)
+				}
 
 			// Verify common separators
 			commonSeparators.forEach { (coord, name) ->
@@ -583,7 +614,10 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		/**
 		 * Logs final summary of path discovery results.
 		 */
-		private fun logFinalSummary(upperRouteForward: Boolean, upperRouteReverse: Boolean) {
+		private fun logFinalSummary(
+			upperRouteForward: Boolean,
+			upperRouteReverse: Boolean
+		) {
 			logger.info { "\n=== Summary ===" }
 			val forwardMsg = if (upperRouteForward) "upper (paths 1, 6)" else "lower (paths 3, 8)"
 			val reverseMsg = if (upperRouteReverse) "upper (paths 2, 5)" else "lower (paths 4, 7)"
@@ -617,7 +651,10 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	 * @return PathSeparator (InOut, RailSemaphore, or RailSwitch)
 	 * @throws AssertionError if cell not found or not a PathSeparator
 	 */
-	private fun getSeparatorAt(x: Int, y: Int): PathSeparator {
+	private fun getSeparatorAt(
+		x: Int,
+		y: Int
+	): PathSeparator {
 		val grid = context.getRailWayNetGrid()
 		val cell = grid.getCellAt(x, y)
 
@@ -693,10 +730,11 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 		grid: cz.vutbr.fit.interlockSim.context.RailwayNetGrid<Cell>
 	): Point? {
 		// Unwrap DynamicPathSeparator to NodeCell for grid lookup
-		val staticSeparator = when (separator) {
-			is Cell -> separator
-			else -> separator as? Cell
-		}
+		val staticSeparator =
+			when (separator) {
+				is Cell -> separator
+				else -> separator as? Cell
+			}
 
 		return staticSeparator?.let { grid.getLocation(it) }
 	}

@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
@@ -88,12 +89,12 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find any semaphore cell in the grid
 			val semaphoreCell =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.firstOrNull { it is DynamicRailSemaphore }
 
 			// Assert: Grid contains DynamicRailSemaphore (not static RailSemaphore)
-			assertThat(semaphoreCell).isNotNull()
 			assertThat(semaphoreCell!!).isInstanceOf(DynamicRailSemaphore::class)
 
 			// Verify it's a DynamicRailSemaphore (sealed class)
@@ -118,7 +119,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find all cells that are instances of DynamicRailSemaphore
 			val dynamicSemaphores =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.filter { it is DynamicRailSemaphore }
 					.toList()
@@ -154,12 +156,12 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find any InOut cell in the grid
 			val inoutCell =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.firstOrNull { it is DynamicInOut }
 
 			// Assert: Grid contains DynamicInOut (not static InOut)
-			assertThat(inoutCell).isNotNull()
 			assertThat(inoutCell!!).isInstanceOf(DynamicInOut::class)
 
 			// Verify it's NOT the static InOut type
@@ -184,7 +186,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find all cells that are instances of DynamicInOut
 			val dynamicInOuts =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.filter { it is DynamicInOut }
 					.toList()
@@ -219,7 +222,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find position of any semaphore in grid
 			val semaphorePoint =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.filter { (_, cell) -> cell is DynamicRailSemaphore }
 					.map { (point, _) -> point }
 					.firstOrNull()
@@ -230,7 +234,6 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val cell = grid.getCellAt(semaphorePoint!!.x, semaphorePoint.y)
 
 			// Assert: Grid navigation returns DynamicRailSemaphore directly
-			assertThat(cell).isNotNull()
 			assertThat(cell!!).isInstanceOf<DynamicRailSemaphore>()
 		}
 
@@ -250,7 +253,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Find any semaphore position
 			val semaphorePoint =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.filter { (_, cell) -> cell is DynamicRailSemaphore }
 					.map { (point, _) -> point }
 					.firstOrNull()
@@ -262,7 +266,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val cell2 = grid.getCellAt(semaphorePoint.x, semaphorePoint.y)
 
 			// Assert: Same object instance (reference equality)
-			assertThat(cell1 === cell2).isEqualTo(true)
+			assertThat(cell1).isSameInstanceAs(cell2)
 		}
 	}
 
@@ -292,7 +296,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			// Act: Find all cells that are DynamicPathSeparator instances
 			// (these are the dynamic wrappers for NodeCells)
 			val dynamicNodeCells =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.filter { it is DynamicPathSeparator }
 					.toList()
@@ -324,7 +329,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Act: Find all TrackBlockPart cells
 			val trackBlockParts =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.mapNotNull { (_, cell) -> cell }
 					.filter { it is TrackBlockPart }
 					.toList()
@@ -361,7 +367,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			var dynamicNodeCellCount = 0
 			var trackBlockPartCount = 0
 
-			grid.asSequence()
+			grid
+				.asSequence()
 				.mapNotNull { (_, cell) -> cell }
 				.forEach { cell ->
 					when {
@@ -428,7 +435,8 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 
 			// Find a semaphore in the grid
 			val semaphoreEntry =
-				grid.asSequence()
+				grid
+					.asSequence()
 					.firstOrNull { (_, cell) -> cell is DynamicRailSemaphore }
 
 			assertThat(semaphoreEntry).isNotNull()
@@ -443,7 +451,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 			val dynamicViaToDynamic = context.toDynamic(staticSemaphore)
 
 			// Assert: Same instance as in grid (identity consistency)
-			assertThat(dynamicViaToDynamic === dynamicSemaphore).isEqualTo(true)
+			assertThat(dynamicViaToDynamic).isSameInstanceAs(dynamicSemaphore)
 		}
 	}
 }

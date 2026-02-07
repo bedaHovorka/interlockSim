@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Timeout
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.swing.JButton
+import javax.swing.JLabel
 import javax.swing.JTextArea
 
 /**
@@ -140,9 +141,12 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 		runOnEDT {
 			val file = File("/test/path/network.xml")
 			val dialog = ValidationDialog(null, validationResult, file)
-			// File path is displayed in the dialog content
-			// We verify this by checking the dialog was created successfully
-			assertThat(dialog.title).isNotNull()
+
+			// Find the file path label in the dialog
+			val fileLabel = findLabelContaining(dialog, "File:")
+			assertThat(fileLabel).isNotNull()
+			assertThat(fileLabel!!.text).contains("network.xml")
+			assertThat(fileLabel.text).contains("/test/path/network.xml")
 		}
 	}
 
@@ -305,6 +309,14 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 		container: java.awt.Container,
 		text: String
 	): JButton? = findComponentOfType(container, JButton::class.java) { it.text == text }
+
+	/**
+	 * Helper method to find a label containing specific text.
+	 */
+	private fun findLabelContaining(
+		container: java.awt.Container,
+		text: String
+	): JLabel? = findComponentOfType(container, JLabel::class.java) { it.text.contains(text) }
 
 	/**
 	 * Helper method to find a component of specific type.

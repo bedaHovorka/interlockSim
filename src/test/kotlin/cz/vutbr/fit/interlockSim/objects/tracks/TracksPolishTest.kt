@@ -214,11 +214,11 @@ class TracksPolishTest {
 
 		@Test
 		fun `setName updates block name`() {
-            val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
+			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
 
-            block.name = "TestBlock"
-            assertThat(block.toString()).contains("TestBlock")
-        }
+			block.name = "TestBlock"
+			assertThat(block.toString()).contains("TestBlock")
+		}
 
 		@Test
 		fun `toString with null name`() {
@@ -233,12 +233,12 @@ class TracksPolishTest {
 
 		@Test
 		fun `toString with name set`() {
-            val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
-            block.name = "Block1"
+			val block = SimpleTrackBlock(separator1, separator2, 100.0, 30.0, 30.0)
+			block.name = "Block1"
 
-            val string = block.toString()
-            assertThat(string).contains("Block1")
-        }
+			val string = block.toString()
+			assertThat(string).contains("Block1")
+		}
 	}
 
 	@Nested

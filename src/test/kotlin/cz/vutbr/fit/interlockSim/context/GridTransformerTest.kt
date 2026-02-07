@@ -81,7 +81,6 @@ class GridTransformerTest : KoinTestBase() {
 
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(5, 5)
-			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
 
 			val dynamicSwitch = dynamicCell as DynamicRailSwitch
@@ -106,7 +105,6 @@ class GridTransformerTest : KoinTestBase() {
 
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(3, 3)
-			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicPathSeparator>()
 
 			// Verify identity preservation via mapping
@@ -127,7 +125,6 @@ class GridTransformerTest : KoinTestBase() {
 
 			// Assert - Grid has dynamic wrapper at same position
 			val dynamicCell = result.dynamicGrid.getCellAt(2, 2)
-			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicInOut>()
 
 			val dynamicInOut = dynamicCell as DynamicInOut
@@ -252,7 +249,6 @@ class GridTransformerTest : KoinTestBase() {
 
 			// Assert - Can look up dynamic from static
 			val dynamicCell = result.staticToDynamicMap[railSwitch]
-			assertThat(dynamicCell).isNotNull()
 			assertThat(dynamicCell as Any).isInstanceOf<DynamicRailSwitch>()
 
 			// Can verify identity via staticRef
@@ -317,7 +313,6 @@ class GridTransformerTest : KoinTestBase() {
 
 			// Assert - InOut and its semaphores are mapped
 			val dynamicInOut = result.staticToDynamicMap[inOut]
-			assertThat(dynamicInOut).isNotNull()
 			assertThat(dynamicInOut!!).isInstanceOf<DynamicInOut>()
 
 			// Verify embedded semaphores are also mapped

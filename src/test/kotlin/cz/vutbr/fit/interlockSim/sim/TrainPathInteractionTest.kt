@@ -13,14 +13,13 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
-import cz.vutbr.fit.interlockSim.objects.paths.Path
-import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrack
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockBlockedTrack
+import cz.vutbr.fit.interlockSim.testutil.createMockPath
+import cz.vutbr.fit.interlockSim.testutil.createMockSemaphoreMock
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.createMockTrack
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.every
 import io.mockk.mockk
@@ -120,7 +119,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val pathSequence = createMockPath(trackBehind, trackCurrent, trackAhead)
 
 			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
-			every { mockOutOut.name} returns "EXIT"
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -141,7 +140,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val pathBlocked = createMockPath(blockedTrack)
 
 			val mockOutOut = mockk<DynamicInOut>(relaxed = true)
-			every { mockOutOut.name} returns "EXIT"
+			every { mockOutOut.name } returns "EXIT"
 
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
@@ -156,7 +155,7 @@ class TrainPathInteractionTest : KoinTestBase() {
 		@Test
 		fun `train handles path becoming available - proceeds`() {
 			// Arrange: Create a path that initially blocks but becomes free
-			val semaphore = createMockSemaphore(true) // Initially allowing
+			val semaphore = createMockSemaphoreMock(true) // Initially allowing
 			val track = createMockTrack("TRACK", 100.0)
 			val pathUnblocked = createMockPath(track)
 
@@ -175,56 +174,5 @@ class TrainPathInteractionTest : KoinTestBase() {
 	}
 
 	// ==================== Helper Methods ====================
-
-	/**
-	 * Creates a mock track with specified name and length.
-	 * Track is always available for path setup.
-	 */
-	private fun createMockTrack(
-		name: String,
-		length: Double
-	): SimpleTrack {
-		val mock = mockk<SimpleTrack>(relaxed = true)
-		every { mock.length() } returns length
-		every { mock.toString() } returns "Track:$name"
-		return mock
-	}
-
-	/**
-	 * Creates a mock blocked track that reports as not free.
-	 * Track is always unavailable for path setup.
-	 */
-	private fun createMockBlockedTrack(
-		name: String,
-		length: Double
-	): SimpleTrack {
-		val mock = mockk<SimpleTrack>(relaxed = true)
-		every { mock.length() } returns length
-		every { mock.toString() } returns "Track:$name"
-		return mock
-	}
-
-	/**
-	 * Creates a mock path from tracks.
-	 * Path is always available for train passage.
-	 */
-	private fun createMockPath(vararg tracks: SimpleTrack): Path {
-		val totalLength = tracks.sumOf { it.length() }
-		val mock = mockk<ArrayPath>(relaxed = true)
-		every { mock.length() } returns totalLength
-		every { mock.toString() } returns "Path[${tracks.size} segments, ${totalLength}m]"
-		return mock
-	}
-
-	/**
-	 * Creates a mock semaphore with allowing/stop signal.
-	 * MockK can mock sealed classes, unlike Mockito.
-	 */
-	private fun createMockSemaphore(isAllowing: Boolean): DynamicRailSemaphore {
-		val semaphore = mockk<DynamicRailSemaphore>(relaxed = true)
-		val signal = if (isAllowing) Signal.FREE else Signal.STOP
-		every { semaphore.signal } returns signal
-		every { semaphore.toString() } returns "Semaphore:$signal"
-		return semaphore
-	}
+	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
 }

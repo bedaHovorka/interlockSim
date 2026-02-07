@@ -325,10 +325,11 @@ class InOutWorkerTest : KoinTestBase() {
 		spatialType: SpatialType
 	): Pair<SimulationContext, DynamicInOut> {
 		// Create a context with a connected InOut
-		val context = cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
-			inOutName = name,
-			isEntry = !orientation  // orientation is inverted: false = entry, true = exit
-		)
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.buildConnectedInOut(
+				inOutName = name,
+				isEntry = !orientation // orientation is inverted: false = entry, true = exit
+			)
 
 		// Return the context and the first InOut
 		val inOut = context.getInOuts().first()

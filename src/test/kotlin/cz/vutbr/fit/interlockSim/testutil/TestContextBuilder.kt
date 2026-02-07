@@ -164,9 +164,7 @@ class TestContextBuilder {
 	 *
 	 * @return configured DefaultSimulationContext instance (immutable network structure)
 	 */
-	fun buildEditingContext(): DefaultEditingContext {
-		return editingContext
-	}
+	fun buildEditingContext(): DefaultEditingContext = editingContext
 }
 
 /**
@@ -323,4 +321,3 @@ fun buildConnectedInOut(
 			.buildSimulationContext()
 	}
 }
-

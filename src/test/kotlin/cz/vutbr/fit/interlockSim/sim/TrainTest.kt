@@ -10,6 +10,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -17,7 +18,6 @@ import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.assertThatThrownBy
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.every
@@ -73,15 +73,15 @@ class TrainTest : KoinTestBase() {
 			val timetable = createTimetableWithLength(150.0)
 
 			// Act & Assert
-			assertThatThrownBy { Train(null as cz.vutbr.fit.interlockSim.context.SimulationContext?, timetable) }
-				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertFailure { Train(null as cz.vutbr.fit.interlockSim.context.SimulationContext?, timetable) }
+				.isInstanceOf<cz.vutbr.fit.interlockSim.exceptions.SimulationException>()
 		}
 
 		@Test
 		fun constructor_nullTimetable_throwsException() {
 			// Act & Assert
-			assertThatThrownBy { Train(mockContext, null as Timetable?) }
-				.isInstanceOf(cz.vutbr.fit.interlockSim.exceptions.SimulationException::class)
+			assertFailure { Train(mockContext, null as Timetable?) }
+				.isInstanceOf<cz.vutbr.fit.interlockSim.exceptions.SimulationException>()
 		}
 
 		@Test

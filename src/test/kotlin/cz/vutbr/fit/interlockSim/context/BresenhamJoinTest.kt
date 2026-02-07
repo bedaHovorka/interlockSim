@@ -41,7 +41,7 @@ class BresenhamJoinTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		context = editingContextFactory.createEmptyContext()
-		testContext = context  // Track for cleanup
+		testContext = context // Track for cleanup
 	}
 
 	@Test

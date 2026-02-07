@@ -81,7 +81,6 @@ import org.koin.core.component.inject
  */
 @DisplayName("TrainNavigationService")
 class TrainNavigationServiceTest : KoinTestBase() {
-
 	@Nested
 	@DisplayName("Successful Navigation")
 	inner class SuccessfulNavigationTests {
@@ -103,7 +102,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 		@AfterEach
 		fun tearDown() {
-			context.close()  // AutoCloseable cleanup
+			context.close() // AutoCloseable cleanup
 		}
 
 		@Test
@@ -122,10 +121,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Assert: Path is available with correctly owned blocks
 			assertThat(result).isNotNull()
-			val blocks = result!!
-				.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
+			val blocks =
+				result!!
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
 			assertThat(blocks).isNotEmpty()
 
 			blocks.forEach { block ->
@@ -157,9 +157,13 @@ class TrainNavigationServiceTest : KoinTestBase() {
 						// Act
 						val result = vyhybnaService.findReservedPathForTrain("train1", inOutA)
 
-						// Assert
+						// Assert - Path should contain facilities connecting inOutA to inOutB
 						assertThat(result).isNotNull()
-						assertThat(result!!.size).isGreaterThan(0)
+						assertThat(result!!).isNotEmpty()
+						// Verify path starts at inOutA
+						assertThat(result.first()).isEqualTo(inOutA)
+						// Verify result contains all elements of the path (blocks + separators)
+						assertThat(result.size).isGreaterThan(1)
 					}
 				}
 			}
@@ -226,10 +230,12 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			assertThat(pathToCheck).isNotNull()
 
 			// Extract blocks from the actual path being navigated
-			val blocksInPath = pathToCheck!!.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-				.toSet()
+			val blocksInPath =
+				pathToCheck!!
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+					.toSet()
 
 			// Verify blocks are valid and owned by train1 before conflict
 			assertThat(blocksInPath).isNotEmpty()
@@ -251,9 +257,9 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Step 3: Stolen block now reserved by train2
 			// Must update BOTH block state AND registry
-			stolenBlock.cancelPathSetup(inOutA)  // Reset state (RESERVED -> FREE)
-			stolenBlock.setUpPath(inOutA, "train2")  // Reserve for train2 (FREE -> RESERVED)
-			registry.registerAtomic("train2", listOf(stolenBlock))  // Register train2 in registry
+			stolenBlock.cancelPathSetup(inOutA) // Reset state (RESERVED -> FREE)
+			stolenBlock.setUpPath(inOutA, "train2") // Reserve for train2 (FREE -> RESERVED)
+			registry.registerAtomic("train2", listOf(stolenBlock)) // Register train2 in registry
 
 			// Act: Train1 tries to navigate again (should now fail due to stolen block)
 			val result = service.findReservedPathForTrain("train1", inOutA)
@@ -312,11 +318,14 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			assertThat(pathToCheck).isNotNull()
 
 			// Extract blocks from the actual path being navigated
-			val blocksInPath = pathToCheck!!.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-				.toSet()
-			assertThat(blocksInPath.size).isGreaterThan(0)
+			val blocksInPath =
+				pathToCheck!!
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+					.toSet()
+			assertThat(blocksInPath).isNotEmpty()
+			assertThat(blocksInPath.size).isLessThan(allBlocks.size) // Path to semaphore is shorter than full path
 
 			// Simulate conflict: train2 steals the FIRST block in the navigation path
 			// IMPORTANT: Must update BOTH block state AND registry
@@ -331,9 +340,9 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Step 3: Stolen block now reserved by train2
 			// Must update BOTH block state AND registry
-			stolenBlock.cancelPathSetup(inOutA)  // Reset state (RESERVED -> FREE)
-			stolenBlock.setUpPath(inOutA, "train2")  // Reserve for train2 (FREE -> RESERVED)
-			registry.registerAtomic("train2", listOf(stolenBlock))  // Register train2 in registry
+			stolenBlock.cancelPathSetup(inOutA) // Reset state (RESERVED -> FREE)
+			stolenBlock.setUpPath(inOutA, "train2") // Reserve for train2 (FREE -> RESERVED)
+			registry.registerAtomic("train2", listOf(stolenBlock)) // Register train2 in registry
 
 			// Act
 			val result = service.isPathReservedForTrain("train1", inOutA)
@@ -352,11 +361,12 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns null when no topological path exists`() {
 			// Arrange: Disconnected InOuts (no track connection)
-			val context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 10, 10, false)
-				// No connection!
-				.buildSimulationContext()
+			val context =
+				TestContextBuilder()
+					.withInOut("A", 1, 1, true)
+					.withInOut("B", 10, 10, false)
+					// No connection!
+					.buildSimulationContext()
 
 			val service = context.getTrainNavigationService()
 			val grid = context.getRailWayNetGrid()
@@ -444,10 +454,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `isPathReservedForTrain returns false when no path exists`() {
 			// Arrange: Disconnected InOuts
-			val context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 10, 10, false)
-				.buildSimulationContext()
+			val context =
+				TestContextBuilder()
+					.withInOut("A", 1, 1, true)
+					.withInOut("B", 10, 10, false)
+					.buildSimulationContext()
 
 			val service = context.getTrainNavigationService()
 			val grid = context.getRailWayNetGrid()
@@ -505,10 +516,11 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `isPathReservedForTrain matches findReservedPathForTrain when path unavailable`() {
 			// Arrange: Disconnected network
 			context.close()
-			context = TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 10, 10, false)
-				.buildSimulationContext()
+			context =
+				TestContextBuilder()
+					.withInOut("A", 1, 1, true)
+					.withInOut("B", 10, 10, false)
+					.buildSimulationContext()
 
 			service = context.getTrainNavigationService()
 			val grid = context.getRailWayNetGrid()
@@ -531,7 +543,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val inOutB = grid.getCellAt(5, 5) as DynamicInOut
 
 			val pathService = context.getPathReservationService()
-			pathService.reservePath("train2", inOutA, inOutB)  // Different owner
+			pathService.reservePath("train2", inOutA, inOutB) // Different owner
 
 			// Act: Train1 tries to navigate
 			val foundPath = service.findReservedPathForTrain("train1", inOutA)
@@ -695,13 +707,12 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		 * @param path Path collection containing PathElements (PathSeparators and TrackSections)
 		 * @return Set of DynamicTrackBlocks in the path (order not significant)
 		 */
-		private fun extractNavigationBlocks(path: cz.vutbr.fit.interlockSim.objects.paths.Path): Set<DynamicTrackBlock> {
-			return path
+		private fun extractNavigationBlocks(path: cz.vutbr.fit.interlockSim.objects.paths.Path): Set<DynamicTrackBlock> =
+			path
 				.filterIsInstance<TrackSection>()
 				.map { it.getTrackBlock() }
 				.filterIsInstance<DynamicTrackBlock>()
 				.toSet()
-		}
 
 		/**
 		 * Tests multi-train navigation coordination with independent reserved paths.
@@ -751,7 +762,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Verify navigation blocks are subset of reserved blocks
 			// (navigation returns path to NEXT semaphore, not full path to target)
-			assertThat(train1NavBlocks.size).isGreaterThan(0)
+			assertThat(train1NavBlocks).isNotEmpty()
+			assertThat(train1NavBlocks.size).isLessThan(train1ReservedBlocks.size + 1) // Nav path ≤ reserved blocks
 			train1NavBlocks.forEach { block ->
 				assertThat(train1ReservedBlocks).contains(block)
 			}
@@ -765,7 +777,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				val train2NavBlocks = extractNavigationBlocks(navPath2!!)
 
 				// Verify navigation blocks are subset of reserved blocks
-				assertThat(train2NavBlocks.size).isGreaterThan(0)
+				assertThat(train2NavBlocks).isNotEmpty()
+				assertThat(train2NavBlocks.size).isLessThan(train2ReservedBlocks.size + 1) // Nav path ≤ reserved blocks
 				train2NavBlocks.forEach { block ->
 					assertThat(train2ReservedBlocks).contains(block)
 				}
@@ -923,15 +936,15 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val firstBlock = navBlocks.first()
 
 			// Step 1: Cancel train1's reservation (make block FREE)
-			firstBlock.cancelPathSetup(inOutA)  // Reset state (RESERVED -> FREE)
+			firstBlock.cancelPathSetup(inOutA) // Reset state (RESERVED -> FREE)
 
 			// Step 2: Unregister train1's ownership of first block (must be FREE first)
 			val unregistered = registry.unregisterBlock("train1", firstBlock)
-			assertThat(unregistered).isTrue()  // Verify unregistration succeeded
+			assertThat(unregistered).isTrue() // Verify unregistration succeeded
 
 			// Step 3: Reserve first block for train2 (simulate conflict)
-			firstBlock.setUpPath(inOutA, "train2")  // Reserve for train2 (FREE -> RESERVED)
-			registry.registerAtomic("train2", listOf(firstBlock))  // Register train2 in registry
+			firstBlock.setUpPath(inOutA, "train2") // Reserve for train2 (FREE -> RESERVED)
+			registry.registerAtomic("train2", listOf(firstBlock)) // Register train2 in registry
 
 			// Train1 navigation should now fail (ownership conflict on first block)
 			val navPathAfterTheft = navService.findReservedPathForTrain("train1", inOutA)
@@ -978,7 +991,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Get blocks from registry (full reservation)
 			val registryBlocks = pathService.getReservedBlocks("train1").toSet()
-			assertThat(registryBlocks.size).isEqualTo(7)  // vyhybna.xml has 7 blocks
+			assertThat(registryBlocks.size).isEqualTo(7) // vyhybna.xml has 7 blocks
 
 			// Get blocks from navigation (path to next semaphore)
 			val navPath = navService.findReservedPathForTrain("train1", inOutA)
@@ -988,7 +1001,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 			// Verify navigation blocks are subset of registry blocks
 			assertThat(navBlocks.size).isGreaterThan(0)
-			assertThat(navBlocks.size).isLessThan(registryBlocks.size + 1)  // Less than or equal
+			assertThat(navBlocks.size).isLessThan(registryBlocks.size + 1) // Less than or equal
 			navBlocks.forEach { block ->
 				assertThat(registryBlocks).contains(block)
 			}

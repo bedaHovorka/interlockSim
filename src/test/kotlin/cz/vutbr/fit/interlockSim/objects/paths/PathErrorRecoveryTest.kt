@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -79,8 +79,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path recovers from semaphore failure during setup`() {
 			// Arrange - path with semaphore
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -103,8 +103,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `getLastPathSemaphore returns semaphore even after setup failure`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -127,11 +127,15 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path with multiple semaphores handles partial failure`() {
 			// Arrange - path with multiple semaphores
-			val sem1 = MockNodeCell("Sem1")
-			val track1 = SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val sem2 = MockNodeCell("Sem2")
-			val track2 = SimpleTrackBlock(MockNodeCell("End2"), MockNodeCell("End3"), 150.0, 70.0, 70.0)
-			val sem3 = MockNodeCell("Sem3")
+			val sem1 = createMockNodeCell(name = "Sem1")
+			val track1End1 = createMockNodeCell(name = "End1")
+			val track1End2 = createMockNodeCell(name = "End2")
+			val track1 = SimpleTrackBlock(track1End1, track1End2, 100.0, 80.0, 80.0)
+			val sem2 = createMockNodeCell(name = "Sem2")
+			val track2End2 = createMockNodeCell(name = "End2")
+			val track2End3 = createMockNodeCell(name = "End3")
+			val track2 = SimpleTrackBlock(track2End2, track2End3, 150.0, 70.0, 70.0)
+			val sem3 = createMockNodeCell(name = "Sem3")
 
 			val path = ArrayPath(mockContext)
 			path.addLast(sem1)
@@ -157,8 +161,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `semaphore configuration failure does not corrupt path`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -191,8 +195,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path cleanup after track occupation error`() {
 			// Arrange - path where track may be occupied
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -218,8 +222,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `isFreeFrom returns false for occupied tracks`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -242,10 +246,10 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `partial track occupation prevents full path setup`() {
 			// Arrange - multi-track path
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -270,10 +274,10 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `track occupation error maintains path integrity`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end2 = MockNodeCell("End2")
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track1 = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end2 = createMockNodeCell(name = "End2")
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -309,7 +313,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path handles switch position conflict`() {
 			// Arrange - path through switch
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -317,7 +321,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 					mainSpeed = 80.0,
 					branchSpeed = 50.0
 				)
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -340,7 +344,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `conflicting switch positions prevent path setup`() {
 			// Arrange - path through multiple switches
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val switch1 =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -348,7 +352,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 					mainSpeed = 80.0,
 					branchSpeed = 50.0
 				)
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val switch2 =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -380,7 +384,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `switch configuration error leaves path in consistent state`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -388,7 +392,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 					mainSpeed = 80.0,
 					branchSpeed = 50.0
 				)
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -412,7 +416,7 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `switch position validation during setup`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val railSwitch =
 				RailSwitch(
 					Cell.SpatialType.HORIZONTAL,
@@ -420,8 +424,11 @@ class PathErrorRecoveryTest : KoinTestBase() {
 					mainSpeed = 80.0,
 					branchSpeed = 50.0
 				)
-			val track1 = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val track2 = SimpleTrackBlock(MockNodeCell("End3"), MockNodeCell("End4"), 100.0, 70.0, 70.0)
+			val track1End2 = createMockNodeCell(name = "End2")
+			val track1 = SimpleTrackBlock(end1, track1End2, 100.0, 80.0, 80.0)
+			val track2End3 = createMockNodeCell(name = "End3")
+			val track2End4 = createMockNodeCell(name = "End4")
+			val track2 = SimpleTrackBlock(track2End3, track2End4, 100.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -452,8 +459,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `TrackOperationException wraps underlying errors`() {
 			// Arrange - path that may trigger errors
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -477,8 +484,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `pathIterating exceptions preserve path state`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -502,8 +509,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `error messages contain diagnostic information`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -524,8 +531,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `exception during iteration does not corrupt iterator`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -557,8 +564,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path operations remain available after errors`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -582,10 +589,10 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `path can be queried after setup failure`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, MockNodeCell("End3"), 150.0, 70.0, 70.0)
+			val track2 = SimpleTrackBlock(end2, createMockNodeCell(name = "End3"), 150.0, 70.0, 70.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -611,8 +618,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `multiple error recovery attempts succeed`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -638,8 +645,8 @@ class PathErrorRecoveryTest : KoinTestBase() {
 		@Test
 		fun `error during teardown preserves path structure`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)

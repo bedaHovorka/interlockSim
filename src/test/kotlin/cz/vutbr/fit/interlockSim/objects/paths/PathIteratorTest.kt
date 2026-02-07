@@ -22,7 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
+import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -124,9 +124,9 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator supports forward traversal`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 70.0, 70.0)
 
@@ -156,9 +156,9 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator supports bidirectional traversal`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
+			val end3 = createMockNodeCell(name = "End3")
 			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 			val track2 = SimpleTrackBlock(end2, end3, 150.0, 70.0, 70.0)
 
@@ -195,8 +195,8 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `descending iterator reverses element order`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 			val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
 
 			val path = ArrayPath(mockContext)
@@ -223,8 +223,8 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `reversePath creates path with reversed iterator order`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val end2 = MockNodeCell("End2")
+			val end1 = createMockNodeCell(name = "End1")
+			val end2 = createMockNodeCell(name = "End2")
 			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0, 80.0)
 
 			val path = ArrayPath(mockContext)
@@ -255,8 +255,8 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator concurrent modification is handled by ArrayDeque`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
@@ -265,7 +265,7 @@ class PathIteratorTest : KoinTestBase() {
 			val iterator = path.iterator()
 
 			// Act - modify path after creating iterator
-			val end3 = MockNodeCell("End3")
+			val end3 = createMockNodeCell(name = "End3")
 			path.addLast(end3)
 
 			// Assert - ArrayDeque iterator may or may not throw ConcurrentModificationException
@@ -277,9 +277,9 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `mutable iterator can remove elements`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end3 = createMockNodeCell(name = "End3")
 
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
@@ -300,7 +300,7 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator remove without next throws IllegalStateException`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
 
@@ -314,8 +314,8 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `multiple iterators see path modifications independently`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
 
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
@@ -325,7 +325,7 @@ class PathIteratorTest : KoinTestBase() {
 			val iterator1 = path.iterator()
 			val count1Before = path.toList().size
 
-			val end3 = MockNodeCell("End3")
+			val end3 = createMockNodeCell(name = "End3")
 			path.addLast(end3)
 
 			val iterator2 = path.iterator()
@@ -349,7 +349,7 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator on single element path`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
 
@@ -368,7 +368,7 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator hasNext is idempotent`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
 
@@ -388,7 +388,7 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `iterator next after hasNext returns false throws exception`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
+			val end1 = createMockNodeCell(name = "End1")
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
 
@@ -406,9 +406,9 @@ class PathIteratorTest : KoinTestBase() {
 			// Arrange
 			val elements =
 				listOf(
-					MockNodeCell("End1"),
-					SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
-					MockNodeCell("End2")
+					createMockNodeCell(name = "End1"),
+					SimpleTrackBlock(createMockNodeCell(name = "End1"), createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0),
+					createMockNodeCell(name = "End2")
 				)
 
 			val path = ArrayPath(mockContext)
@@ -437,9 +437,9 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `multiple forward iterators are independent`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end3 = createMockNodeCell(name = "End3")
 
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
@@ -464,9 +464,9 @@ class PathIteratorTest : KoinTestBase() {
 		@Test
 		fun `forward and reverse iterators are independent`() {
 			// Arrange
-			val end1 = MockNodeCell("End1")
-			val track = SimpleTrackBlock(end1, MockNodeCell("End2"), 100.0, 80.0, 80.0)
-			val end3 = MockNodeCell("End3")
+			val end1 = createMockNodeCell(name = "End1")
+			val track = SimpleTrackBlock(end1, createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0)
+			val end3 = createMockNodeCell(name = "End3")
 
 			val path = ArrayPath(mockContext)
 			path.addLast(end1)
@@ -492,9 +492,9 @@ class PathIteratorTest : KoinTestBase() {
 			// Arrange
 			val elements =
 				listOf(
-					MockNodeCell("End1"),
-					SimpleTrackBlock(MockNodeCell("End1"), MockNodeCell("End2"), 100.0, 80.0, 80.0),
-					MockNodeCell("End2")
+					createMockNodeCell(name = "End1"),
+					SimpleTrackBlock(createMockNodeCell(name = "End1"), createMockNodeCell(name = "End2"), 100.0, 80.0, 80.0),
+					createMockNodeCell(name = "End2")
 				)
 
 			val path = ArrayPath(mockContext)

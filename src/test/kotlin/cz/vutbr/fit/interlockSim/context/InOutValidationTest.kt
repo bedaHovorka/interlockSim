@@ -151,8 +151,9 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Programmatic context with 1 InOut can be created`() {
-		val builder = TestContextBuilder()
-			.withInOut("OnlyEntry", 1, 1, true)
+		val builder =
+			TestContextBuilder()
+				.withInOut("OnlyEntry", 1, 1, true)
 
 		val editingContext = builder.buildEditingContext()
 
@@ -165,10 +166,11 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Programmatic context with 2 InOuts is valid`() {
-		val builder = TestContextBuilder()
-			.withInOut("Entry", 1, 1, true)
-			.withInOut("Exit", 10, 10, false)
-			.withConnection(1, 1, 10, 10, 100.0, 80.0)
+		val builder =
+			TestContextBuilder()
+				.withInOut("Entry", 1, 1, true)
+				.withInOut("Exit", 10, 10, false)
+				.withConnection(1, 1, 10, 10, 100.0, 80.0)
 
 		val editingContext = builder.buildEditingContext()
 
