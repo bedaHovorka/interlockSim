@@ -102,8 +102,9 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `simulation completes with pre-reserved path`() {
 		// Arrange: Load vyhybna.xml (shunting loop configuration)
-		val xml = TestFixtures.loadShuntingXml()
-		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		TestFixtures.loadShuntingXml().use { xml ->
+			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		}
 		reservationService = context.getPathReservationService()
 
 		val inOuts = context.getInOuts().toList()
@@ -128,7 +129,8 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 		context.run()
 
 		// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
-		assertThat(registry.trainCount()).isGreaterThan(0)
+		val preTestBlocks = registry.getBlocks(preTestTrainId)
+		assertThat(preTestBlocks.size).isGreaterThan(0)
 		logger.info {
 			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
 		}
@@ -142,8 +144,9 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `simulation handles train lifecycle without pre-reservations`() {
 		// Arrange: Load vyhybna.xml
-		val xml = TestFixtures.loadShuntingXml()
-		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		TestFixtures.loadShuntingXml().use { xml ->
+			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		}
 		reservationService = context.getPathReservationService()
 
 		val inOuts = context.getInOuts().toList()
@@ -184,8 +187,9 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `simulation manages path contention with pre-reservation`() {
 		// Arrange: Load vyhybna.xml
-		val xml = TestFixtures.loadShuntingXml()
-		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		TestFixtures.loadShuntingXml().use { xml ->
+			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		}
 		reservationService = context.getPathReservationService()
 
 		val inOuts = context.getInOuts().toList()
@@ -230,8 +234,9 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `full simulation lifecycle releases all resources`() {
 		// Arrange: Load vyhybna.xml
-		val xml = TestFixtures.loadShuntingXml()
-		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		TestFixtures.loadShuntingXml().use { xml ->
+			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+		}
 
 		val registry = context.scope.get<PathReservationRegistry>()
 		assertThat(registry.trainCount()).isEqualTo(0)
@@ -245,10 +250,6 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 		assertThat(context.getGraph()).isNotNull()
 		assertThat(context.getRailWayNetGrid()).isNotNull()
 
-		logger.info {
-			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
-		}
-
 		// Verify all InOuts have workers that processed trains
 		val inOuts = context.getInOuts().toList()
 		for (inOut in inOuts) {
@@ -256,5 +257,14 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 			assertThat(worker).isNotNull()
 			assertThat(worker.getQueqe()).isNotNull()
 		}
+
+		// Verify post-simulation registry state
+		// Note: ShuntingLoop at endTime=60 may not complete all train journeys —
+		// trains could be mid-path when simulation ends, so registry may not be empty.
+		logger.info {
+			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+		}
+		// At minimum, verify the registry is in a consistent state (blocks >= trains)
+		assertThat(registry.blockCount()).isGreaterThan(registry.trainCount() - 1)
 	}
 }
