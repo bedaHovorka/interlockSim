@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.buildLinearTrack
@@ -38,36 +39,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Comprehensive race condition tests for concurrent access scenarios.
+ * Concurrent access tests for railway simulation components.
  *
- * **IMPORTANT: Tests in this class are DISABLED by design.**
+ * Most tests (11) are **enabled** and validate that individual thread-safe components
+ * (SimpleTrackBlock, DynamicRailSwitch, PropertyChangeSupport) handle concurrent access
+ * correctly without exceptions or data corruption.
  *
- * These tests demonstrate race conditions that occur when Context classes are
- * accessed concurrently. However, Context is intentionally NOT thread-safe:
- *
- * ## Design Decision (Option 1)
- *
- * Context and its implementations (DefaultSimulationContext, EditingContext, SimulationContext)
- * are documented as NOT thread-safe. Multi-threaded access is not supported.
- *
- * ### Rationale:
- * 1. Railway simulations are inherently sequential (discrete event model)
- * 2. The jDisco framework is single-threaded by design
- * 3. No current use cases require concurrent Context access
- * 4. Thread-safety would add unnecessary complexity and performance overhead
- * 5. Aligns with KISS principle
- *
- * ### Race Conditions Documented:
- * - NullPointerException in grid access during concurrent modifications
- * - ArrayIndexOutOfBoundsException in cell operations
- * - ConcurrentModificationException in listener notifications
- *
- * These tests remain in the codebase to:
- * 1. Document known race conditions if thread-safety is attempted in the future
- * 2. Provide evidence for the design decision to not implement thread-safety
- * 3. Serve as integration tests if the design decision is revisited
- *
- * **Usage:** Do not enable these tests unless implementing thread-safety (Option 2).
+ * Three tests remain individually `@Disabled` because they require `EditingContext`
+ * grid modification (`putCell()`), which is no longer available on `SimulationContext`
+ * after Issue #153.5. These tests also document the design decision that Context itself
+ * is intentionally NOT thread-safe (Issue #28).
  *
  * @see cz.vutbr.fit.interlockSim.context.Context
  * @see cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -76,7 +57,6 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @Tag("integration-test")
 @DisplayName("Race Condition and Concurrent Access Tests")
-@Disabled("Phase 1: Tests require DynamicTrack integration (Phase 2)")
 class RaceConditionTest : KoinTestBase() {
 	companion object {
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
@@ -103,9 +83,9 @@ class RaceConditionTest : KoinTestBase() {
 		@Test
 		@DisplayName("Multiple threads attempting simultaneous path reservations")
 		fun concurrentPathReservations_multipleThreads_noExceptionThrown() {
-			// Arrange - Create two tracks
-			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, end3, 100.0, 80.0)
+			// Arrange - Create two tracks with DynamicTrack wrappers for path operations
+			val track1 = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
+			val track2 = DynamicTrack(SimpleTrackBlock(end2, end3, 100.0, 80.0))
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -122,7 +102,7 @@ class RaceConditionTest : KoinTestBase() {
 							startLatch.await()
 
 							// Attempt to setup path on track1
-							track1.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+							track1.setUpPath(end1)
 							successCount.incrementAndGet()
 						} catch (e: TrackOperationException) {
 							// Expected if another thread beat us to it
@@ -161,10 +141,10 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent path cancellations maintain track state consistency")
 		fun concurrentPathCancellations_maintainStateConsistency() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 
 			// Setup initial path
-			track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+			track.setUpPath(end1)
 			val isFreeInitially = track.isFreeFrom(end1)
 
 			val threadCount = THREAD_COUNT
@@ -217,7 +197,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Alternating reservation and cancellation from concurrent threads")
 		fun alternatingReservationCancellation_maintainsStateConsistency() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 			val iterations = 10
 			val threadCount = 3
 			val totalLatch = CountDownLatch(threadCount * iterations)
@@ -230,7 +210,7 @@ class RaceConditionTest : KoinTestBase() {
 						try {
 							// Thread-local timing to avoid deadlock
 							if (iter % 2 == 0) {
-								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+								track.setUpPath(end1)
 							} else {
 								track.cancelPathSetup(end1)
 							}
@@ -420,10 +400,10 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Concurrent enter attempts on same track handled safely")
 		fun concurrentEnter_sameTrack_handlesSafely() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 
 			// First reserve the track
-			track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+			track.setUpPath(end1)
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -476,10 +456,10 @@ class RaceConditionTest : KoinTestBase() {
 		@Test
 		@DisplayName("Concurrent enter/leave on multiple tracks maintains consistency")
 		fun concurrentEnterLeave_multipleTracksStress() {
-			// Arrange - Create a chain of tracks
-			val track1 = SimpleTrackBlock(end1, end2, 100.0, 80.0)
-			val track2 = SimpleTrackBlock(end2, end3, 100.0, 80.0)
-			val track3 = SimpleTrackBlock(end3, end4, 100.0, 80.0)
+			// Arrange - Create a chain of tracks with DynamicTrack wrappers
+			val track1 = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
+			val track2 = DynamicTrack(SimpleTrackBlock(end2, end3, 100.0, 80.0))
+			val track3 = DynamicTrack(SimpleTrackBlock(end3, end4, 100.0, 80.0))
 			val tracks = listOf(track1, track2, track3)
 
 			val occupant = createMockTrackOccupant("Train1")
@@ -497,7 +477,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (iter in 0 until iterations) {
 						for (track in tracks) {
 							try {
-								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+								track.setUpPath(end1)
 								track.enter(occupant)
 								enterCount.incrementAndGet()
 								track.leave(occupant)
@@ -523,7 +503,7 @@ class RaceConditionTest : KoinTestBase() {
 					for (iter in 0 until iterations) {
 						for (track in tracks) {
 							try {
-								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+								track.setUpPath(end1)
 								Thread.sleep(1)
 								track.cancelPathSetup(end1)
 							} catch (e: TrackOperationException) {
@@ -558,7 +538,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Track occupancy queries consistent during concurrent modifications")
 		fun trackOccupancyQueries_duringMod_returnsConsistentResults() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 			val occupant = createMockTrackOccupant("Train1")
 
 			val iterations = 20
@@ -573,7 +553,7 @@ class RaceConditionTest : KoinTestBase() {
 				try {
 					startLatch.await()
 					for (i in 0 until iterations) {
-						track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+						track.setUpPath(end1)
 						Thread.sleep(1)
 						try {
 							track.enter(occupant)
@@ -859,7 +839,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Multiple simultaneous path requests resolve deterministically")
 		fun simultaneousPathRequests_resolveDeterministically() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(threadCount)
@@ -877,7 +857,7 @@ class RaceConditionTest : KoinTestBase() {
 
 							setupAttempts.incrementAndGet()
 							try {
-								track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+								track.setUpPath(end1)
 								setupSuccesses.incrementAndGet()
 							} catch (e: TrackOperationException) {
 								// Other threads beat us - this is expected
@@ -920,7 +900,7 @@ class RaceConditionTest : KoinTestBase() {
 		@DisplayName("Rapid concurrent state changes don't corrupt track state")
 		fun rapidStateChanges_noCorruption() {
 			// Arrange
-			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val track = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 			val occupant = createMockTrackOccupant("Train1")
 			val iterations = 5
 			val startLatch = CountDownLatch(1)
@@ -933,7 +913,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until iterations) {
 						try {
-							track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+							track.setUpPath(end1)
 							track.cancelPathSetup(end1)
 						} catch (e: TrackOperationException) {
 							// Expected due to interference
@@ -952,7 +932,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until iterations) {
 						try {
-							track.setUpPath(end1, "concurrent-train-${Thread.currentThread().id}")
+							track.setUpPath(end1)
 							track.enter(occupant)
 							track.leave(occupant)
 						} catch (e: TrackOperationException) {
