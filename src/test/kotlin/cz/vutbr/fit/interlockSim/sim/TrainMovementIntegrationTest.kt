@@ -51,8 +51,10 @@ private val logger = KotlinLogging.logger {}
  *    manages reservation lifecycle end-to-end
  * 3. **Simulation manages path contention** - ShuntingLoop handles multiple trains
  *    competing for paths
- * 4. **Full simulation lifecycle releases all resources** - PathReservationRegistry
- *    is clean after simulation completes
+ * 4. **Full simulation lifecycle releases all resources (open-ended runs)** -
+ *    when the simulation is allowed to run until all trains finish and routes
+ *    are released, the PathReservationRegistry is expected to be empty; in
+ *    fixed endTime runs, active reservations may legitimately remain at the end
  *
  * ## Limitations
  *
