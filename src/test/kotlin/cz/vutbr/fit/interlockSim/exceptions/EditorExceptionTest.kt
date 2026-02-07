@@ -19,6 +19,8 @@ import assertk.assertions.isNotNull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 
 /**
  * Unit tests for EditorException.
@@ -154,31 +156,14 @@ class EditorExceptionTest {
 	@Nested
 	@DisplayName("Severity Preservation")
 	inner class SeverityTests {
-		@Test
-		fun `FATAL severity is preserved`() {
+		@ParameterizedTest(name = "{0} severity is preserved")
+		@EnumSource(Severity::class, names = ["FATAL", "ERROR", "WARN"])
+		fun `severity is preserved`(severity: Severity) {
 			// Act
-			val exception = EditorException(Severity.FATAL, testMessage)
+			val exception = EditorException(severity, testMessage)
 
 			// Assert
-			assertThat(exception.severity).isEqualTo(Severity.FATAL)
-		}
-
-		@Test
-		fun `ERROR severity is preserved`() {
-			// Act
-			val exception = EditorException(Severity.ERROR, testMessage)
-
-			// Assert
-			assertThat(exception.severity).isEqualTo(Severity.ERROR)
-		}
-
-		@Test
-		fun `WARN severity is preserved`() {
-			// Act
-			val exception = EditorException(Severity.WARN, testMessage)
-
-			// Assert
-			assertThat(exception.severity).isEqualTo(Severity.WARN)
+			assertThat(exception.severity).isEqualTo(severity)
 		}
 
 		@Test
@@ -194,22 +179,11 @@ class EditorExceptionTest {
 			assertThat(exception3.severity).isEqualTo(Severity.FATAL)
 		}
 
-		@Test
-		fun `severity levels propagate correctly in toString`() {
-			// Arrange
-			val fatalException = EditorException(Severity.FATAL, testMessage)
-			val errorException = EditorException(Severity.ERROR, testMessage)
-			val warnException = EditorException(Severity.WARN, testMessage)
-
-			// Act
-			val fatalString = fatalException.toString()
-			val errorString = errorException.toString()
-			val warnString = warnException.toString()
-
-			// Assert
-			assertThat(fatalString).contains("FATAL")
-			assertThat(errorString).contains("ERROR")
-			assertThat(warnString).contains("WARN")
+		@ParameterizedTest(name = "{0} in toString")
+		@EnumSource(Severity::class, names = ["FATAL", "ERROR", "WARN"])
+		fun `severity propagates in toString`(severity: Severity) {
+			val exception = EditorException(severity, testMessage)
+			assertThat(exception.toString()).contains(severity.name)
 		}
 	}
 

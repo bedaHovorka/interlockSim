@@ -3,6 +3,7 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -13,6 +14,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
 import org.koin.test.inject
 
 @DisplayName("AutoNameGenerator")
@@ -31,25 +35,24 @@ class AutoNameGeneratorTest : KoinTestBase() {
 		AutoNameGenerator.reset()
 	}
 
+	companion object {
+		@JvmStatic
+		fun cellTypePrefixes() =
+			listOf(
+				Arguments.of(RailSemaphore::class.java, "S1"),
+				Arguments.of(RailSwitch::class.java, "SW1"),
+				Arguments.of(InOut::class.java, "IO1"),
+			)
+	}
+
 	@Nested
 	@DisplayName("Name generation")
 	inner class NameGeneration {
-		@Test
-		fun `generates S1 for first RailSemaphore`() {
-			val name = AutoNameGenerator.generateName(RailSemaphore::class.java, context)
-			assertThat(name).isEqualTo("S1")
-		}
-
-		@Test
-		fun `generates SW1 for first RailSwitch`() {
-			val name = AutoNameGenerator.generateName(RailSwitch::class.java, context)
-			assertThat(name).isEqualTo("SW1")
-		}
-
-		@Test
-		fun `generates IO1 for first InOut`() {
-			val name = AutoNameGenerator.generateName(InOut::class.java, context)
-			assertThat(name).isEqualTo("IO1")
+		@ParameterizedTest(name = "first name for {0} is {1}")
+		@MethodSource("cz.vutbr.fit.interlockSim.context.AutoNameGeneratorTest#cellTypePrefixes")
+		fun `generates correct first name for cell type`(cellClass: Class<out NodeCell>, expectedName: String) {
+			val name = AutoNameGenerator.generateName(cellClass, context)
+			assertThat(name).isEqualTo(expectedName)
 		}
 
 		@Test

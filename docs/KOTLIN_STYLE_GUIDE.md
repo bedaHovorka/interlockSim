@@ -1619,6 +1619,174 @@ Need test network?
    └─ Use: TestContextBuilder()
 ```
 
+## Parameterized Tests (JUnit 5)
+
+**Status:** Adopted February 2026. Parameterized tests reduce duplication and improve coverage by running the same assertion logic across multiple inputs.
+
+### When to Use Parameterized Tests
+
+Use parameterized tests when:
+- Testing the same behavior across multiple enum values or input combinations
+- Verifying mathematical/geometric operations with known input→output pairs
+- Testing matrix combinations (e.g., type × spatialType → expected segments)
+
+**Do not** use parameterized tests for single-case tests or when each case needs substantially different setup logic.
+
+### Pattern Reference
+
+#### 1. `@EnumSource` — Exhaustive Enum Testing
+
+Tests all values of an enum automatically. New enum values are covered without test changes.
+
+```kotlin
+@ParameterizedTest
+@EnumSource(Segment::class)
+fun `segment transformations work correctly`(segment: Segment) {
+	assertThat(anti(anti(segment)))
+		.withMessage("anti(anti($segment)) should be identity")
+		.isSameInstanceAs(segment)
+}
+```
+
+#### 2. `@EnumSource` with `names` — Filtered Enum Values
+
+Tests a subset of enum values. Use when some values need different treatment.
+
+```kotlin
+@ParameterizedTest(name = "transition from STOP to {0}")
+@EnumSource(value = Signal::class, names = ["FREE", "S30", "S40", "S60", "S80", "S100"])
+fun `semaphore transitions from STOP to other aspects`(targetSignal: Signal) {
+	assertThat(semaphore.signal).isEqualTo(Signal.STOP)
+	semaphore.signal = targetSignal
+	assertThat(semaphore.signal).isEqualTo(targetSignal)
+}
+```
+
+#### 3. `@CsvSource` — Simple Input→Output Pairs
+
+Best for tabular data. JUnit auto-converts CSV strings to enums, ints, booleans.
+
+```kotlin
+@ParameterizedTest(name = "neighbors{0} at ({1},{2}) returns {3} neighbors")
+@CsvSource(
+	"4, 1, 1, 4",   // center has 4 neighbors in 4-connectivity
+	"4, 0, 0, 2",   // corner has only 2 neighbors in 4-connectivity
+	"8, 1, 1, 6",   // center has 6 neighbors in 8-connectivity
+	"8, 0, 0, 3"    // corner has 3 neighbors in 8-connectivity
+)
+fun `neighbor algorithm returns correct count`(
+	connectivity: Int, x: Int, y: Int, expectedCount: Int
+) {
+	val neighbors = when (connectivity) {
+		4 -> map.neighbors4(Point(x, y)).toList()
+		8 -> map.neighbors8(Point(x, y)).toList()
+		else -> error("Invalid connectivity: $connectivity")
+	}
+	assertThat(neighbors.size).isEqualTo(expectedCount)
+}
+```
+
+#### 4. `@ValueSource` — Primitive Value Lists
+
+For testing a single parameter across multiple values.
+
+```kotlin
+@ParameterizedTest(name = "d2r(r2d({0})) = {0}")
+@ValueSource(ints = [-5, -1, 0, 1, 5, 10])
+fun `d2r and r2d are inverse operations`(d: Int) {
+	val roundTripped = r2d(d2r(d))
+	assertThat(roundTripped)
+		.withMessage("Round-trip conversion for d=$d")
+		.isEqualTo(d)
+}
+```
+
+#### 5. `@MethodSource` — Complex Objects via Companion
+
+Use when test data is too complex for CSV. Define a `@JvmStatic` method in a companion object.
+
+```kotlin
+companion object {
+	@JvmStatic
+	fun cellTypePrefixes() = listOf(
+		Arguments.of(RailSemaphore::class.java, "S1"),
+		Arguments.of(RailSwitch::class.java, "SW1"),
+		Arguments.of(InOut::class.java, "IO1"),
+	)
+}
+
+@ParameterizedTest(name = "first name for {0} is {1}")
+@MethodSource("cellTypePrefixes")
+fun `generates correct first name for cell type`(
+	cellClass: Class<out NodeCell>, expectedName: String
+) {
+	val name = AutoNameGenerator.generateName(cellClass, context)
+	assertThat(name).isEqualTo(expectedName)
+}
+```
+
+#### 6. `@ArgumentsSource` — Custom Provider Class
+
+Use for complex matrices reusable across test files. Provider lives in `testutil/providers/`.
+
+```kotlin
+// In testutil/providers/SwitchActiveSegmentsProvider.kt
+class SwitchActiveSegmentsProvider : ArgumentsProvider {
+	override fun provideArguments(context: ExtensionContext): Stream<Arguments> = Stream.of(
+		Arguments.of(Type.SIMPLE_LEFT_FALSE, SpatialType.HORIZONTAL, Segment.A, Segment.F, Segment.A, Segment.E),
+		Arguments.of(Type.SIMPLE_RIGHT_FALSE, SpatialType.HORIZONTAL, Segment.A, Segment.F, Segment.A, Segment.G),
+		// ... more combinations
+	)
+}
+
+// In DynamicRailSwitchTest.kt
+@ParameterizedTest(name = "{0}/{1}: MAIN({2},{3}), BRANCH({4},{5})")
+@ArgumentsSource(SwitchActiveSegmentsProvider::class)
+fun `getActiveSegments returns correct segments for type`(
+	type: Type, spatialType: SpatialType,
+	mainSeg1: Segment, mainSeg2: Segment,
+	branchSeg1: Segment, branchSeg2: Segment
+) { /* ... */ }
+```
+
+### Gotchas
+
+**`@MethodSource` in `@Nested` inner classes:** Must use fully qualified name with `#` separator.
+
+```kotlin
+// WRONG — won't find the method from @Nested inner class:
+@MethodSource("cellTypePrefixes")
+
+// CORRECT — FQN syntax:
+@MethodSource("cz.vutbr.fit.interlockSim.context.AutoNameGeneratorTest#cellTypePrefixes")
+```
+
+**Companion must be on outer class** when inner `@Nested` classes reference it.
+
+**`@CsvSource` auto-conversion:** String `"STOP"` auto-converts to `Signal.STOP` if the parameter type is `Signal`. No explicit converter needed.
+
+**Test display names:** Use `{0}`, `{1}`, etc. in `@ParameterizedTest(name = "...")` to reference arguments by position. Complex objects use their `toString()`.
+
+### Decision Guide
+
+```
+Which parameterized annotation to use?
+├─ Testing all/some values of an enum?
+│  └─ @EnumSource (with optional names filter)
+│
+├─ Simple input→output pairs (primitives, enums, strings)?
+│  └─ @CsvSource
+│
+├─ Single parameter, multiple primitive values?
+│  └─ @ValueSource
+│
+├─ Complex objects or data classes as test input?
+│  ├─ Used in one test class only?
+│  │  └─ @MethodSource (companion @JvmStatic method)
+│  └─ Reusable across multiple test classes?
+│     └─ @ArgumentsSource (provider in testutil/providers/)
+```
+
 ## Build & Development Environment
 
 ### Dependency Management

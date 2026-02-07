@@ -16,6 +16,8 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 
 /**
  * Tests for Array2DMap extension functions supporting pathfinding algorithms.
@@ -157,6 +159,33 @@ class Array2DMapExtensionsTest {
 		)
 	}
 
+	@ParameterizedTest(name = "neighbors{0} at ({1},{2}) returns {3} neighbors")
+	@CsvSource(
+		"4, 1, 1, 4", // D(1,1) has 4 neighbors in 4-connectivity
+		"4, 0, 0, 2", // A(0,0) corner has only 2 neighbors in 4-connectivity
+		"4, 2, 2, 4", // G(2,2) has 4 neighbors in 4-connectivity
+		"8, 1, 1, 6", // D(1,1) has 6 neighbors in 8-connectivity
+		"8, 0, 0, 3", // A(0,0) corner has 3 neighbors in 8-connectivity
+		"8, 2, 2, 5" // G(2,2) has 5 neighbors in 8-connectivity
+	)
+	fun `neighbor algorithm returns correct count`(
+		connectivity: Int,
+		x: Int,
+		y: Int,
+		expectedCount: Int
+	) {
+		// Act
+		val neighbors =
+			when (connectivity) {
+				4 -> map.neighbors4(Point(x, y)).toList()
+				8 -> map.neighbors8(Point(x, y)).toList()
+				else -> error("Invalid connectivity: $connectivity")
+			}
+
+		// Assert
+		assertThat(neighbors.size).isEqualTo(expectedCount)
+	}
+
 	@Test
 	fun testNeighbors4() {
 		// Neighbors of D(1,1) should be A(1,0), C(0,1), E(2,1), F(1,2)
@@ -205,6 +234,27 @@ class Array2DMapExtensionsTest {
 			Point(1, 2), // left - F
 			Point(2, 3) // down - I
 		)
+	}
+
+	@ParameterizedTest(name = "neighborEntries{0} at D(1,1) returns {1} entries")
+	@CsvSource(
+		"4, 4",
+		"8, 6"
+	)
+	fun `neighbor entries algorithm returns correct count`(
+		connectivity: Int,
+		expectedCount: Int
+	) {
+		// Act
+		val entries =
+			when (connectivity) {
+				4 -> map.neighborEntries4(Point(1, 1)).toList()
+				8 -> map.neighborEntries8(Point(1, 1)).toList()
+				else -> error("Invalid connectivity: $connectivity")
+			}
+
+		// Assert
+		assertThat(entries.size).isEqualTo(expectedCount)
 	}
 
 	@Test

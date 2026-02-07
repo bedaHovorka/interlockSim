@@ -14,6 +14,8 @@ import assertk.assertions.isCloseTo
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEqualTo
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.MethodSource
 import kotlin.math.sqrt
 
 /**
@@ -148,39 +150,38 @@ class PointFTest {
 
 	// ========== Distance Calculation Tests (Issue #289) ==========
 
-	@Test
-	fun testDistanceTo_zeroDistance() {
-		// Distance from point to itself should be zero
-		val point = PointF(5.0f, 10.0f)
-		val distance = point.distanceTo(point)
-		assertThat(distance).isCloseTo(0.0f, 0.0001f)
+	data class DistanceFTestCase(
+		val p1: PointF,
+		val p2: PointF,
+		val expected: Float,
+		val description: String
+	) {
+		override fun toString(): String = description
 	}
 
-	@Test
-	fun testDistanceTo_horizontal() {
-		// Distance along X-axis only
-		val point1 = PointF(0.0f, 5.0f)
-		val point2 = PointF(3.0f, 5.0f)
-		val distance = point1.distanceTo(point2)
-		assertThat(distance).isCloseTo(3.0f, 0.0001f)
+	companion object {
+		@JvmStatic
+		fun distanceTestCases() =
+			listOf(
+				DistanceFTestCase(PointF(5.0f, 10.0f), PointF(5.0f, 10.0f), 0.0f, "zero distance"),
+				DistanceFTestCase(PointF(0.0f, 5.0f), PointF(3.0f, 5.0f), 3.0f, "horizontal"),
+				DistanceFTestCase(PointF(5.0f, 0.0f), PointF(5.0f, 4.0f), 4.0f, "vertical"),
+				DistanceFTestCase(PointF(0.0f, 0.0f), PointF(3.0f, 4.0f), 5.0f, "diagonal 3-4-5"),
+				DistanceFTestCase(
+					PointF(1.5f, 2.3f), PointF(4.2f, 5.7f),
+					sqrt((4.2f - 1.5f) * (4.2f - 1.5f) + (5.7f - 2.3f) * (5.7f - 2.3f)),
+					"fractional"
+				),
+				DistanceFTestCase(PointF(-2.0f, -3.0f), PointF(1.0f, 1.0f), 5.0f, "negative coords"),
+			)
 	}
 
-	@Test
-	fun testDistanceTo_vertical() {
-		// Distance along Y-axis only
-		val point1 = PointF(5.0f, 0.0f)
-		val point2 = PointF(5.0f, 4.0f)
-		val distance = point1.distanceTo(point2)
-		assertThat(distance).isCloseTo(4.0f, 0.0001f)
-	}
-
-	@Test
-	fun testDistanceTo_diagonal() {
-		// 3-4-5 right triangle
-		val point1 = PointF(0.0f, 0.0f)
-		val point2 = PointF(3.0f, 4.0f)
-		val distance = point1.distanceTo(point2)
-		assertThat(distance).isCloseTo(5.0f, 0.0001f)
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("distanceTestCases")
+	fun `distance calculation is correct`(testCase: DistanceFTestCase) {
+		val distance = testCase.p1.distanceTo(testCase.p2)
+		assertThat(distance)
+			.isCloseTo(testCase.expected, 0.0001f)
 	}
 
 	@Test
@@ -191,16 +192,6 @@ class PointFTest {
 		val distance1 = point1.distanceTo(point2)
 		val distance2 = point2.distanceTo(point1)
 		assertThat(distance1).isCloseTo(distance2, 0.0001f)
-	}
-
-	@Test
-	fun testDistanceTo_fractional() {
-		// Test with fractional coordinates (common in animation)
-		val point1 = PointF(1.5f, 2.3f)
-		val point2 = PointF(4.2f, 5.7f)
-		val expectedDistance = sqrt((4.2f - 1.5f) * (4.2f - 1.5f) + (5.7f - 2.3f) * (5.7f - 2.3f))
-		val distance = point1.distanceTo(point2)
-		assertThat(distance).isCloseTo(expectedDistance, 0.0001f)
 	}
 
 	@Test
@@ -222,16 +213,5 @@ class PointFTest {
 		val point4 = PointF(14.0f, 5.0f)
 		val largeDistance = point1.distanceTo(point4)
 		assertThat(largeDistance).isCloseTo(4.0f, 0.0001f)
-	}
-
-	@Test
-	fun testDistanceTo_negativeCoordinates() {
-		// Test with negative coordinates
-		val point1 = PointF(-2.0f, -3.0f)
-		val point2 = PointF(1.0f, 1.0f)
-		val expectedDistance = sqrt((1.0f - (-2.0f)) * (1.0f - (-2.0f)) + (1.0f - (-3.0f)) * (1.0f - (-3.0f)))
-		val distance = point1.distanceTo(point2)
-		assertThat(distance).isCloseTo(expectedDistance, 0.0001f)
-		assertThat(distance).isCloseTo(5.0f, 0.0001f) // 3-4-5 triangle
 	}
 }

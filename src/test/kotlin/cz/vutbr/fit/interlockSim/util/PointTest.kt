@@ -15,7 +15,10 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotSameInstanceAs
+import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.MethodSource
 import kotlin.math.sqrt
 
 /**
@@ -75,39 +78,44 @@ class PointTest {
 		assertThat(str).contains("Point")
 	}
 
-	@Test
-	fun testDistanceToSelf() {
-		val point = Point(10, 20)
-		val distance = point.distance(point)
-
-		assertThat(distance).isEqualTo(0.0)
+	/**
+	 * Test data class for distance calculations
+	 */
+	data class DistanceTestCase(
+		val p1: Point,
+		val p2: Point,
+		val expected: Double,
+		val description: String
+	) {
+		override fun toString(): String = description
 	}
 
-	@Test
-	fun testDistanceHorizontal() {
-		val point1 = Point(0, 0)
-		val point2 = Point(3, 0)
-		val distance = point1.distance(point2)
-
-		assertThat(distance).isEqualTo(3.0)
+	companion object {
+		/**
+		 * Provides test cases for distance calculation tests
+		 */
+		@JvmStatic
+		fun distanceTestCases() =
+			listOf(
+				DistanceTestCase(Point(10, 20), Point(10, 20), 0.0, "distance to self"),
+				DistanceTestCase(Point(0, 0), Point(3, 0), 3.0, "horizontal distance"),
+				DistanceTestCase(Point(0, 0), Point(0, 4), 4.0, "vertical distance"),
+				DistanceTestCase(Point(0, 0), Point(3, 4), 5.0, "diagonal distance (3-4-5 triangle)"),
+				DistanceTestCase(Point(-3, -4), Point(0, 0), 5.0, "distance with negative coordinates"),
+				DistanceTestCase(Point(1000, 2000), Point(1000, 2001), 1.0, "distance with large coordinates")
+			)
 	}
 
-	@Test
-	fun testDistanceVertical() {
-		val point1 = Point(0, 0)
-		val point2 = Point(0, 4)
-		val distance = point1.distance(point2)
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("distanceTestCases")
+	fun `distance calculation is correct`(testCase: DistanceTestCase) {
+		// Act
+		val distance = testCase.p1.distance(testCase.p2)
 
-		assertThat(distance).isEqualTo(4.0)
-	}
-
-	@Test
-	fun testDistanceDiagonal() {
-		val point1 = Point(0, 0)
-		val point2 = Point(3, 4)
-		val distance = point1.distance(point2)
-
-		assertThat(distance).isEqualTo(5.0)
+		// Assert
+		assertThat(distance)
+			.withMessage("Distance from ${testCase.p1} to ${testCase.p2} should be ${testCase.expected}")
+			.isEqualTo(testCase.expected)
 	}
 
 	@Test
@@ -122,15 +130,6 @@ class PointTest {
 	}
 
 	@Test
-	fun testDistanceWithNegativeCoordinates() {
-		val point1 = Point(-3, -4)
-		val point2 = Point(0, 0)
-		val distance = point1.distance(point2)
-
-		assertThat(distance).isEqualTo(5.0)
-	}
-
-	@Test
 	fun testDistanceTriangleInequality() {
 		val point1 = Point(0, 0)
 		val point2 = Point(3, 0)
@@ -142,15 +141,6 @@ class PointTest {
 
 		// Triangle inequality: d13 <= d12 + d23
 		assertThat(d13).isLessThanOrEqualTo(d12 + d23)
-	}
-
-	@Test
-	fun testDistanceLargeCoordinates() {
-		val point1 = Point(1000, 2000)
-		val point2 = Point(1000, 2001)
-		val distance = point1.distance(point2)
-
-		assertThat(distance).isEqualTo(1.0)
 	}
 
 	@Test
