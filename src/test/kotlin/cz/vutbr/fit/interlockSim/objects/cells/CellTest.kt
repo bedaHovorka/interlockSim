@@ -38,7 +38,7 @@ class CellTest {
 	/**
 	 * Tests segment transformations and properties
 	 */
-	@ParameterizedTest
+	@ParameterizedTest(name = "segment {0} transformations")
 	@EnumSource(Segment::class)
 	fun `segment transformations work correctly`(segment: Segment) {
 		// Arrange
@@ -103,7 +103,7 @@ class CellTest {
 	/**
 	 * Tests cell direction properties for all cell types and spatial types
 	 */
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0} direction is opposite for opposite orientations")
 	@EnumSource(SpatialType::class)
 	fun `cell direction is opposite for opposite orientations`(spatialType: SpatialType) {
 		for (clazz in testedClasses) {

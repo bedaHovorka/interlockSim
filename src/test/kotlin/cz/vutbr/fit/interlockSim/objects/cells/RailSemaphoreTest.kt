@@ -108,7 +108,7 @@ class RailSemaphoreTest : KoinTestBase() {
 		fun `signal transitions work correctly`(
 			fromSignal: Signal,
 			toSignal: Signal,
-			@Suppress("UNUSED_PARAMETER") description: String
+			_description: String
 		) {
 			// Arrange
 			semaphore.signal = fromSignal

@@ -20,7 +20,10 @@ class SwitchActiveSegmentsProvider : ArgumentsProvider {
 		Arguments.of(Type.SIMPLE_RIGHT_FALSE, SpatialType.HORIZONTAL, Segment.A, Segment.F, Segment.A, Segment.G),
 		Arguments.of(Type.SIMPLE_LEFT_TRUE, SpatialType.HORIZONTAL, Segment.A, Segment.F, Segment.F, Segment.D),
 		Arguments.of(Type.SIMPLE_RIGHT_TRUE, SpatialType.HORIZONTAL, Segment.A, Segment.F, Segment.F, Segment.B),
-		// VERTICAL switch type
+		// VERTICAL switch types
+		Arguments.of(Type.SIMPLE_LEFT_FALSE, SpatialType.VERTICAL, Segment.C, Segment.H, Segment.C, Segment.G),
+		Arguments.of(Type.SIMPLE_RIGHT_FALSE, SpatialType.VERTICAL, Segment.C, Segment.H, Segment.C, Segment.D),
+		Arguments.of(Type.SIMPLE_LEFT_TRUE, SpatialType.VERTICAL, Segment.H, Segment.C, Segment.H, Segment.B),
 		Arguments.of(Type.SIMPLE_RIGHT_TRUE, SpatialType.VERTICAL, Segment.C, Segment.H, Segment.H, Segment.E),
 	)
 }
