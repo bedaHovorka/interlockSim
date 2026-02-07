@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
@@ -23,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 
@@ -70,6 +72,32 @@ class CellTest {
 		assertThat(center == transformed)
 			.withMessage("transformed point should not equal original")
 			.isFalse()
+	}
+
+	/**
+	 * Tests that all segment transformations produce unique points (cross-segment uniqueness).
+	 * This verifies that the segment topology is correctly defined with no duplicate transformations.
+	 */
+	@Test
+	fun `all segment transformations produce unique points`() {
+		// Arrange
+		val center = Point(0, 0)
+
+		// Act - transform center point using all segments
+		val transformedPoints = Segment.values().map { it.transform(center) }
+
+		// Assert - all transformed points are unique
+		val uniquePoints = transformedPoints.toSet()
+		assertThat(uniquePoints.size)
+			.withMessage("All ${Segment.values().size} segments should produce unique transformed points")
+			.isEqualTo(Segment.values().size)
+
+		// Assert - no transformed point equals the center
+		transformedPoints.forEach { point ->
+			assertThat(point == center)
+				.withMessage("Transformed point $point should not equal center $center")
+				.isFalse()
+		}
 	}
 
 	/**
