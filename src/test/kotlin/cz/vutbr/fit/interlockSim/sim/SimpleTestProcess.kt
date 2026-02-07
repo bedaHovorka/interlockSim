@@ -87,7 +87,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *     val train = Train(context, timetable)
  *
  *     // Act - Run simulation with SimpleTestProcess
- *     val testProcess = SimpleTestProcess(context, train, endTime = 5.0)
+ *     val testProcess = SimpleTestProcess(train, endTime = 5.0)
  *     context.setMainProcess(testProcess)
  *     context.run()
  *
@@ -98,7 +98,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * }
  * ```
  *
- * @param env Simulation environment (context providing simulation facilities)
  * @param train Train instance to coordinate
  * @param endTime Maximum simulation time in seconds
  *
@@ -108,7 +107,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @see SimulationExecutionTest Integration test patterns
  */
 class SimpleTestProcess(
-	private val env: SimulationEnvironment,
 	private val train: Train,
 	private val endTime: Double
 ) : LoopProcess() {

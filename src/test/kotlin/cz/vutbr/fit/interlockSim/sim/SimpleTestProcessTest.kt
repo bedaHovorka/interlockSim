@@ -45,7 +45,7 @@ import org.junit.jupiter.api.Test
  * @see SimpleTestProcess
  */
 @Tag("integration-test")
-@DisplayName("SimpleTestProcess Unit Tests")
+@DisplayName("SimpleTestProcess Integration Tests")
 class SimpleTestProcessTest : KoinTestBase() {
 	private lateinit var context: DefaultSimulationContext
 
@@ -74,7 +74,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 		val train = Train(context, timetable)
 
 		// Act: Run simulation with SimpleTestProcess (5 seconds)
-		val testProcess = SimpleTestProcess(context, train, endTime = 5.0)
+		val testProcess = SimpleTestProcess(train, endTime = 5.0)
 		context.setMainProcess(testProcess)
 		context.run()
 
@@ -109,7 +109,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 
 		// Act: Run simulation with short endTime (3 seconds)
 		val endTime = 3.0
-		val testProcess = SimpleTestProcess(context, train, endTime = endTime)
+		val testProcess = SimpleTestProcess(train, endTime = endTime)
 		context.setMainProcess(testProcess)
 		context.run()
 
@@ -142,7 +142,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 		val train = Train(context, timetable)
 
 		// Act: Run simulation with generous endTime (60 seconds)
-		val testProcess = SimpleTestProcess(context, train, endTime = 60.0)
+		val testProcess = SimpleTestProcess(train, endTime = 60.0)
 		context.setMainProcess(testProcess)
 		context.run()
 
@@ -176,7 +176,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 		val train = Train(context, timetable)
 
 		// Act: Run simulation
-		val testProcess = SimpleTestProcess(context, train, endTime = 5.0)
+		val testProcess = SimpleTestProcess(train, endTime = 5.0)
 		context.setMainProcess(testProcess)
 		context.run()
 
@@ -215,7 +215,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 		val train = Train(context, timetable)
 
 		// Act: Run simulation (short time because train won't move without dispatcher)
-		val testProcess = SimpleTestProcess(context, train, endTime = 5.0)
+		val testProcess = SimpleTestProcess(train, endTime = 5.0)
 		context.setMainProcess(testProcess)
 		context.run()
 
@@ -245,7 +245,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 
 		// Act: Run simulation for 10 seconds
 		// With 1-second iteration interval, this should execute ~10 iterations
-		val testProcess = SimpleTestProcess(context, train, endTime = 10.0)
+		val testProcess = SimpleTestProcess(train, endTime = 10.0)
 		context.setMainProcess(testProcess)
 		context.run()
 

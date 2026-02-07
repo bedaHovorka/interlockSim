@@ -74,6 +74,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 			// Verify train1 can navigate through reserved blocks (shared registry)
 			val path = trainNavigationService.findReservedPathForTrain("train1", inOutA)
+			assertThat(path).isNotNull()
 
 			// Extract blocks from path returned by TrainNavigationService
 			val blocksFromPath =
