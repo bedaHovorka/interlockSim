@@ -242,30 +242,53 @@ class ContextTransformerTest : KoinTestBase() {
 		}
 	}
 
-	// NOTE: Property Preservation tests - Issue #168 CLOSED (2026-01-20)
-	//
-	// Properties (currentMaxSpeed, currentTrackLength, currentNameString) ARE accessible via BaseContext.
-	// These properties exist in BaseContext and are inherited by DefaultSimulationContext.
-	//
-	// To implement these tests:
-	// 1. Set properties on EditingContext before transformation
-	// 2. Transform to SimulationContext
-	// 3. Cast to DefaultSimulationContext or BaseContext to access properties
-	// 4. Verify properties are preserved after transformation
-	//
-	// Example pattern:
-	//   val editingContext = DefaultEditingContext(20, 20)
-	//   editingContext.currentMaxSpeed = 120.0
-	//   val simContext = transformer.createSimulationContext(editingContext, processFactory)
-	//   assertThat((simContext as BaseContext).currentMaxSpeed).isEqualTo(120.0)
-	//
-	// Tests that could be implemented:
-	// - transformContext_preservesMaxSpeed()
-	// - transformContext_preservesTrackLength()
-	// - transformContext_preservesNameString()
-	// - transformContext_preservesAllProperties()
-	//
-	// See: https://github.com/bedaHovorka/interlockSim/issues/168
+	/**
+	 * Property Preservation Tests
+	 *
+	 * Verifies that configuration properties set on EditingContext are correctly
+	 * copied to SimulationContext during transformation via BaseContext.copyConfiguration().
+	 *
+	 * See: Issue #168 (closed 2026-01-20)
+	 */
+	@Nested
+	@DisplayName("Property Preservation")
+	inner class PropertyPreservation {
+		@Test
+		@DisplayName("transformation preserves currentMaxSpeed")
+		fun transformContext_preservesMaxSpeed() {
+			DefaultEditingContext(20, 20).use { editingContext ->
+				editingContext.currentMaxSpeed = 120.0
+
+				transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+					assertThat((simulationContext as DefaultSimulationContext).currentMaxSpeed).isEqualTo(120.0)
+				}
+			}
+		}
+
+		@Test
+		@DisplayName("transformation preserves currentTrackLength")
+		fun transformContext_preservesTrackLength() {
+			DefaultEditingContext(20, 20).use { editingContext ->
+				editingContext.currentTrackLength = 250.0
+
+				transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+					assertThat((simulationContext as DefaultSimulationContext).currentTrackLength).isEqualTo(250.0)
+				}
+			}
+		}
+
+		@Test
+		@DisplayName("transformation preserves currentNameString")
+		fun transformContext_preservesNameString() {
+			DefaultEditingContext(20, 20).use { editingContext ->
+				editingContext.currentNameString = "TestNetwork"
+
+				transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
+					assertThat((simulationContext as DefaultSimulationContext).currentNameString).isEqualTo("TestNetwork")
+				}
+			}
+		}
+	}
 
 	@Nested
 	@DisplayName("InOut List Preservation")
