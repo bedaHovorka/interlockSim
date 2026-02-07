@@ -22,6 +22,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
+import org.junit.jupiter.params.provider.EnumSource
 import org.koin.test.get
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
@@ -71,35 +74,55 @@ class RailSemaphoreTest : KoinTestBase() {
 				.isEqualTo(Signal.STOP)
 		}
 
-		@Test
-		fun `semaphore changes to PROCEED aspect`() {
+		@ParameterizedTest(name = "transition from STOP to {0}")
+		@EnumSource(
+			value = Signal::class,
+			names = ["FREE", "S30", "S40", "S60", "S80", "S100"]
+		)
+		fun `semaphore transitions from STOP to other aspects`(targetSignal: Signal) {
 			// Arrange
-			val initialSignal = semaphore.signal
-			assertThat(initialSignal)
+			assertThat(semaphore.signal)
 				.withMessage("initial signal must be STOP")
 				.isEqualTo(Signal.STOP)
 
 			// Act
-			semaphore.signal = Signal.FREE
+			semaphore.signal = targetSignal
 
 			// Assert
 			assertThat(semaphore.signal)
-				.withMessage("signal should change to FREE after setSignal")
-				.isEqualTo(Signal.FREE)
+				.withMessage("signal should transition to $targetSignal")
+				.isEqualTo(targetSignal)
 		}
 
-		@Test
-		fun `semaphore changes to CAUTION aspect`() {
+		@ParameterizedTest(name = "{0} → {1}: {2}")
+		@CsvSource(
+			"STOP, FREE, 'allow full speed'",
+			"STOP, S30, 'allow 30 km/h'",
+			"FREE, STOP, 'halt trains'",
+			"FREE, S30, 'reduce to 30 km/h'",
+			"S30, FREE, 'increase to full speed'",
+			"S30, STOP, 'halt from caution'",
+			"S60, S30, 'reduce caution speed'",
+			"S30, S60, 'increase caution speed'"
+		)
+		fun `signal transitions work correctly`(
+			fromSignal: Signal,
+			toSignal: Signal,
+			@Suppress("UNUSED_PARAMETER") description: String
+		) {
 			// Arrange
-			semaphore.signal = Signal.STOP
+			semaphore.signal = fromSignal
+			assertThat(semaphore.signal)
+				.withMessage("setup: signal should be $fromSignal")
+				.isEqualTo(fromSignal)
 
 			// Act
-			semaphore.signal = Signal.S30
+			semaphore.signal = toSignal
 
 			// Assert
 			assertThat(semaphore.signal)
-				.withMessage("signal should change to S30 (caution speed)")
-				.isEqualTo(Signal.S30)
+				.withMessage("signal should transition from $fromSignal to $toSignal")
+				.isEqualTo(toSignal)
 		}
 
 		@Test

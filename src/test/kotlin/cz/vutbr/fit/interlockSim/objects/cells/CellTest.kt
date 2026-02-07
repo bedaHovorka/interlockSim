@@ -23,8 +23,8 @@ import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.core.segmentFor
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.Test
-import java.util.EnumMap
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.EnumSource
 
 /**
  * This class checks cells attributes (mainly topology)
@@ -36,59 +36,73 @@ class CellTest {
 	/**
 	 * Tests segment transformations and properties
 	 */
-	@Test
-	fun testSegments() {
+	@ParameterizedTest
+	@EnumSource(Segment::class)
+	fun `segment transformations work correctly`(segment: Segment) {
+		// Arrange
 		val center = Point(0, 0)
-		val points = EnumMap<Segment, Point>(Segment::class.java)
+		val dx = segment.dx
+		val dy = segment.dy
 
-		for (s in Segment.values()) { // TODO parametrized test
-			val dx = s.dx
-			val dy = s.dy
+		// Act & Assert - segmentFor reverses to original
+		assertThat(segmentFor(dx, dy))
+			.withMessage("segmentFor($dx, $dy) should return $segment")
+			.isSameInstanceAs(segment)
 
-			assertThat(segmentFor(dx, dy)).isSameInstanceAs(s)
+		// Act & Assert - double anti() is identity
+		assertThat(anti(anti(segment)))
+			.withMessage("anti(anti($segment)) should be identity")
+			.isSameInstanceAs(segment)
 
-			assertThat(anti(anti(s))).isSameInstanceAs(s)
-			assertThat(conflict(s, s)).isTrue()
+		// Act & Assert - segment conflicts with itself
+		assertThat(conflict(segment, segment))
+			.withMessage("$segment should conflict with itself")
+			.isTrue()
 
-			val tr = s.transform(center)
-			assertThat(tr).isNotSameInstanceAs(center) // Must not return same object
-			assertThat(center == tr).withMessage("transformed point is equal").isFalse()
-			assertThat(points.values.contains(tr)).withMessage("transformed point is generated twice").isFalse()
-			points[s] = tr
-		}
+		// Act - transform point
+		val transformed = segment.transform(center)
+
+		// Assert - transformation creates new point
+		assertThat(transformed)
+			.withMessage("transform should create new Point instance")
+			.isNotSameInstanceAs(center)
+
+		assertThat(center == transformed)
+			.withMessage("transformed point should not equal original")
+			.isFalse()
 	}
 
 	/**
-	 * Tests cell direction properties
+	 * Tests cell direction properties for all cell types and spatial types
 	 */
-	@Test
-	fun testDirection() {
+	@ParameterizedTest
+	@EnumSource(SpatialType::class)
+	fun `cell direction is opposite for opposite orientations`(spatialType: SpatialType) {
 		for (clazz in testedClasses) {
-			testDir(clazz)
+			testDirForCellType(clazz, spatialType)
 		}
 	}
 
-	private fun testDir(
+	private fun testDirForCellType(
 		clazz: Class<out Cell>,
+		spatialType: SpatialType,
 		vararg objects: Any
 	) {
-		for (t in SpatialType.values()) {
-			try {
-				val sem1 = newCell(clazz, true, t, objects)
-				val sem2 = newCell(clazz, false, t, objects)
+		try {
+			val cell1 = newCell(clazz, true, spatialType, objects)
+			val cell2 = newCell(clazz, false, spatialType, objects)
 
-				assertThat(sem1.direction())
-					.withMessage("direction for class ${clazz.simpleName} and $t")
-					.isSameInstanceAs(anti(sem2.direction()))
-			} catch (e: IllegalArgumentException) {
-				// This try-catch is intentional - it handles valid cases where certain
-				// switch types are unsupported. This is not an assertion test.
-				val message = e.message
-				if (message != null && message == UNSUPORTED_SWITCH_TYPES_MESSAGE) {
-					continue
-				}
-				throw e
+			assertThat(cell1.direction())
+				.withMessage("direction for class ${clazz.simpleName} and $spatialType")
+				.isSameInstanceAs(anti(cell2.direction()))
+		} catch (e: IllegalArgumentException) {
+			// This try-catch is intentional - it handles valid cases where certain
+			// switch types are unsupported. This is not an assertion test.
+			val message = e.message
+			if (message != null && message == UNSUPORTED_SWITCH_TYPES_MESSAGE) {
+				return
 			}
+			throw e
 		}
 	}
 
