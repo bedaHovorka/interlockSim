@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotSameInstanceAs
 import assertk.assertions.isSameInstanceAs
