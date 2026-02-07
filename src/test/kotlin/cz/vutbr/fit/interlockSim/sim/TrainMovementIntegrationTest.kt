@@ -267,6 +267,6 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
 		}
 		// At minimum, verify the registry is in a consistent state (blocks >= trains)
-		assertThat(registry.blockCount()).isGreaterThan(registry.trainCount() - 1)
+		assertThat(registry.blockCount()).isGreaterThanOrEqualTo(registry.trainCount())
 	}
 }

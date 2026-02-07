@@ -83,9 +83,8 @@ class RaceConditionTest : KoinTestBase() {
 		@Test
 		@DisplayName("Multiple threads attempting simultaneous path reservations")
 		fun concurrentPathReservations_multipleThreads_noExceptionThrown() {
-			// Arrange - Create two tracks with DynamicTrack wrappers for path operations
+			// Arrange - Create track with DynamicTrack wrapper for path operations
 			val track1 = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
-			val track2 = DynamicTrack(SimpleTrackBlock(end2, end3, 100.0, 80.0))
 
 			val threadCount = THREAD_COUNT
 			val startLatch = CountDownLatch(1)
@@ -460,7 +459,12 @@ class RaceConditionTest : KoinTestBase() {
 			val track1 = DynamicTrack(SimpleTrackBlock(end1, end2, 100.0, 80.0))
 			val track2 = DynamicTrack(SimpleTrackBlock(end2, end3, 100.0, 80.0))
 			val track3 = DynamicTrack(SimpleTrackBlock(end3, end4, 100.0, 80.0))
-			val tracks = listOf(track1, track2, track3)
+			// Map each track to its appropriate separator for path operations
+			val trackSeparators = listOf(
+				track1 to end1,
+				track2 to end2,
+				track3 to end3
+			)
 
 			val occupant = createMockTrackOccupant("Train1")
 			val iterations = STRESS_TEST_ITERATIONS
@@ -475,9 +479,9 @@ class RaceConditionTest : KoinTestBase() {
 				try {
 					startLatch.await()
 					for (iter in 0 until iterations) {
-						for (track in tracks) {
+						for ((track, separator) in trackSeparators) {
 							try {
-								track.setUpPath(end1)
+								track.setUpPath(separator)
 								track.enter(occupant)
 								enterCount.incrementAndGet()
 								track.leave(occupant)
@@ -501,11 +505,11 @@ class RaceConditionTest : KoinTestBase() {
 				try {
 					startLatch.await()
 					for (iter in 0 until iterations) {
-						for (track in tracks) {
+						for ((track, separator) in trackSeparators) {
 							try {
-								track.setUpPath(end1)
+								track.setUpPath(separator)
 								Thread.sleep(1)
-								track.cancelPathSetup(end1)
+								track.cancelPathSetup(separator)
 							} catch (e: TrackOperationException) {
 								// Expected due to concurrent modifications
 							}
