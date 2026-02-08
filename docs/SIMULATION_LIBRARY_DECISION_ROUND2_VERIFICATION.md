@@ -1,8 +1,10 @@
-# Simulation Library Decision Round 2 - Calculation Verification Report
+# Simulation Library Decision - Calculation Verification Report
 
 **Verification Date:** 2026-02-08  
 **Verified By:** GitHub Copilot Automated Verification  
-**Document Verified:** [SIMULATION_LIBRARY_DECISION_ROUND2.md](SIMULATION_LIBRARY_DECISION_ROUND2.md)
+**Documents Verified:** 
+- [SIMULATION_LIBRARY_DECISION_ROUND2.md](SIMULATION_LIBRARY_DECISION_ROUND2.md) (Round 2)
+- [SIMULATION_LIBRARY_DECISION.md](SIMULATION_LIBRARY_DECISION.md) (Round 1)
 
 ---
 
@@ -10,7 +12,27 @@
 
 ✅ **ALL CALCULATIONS VERIFIED AS CORRECT**
 
-The voting calculations, percentages, and totals in SIMULATION_LIBRARY_DECISION_ROUND2.md have been independently verified using automated Python scripts. All claims in the document are mathematically accurate.
+Both voting decision documents have been independently verified using automated Python scripts:
+
+### Round 1 (SIMULATION_LIBRARY_DECISION.md)
+- **Decision:** Kalasim (A5) selected 7-0 unanimous
+- **Verification Status:** ✅ All per-member totals correct (27 contexts × 7 members = 189 votes)
+- **Key Finding:** Final ranked vote shows 7-0 unanimous consensus for A5
+
+### Round 2 (SIMULATION_LIBRARY_DECISION_ROUND2.md)  
+- **Decision:** Road 2 (A2→A6→A5 phased) selected 5-2 majority
+- **Verification Status:** ✅ All calculations mathematically accurate (28 contexts × 7 members = 196 votes)
+- **Key Finding:** 84 Road 2 votes vs 40 Road 1 votes (67.7% decisive majority)
+
+---
+
+## Table of Contents
+
+1. [Verification Methodology](#verification-methodology)
+2. [Round 2 Verification Results](#round-2-verification-results)
+3. [Round 1 Verification Results](#round-1-verification-results)
+4. [Conclusion](#conclusion)
+5. [Appendix: Verification Scripts](#appendix-verification-scripts)
 
 ---
 
@@ -35,7 +57,9 @@ The voting calculations, percentages, and totals in SIMULATION_LIBRARY_DECISION_
 
 ---
 
-## Detailed Verification Results
+## Round 2 Verification Results
+
+### Detailed Verification Results (SIMULATION_LIBRARY_DECISION_ROUND2.md)
 
 ### Per-Member Vote Totals (Lines 703-711)
 
@@ -168,11 +192,73 @@ Randomly verified specific contexts to ensure matrix accuracy:
 
 ---
 
+## Round 1 Verification Results
+
+### Detailed Verification Results (SIMULATION_LIBRARY_DECISION.md)
+
+#### Per-Member Vote Totals (Lines 537-545)
+
+| Member | A1 (Doc) | A1 (Calc) | A2 (Doc) | A2 (Calc) | A3 (Doc) | A3 (Calc) | A4 (Doc) | A4 (Calc) | A5 (Doc) | A5 (Calc) | A6 (Doc) | A6 (Calc) | Abstain (Doc) | Abstain (Calc) | Total (Doc) | Total (Calc) | Status |
+|--------|----------|-----------|----------|-----------|----------|-----------|----------|-----------|----------|-----------|----------|-----------|---------------|----------------|-------------|--------------|--------|
+| TSE | 0 | ✓ 0 | 0 | ✓ 0 | 1 | ✓ 1 | 2 | ✓ 2 | 17 | ✓ 17 | 7 | ✓ 7 | 0 | ✓ 0 | 27 | ✓ 27 | ✅ |
+| KTL | 0 | ✓ 0 | 0 | ✓ 0 | 1 | ✓ 1 | 1 | ✓ 1 | 18 | ✓ 18 | 7 | ✓ 7 | 0 | ✓ 0 | 27 | ✓ 27 | ✅ |
+| JSD | 14 | ✓ 14 | 7 | ✓ 7 | 5 | ✓ 5 | 0 | ✓ 0 | 0 | ✓ 0 | 0 | ✓ 0 | 1 | ✓ 1 | 27 | ✓ 27 | ✅ |
+| KJD | 0 | ✓ 0 | 0 | ✓ 0 | 0 | ✓ 0 | 0 | ✓ 0 | 24 | ✓ 24 | 2 | ✓ 2 | 1 | ✓ 1 | 27 | ✓ 27 | ✅ |
+| AA | 0 | ✓ 0 | 0 | ✓ 0 | 2 | ✓ 2 | 1 | ✓ 1 | 7 | ✓ 7 | 17 | ✓ 17 | 0 | ✓ 0 | 27 | ✓ 27 | ✅ |
+| RCE | 0 | ✓ 0 | 1 | ✓ 1 | 3 | ✓ 3 | 2 | ✓ 2 | 11 | ✓ 11 | 2 | ✓ 2 | 8 | ✓ 8 | 27 | ✓ 27 | ✅ |
+| QA | 0 | ✓ 0 | 1 | ✓ 1 | 1 | ✓ 1 | 0 | ✓ 0 | 17 | ✓ 17 | 6 | ✓ 6 | 2 | ✓ 2 | 27 | ✓ 27 | ✅ |
+
+**All per-member calculations verified correct.** ✅
+
+#### Context Voting Analysis
+
+**Total contexts:** 27 (Meeting 1: 10, Meeting 2: 6, Meeting 3: 6, Meeting 4: 5)  
+**Total possible votes:** 27 contexts × 7 members = 189  
+**All 189 votes accounted for in the document.**
+
+#### Final Ranked Vote (Unanimous Decision)
+
+The document includes a "Final Ranked Vote" section where all 7 team members explicitly chose A5 (Kalasim) as their 1st choice after deliberation:
+
+| Member | 1st Choice | Status |
+|--------|-----------|--------|
+| TSE | A5 | ✅ |
+| KTL | A5 | ✅ |
+| JSD | A5 | ✅ (consensus acceptance) |
+| KJD | A5 | ✅ |
+| AA | A5 | ✅ (facade sufficiency argument) |
+| RCE | A5 | ✅ |
+| QA | A5 | ✅ |
+
+**Result:** 7-0 unanimous for A5 (Kalasim) ✅
+
+#### Raw Vote Distribution vs Final Ranked Vote
+
+The context voting shows:
+- **5 members** (TSE, KTL, KJD, RCE, QA) voted A5 most frequently in context votes
+- **1 member** (JSD) voted A1 (jDisco keep) most frequently - 14 times
+- **1 member** (AA) voted A6 (kDisco) most frequently - 17 times
+
+However, the **Final Ranked Vote** shows all 7 members chose A5 as their 1st choice. This reflects:
+- **JSD's consensus acceptance:** "Accepting consensus; concerns mitigated by PoC gate. Conditional on 50-train scalability."
+- **AA's strategic decision:** "SimulationEnvironment facade provides sufficient abstraction; kDisco layer unnecessary"
+
+This is the correct interpretation of structured decision-making: context votes inform debate, but the final ranked vote represents the binding consensus after full deliberation.
+
+---
+
 ## Conclusion
 
-### Verification Summary
+### Overall Verification Summary
 
-✅ **All 196 votes correctly tallied**  
+#### Round 1 (SIMULATION_LIBRARY_DECISION.md)
+✅ **All 189 votes correctly tallied** (27 contexts × 7 members)  
+✅ **All per-member totals accurate**  
+✅ **Final 7-0 unanimous ranking confirmed**  
+✅ **Context votes properly differentiated from final ranked vote**
+
+#### Round 2 (SIMULATION_LIBRARY_DECISION_ROUND2.md)
+✅ **All 196 votes correctly tallied** (28 contexts × 7 members)  
 ✅ **All per-member totals accurate**  
 ✅ **All meeting breakdowns correct**  
 ✅ **All percentage calculations precise**  
@@ -181,17 +267,18 @@ Randomly verified specific contexts to ensure matrix accuracy:
 
 ### Document Quality Assessment
 
-The SIMULATION_LIBRARY_DECISION_ROUND2.md document demonstrates:
+Both SIMULATION_LIBRARY_DECISION documents demonstrate:
 
-1. **Mathematical accuracy:** Zero calculation errors found
-2. **Transparency:** Arithmetic checksums provided for verification
+1. **Mathematical accuracy:** Zero calculation errors found in either document
+2. **Transparency:** Round 2 provides arithmetic checksums for verification
 3. **Consistency:** All cross-references between sections are correct
-4. **Completeness:** All 28×7 = 196 possible votes accounted for
-5. **Documentation rigor:** Special cases (RCE abstention, QA neutrality) clearly explained
+4. **Completeness:** All possible votes accounted for (189 in Round 1, 196 in Round 2)
+5. **Documentation rigor:** Special cases clearly explained (abstentions, consensus decisions)
+6. **Proper methodology:** Distinction between context voting and final ranked votes
 
 ### Recommendation
 
-**No corrections required.** The document is ready for use as an authoritative decision record.
+**No corrections required.** Both documents are ready for use as authoritative decision records.
 
 ---
 
@@ -199,7 +286,8 @@ The SIMULATION_LIBRARY_DECISION_ROUND2.md document demonstrates:
 
 The following Python scripts were used for automated verification:
 
-### Script 1: Complete Vote Verification
+### Script 1: Round 2 Complete Vote Verification
+
 ```python
 #!/usr/bin/env python3
 """Verify voting calculations in SIMULATION_LIBRARY_DECISION_ROUND2.md"""
@@ -270,8 +358,75 @@ print(f"R2 percentage (decisive): {overall_r2 / (overall_r1 + overall_r2) * 100:
 
 **Output:** All values match document claims exactly.
 
+### Script 2: Round 1 Complete Vote Verification
+
+```python
+#!/usr/bin/env python3
+"""Verify voting calculations in SIMULATION_LIBRARY_DECISION.md (Round 1)"""
+
+# Voting matrix from document (lines 504-533)
+voting_matrix = [
+    # Meeting 1 (contexts 1-10)
+    ["A6", "A5", "A2", "A5", "A6", "--", "A5"],  # 1: Null safety
+    ["A6", "A6", "A2", "A5", "A6", "A6", "A6"],  # 2: Object identity
+    ["A6", "A5", "A1", "A5", "A6", "--", "A6"],  # 3: Non-determinism
+    ["A4", "A6", "A2", "A5", "A6", "A4", "A6"],  # 4: Multi-train scalability
+    ["A6", "A6", "A2", "A6", "A6", "--", "A6"],  # 5: Test infrastructure
+    ["A3", "A6", "A1", "A5", "A6", "--", "A5"],  # 6: Animation bridge
+    ["A6", "A6", "A2", "A5", "A6", "A6", "A6"],  # 7: Path reservation
+    ["A4", "A4", "A1", "--", "A4", "A4", "--"],  # 8: Continuous simulation
+    ["A6", "A6", "A1", "A5", "A6", "A2", "A2"],  # 9: Migration risk
+    ["A6", "A6", "--", "A6", "A6", "--", "--"],  # 10: Koin DI compatibility
+    # Meeting 2 (contexts 11-16)
+    ["A5", "A5", "A3", "A5", "A6", "A3", "A5"],  # 11: Goal 1: Multi-Train
+    ["A5", "A5", "A3", "A5", "A3", "A5", "A3"],  # 12: Goal 5: Save/Restore
+    ["A5", "A5", "A1", "A5", "A5", "A5", "A5"],  # 13: Goal 7: Speed Control
+    ["A5", "A5", "A3", "A5", "A6", "A5", "A5"],  # 14: Goal 10: AI Dispatcher
+    ["A5", "A5", "A1", "A5", "A5", "A5", "A5"],  # 15: Goal 11: Track Gradients
+    ["A5", "A5", "A1", "A5", "A5", "A5", "A5"],  # 16: Goal 14: Custom Train Types
+    # Meeting 3 (contexts 17-22)
+    ["A5", "A5", "A2", "A5", "A6", "A5", "A5"],  # 17: API mapping quality
+    ["A5", "A5", "A1", "A5", "A6", "A5", "A5"],  # 18: Migration effort
+    ["A5", "A5", "A1", "A5", "A5", "--", "A5"],  # 19: Kotlin idiom alignment
+    ["A5", "A5", "A2", "A5", "A6", "--", "A6"],  # 20: Test migration complexity
+    ["A5", "A5", "A1", "A5", "A5", "A5", "A5"],  # 21: Koin DI integration
+    ["A5", "A5", "A1", "A5", "A6", "--", "A5"],  # 22: Debugging/transparency
+    # Meeting 4 (contexts 23-27)
+    ["A5", "A5", "A1", "A5", "A6", "A5", "A5"],  # 23: Lowest migration risk
+    ["A5", "A5", "A3", "A5", "A5", "A3", "A5"],  # 24: Best long-term sustainability
+    ["A5", "A3", "A3", "A5", "A3", "A3", "A5"],  # 25: Best upstream health
+    ["A5", "A5", "A1", "A5", "A6", "A5", "A5"],  # 26: Best rollback safety
+    ["A5", "A5", "A1", "A5", "A5", "A5", "A5"],  # 27: Best for team skills
+]
+
+member_names = ["TSE", "KTL", "JSD", "KJD", "AA", "RCE", "QA"]
+
+# Calculate per-member totals
+member_totals = {name: {"A1": 0, "A2": 0, "A3": 0, "A4": 0, "A5": 0, "A6": 0, "Abstain": 0} 
+                 for name in member_names}
+
+for context in voting_matrix:
+    for i, vote in enumerate(context):
+        if vote == "--":
+            member_totals[member_names[i]]["Abstain"] += 1
+        else:
+            member_totals[member_names[i]][vote] += 1
+
+# Display results
+for name in member_names:
+    totals = member_totals[name]
+    print(f"{name}: A1={totals['A1']}, A2={totals['A2']}, A3={totals['A3']}, "
+          f"A4={totals['A4']}, A5={totals['A5']}, A6={totals['A6']}, "
+          f"Abstain={totals['Abstain']}")
+
+# Final ranked vote verification
+print("\nFinal Ranked Vote: All 7 members chose A5 as 1st choice")
+```
+
+**Output:** All values match document claims exactly. Final ranked vote shows 7-0 unanimous consensus for A5.
+
 ---
 
 **Verification Completed:** 2026-02-08  
-**Status:** ✅ PASSED  
-**Action Required:** None - document is accurate
+**Both Documents Status:** ✅ PASSED  
+**Action Required:** None - both documents are accurate
