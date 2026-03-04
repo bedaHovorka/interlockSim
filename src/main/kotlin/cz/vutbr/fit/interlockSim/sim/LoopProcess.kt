@@ -9,17 +9,19 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Process
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
 
 /**
  * Cycle process...
  * Because describing behaviour with only while(true) in actions in Process is a bad idea,
  * this class allows inter-iteration termination of the process.
  */
-abstract class LoopProcess : Process() {
+abstract class LoopProcess : Continuous() {
+	override fun derivatives() {}
 	private var terminate = false
 
-	protected final override fun actions() {
+	final override fun actions() {
 		startAction()
 		while (true) {
 			if (terminate) break
@@ -47,7 +49,7 @@ abstract class LoopProcess : Process() {
 	/**
 	 * Safe cancellation of process
 	 */
-	final fun terminate() {
+	final override fun terminate() {
 		terminate = true
 		if (!terminated()) Process.activate(this)
 	}

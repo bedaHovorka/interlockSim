@@ -42,9 +42,9 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.DiscoException
-import jDisco.Process
-import jDisco.Random
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Random
 import java.util.EnumSet
 import java.util.IdentityHashMap
 
@@ -1126,7 +1126,7 @@ open class DefaultSimulationContext(
 		}
 
 		try {
-			Process.activate(mainProcess)
+			Process.activate(mainProcess!!)
 		} catch (e: DiscoException) {
 			logger.error(e) { "Failed to activate main simulation process" }
 			throw SimulationException(e)
@@ -1334,7 +1334,7 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Error generating simulation report for type $type" }
 		}
 		buf.insert(0, ' ')
-		buf.insert(0, jDisco.Process.time())
+		buf.insert(0, Process.time())
 		simulationLogger.info { buf }
 
 		// Fire property change event for animation event timeline

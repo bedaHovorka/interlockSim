@@ -25,11 +25,12 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.Condition
-import jDisco.Continuous
-import jDisco.Process
-import jDisco.Reporter
-import jDisco.Variable
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Reporter
+import cz.hovorka.kdisco.Variable
+import cz.hovorka.kdisco.activate
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -201,7 +202,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				requireSimulation(position.isActive && pv.isActive) {
+				requireSimulation(position.isActive() && pv.isActive) {
 					"Position and velocity integration must be active"
 				}
 				waitUntil {
@@ -285,7 +286,7 @@ class Train :
 			}
 			requireSimulationNotNull(semaphore.signal) { "Semaphore signal must not be null" }
 			logger.info {
-				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
+				"${Process.time()} SENSOR: Train $number detected at semaphore " +
 					"${semaphore.name}, " +
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
@@ -514,7 +515,7 @@ class Train :
 			next: TrackSection?
 		) {
 			logger.debug {
-				"${jDisco.Process.time()} POSITION: Train $number front at separator $where, " +
+				"${Process.time()} POSITION: Train $number front at separator $where, " +
 					"entering block $next, leaving block $current"
 			}
 
@@ -636,7 +637,7 @@ class Train :
 					"current velocity ${getVelocity()}"
 			}
 			start()
-			waitUntil(currentCondition)
+			waitUntil(currentCondition!!)
 
 			if (accelerate && currentCondition!!.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0.0
@@ -791,7 +792,7 @@ class Train :
 		activate(tail)
 
 		out()
-		activate(worker.getQueqe().first() as? Train)
+		(worker.getQueqe().first() as? Train)?.let { activate(it) }
 		ap.start()
 
 		waitUntil(front.terminated)

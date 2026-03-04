@@ -18,10 +18,10 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.Condition
-import jDisco.Head
-import jDisco.Link
-import jDisco.Process
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Head
+import cz.hovorka.kdisco.Link
+import cz.hovorka.kdisco.Process
 
 /**
  * Behaviour of InOut process
