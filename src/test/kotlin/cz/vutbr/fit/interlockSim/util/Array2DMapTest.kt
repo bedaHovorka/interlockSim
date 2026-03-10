@@ -237,6 +237,35 @@ class Array2DMapTest {
 		return sum / c.size
 	}
 
+	/**
+	 * Test getRow with a sparse row containing null gaps (non-contiguous x values).
+	 * Verifies that filterNotNull() in getRow skips the gaps correctly.
+	 */
+	@Test
+	fun testGetRow_sparseRow_filterNotNullSkipsGaps() {
+		val map = Array2DMap<String>()
+
+// Insert values at x=0 and x=5, leaving a gap at x=1..x=4
+		map.put(Point(0, 7), "first")
+		map.put(Point(5, 7), "second")
+
+// getRow should return only non-null values, skipping the gaps
+		val row = map.getRow(7)
+		assertThat(row.size).isEqualTo(2)
+		assertThat(row[0]).isEqualTo("first")
+		assertThat(row[1]).isEqualTo("second")
+	}
+
+	/**
+	 * Test getRow returns empty list for a row with no entries.
+	 */
+	@Test
+	fun testGetRow_emptyRow_returnsEmptyList() {
+		val map = Array2DMap<String>()
+		val row = map.getRow(42)
+		assertThat(row.size).isEqualTo(0)
+	}
+
 	// Note: testSpeed() performance benchmark removed in Issue #216
 	// See src/jmh/kotlin/cz/vutbr/fit/interlockSim/benchmarks/GridStoragePerformance.kt
 	// Run benchmarks with: ./gradlew jmh
