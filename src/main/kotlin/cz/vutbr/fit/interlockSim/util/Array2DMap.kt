@@ -254,8 +254,7 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 	 */
 	fun getRow(y: Int): List<V> {
 		val list = array.get(y) ?: return emptyList()
-		@Suppress("UNCHECKED_CAST")
-		return list as List<V>
+		return list.filterNotNull()
 	}
 
 	override fun clear() {

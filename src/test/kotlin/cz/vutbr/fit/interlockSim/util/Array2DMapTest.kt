@@ -12,11 +12,9 @@ package cz.vutbr.fit.interlockSim.util
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import org.junit.jupiter.api.Test
 import java.util.ArrayList
-import java.util.Collections
 import java.util.List
 import java.util.Map
 import java.util.Random
@@ -141,11 +139,8 @@ class Array2DMapTest {
 				treeList.add(double1)
 			}
 			val row = array2DMap.getRow(y)
-			val tLsize = treeList.size
-			val aLsize = row.size
-			assertThat(tLsize).isGreaterThanOrEqualTo(aLsize)
-			assertThat(row).isEqualTo(treeList.subList(0, aLsize))
-			assertThat(treeList.subList(aLsize, tLsize)).isEqualTo(Collections.nCopies(tLsize - aLsize, null))
+			// filterNotNull() semantics: row contains only non-null values, in order
+			assertThat(row).isEqualTo(treeList.filterNotNull())
 		}
 		EQ()
 	}
