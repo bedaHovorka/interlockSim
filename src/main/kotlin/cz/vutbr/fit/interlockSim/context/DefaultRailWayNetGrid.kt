@@ -13,7 +13,6 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.util.Point
-import java.util.AbstractSet
 
 /**
  * Grid represantation
@@ -24,7 +23,9 @@ class DefaultRailWayNetGrid(
 ) : AbstractRailwayNetGrid<Cell>(cols, rows) {
 	private inner class KeySet(
 		private val set: Set<Map.Entry<Point, Cell>>
-	) : AbstractSet<Point>() {
+	) : AbstractMutableSet<Point>() {
+		override fun add(element: Point): Boolean = throw UnsupportedOperationException("add")
+
 		override fun iterator(): MutableIterator<Point> {
 			val delegate: Iterator<Map.Entry<Point, Cell>> = set.iterator()
 			return PointIterator(delegate)

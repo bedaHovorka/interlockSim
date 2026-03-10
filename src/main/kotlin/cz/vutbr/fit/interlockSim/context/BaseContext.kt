@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
@@ -19,9 +21,6 @@ import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.HashMapGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.beans.PropertyChangeListener
-import java.beans.PropertyChangeSupport
-import java.util.IdentityHashMap
 
 /**
  * Abstract base class containing shared functionality between editing and simulation contexts.
@@ -111,10 +110,10 @@ abstract class BaseContext<T : TrackBlock>(
 	rows: Int
 ) {
 	/**
-	 * PropertyChangeSupport for notifying listeners of context changes.
+	 * Listeners for context change notifications.
 	 * Replaces deprecated Observable pattern (Java 21 migration).
 	 */
-	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+	private val listeners = mutableListOf<ContextPropertyChangeListener>()
 
 	/**
 	 * Graph representing track blocks and their connections.
@@ -127,7 +126,7 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Maps track blocks to their line cell keys for removal tracking.
 	 * Used to efficiently remove intermediate TrackBlockPart cells when a TrackBlock is removed.
 	 */
-	private val linesKeys: MutableMap<T, Set<Point>> = IdentityHashMap<T, Set<Point>>()
+	private val linesKeys: MutableMap<T, Set<Point>> = HashMap()
 
 	/**
 	 * List of entry/exit points in the railway network.
@@ -245,8 +244,8 @@ abstract class BaseContext<T : TrackBlock>(
 	 * @param listener the listener to add
 	 */
 	@Synchronized
-	open fun addPropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.addPropertyChangeListener(listener)
+	open fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.add(listener)
 	}
 
 	/**
@@ -259,17 +258,33 @@ abstract class BaseContext<T : TrackBlock>(
 	 * @param listener the listener to remove
 	 */
 	@Synchronized
-	open fun removePropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.removePropertyChangeListener(listener)
+	open fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.remove(listener)
 	}
 
 	/**
-	 * Get the PropertyChangeSupport instance for firing property changes.
-	 * Protected to allow subclasses to fire property change events.
+	 * Get the listener list for subclasses that need to fire property changes.
 	 *
-	 * @return the PropertyChangeSupport instance
+	 * @return the list of registered listeners
 	 */
-	protected fun getChangeSupport(): PropertyChangeSupport = changeSupport
+	protected fun getListeners(): List<ContextPropertyChangeListener> = listeners
+
+	/**
+	 * Fire a property change event to all registered listeners.
+	 * Protected to allow subclasses to notify listeners of changes.
+	 *
+	 * @param propertyName the name of the property that changed
+	 * @param oldValue the old value of the property
+	 * @param newValue the new value of the property
+	 */
+	protected fun firePropertyChange(
+		propertyName: String,
+		oldValue: Any?,
+		newValue: Any?
+	) {
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
+	}
 
 	/**
 	 * Get the track block line keys mapping.
@@ -329,7 +344,8 @@ abstract class BaseContext<T : TrackBlock>(
 		if (!frozen) {
 			frozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
-			changeSupport.firePropertyChange("frozen", false, true)
+			val snapshot = synchronized(this) { listeners.toList() }
+			snapshot.forEach { it.propertyChange(ContextChangeEvent("frozen", false, true)) }
 		}
 	}
 
@@ -357,6 +373,7 @@ abstract class BaseContext<T : TrackBlock>(
 			return
 		}
 
-		changeSupport.firePropertyChange(propertyName, oldValue, newValue)
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
 }

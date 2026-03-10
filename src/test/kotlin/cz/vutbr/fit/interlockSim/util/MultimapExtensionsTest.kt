@@ -19,6 +19,7 @@ import assertk.assertions.contains
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.allMatch
@@ -216,6 +217,46 @@ class MultimapExtensionsTest {
 
 // TreeMap keys are sorted, valuesMulti returns in key order
 			assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
+		}
+
+		@Test
+		fun valuesMulti_withHashMap_returnsSortedByKey() {
+// Use HashMap (no guaranteed order) to exercise the sortedBy code path in valuesMulti
+			val hashMap = mutableMapOf<Int, MutableSet<String>>()
+			hashMap.putMulti(3, "three")
+			hashMap.putMulti(1, "one")
+			hashMap.putMulti(2, "two")
+
+// valuesMulti must sort by key regardless of map iteration order
+			val result = hashMap.valuesMulti().toList()
+			assertThat(result[0]).isEqualTo("one")
+			assertThat(result[1]).isEqualTo("two")
+			assertThat(result[2]).isEqualTo("three")
+		}
+
+		@Test
+		fun getMulti_withHashMap_returnsEmptySetForMissingKey() {
+// Use HashMap to exercise getMulti missing-key code path
+			val hashMap = mutableMapOf<Int, MutableSet<String>>()
+			hashMap.putMulti(1, "value")
+
+			val missing = hashMap.getMulti(999)
+			assertThat(missing).isEmpty()
+		}
+
+		@Test
+		fun valuesMulti_withHashMap_returnsAllValuesWhenKeyPresent() {
+// Use LinkedHashMap (inserted-order, not sorted) to ensure sort happens
+			val linkedMap = LinkedHashMap<Int, MutableSet<String>>()
+			linkedMap.putMulti(10, "ten")
+			linkedMap.putMulti(5, "five")
+			linkedMap.putMulti(7, "seven")
+
+			val result = linkedMap.valuesMulti().toList()
+// Result should be sorted by key: 5, 7, 10
+			assertThat(result[0]).isEqualTo("five")
+			assertThat(result[1]).isEqualTo("seven")
+			assertThat(result[2]).isEqualTo("ten")
 		}
 
 		@Test

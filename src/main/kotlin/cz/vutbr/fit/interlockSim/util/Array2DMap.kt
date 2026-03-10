@@ -9,21 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import java.util.AbstractList
-import java.util.AbstractMap
-import java.util.AbstractSet
-import java.util.Comparator
-import java.util.Iterator
-import java.util.List
-import java.util.RandomAccess
-import java.util.TreeSet
 
 /**
  * ADT for grid
  * @param <V> type of values
  *
  */
-class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap<Point, V> - see issue #57 */ {
+class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements NavigableMap<Point, V> - see issue #57 */ {
 	private inner class Entry(
 		override val key: Point
 	) : MutableMap.MutableEntry<Point, V> {
@@ -59,11 +51,9 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 		}
 	}
 
-	private inner class Array2DEntrySet : AbstractSet<MutableMap.MutableEntry<Point, V>>() {
+	private inner class Array2DEntrySet : AbstractMutableSet<MutableMap.MutableEntry<Point, V>>() {
 		private inner class Array2DIterator : MutableIterator<MutableMap.MutableEntry<Point, V>> {
-			// Safe: Kotlin TreeSet.iterator() returns MutableIterator which is compatible with Java Iterator
-			@Suppress("UNCHECKED_CAST")
-			private val iterator: java.util.Iterator<Point> = _keys.iterator() as java.util.Iterator<Point>
+			private val iterator: MutableIterator<Point> = _keys.iterator()
 			private var current: Point? = null
 
 			override fun hasNext(): Boolean = iterator.hasNext()
@@ -142,17 +132,22 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 		 * Clear all entries from the set (and underlying map).
 		 * Issue #58: Full Map contract compliance for modifiable EntrySet
 		 */
+		override fun add(element: MutableMap.MutableEntry<Point, V>): Boolean = throw UnsupportedOperationException()
+
 		override fun clear() {
 			this@Array2DMap.clear()
 		}
 	}
 
 	// seznam s dirama
-	private class RelocableList<T> :
-		AbstractList<T>(),
-		RandomAccess {
+	private class RelocableList<T> : AbstractMutableList<T?>() {
 		@Transient
 		private var elements: Array<T?>? = null
+
+		override fun add(
+			index: Int,
+			element: T?
+		): Unit = throw UnsupportedOperationException()
 
 		override fun get(index: Int): T? {
 			if (elements == null || index >= elements!!.size || index < 0) return null
@@ -161,7 +156,7 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 
 		override fun set(
 			index: Int,
-			element: T
+			element: T?
 		): T? {
 			if (index < 0) throw IndexOutOfBoundsException()
 			val resize = elements == null || index >= elements!!.size
@@ -200,7 +195,7 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 	}
 
 	private val array = RelocableList<RelocableList<V>>()
-	private val _keys: TreeSet<Point> = TreeSet(POINT_COMPARATOR)
+	private val _keys: java.util.TreeSet<Point> = java.util.TreeSet(POINT_COMPARATOR)
 
 	override val keys: MutableSet<Point>
 		get() = _keys
@@ -258,17 +253,8 @@ class Array2DMap<V> : AbstractMap<Point, V>() /* Future: implements NavigableMap
 	 * @return elements at row
 	 */
 	fun getRow(y: Int): List<V> {
-		val list = array.get(y)
-
-		// Note: EntrySet is now fully modifiable (Issue #58 complete)
-		@Suppress("UNCHECKED_CAST")
-		val result: java.util.List<V> =
-			if (list == null) {
-				(mutableListOf<V>() as java.util.List<V>)
-			} else {
-				(list as java.util.List<V>)
-			}
-		return result
+		val list = array.get(y) ?: return emptyList()
+		return list.filterNotNull()
 	}
 
 	override fun clear() {

@@ -112,7 +112,7 @@ class YJunctionSegmentConnectionTest : KoinTestBase() {
 			val nodes = graph.nodeSet()
 			nodes.forEach { node ->
 				val edges = graph.get(node)
-				println("  Node $node connects to ${edges.size()} edge(s): ${edges.joinToString()}")
+				println("  Node $node connects to ${edges.size} edge(s): ${edges.joinToString()}")
 			}
 
 			println("\nAll edges in graph:")

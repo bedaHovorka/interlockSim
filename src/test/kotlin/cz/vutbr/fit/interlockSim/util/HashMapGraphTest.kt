@@ -134,7 +134,7 @@ class HashMapGraphTest {
 
 			val edges = graph.assignedEdges("A")
 
-			assertThat(edges.size()).isEqualTo(3)
+			assertThat(edges.size).isEqualTo(3)
 			assertThat(edges.get("info1")).isEqualTo(100)
 			assertThat(edges.get("info3")).isEqualTo(150)
 			assertThat(edges.get("info5")).isEqualTo(200)

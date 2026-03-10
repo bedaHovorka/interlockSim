@@ -10,11 +10,6 @@
 package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import java.util.Arrays
-import java.util.Collection
-import java.util.EnumMap
-import java.util.Map
-import java.util.Set
 
 /**
  * for enum pairs mapping to other
@@ -24,7 +19,7 @@ import java.util.Set
 class EnumUnorientedGraph<N, E>(
 	private val clazz: Class<N>
 ) : AbstractUnorientedGraph<N, E>() where N : Enum<N> {
-	private val map: MutableMap<N, MutableMap<N, E>> = EnumMap(clazz)
+	private val map: MutableMap<N, MutableMap<N, E>> = HashMap()
 
 	/**
 	 * @param clazz
@@ -59,7 +54,7 @@ class EnumUnorientedGraph<N, E>(
 	 * @return node around in graph
 	 */
 	fun getJoinedNodesAndEdges(node: N?): Map<N, E> {
-		val enumMap = EnumMap<N, E>(clazz)
+		val enumMap = HashMap<N, E>()
 		for (e in map.entries) {
 			val key = e.key
 			val value = e.value
@@ -79,8 +74,7 @@ class EnumUnorientedGraph<N, E>(
 				}
 			}
 		}
-		@Suppress("UNCHECKED_CAST")
-		return enumMap as java.util.Map<N, E>
+		return enumMap
 	}
 
 	override fun nodeSet(): Set<N> = throw NotImplementedException()
@@ -132,7 +126,7 @@ class EnumUnorientedGraph<N, E>(
 		nodes[1] = n2
 		// Since N extends Enum<N>, we can safely cast to Array<Comparable>
 		@Suppress("UNCHECKED_CAST")
-		Arrays.sort(nodes as Array<Comparable<N>>)
+		(nodes as Array<Comparable<N>>).sort()
 		return nodes
 	}
 
@@ -141,7 +135,7 @@ class EnumUnorientedGraph<N, E>(
 	private fun getSubmapWithCreation(sortedNodes: Array<N>): MutableMap<N, E> {
 		var subMap = getSubmap(sortedNodes)
 		if (subMap == null) {
-			subMap = EnumMap(clazz)
+			subMap = HashMap()
 			map[sortedNodes[0]] = subMap
 		}
 		return subMap

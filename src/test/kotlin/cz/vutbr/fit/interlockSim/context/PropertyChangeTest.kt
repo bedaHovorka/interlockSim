@@ -25,8 +25,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * PropertyChange Notification Tests for Java 21 migration.
@@ -210,11 +210,11 @@ class PropertyChangeTest : KoinTestBase() {
 	/**
 	 * Test PropertyChangeListener implementation that captures all events.
 	 */
-	private class TestPropertyChangeListener : PropertyChangeListener {
-		val events: MutableList<PropertyChangeEvent> = mutableListOf()
+	private class TestPropertyChangeListener : ContextPropertyChangeListener {
+		val events: MutableList<ContextChangeEvent> = mutableListOf()
 
-		override fun propertyChange(evt: PropertyChangeEvent) {
-			events.add(evt)
+		override fun propertyChange(event: ContextChangeEvent) {
+			events.add(event)
 		}
 	}
 }

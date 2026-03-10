@@ -9,8 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import java.util.Collection
-import java.util.Set
 
 /**
  * ADT Graph interface

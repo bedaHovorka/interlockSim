@@ -10,8 +10,6 @@
 package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import java.util.AbstractSet
-import java.util.NoSuchElementException
 
 /**
  * Unordered pair of nodes for implementation ADT ExtendedUnorientedGraph.
@@ -39,7 +37,7 @@ import java.util.NoSuchElementException
  * @param T type of elements (the two nodes)
  * @param V type of additional information associated with each element
  */
-class Doubleton<T, V> : AbstractSet<T> {
+class Doubleton<T, V>(first: T, second: T) : AbstractMutableSet<T>() {
 	enum class IteratorState {
 		INIT,
 		FIRST,
@@ -61,7 +59,7 @@ class Doubleton<T, V> : AbstractSet<T> {
 					state = IteratorState.SECOND
 					second
 				}
-				IteratorState.SECOND -> throw NoSuchElementException()
+				IteratorState.SECOND -> throw kotlin.NoSuchElementException()
 			}
 
 		override fun remove(): Unit = throw UnsupportedOperationException()
@@ -71,6 +69,12 @@ class Doubleton<T, V> : AbstractSet<T> {
 	private val second: T
 	private var firstValue: V? = null
 	private var secondValue: V? = null
+
+	init {
+		if (first == second) throw IllegalArgumentException("arguments is equal")
+		this.first = first
+		this.second = second
+	}
 
 	/**
 	 * Creates a Doubleton with associated values for each element.
@@ -84,19 +88,6 @@ class Doubleton<T, V> : AbstractSet<T> {
 	constructor(first: T, second: T, firstValue: V, secondValue: V) : this(first, second) {
 		this.firstValue = firstValue
 		this.secondValue = secondValue
-	}
-
-	/**
-	 * Creates a Doubleton without initial associated values.
-	 *
-	 * @param first the first element
-	 * @param second the second element (must be distinct from first)
-	 * @throws IllegalArgumentException if first equals second
-	 */
-	constructor(first: T, second: T) {
-		if (first == second) throw IllegalArgumentException("arguments is equal")
-		this.first = first
-		this.second = second
 	}
 
 	override fun hashCode(): Int {
@@ -137,6 +128,8 @@ class Doubleton<T, V> : AbstractSet<T> {
 		// the same elements, which is the correct Set semantics.
 		return super.equals(obj)
 	}
+
+	override fun add(element: T): Boolean = throw UnsupportedOperationException()
 
 	override fun iterator(): MutableIterator<T> = DoubletonIterator()
 

@@ -110,7 +110,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 			context
 				.getGraph()
 				.assignedEdges(Point(1, 1))
-				.values()
+				.values
 				.first()
 		val firstSection = firstBlock.getNextTrackSection(semaphore, null)
 		val nextSection = navigator.getNextTrackSection(semaphore, firstSection)
@@ -218,7 +218,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 			context
 				.getGraph()
 				.assignedEdges(Point(1, 1))
-				.values()
+				.values
 				.first()
 
 		// Act: Get next block from semaphore
@@ -451,7 +451,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 			context
 				.getGraph()
 				.assignedEdges(Point(1, 1))
-				.values()
+				.values
 				.first()
 		val firstSection = block.getNextTrackSection(inOutA, null)!!
 
@@ -552,7 +552,7 @@ class TopologyNavigatorTest : KoinTestBase() {
 			context
 				.getGraph()
 				.assignedEdges(Point(1, 1))
-				.values()
+				.values
 				.first()
 		val firstSection = block1.getNextTrackSection(staticSemaphore, null)
 

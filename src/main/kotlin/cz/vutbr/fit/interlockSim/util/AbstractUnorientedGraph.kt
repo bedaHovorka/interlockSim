@@ -11,9 +11,6 @@ package cz.vutbr.fit.interlockSim.util
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
-import java.lang.reflect.InvocationTargetException
-import java.util.Collection
-import java.util.Map
 
 /**
  * Base for Graphs
@@ -44,19 +41,16 @@ abstract class AbstractUnorientedGraph<N, E> : UnorientedGraph<N, E> {
 	private fun invokeForImplementationContainer(vararg args: Any?): Any? {
 		val o = implementationContainer()
 		if (o == null || (o !is Map<*, *> && o !is Collection<*>)) throw UnsupportedOperationException()
-
 		val e = Throwable().stackTrace[1]
 		val methodName = e.methodName
-		try {
+		return runCatching {
 			@Suppress("UNCHECKED_CAST")
 			val classArray = CellUtilities.toClass(args) as Array<Class<*>?>
 			val method = o.javaClass.getMethod(methodName, *classArray)
-			return method.invoke(o, *args)
-		} catch (ee: InvocationTargetException) {
+			method.invoke(o, *args)
+		}.getOrElse { ee ->
 			val cause = ee.cause
-			requireValidState(cause is RuntimeException) { "Expected RuntimeException but got ${cause?.javaClass?.name}" }
-			throw cause as RuntimeException
-		} catch (ee: Exception) {
+			if (cause is RuntimeException) throw cause
 			throw UnsupportedOperationException(ee)
 		}
 	}

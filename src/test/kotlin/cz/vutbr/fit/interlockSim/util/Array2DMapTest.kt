@@ -12,11 +12,9 @@ package cz.vutbr.fit.interlockSim.util
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
-import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import org.junit.jupiter.api.Test
 import java.util.ArrayList
-import java.util.Collections
 import java.util.List
 import java.util.Map
 import java.util.Random
@@ -141,11 +139,8 @@ class Array2DMapTest {
 				treeList.add(double1)
 			}
 			val row = array2DMap.getRow(y)
-			val tLsize = treeList.size
-			val aLsize = row.size
-			assertThat(tLsize).isGreaterThanOrEqualTo(aLsize)
-			assertThat(row).isEqualTo(treeList.subList(0, aLsize))
-			assertThat(treeList.subList(aLsize, tLsize)).isEqualTo(Collections.nCopies(tLsize - aLsize, null))
+			// filterNotNull() semantics: row contains only non-null values, in order
+			assertThat(row).isEqualTo(treeList.filterNotNull())
 		}
 		EQ()
 	}
@@ -240,6 +235,35 @@ class Array2DMapTest {
 			sum += l
 		}
 		return sum / c.size
+	}
+
+	/**
+	 * Test getRow with a sparse row containing null gaps (non-contiguous x values).
+	 * Verifies that filterNotNull() in getRow skips the gaps correctly.
+	 */
+	@Test
+	fun testGetRow_sparseRow_filterNotNullSkipsGaps() {
+		val map = Array2DMap<String>()
+
+// Insert values at x=0 and x=5, leaving a gap at x=1..x=4
+		map.put(Point(0, 7), "first")
+		map.put(Point(5, 7), "second")
+
+// getRow should return only non-null values, skipping the gaps
+		val row = map.getRow(7)
+		assertThat(row.size).isEqualTo(2)
+		assertThat(row[0]).isEqualTo("first")
+		assertThat(row[1]).isEqualTo("second")
+	}
+
+	/**
+	 * Test getRow returns empty list for a row with no entries.
+	 */
+	@Test
+	fun testGetRow_emptyRow_returnsEmptyList() {
+		val map = Array2DMap<String>()
+		val row = map.getRow(42)
+		assertThat(row.size).isEqualTo(0)
 	}
 
 	// Note: testSpeed() performance benchmark removed in Issue #216

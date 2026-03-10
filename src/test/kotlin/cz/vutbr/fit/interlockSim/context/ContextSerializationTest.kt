@@ -22,8 +22,8 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Comprehensive tests for context serialization and freeze behavior
@@ -128,7 +128,7 @@ class ContextSerializationTest : KoinTestBase() {
 				var eventNewValue: Any? = null
 
 				val listener =
-					PropertyChangeListener { evt ->
+					ContextPropertyChangeListener { evt ->
 						if (evt.propertyName == "frozen") {
 							eventFired = true
 							eventPropertyName = evt.propertyName
@@ -155,7 +155,7 @@ class ContextSerializationTest : KoinTestBase() {
 				var eventCount = 0
 
 				val listener =
-					PropertyChangeListener { evt ->
+					ContextPropertyChangeListener { evt ->
 						if (evt.propertyName == "frozen") {
 							eventCount++
 						}
@@ -359,13 +359,13 @@ class ContextSerializationTest : KoinTestBase() {
 	/**
 	 * Test PropertyChangeListener implementation that tracks freeze events.
 	 */
-	private class TestPropertyChangeListener : PropertyChangeListener {
+	private class TestPropertyChangeListener : ContextPropertyChangeListener {
 		var receivedFreezeEvent: Boolean = false
-		var lastEvent: PropertyChangeEvent? = null
+		var lastEvent: ContextChangeEvent? = null
 
-		override fun propertyChange(evt: PropertyChangeEvent) {
-			lastEvent = evt
-			if (evt.propertyName == "frozen") {
+		override fun propertyChange(event: ContextChangeEvent) {
+			lastEvent = event
+			if (event.propertyName == "frozen") {
 				receivedFreezeEvent = true
 			}
 		}

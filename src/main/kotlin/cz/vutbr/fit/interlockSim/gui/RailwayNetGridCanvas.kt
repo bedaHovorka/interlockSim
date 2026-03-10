@@ -28,6 +28,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color
@@ -39,8 +41,6 @@ import java.awt.Rectangle
 import java.awt.event.MouseEvent
 import java.awt.event.MouseListener
 import java.awt.event.MouseMotionListener
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
@@ -79,7 +79,7 @@ class RailwayNetGridCanvas :
 	Scrollable,
 	MouseMotionListener,
 	StatusProducer,
-	PropertyChangeListener {
+	ContextPropertyChangeListener {
 	// Rendering modes for editing and simulation
 	private enum class State(
 		val cellRenderer: CellRenderer?,
@@ -680,10 +680,10 @@ class RailwayNetGridCanvas :
 	 */
 	internal fun getToolbarArgs(): Array<Any?>? = toolbarArgs
 
-	// PropertyChangeListener for context updates
-	override fun propertyChange(evt: PropertyChangeEvent) {
-		val newValue = evt.newValue
-		if (newValue is Point) {
+	// ContextPropertyChangeListener for context updates
+	override fun propertyChange(event: ContextChangeEvent) {
+		val newValue = event.newValue
+		if (newValue is cz.vutbr.fit.interlockSim.util.Point) {
 			repaint(10, newValue.x * CELL_WIDTH, newValue.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
 		} else {
 			repaint(100)

@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Test suite for BaseContext shared functionality.
@@ -171,7 +172,7 @@ class BaseContextTest : KoinTestBase() {
 			// Arrange
 			var listenerCalled = false
 			val listener =
-				java.beans.PropertyChangeListener { evt ->
+				ContextPropertyChangeListener { _ ->
 					listenerCalled = true
 				}
 

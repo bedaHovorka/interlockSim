@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test
  * - Reverse table consistency: cell-to-point mapping integrity
  * - Iterator operations: keySet iteration and removal
  * - Batch operations: putMap for TrackBlockPart collections
+ * - HashMap regression: WeakHashMap → HashMap replacement (PR #375)
  */
 @DisplayName("DefaultRailWayNetGrid")
 class DefaultRailWayNetGridTest {
@@ -474,6 +475,112 @@ class DefaultRailWayNetGridTest {
 
 			// Assert
 			assertThat(grid.isEmpty()).isTrue()
+		}
+	}
+
+	/**
+	 * Regression tests proving that replacing [java.util.WeakHashMap] with [HashMap] in
+	 * [AbstractRailwayNetGrid.reverseTable] (PR #375) is safe.
+	 *
+	 * ## Concern
+	 *
+	 * `WeakHashMap` allows GC to silently collect entries whose keys are not otherwise
+	 * strongly reachable. `HashMap` retains all entries until they are explicitly removed.
+	 * Replacing `WeakHashMap` with `HashMap` is therefore only safe if every code path that
+	 * removes a cell from the `cells` map also removes the corresponding entry from the
+	 * reverse table — i.e. there are no "silent GC cleanup" paths that `HashMap` would miss.
+	 *
+	 * ## Why the replacement is safe
+	 *
+	 * [DefaultRailWayNetGrid] provides three distinct entry-removal code paths, each of which
+	 * explicitly removes the reverse-table entry:
+	 * 1. [DefaultRailWayNetGrid.remove] — direct removal by [Point]
+	 * 2. [DefaultRailWayNetGrid.KeySet.PointIterator.remove] — iterator-based removal
+	 * 3. [DefaultRailWayNetGrid.KeySet.removeAll] — batch removal by [Point] collection
+	 *
+	 * These tests verify each path in isolation.
+	 */
+	@Nested
+	@DisplayName("reverseTable cleanup — WeakHashMap → HashMap regression (PR #375)")
+	class ReverseTableHashMapRegressionTests {
+		private lateinit var grid: DefaultRailWayNetGrid
+
+		@BeforeEach
+		fun setUp() {
+			grid = DefaultRailWayNetGrid(20, 20)
+		}
+
+		@Test
+		@DisplayName("remove(Point) cleans up reverseTable — path 1 of 3")
+		fun `remove by Point removes cell from reverseTable`() {
+			// Arrange
+			val point = Point(3, 3)
+			val cell = InOut("X", false, SpatialType.HORIZONTAL)
+			grid.put(point, cell)
+			assertThat(grid.containsKey(point)).isTrue()
+			assertThat(grid.getLocation(cell)).isEqualTo(point)
+
+			// Act — removal path 1: direct remove(Point)
+			grid.remove(point)
+
+			// Assert — reverseTable entry must be gone; HashMap cannot clean it up silently
+			assertThat(grid.containsKey(point)).isFalse()
+			assertThat(grid.getLocation(cell)).isNull()
+		}
+
+		@Test
+		@DisplayName("iterator.remove() cleans up reverseTable — path 2 of 3")
+		fun `iterator remove cleans up reverseTable entry`() {
+			// Arrange
+			val point1 = Point(4, 4)
+			val point2 = Point(5, 5)
+			val cell1 = InOut("A", false, SpatialType.HORIZONTAL)
+			val cell2 = RailSemaphore(true, SpatialType.VERTICAL)
+			grid.put(point1, cell1)
+			grid.put(point2, cell2)
+
+			// Act — removal path 2: iterator.remove()
+			val iterator = grid.keySet().iterator()
+			while (iterator.hasNext()) {
+				val p = iterator.next()
+				if (p == point1) {
+					iterator.remove()
+					break
+				}
+			}
+
+			// Assert — reverseTable entry for cell1 must be gone
+			assertThat(grid.getLocation(cell1)).isNull()
+			assertThat(grid.getCellAt(point1.x, point1.y)).isNull()
+			// cell2 must be untouched
+			assertThat(grid.getLocation(cell2)).isEqualTo(point2)
+		}
+
+		@Test
+		@DisplayName("removeAll(Collection<Point>) cleans up reverseTable — path 3 of 3")
+		fun `removeAll cleans up reverseTable entries for all removed points`() {
+			// Arrange
+			val point1 = Point(6, 6)
+			val point2 = Point(7, 7)
+			val point3 = Point(8, 8)
+			val cell1 = InOut("A", false, SpatialType.HORIZONTAL)
+			val cell2 = RailSemaphore(false, SpatialType.VERTICAL)
+			val cell3 = InOut("B", true, SpatialType.HORIZONTAL)
+			grid.put(point1, cell1)
+			grid.put(point2, cell2)
+			grid.put(point3, cell3)
+
+			// Act — removal path 3: removeAll(Collection<Point>)
+			grid.keySet().removeAll(setOf(point1, point3))
+
+			// Assert — reverseTable entries for cell1 and cell3 must be gone
+			assertThat(grid.getLocation(cell1)).isNull()
+			assertThat(grid.getLocation(cell3)).isNull()
+			assertThat(grid.getCellAt(point1.x, point1.y)).isNull()
+			assertThat(grid.getCellAt(point3.x, point3.y)).isNull()
+			// cell2 must be retained (HashMap does not drop it silently)
+			assertThat(grid.getLocation(cell2)).isEqualTo(point2)
+			assertThat(grid.getCellAt(point2.x, point2.y)).isSameInstanceAs(cell2)
 		}
 	}
 

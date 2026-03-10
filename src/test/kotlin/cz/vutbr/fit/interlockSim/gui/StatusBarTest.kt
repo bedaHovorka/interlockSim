@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import java.awt.Component
 import java.awt.event.MouseEvent
-import java.beans.PropertyChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 
 /**
  * Tests for StatusBar GUI component.
@@ -122,13 +122,7 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("handles property change with CharSequence value")
 	fun handlesPropertyChangeWithCharSequenceValue() {
 		// Create property change event with CharSequence
-		val event =
-			PropertyChangeEvent(
-				this,
-				"status",
-				"old",
-				"New status message"
-			)
+		val event = ContextChangeEvent("status", "old", "New status message")
 
 		// Trigger property change
 		statusBar.propertyChange(event)
@@ -141,13 +135,7 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("handles property change with non-CharSequence value")
 	fun handlesPropertyChangeWithNonCharSequenceValue() {
 		// Create property change event with Integer
-		val event =
-			PropertyChangeEvent(
-				this,
-				"status",
-				null,
-				12345
-			)
+		val event = ContextChangeEvent("status", null, 12345)
 
 		// Trigger property change
 		statusBar.propertyChange(event)
@@ -163,13 +151,7 @@ class StatusBarTest : KoinTestBase() {
 		statusBar.text = "Initial text"
 
 		// Create property change event with null new value
-		val event =
-			PropertyChangeEvent(
-				this,
-				"status",
-				"old",
-				null
-			)
+		val event = ContextChangeEvent("status", "old", null)
 
 		// Trigger property change
 		statusBar.propertyChange(event)

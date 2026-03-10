@@ -10,12 +10,12 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 
@@ -92,7 +92,7 @@ class AnimationController(
 	private val context: SimulationContext,
 	private val canvas: Component,
 	private val eventPanel: EventTimelinePanel? = null
-) : PropertyChangeListener,
+) : ContextPropertyChangeListener,
 	AutoCloseable {
 	/**
 	 * Current animation state (immutable snapshot).
@@ -266,23 +266,23 @@ class AnimationController(
 	}
 
 	/**
-	 * PropertyChangeListener implementation for simulation state updates.
+	 * ContextPropertyChangeListener implementation for simulation state updates.
 	 *
 	 * **Called on jDisco simulation thread** (not EDT!).
 	 * Marshals state capture and update to EDT via SwingUtilities.invokeLater.
 	 *
-	 * @param evt PropertyChangeEvent containing simulation reports and state changes
+	 * @param event ContextChangeEvent containing simulation reports and state changes
 	 */
-	override fun propertyChange(evt: PropertyChangeEvent?) {
+	override fun propertyChange(event: ContextChangeEvent) {
 		// This method executes on jDisco simulation thread!
 		require(!SwingUtilities.isEventDispatchThread()) {
 			"PropertyChange event should come from simulation thread, not EDT"
 		}
 
-		logger.trace { "PropertyChange event received from simulation thread: ${evt?.propertyName}" }
+		logger.trace { "PropertyChange event received from simulation thread: ${event.propertyName}" }
 
 		// Extract event information if available
-		val simulationEvent = extractSimulationEvent(evt)
+		val simulationEvent = extractSimulationEvent(event)
 
 		// Marshal state capture and update to EDT
 		SwingUtilities.invokeLater {
@@ -394,7 +394,7 @@ class AnimationController(
 	}
 
 	/**
-	 * Extract simulation event from PropertyChangeEvent.
+	 * Extract simulation event from ContextChangeEvent.
 	 *
 	 * This method parses property change events from the simulation context
 	 * and converts them to SimulationEvent instances for the event timeline.
@@ -404,22 +404,20 @@ class AnimationController(
 	 *
 	 * **Called on simulation thread** (not EDT!).
 	 *
-	 * @param evt PropertyChangeEvent from simulation context
+	 * @param event ContextChangeEvent from simulation context
 	 * @return SimulationEvent if the event can be parsed, null otherwise
 	 */
-	private fun extractSimulationEvent(evt: PropertyChangeEvent?): SimulationEvent? {
-		if (evt == null) return null
-
+	private fun extractSimulationEvent(event: ContextChangeEvent): SimulationEvent? {
 		// Try to extract report type from property name
 		val reportType =
 			try {
-				SimulationContext.ReportType.valueOf(evt.propertyName ?: return null)
+				SimulationContext.ReportType.valueOf(event.propertyName)
 			} catch (e: IllegalArgumentException) {
 				return null
 			}
 
 		// Extract message from new value (format: "time object message")
-		val fullMessage = evt.newValue?.toString() ?: return null
+		val fullMessage = event.newValue?.toString() ?: return null
 
 		// Parse simulation time from the beginning of the message
 		val parts = fullMessage.trim().split(Regex("\\s+"), limit = 2)

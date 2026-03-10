@@ -16,7 +16,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
-import java.util.Arrays
 
 /**
  * This is common track block with one section
@@ -134,5 +133,5 @@ class SimpleTrackBlock :
 	// based on the constructor (it accepts NodeCell as PathSeparator), but we keep parent signature
 	// The parent ends() method returns Array<PathSeparator> which is correct
 
-	override fun toString(): String = if (name == null) Arrays.toString(ends()) else name!!
+	override fun toString(): String = if (name == null) ends().contentToString() else name!!
 }

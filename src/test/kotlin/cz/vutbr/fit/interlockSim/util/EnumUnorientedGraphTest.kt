@@ -30,8 +30,8 @@ import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.*
 import java.util.*
 
-// Type alias to use Java Map with Kotlin type annotations
-typealias JMap<K, V> = java.util.Map<K, V>
+// Type alias to use Map with Kotlin type annotations
+typealias JMap<K, V> = Map<K, V>
 
 /**
  * Unit tests for {@link EnumUnorientedGraph}.

@@ -9,8 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import java.util.Map
-import java.util.Set
 
 /**
  * for this program extended unoriented graph interface

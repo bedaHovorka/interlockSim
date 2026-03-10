@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.IdentityHashMap
 
 /**
  * Base implementation of {@link StaticTrack} - immutable track configuration
@@ -45,7 +44,7 @@ abstract class SimpleTrack(
 		private val logger = KotlinLogging.logger {}
 	}
 
-	private val speeds: IdentityHashMap<PathSeparator, Double> = IdentityHashMap()
+	private val speeds: HashMap<PathSeparator, Double> = HashMap()
 	private val ends: Array<PathSeparator>
 
 	init {

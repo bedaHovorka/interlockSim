@@ -17,10 +17,10 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.BeforeEach
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 import java.io.File
 
 /**
@@ -154,13 +154,11 @@ class SwitchConfigurationTest : KoinTestBase() {
 		var newValue: RailSwitch.Conf? = null
 
 		vA.addPropertyChangeListener(
-			object : PropertyChangeListener {
-				override fun propertyChange(evt: PropertyChangeEvent?) {
-					if (evt?.propertyName == "conf") {
-						eventFired = true
-						oldValue = evt.oldValue as? RailSwitch.Conf
-						newValue = evt.newValue as? RailSwitch.Conf
-					}
+			ContextPropertyChangeListener { evt: ContextChangeEvent ->
+				if (evt.propertyName == "conf") {
+					eventFired = true
+					oldValue = evt.oldValue as? RailSwitch.Conf
+					newValue = evt.newValue as? RailSwitch.Conf
 				}
 			}
 		)
@@ -238,11 +236,9 @@ class SwitchConfigurationTest : KoinTestBase() {
 		var confChangeCount = 0
 
 		vA.addPropertyChangeListener(
-			object : PropertyChangeListener {
-				override fun propertyChange(evt: PropertyChangeEvent?) {
-					if (evt?.propertyName == "conf") {
-						confChangeCount++
-					}
+			ContextPropertyChangeListener { evt: ContextChangeEvent ->
+				if (evt.propertyName == "conf") {
+					confChangeCount++
 				}
 			}
 		)

@@ -37,6 +37,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.File
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Integration tests for context lifecycle management.
@@ -319,11 +321,11 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 	/**
 	 * Test PropertyChangeListener implementation that captures all events.
 	 */
-	private class TestPropertyChangeListener : java.beans.PropertyChangeListener {
-		val events: MutableList<java.beans.PropertyChangeEvent> = mutableListOf()
+	private class TestPropertyChangeListener : ContextPropertyChangeListener {
+		val events: MutableList<ContextChangeEvent> = mutableListOf()
 
-		override fun propertyChange(evt: java.beans.PropertyChangeEvent) {
-			events.add(evt)
+		override fun propertyChange(event: ContextChangeEvent) {
+			events.add(event)
 		}
 	}
 }

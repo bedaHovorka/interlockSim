@@ -37,6 +37,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Concurrent access tests for railway simulation components.
@@ -796,7 +797,7 @@ class RaceConditionTest : KoinTestBase() {
 						for (iter in 0 until iterations) {
 							// Create a listener
 							val listener =
-								java.beans.PropertyChangeListener { _ ->
+								ContextPropertyChangeListener { _ ->
 									// Listener receives property changes
 								}
 
@@ -986,7 +987,7 @@ class RaceConditionTest : KoinTestBase() {
 			// Arrange
 			val context = buildMinimalSimulation()
 			val threadCount = 3
-			val listenerOps = ArrayList<java.beans.PropertyChangeListener>()
+			val listenerOps = ArrayList<ContextPropertyChangeListener>()
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(threadCount)
 			val exceptions = CopyOnWriteArrayList<Exception>()
@@ -998,7 +999,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until 10) {
 						val listener =
-							java.beans.PropertyChangeListener { _ ->
+							ContextPropertyChangeListener { _ ->
 								// Listener receives events
 							}
 						listenerOps.add(listener)

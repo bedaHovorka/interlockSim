@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import java.util.EnumSet
 
 /**
  * Base implementation of {@link Cell}
@@ -40,5 +39,5 @@ abstract class AbstractCell : Cell {
 
 fun arr2set(segments: Array<Cell.Segment>): Set<Cell.Segment> {
 	requireValidState(segments.isNotEmpty()) { "Segments array cannot be empty" }
-	return EnumSet.of(segments[0], *segments) as Set<Cell.Segment>
+	return setOf(*segments)
 }
