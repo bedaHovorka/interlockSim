@@ -42,7 +42,7 @@ The interlockSim project will migrate its simulation engine from jDisco (a discr
 
 ### Part 1: jDisco Architecture Inventory
 
-**java-senior-dev (JSD)** presented a file-by-file breakdown of jDisco coupling. The analysis identified **13 source files** with jDisco imports, approximately **50 distinct API references** in production code, and **40 calls to process-interaction primitives** (`hold`/`passivate`/`activate`/`waitUntil`) concentrated in 5 files.
+**java-senior-dev (JSD)** presented a file-by-file breakdown of jDisco coupling. The analysis identified **10 source files with direct jDisco imports (12 including indirect coupling via inheritance)**, approximately **50 distinct API references** in production code, and **40 calls to process-interaction primitives** (`hold`/`passivate`/`activate`/`waitUntil`) concentrated in 5 files.
 
 **File-level coupling surface:**
 
@@ -120,7 +120,7 @@ Trains 1-7 complete normally. Train #8 onwards deadlock due to PathInfo containi
 
 #### Issue #94 / PR #254 (CLOSED 2026-01-21): SimulationEnvironment Facade
 
-Introduced `SimulationEnvironment` facade interface with 11 essential methods (reduced from 18). **Explicitly designed as migration seam** -- PR description included adapter pattern example for DSOL. Unblocked 18 issues (32% of all open work). **KTL:** "The hardest architectural preparation work has already been done. Switching the provider behind this facade is a contained task."
+Introduced `SimulationEnvironment` facade interface with 18 essential methods. **Explicitly designed as migration seam** -- PR description included adapter pattern example for DSOL. Unblocked 18 issues (32% of all open work). **KTL:** "The hardest architectural preparation work has already been done. Switching the provider behind this facade is a contained task."
 
 #### Issue #153 (CLOSED 2026-01-20): Context Inheritance Incompatibility
 

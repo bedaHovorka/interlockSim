@@ -62,7 +62,7 @@ jobs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew clean build test jacocoTestReport --no-daemon --warning-mode=all --stacktrace
+      run: ./gradlew clean build test integrationTest jacocoTestReport --no-daemon --warning-mode=all --stacktrace
 
     - name: Upload JaCoCo coverage report
       uses: actions/upload-artifact@v4

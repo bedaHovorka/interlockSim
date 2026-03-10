@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Continuous
 import cz.hovorka.kdisco.Process
 
 /**
@@ -17,8 +16,7 @@ import cz.hovorka.kdisco.Process
  * Because describing behaviour with only while(true) in actions in Process is a bad idea,
  * this class allows inter-iteration termination of the process.
  */
-abstract class LoopProcess : Continuous() {
-	override fun derivatives() {}
+abstract class LoopProcess : Process() {
 	private var terminate = false
 
 	final override fun actions() {

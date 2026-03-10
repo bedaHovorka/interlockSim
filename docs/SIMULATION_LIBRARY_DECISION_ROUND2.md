@@ -202,13 +202,13 @@ TSE opened by establishing the meeting's scope: "Round 1 determined that continu
 
 KTL opened: "This meeting analyzes the breaking change profile of each road. We look at sim/ package impact, test breakage, rollback safety, and the conservative restriction from CLAUDE.md. JSD will provide the historical perspective on each file's modification risk."
 
-JSD added: "I've cataloged the 13 files with jDisco imports. Each has a different risk level based on complexity, coupling depth, and test coverage. The question isn't just 'how many files change' but 'how safely do they change.'"
+JSD added: "I've cataloged the 10 files with direct jDisco imports (12 including indirect coupling via inheritance). Each has a different risk level based on complexity, coupling depth, and test coverage. The question isn't just 'how many files change' but 'how safely do they change.'"
 
 ### Context 1: sim/ Conservative Restriction (CLAUDE.md)
 
 CLAUDE.md states: *"Simulation Core (sim/ package): Minimal changes only — Be extremely conservative with simulation logic. No refactoring — Do not restructure working simulation code. Tests required — Any changes MUST have comprehensive test coverage first. No unsolicited improvements — Only make explicitly requested changes."*
 
-**KTL:** "Road 1 rewrites 13 files in sim/ at once. This is not 'minimal changes' — it's a wholesale rewrite. Road 2 Step 1 changes ZERO sim/ files (bridge only in new kDisco module). Step 2 swaps imports. Step 3 removes bridge. Each step is individually conservative."
+**KTL:** "Road 1 rewrites 10 files in sim/ at once (12 with indirect coupling). This is not 'minimal changes' — it's a wholesale rewrite. Road 2 Step 1 changes ZERO sim/ files (bridge only in new kDisco module). Step 2 swaps imports. Step 3 removes bridge. Each step is individually conservative."
 
 **JSD:** "The conservative restriction was written specifically to protect against the kind of risk Road 1 introduces. Road 2 respects the spirit and letter of that restriction."
 
@@ -220,19 +220,19 @@ CLAUDE.md states: *"Simulation Core (sim/ package): Minimal changes only — Be 
 
 **RCE:** "Total risk may be the same, but risk per step is lower with Road 2. In railway engineering, we call this 'isolation of failure modes.' You don't replace the signaling system and the track simultaneously."
 
-**QA:** "I can validate one step at a time. I cannot validate 13 files changed simultaneously with the same confidence."
+**QA:** "I can validate one step at a time. I cannot validate 10 files changed simultaneously (12 with indirect coupling) with the same confidence."
 
 ### Context 2: sim/ Package Changes Per Step
 
 | Step | Road 1 | Road 2 |
 |------|--------|--------|
-| Step 1 | 13 files rewritten | 0 sim/ changes (new kDisco module only) |
-| Step 2 | Done | Import swap: `jDisco.*` → `kDisco.*` (13 files, mechanical) |
-| Step 3 | — | Remove bridge, `kDisco.*` → Kalasim direct (13 files, targeted) |
+| Step 1 | 10 files rewritten (12 with indirect coupling) | 0 sim/ changes (new kDisco module only) |
+| Step 2 | Done | Import swap: `jDisco.*` → `kDisco.*` (10 files, mechanical) |
+| Step 3 | — | Remove bridge, `kDisco.*` → Kalasim direct (10 files, targeted) |
 
 **KTL:** "Road 2 Step 2 is mechanical — find-and-replace imports. The kDisco API matches jDisco API, so the sim/ code doesn't change behavior, only import paths. Step 3 is the real rewrite, but by then we've validated the bridge works."
 
-**KJD:** "But wait — Road 2 has THREE steps touching sim/ (0 + 13 + 13 = 26 file-touches). Road 1 has ONE step (13 file-touches). Wouldn't more touches mean more chances for errors?"
+**KJD:** "But wait — Road 2 has THREE steps touching sim/ (0 + 10 + 10 = 20 file-touches). Road 1 has ONE step (10 file-touches). Wouldn't more touches mean more chances for errors?"
 
 **JSD:** "More touches with smaller scope. Each touch is validated independently."
 
@@ -377,7 +377,7 @@ AA added: "I'll focus on the AI-related goals (9, 10) and cross-cutting concerns
 
 **AA:** "The bridge is removed in Step 3. Any serialization boundary in the bridge is temporary. If we design the permanent serialization around SimulationEnvironment facade instead, both roads are equivalent."
 
-**JSD:** "SimulationEnvironment already has 11 methods — the serialization boundary should be there, not in a temporary bridge."
+**JSD:** "SimulationEnvironment already has 18 methods — the serialization boundary should be there, not in a temporary bridge."
 
 ### Context 3: Goal 10 — AI Dispatcher Routing
 
@@ -534,11 +534,11 @@ AA added: "I'll focus on the AI-related goals (9, 10) and cross-cutting concerns
 
 **TSE (Road 2):** "The coupling point analysis in Meeting 1 convinced me that phased migration de-risks the hardest parts. The Motor class, position-based events, and Variable state management are all better handled incrementally. Meeting 2 sealed it — the sim/ conservative restriction is not just a guideline, it's a project principle. Road 2 respects it; Road 1 violates it. Goal 1 arriving 2 months later is acceptable given the reduced risk."
 
-**KTL (Road 2):** "As technical architect, I see Road 2's bridge as tested infrastructure, not overhead. Step 1 validates the bridge against jDisco golden output — if it passes, we know the abstraction is correct. Step 2 swaps the backend behind a tested API. Step 3 removes the bridge. Each step has a clear success criterion. Road 1 has one success criterion: 'everything works after rewriting 13 files.'"
+**KTL (Road 2):** "As technical architect, I see Road 2's bridge as tested infrastructure, not overhead. Step 1 validates the bridge against jDisco golden output — if it passes, we know the abstraction is correct. Step 2 swaps the backend behind a tested API. Step 3 removes the bridge. Each step has a clear success criterion. Road 1 has one success criterion: 'everything works after rewriting 10 files (12 with indirect coupling).'"
 
 **JSD (Road 2):** "I have been the most conservative voice throughout Rounds 1 and 2. Road 2 aligns with the project's conservative DNA. The bridge carries the 2007 API patterns through the transition. The historical validation is preserved at every step. I can verify regression-free behavior at three checkpoints instead of one."
 
-**KJD (Road 1, with reservations):** "I've been listening to the senior arguments and I understand the risk reduction case for Road 2. But I still think YAGNI applies — 800 lines of bridge code that gets deleted feels wasteful. Road 1 writes ~500 lines of Kalasim integration code that STAYS. I've personally worked on the Java→Kotlin migration and the context refactoring, and we handled those well. I believe we can handle a 13-file migration in one step. But I acknowledge the coupling point analysis changed my mind on some contexts — especially API stability and Koin integration where Road 2 genuinely helps."
+**KJD (Road 1, with reservations):** "I've been listening to the senior arguments and I understand the risk reduction case for Road 2. But I still think YAGNI applies — 800 lines of bridge code that gets deleted feels wasteful. Road 1 writes ~500 lines of Kalasim integration code that STAYS. I've personally worked on the Java→Kotlin migration and the context refactoring, and we handled those well. I believe we can handle a 10-file migration (12 with indirect coupling) in one step. But I acknowledge the coupling point analysis changed my mind on some contexts — especially API stability and Koin integration where Road 2 genuinely helps."
 
 **AA (Road 1):** "YAGNI is the principle at stake. The bridge is temporary by design. Building temporary infrastructure has real costs: design, implementation, testing, documentation, and then removal. SimulationEnvironment facade already provides the migration seam. kDisco bridge is a second, redundant seam that adds complexity without permanent value."
 
@@ -775,7 +775,7 @@ This document REFINES — does not replace — the Round 1 decision ([SIMULATION
 | Timeline | 15 months | 18 months | +3 months |
 | Validation passes | 1 | 3 | +2 validation cycles |
 | Rollback granularity | 1 (all or nothing) | 3 (per step) | +2 rollback points |
-| sim/ changes in first step | 13 files | 0 files | -13 files initial risk |
+| sim/ changes in first step | 10 files (12 with indirect coupling) | 0 files | -10 files initial risk |
 
 ### C. KJD and AA Dissenting Position
 
@@ -783,7 +783,7 @@ KJD and AA voted Road 1, though with different conviction levels:
 
 **AA (consistent R1, 16-2):** Strongest Road 1 advocate. Arguments:
 1. **YAGNI:** ~800 lines of bridge code are written and then deleted. Zero permanent value.
-2. **SimulationEnvironment sufficiency:** The existing facade (Issue #94, 11 methods) already provides the migration seam. kDisco bridge is a redundant second seam.
+2. **SimulationEnvironment sufficiency:** The existing facade (Issue #94, now 18 methods) already provides the migration seam. kDisco bridge is a redundant second seam.
 3. **Lower total development effort:** Road 1 has fewer total file-touches and shorter timeline.
 
 **KJD (evolving R1, 11-3 with 14 ties):** Started as strong Road 1 advocate but shifted toward neutral during meetings. As a junior developer, KJD was influenced by senior team arguments on coupling point complexity and API stability. Key observations:
@@ -804,7 +804,7 @@ These arguments are recorded as legitimate positions. KJD's evolution demonstrat
 | `sim/InOutWorker.kt` | 172 | Head/Link queue, Condition, waitUntil | M2 |
 | `sim/ShuntingLoop.kt` | 341 | Scenario orchestration, hold() calls | M2 |
 | `sim/Generator.kt` | 80 | jDisco Random, hold() for timing | M2 |
-| `context/SimulationEnvironment.kt` | 11 methods | Migration seam | M2, M3 |
+| `context/SimulationEnvironment.kt` | 18 methods | Migration seam | M2, M3 |
 | `context/DefaultSimulationContext.kt` | 1531 | DiscoException catch, Process.activate() | M2 |
 | `objects/tracks/DynamicTrackBlock.kt` | 434 | Process.time() in logging | M2 |
 | `objects/tracks/DynamicTrack.kt` | 350 | Process.time() in logging | M2 |

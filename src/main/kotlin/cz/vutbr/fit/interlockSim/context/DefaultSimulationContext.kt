@@ -1116,7 +1116,7 @@ open class DefaultSimulationContext(
 
 		logger.info {
 			"Starting simulation: ${inouts.size} InOut points, ${getGraph().size()} track blocks, " +
-				"main process=${mainProcess!!.javaClass.simpleName}"
+				"main process=${requireNotNull(mainProcess) { "mainProcess must be initialized" }.javaClass.simpleName}"
 		}
 
 		// Use factory to create worker for each InOut
@@ -1126,7 +1126,7 @@ open class DefaultSimulationContext(
 		}
 
 		try {
-			Process.activate(mainProcess!!)
+			Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
 		} catch (e: DiscoException) {
 			logger.error(e) { "Failed to activate main simulation process" }
 			throw SimulationException(e)

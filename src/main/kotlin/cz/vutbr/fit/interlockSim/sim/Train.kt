@@ -616,10 +616,11 @@ class Train :
 		): Boolean = if (isDecelarate()) targetSpeed >= velocity else targetSpeed <= velocity
 	}
 
-	private inner class Motor : LoopProcess() {
+	private inner class Motor : Continuous() {
 		private var currentCondition: AccelerationStopCondition? = null
 		private var targetSpeed: Double = 0.0
 		private var accelerate: Boolean = false
+		private var terminate = false
 
 		private inner class AccelerationStopCondition(
 			private val stopTest: AccelerationStopTest
@@ -629,7 +630,16 @@ class Train :
 			fun getStopTest(): AccelerationStopTest = stopTest
 		}
 
-		override fun iteration() {
+		override fun actions() {
+			while (true) {
+				if (terminate) break
+				iteration()
+				if (terminate) break
+				passivate()
+			}
+		}
+
+		private fun iteration() {
 			requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
 			accelerate = true
 			logger.trace {
@@ -637,9 +647,10 @@ class Train :
 					"current velocity ${getVelocity()}"
 			}
 			start()
-			waitUntil(currentCondition!!)
+			waitUntil(requireNotNull(currentCondition) { "currentCondition must be set before waitUntil is called" })
 
-			if (accelerate && currentCondition!!.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+			val cond = requireNotNull(currentCondition) { "currentCondition must be set" }
+			if (accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0.0
 				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
 				waitUntil(AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED))
@@ -704,6 +715,11 @@ class Train :
 			}
 		}
 
+		override fun terminate() {
+			terminate = true
+			if (!terminated()) activate(this)
+		}
+
 		override fun start(): Continuous = if (accelerate) super.start() else this
 
 		override fun derivatives() {
@@ -717,7 +733,7 @@ class Train :
 
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
-				if (currentCondition!!.getStopTest().isDecelarate()) {
+				if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelarate()) {
 					Math.max(a, MINIMAL_DECELERATION.toDouble())
 				} else {
 					Math.min(a, MAXIMAL_ACCELERATION.toDouble())
