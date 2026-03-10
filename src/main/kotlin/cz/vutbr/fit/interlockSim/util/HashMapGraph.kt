@@ -221,7 +221,7 @@ class HashMapGraph<N, E, X> :
 		}
 
 		// Return unmodifiable view of cached set (O(1) performance)
-		return java.util.Collections.unmodifiableSet(cachedNodeSet)
+		return cachedNodeSet!!.toSet()
 	}
 
 	/* (non-Javadoc)
@@ -230,7 +230,7 @@ class HashMapGraph<N, E, X> :
 	override fun entrySet(): Set<Map.Entry<Doubleton<N, X>, E>> {
 		// Return unmodifiable view of map entries (O(1) performance)
 		@Suppress("UNCHECKED_CAST")
-		return java.util.Collections.unmodifiableSet(map.entries) as Set<Map.Entry<Doubleton<N, X>, E>>
+		return map.entries.toSet() as Set<Map.Entry<Doubleton<N, X>, E>>
 	}
 
 	override fun putIfNotExists(
@@ -251,7 +251,7 @@ class HashMapGraph<N, E, X> :
 	/* (non-Javadoc)
 	 * @see cz.vutbr.fit.interlockSim.context.Graph#values()
 	 */
-	override fun values(): Collection<E> = java.util.Collections.unmodifiableCollection(map.values)
+	override fun values(): Collection<E> = map.values.toList()
 
 	override fun get(node: N): Collection<E> = allEdgesJoinsWith(node, false)
 
