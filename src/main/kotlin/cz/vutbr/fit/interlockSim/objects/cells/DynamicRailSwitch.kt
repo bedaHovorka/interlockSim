@@ -17,8 +17,6 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.beans.PropertyChangeListener
-import java.beans.PropertyChangeSupport
 
 private val logger = KotlinLogging.logger {}
 
@@ -73,9 +71,9 @@ class DynamicRailSwitch(
 		private set
 
 	/**
-	 * Property change support for observing state changes
+	 * Listeners for switch state changes (Kotlin-native, no java.beans dependency).
 	 */
-	private val propertyChangeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+	private val listeners = mutableListOf<ContextPropertyChangeListener>()
 
 	/**
 	 * Changes the switch configuration to the opposite position.
@@ -94,7 +92,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		propertyChangeSupport.firePropertyChange("conf", oldConf, conf)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
 	override fun cancelPathSetup(
@@ -132,7 +130,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			propertyChangeSupport.firePropertyChange("conf", oldConf, newConf)
+			listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -159,11 +157,7 @@ class DynamicRailSwitch(
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		val map = staticRef.confs.getJoinedNodesAndEdges(from)
 
-		// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
-		// Note: Java Map.entrySet() provides entries, cast needed for destructuring
-		@Suppress("UNCHECKED_CAST")
-		val typedEntries = map.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
-		for ((segment, configuration) in typedEntries) {
+		for ((segment, configuration) in map.entries) {
 			if (configuration == conf) return segment
 		}
 		return null
@@ -183,7 +177,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		propertyChangeSupport.firePropertyChange("locked", oldLocked, locked)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -200,7 +194,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		propertyChangeSupport.firePropertyChange("locked", oldLocked, locked)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -225,21 +219,21 @@ class DynamicRailSwitch(
 	fun isReverse(): Boolean = conf == Conf.BRANCH
 
 	/**
-	 * Registers a PropertyChangeListener to be notified of switch state changes.
+	 * Registers a listener to be notified of switch state changes.
 	 *
-	 * @param listener the PropertyChangeListener to add
+	 * @param listener the listener to add
 	 */
-	fun addPropertyChangeListener(listener: PropertyChangeListener) {
-		propertyChangeSupport.addPropertyChangeListener(listener)
+	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.add(listener)
 	}
 
 	/**
-	 * Unregisters a PropertyChangeListener from receiving switch state change notifications.
+	 * Unregisters a listener from receiving switch state change notifications.
 	 *
-	 * @param listener the PropertyChangeListener to remove
+	 * @param listener the listener to remove
 	 */
-	fun removePropertyChangeListener(listener: PropertyChangeListener) {
-		propertyChangeSupport.removePropertyChangeListener(listener)
+	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.remove(listener)
 	}
 
 	/**
@@ -300,11 +294,7 @@ class DynamicRailSwitch(
 			val joinedEdges = staticRef.confs.getJoinedNodesAndEdges(segment)
 
 			// Search for the edge with value matching current conf
-			// Type-safe iteration with explicit typing to avoid Java/Kotlin interop ambiguity
-			// Note: Java Map.entrySet() provides entries, cast needed for destructuring
-			@Suppress("UNCHECKED_CAST")
-			val typedEntries = joinedEdges.entrySet() as Set<Map.Entry<Cell.Segment, Conf>>
-			for ((connectedSegment, configuration) in typedEntries) {
+			for ((connectedSegment, configuration) in joinedEdges.entries) {
 				if (configuration == conf) {
 					return setOf(segment, connectedSegment)
 				}

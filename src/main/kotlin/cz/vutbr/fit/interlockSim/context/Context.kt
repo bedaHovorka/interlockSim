@@ -15,8 +15,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.github.oshai.kotlinlogging.KotlinLogging
+import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
 import org.koin.core.scope.Scope
-import java.beans.PropertyChangeListener
 
 private val logger = KotlinLogging.logger {}
 
@@ -101,7 +101,7 @@ interface Context<out C : Cell, T : TrackBlock> : AutoCloseable {
 	 *
 	 * @param listener the listener to add
 	 */
-	fun addPropertyChangeListener(listener: PropertyChangeListener)
+	fun addPropertyChangeListener(listener: ContextPropertyChangeListener)
 
 	/**
 	 * Remove a listener for context changes.
@@ -109,7 +109,7 @@ interface Context<out C : Cell, T : TrackBlock> : AutoCloseable {
 	 *
 	 * @param listener the listener to remove
 	 */
-	fun removePropertyChangeListener(listener: PropertyChangeListener)
+	fun removePropertyChangeListener(listener: ContextPropertyChangeListener)
 
 	/**
 	 * Close this editing context and release scoped resources.

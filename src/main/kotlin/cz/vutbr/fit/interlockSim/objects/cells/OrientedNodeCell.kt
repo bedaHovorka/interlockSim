@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import java.util.EnumSet
 
 /**
  * Base implementation of {@link OrientedPathSeparator}
@@ -29,7 +28,7 @@ abstract class OrientedNodeCell protected constructor(
 	abstract fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
 
 	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> =
-		EnumSet.of(getFollowingSegment(from)) as Set<Cell.Segment>
+		setOfNotNull(getFollowingSegment(from))
 
 	override fun getOrientation(): Boolean = orientation
 

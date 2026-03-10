@@ -12,11 +12,11 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionListener
-import java.beans.PropertyChangeEvent
 import javax.swing.JLabel
 
 /**
@@ -59,8 +59,8 @@ class StatusBar :
 		producerComponent.removeMouseMotionListener(mouseListener)
 	}
 
-	override fun propertyChange(evt: PropertyChangeEvent) {
-		val newValue = evt.newValue
+	override fun propertyChange(event: ContextChangeEvent) {
+		val newValue = event.newValue
 		when {
 			newValue is CharSequence -> text = newValue.toString()
 			newValue != null -> text = newValue.toString()

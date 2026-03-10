@@ -206,10 +206,10 @@ class AnimationControllerResourceCleanupTest : KoinTestBase() {
 				context
 			}
 
-		val field = actualContext.javaClass.superclass.getDeclaredField("changeSupport")
+		val field = actualContext.javaClass.superclass.getDeclaredField("listeners")
 		field.isAccessible = true
-		val changeSupport = field.get(actualContext) as java.beans.PropertyChangeSupport
-		return changeSupport.propertyChangeListeners.toList()
+		@Suppress("UNCHECKED_CAST")
+		return (field.get(actualContext) as List<*>).filterNotNull()
 	}
 
 	// Test utilities

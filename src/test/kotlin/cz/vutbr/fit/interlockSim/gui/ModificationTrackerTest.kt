@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import java.beans.PropertyChangeEvent
+import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
 import java.io.File
 
 /**
@@ -154,7 +154,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with CELL_ADDED marks dirty")
 	fun propertyChangeWithCellAddedMarksDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.CELL_ADDED, null, "cell")
+		val event = ContextChangeEvent(ContextChangeListener.CELL_ADDED, null, "cell")
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isTrue()
 	}
@@ -162,7 +162,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with CELL_REMOVED marks dirty")
 	fun propertyChangeWithCellRemovedMarksDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.CELL_REMOVED, "cell", null)
+		val event = ContextChangeEvent(ContextChangeListener.CELL_REMOVED, "cell", null)
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isTrue()
 	}
@@ -170,7 +170,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with JOIN_CREATED marks dirty")
 	fun propertyChangeWithJoinCreatedMarksDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.JOIN_CREATED, null, "join")
+		val event = ContextChangeEvent(ContextChangeListener.JOIN_CREATED, null, "join")
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isTrue()
 	}
@@ -178,7 +178,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with TRACK_BLOCK_REMOVED marks dirty")
 	fun propertyChangeWithTrackBlockRemovedMarksDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.TRACK_BLOCK_REMOVED, "block", null)
+		val event = ContextChangeEvent(ContextChangeListener.TRACK_BLOCK_REMOVED, "block", null)
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isTrue()
 	}
@@ -186,7 +186,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with JOIN_FAILED does not mark dirty")
 	fun propertyChangeWithJoinFailedDoesNotMarkDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.JOIN_FAILED, null, "error")
+		val event = ContextChangeEvent(ContextChangeListener.JOIN_FAILED, null, "error")
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isFalse()
 	}
@@ -194,7 +194,7 @@ class ModificationTrackerTest {
 	@Test
 	@DisplayName("propertyChange with CONTEXT_CHANGED does not mark dirty")
 	fun propertyChangeWithContextChangedDoesNotMarkDirty() {
-		val event = PropertyChangeEvent(this, ContextChangeListener.CONTEXT_CHANGED, null, null)
+		val event = ContextChangeEvent(ContextChangeListener.CONTEXT_CHANGED, null, null)
 		tracker.propertyChange(event)
 		assertThat(tracker.isDirty()).isFalse()
 	}

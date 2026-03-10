@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.context
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.util.Array2DMap
 import cz.vutbr.fit.interlockSim.util.Point
-import java.util.WeakHashMap
 
 /**
  * Implementation of {@link RailwayNetGrid}
@@ -27,7 +26,7 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 	private val _cols: Int = cols
 	private val _rows: Int = rows
 
-	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = WeakHashMap()
+	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = HashMap()
 	private val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
 
 	protected fun getCells(): Array2DMap<@UnsafeVariance T> = cells

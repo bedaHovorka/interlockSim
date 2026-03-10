@@ -12,8 +12,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-import java.util.TreeMap
-
 /**
  * Extension function to add a value to a multimap (TreeMap with Set values)
  * This is a Kotlin-idiomatic replacement for TreeMultiMap.put()
@@ -21,7 +19,7 @@ import java.util.TreeMap
  * @param key the key to associate the value with
  * @param value the value to add to the set of values for this key
  */
-fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.putMulti(
+fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.putMulti(
 	key: K,
 	value: V
 ) {
@@ -36,7 +34,7 @@ fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.putMulti(
  *
  * @return collection of all values across all keys, in key-sorted order
  */
-fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.valuesMulti(): Collection<V> {
+fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.valuesMulti(): Collection<V> {
 	val result = mutableListOf<V>()
 	for (set in values) {
 		result.addAll(set)
@@ -51,4 +49,5 @@ fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.valuesMulti(): Collection<V
  * @param key the key to look up
  * @return set of values for the key, or empty set if key not present
  */
-fun <K : Comparable<K>, V> TreeMap<K, MutableSet<V>>.getMulti(key: K): Set<V> = get(key)?.toSet() ?: emptySet()
+fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.getMulti(key: K): Set<V> =
+	get(key)?.toSet() ?: emptySet()

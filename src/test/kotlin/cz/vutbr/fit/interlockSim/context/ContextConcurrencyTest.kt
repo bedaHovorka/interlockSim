@@ -25,7 +25,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.beans.PropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
@@ -195,7 +195,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 				List(10) { index ->
 					thread {
 						barrier.await()
-						val listener = PropertyChangeListener { evt -> listenerCount.incrementAndGet() }
+						val listener = ContextPropertyChangeListener { _ -> listenerCount.incrementAndGet() }
 						context.addPropertyChangeListener(listener)
 						Thread.sleep(10) // Small delay
 						context.removePropertyChangeListener(listener)
@@ -218,7 +218,7 @@ class ContextConcurrencyTest : KoinTestBase() {
 
 			val listeners =
 				List(listenerCount) {
-					PropertyChangeListener { evt ->
+					ContextPropertyChangeListener { evt ->
 						if (evt.propertyName == ContextChangeListener.CELL_ADDED) {
 							eventCount.incrementAndGet()
 						}

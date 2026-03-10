@@ -18,8 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.Process
-import java.beans.PropertyChangeListener
-import java.beans.PropertyChangeSupport
+import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
 
 private val logger = KotlinLogging.logger {}
 
@@ -41,11 +41,7 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrack(
 	val staticRef: TrackFacility
 ) {
-	/**
-	 * PropertyChangeSupport for notifying listeners of state changes.
-	 * Follows the pattern used in BaseContext (Java Beans event model).
-	 */
-	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+	private val listeners = mutableListOf<ContextPropertyChangeListener>()
 
 	// Static properties delegated from wrapped object
 	val length: Double
@@ -122,9 +118,9 @@ class DynamicTrack(
 		occupant = newOccupant
 		reservedFrom = null
 		// Fire property change events
-		changeSupport.firePropertyChange("state", oldState, state)
-		changeSupport.firePropertyChange("occupant", null, newOccupant)
-		changeSupport.firePropertyChange("reservedFrom", oldReservedFrom, null)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	/**
@@ -148,8 +144,8 @@ class DynamicTrack(
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
 		// Fire property change events
-		changeSupport.firePropertyChange("state", oldState, state)
-		changeSupport.firePropertyChange("occupant", oldOccupant, null)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
 	}
 
 	/**
@@ -188,8 +184,8 @@ class DynamicTrack(
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep
 		// Fire property change events
-		changeSupport.firePropertyChange("state", oldState, state)
-		changeSupport.firePropertyChange("reservedFrom", null, sep)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
 	}
 
 	/**
@@ -253,8 +249,8 @@ class DynamicTrack(
 		}
 		reservedFrom = null
 		// Fire property change events
-		changeSupport.firePropertyChange("state", oldState, state)
-		changeSupport.firePropertyChange("reservedFrom", oldReservedFrom, null)
+		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	// Private helper methods for state transitions
@@ -328,18 +324,17 @@ class DynamicTrack(
 	 * @param listener The listener to add
 	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
-	fun addPropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.addPropertyChangeListener(listener)
+	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.add(listener)
 	}
 
 	/**
 	 * Removes a property change listener from this track.
 	 *
 	 * @param listener The listener to remove
-	 * @see PropertyChangeSupport.removePropertyChangeListener
 	 */
-	fun removePropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.removePropertyChangeListener(listener)
+	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.remove(listener)
 	}
 
 	/**

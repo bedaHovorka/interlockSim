@@ -16,8 +16,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 
 /**
  * Tests for DynamicRailSemaphore wrapper class
@@ -192,8 +190,8 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `signal change fires property change event`() {
 		// Given: listener is registered
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 		dynamicSemaphore1.addPropertyChangeListener(testListener)
 
 		// When: signal changes
@@ -207,14 +205,13 @@ class DynamicRailSemaphoreTest {
 		assertThat(signalEvent.propertyName).isEqualTo("signal")
 		assertThat(signalEvent.oldValue).isEqualTo(Signal.STOP)
 		assertThat(signalEvent.newValue).isEqualTo(Signal.S30)
-		assertThat(signalEvent.source).isSameAs(dynamicSemaphore1)
 	}
 
 	@Test
 	fun `multiple signal changes fire multiple events`() {
 		// Given: listener is registered
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 		dynamicSemaphore1.addPropertyChangeListener(testListener)
 
 		// When: signal changes multiple times
@@ -244,8 +241,8 @@ class DynamicRailSemaphoreTest {
 		dynamicSemaphore1.signal = Signal.S30
 
 		// And: listener is registered
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 		dynamicSemaphore1.addPropertyChangeListener(testListener)
 
 		// When: signal is set to same value
@@ -258,8 +255,8 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `removePropertyChangeListener stops receiving events`() {
 		// Given: listener is registered and receives events
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 		dynamicSemaphore1.addPropertyChangeListener(testListener)
 		dynamicSemaphore1.signal = Signal.S30
 		assertThat(capturedEvents).hasSize(1)
@@ -276,10 +273,10 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `multiple listeners all receive events`() {
 		// Given: two listeners
-		val capturedEvents1 = mutableListOf<PropertyChangeEvent>()
-		val capturedEvents2 = mutableListOf<PropertyChangeEvent>()
-		val testListener1 = PropertyChangeListener { evt -> capturedEvents1.add(evt) }
-		val testListener2 = PropertyChangeListener { evt -> capturedEvents2.add(evt) }
+		val capturedEvents1 = mutableListOf<ContextChangeEvent>()
+		val capturedEvents2 = mutableListOf<ContextChangeEvent>()
+		val testListener1 = ContextPropertyChangeListener { evt -> capturedEvents1.add(evt) }
+		val testListener2 = ContextPropertyChangeListener { evt -> capturedEvents2.add(evt) }
 
 		dynamicSemaphore1.addPropertyChangeListener(testListener1)
 		dynamicSemaphore1.addPropertyChangeListener(testListener2)
@@ -296,8 +293,8 @@ class DynamicRailSemaphoreTest {
 
 	@Test
 	fun `listener can be added and removed multiple times`() {
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 
 		// Add listener
 		dynamicSemaphore1.addPropertyChangeListener(testListener)
@@ -319,10 +316,10 @@ class DynamicRailSemaphoreTest {
 	@Test
 	fun `property change events are independent for different semaphores`() {
 		// Given: listeners on both semaphores
-		val capturedEvents1 = mutableListOf<PropertyChangeEvent>()
-		val capturedEvents2 = mutableListOf<PropertyChangeEvent>()
-		val testListener1 = PropertyChangeListener { evt -> capturedEvents1.add(evt) }
-		val testListener2 = PropertyChangeListener { evt -> capturedEvents2.add(evt) }
+		val capturedEvents1 = mutableListOf<ContextChangeEvent>()
+		val capturedEvents2 = mutableListOf<ContextChangeEvent>()
+		val testListener1 = ContextPropertyChangeListener { evt -> capturedEvents1.add(evt) }
+		val testListener2 = ContextPropertyChangeListener { evt -> capturedEvents2.add(evt) }
 
 		dynamicSemaphore1.addPropertyChangeListener(testListener1)
 		dynamicSemaphore2.addPropertyChangeListener(testListener2)
@@ -341,8 +338,8 @@ class DynamicRailSemaphoreTest {
 		val constantSemaphore = createConstantInstance(staticSemaphore1, Signal.FREE)
 
 		// And: listener is registered
-		val capturedEvents = mutableListOf<PropertyChangeEvent>()
-		val testListener = PropertyChangeListener { evt -> capturedEvents.add(evt) }
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		val testListener = ContextPropertyChangeListener { evt -> capturedEvents.add(evt) }
 		constantSemaphore.addPropertyChangeListener(testListener)
 
 		// When: attempt to change signal (should be ignored)

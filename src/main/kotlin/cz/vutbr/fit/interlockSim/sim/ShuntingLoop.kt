@@ -27,9 +27,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
-import java.util.Collections
-import java.util.LinkedList
-import java.util.Queue
 
 /**
  * Příklad fungování modelu
@@ -90,7 +87,7 @@ class ShuntingLoop(
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
-	private val unapprowedTrains: Queue<Train> = LinkedList<Train>()
+	private val unapprowedTrains: ArrayDeque<Train> = ArrayDeque()
 	private val approwedTrains: MutableList<Train> = mutableListOf()
 	private val generator: InnerGenerator = InnerGenerator(context)
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
@@ -132,7 +129,7 @@ class ShuntingLoop(
 		context: SimulationEnvironment
 	) : Generator(context) {
 		override fun placeTrain(train: Train) {
-			unapprowedTrains.offer(train)
+			unapprowedTrains.addLast(train)
 		}
 	}
 
@@ -162,7 +159,7 @@ class ShuntingLoop(
 		// Paths are now discovered dynamically using TopologyNavigator when needed
 		// - innerTrackBlocks: middle blocks with RailSemaphore ends only (k1, k2)
 		// - outerTrackblocks: entry/exit blocks with one InOut end (kB, kA)
-		Collections.addAll(innerTrackBlocks, k1, k2)
+		innerTrackBlocks.addAll(listOf(k1, k2))
 		outerTrackblocks[kB] = zB
 		outerTrackblocks[kA] = zA
 	}
@@ -322,8 +319,8 @@ class ShuntingLoop(
 	}
 
 	private fun approveTrains() {
-		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.size > 0) {
-			val poll: Train = unapprowedTrains.poll()
+		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.isNotEmpty()) {
+			val poll: Train = unapprowedTrains.removeFirst()
 			approwedTrains.add(poll)
 			activate(poll)
 		}

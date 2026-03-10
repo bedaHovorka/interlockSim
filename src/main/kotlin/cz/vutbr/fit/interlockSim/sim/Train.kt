@@ -31,7 +31,6 @@ import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Reporter
 import cz.hovorka.kdisco.Variable
 import cz.hovorka.kdisco.activate
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Train Process
@@ -42,7 +41,9 @@ class Train :
 	TrackOccupant {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-		private val count = AtomicInteger(0)
+		private var countValue = 0
+		private val countLock = Any()
+		private fun nextCount(): Int = synchronized(countLock) { ++countValue }
 
 		/**
 		 * Maximum train acceleration in m/s²
@@ -498,12 +499,12 @@ class Train :
 				"NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS"
 			)
 			val min: Double =
-				Math.min(
+				minOf(
 					path.maxSpeed(path.getFirst()),
 					thisSignal.allowedSpeed()
 				)
 			if (nextSignal.isAllowing()) {
-				motor.accelerateTo(Math.min(nextSignal.allowedSpeed(), min))
+				motor.accelerateTo(minOf(nextSignal.allowedSpeed(), min))
 			} else {
 				motor.onWarning(min)
 			}
@@ -576,7 +577,7 @@ class Train :
 
 	private inner class LengthChecker : ContinuousInvariantChecker() {
 		override fun check(): Boolean =
-			Math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
+			kotlin.math.abs(front.getTotalDistance() - tail.getTotalDistance() - getLength()) <= maxAbsError
 
 		override fun report(reportObj: StringBuilder): StringBuilder {
 			requireSimulationNotNull(reportObj) { "Report object must not be null" }
@@ -740,9 +741,9 @@ class Train :
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
 				if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelarate()) {
-					Math.max(a, MINIMAL_DECELERATION.toDouble())
+					maxOf(a, MINIMAL_DECELERATION.toDouble())
 				} else {
-					Math.min(a, MAXIMAL_ACCELERATION.toDouble())
+					minOf(a, MAXIMAL_ACCELERATION.toDouble())
 				}
 		}
 	}
@@ -781,7 +782,7 @@ class Train :
 		val validatedTimetable = requireSimulationNotNull(timetable) { "timetable must not be null" }
 		this.timetable = validatedTimetable
 		this.length = validatedTimetable.getLength()
-		number = count.incrementAndGet()
+		number = nextCount()
 		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name

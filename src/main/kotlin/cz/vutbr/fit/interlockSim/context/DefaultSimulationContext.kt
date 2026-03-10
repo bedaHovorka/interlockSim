@@ -45,8 +45,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Random
-import java.util.EnumSet
-import java.util.IdentityHashMap
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -141,12 +139,12 @@ open class DefaultSimulationContext(
 	/**
 	 * Set of allowed report types for simulation output
 	 */
-	private val allowedReportTypes: MutableSet<ReportType> = EnumSet.noneOf(ReportType::class.java)
+	private val allowedReportTypes: MutableSet<ReportType> = mutableSetOf()
 
 	/**
 	 * Workers for each entry/exit point
 	 */
-	private var workers: MutableMap<DynamicInOut, InOutWorker> = IdentityHashMap()
+	private var workers: MutableMap<DynamicInOut, InOutWorker> = HashMap()
 
 	/**
 	 * Cache of dynamic InOut wrappers (lazily created)
@@ -157,13 +155,13 @@ open class DefaultSimulationContext(
 	 * Mapping from static PathSeparator to Dynamic wrapper (for simulation context)
 	 * Maps InOut, RailSemaphore, RailSwitch to their Dynamic counterparts
 	 */
-	private val staticToDynamicMap: MutableMap<PathSeparator, DynamicPathSeparator> = IdentityHashMap()
+	private val staticToDynamicMap: MutableMap<PathSeparator, DynamicPathSeparator> = HashMap()
 
 	/**
 	 * Mapping from static TrackFacility to DynamicTrack wrapper (for simulation context)
 	 * Maps track facilities to their Dynamic wrappers for state management
 	 */
-	private val staticTrackToDynamicMap: MutableMap<TrackFacility, DynamicTrack> = IdentityHashMap()
+	private val staticTrackToDynamicMap: MutableMap<TrackFacility, DynamicTrack> = HashMap()
 
 	/**
 	 * Cache of PathSeparator grid positions for O(1) animation rendering.
@@ -1339,7 +1337,7 @@ open class DefaultSimulationContext(
 
 		// Fire property change event for animation event timeline
 		// Property name = report type name, new value = formatted message
-		getChangeSupport().firePropertyChange(type.name, null, buf.toString())
+		firePropertyChange(type.name, null, buf.toString())
 	}
 
 	/**

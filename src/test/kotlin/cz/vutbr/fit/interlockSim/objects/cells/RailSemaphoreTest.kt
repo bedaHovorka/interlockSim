@@ -26,8 +26,6 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.test.get
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -150,10 +148,10 @@ class RailSemaphoreTest : KoinTestBase() {
 		fun `aspect change fires property change`() {
 			// Arrange
 			val changeCount = AtomicInteger(0)
-			var capturedEvent: PropertyChangeEvent? = null
+			var capturedEvent: ContextChangeEvent? = null
 
 			val listener =
-				PropertyChangeListener { event ->
+				ContextPropertyChangeListener { event ->
 					changeCount.incrementAndGet()
 					capturedEvent = event
 				}

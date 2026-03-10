@@ -15,8 +15,6 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.EnumMap
-import java.util.EnumSet
 
 /**
  * Switch
@@ -29,12 +27,12 @@ class RailSwitch : NodeCell {
 		/**
 		 * switch with one branch
 		 */
-		SIMPLE(EnumSet.of(Conf.BRANCH, Conf.MAIN) as Set<Conf>),
+		SIMPLE(setOf(Conf.BRANCH, Conf.MAIN)),
 
 		/**
 		 * not specified
 		 */
-		DUAL(EnumSet.noneOf(Conf::class.java) as Set<Conf>); // NOT IMLEMENTED YET - EXTENSION
+		DUAL(emptySet()); // NOT IMLEMENTED YET - EXTENSION
 
 		@Suppress("UNCHECKED_CAST")
 		private val possibleConfs: Set<Conf> = confs
@@ -99,7 +97,7 @@ class RailSwitch : NodeCell {
 		fun getKind(): Kind = kind
 	}
 
-	val speeds: EnumMap<Conf, Double> = EnumMap<Conf, Double>(Conf::class.java)
+	val speeds: HashMap<Conf, Double> = HashMap()
 	val confs: EnumUnorientedGraph<Cell.Segment, Conf>
 	val type: Type
 
@@ -192,7 +190,7 @@ class RailSwitch : NodeCell {
 	}
 }
 
-private class SwitchMap<V> : EnumMap<Type, EnumMap<Cell.SpatialType, V>>(Type::class.java) {
+private class SwitchMap<V> : HashMap<Type, HashMap<Cell.SpatialType, V>>() {
 	fun put(
 		t: Type,
 		st: Cell.SpatialType,
@@ -200,7 +198,7 @@ private class SwitchMap<V> : EnumMap<Type, EnumMap<Cell.SpatialType, V>>(Type::c
 	) {
 		var subMap = get(t)
 		if (subMap == null) {
-			subMap = EnumMap<Cell.SpatialType, V>(Cell.SpatialType::class.java)
+			subMap = HashMap()
 			put(t, subMap)
 		}
 		subMap.put(st, v)
@@ -288,5 +286,5 @@ private fun putBranches(
 	first: Cell.Segment,
 	vararg segments: Cell.Segment
 ) {
-	branches.put(t, st, EnumSet.of(first, *segments) as Set<Cell.Segment>)
+	branches.put(t, st, setOf(first, *segments))
 }

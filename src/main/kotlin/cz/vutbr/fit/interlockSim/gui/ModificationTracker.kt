@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_MO
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_REMOVED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.JOIN_CREATED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.TRACK_BLOCK_REMOVED
-import java.beans.PropertyChangeEvent
+import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
 import java.io.File
 
 /**
@@ -111,8 +111,8 @@ class ModificationTracker(
 	 * - Configuration changes (maxSpeed, trackLength): Could mark dirty
 	 * - InOut list modifications: Could mark dirty
 	 */
-	override fun propertyChange(evt: PropertyChangeEvent) {
-		when (evt.propertyName) {
+	override fun propertyChange(event: ContextChangeEvent) {
+		when (event.propertyName) {
 			CELL_ADDED, CELL_REMOVED, JOIN_CREATED, TRACK_BLOCK_REMOVED, CELL_MODIFIED -> markDirty()
 			// Explicitly ignore JOIN_FAILED (failed operation, no change)
 			// Explicitly ignore CONTEXT_CHANGED (generic event)

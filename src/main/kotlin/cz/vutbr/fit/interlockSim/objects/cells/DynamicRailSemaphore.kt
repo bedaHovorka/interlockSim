@@ -18,8 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.beans.PropertyChangeListener
-import java.beans.PropertyChangeSupport
 
 private val logger = KotlinLogging.logger {}
 
@@ -43,10 +41,9 @@ sealed class DynamicRailSemaphore(
 ) : OrientedPathSeparator by staticRef,
 	DynamicPathSeparator {
 	/**
-	 * PropertyChangeSupport for notifying listeners of signal state changes.
-	 * Follows the pattern used in BaseContext (Java Beans event model).
+	 * Listeners for signal state changes (Kotlin-native, no java.beans dependency).
 	 */
-	private val changeSupport: PropertyChangeSupport = PropertyChangeSupport(this)
+	private val listeners = mutableListOf<ContextPropertyChangeListener>()
 
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
@@ -73,7 +70,8 @@ sealed class DynamicRailSemaphore(
 			field = newSignal
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
-				changeSupport.firePropertyChange("signal", oldSignal, newSignal)
+				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
+				listeners.forEach { it.propertyChange(evt) }
 			}
 		}
 
@@ -179,20 +177,18 @@ sealed class DynamicRailSemaphore(
 	 * The listener will be notified when the "signal" property changes.
 	 *
 	 * @param listener The listener to add
-	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
-	fun addPropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.addPropertyChangeListener(listener)
+	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.add(listener)
 	}
 
 	/**
 	 * Removes a property change listener from this semaphore.
 	 *
 	 * @param listener The listener to remove
-	 * @see PropertyChangeSupport.removePropertyChangeListener
 	 */
-	fun removePropertyChangeListener(listener: PropertyChangeListener) {
-		changeSupport.removePropertyChangeListener(listener)
+	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		listeners.remove(listener)
 	}
 
 	/**

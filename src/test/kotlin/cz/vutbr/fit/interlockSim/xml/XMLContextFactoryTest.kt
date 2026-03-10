@@ -321,7 +321,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 				val edges = graph.assignedEdges(current)
 
 				// For each track block, find the other end and add it to the queue
-				for (entry in edges.entrySet()) {
+				for (entry in edges.entries) {
 					val trackBlock = entry.value
 					// TrackBlocks should be TrackSections which have ends()
 					if (trackBlock !is TrackSection) continue
@@ -793,7 +793,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					val location = context.getRailWayNetGrid().getLocation(cell)
 					if (location != null) {
 						val edges = context.getGraph().assignedEdges(location)
-						if (edges.size() >= 3) {
+						if (edges.size >= 3) {
 							return cell
 						}
 					}
@@ -1004,7 +1004,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 					if (location != null) {
 						val edges = context.getGraph().assignedEdges(location)
 						// Switches should have at least 2 connections (input + output)
-						assertThat(edges.size())
+						assertThat(edges.size)
 							.withMessage("Switch at $location should have connections")
 							.isGreaterThan(1)
 					}
@@ -1066,7 +1066,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 				if (current == toLoc) return true
 
 				val edges = graph.assignedEdges(current)
-				for (entry in edges.entrySet()) {
+				for (entry in edges.entries) {
 					val trackBlock = entry.value
 					if (trackBlock !is TrackSection) continue
 

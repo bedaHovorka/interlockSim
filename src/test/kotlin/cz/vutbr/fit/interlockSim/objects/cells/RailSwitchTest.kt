@@ -25,8 +25,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
 
 /**
  * Tests for DynamicRailSwitch cell type with comprehensive behavior validation.
@@ -272,11 +270,11 @@ class RailSwitchTest {
 	 * Test PropertyChangeListener implementation that captures all events.
 	 * Used to verify property change notifications from switch operations.
 	 */
-	private class TestPropertyChangeListener : PropertyChangeListener {
-		val events: MutableList<PropertyChangeEvent> = mutableListOf()
+	private class TestPropertyChangeListener : ContextPropertyChangeListener {
+		val events: MutableList<ContextChangeEvent> = mutableListOf()
 
-		override fun propertyChange(evt: PropertyChangeEvent) {
-			events.add(evt)
+		override fun propertyChange(event: ContextChangeEvent) {
+			events.add(event)
 		}
 	}
 }

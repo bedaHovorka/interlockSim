@@ -473,13 +473,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// When: Property change with Point value
 			val point = java.awt.Point(5, 5)
-			val event =
-				java.beans.PropertyChangeEvent(
-					editingContext,
-					"cell",
-					null,
-					point
-				)
+			val event = cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent("cell", null, point)
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)
@@ -496,13 +490,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setContext(editingContext)
 
 			// When: Property change with non-Point value
-			val event =
-				java.beans.PropertyChangeEvent(
-					editingContext,
-					"property",
-					null,
-					"value"
-				)
+			val event = cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent("property", null, "value")
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)

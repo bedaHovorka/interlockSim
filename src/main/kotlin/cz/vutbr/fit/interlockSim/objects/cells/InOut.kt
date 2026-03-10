@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
-import java.util.EnumSet
 
 /**
  * predstavuje spojeni s externi zeleznicni siti
@@ -37,7 +36,7 @@ class InOut(
 		setName(name)
 	}
 
-	override fun joins(): Set<Cell.Segment> = EnumSet.of(direction()) as Set<Cell.Segment>
+	override fun joins(): Set<Cell.Segment> = setOf(direction())
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? {
 		if (from == null) return direction()

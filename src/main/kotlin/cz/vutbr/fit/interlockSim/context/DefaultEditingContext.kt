@@ -26,7 +26,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.util.TreeMap
 import kotlin.math.sqrt
 
 /**
@@ -206,7 +205,7 @@ open class DefaultEditingContext(
 	): Map<Point, TrackBlockPart>? {
 		// Using Kotlin-idiomatic TreeMap with extension functions
 		// Replaces TreeMultiMap with standard library + extensions
-		val distanceMap = TreeMap<Double, MutableSet<Tranporter>>()
+		val distanceMap = java.util.TreeMap<Double, MutableSet<Tranporter>>()
 
 		if (key1.distance(key2) <= sqrt(2.0)) return null
 
@@ -503,7 +502,7 @@ open class DefaultEditingContext(
 		if (nodeCell is InOut && !inouts.contains(nodeCell as InOut)) {
 			inouts.add(nodeCell as InOut)
 		}
-		getChangeSupport().firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
+		firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
 		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
 	}
 
@@ -522,7 +521,7 @@ open class DefaultEditingContext(
 				if (set != null) grid.keySet().removeAll(set)
 			}
 			if (cell is InOut) inouts.remove(cell as InOut)
-			getChangeSupport().firePropertyChange(
+			firePropertyChange(
 				ContextChangeListener.CELL_REMOVED,
 				null,
 				String.format("Cell removed at (%d,%d)", key.x, key.y)
@@ -538,7 +537,7 @@ open class DefaultEditingContext(
 		val grid = getGrid()
 		getGraph().remove(line)
 		grid.keySet().removeAll(getLinesKeys().remove(line) ?: emptySet())
-		getChangeSupport().firePropertyChange(
+		firePropertyChange(
 			ContextChangeListener.TRACK_BLOCK_REMOVED,
 			null,
 			String.format("TrackBlock %s removed", line)
@@ -580,7 +579,7 @@ open class DefaultEditingContext(
 			logger.debug {
 				"Join failed between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
 			}
-			getChangeSupport().firePropertyChange(
+			firePropertyChange(
 				ContextChangeListener.JOIN_FAILED,
 				null,
 				String.format(
@@ -598,7 +597,7 @@ open class DefaultEditingContext(
 		logger.debug {
 			"Created track join (${key1.x},${key1.y})->(${key2.x},${key2.y}) with $mapSize intermediate cells"
 		}
-		getChangeSupport().firePropertyChange(
+		firePropertyChange(
 			ContextChangeListener.JOIN_CREATED,
 			null,
 			String.format(
@@ -620,7 +619,7 @@ open class DefaultEditingContext(
 	 * @param key The grid position of the modified cell
 	 */
 	override fun fireCellModified(key: Point) {
-		getChangeSupport().firePropertyChange(
+		firePropertyChange(
 			ContextChangeListener.CELL_MODIFIED,
 			null,
 			key

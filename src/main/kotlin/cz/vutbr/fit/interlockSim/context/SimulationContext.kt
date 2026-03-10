@@ -16,7 +16,6 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import java.util.EnumSet
 
 /**
  * Interface to shared functions of inner data model, which is allowed by simulation
@@ -123,7 +122,7 @@ interface SimulationContext :
 			 * all standard reports (without debug)
 			 */
 			@JvmField
-			val ALL: Array<ReportType> = EnumSet.complementOf(EnumSet.of(_DEBUG)).toArray(arrayOfNulls<ReportType>(0))
+			val ALL: Array<ReportType> = entries.filter { it != _DEBUG }.toTypedArray()
 		}
 	}
 

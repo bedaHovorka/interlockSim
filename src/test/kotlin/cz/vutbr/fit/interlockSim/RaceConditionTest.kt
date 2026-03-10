@@ -796,7 +796,7 @@ class RaceConditionTest : KoinTestBase() {
 						for (iter in 0 until iterations) {
 							// Create a listener
 							val listener =
-								java.beans.PropertyChangeListener { _ ->
+								cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener { _ ->
 									// Listener receives property changes
 								}
 
@@ -986,7 +986,7 @@ class RaceConditionTest : KoinTestBase() {
 			// Arrange
 			val context = buildMinimalSimulation()
 			val threadCount = 3
-			val listenerOps = ArrayList<java.beans.PropertyChangeListener>()
+			val listenerOps = ArrayList<cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener>()
 			val startLatch = CountDownLatch(1)
 			val doneLatch = CountDownLatch(threadCount)
 			val exceptions = CopyOnWriteArrayList<Exception>()
@@ -998,7 +998,7 @@ class RaceConditionTest : KoinTestBase() {
 					startLatch.await()
 					for (i in 0 until 10) {
 						val listener =
-							java.beans.PropertyChangeListener { _ ->
+							cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener { _ ->
 								// Listener receives events
 							}
 						listenerOps.add(listener)

@@ -171,7 +171,7 @@ class BaseContextTest : KoinTestBase() {
 			// Arrange
 			var listenerCalled = false
 			val listener =
-				java.beans.PropertyChangeListener { evt ->
+				cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener { _ ->
 					listenerCalled = true
 				}
 

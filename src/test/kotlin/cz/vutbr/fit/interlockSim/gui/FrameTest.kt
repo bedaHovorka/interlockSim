@@ -183,7 +183,7 @@ class FrameTest : AbstractFrameTestBase() {
 			// Create a test listener to verify registration works
 			var listenerCalled = false
 			val testListener =
-				java.beans.PropertyChangeListener { evt ->
+				cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener { _ ->
 					listenerCalled = true
 				}
 

@@ -20,7 +20,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import java.util.IdentityHashMap
 
 /**
  * Utility for transforming static railway network grids to dynamic grids.
@@ -82,7 +81,7 @@ object GridTransformer {
 		val dynamicGrid = DefaultRailWayNetGrid(cols, rows)
 		
 		// Mapping for identity preservation and reverse lookup
-		val staticToDynamicMap = IdentityHashMap<NodeCell, DynamicPathSeparator>()
+		val staticToDynamicMap = HashMap<NodeCell, DynamicPathSeparator>()
 		
 		// Iterate through all cells in source grid
 		for ((point, cell) in staticGrid) {

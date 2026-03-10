@@ -1,7 +1,7 @@
 package cz.vutbr.fit.interlockSim.context
 
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
 
 /**
  * Listener interface for context changes.
@@ -9,7 +9,7 @@ import java.beans.PropertyChangeListener
  *
  * @since 2026-01 (Java 21 migration)
  */
-interface ContextChangeListener : PropertyChangeListener {
+interface ContextChangeListener : ContextPropertyChangeListener {
 	companion object {
 		/**
 		 * Property name for general context changes.
@@ -50,7 +50,7 @@ interface ContextChangeListener : PropertyChangeListener {
 	/**
 	 * Called when a context property changes.
 	 *
-	 * @param evt PropertyChangeEvent with property name and values
+	 * @param event ContextChangeEvent with property name and values
 	 */
-	override fun propertyChange(evt: PropertyChangeEvent)
+	override fun propertyChange(event: ContextChangeEvent)
 }

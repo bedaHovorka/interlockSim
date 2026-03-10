@@ -201,7 +201,7 @@ class AbstractUnorientedGraphTest {
 
 	/**
 	 * Nested test group: Size Operations
-	 * Tests size() method which uses reflection to call implementationContainer.size()
+	 * Tests size() method which uses reflection to call implementationContainer.size
 	 */
 	@Nested
 	@DisplayName("Size Operations (size, isEmpty)")
@@ -412,7 +412,7 @@ class AbstractUnorientedGraphTest {
 			val values = graph.values()
 
 			// Assert
-			assertThat(values.size())
+			assertThat(values.size)
 				.withMessage("values should contain all edge values")
 				.isEqualTo(3)
 			assertThat(values.contains(100)).isTrue()
@@ -425,14 +425,14 @@ class AbstractUnorientedGraphTest {
 			// Arrange
 			graph.put("A", "B", 100)
 			val values1 = graph.values()
-			assertThat(values1.size()).isEqualTo(1)
+			assertThat(values1.size).isEqualTo(1)
 
 			// Act - add more edges
 			graph.put("B", "C", 200)
 			val values2 = graph.values()
 
 			// Assert
-			assertThat(values2.size())
+			assertThat(values2.size)
 				.withMessage("values should reflect new edges")
 				.isEqualTo(2)
 		}
@@ -468,7 +468,7 @@ class AbstractUnorientedGraphTest {
 			assertThat(graph.isEmpty()).isFalse()
 			assertThat(graph.size()).isEqualTo(1)
 			assertThat(graph.containsEdge(100)).isTrue()
-			assertThat(graph.values().size()).isEqualTo(1)
+			assertThat(graph.values().size).isEqualTo(1)
 
 			// Clear
 			graph.clear()

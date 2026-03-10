@@ -319,11 +319,11 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 	/**
 	 * Test PropertyChangeListener implementation that captures all events.
 	 */
-	private class TestPropertyChangeListener : java.beans.PropertyChangeListener {
-		val events: MutableList<java.beans.PropertyChangeEvent> = mutableListOf()
+	private class TestPropertyChangeListener : cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener {
+		val events: MutableList<cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent> = mutableListOf()
 
-		override fun propertyChange(evt: java.beans.PropertyChangeEvent) {
-			events.add(evt)
+		override fun propertyChange(event: cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent) {
+			events.add(event)
 		}
 	}
 }
