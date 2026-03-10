@@ -35,6 +35,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.File
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * End-to-end integration tests for the complete edit-to-simulation workflow.
@@ -274,10 +276,10 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 	/**
 	 * Test PropertyChangeListener implementation that captures all events.
 	 */
-	private class TestPropertyChangeListener : cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener {
-		val events: MutableList<cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent> = mutableListOf()
+	private class TestPropertyChangeListener : ContextPropertyChangeListener {
+		val events: MutableList<ContextChangeEvent> = mutableListOf()
 
-		override fun propertyChange(event: cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent) {
+		override fun propertyChange(event: ContextChangeEvent) {
 			events.add(event)
 		}
 	}

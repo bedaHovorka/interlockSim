@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.objects.cells
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -92,7 +94,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
 	override fun cancelPathSetup(
@@ -130,7 +132,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
+			listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -177,7 +179,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -194,7 +196,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**

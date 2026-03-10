@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.MouseEvent

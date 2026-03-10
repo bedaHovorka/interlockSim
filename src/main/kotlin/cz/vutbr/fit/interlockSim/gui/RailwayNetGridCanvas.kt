@@ -28,8 +28,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Color

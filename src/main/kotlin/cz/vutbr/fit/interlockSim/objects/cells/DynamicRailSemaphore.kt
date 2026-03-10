@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathElement
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.anti
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -71,7 +73,7 @@ sealed class DynamicRailSemaphore(
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
 				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
-				listeners.forEach { it.propertyChange(evt) }
+				listeners.toList().forEach { it.propertyChange(evt) }
 			}
 		}
 

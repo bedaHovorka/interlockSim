@@ -13,24 +13,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 
 /**
- * Kotlin-native replacement for java.beans.PropertyChangeEvent.
- * Used to notify listeners of property changes in Dynamic cell objects.
- */
-data class ContextChangeEvent(
-	val propertyName: String,
-	val oldValue: Any?,
-	val newValue: Any?
-)
-
-/**
- * Kotlin-native replacement for java.beans.PropertyChangeListener.
- * Fun interface allows lambda usage.
- */
-fun interface ContextPropertyChangeListener {
-	fun propertyChange(event: ContextChangeEvent)
-}
-
-/**
  * Domain-specific utility functions for working with Cell objects.
  *
  * This object contains utilities that depend on domain model classes (NodeCell, SimulationContext).

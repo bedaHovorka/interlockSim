@@ -27,6 +27,8 @@ import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.EnumSource
 import org.koin.test.get
 import java.util.concurrent.atomic.AtomicInteger
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Unit tests for {@link DynamicRailSemaphore}.

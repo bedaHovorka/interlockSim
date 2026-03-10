@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import java.awt.Component
 import java.awt.event.MouseEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 
 /**
  * Tests for StatusBar GUI component.

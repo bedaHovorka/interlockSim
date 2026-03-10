@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_MO
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.CELL_REMOVED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.JOIN_CREATED
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener.Companion.TRACK_BLOCK_REMOVED
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import java.io.File
 
 /**

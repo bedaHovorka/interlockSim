@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for RailwayNetGridCanvas context type handling.
@@ -473,7 +475,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// When: Property change with Point value
 			val point = java.awt.Point(5, 5)
-			val event = cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent("cell", null, point)
+			val event = ContextChangeEvent("cell", null, point)
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)
@@ -490,7 +492,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 			canvas.setContext(editingContext)
 
 			// When: Property change with non-Point value
-			val event = cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent("property", null, "value")
+			val event = ContextChangeEvent("property", null, "value")
 			canvas.propertyChange(event)
 
 			// Then: Canvas should handle property change (no exception)

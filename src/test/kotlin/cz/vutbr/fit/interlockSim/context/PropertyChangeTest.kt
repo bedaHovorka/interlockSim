@@ -25,8 +25,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * PropertyChange Notification Tests for Java 21 migration.

@@ -10,8 +10,8 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
@@ -282,7 +282,8 @@ abstract class BaseContext<T : TrackBlock>(
 		oldValue: Any?,
 		newValue: Any?
 	) {
-		listeners.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
 
 	/**
@@ -343,7 +344,8 @@ abstract class BaseContext<T : TrackBlock>(
 		if (!frozen) {
 			frozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
-			listeners.forEach { it.propertyChange(ContextChangeEvent("frozen", false, true)) }
+			val snapshot = synchronized(this) { listeners.toList() }
+			snapshot.forEach { it.propertyChange(ContextChangeEvent("frozen", false, true)) }
 		}
 	}
 
@@ -371,6 +373,7 @@ abstract class BaseContext<T : TrackBlock>(
 			return
 		}
 
-		listeners.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
 }

@@ -20,8 +20,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for DynamicTrack wrapper class

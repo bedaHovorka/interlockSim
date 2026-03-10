@@ -18,8 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.Process
-import cz.vutbr.fit.interlockSim.objects.cells.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 private val logger = KotlinLogging.logger {}
 
@@ -118,9 +118,9 @@ class DynamicTrack(
 		occupant = newOccupant
 		reservedFrom = null
 		// Fire property change events
-		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
-		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	/**
@@ -144,8 +144,8 @@ class DynamicTrack(
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
 		// Fire property change events
-		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
 	}
 
 	/**
@@ -184,8 +184,8 @@ class DynamicTrack(
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep
 		// Fire property change events
-		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
 	}
 
 	/**
@@ -249,8 +249,8 @@ class DynamicTrack(
 		}
 		reservedFrom = null
 		// Fire property change events
-		listeners.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	// Private helper methods for state transitions

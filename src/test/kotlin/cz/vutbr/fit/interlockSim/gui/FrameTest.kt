@@ -27,6 +27,8 @@ import java.awt.BorderLayout
 import java.util.concurrent.TimeUnit
 import javax.swing.JFrame
 import javax.swing.JScrollPane
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for Frame GUI component.
@@ -183,7 +185,7 @@ class FrameTest : AbstractFrameTestBase() {
 			// Create a test listener to verify registration works
 			var listenerCalled = false
 			val testListener =
-				cz.vutbr.fit.interlockSim.objects.cells.ContextPropertyChangeListener { _ ->
+				ContextPropertyChangeListener { _ ->
 					listenerCalled = true
 				}
 
