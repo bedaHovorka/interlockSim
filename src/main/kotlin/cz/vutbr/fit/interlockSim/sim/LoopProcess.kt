@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import jDisco.Process
+import cz.hovorka.kdisco.Process
 
 /**
  * Cycle process...
@@ -19,7 +19,7 @@ import jDisco.Process
 abstract class LoopProcess : Process() {
 	private var terminate = false
 
-	protected final override fun actions() {
+	final override fun actions() {
 		startAction()
 		while (true) {
 			if (terminate) break
@@ -47,7 +47,7 @@ abstract class LoopProcess : Process() {
 	/**
 	 * Safe cancellation of process
 	 */
-	final fun terminate() {
+	final override fun terminate() {
 		terminate = true
 		if (!terminated()) Process.activate(this)
 	}

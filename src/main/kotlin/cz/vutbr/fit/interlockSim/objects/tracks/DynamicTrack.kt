@@ -17,7 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.Process
+import cz.hovorka.kdisco.Process
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
 

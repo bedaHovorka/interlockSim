@@ -44,7 +44,7 @@ plugins {
 }
 
 // Load versions from gradle.properties
-val jdiscoVersion: String by project
+val kdiscoVersion: String by project
 val slf4jVersion: String by project
 val logbackVersion: String by project
 val kotlinLoggingVersion: String by project
@@ -72,26 +72,22 @@ java {
 
 // Configure repositories
 repositories {
-    mavenLocal() // For jDisco local development (highest priority)
+    mavenLocal() // For kDisco local development (highest priority)
 
-    // GitHub Packages Maven Registry for jDisco (conditional - only when credentials available)
-    // This prevents build failures when running outside CI environment
-    val githubUsername = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
-    val githubToken = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+    val githubUsername = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user") as String?
+    val githubToken = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.key") as String?
 
     if (!githubUsername.isNullOrEmpty() && !githubToken.isNullOrEmpty()) {
         maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/bedaHovorka/jdisco")
+            name = "GitHubPackages-kdisco"
+            url = uri("https://maven.pkg.github.com/bedaHovorka/kdisco")
             credentials {
                 username = githubUsername
                 password = githubToken
             }
         }
     } else {
-        logger.warn("GitHub Packages credentials not available. Skipping GitHub Packages repository.")
-        logger.warn("jDisco must be available in mavenLocal() for build to succeed.")
-        logger.warn("To install jDisco locally: cd ~/work/jdisco && mvn install")
+        logger.warn("GitHub Packages credentials not available. kDisco must be in mavenLocal().")
     }
 
     mavenCentral() // For all other dependencies
@@ -100,7 +96,7 @@ repositories {
 // Dependencies (matching Ivy configuration exactly)
 dependencies {
     // Compile dependencies (from Ivy compile configuration)
-    implementation("dk.ruc.keld:jdisco:$jdiscoVersion") // Discrete event simulation library
+    implementation("cz.hovorka.kdisco:kdisco-core-api-jvm:$kdiscoVersion") // Discrete event simulation library (kDisco wrapping jDisco)
     implementation("org.slf4j:slf4j-api:$slf4jVersion") // Logging facade
     implementation("ch.qos.logback:logback-classic:$logbackVersion") // SLF4J implementation (includes logback-core)
     implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion") // Kotlin logging library
@@ -382,39 +378,33 @@ tasks.javadoc {
 // ===========================================
 
 /**
- * Task: checkJdisco
- * Verifies that jDisco library is available in Maven local repository
- * This matches Ant's check-jdisco target
+ * Task: checkKdisco
+ * Verifies that kDisco library is available in Maven local repository
  */
-val checkJdisco by tasks.registering {
+val checkKdisco by tasks.registering {
     group = "verification"
-    description = "Verify jDisco library is installed in Maven local repository"
+    description = "Verify kDisco library is installed in Maven local repository"
 
     doLast {
-        val jdiscoJar =
+        val kdiscoJar =
             file(
                 "${System.getProperty(
                     "user.home",
-                )}/.m2/repository/dk/ruc/keld/jdisco/$jdiscoVersion/jdisco-$jdiscoVersion.jar",
+                )}/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/$kdiscoVersion/kdisco-core-api-jvm-$kdiscoVersion.jar",
             )
 
-        if (jdiscoJar.exists()) {
-            println("✓ jDisco $jdiscoVersion found in mavenLocal cache: ${jdiscoJar.absolutePath}")
+        if (kdiscoJar.exists()) {
+            println("✓ kDisco $kdiscoVersion found in mavenLocal: ${kdiscoJar.absolutePath}")
         } else {
-            println("⚠ jDisco $jdiscoVersion not found in mavenLocal cache")
-            println("  Will attempt to download from GitHub Packages: https://maven.pkg.github.com/bedaHovorka/jdisco")
-            println()
-            println("  For local development, you can install jDisco to mavenLocal for faster builds:")
-            println("    cd ~/work/jdisco && mvn install")
-            println()
-            println("  For more info: https://github.com/bedaHovorka/jdisco")
+            println("⚠ kDisco $kdiscoVersion not found in mavenLocal")
+            println("  To install: cd ~/work/kdisco && ./gradlew :kdisco-core-api:publishToMavenLocal")
         }
     }
 }
 
-// Make compileJava depend on checkJdisco
+// Make compileJava depend on checkKdisco
 tasks.compileJava {
-    dependsOn(checkJdisco)
+    dependsOn(checkKdisco)
 }
 
 /**
@@ -549,7 +539,7 @@ tasks.register("printConfig") {
             |  Target Compatibility: ${java.targetCompatibility}
             |
             |Dependencies:
-            |  jDisco: $jdiscoVersion
+            |  kDisco: $kdiscoVersion
             |  SLF4J: $slf4jVersion
             |  Logback: $logbackVersion
             |  JUnit: $junitJupiterVersion

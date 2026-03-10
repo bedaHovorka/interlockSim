@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -97,7 +98,7 @@ object AnimationStateCapture {
 	 *
 	 * @return Current simulation time in seconds
 	 */
-	private fun captureSimulationTime(): Double = jDisco.Process.time()
+	private fun captureSimulationTime(): Double = Process.time()
 
 	/**
 	 * Capture state of all active trains in simulation.

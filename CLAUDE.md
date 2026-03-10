@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-02-05
+**Last Updated:** 2026-03-10
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -158,8 +158,8 @@ For complete navigation services architecture, Koin DI integration patterns, and
 - `objects/paths/` - Route management
 
 **Simulation engine:**
-- Built on jDisco library (discrete event simulation framework, Java 6 compatible)
-- External dependency from https://github.com/bedavs/jDisco
+- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-api-jvm:0.2.0-SNAPSHOT`) — Kotlin wrapper over jDisco (Phase 1 migration complete 2026-03-04)
+- kDisco repo: https://github.com/bedavs/kdisco; jDisco (original): https://github.com/bedavs/jDisco
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
 **GUI:**
@@ -233,7 +233,7 @@ class MyClass(private val dependency: MyDependency)
 
 ### Critical DI Rules
 
-1. **sim/ package EXCLUDED** - No Koin injection in simulation classes until jDisco migration
+1. **sim/ package EXCLUDED** - No Koin injection in simulation classes until kDisco→Kalasim migration (Phase 2)
 2. **Contexts are NOT singletons** - Use `factory` or `scope`, never `single`
 3. **Preserve factory patterns** - Inject factories, not products
 
@@ -252,7 +252,7 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 
 **Conservative approach differentiated by component type:**
 
-### Critical Restrictions (Until jDisco Migration)
+### Critical Restrictions (Until kDisco→Kalasim Migration, Phase 2)
 
 **Simulation Core (`sim/` package):**
 - **Minimal changes only** - Be extremely conservative with simulation logic
@@ -260,8 +260,8 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
 
-**jDisco Library:**
-- **Do not modify** - Maintained as separate project at https://github.com/bedavs/jDisco
+**kDisco Library:**
+- **Do not modify** - Maintained as separate project at https://github.com/bedavs/kdisco (wraps jDisco: https://github.com/bedavs/jDisco)
 
 ### Flexible Development (Other Components)
 
@@ -396,11 +396,15 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 
 ## Future Development Considerations
 
-The project currently uses **jDisco** (discrete/continuous simulation library from 2004, no longer maintained). Research has been conducted on modern alternatives - see `jdisco-research.md` for comprehensive analysis.
+The project currently uses **kDisco** (Kotlin wrapper over jDisco, Phase 1 migration complete 2026-03-04). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
 
-**Recommended migration paths:**
-1. **DSOL** (Distributed Simulation Object Library) - Best for combined discrete-continuous simulation (actively maintained, Java 17+, TU Delft)
-2. **Kalasim** - Best for discrete-only simulation with Kotlin (native Kotlin with coroutines)
+**Migration status:**
+- ✅ **Phase 1 complete (2026-03-04):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-api-jvm:0.2.0`). See commit history on `feature/simulation-library-decision-round2`.
+- 🆕 **Phase 2 (future):** Migrate from kDisco to Kalasim (native Kotlin coroutines-based discrete event simulation).
+
+**Alternative frameworks researched (see `docs/jdisco-research.md`):**
+1. **Kalasim** - Long-term target; native Kotlin with coroutines, discrete-only
+2. **DSOL** (Distributed Simulation Object Library) - Best for combined discrete-continuous simulation (actively maintained, Java 17+, TU Delft)
 3. **SSJ** (Stochastic Simulation in Java) - For stochastic/Monte Carlo simulation (Université de Montréal)
 
-**Note:** Any migration from jDisco to modern frameworks is a future development goal and should follow the conservative approach outlined above - thorough testing required before any changes to existing simulation code.
+**Note:** Any migration from kDisco to modern frameworks is a future development goal and should follow the conservative approach outlined above - thorough testing required before any changes to existing simulation code.

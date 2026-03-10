@@ -25,11 +25,12 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.Condition
-import jDisco.Continuous
-import jDisco.Process
-import jDisco.Reporter
-import jDisco.Variable
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Reporter
+import cz.hovorka.kdisco.Variable
+import cz.hovorka.kdisco.activate
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -201,7 +202,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				requireSimulation(position.isActive && pv.isActive) {
+				requireSimulation(position.isActive() && pv.isActive) {
 					"Position and velocity integration must be active"
 				}
 				waitUntil {
@@ -285,7 +286,7 @@ class Train :
 			}
 			requireSimulationNotNull(semaphore.signal) { "Semaphore signal must not be null" }
 			logger.info {
-				"${jDisco.Process.time()} SENSOR: Train $number detected at semaphore " +
+				"${Process.time()} SENSOR: Train $number detected at semaphore " +
 					"${semaphore.name}, " +
 					"signal=${semaphore.signal}, velocity=${getVelocity()} m/s"
 			}
@@ -514,7 +515,7 @@ class Train :
 			next: TrackSection?
 		) {
 			logger.debug {
-				"${jDisco.Process.time()} POSITION: Train $number front at separator $where, " +
+				"${Process.time()} POSITION: Train $number front at separator $where, " +
 					"entering block $next, leaving block $current"
 			}
 
@@ -615,10 +616,18 @@ class Train :
 		): Boolean = if (isDecelarate()) targetSpeed >= velocity else targetSpeed <= velocity
 	}
 
-	private inner class Motor : LoopProcess() {
+	// Motor extends Continuous (not LoopProcess) because it requires ODE-based physics integration
+	// via derivatives(). LoopProcess extends Process (discrete-only) and cannot provide continuous
+	// integration. Motor uses Continuous.start()/stop() to activate/deactivate the ODE integrator
+	// per acceleration phase, while the terminate flag provides graceful shutdown (safe to reimplement
+	// here because Motor cannot inherit from LoopProcess). The "continuous simulation not required"
+	// determination in the decision docs refers to the framework choice (DSOL vs kDisco), not to
+	// Motor's kinematics, which have always been ODE-based. See: #373
+	private inner class Motor : Continuous() {
 		private var currentCondition: AccelerationStopCondition? = null
 		private var targetSpeed: Double = 0.0
 		private var accelerate: Boolean = false
+		private var terminate = false
 
 		private inner class AccelerationStopCondition(
 			private val stopTest: AccelerationStopTest
@@ -628,17 +637,26 @@ class Train :
 			fun getStopTest(): AccelerationStopTest = stopTest
 		}
 
-		override fun iteration() {
-			requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
+		override fun actions() {
+			while (true) {
+				if (terminate) break
+				iteration()
+				if (terminate) break
+				passivate()
+			}
+		}
+
+		private fun iteration() {
+			val cond = requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
 			accelerate = true
 			logger.trace {
 				"Train $number motor iteration: target speed $targetSpeed, " +
 					"current velocity ${getVelocity()}"
 			}
 			start()
-			waitUntil(currentCondition)
+			waitUntil(cond)
 
-			if (accelerate && currentCondition!!.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
+			if (accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0.0
 				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
 				waitUntil(AccelerationStopCondition(AccelerationStopTest.DECELERATION_ENDED))
@@ -703,6 +721,11 @@ class Train :
 			}
 		}
 
+		override fun terminate() {
+			terminate = true
+			if (!terminated()) activate(this)
+		}
+
 		override fun start(): Continuous = if (accelerate) super.start() else this
 
 		override fun derivatives() {
@@ -716,7 +739,7 @@ class Train :
 
 			val a: Double = ((targetSpeed - velocity.state) * (targetSpeed + velocity.state)) / (2 * s)
 			acceleration.state =
-				if (currentCondition!!.getStopTest().isDecelarate()) {
+				if (requireNotNull(currentCondition) { "currentCondition must be set" }.getStopTest().isDecelarate()) {
 					Math.max(a, MINIMAL_DECELERATION.toDouble())
 				} else {
 					Math.min(a, MAXIMAL_ACCELERATION.toDouble())
@@ -791,7 +814,7 @@ class Train :
 		activate(tail)
 
 		out()
-		activate(worker.getQueqe().first() as? Train)
+		(worker.getQueqe().first() as? Train)?.let { activate(it) }
 		ap.start()
 
 		waitUntil(front.terminated)

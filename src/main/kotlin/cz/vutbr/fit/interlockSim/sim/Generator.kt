@@ -11,7 +11,12 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jDisco.Random
+import cz.hovorka.kdisco.Random
+import cz.hovorka.kdisco.activate
+import cz.hovorka.kdisco.dtMax
+import cz.hovorka.kdisco.dtMin
+import cz.hovorka.kdisco.maxAbsError
+import cz.hovorka.kdisco.maxRelError
 
 /**
  * Testing Generator
