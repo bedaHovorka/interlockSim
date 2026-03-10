@@ -640,16 +640,15 @@ class Train :
 		}
 
 		private fun iteration() {
-			requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
+			val cond = requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
 			accelerate = true
 			logger.trace {
 				"Train $number motor iteration: target speed $targetSpeed, " +
 					"current velocity ${getVelocity()}"
 			}
 			start()
-			waitUntil(requireNotNull(currentCondition) { "currentCondition must be set before waitUntil is called" })
+			waitUntil(cond)
 
-			val cond = requireNotNull(currentCondition) { "currentCondition must be set" }
 			if (accelerate && cond.getStopTest() == AccelerationStopTest.TO_HALF_SPEED) {
 				targetSpeed = 0.0
 				logger.trace { "Train $number motor: deceleration phase to half speed, target $targetSpeed" }
