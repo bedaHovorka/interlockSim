@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for RailwayNetGridCanvas context type handling.

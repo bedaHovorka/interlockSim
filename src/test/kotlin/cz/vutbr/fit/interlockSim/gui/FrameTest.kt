@@ -27,7 +27,6 @@ import java.awt.BorderLayout
 import java.util.concurrent.TimeUnit
 import javax.swing.JFrame
 import javax.swing.JScrollPane
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
