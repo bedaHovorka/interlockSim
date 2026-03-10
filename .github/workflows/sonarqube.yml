@@ -87,6 +87,7 @@ jobs:
     # If secrets are not configured, this step will skip gracefully
     - name: SonarCloud Scan
       env:
+        GITHUB_ACTOR: ${{ github.actor }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
