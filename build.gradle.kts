@@ -73,7 +73,14 @@ java {
 // Configure repositories
 repositories {
     mavenLocal() // For kDisco local development (highest priority)
-
+    maven {
+        name = "GitHubPackages-kdisco"
+        url = uri("https://maven.pkg.github.com/bedaHovorka/kdisco")
+        credentials {
+            username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user") as String?
+            password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.key") as String?
+        }
+    }
     mavenCentral() // For all other dependencies
 }
 
