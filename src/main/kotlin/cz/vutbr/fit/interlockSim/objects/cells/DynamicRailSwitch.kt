@@ -94,7 +94,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
+		synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
 	override fun cancelPathSetup(
@@ -132,7 +132,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
+			synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -179,7 +179,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -196,7 +196,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -225,6 +225,7 @@ class DynamicRailSwitch(
 	 *
 	 * @param listener the listener to add
 	 */
+	@Synchronized
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.add(listener)
 	}
@@ -234,6 +235,7 @@ class DynamicRailSwitch(
 	 *
 	 * @param listener the listener to remove
 	 */
+	@Synchronized
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.remove(listener)
 	}

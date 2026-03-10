@@ -73,7 +73,8 @@ sealed class DynamicRailSemaphore(
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
 				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
-				listeners.toList().forEach { it.propertyChange(evt) }
+				val snapshot = synchronized(this) { listeners.toList() }
+				snapshot.forEach { it.propertyChange(evt) }
 			}
 		}
 
@@ -180,6 +181,7 @@ sealed class DynamicRailSemaphore(
 	 *
 	 * @param listener The listener to add
 	 */
+	@Synchronized
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.add(listener)
 	}
@@ -189,6 +191,7 @@ sealed class DynamicRailSemaphore(
 	 *
 	 * @param listener The listener to remove
 	 */
+	@Synchronized
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.remove(listener)
 	}

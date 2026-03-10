@@ -118,9 +118,10 @@ class DynamicTrack(
 		occupant = newOccupant
 		reservedFrom = null
 		// Fire property change events
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	/**
@@ -144,8 +145,9 @@ class DynamicTrack(
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
 		// Fire property change events
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
 	}
 
 	/**
@@ -184,8 +186,9 @@ class DynamicTrack(
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep
 		// Fire property change events
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
 	}
 
 	/**
@@ -249,8 +252,9 @@ class DynamicTrack(
 		}
 		reservedFrom = null
 		// Fire property change events
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
+		val snapshot = synchronized(this) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
 
 	// Private helper methods for state transitions
@@ -324,6 +328,7 @@ class DynamicTrack(
 	 * @param listener The listener to add
 	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
+	@Synchronized
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.add(listener)
 	}
@@ -333,6 +338,7 @@ class DynamicTrack(
 	 *
 	 * @param listener The listener to remove
 	 */
+	@Synchronized
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners.remove(listener)
 	}
