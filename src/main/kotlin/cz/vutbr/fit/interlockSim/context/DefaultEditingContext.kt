@@ -203,9 +203,9 @@ open class DefaultEditingContext(
 		key2: Point,
 		trackBlock: TrackBlock
 	): Map<Point, TrackBlockPart>? {
-		// Using Kotlin-idiomatic TreeMap with extension functions
+		// Using mutableMapOf with extension functions
 		// Replaces TreeMultiMap with standard library + extensions
-		val distanceMap = java.util.TreeMap<Double, MutableSet<Tranporter>>()
+		val distanceMap = mutableMapOf<Double, MutableSet<Tranporter>>()
 
 		if (key1.distance(key2) <= sqrt(2.0)) return null
 

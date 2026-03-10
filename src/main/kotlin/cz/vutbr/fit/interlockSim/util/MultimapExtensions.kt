@@ -7,19 +7,19 @@
  *
  * Bedrich Hovorka
  *
- * Kotlin-idiomatic extensions for multimap functionality using TreeMap
+ * Kotlin-idiomatic extensions for multimap functionality using MutableMap
  * Replaces custom TreeMultiMap class with standard library + extensions
  */
 package cz.vutbr.fit.interlockSim.util
 
 /**
- * Extension function to add a value to a multimap (TreeMap with Set values)
+ * Extension function to add a value to a multimap (MutableMap with Set values)
  * This is a Kotlin-idiomatic replacement for TreeMultiMap.put()
  *
  * @param key the key to associate the value with
  * @param value the value to add to the set of values for this key
  */
-fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.putMulti(
+fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.putMulti(
 	key: K,
 	value: V
 ) {
@@ -30,17 +30,12 @@ fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.putMulti(
  * Extension function to get all values from a multimap
  * This is a Kotlin-idiomatic replacement for TreeMultiMap.values()
  *
- * Returns values in sorted key order (TreeMap guarantees this)
+ * Returns values in sorted key order (explicitly sorted since MutableMap doesn't guarantee order)
  *
  * @return collection of all values across all keys, in key-sorted order
  */
-fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.valuesMulti(): Collection<V> {
-	val result = mutableListOf<V>()
-	for (set in values) {
-		result.addAll(set)
-	}
-	return result
-}
+fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.valuesMulti(): Collection<V> =
+	entries.sortedBy { it.key }.flatMap { it.value }
 
 /**
  * Extension function to get values for a specific key from a multimap
@@ -49,5 +44,5 @@ fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.valuesMulti(): Co
  * @param key the key to look up
  * @return set of values for the key, or empty set if key not present
  */
-fun <K : Comparable<K>, V> java.util.TreeMap<K, MutableSet<V>>.getMulti(key: K): Set<V> =
+fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.getMulti(key: K): Set<V> =
 	get(key)?.toSet() ?: emptySet()
