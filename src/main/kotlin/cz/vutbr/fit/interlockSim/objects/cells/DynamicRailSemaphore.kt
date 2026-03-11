@@ -46,6 +46,7 @@ sealed class DynamicRailSemaphore(
 	 * Listeners for signal state changes (Kotlin-native, no java.beans dependency).
 	 */
 	private val listeners = mutableListOf<ContextPropertyChangeListener>()
+	private val listenersLock = Any()
 
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
@@ -73,7 +74,7 @@ sealed class DynamicRailSemaphore(
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
 				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
-				val snapshot = synchronized(this) { listeners.toList() }
+				val snapshot = synchronized(listenersLock) { listeners.toList() }
 				snapshot.forEach { it.propertyChange(evt) }
 			}
 		}
@@ -184,9 +185,8 @@ sealed class DynamicRailSemaphore(
 	 *
 	 * @param listener The listener to add
 	 */
-	@Synchronized
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.add(listener)
+		synchronized(listenersLock) { listeners.add(listener) }
 	}
 
 	/**
@@ -197,9 +197,8 @@ sealed class DynamicRailSemaphore(
 	 *
 	 * @param listener The listener to remove
 	 */
-	@Synchronized
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.remove(listener)
+		synchronized(listenersLock) { listeners.remove(listener) }
 	}
 
 	/**

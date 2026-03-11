@@ -76,6 +76,7 @@ class DynamicRailSwitch(
 	 * Listeners for switch state changes (Kotlin-native, no java.beans dependency).
 	 */
 	private val listeners = mutableListOf<ContextPropertyChangeListener>()
+	private val listenersLock = Any()
 
 	/**
 	 * Changes the switch configuration to the opposite position.
@@ -94,7 +95,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		val snapshot = synchronized(this) { listeners.toList() }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
@@ -133,7 +134,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			val snapshot = synchronized(this) { listeners.toList() }
+			val snapshot = synchronized(listenersLock) { listeners.toList() }
 			snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
@@ -181,7 +182,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		val snapshot = synchronized(this) { listeners.toList() }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
@@ -199,7 +200,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		val snapshot = synchronized(this) { listeners.toList() }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
@@ -232,9 +233,8 @@ class DynamicRailSwitch(
 	 *
 	 * @param listener the listener to add
 	 */
-	@Synchronized
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.add(listener)
+		synchronized(listenersLock) { listeners.add(listener) }
 	}
 
 	/**
@@ -245,9 +245,8 @@ class DynamicRailSwitch(
 	 *
 	 * @param listener the listener to remove
 	 */
-	@Synchronized
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.remove(listener)
+		synchronized(listenersLock) { listeners.remove(listener) }
 	}
 
 	/**
