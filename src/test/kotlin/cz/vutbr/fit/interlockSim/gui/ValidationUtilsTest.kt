@@ -19,6 +19,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
+import cz.vutbr.fit.interlockSim.util.ValidationUtils
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.xml.sax.SAXException

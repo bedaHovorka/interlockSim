@@ -108,6 +108,9 @@ dependencies {
     // Koin dependencies (Dependency Injection Framework - added 2026-01-12)
     implementation("io.insert-koin:koin-core:$koinVersion") // Koin core DI framework
 
+    // Core subproject dependency
+    implementation(project(":core"))
+
     // Test dependencies (from Ivy test configuration)
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion") // JUnit 5 API
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion") // JUnit 5 parameterized tests
@@ -221,7 +224,12 @@ tasks.test {
 
     // Fail fast on test failures (matching Ant's haltonfailure="yes")
     ignoreFailures = false
+
+    // Wire :core tests into the root test task lifecycle
+    dependsOn(":core:jvmTest")
 }
+
+// Wire :core integration tests into the integrationTest task lifecycle
 
 /**
  * Task: integrationTest
@@ -271,6 +279,8 @@ val integrationTest by tasks.registering(Test::class) {
     }
 
     ignoreFailures = false
+
+    dependsOn(":core:integrationTest")
 
     // Set different output directory to avoid conflicts with unit tests
     testClassesDirs =

@@ -7,6 +7,8 @@
 
 rootProject.name = "interlockSim"
 
+include(":core")
+
 // Enable build cache for faster incremental builds
 // Cache persists between builds and speeds up no-op builds significantly
 buildCache {

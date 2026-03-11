@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="100" Y="100" >
+  <RailSwitch X="33" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+  <RailSwitch X="34" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" />
+  <RailSwitch X="35" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" />
+  <RailSwitch X="8" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+  <RailSemaphore X="36" Y="32" SpatialType="HORIZONTAL" orientation="true" />
+  <InOut X="37" Y="32" SpatialType="HORIZONTAL" orientation="true" name="east_exit_2" />
+  <RailSwitch X="9" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" />
+  <RailSemaphore X="11" Y="31" SpatialType="HORIZONTAL" orientation="true" />
+  <RailSemaphore X="31" Y="31" SpatialType="HORIZONTAL" orientation="false" />
+  <RailSemaphore X="11" Y="30" SpatialType="HORIZONTAL" orientation="true" />
+  <InOut X="5" Y="31" SpatialType="HORIZONTAL" orientation="false" name="west_entry_1" />
+  <RailSemaphore X="6" Y="31" SpatialType="HORIZONTAL" orientation="false" />
+  <RailSwitch X="7" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+  <RailSemaphore X="31" Y="30" SpatialType="HORIZONTAL" orientation="false" />
+  <InOut X="5" Y="32" SpatialType="HORIZONTAL" orientation="false" name="west_entry_2" />
+  <RailSemaphore X="6" Y="32" SpatialType="HORIZONTAL" orientation="false" />
+  <RailSwitch X="7" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" />
+  <RailSwitch X="35" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+  <RailSwitch X="34" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+  <RailSwitch X="8" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" />
+  <RailSwitch X="33" Y="31" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" />
+  <RailSwitch X="9" Y="32" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+  <RailSemaphore X="36" Y="31" SpatialType="HORIZONTAL" orientation="true" />
+  <InOut X="37" Y="31" SpatialType="HORIZONTAL" orientation="true" name="east_exit_1" />
+  <RailSemaphore X="11" Y="32" SpatialType="HORIZONTAL" orientation="true" />
+  <RailSemaphore X="11" Y="33" SpatialType="HORIZONTAL" orientation="true" />
+  <RailSemaphore X="31" Y="33" SpatialType="HORIZONTAL" orientation="false" />
+  <RailSemaphore X="31" Y="32" SpatialType="HORIZONTAL" orientation="false" />
+  <SimpleTrackBlock fromX="35" fromY="31" toX="34" toY="31" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="34" fromY="31" toX="33" toY="31" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="34" fromY="32" toX="33" toY="32" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="35" fromY="32" toX="34" toY="32" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="8" fromY="32" toX="9" toY="32" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="36" fromY="31" toX="35" toY="31" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="36" fromY="32" toX="35" toY="32" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="8" fromY="31" toX="9" toY="31" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="37" fromY="32" toX="36" toY="32" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="37" fromY="31" toX="36" toY="31" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="9" fromY="32" toX="11" toY="32" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="9" fromY="31" toX="11" toY="31" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="9" fromY="32" toX="11" toY="33" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="11" fromY="33" toX="31" toY="33" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="8" fromY="32" toX="7" toY="31" fromSegment="B" toSegment="G" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="8" fromY="31" toX="7" toY="32" fromSegment="D" toSegment="E" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="33" fromY="31" toX="31" toY="30" fromSegment="B" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="11" fromY="30" toX="31" toY="30" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="35" fromY="31" toX="34" toY="32" fromSegment="D" toSegment="E" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="35" fromY="32" toX="34" toY="31" fromSegment="B" toSegment="G" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="31" fromY="31" toX="11" toY="31" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="11" fromY="32" toX="31" toY="32" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="9" fromY="31" toX="11" toY="30" fromSegment="E" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="5" fromY="32" toX="6" toY="32" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="5" fromY="31" toX="6" toY="31" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="33" fromY="32" toX="31" toY="33" fromSegment="D" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="6" fromY="32" toX="7" toY="32" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="6" fromY="31" toX="7" toY="31" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="7" fromY="32" toX="8" toY="32" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="8" fromY="31" toX="7" toY="31" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="31" fromY="31" toX="33" toY="31" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+  <SimpleTrackBlock fromX="31" fromY="32" toX="33" toY="32" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+</net>
