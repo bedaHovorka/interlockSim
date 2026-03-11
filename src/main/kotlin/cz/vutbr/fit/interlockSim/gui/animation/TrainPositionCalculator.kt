@@ -160,9 +160,9 @@ class TrainPositionCalculator(
 			return null
 		}
 
-		// Try to use entry separator to determine correct direction
-		// Use identity-based comparison (===) instead of position-based comparison
-		// This eliminates false positives from floating-point precision and cache misses
+		// Use identity-based comparison (===) to determine interpolation direction.
+		// Unwrap dynamic wrappers to static refs, then compare with === to find which
+		// end the train entered from — that end becomes the start of interpolation.
 		val (entryPos, exitPos) =
 			if (entrySeparator != null) {
 				// Unwrap to static references for identity comparison
@@ -203,12 +203,9 @@ class TrainPositionCalculator(
 		// Calculate progress ratio (clamped to [0.0, 1.0])
 		val ratio = (distanceAlongSection / sectionLength).coerceIn(0.0, 1.0)
 
-		// Linear interpolation from entry to exit
-		val interpolatedX = entryPos.x + (exitPos.x - entryPos.x) * ratio
-		val interpolatedY = entryPos.y + (exitPos.y - entryPos.y) * ratio
-
-		// Return continuous coordinates (preserves sub-cell positioning)
-		return PointF(interpolatedX.toFloat(), interpolatedY.toFloat())
+		// Linear interpolation from entry to exit (ratio=0 → entry, ratio=1 → exit)
+		return PointF(entryPos.x.toFloat(), entryPos.y.toFloat())
+			.lerp(PointF(exitPos.x.toFloat(), exitPos.y.toFloat()), ratio.toFloat())
 	}
 
 	/**

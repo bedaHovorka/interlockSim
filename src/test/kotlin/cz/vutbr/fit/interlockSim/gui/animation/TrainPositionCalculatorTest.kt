@@ -193,10 +193,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val ends = trackSection!!.ends()
 		assertThat(ends.size >= 2).isEqualTo(true)
 
-		// Create mock train with entry separator matching first end
-		// Cast to DynamicPathSeparator since we're in simulation context
+		// Cast to DynamicPathSeparator: in simulation context all separators are dynamic wrappers
+		val end0Dynamic = ends[0] as? DynamicPathSeparator
+		assertThat(end0Dynamic).isNotNull() // Fails if section end is not a dynamic wrapper
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns ends[0] as? DynamicPathSeparator
+		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
@@ -221,10 +222,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val ends = trackSection!!.ends()
 		assertThat(ends.size >= 2).isEqualTo(true)
 
-		// Create mock train with entry separator matching second end
-		// Cast to DynamicPathSeparator since we're in simulation context
+		// Cast to DynamicPathSeparator: in simulation context all separators are dynamic wrappers
+		val end1Dynamic = ends[1] as? DynamicPathSeparator
+		assertThat(end1Dynamic).isNotNull() // Fails if section end is not a dynamic wrapper
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns ends[1] as? DynamicPathSeparator
+		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
 
 		// Calculate position at midpoint
 		val sectionLength = trackSection.length()
@@ -282,10 +284,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val ends = trackSection!!.ends()
 		assertThat(ends.size >= 2).isEqualTo(true)
 
-		// If ends[0] is a dynamic wrapper, it should still match via unwrapping
-		// Cast to DynamicPathSeparator since we're in simulation context
+		// ends[0] must be a DynamicPathSeparator in simulation context (all separators are wrapped)
+		val end0Dynamic = ends[0] as? DynamicPathSeparator
+		assertThat(end0Dynamic).isNotNull()
 		val trainWithEntry = mockk<Train>(relaxed = true)
-		every { trainWithEntry.trainEntrySeparator } returns ends[0] as? DynamicPathSeparator
+		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
 
 		// Test at start (distance = 0)
 		val gridLocationStart = calculator.calculateTrainGridLocation(
@@ -319,13 +322,18 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val ends = trackSection!!.ends()
 		assertThat(ends.size >= 2).isEqualTo(true)
 
-		// Create two trains, one entering from each end
-		// Cast to DynamicPathSeparator since we're in simulation context
+		// Create two trains, one entering from each end.
+		// Assert casts succeed — all separators are dynamic wrappers in simulation context.
+		val end0Dynamic = ends[0] as? DynamicPathSeparator
+		val end1Dynamic = ends[1] as? DynamicPathSeparator
+		assertThat(end0Dynamic).isNotNull()
+		assertThat(end1Dynamic).isNotNull()
+
 		val trainFromEnd0 = mockk<Train>(relaxed = true)
-		every { trainFromEnd0.trainEntrySeparator } returns ends[0] as? DynamicPathSeparator
+		every { trainFromEnd0.trainEntrySeparator } returns end0Dynamic
 
 		val trainFromEnd1 = mockk<Train>(relaxed = true)
-		every { trainFromEnd1.trainEntrySeparator } returns ends[1] as? DynamicPathSeparator
+		every { trainFromEnd1.trainEntrySeparator } returns end1Dynamic
 
 		// Use 25% (asymmetric) — at midpoint both trains would land at the same position,
 		// so 50% cannot verify that direction selection is actually working
