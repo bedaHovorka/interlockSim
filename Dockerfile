@@ -54,6 +54,8 @@ COPY .editorconfig /build/interlockSim/
 # built from source and published to mavenLocal before interlockSim compiles.
 # Building kDisco also downloads jDisco (its transitive dep) into the
 # Gradle cache, making it available for interlockSim's dependency resolution.
+# Requires outbound HTTPS to github.com on cache miss. In air-gapped environments,
+# pre-populate the BuildKit cache by running a connected build first.
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
