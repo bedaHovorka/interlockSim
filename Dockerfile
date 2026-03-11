@@ -29,6 +29,10 @@ ARG GITHUB_TOKEN
 
 WORKDIR /build/interlockSim
 
+# Install git before COPY layers so this layer is cached independently of source changes.
+# Moving it here avoids re-downloading git on every gradle.properties / build.gradle.kts bump.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 # Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
 # These files are checked into git and ensure consistent Gradle version
 COPY gradlew /build/interlockSim/
@@ -43,9 +47,6 @@ COPY build.gradle.kts /build/interlockSim/
 COPY detekt.yml /build/interlockSim/
 COPY detekt-strict.yml /build/interlockSim/
 COPY .editorconfig /build/interlockSim/
-
-# Install git (required for cloning kDisco in Layer 2.5)
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
 # Layer 2.5: Build kDisco 0.2.0 from source if not in cache
 # Mirrors the CI workflow (gradle-java21.yml / sonarqube.yml).
@@ -67,6 +68,7 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
         grep -E 'version[[:space:]]*=[[:space:]]*"0\.2\.0"' build.gradle.kts; \
         GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
         ./gradlew :kdisco-core-api:publishToMavenLocal --no-daemon; \
+        rm -rf /tmp/kdisco; \
     else \
         echo "kDisco 0.2.0 found in cache — skipping build"; \
     fi
