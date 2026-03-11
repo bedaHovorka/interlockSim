@@ -60,10 +60,11 @@ COPY .editorconfig /build/interlockSim/
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
+    JDISCO_VERSION="1.2.0"; \
     KDISCO_JAR="/root/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/0.2.0/kdisco-core-api-jvm-0.2.0.jar"; \
-    JDISCO_JAR="/root/.m2/repository/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar"; \
+    JDISCO_JAR="/root/.m2/repository/dk/ruc/keld/jdisco/${JDISCO_VERSION}/jdisco-${JDISCO_VERSION}.jar"; \
     if [ ! -f "$KDISCO_JAR" ] || [ ! -f "$JDISCO_JAR" ]; then \
-        echo "kDisco 0.2.0 or jDisco 1.2.0 not cached — building from source..."; \
+        echo "kDisco 0.2.0 or jDisco ${JDISCO_VERSION} not cached — building from source..."; \
         KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"; \
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco; \
         cd /tmp/kdisco; \
@@ -73,14 +74,16 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
         GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
         ./gradlew :kdisco-core-api:publishToMavenLocal --no-daemon; \
         rm -rf /tmp/kdisco; \
-        JDISCO_DIR="/root/.m2/repository/dk/ruc/keld/jdisco/1.2.0"; \
+        JDISCO_DIR="/root/.m2/repository/dk/ruc/keld/jdisco/${JDISCO_VERSION}"; \
         mkdir -p "$JDISCO_DIR"; \
-        JDISCO_CACHE=$(find /root/.gradle/caches/modules-2 -name "jdisco-1.2.0.jar" 2>/dev/null | head -1); \
-        JDISCO_POM=$(find /root/.gradle/caches/modules-2 -name "jdisco-1.2.0.pom" 2>/dev/null | head -1); \
-        [ -n "$JDISCO_CACHE" ] && cp "$JDISCO_CACHE" "$JDISCO_DIR/jdisco-1.2.0.jar" && echo "jDisco 1.2.0 installed to mavenLocal"; \
-        [ -n "$JDISCO_POM" ]   && cp "$JDISCO_POM"   "$JDISCO_DIR/jdisco-1.2.0.pom"; \
+        JDISCO_CACHE=$(find /root/.gradle/caches/modules-2 -name "jdisco-${JDISCO_VERSION}.jar" 2>/dev/null | head -1); \
+        JDISCO_POM=$(find /root/.gradle/caches/modules-2 -name "jdisco-${JDISCO_VERSION}.pom" 2>/dev/null | head -1); \
+        [ -n "$JDISCO_CACHE" ] || { echo "ERROR: jdisco-${JDISCO_VERSION}.jar not found in Gradle cache"; exit 1; }; \
+        [ -n "$JDISCO_POM" ]   || { echo "ERROR: jdisco-${JDISCO_VERSION}.pom not found in Gradle cache"; exit 1; }; \
+        cp "$JDISCO_CACHE" "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.jar" && echo "jDisco ${JDISCO_VERSION} JAR installed to mavenLocal"; \
+        cp "$JDISCO_POM"   "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.pom" && echo "jDisco ${JDISCO_VERSION} POM installed to mavenLocal"; \
     else \
-        echo "kDisco 0.2.0 and jDisco 1.2.0 found in cache — skipping build"; \
+        echo "kDisco 0.2.0 and jDisco ${JDISCO_VERSION} found in cache — skipping build"; \
     fi
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
