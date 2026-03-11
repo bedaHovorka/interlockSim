@@ -179,6 +179,9 @@ sealed class DynamicRailSemaphore(
 	 *
 	 * The listener will be notified when the "signal" property changes.
 	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener registration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
+	 *
 	 * @param listener The listener to add
 	 */
 	@Synchronized
@@ -188,6 +191,9 @@ sealed class DynamicRailSemaphore(
 
 	/**
 	 * Removes a property change listener from this semaphore.
+	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
 	 *
 	 * @param listener The listener to remove
 	 */

@@ -407,4 +407,46 @@ class DynamicRailSemaphoreTest {
 			assertThat(dynamicSemaphore1.equals(staticSemaphore2)).isFalse()
 		}
 	}
+
+	@Nested
+	@DisplayName("Listener thread-safety")
+	inner class ListenerThreadSafety {
+		@Test
+		fun `listener added during event callback does not cause ConcurrentModificationException`() {
+			// Regression test: listener mutation during event dispatch must not throw CME.
+			val secondListenerCallCount = intArrayOf(0)
+			val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
+
+			val firstListener = ContextPropertyChangeListener {
+				dynamicSemaphore1.addPropertyChangeListener(secondListener)
+			}
+			dynamicSemaphore1.addPropertyChangeListener(firstListener)
+
+			// Should not throw ConcurrentModificationException (snapshot prevents it)
+			dynamicSemaphore1.signal = Signal.FREE
+
+			// Fire again — second listener is now registered and should receive the event
+			dynamicSemaphore1.signal = Signal.STOP
+			assertThat(secondListenerCallCount[0]).isGreaterThan(0)
+		}
+
+		@Test
+		fun `listener removed during event callback does not cause ConcurrentModificationException`() {
+			// Regression test: listener self-removal during dispatch must be safe (snapshot).
+			var callCount = 0
+			lateinit var selfRemovingListener: ContextPropertyChangeListener
+			selfRemovingListener = ContextPropertyChangeListener {
+				callCount++
+				dynamicSemaphore1.removePropertyChangeListener(selfRemovingListener)
+			}
+			dynamicSemaphore1.addPropertyChangeListener(selfRemovingListener)
+
+			dynamicSemaphore1.signal = Signal.FREE
+			val countAfterFirstFire = callCount
+
+			// Listener was removed; further fires must not call it again
+			dynamicSemaphore1.signal = Signal.STOP
+			assertThat(callCount).isEqualTo(countAfterFirstFire)
+		}
+	}
 }

@@ -325,6 +325,9 @@ class DynamicTrack(
 	 * - "occupant" property: changes when train enters/leaves
 	 * - "reservedFrom" property: changes when path is set up/cancelled
 	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener registration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
+	 *
 	 * @param listener The listener to add
 	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
@@ -335,6 +338,9 @@ class DynamicTrack(
 
 	/**
 	 * Removes a property change listener from this track.
+	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
 	 *
 	 * @param listener The listener to remove
 	 */
