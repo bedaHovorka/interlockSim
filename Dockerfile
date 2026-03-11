@@ -57,14 +57,15 @@ COPY .editorconfig /build/interlockSim/
 # it as a transitive dep of kDisco without GitHub Packages authentication.
 # Requires outbound HTTPS to github.com on cache miss. In air-gapped environments,
 # pre-populate the BuildKit cache by running a connected build first.
+# JDISCO_VERSION below must be kept in sync with the jdisco version in build.gradle.kts.
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
     JDISCO_VERSION="1.2.0"; \
     KDISCO_JAR="/root/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/0.2.0/kdisco-core-api-jvm-0.2.0.jar"; \
-    JDISCO_JAR="/root/.m2/repository/dk/ruc/keld/jdisco/${JDISCO_VERSION}/jdisco-${JDISCO_VERSION}.jar"; \
+    JDISCO_JAR_M2="/root/.m2/repository/dk/ruc/keld/jdisco/${JDISCO_VERSION}/jdisco-${JDISCO_VERSION}.jar"; \
     JDISCO_POM_M2="/root/.m2/repository/dk/ruc/keld/jdisco/${JDISCO_VERSION}/jdisco-${JDISCO_VERSION}.pom"; \
-    if [ ! -f "$KDISCO_JAR" ] || [ ! -f "$JDISCO_JAR" ] || [ ! -f "$JDISCO_POM_M2" ]; then \
+    if [ ! -f "$KDISCO_JAR" ] || [ ! -f "$JDISCO_JAR_M2" ] || [ ! -f "$JDISCO_POM_M2" ]; then \
         echo "kDisco 0.2.0 or jDisco ${JDISCO_VERSION} not cached — building from source..."; \
         KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"; \
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco; \
@@ -83,8 +84,6 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
         [ -n "$JDISCO_POM" ]   || { echo "ERROR: jdisco-${JDISCO_VERSION}.pom not found in Gradle cache"; exit 1; }; \
         cp "$JDISCO_CACHE" "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.jar" || { echo "ERROR: failed to copy jdisco-${JDISCO_VERSION}.jar into mavenLocal at $JDISCO_DIR"; exit 1; }; \
         cp "$JDISCO_POM"   "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.pom" || { echo "ERROR: failed to copy jdisco-${JDISCO_VERSION}.pom into mavenLocal at $JDISCO_DIR"; exit 1; }; \
-        [ -f "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.jar" ] || { echo "ERROR: jdisco-${JDISCO_VERSION}.jar not present in mavenLocal at $JDISCO_DIR after copy"; exit 1; }; \
-        [ -f "$JDISCO_DIR/jdisco-${JDISCO_VERSION}.pom" ] || { echo "ERROR: jdisco-${JDISCO_VERSION}.pom not present in mavenLocal at $JDISCO_DIR after copy"; exit 1; }; \
         echo "jDisco ${JDISCO_VERSION} JAR and POM installed to mavenLocal at $JDISCO_DIR"; \
     else \
         echo "kDisco 0.2.0 and jDisco ${JDISCO_VERSION} found in cache — skipping build"; \
