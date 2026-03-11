@@ -199,18 +199,23 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val trainWithEntry = mockk<Train>(relaxed = true)
 		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
 
-		// Calculate position at midpoint
+		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
 		val gridLocation = calculator.calculateTrainGridLocation(
 			trainWithEntry,
 			trackSection,
-			sectionLength / 2.0
+			sectionLength * 0.25
 		)
 
 		assertThat(gridLocation).isNotNull()
-		// Should interpolate from ends[0] to ends[1]
-		assertThat(gridLocation!!.x >= 0.0f).isEqualTo(true)
-		assertThat(gridLocation.y >= 0.0f).isEqualTo(true)
+		// Directional check: at 25% the result must be closer to ends[0] (entry) than to ends[1] (exit)
+		val end0GridPos = calculator.getGridPosition(ends[0])
+		val end1GridPos = calculator.getGridPosition(ends[1])
+		assertThat(end0GridPos).isNotNull()
+		assertThat(end1GridPos).isNotNull()
+		val end0F = cz.vutbr.fit.interlockSim.util.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
+		val end1F = cz.vutbr.fit.interlockSim.util.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
+		assertThat(gridLocation!!.distanceTo(end0F) < gridLocation.distanceTo(end1F)).isEqualTo(true)
 	}
 
 	@Test
@@ -228,18 +233,23 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val trainWithEntry = mockk<Train>(relaxed = true)
 		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
 
-		// Calculate position at midpoint
+		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
 		val gridLocation = calculator.calculateTrainGridLocation(
 			trainWithEntry,
 			trackSection,
-			sectionLength / 2.0
+			sectionLength * 0.25
 		)
 
 		assertThat(gridLocation).isNotNull()
-		// Should interpolate from ends[1] to ends[0] (reversed order)
-		assertThat(gridLocation!!.x >= 0.0f).isEqualTo(true)
-		assertThat(gridLocation.y >= 0.0f).isEqualTo(true)
+		// Directional check: at 25% the result must be closer to ends[1] (entry) than to ends[0] (reversed order)
+		val end0GridPos = calculator.getGridPosition(ends[0])
+		val end1GridPos = calculator.getGridPosition(ends[1])
+		assertThat(end0GridPos).isNotNull()
+		assertThat(end1GridPos).isNotNull()
+		val end0F = cz.vutbr.fit.interlockSim.util.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
+		val end1F = cz.vutbr.fit.interlockSim.util.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
+		assertThat(gridLocation!!.distanceTo(end1F) < gridLocation.distanceTo(end0F)).isEqualTo(true)
 	}
 
 	@Test

@@ -204,8 +204,10 @@ class TrainPositionCalculator(
 		val ratio = (distanceAlongSection / sectionLength).coerceIn(0.0, 1.0)
 
 		// Linear interpolation from entry to exit (ratio=0 → entry, ratio=1 → exit)
-		return PointF(entryPos.x.toFloat(), entryPos.y.toFloat())
-			.lerp(PointF(exitPos.x.toFloat(), exitPos.y.toFloat()), ratio.toFloat())
+		val ratioF = ratio.toFloat()
+		val x = entryPos.x.toFloat() + (exitPos.x.toFloat() - entryPos.x.toFloat()) * ratioF
+		val y = entryPos.y.toFloat() + (exitPos.y.toFloat() - entryPos.y.toFloat()) * ratioF
+		return PointF(x, y)
 	}
 
 	/**
