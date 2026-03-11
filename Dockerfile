@@ -29,6 +29,10 @@ ARG GITHUB_TOKEN
 
 WORKDIR /build/interlockSim
 
+# Install git before COPY layers so this layer is cached independently of source changes.
+# Moving it here avoids re-downloading git on every gradle.properties / build.gradle.kts bump.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 # Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
 # These files are checked into git and ensure consistent Gradle version
 COPY gradlew /build/interlockSim/
@@ -44,9 +48,36 @@ COPY detekt.yml /build/interlockSim/
 COPY detekt-strict.yml /build/interlockSim/
 COPY .editorconfig /build/interlockSim/
 
+# Layer 2.5: Build kDisco 0.2.0 from source if not in cache
+# Mirrors the CI workflow (gradle-java21.yml / sonarqube.yml).
+# kDisco 0.2.0 is not published to any public Maven repo, so it must be
+# built from source and published to mavenLocal before interlockSim compiles.
+# Building kDisco also downloads jDisco (its transitive dep) into the
+# Gradle cache, making it available for interlockSim's dependency resolution.
+# Requires outbound HTTPS to github.com on cache miss. In air-gapped environments,
+# pre-populate the BuildKit cache by running a connected build first.
+RUN --mount=type=cache,target=/root/.gradle/caches \
+    --mount=type=cache,target=/root/.gradle/wrapper \
+    --mount=type=cache,target=/root/.m2/repository \
+    KDISCO_JAR="/root/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/0.2.0/kdisco-core-api-jvm-0.2.0.jar"; \
+    if [ ! -f "$KDISCO_JAR" ]; then \
+        echo "kDisco 0.2.0 not cached — building from source..."; \
+        KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"; \
+        git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco; \
+        cd /tmp/kdisco; \
+        git checkout "$KDISCO_COMMIT"; \
+        sed -i 's/version[[:space:]]*=[[:space:]]*"0\.2\.0-SNAPSHOT"/version = "0.2.0"/' build.gradle.kts; \
+        grep -E 'version[[:space:]]*=[[:space:]]*"0\.2\.0"' build.gradle.kts; \
+        GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
+        ./gradlew :kdisco-core-api:publishToMavenLocal --no-daemon; \
+        rm -rf /tmp/kdisco; \
+    else \
+        echo "kDisco 0.2.0 found in cache — skipping build"; \
+    fi
+
 # Layer 3: Resolve dependencies with BuildKit cache mount
 # Gradle caches: dependencies, build cache, and Gradle distributions
-# mavenLocal cache is also mounted for jDisco fallback
+# kDisco 0.2.0 and jDisco are now available via mavenLocal / Gradle cache
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
