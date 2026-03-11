@@ -214,4 +214,50 @@ class PointFTest {
 		val largeDistance = point1.distanceTo(point4)
 		assertThat(largeDistance).isCloseTo(4.0f, 0.0001f)
 	}
+
+	// ========== Linear Interpolation Tests (Issue #324) ==========
+
+	@Test
+	fun `lerp at t=0 returns this point`() {
+		val start = PointF(2.0f, 4.0f)
+		val end = PointF(10.0f, 8.0f)
+		val result = start.lerp(end, 0.0f)
+		assertThat(result.x).isCloseTo(2.0f, 0.0001f)
+		assertThat(result.y).isCloseTo(4.0f, 0.0001f)
+	}
+
+	@Test
+	fun `lerp at t=1 returns other point`() {
+		val start = PointF(2.0f, 4.0f)
+		val end = PointF(10.0f, 8.0f)
+		val result = start.lerp(end, 1.0f)
+		assertThat(result.x).isCloseTo(10.0f, 0.0001f)
+		assertThat(result.y).isCloseTo(8.0f, 0.0001f)
+	}
+
+	@Test
+	fun `lerp at t=0_5 returns midpoint`() {
+		val start = PointF(0.0f, 0.0f)
+		val end = PointF(10.0f, 6.0f)
+		val result = start.lerp(end, 0.5f)
+		assertThat(result.x).isCloseTo(5.0f, 0.0001f)
+		assertThat(result.y).isCloseTo(3.0f, 0.0001f)
+	}
+
+	@Test
+	fun `lerp at t=0_25 returns quarter point`() {
+		val start = PointF(0.0f, 0.0f)
+		val end = PointF(8.0f, 4.0f)
+		val result = start.lerp(end, 0.25f)
+		assertThat(result.x).isCloseTo(2.0f, 0.0001f)
+		assertThat(result.y).isCloseTo(1.0f, 0.0001f)
+	}
+
+	@Test
+	fun `lerp with equal points returns same point for any t`() {
+		val point = PointF(5.0f, 3.0f)
+		assertThat(point.lerp(point, 0.0f)).isEqualTo(point)
+		assertThat(point.lerp(point, 0.5f)).isEqualTo(point)
+		assertThat(point.lerp(point, 1.0f)).isEqualTo(point)
+	}
 }
