@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.PointF
-import kotlin.math.abs
 
 /**
  * Utility for calculating train grid positions via linear interpolation.
@@ -80,21 +79,6 @@ class TrainPositionCalculator(
 	private val context: SimulationContext,
 	private val separatorPositionCache: Map<PathSeparator, Point>
 ) {
-	companion object {
-		/**
-		 * Tolerance for comparing PathSeparator grid positions (in grid cell units).
-		 *
-		 * This epsilon handles:
-		 * - Floating-point precision errors from coordinate calculations
-		 * - Static/dynamic wrapper mismatches (both reference the same grid cell)
-		 *
-		 * Value: 0.01 grid cells (< 1% of a cell width/height)
-		 * Rationale: Grid cells are integer-indexed, so any difference < 0.5 rounds to same cell.
-		 * Using 0.01 provides safety margin while ensuring same-cell separators always match.
-		 */
-		private const val POSITION_MATCH_EPSILON = 0.01
-	}
-
 	/**
 	 * Calculate train's grid location via linear interpolation along a track section.
 	 *
@@ -225,26 +209,6 @@ class TrainPositionCalculator(
 
 		// Return continuous coordinates (preserves sub-cell positioning)
 		return PointF(interpolatedX.toFloat(), interpolatedY.toFloat())
-	}
-
-	/**
-	 * Compare two grid positions for equality within epsilon tolerance.
-	 *
-	 * This handles:
-	 * - Floating-point precision errors from coordinate calculations
-	 * - Static/dynamic wrapper references to the same grid cell
-	 *
-	 * @param p1 First position (or null)
-	 * @param p2 Second position (or null)
-	 * @return True if positions match within POSITION_MATCH_EPSILON tolerance, false otherwise
-	 */
-	private fun positionsMatch(
-		p1: Point?,
-		p2: Point?
-	): Boolean {
-		if (p1 == null || p2 == null) return false
-		return abs(p1.x - p2.x) < POSITION_MATCH_EPSILON &&
-			abs(p1.y - p2.y) < POSITION_MATCH_EPSILON
 	}
 
 	/**
