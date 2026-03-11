@@ -327,27 +327,28 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val trainFromEnd1 = mockk<Train>(relaxed = true)
 		every { trainFromEnd1.trainEntrySeparator } returns ends[1] as? DynamicPathSeparator
 
-		// Both trains at midpoint
+		// Use 25% (asymmetric) — at midpoint both trains would land at the same position,
+		// so 50% cannot verify that direction selection is actually working
 		val sectionLength = trackSection.length()
-		val midpoint = sectionLength / 2.0
+		val quarterPoint = sectionLength * 0.25
 
 		val positionFromEnd0 = calculator.calculateTrainGridLocation(
 			trainFromEnd0,
 			trackSection,
-			midpoint
+			quarterPoint
 		)
 		val positionFromEnd1 = calculator.calculateTrainGridLocation(
 			trainFromEnd1,
 			trackSection,
-			midpoint
+			quarterPoint
 		)
 
 		assertThat(positionFromEnd0).isNotNull()
 		assertThat(positionFromEnd1).isNotNull()
 
-		// Both should produce valid positions
-		// They might be at the same location (midpoint) or different depending on the section geometry
-		assertThat(positionFromEnd0!!.x >= 0.0f).isEqualTo(true)
-		assertThat(positionFromEnd1!!.x >= 0.0f).isEqualTo(true)
+		// 25% from end0 = 75% from end1, so the two positions must be different
+		// (they're on opposite sides of the midpoint)
+		val distance = positionFromEnd0!!.distanceTo(positionFromEnd1!!)
+		assertThat(distance > 0.1f).isEqualTo(true)
 	}
 }
