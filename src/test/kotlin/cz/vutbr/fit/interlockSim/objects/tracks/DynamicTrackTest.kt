@@ -533,4 +533,45 @@ class DynamicTrackTest {
 		// Then: event should have been fired
 		assertThat(capturedEvents).isNotEmpty()
 	}
+
+	@Test
+	fun `listener added during event callback does not cause ConcurrentModificationException`() {
+		// Regression test for thread-safety fix: listener mutation during event dispatch
+		// must not throw ConcurrentModificationException (snapshot prevents this).
+		val secondListenerCallCount = intArrayOf(0)
+		val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
+
+		// Listener that adds a second listener during its callback
+		val firstListener = ContextPropertyChangeListener {
+			dynamicTrack1.addPropertyChangeListener(secondListener)
+		}
+		dynamicTrack1.addPropertyChangeListener(firstListener)
+
+		// When: state changes - should not throw ConcurrentModificationException
+		dynamicTrack1.setUpPath(separator1)
+
+		// Then: second listener was registered; fire again to verify it receives events
+		dynamicTrack1.cancelPathSetup(separator1)
+		assertThat(secondListenerCallCount[0]).isGreaterThan(0)
+	}
+
+	@Test
+	fun `listener removed during event callback does not cause ConcurrentModificationException`() {
+		// Regression test: listener self-removal during event dispatch must be safe (snapshot).
+		var callCount = 0
+		lateinit var selfRemovingListener: ContextPropertyChangeListener
+		selfRemovingListener = ContextPropertyChangeListener {
+			callCount++
+			dynamicTrack1.removePropertyChangeListener(selfRemovingListener)
+		}
+		dynamicTrack1.addPropertyChangeListener(selfRemovingListener)
+
+		// Should not throw; listener removes itself on first event
+		dynamicTrack1.setUpPath(separator1)
+		val countAfterFirstFire = callCount
+
+		// Listener was removed — second fire should not increment count
+		dynamicTrack1.cancelPathSetup(separator1)
+		assertThat(callCount).isEqualTo(countAfterFirstFire)
+	}
 }

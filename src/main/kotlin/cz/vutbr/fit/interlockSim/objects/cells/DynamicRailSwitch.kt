@@ -76,6 +76,7 @@ class DynamicRailSwitch(
 	 * Listeners for switch state changes (Kotlin-native, no java.beans dependency).
 	 */
 	private val listeners = mutableListOf<ContextPropertyChangeListener>()
+	private val listenersLock = Any()
 
 	/**
 	 * Changes the switch configuration to the opposite position.
@@ -94,7 +95,8 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
 	override fun cancelPathSetup(
@@ -132,7 +134,8 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			listeners.toList().forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
+			val snapshot = synchronized(listenersLock) { listeners.toList() }
+			snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -179,7 +182,8 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -196,7 +200,8 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		listeners.toList().forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -223,19 +228,25 @@ class DynamicRailSwitch(
 	/**
 	 * Registers a listener to be notified of switch state changes.
 	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener registration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
+	 *
 	 * @param listener the listener to add
 	 */
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.add(listener)
+		synchronized(listenersLock) { listeners.add(listener) }
 	}
 
 	/**
 	 * Unregisters a listener from receiving switch state change notifications.
 	 *
+	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
+	 * from multiple threads, even though the simulation context itself is not thread-safe.
+	 *
 	 * @param listener the listener to remove
 	 */
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.remove(listener)
+		synchronized(listenersLock) { listeners.remove(listener) }
 	}
 
 	/**

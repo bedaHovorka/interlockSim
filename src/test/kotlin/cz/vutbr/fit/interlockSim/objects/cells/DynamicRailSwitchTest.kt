@@ -15,6 +15,7 @@ import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.providers.SwitchActiveSegmentsProvider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -398,6 +399,48 @@ class DynamicRailSwitchTest {
 		@Test
 		fun `equals with different static RailSwitch returns false`() {
 			assertThat(dynamicSwitch1.equals(staticSwitch2)).isFalse()
+		}
+	}
+
+	@Nested
+	@DisplayName("Listener thread-safety")
+	inner class ListenerThreadSafety {
+		@Test
+		fun `listener added during event callback does not cause ConcurrentModificationException`() {
+			// Regression test: listener mutation during event dispatch must not throw CME.
+			val secondListenerCallCount = intArrayOf(0)
+			val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
+
+			val firstListener = ContextPropertyChangeListener {
+				dynamicSwitch1.addPropertyChangeListener(secondListener)
+			}
+			dynamicSwitch1.addPropertyChangeListener(firstListener)
+
+			// Should not throw ConcurrentModificationException (snapshot prevents it)
+			dynamicSwitch1.changeConf()
+
+			// Fire again — second listener is now registered and should receive the event
+			dynamicSwitch1.changeConf()
+			assertThat(secondListenerCallCount[0]).isGreaterThan(0)
+		}
+
+		@Test
+		fun `listener removed during event callback does not cause ConcurrentModificationException`() {
+			// Regression test: listener self-removal during dispatch must be safe (snapshot).
+			var callCount = 0
+			lateinit var selfRemovingListener: ContextPropertyChangeListener
+			selfRemovingListener = ContextPropertyChangeListener {
+				callCount++
+				dynamicSwitch1.removePropertyChangeListener(selfRemovingListener)
+			}
+			dynamicSwitch1.addPropertyChangeListener(selfRemovingListener)
+
+			dynamicSwitch1.changeConf()
+			val countAfterFirstFire = callCount
+
+			// Listener was removed; further fires must not call it again
+			dynamicSwitch1.changeConf()
+			assertThat(callCount).isEqualTo(countAfterFirstFire)
 		}
 	}
 }
