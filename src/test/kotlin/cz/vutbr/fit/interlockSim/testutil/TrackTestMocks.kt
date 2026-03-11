@@ -420,7 +420,6 @@ fun createMockSwitch(name: String): RailSwitch {
 	every { mock.toString() } returns "Switch:$name"
 	return mock
 }
-
 // ==================== Mock Implementations ====================
 
 /**

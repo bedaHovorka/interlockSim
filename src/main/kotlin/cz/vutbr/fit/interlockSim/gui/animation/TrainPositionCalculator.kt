@@ -15,7 +15,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.PointF
-import kotlin.math.abs
 
 /**
  * Utility for calculating train grid positions via linear interpolation.
@@ -80,21 +79,6 @@ class TrainPositionCalculator(
 	private val context: SimulationContext,
 	private val separatorPositionCache: Map<PathSeparator, Point>
 ) {
-	companion object {
-		/**
-		 * Tolerance for comparing PathSeparator grid positions (in grid cell units).
-		 *
-		 * This epsilon handles:
-		 * - Floating-point precision errors from coordinate calculations
-		 * - Static/dynamic wrapper mismatches (both reference the same grid cell)
-		 *
-		 * Value: 0.01 grid cells (< 1% of a cell width/height)
-		 * Rationale: Grid cells are integer-indexed, so any difference < 0.5 rounds to same cell.
-		 * Using 0.01 provides safety margin while ensuring same-cell separators always match.
-		 */
-		private const val POSITION_MATCH_EPSILON = 0.01
-	}
-
 	/**
 	 * Calculate train's grid location via linear interpolation along a track section.
 	 *
@@ -176,27 +160,31 @@ class TrainPositionCalculator(
 			return null
 		}
 
-		// Try to use entry separator to determine correct direction
-		// Try both orderings and pick the one where first separator matches entry
+		// Use identity-based comparison (===) to determine interpolation direction.
+		// Unwrap dynamic wrappers to static refs, then compare with === to find which
+		// end the train entered from — that end becomes the start of interpolation.
 		val (entryPos, exitPos) =
 			if (entrySeparator != null) {
-				// Try to find which end matches the entry separator
-				// Compare by getting grid positions (handles static/dynamic wrapper mismatch)
-				val entryGridPos = getGridPosition(entrySeparator)
+				// Unwrap to static references for identity comparison
+				val entryStatic = DynamicWrapperUtils.unwrapToStatic(entrySeparator)
+				val end0Static = DynamicWrapperUtils.unwrapToStatic(ends[0])
+				val end1Static = DynamicWrapperUtils.unwrapToStatic(ends[1])
+
+				// Get grid positions for the final result
 				val end0GridPos = getGridPosition(ends[0])
 				val end1GridPos = getGridPosition(ends[1])
 
 				when {
-					positionsMatch(entryGridPos, end0GridPos) -> {
+					entryStatic === end0Static -> {
 						// entrySeparator matches ends[0] - use normal order
-						Pair(end0GridPos!!, end1GridPos ?: return null)
+						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
 					}
-					positionsMatch(entryGridPos, end1GridPos) -> {
+					entryStatic === end1Static -> {
 						// entrySeparator matches ends[1] - use reversed order
-						Pair(end1GridPos!!, end0GridPos ?: return null)
+						Pair(end1GridPos ?: return null, end0GridPos ?: return null)
 					}
 					else -> {
-						// Can't match entry separator (race condition) - use arbitrary order
+						// Fallback: Can't match entry separator - use arbitrary order
 						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
 					}
 				}
@@ -215,32 +203,11 @@ class TrainPositionCalculator(
 		// Calculate progress ratio (clamped to [0.0, 1.0])
 		val ratio = (distanceAlongSection / sectionLength).coerceIn(0.0, 1.0)
 
-		// Linear interpolation from entry to exit
-		val interpolatedX = entryPos.x + (exitPos.x - entryPos.x) * ratio
-		val interpolatedY = entryPos.y + (exitPos.y - entryPos.y) * ratio
-
-		// Return continuous coordinates (preserves sub-cell positioning)
-		return PointF(interpolatedX.toFloat(), interpolatedY.toFloat())
-	}
-
-	/**
-	 * Compare two grid positions for equality within epsilon tolerance.
-	 *
-	 * This handles:
-	 * - Floating-point precision errors from coordinate calculations
-	 * - Static/dynamic wrapper references to the same grid cell
-	 *
-	 * @param p1 First position (or null)
-	 * @param p2 Second position (or null)
-	 * @return True if positions match within POSITION_MATCH_EPSILON tolerance, false otherwise
-	 */
-	private fun positionsMatch(
-		p1: Point?,
-		p2: Point?
-	): Boolean {
-		if (p1 == null || p2 == null) return false
-		return abs(p1.x - p2.x) < POSITION_MATCH_EPSILON &&
-			abs(p1.y - p2.y) < POSITION_MATCH_EPSILON
+		// Linear interpolation from entry to exit (ratio=0 → entry, ratio=1 → exit)
+		val ratioF = ratio.toFloat()
+		val x = entryPos.x.toFloat() + (exitPos.x.toFloat() - entryPos.x.toFloat()) * ratioF
+		val y = entryPos.y.toFloat() + (exitPos.y.toFloat() - entryPos.y.toFloat()) * ratioF
+		return PointF(x, y)
 	}
 
 	/**
