@@ -179,7 +179,8 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		synchronized(this) { listeners.toList() }
+			.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -196,7 +197,8 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		synchronized(this) { listeners.toList() }.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		synchronized(this) { listeners.toList() }
+			.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
