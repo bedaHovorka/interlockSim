@@ -53,15 +53,17 @@ COPY .editorconfig /build/interlockSim/
 # kDisco 0.2.0 is not published to any public Maven repo, so it must be
 # built from source and published to mavenLocal before interlockSim compiles.
 # Building kDisco also downloads jDisco (its transitive dep) into the
-# Gradle cache, making it available for interlockSim's dependency resolution.
+# Gradle cache; jDisco is then copied to mavenLocal so Layer 5 can resolve
+# it as a transitive dep of kDisco without GitHub Packages authentication.
 # Requires outbound HTTPS to github.com on cache miss. In air-gapped environments,
 # pre-populate the BuildKit cache by running a connected build first.
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
     KDISCO_JAR="/root/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/0.2.0/kdisco-core-api-jvm-0.2.0.jar"; \
-    if [ ! -f "$KDISCO_JAR" ]; then \
-        echo "kDisco 0.2.0 not cached — building from source..."; \
+    JDISCO_JAR="/root/.m2/repository/dk/ruc/keld/jdisco/1.2.0/jdisco-1.2.0.jar"; \
+    if [ ! -f "$KDISCO_JAR" ] || [ ! -f "$JDISCO_JAR" ]; then \
+        echo "kDisco 0.2.0 or jDisco 1.2.0 not cached — building from source..."; \
         KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"; \
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco; \
         cd /tmp/kdisco; \
@@ -71,8 +73,14 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
         GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
         ./gradlew :kdisco-core-api:publishToMavenLocal --no-daemon; \
         rm -rf /tmp/kdisco; \
+        JDISCO_DIR="/root/.m2/repository/dk/ruc/keld/jdisco/1.2.0"; \
+        mkdir -p "$JDISCO_DIR"; \
+        JDISCO_CACHE=$(find /root/.gradle/caches/modules-2 -name "jdisco-1.2.0.jar" 2>/dev/null | head -1); \
+        JDISCO_POM=$(find /root/.gradle/caches/modules-2 -name "jdisco-1.2.0.pom" 2>/dev/null | head -1); \
+        [ -n "$JDISCO_CACHE" ] && cp "$JDISCO_CACHE" "$JDISCO_DIR/jdisco-1.2.0.jar" && echo "jDisco 1.2.0 installed to mavenLocal"; \
+        [ -n "$JDISCO_POM" ]   && cp "$JDISCO_POM"   "$JDISCO_DIR/jdisco-1.2.0.pom"; \
     else \
-        echo "kDisco 0.2.0 found in cache — skipping build"; \
+        echo "kDisco 0.2.0 and jDisco 1.2.0 found in cache — skipping build"; \
     fi
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
