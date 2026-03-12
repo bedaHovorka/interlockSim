@@ -55,7 +55,7 @@ data class ValidationResult(
  */
 data class ValidationError(
 	val category: ErrorCategory,
-	val severity: Severity,
+	val severity: ValidationSeverity,
 	val message: String,
 	val location: String? = null,
 	val explanation: String
@@ -131,7 +131,7 @@ enum class ErrorCategory {
 /**
  * Severity levels for validation errors.
  */
-enum class Severity {
+enum class ValidationSeverity {
 	/**
 	 * Critical error that prevents the network from being used.
 	 */

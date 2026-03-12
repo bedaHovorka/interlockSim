@@ -36,7 +36,7 @@ object NameValidator {
 			errors.add(
 				ValidationError(
 					category = ErrorCategory.CONFIGURATION,
-					severity = Severity.ERROR,
+					severity = ValidationSeverity.ERROR,
 					message = "Name cannot be empty",
 					explanation = "Railway element names must contain at least one character."
 				)
@@ -48,7 +48,7 @@ object NameValidator {
 			errors.add(
 				ValidationError(
 					category = ErrorCategory.CONFIGURATION,
-					severity = Severity.ERROR,
+					severity = ValidationSeverity.ERROR,
 					message = "Name too long (max $MAX_NAME_LENGTH characters, got ${name.length})",
 					explanation =
 						"Railway element names are limited to $MAX_NAME_LENGTH characters " +
@@ -62,7 +62,7 @@ object NameValidator {
 			errors.add(
 				ValidationError(
 					category = ErrorCategory.CONFIGURATION,
-					severity = Severity.ERROR,
+					severity = ValidationSeverity.ERROR,
 					message = "Name contains invalid characters",
 					explanation =
 						"Railway element names may only contain letters (a-z, A-Z), digits (0-9), " +

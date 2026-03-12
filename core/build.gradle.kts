@@ -28,6 +28,9 @@ val koinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
+// Note: Although this module uses kotlin("multiplatform"), commonMain currently contains
+// JVM-only APIs (javax.xml.*, kDisco). The KMP structure is intentional for future
+// platform expansion; for now only the JVM target is active.
 kotlin {
 	jvm {
 		compilations.all {

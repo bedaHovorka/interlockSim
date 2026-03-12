@@ -663,7 +663,7 @@ sonar {
             "build/test-results/test," +
                 "build/test-results/integrationTest," +
                 "core/build/test-results/jvmTest," +
-                "core/build/test-results/jvmIntegrationTest"
+                "core/build/test-results/integrationTest"
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",

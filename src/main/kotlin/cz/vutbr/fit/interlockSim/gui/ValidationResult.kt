@@ -17,4 +17,4 @@ typealias ValidationResult = cz.vutbr.fit.interlockSim.util.ValidationResult
 typealias ValidationError = cz.vutbr.fit.interlockSim.util.ValidationError
 typealias ValidationWarning = cz.vutbr.fit.interlockSim.util.ValidationWarning
 typealias ErrorCategory = cz.vutbr.fit.interlockSim.util.ErrorCategory
-typealias Severity = cz.vutbr.fit.interlockSim.util.Severity
+typealias Severity = cz.vutbr.fit.interlockSim.util.ValidationSeverity

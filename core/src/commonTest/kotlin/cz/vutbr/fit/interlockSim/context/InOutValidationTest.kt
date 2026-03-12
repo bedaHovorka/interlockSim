@@ -22,6 +22,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import cz.vutbr.fit.interlockSim.testutil.coreTestModule
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -70,7 +71,7 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 0 InOuts throws ContextCreationException`() {
-		val min = 1 // XMLContextFactory.MIN_INOUT_ELEMENTS
+		val min = XMLContextFactory.MIN_INOUT_ELEMENTS
 		assertFailure {
 			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
 				xmlFactory.createContext(stream)
@@ -203,7 +204,7 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Error message reflects MIN_INOUT_ELEMENTS constant value`() {
-		val min = 1 // XMLContextFactory.MIN_INOUT_ELEMENTS
+		val min = XMLContextFactory.MIN_INOUT_ELEMENTS
 		assertFailure {
 			TestFixtures.loadInvalidInOutXml("zero-inouts.xml").use { stream ->
 				xmlFactory.createContext(stream)

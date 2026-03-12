@@ -45,7 +45,7 @@ object ValidationUtils {
 		val error =
 			ValidationError(
 				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
+				severity = ValidationSeverity.ERROR,
 				message = "XML Schema Violation",
 				location = location,
 				explanation = parseErrorMessage(message)
@@ -62,7 +62,7 @@ object ValidationUtils {
 		val error =
 			ValidationError(
 				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
+				severity = ValidationSeverity.ERROR,
 				message = "Validation Failed",
 				location = null,
 				explanation = parseErrorMessage(message)
@@ -78,7 +78,7 @@ object ValidationUtils {
 		val error =
 			ValidationError(
 				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
+				severity = ValidationSeverity.ERROR,
 				message = "File Not Found",
 				location = exception.message,
 				explanation = "The selected file could not be found or accessed. Please check the file path and permissions."
@@ -95,7 +95,7 @@ object ValidationUtils {
 		val error =
 			ValidationError(
 				category = ErrorCategory.STRUCTURAL,
-				severity = Severity.ERROR,
+				severity = ValidationSeverity.ERROR,
 				message = "Loading Failed",
 				location = null,
 				explanation = parseErrorMessage(message)
