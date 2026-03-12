@@ -153,6 +153,18 @@ val integrationTest by tasks.registering(Test::class) {
 }
 
 // ===========================================
+// SonarQube Configuration
+// ===========================================
+
+// Suppress automatic SonarQube sub-module for :core.
+// The root sonar{} block explicitly registers all :core source/binary/report paths,
+// so letting the plugin auto-discover them here causes "can't be indexed twice".
+// Note: sonar.skip is a boolean field (isSkipProject), not a string property.
+sonarqube {
+	isSkipProject = true
+}
+
+// ===========================================
 // JaCoCo Configuration
 // ===========================================
 
