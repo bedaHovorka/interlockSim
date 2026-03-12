@@ -70,29 +70,6 @@ java {
     }
 }
 
-// Configure repositories
-repositories {
-    mavenLocal() // For kDisco local development (highest priority)
-
-    val githubUsername = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user") as String?
-    val githubToken = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.key") as String?
-
-    if (!githubUsername.isNullOrEmpty() && !githubToken.isNullOrEmpty()) {
-        maven {
-            name = "GitHubPackages-kdisco"
-            url = uri("https://maven.pkg.github.com/bedaHovorka/kdisco")
-            credentials {
-                username = githubUsername
-                password = githubToken
-            }
-        }
-    } else {
-        logger.warn("GitHub Packages credentials not available. kDisco must be in mavenLocal().")
-    }
-
-    mavenCentral() // For all other dependencies
-}
-
 // Dependencies (matching Ivy configuration exactly)
 dependencies {
     // Compile dependencies (from Ivy compile configuration)
@@ -107,6 +84,9 @@ dependencies {
 
     // Koin dependencies (Dependency Injection Framework - added 2026-01-12)
     implementation("io.insert-koin:koin-core:$koinVersion") // Koin core DI framework
+
+    // Core subproject dependency
+    implementation(project(":core"))
 
     // Test dependencies (from Ivy test configuration)
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion") // JUnit 5 API
@@ -221,7 +201,12 @@ tasks.test {
 
     // Fail fast on test failures (matching Ant's haltonfailure="yes")
     ignoreFailures = false
+
+    // Wire :core tests into the root test task lifecycle
+    dependsOn(":core:jvmTest")
 }
+
+// Wire :core integration tests into the integrationTest task lifecycle
 
 /**
  * Task: integrationTest
@@ -271,6 +256,8 @@ val integrationTest by tasks.registering(Test::class) {
     }
 
     ignoreFailures = false
+
+    dependsOn(":core:integrationTest")
 
     // Set different output directory to avoid conflicts with unit tests
     testClassesDirs =
@@ -656,11 +643,11 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (Kotlin migration - using kotlin directories)
-        property("sonar.sources", "src/main/kotlin")
-        property("sonar.tests", "src/test/kotlin")
-        property("sonar.java.binaries", "build/classes/kotlin/main")
-        property("sonar.java.test.binaries", "build/classes/kotlin/test")
+        // Source and test paths (app + :core KMP subproject)
+        property("sonar.sources", "src/main/kotlin,core/src/commonMain/kotlin")
+        property("sonar.tests", "src/test/kotlin,core/src/commonTest/kotlin")
+        property("sonar.java.binaries", "build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
+        property("sonar.java.test.binaries", "build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
 
         // Java version
         property("sonar.java.source", javaVersion)
@@ -670,9 +657,19 @@ sonar {
         property("sonar.language", "java,kotlin")
         property("sonar.kotlin.source.version", kotlinVersion)
 
-        // Test results and coverage paths
-        property("sonar.junit.reportPaths", "build/test-results/test")
-        property("sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml")
+        // Test results and coverage paths (app + :core KMP subproject)
+        property(
+            "sonar.junit.reportPaths",
+            "build/test-results/test," +
+                "build/test-results/integrationTest," +
+                "core/build/test-results/jvmTest," +
+                "core/build/test-results/integrationTest"
+        )
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            "build/reports/jacoco/test/jacocoTestReport.xml," +
+                "core/build/reports/jacoco/jvmTest/jacocoTestReport.xml"
+        )
 
         // Encoding
         property("sonar.sourceEncoding", "ISO-8859-1")

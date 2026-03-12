@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="100" Y="100">
+	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"
+</net>

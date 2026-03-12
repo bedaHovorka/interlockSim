@@ -47,6 +47,7 @@ COPY build.gradle.kts /build/interlockSim/
 COPY detekt.yml /build/interlockSim/
 COPY detekt-strict.yml /build/interlockSim/
 COPY .editorconfig /build/interlockSim/
+COPY core/build.gradle.kts /build/interlockSim/core/
 
 # Layer 2.5: Build kDisco 0.2.0 from source if not in cache
 # Mirrors the CI workflow (gradle-java21.yml / sonarqube.yml).
@@ -101,6 +102,7 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
 # Layer 4: Copy source code
 # This is the layer that changes most frequently
 COPY src/ /build/interlockSim/src/
+COPY core/src/ /build/interlockSim/core/src/
 
 # Layer 5: Build and test with cache mount
 # Tests run during build (haltOnFailure), creating uber JAR with shadowJar

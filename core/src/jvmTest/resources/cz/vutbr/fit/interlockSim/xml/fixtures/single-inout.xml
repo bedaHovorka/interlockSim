@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!-- Test fixture: Network with 1 InOut element (VALID with bidirectional operation support) -->
+<net X="10" Y="10">
+  <InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="false" name="OnlyOne"/>
+</net>
