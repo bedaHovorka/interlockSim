@@ -67,7 +67,7 @@ class EnumUnorientedGraphTest {
 
 	@BeforeEach
 	fun setUp() {
-		graph = EnumUnorientedGraph(Direction::class.java)
+		graph = EnumUnorientedGraph()
 	}
 
 	@Nested
@@ -75,7 +75,7 @@ class EnumUnorientedGraphTest {
 	inner class BasicOperations {
 		@Test
 		fun constructor_validEnumClass_createsGraph() {
-			val g: EnumUnorientedGraph<Direction, Int> = EnumUnorientedGraph(Direction::class.java)
+			val g: EnumUnorientedGraph<Direction, Int> = EnumUnorientedGraph()
 
 			assertThat(g).isNotNull()
 		}
@@ -275,7 +275,7 @@ class EnumUnorientedGraphTest {
 	inner class DifferentEnumTypes {
 		@Test
 		fun signalEnum_worksCorrectly() {
-			val signalGraph: EnumUnorientedGraph<Signal, String> = EnumUnorientedGraph(Signal::class.java)
+			val signalGraph: EnumUnorientedGraph<Signal, String> = EnumUnorientedGraph()
 
 			signalGraph.put(Signal.RED, Signal.GREEN, "transition")
 
@@ -285,7 +285,7 @@ class EnumUnorientedGraphTest {
 
 		@Test
 		fun signalEnum_multipleTransitions_allStored() {
-			val signalGraph: EnumUnorientedGraph<Signal, String> = EnumUnorientedGraph(Signal::class.java)
+			val signalGraph: EnumUnorientedGraph<Signal, String> = EnumUnorientedGraph()
 
 			signalGraph.put(Signal.RED, Signal.YELLOW, "caution")
 			signalGraph.put(Signal.YELLOW, Signal.GREEN, "go")

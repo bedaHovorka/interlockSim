@@ -668,7 +668,7 @@ class XMLContextFactory : EditingContextFactory {
 	 * @throws IOException if serialization fails
 	 */
 	private fun generateXML(context: Context<*, *>): String {
-		val xmlContext = Util.assertInstanceOf(EditingContext::class.java, context)
+		val xmlContext = Util.assertInstanceOf<EditingContext>(context)
 		val railwayNetGrid = xmlContext.getRailWayNetGrid()
 		val builder = StringBuilder()
 
@@ -752,7 +752,7 @@ class XMLContextFactory : EditingContextFactory {
 		stream: OutputStream
 	): Boolean {
 		// Pre-save validation: Check InOut count
-		val editingContext = Util.assertInstanceOf(EditingContext::class.java, context)
+		val editingContext = Util.assertInstanceOf<EditingContext>(context)
 		val inOutsCount = editingContext.getInOuts().size
 		if (inOutsCount < MIN_INOUT_ELEMENTS) {
 			logger.warn {
@@ -848,7 +848,7 @@ class XMLContextFactory : EditingContextFactory {
 		file: File
 	): Boolean {
 		// Pre-save validation: Check InOut count
-		val editingContext = Util.assertInstanceOf(EditingContext::class.java, context)
+		val editingContext = Util.assertInstanceOf<EditingContext>(context)
 		val inOutsCount = editingContext.getInOuts().size
 		if (inOutsCount < MIN_INOUT_ELEMENTS) {
 			logger.warn {
@@ -975,7 +975,7 @@ class XMLContextFactory : EditingContextFactory {
 		return try {
 			constructor.newInstance(*arguments)
 		} catch (e: InvocationTargetException) {
-			throw Util.assertInstanceOf(Exception::class.java, e.targetException!!)
+			throw Util.assertInstanceOf<Exception>(e.targetException!!)
 		}
 	}
 }

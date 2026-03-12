@@ -261,7 +261,7 @@ class DefaultTrainNavigationService(
 							// Unexpected element type - path structure error
 							logger.warn {
 								"determineNextFromPathInfo: Unexpected element type after separator: " +
-									"${nextElement.javaClass.simpleName}, path may be malformed"
+									"${nextElement::class.simpleName}, path may be malformed"
 							}
 							null // Unexpected structure
 						}
@@ -337,7 +337,7 @@ class DefaultTrainNavigationService(
 					} else {
 						logger.trace {
 							"getCurrentTrackSection: element before separator is not TrackSection: " +
-								"${previous.javaClass.simpleName}"
+								"${previous::class.simpleName}"
 						}
 						return null
 					}

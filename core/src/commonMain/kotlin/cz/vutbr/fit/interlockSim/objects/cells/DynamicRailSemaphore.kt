@@ -43,10 +43,10 @@ sealed class DynamicRailSemaphore(
 ) : OrientedPathSeparator by staticRef,
 	DynamicPathSeparator {
 	/**
-	 * Listeners for signal state changes (Kotlin-native, no java.beans dependency).
+	 * Listeners for signal state changes. Copy-on-write via @Volatile list.
 	 */
-	private val listeners = mutableListOf<ContextPropertyChangeListener>()
-	private val listenersLock = Any()
+	@Volatile
+	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	// Static properties delegated from wrapped object
 	// orientation and direction() are delegated from OrientedPathSeparator
@@ -74,8 +74,7 @@ sealed class DynamicRailSemaphore(
 			// Fire property change event only if signal actually changed
 			if (oldSignal != newSignal) {
 				val evt = ContextChangeEvent("signal", oldSignal, newSignal)
-				val snapshot = synchronized(listenersLock) { listeners.toList() }
-				snapshot.forEach { it.propertyChange(evt) }
+				listeners.forEach { it.propertyChange(evt) }
 			}
 		}
 
@@ -173,32 +172,21 @@ sealed class DynamicRailSemaphore(
 	 * - Stability across signal state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(staticRef)
+	override fun hashCode(): Int = staticRef.hashCode()
 
 	/**
 	 * Adds a property change listener to this semaphore.
-	 *
 	 * The listener will be notified when the "signal" property changes.
-	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener registration
-	 * from multiple threads, even though the simulation context itself is not thread-safe.
-	 *
-	 * @param listener The listener to add
 	 */
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.add(listener) }
+		listeners = listeners + listener
 	}
 
 	/**
 	 * Removes a property change listener from this semaphore.
-	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
-	 * from multiple threads, even though the simulation context itself is not thread-safe.
-	 *
-	 * @param listener The listener to remove
 	 */
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.remove(listener) }
+		listeners = listeners - listener
 	}
 
 	/**

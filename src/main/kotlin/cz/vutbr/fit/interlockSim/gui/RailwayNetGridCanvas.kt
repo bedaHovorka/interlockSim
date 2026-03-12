@@ -173,7 +173,7 @@ class RailwayNetGridCanvas :
 										logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
 										editingContext.currentNameString
 									} else {
-										val autoName = AutoNameGenerator.generateName(newCell.javaClass, editingContext)
+										val autoName = AutoNameGenerator.generateName(newCell::class, editingContext)
 										logger.debug { "InOut: Auto-generated name: '$autoName'" }
 										autoName
 									}
@@ -184,12 +184,12 @@ class RailwayNetGridCanvas :
 								// Auto-generate sequential names for semaphores and switches
 								val autoName =
 									AutoNameGenerator.generateName(
-										newCell.javaClass,
+										newCell::class,
 										editingContext
 									)
 								newCell.setName(autoName)
 								logger.debug {
-									"${newCell.javaClass.simpleName}: Auto-named as '$autoName', " +
+									"${newCell::class.simpleName}: Auto-named as '$autoName', " +
 										"getName() returns: '${newCell.getName()}'"
 								}
 							}

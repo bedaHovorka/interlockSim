@@ -115,7 +115,7 @@ class DynamicInOut(
 	 * - Stability across state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(staticRef)
+	override fun hashCode(): Int = staticRef.hashCode()
 
 	/**
 	 * String representation for debugging

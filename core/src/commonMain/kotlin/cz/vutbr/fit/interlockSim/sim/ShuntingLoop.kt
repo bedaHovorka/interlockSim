@@ -139,16 +139,16 @@ class ShuntingLoop(
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val B: DynamicInOut = elementAt(context, DynamicInOut::class.java, 30, 8)
-		val A: DynamicInOut = elementAt(context, DynamicInOut::class.java, 11, 8)
-		val zA: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 14, 8)
-		val doA1: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 16, 8)
-		val doB1: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 25, 8)
-		val zB: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 27, 8)
-		val doA2: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 17, 9)
-		val doB2: DynamicRailSemaphore = elementAt(context, DynamicRailSemaphore::class.java, 24, 9)
-		val vA: DynamicRailSwitch = elementAt(context, DynamicRailSwitch::class.java, 15, 8)
-		val vB: DynamicRailSwitch = elementAt(context, DynamicRailSwitch::class.java, 26, 8)
+		val B: DynamicInOut = elementAt<DynamicInOut>(context, 30, 8)
+		val A: DynamicInOut = elementAt<DynamicInOut>(context, 11, 8)
+		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 14, 8)
+		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 16, 8)
+		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 25, 8)
+		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 27, 8)
+		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 17, 9)
+		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 24, 9)
+		val vA: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, 15, 8)
+		val vB: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, 26, 8)
 
 		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
@@ -164,15 +164,14 @@ class ShuntingLoop(
 		outerTrackblocks[kA] = zA
 	}
 
-	private fun <T : Cell> elementAt(
+	private inline fun <reified T : Cell> elementAt(
 		context: SimulationContext,
-		clazz: Class<T>,
 		x: Int,
 		y: Int
 	): T {
 		val railWayNetGrid: RailwayNetGrid<Cell> = context.getRailWayNetGrid()
 		val cell = railWayNetGrid.getCellAt(x, y) ?: throw IllegalArgumentException("No cell at position ($x, $y)")
-		return Util.assertInstanceOf(clazz, cell)
+		return Util.assertInstanceOf(cell)
 	}
 
 	private fun getBlock(
@@ -186,9 +185,9 @@ class ShuntingLoop(
 		val point1 = railWayNetGrid.getLocation(cell1) ?: throw IllegalArgumentException("Cannot get location for cell1")
 		val point2 = railWayNetGrid.getLocation(cell2) ?: throw IllegalArgumentException("Cannot get location for cell2")
 		val block = graph.get(point1, point2) ?: throw IllegalArgumentException("Cannot get block between cells")
-		val assertInstanceOf = Util.assertInstanceOf(DynamicTrackBlock::class.java, block)
-		assertInstanceOf.name = name
-		return assertInstanceOf
+		val dynamicBlock = Util.assertInstanceOf<DynamicTrackBlock>(block)
+		dynamicBlock.name = name
+		return dynamicBlock
 	}
 
 	override fun startAction() {
@@ -222,7 +221,7 @@ class ShuntingLoop(
 		// Inner blocks (k1, k2) have RailSemaphore ends only, no InOut
 		// Check both semaphore endpoints to see if path needs to be reserved
 		for (sep in block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf(DynamicRailSemaphore::class.java, sep))) return
+			if (checkOneEnd(block, Util.assertInstanceOf<DynamicRailSemaphore>(sep))) return
 		}
 	}
 

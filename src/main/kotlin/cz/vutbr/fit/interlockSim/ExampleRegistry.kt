@@ -90,7 +90,7 @@ class ExampleRegistry {
 
 		// Use .use {} to ensure stream is properly closed
 		return stream.use {
-			val context = Util.assertInstanceOf(DefaultSimulationContext::class.java, factory.createContext(it))
+			val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(it))
 			val time = args[2].toLong()
 			// Initialize dynamic wrapper map by calling getInOuts()
 			context.getInOuts()
@@ -131,7 +131,7 @@ class ExampleRegistry {
 
 		// Use .use {} to ensure stream is properly closed
 		return stream.use {
-			val context = Util.assertInstanceOf(DefaultSimulationContext::class.java, factory.createContext(it))
+			val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(it))
 			val time = args[2].toLong()
 			// Initialize dynamic wrapper map by calling getInOuts()
 			context.getInOuts()

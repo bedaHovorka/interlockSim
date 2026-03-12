@@ -31,7 +31,7 @@ abstract class NodeCell(
 	 */
 	open fun setName(name: String) {
 		this.name = name
-		toStringValue = this::class.java.simpleName + ':' + name
+		toStringValue = this::class.simpleName + ':' + name
 	}
 
 	/**

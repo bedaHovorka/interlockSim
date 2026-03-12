@@ -170,7 +170,7 @@ class PathInfoBuilder(
 			// Other types: check if they contain blocks
 			// For now, return empty list (can be extended if needed)
 			logger.warn {
-				"TrackSection is not a DynamicTrackBlock: ${trackSection.javaClass.simpleName}"
+				"TrackSection is not a DynamicTrackBlock: ${trackSection::class.simpleName}"
 			}
 			emptyList()
 		}

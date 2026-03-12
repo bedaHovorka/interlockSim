@@ -41,8 +41,8 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrack(
 	val staticRef: TrackFacility
 ) {
-	private val listeners = mutableListOf<ContextPropertyChangeListener>()
-	private val listenersLock = Any()
+	@Volatile
+	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	// Static properties delegated from wrapped object
 	val length: Double
@@ -119,7 +119,7 @@ class DynamicTrack(
 		occupant = newOccupant
 		reservedFrom = null
 		// Fire property change events
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("occupant", null, newOccupant)) }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
@@ -146,7 +146,7 @@ class DynamicTrack(
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
 		// Fire property change events
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("occupant", oldOccupant, null)) }
 	}
@@ -187,7 +187,7 @@ class DynamicTrack(
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED)
 		reservedFrom = sep
 		// Fire property change events
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", null, sep)) }
 	}
@@ -216,8 +216,8 @@ class DynamicTrack(
 			if (!isSetUp) {
 				logger.debug {
 					"${Process.time()} Track ${staticRef.hashCode()} isSetUpPath: NO MATCH " +
-						"sep=$sep (static=$sepStatic, id=${System.identityHashCode(sepStatic)}), " +
-						"from=$reservedFrom (static=$reservedFromStatic, id=${System.identityHashCode(reservedFromStatic)})"
+						"sep=$sep (static=$sepStatic, id=${sepStatic.hashCode()}), " +
+						"from=$reservedFrom (static=$reservedFromStatic, id=${reservedFromStatic.hashCode()})"
 				}
 			}
 		} else {
@@ -253,7 +253,7 @@ class DynamicTrack(
 		}
 		reservedFrom = null
 		// Fire property change events
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("state", oldState, state)) }
 		snapshot.forEach { it.propertyChange(ContextChangeEvent("reservedFrom", oldReservedFrom, null)) }
 	}
@@ -316,7 +316,7 @@ class DynamicTrack(
 	 * - Stability across state changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(staticRef)
+	override fun hashCode(): Int = staticRef.hashCode()
 
 	/**
 	 * Adds a property change listener to this track.
@@ -333,19 +333,14 @@ class DynamicTrack(
 	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.add(listener) }
+		listeners = listeners + listener
 	}
 
 	/**
 	 * Removes a property change listener from this track.
-	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
-	 * from multiple threads, even though the simulation context itself is not thread-safe.
-	 *
-	 * @param listener The listener to remove
 	 */
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.remove(listener) }
+		listeners = listeners - listener
 	}
 
 	/**

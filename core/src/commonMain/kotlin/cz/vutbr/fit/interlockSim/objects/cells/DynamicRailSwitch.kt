@@ -73,10 +73,10 @@ class DynamicRailSwitch(
 		private set
 
 	/**
-	 * Listeners for switch state changes (Kotlin-native, no java.beans dependency).
+	 * Listeners for switch state changes. Copy-on-write via @Volatile list.
 	 */
-	private val listeners = mutableListOf<ContextPropertyChangeListener>()
-	private val listenersLock = Any()
+	@Volatile
+	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
 	 * Changes the switch configuration to the opposite position.
@@ -95,8 +95,7 @@ class DynamicRailSwitch(
 		logger.info {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
-		snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
 
 	override fun cancelPathSetup(
@@ -134,8 +133,7 @@ class DynamicRailSwitch(
 		}
 		conf = newConf
 		if (oldConf != newConf) {
-			val snapshot = synchronized(listenersLock) { listeners.toList() }
-			snapshot.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
+			listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, newConf)) }
 		}
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
@@ -182,8 +180,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
-		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -200,8 +197,7 @@ class DynamicRailSwitch(
 		logger.debug {
 			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
-		val snapshot = synchronized(listenersLock) { listeners.toList() }
-		snapshot.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
+		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
 
 	/**
@@ -234,19 +230,14 @@ class DynamicRailSwitch(
 	 * @param listener the listener to add
 	 */
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.add(listener) }
+		listeners = listeners + listener
 	}
 
 	/**
 	 * Unregisters a listener from receiving switch state change notifications.
-	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
-	 * from multiple threads, even though the simulation context itself is not thread-safe.
-	 *
-	 * @param listener the listener to remove
 	 */
 	fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		synchronized(listenersLock) { listeners.remove(listener) }
+		listeners = listeners - listener
 	}
 
 	/**
@@ -284,7 +275,7 @@ class DynamicRailSwitch(
 	 * - Stability across configuration changes
 	 * - Proper behavior in hash-based collections
 	 */
-	override fun hashCode(): Int = System.identityHashCode(staticRef)
+	override fun hashCode(): Int = staticRef.hashCode()
 
 	/**
 	 * Returns the segment pair that forms the current active path.

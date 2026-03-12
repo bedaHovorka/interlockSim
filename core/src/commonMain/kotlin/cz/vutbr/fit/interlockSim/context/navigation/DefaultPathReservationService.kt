@@ -365,8 +365,8 @@ class DefaultPathReservationService(
 	): PathReservationService.ReservationResult {
 		logger.debug {
 			"reservePathToAnyNextSemaphore: ENTRY POINT for $trainId - " +
-				"start=$start (${start.javaClass.simpleName}), " +
-				"next=$next (${next.javaClass.simpleName})"
+				"start=$start (${start::class.simpleName}), " +
+				"next=$next (${next::class.simpleName})"
 		}
 
 		// Find ALL reachable semaphores via this track section
