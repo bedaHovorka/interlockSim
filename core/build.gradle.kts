@@ -160,12 +160,18 @@ jacoco {
 	toolVersion = "0.8.11"
 }
 
-tasks.named("jvmTest") {
-	finalizedBy(tasks.matching { it.name == "jacocoTestReport" })
-}
-
-tasks.withType<JacocoReport>().configureEach {
+val jacocoTestReport by tasks.registering(JacocoReport::class) {
 	dependsOn(tasks.named("jvmTest"))
+
+	executionData.setFrom(
+		fileTree(layout.buildDirectory).include("jacoco/jvmTest.exec")
+	)
+	sourceDirectories.setFrom(
+		files("src/commonMain/kotlin", "src/jvmMain/kotlin")
+	)
+	classDirectories.setFrom(
+		fileTree("${layout.buildDirectory.get()}/classes/kotlin/jvm/main")
+	)
 
 	reports {
 		xml.required.set(true)
@@ -174,6 +180,10 @@ tasks.withType<JacocoReport>().configureEach {
 		html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/jvmTest/html"))
 		csv.required.set(false)
 	}
+}
+
+tasks.named("jvmTest") {
+	finalizedBy(jacocoTestReport)
 }
 
 // ===========================================
