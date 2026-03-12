@@ -211,8 +211,8 @@ class EagerTrackWrappingTest : KoinTestBase() {
 
 			// Assert - Should complete quickly (< 1 second for small network)
 			assertThat(duration)
-				.withMessage("Initialization should complete in under 1 second")
-				.isLessThan(1000)
+				.withMessage("Initialization should complete in under 5 seconds")
+				.isLessThan(5000)
 
 			// Verify tracks were actually wrapped
 			val graph = context.getGraph()

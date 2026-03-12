@@ -28,29 +28,6 @@ val koinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Configure repositories (same as root)
-repositories {
-	mavenLocal() // For kDisco local development (highest priority)
-
-	val githubUsername = System.getenv("GITHUB_ACTOR") ?: rootProject.findProperty("gpr.user") as String?
-	val githubToken = System.getenv("GITHUB_TOKEN") ?: rootProject.findProperty("gpr.key") as String?
-
-	if (!githubUsername.isNullOrEmpty() && !githubToken.isNullOrEmpty()) {
-		maven {
-			name = "GitHubPackages-kdisco"
-			url = uri("https://maven.pkg.github.com/bedaHovorka/kdisco")
-			credentials {
-				username = githubUsername
-				password = githubToken
-			}
-		}
-	} else {
-		logger.warn("GitHub Packages credentials not available. kDisco must be in mavenLocal().")
-	}
-
-	mavenCentral()
-}
-
 kotlin {
 	jvm {
 		compilations.all {
