@@ -90,7 +90,10 @@ open class DefaultEditingContext(
 		org.koin.core.context.GlobalContext
 			.get()
 			.createScope(
-				scopeId = this.hashCode().toString(),
+				// DefaultEditingContext does not override hashCode(), so this.hashCode()
+			// returns the identity hash code (equivalent to System.identityHashCode(this)).
+			// Each context instance gets a unique scope ID.
+			scopeId = this.hashCode().toString(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultEditingContext>(),

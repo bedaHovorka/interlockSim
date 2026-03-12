@@ -280,30 +280,42 @@ tasks.named("compileKotlinJvm") {
 // Ensures commonMain stays free of JVM-only imports (java.*, javax.*) and idioms.
 // This is required for adding non-JVM KMP targets in the future.
 
-val checkCoreCommonMainPurity by tasks.registering(Exec::class) {
+val checkCoreCommonMainPurity by tasks.registering {
 	group = "verification"
 	description = "Verify :core commonMain contains no java.* or javax.* imports"
 
 	val commonMainDir = file("src/commonMain/kotlin")
 
-	commandLine(
-		"bash", "-c",
-		"""
-		failures=0
-		while IFS= read -r -d '' file; do
-		  if grep -qE '^import (java|javax)\.' "${'$'}file"; then
-		    echo "PURITY VIOLATION: ${'$'}file"
-		    grep -nE '^import (java|javax)\.' "${'$'}file"
-		    failures=1
-		  fi
-		done < <(find "${commonMainDir.absolutePath}" -name "*.kt" -print0)
-		if [ ${'$'}failures -ne 0 ]; then
-		  echo "ERROR: commonMain contains JVM-only imports. Move them to jvmMain."
-		  exit 1
-		fi
-		echo "commonMain purity check passed - no java.* or javax.* imports found."
-		""".trimIndent()
-	)
+	doLast {
+		if (!commonMainDir.exists()) {
+			logger.info("commonMain directory {} does not exist, skipping purity check.", commonMainDir)
+			return@doLast
+		}
+
+		val importRegex = Regex("^import\\s+(java|javax)\\..*")
+		val violations = mutableListOf<String>()
+
+		project.fileTree(commonMainDir).matching { include("**/*.kt") }.forEach { file ->
+			val lines = file.readLines()
+			lines.forEachIndexed { index, line ->
+				if (importRegex.containsMatchIn(line)) {
+					if (violations.isEmpty() || violations.last() != file.path) {
+						println("PURITY VIOLATION: ${file.path}")
+						violations.add(file.path)
+					}
+					println("${index + 1}: $line")
+				}
+			}
+		}
+
+		if (violations.isNotEmpty()) {
+			throw org.gradle.api.GradleException(
+				"ERROR: commonMain contains JVM-only imports. Move them to jvmMain."
+			)
+		}
+
+		println("commonMain purity check passed - no java.* or javax.* imports found.")
+	}
 }
 
 tasks.named("check") {

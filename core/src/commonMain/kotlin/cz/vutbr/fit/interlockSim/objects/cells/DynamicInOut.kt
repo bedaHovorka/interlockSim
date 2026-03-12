@@ -110,10 +110,9 @@ class DynamicInOut(
 	/**
 	 * Hash code based on the static object (stable hash code).
 	 *
-	 * Uses identity hash code of the static object to ensure:
-	 * - Consistency with equals()
-	 * - Stability across state changes
-	 * - Proper behavior in hash-based collections
+	 * Delegates to staticRef.hashCode(). Safe because InOut (and all NodeCell/TrackFacility
+	 * subtypes used as staticRef) do NOT override hashCode() — they inherit Object.hashCode()
+	 * which returns the identity hash code. This is equivalent to System.identityHashCode(staticRef).
 	 */
 	override fun hashCode(): Int = staticRef.hashCode()
 

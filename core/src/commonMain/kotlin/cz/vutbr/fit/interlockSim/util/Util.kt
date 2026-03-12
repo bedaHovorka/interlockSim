@@ -27,7 +27,11 @@ object Util {
 	 * @throws IllegalStateException if obj is not an instance of T
 	 */
 	inline fun <reified T> assertInstanceOf(obj: Any): T {
-		requireValidState(obj is T) { "Expected instance of ${T::class.simpleName} but got ${obj::class.simpleName}: $obj" }
+		requireValidState(obj is T) {
+			val expectedName = T::class.simpleName ?: T::class.qualifiedName ?: T::class.toString()
+			val actualName = obj::class.simpleName ?: obj::class.qualifiedName ?: obj::class.toString()
+			"Expected instance of $expectedName but got $actualName: $obj"
+		}
 		return obj as T
 	}
 }

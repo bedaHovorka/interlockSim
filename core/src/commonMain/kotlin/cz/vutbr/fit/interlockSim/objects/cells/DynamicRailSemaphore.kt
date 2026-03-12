@@ -44,6 +44,8 @@ sealed class DynamicRailSemaphore(
 	DynamicPathSeparator {
 	/**
 	 * Listeners for signal state changes. Copy-on-write via @Volatile list.
+	 * Not thread-safe by design: concurrent add/remove may lose an update.
+	 * Acceptable because simulation and GUI both run single-threaded.
 	 */
 	@Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
