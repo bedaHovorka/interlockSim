@@ -8,14 +8,15 @@
 
 plugins {
     java
-    kotlin("jvm") version "2.0.20"
+    kotlin("jvm")
     application
-    id("com.gradleup.shadow") version "8.3.8"
+    id("com.gradleup.shadow")
     jacoco
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
-    id("io.gitlab.arturbosch.detekt") version "1.23.7"
-    id("me.champeau.jmh") version "0.7.2"
+    id("org.jlleitschuh.gradle.ktlint")
+    id("io.gitlab.arturbosch.detekt")
+    id("me.champeau.jmh")
     // NOTE: sonarqube NOT applied here — root handles it
+    // NOTE: versions are declared once in root build.gradle.kts (apply false)
 }
 
 // Load versions from gradle.properties
@@ -390,7 +391,7 @@ tasks.register("checkDeprecations") {
             |Review compiler output above for deprecation warnings
             |
             |To save detailed report to file:
-            |  ./gradlew clean compileJava compileTestJava 2>&1 | tee build/reports/deprecation-report.txt
+            |  ./gradlew :desktop-ui:clean :desktop-ui:compileJava :desktop-ui:compileTestJava 2>&1 | tee desktop-ui/build/reports/deprecation-report.txt
             |
             """.trimMargin(),
         )
