@@ -17,7 +17,7 @@ Each policy has two files:
 Install the recommended policy module:
 
 ```bash
-sudo semodule -i docker-x11/docker-x11-complete.pp
+sudo semodule -i desktop-ui/docker-x11/docker-x11-complete.pp
 ```
 
 ## Verification
@@ -39,7 +39,7 @@ This is required for GUI applications running in Docker containers on Fedora.
 ## Documentation
 
 For complete setup instructions, see:
-- [docs/FEDORA_DOCKER_X11_SETUP.md](../docs/FEDORA_DOCKER_X11_SETUP.md)
+- [docs/FEDORA_DOCKER_X11_SETUP.md](../../docs/FEDORA_DOCKER_X11_SETUP.md)
 
 ## Regenerating Policies
 

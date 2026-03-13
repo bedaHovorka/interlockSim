@@ -5,7 +5,7 @@ When running Docker containers with GUI applications on Fedora (with SELinux ena
 
 ## Available SELinux Policies
 
-This project includes three pre-generated SELinux policy modules in the `docker-x11/` directory:
+This project includes three pre-generated SELinux policy modules in the `desktop-ui/docker-x11/` directory:
 
 - **docker-x11-complete** (recommended) - Comprehensive policy allowing all required X11 operations
 - **docker-x11-final** - Alternative comprehensive policy (latest iteration)
@@ -39,11 +39,11 @@ sudo ausearch -c 'java' --raw | sudo audit2allow -M docker-x11-complete
 sudo semodule -i docker-x11-complete.pp
 ```
 
-**Note:** Pre-generated policy files are available in the `docker-x11/` directory of this project. You can install them directly:
+**Note:** Pre-generated policy files are available in the `desktop-ui/docker-x11/` directory of this project. You can install them directly:
 
 ```bash
 # Install pre-generated policy
-sudo semodule -i docker-x11/docker-x11-complete.pp
+sudo semodule -i desktop-ui/docker-x11/docker-x11-complete.pp
 ```
 
 ### 3. Verify Configuration
@@ -130,9 +130,9 @@ sudo semodule -r docker-x11-java
 ## Related Files
 
 **Project Files:**
-- `docker-x11/docker-x11-complete.{pp,te}` - SELinux policy module (complete, recommended)
-- `docker-x11/docker-x11-final.{pp,te}` - SELinux policy module (final iteration)
-- `docker-x11/docker-x11-java.{pp,te}` - SELinux policy module (Java-specific, initial)
+- `desktop-ui/docker-x11/docker-x11-complete.{pp,te}` - SELinux policy module (complete, recommended)
+- `desktop-ui/docker-x11/docker-x11-final.{pp,te}` - SELinux policy module (final iteration)
+- `desktop-ui/docker-x11/docker-x11-java.{pp,te}` - SELinux policy module (Java-specific, initial)
 - `docker-compose.yml` - Docker Compose configuration with X11 forwarding
 
 **System Files (after installation):**

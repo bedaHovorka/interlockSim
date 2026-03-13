@@ -39,8 +39,8 @@ kotlin {
 			}
 		}
 		testRuns["test"].executionTask.configure {
-			// Use root project dir so relative File paths like "src/test/resources/..." resolve correctly
-			workingDir = rootProject.projectDir
+			// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
+			workingDir = rootProject.projectDir.resolve("desktop-ui")
 			useJUnitPlatform {
 				excludeTags("integration-test")
 			}
@@ -113,8 +113,8 @@ val integrationTest by tasks.registering(Test::class) {
 	group = "verification"
 	description = "Run :core integration tests (tagged with @Tag(\"integration-test\"))"
 
-	// Use root project dir so relative File paths like "src/main/resources/..." resolve correctly
-	workingDir = rootProject.projectDir
+	// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
+	workingDir = rootProject.projectDir.resolve("desktop-ui")
 
 	useJUnitPlatform {
 		includeTags("integration-test")

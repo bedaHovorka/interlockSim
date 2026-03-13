@@ -127,7 +127,7 @@ jobs:
       if: success()
       with:
         name: interlockSim-jar-${{ github.sha }}
-        path: build/libs/interlockSim.jar
+        path: desktop-ui/build/libs/interlockSim.jar
         retention-days: 90
         if-no-files-found: error
         compression-level: 9
@@ -137,20 +137,20 @@ jobs:
       if: always()
       with:
         name: test-results-${{ github.sha }}
-        path: build/test-results/
+        path: desktop-ui/build/test-results/
         retention-days: 30
 
     - name: Generate test report summary
       if: always()
       run: |
-        if [ -f build/test-results/test/TEST-*.xml ]; then
+        if [ -f desktop-ui/build/test-results/test/TEST-*.xml ]; then
           echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           # Count total tests
-          TOTAL_TESTS=$(find build/test-results -name "TEST-*.xml" -exec grep -h 'tests="' {} \; | awk -F'tests="' '{sum+=$2; gsub(/".*/, "", sum)}' | awk '{s+=$1} END {print s}')
+          TOTAL_TESTS=$(find desktop-ui/build/test-results -name "TEST-*.xml" -exec grep -h 'tests="' {} \; | awk -F'tests="' '{sum+=$2; gsub(/".*/, "", sum)}' | awk '{s+=$1} END {print s}')
           echo "**Total Unit Tests**: $TOTAL_TESTS" >> $GITHUB_STEP_SUMMARY
           # Count failures
-          FAILURES=$(find build/test-results -name "TEST-*.xml" -exec grep -h 'failures="' {} \; | awk -F'failures="' '{sum+=$2; gsub(/".*/, "", sum)}' | awk '{s+=$1} END {print s}')
+          FAILURES=$(find desktop-ui/build/test-results -name "TEST-*.xml" -exec grep -h 'failures="' {} \; | awk -F'failures="' '{sum+=$2; gsub(/".*/, "", sum)}' | awk '{s+=$1} END {print s}')
           echo "**Failures**: $FAILURES" >> $GITHUB_STEP_SUMMARY
           echo "**Status**: ✓ All tests passed" >> $GITHUB_STEP_SUMMARY
         fi
@@ -167,7 +167,7 @@ jobs:
         START_TIME=$(date +%s%N)
 
         if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml \
-          -jar build/libs/interlockSim.jar example shuntingLoop 300; then
+          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 300; then
 
           END_TIME=$(date +%s%N)
           ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))

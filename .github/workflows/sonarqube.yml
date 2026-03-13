@@ -95,7 +95,7 @@ jobs:
       with:
         name: jacoco-coverage-report-${{ github.sha }}
         path: |
-          build/reports/jacoco/
+          desktop-ui/build/reports/jacoco/
           core/build/reports/jacoco/
         retention-days: 30
         compression-level: 9
@@ -103,7 +103,7 @@ jobs:
     - name: Generate coverage report summary
       if: always()
       run: |
-        if [ -f build/reports/jacoco/test/html/index.html ]; then
+        if [ -f desktop-ui/build/reports/jacoco/test/html/index.html ]; then
           echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
           echo "JaCoCo coverage report generated" >> $GITHUB_STEP_SUMMARY
           echo "[View Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

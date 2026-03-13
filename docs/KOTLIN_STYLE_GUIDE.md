@@ -2000,7 +2000,7 @@ If you encounter `java.awt.AWTError: Can't connect to X11 window server`:
    # See docs/FEDORA_DOCKER_X11_SETUP.md for detailed instructions
 
    # Option 1: Use pre-generated policy (fastest)
-   sudo semodule -i docker-x11/docker-x11-complete.pp
+   sudo semodule -i desktop-ui/docker-x11/docker-x11-complete.pp
 
    # Option 2: Generate from audit log
    xhost +local:docker

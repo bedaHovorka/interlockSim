@@ -64,7 +64,7 @@ For complete build system documentation including dependency management, GitHub 
 - `src/main/java/` - Main source code
 - `src/test/java/` - Test source code
 - `src/main/resources/` - Resource files (XML schemas, examples)
-- `docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
+- `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
 - `docs/` - Project documentation
 - `build/` - Compiled outputs, JARs, test results
 
