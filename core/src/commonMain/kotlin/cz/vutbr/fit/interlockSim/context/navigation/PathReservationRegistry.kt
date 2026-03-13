@@ -583,8 +583,9 @@ class PathReservationRegistry(
 	 *
 	 * **Infinite Loop Bug (REJECTED):**
 	 * - Train oscillates: A → B → A → B → A (repeated back-and-forth)
-	 * - Separator appears MULTIPLE times in merged path (not just returning to original start)
-	 * - This is TRUNCATED: prevents TOCROA infinite loop bug (Issue #301)
+	 * - Separator would appear 3+ times in merged path
+	 * - The entire merge is ABORTED and the original `old` PathInfo is returned unchanged
+	 *   (Issue #316 fix: a truncated PathInfo ending mid-path is worse than keeping the valid original)
 	 *
 	 * ## Entry Direction Merging
 	 *
@@ -597,7 +598,6 @@ class PathReservationRegistry(
 	 * @throws IllegalStateException if new.start appears multiple times in path
 	 * @since Issue #296 Phase 8
 	 */
-	@Suppress("LongMethod", "CyclomaticComplexMethod")
 	private fun mergePathInfo(
 		trainId: String,
 		old: PathInfo,
@@ -624,22 +624,9 @@ class PathReservationRegistry(
 		// Step 3: Find overlap point (old.target == new.start)
 		val skipFirst = (new.start == old.target)
 		var skipped = false
-		var cycleDetected = false
-		var actualTarget: cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator = new.target
 
 		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
-		val truncatedSwitches = mutableListOf<DynamicRailSwitch>() // Tier 3: Track truncated switches
 		for (element in new.reservedPath) {
-			if (cycleDetected) {
-				// Tier 3: Collect switches from truncated portion of path
-				if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
-					element.isSwitch() &&
-					element is DynamicRailSwitch
-				) {
-					truncatedSwitches.add(element)
-				}
-				continue // Keep collecting truncated switches
-			}
 
 			if (skipFirst && !skipped && element == new.start) {
 				skipped = true // Skip this occurrence (already in old path)
@@ -656,28 +643,15 @@ class PathReservationRegistry(
 
 					if (occurrenceCount >= 2) {
 						// This would be the 3rd occurrence - infinite loop detected
-						logger.info {
-							"mergePathInfo: INFINITE LOOP DETECTED - separator $element appears $occurrenceCount times " +
-								"in merged path, would be ${occurrenceCount + 1}th occurrence. Truncating to prevent infinite loop " +
+						// Issue #316 fix: abort the entire merge and return the existing valid PathInfo
+						// (a truncated PathInfo is worse than the original because it may end with a
+						// separator without proper closure, causing infinite cycle-detection loops)
+						logger.warn {
+							"mergePathInfo: merge for train $trainId would create cycle (separator $element at 3+ occurrences). " +
+								"Keeping existing valid PathInfo unchanged. " +
 								"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
 						}
-						cycleDetected = true
-						// Update target to the last valid separator before the cycle
-						val lastSeparator = mergedPath.findLast { it is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator }
-						if (lastSeparator is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator) {
-							actualTarget = lastSeparator
-							logger.info {
-								"mergePathInfo: Updated target from ${new.target} to $actualTarget (last separator before cycle)"
-							}
-						}
-						// Tier 3: Collect THIS element if it's a switch (first truncated element)
-						if (element is cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator &&
-							element.isSwitch() &&
-							element is DynamicRailSwitch
-						) {
-							truncatedSwitches.add(element)
-						}
-						continue // Keep collecting truncated switches
+						return old
 					} else {
 						// 2nd occurrence - legitimate circular route (train completing one loop)
 						logger.info {
@@ -693,35 +667,6 @@ class PathReservationRegistry(
 			}
 		}
 
-		// Tier 3: Unlock and unregister truncated switches (Issue #291 - Cycle Detection Cleanup)
-		if (truncatedSwitches.isNotEmpty()) {
-			logger.info {
-				"mergePathInfo: Unlocking and unregistering ${truncatedSwitches.size} switches " +
-					"from truncated path portion for '$trainId'"
-			}
-			truncatedSwitches.forEach { switch ->
-				try {
-					// Unlock the switch
-					switch.unlock()
-					// Unregister from registry
-					val switchList = trainToSwitches[trainId]
-					if (switchList != null && switch in switchList) {
-						switchList.remove(switch)
-						switchToTrain.remove(switch)
-						logger.info {
-							"mergePathInfo: Unregistered and unlocked switch ${switch.hashCode()} from '$trainId' after cycle detection"
-						}
-					} else {
-						logger.debug {
-							"mergePathInfo: Switch ${switch.hashCode()} was not registered to '$trainId', only unlocked"
-						}
-					}
-				} catch (e: Exception) {
-					logger.warn(e) { "mergePathInfo: Failed to cleanup switch $switch" }
-				}
-			}
-		}
-
 		// Step 5: Merge entry directions (new overwrites old for conflicts)
 		val mergedDirections = old.entryDirections.toMutableMap()
 		mergedDirections.putAll(new.entryDirections)
@@ -729,12 +674,12 @@ class PathReservationRegistry(
 		logger.trace {
 			"mergePathInfo: merged ${old.reservedPath.size} + ${new.reservedPath.size} " +
 				"elements into ${mergedPath.size} elements " +
-				"(overlap: ${if (skipFirst) "yes" else "no"}, cycle: ${if (cycleDetected) "yes" else "no"})"
+				"(overlap: ${if (skipFirst) "yes" else "no"})"
 		}
 
 		return PathInfo(
 			start = old.start, // Keep original start (where Tail might still be)
-			target = actualTarget, // Use actual target (updated if cycle detected)
+			target = new.target,
 			reservedPath = mergedPath,
 			entryDirections = mergedDirections
 		)

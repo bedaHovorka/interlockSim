@@ -76,7 +76,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val xmlString = outputStream.toString(Charsets.UTF_8)
 			assertThat(xmlString).contains("<?xml version=\"1.0\"?>")
 			assertThat(xmlString).contains("<!DOCTYPE net>")
-			assertThat(xmlString).contains("<net X=\"100\" Y=\"100\" >")
+			assertThat(xmlString).contains("<net X=\"100\" Y=\"100\"")
 			assertThat(xmlString).contains("</net>")
 		}
 
@@ -94,7 +94,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			// Verify success and XML structure
 			assertThat(success).isTrue()
 			val xmlString = outputStream.toString(Charsets.UTF_8)
-			assertThat(xmlString).contains("<net X=\"100\" Y=\"100\" >")
+			assertThat(xmlString).contains("<net X=\"100\" Y=\"100\"")
 			assertThat(xmlString).contains("InOut")
 		}
 

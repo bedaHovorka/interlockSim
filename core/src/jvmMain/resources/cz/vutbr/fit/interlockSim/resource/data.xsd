@@ -25,7 +25,24 @@
     	</xs:complexContent>
     </xs:complexType>
 
-         <xs:element name="net"></xs:element>
+         <xs:element name="net">
+           <xs:complexType>
+             <!-- xs:any processContents="lax" is used because the child elements (RailSwitch,
+                  RailSemaphore, InOut, SimpleTrackBlock) are declared as top-level xs:elements
+                  in this schema, which cannot be referenced directly inside a complexType sequence
+                  without namespace qualification. Application-level validation in
+                  XMLContextFactory.Handler.classification() enforces the actual element name
+                  constraints at parse time. -->
+             <xs:sequence minOccurs="0" maxOccurs="unbounded">
+               <xs:any processContents="lax"/>
+             </xs:sequence>
+             <xs:attribute name="X" type="xs:int" use="required"/>
+             <xs:attribute name="Y" type="xs:int" use="required"/>
+             <xs:attribute name="currentMaxSpeed" type="xs:decimal" use="optional"/>
+             <xs:attribute name="currentTrackLength" type="xs:decimal" use="optional"/>
+             <xs:attribute name="currentNameString" type="xs:string" use="optional"/>
+           </xs:complexType>
+         </xs:element>
          
          <xs:element name="RailSwitch">
            <xs:complexType>

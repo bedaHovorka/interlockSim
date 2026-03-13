@@ -43,7 +43,7 @@ class XmlContextWriter {
 		val railwayNetGrid = context.getRailWayNetGrid()
 		val builder = StringBuilder()
 
-		writeHeader(builder, railwayNetGrid)
+		writeHeader(builder, context)
 		writeNodes(builder, context, railwayNetGrid)
 		writeEdges(builder, context)
 		writeFooter(builder)
@@ -51,12 +51,18 @@ class XmlContextWriter {
 		return builder.toString()
 	}
 
-	private fun writeHeader(builder: StringBuilder, grid: RailwayNetGrid<*>) {
+	private fun writeHeader(builder: StringBuilder, context: DefaultEditingContext) {
+		val grid = context.getRailWayNetGrid()
 		builder.append("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
 		builder.append(ROOT_ELEMENT_NAME).append(">\n")
 		builder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
 		appendAttribute(builder, X, grid.cols)
 		appendAttribute(builder, Y, grid.rows)
+		appendAttribute(builder, "currentMaxSpeed", context.currentMaxSpeed)
+		appendAttribute(builder, "currentTrackLength", context.currentTrackLength)
+		if (context.currentNameString.isNotEmpty()) {
+			appendAttribute(builder, "currentNameString", context.currentNameString)
+		}
 		builder.append(">\n")
 	}
 

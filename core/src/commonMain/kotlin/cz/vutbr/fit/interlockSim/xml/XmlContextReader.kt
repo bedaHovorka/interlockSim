@@ -140,7 +140,11 @@ class XmlContextReader {
 				}
 				val cols = requireInt(attrs, X)
 				val rows = requireInt(attrs, Y)
-				editingContext1 = DefaultEditingContext(cols, rows)
+				val ctx = DefaultEditingContext(cols, rows)
+				attrs["currentMaxSpeed"]?.toDoubleOrNull()?.let { ctx.currentMaxSpeed = it }
+				attrs["currentTrackLength"]?.toDoubleOrNull()?.let { ctx.currentTrackLength = it }
+				attrs["currentNameString"]?.let { ctx.currentNameString = it }
+				editingContext1 = ctx
 			}
 
 			"InOut" -> {

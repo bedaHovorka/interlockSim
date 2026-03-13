@@ -46,7 +46,7 @@ class XmlContextWriterTest {
 		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
 		ctx.use {
 			val xml = XmlContextWriter().generate(it)
-			assertThat(xml).contains("<net X=\"20\" Y=\"25\" >")
+			assertThat(xml).contains("<net X=\"20\" Y=\"25\"")
 			assertThat(xml).contains("</net>")
 		}
 	}
