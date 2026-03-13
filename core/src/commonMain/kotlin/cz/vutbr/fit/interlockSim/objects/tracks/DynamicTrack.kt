@@ -102,6 +102,7 @@ class DynamicTrack(
 	 * Transitions state from RESERVED to OCCUPIED.
 	 *
 	 * @param newOccupant The train entering
+	 * @throws TrackOperationException if track state is not RESERVED
 	 * @throws IllegalStateException if track is already occupied (collision detection)
 	 */
 	fun enter(newOccupant: TrackOccupant) {
@@ -120,7 +121,7 @@ class DynamicTrack(
 		}
 		val oldState = state
 		val oldReservedFrom = reservedFrom
-		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
+		exceptionStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
 		// Fire property change events
@@ -136,6 +137,7 @@ class DynamicTrack(
 	 * Transitions state from OCCUPIED to FREE.
 	 *
 	 * @param leavingOccupant The train leaving (must match current occupant)
+	 * @throws TrackOperationException if track state is not OCCUPIED
 	 * @throws IllegalStateException if occupant doesn't match
 	 */
 	fun leave(leavingOccupant: TrackOccupant) {
@@ -148,7 +150,7 @@ class DynamicTrack(
 		}
 		val oldState = state
 		val oldOccupant = occupant
-		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
+		exceptionStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
 		occupant = null
 		// Fire property change events
 		val snapshot = listeners
