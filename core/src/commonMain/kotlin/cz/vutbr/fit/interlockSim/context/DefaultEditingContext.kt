@@ -71,7 +71,6 @@ import kotlin.math.sqrt
  * @see EditingContext
  * @see DefaultSimulationContext
  * @see Context
- * @see javax.annotation.concurrent.NotThreadSafe
  */
 open class DefaultEditingContext(
 	cols: Int,
@@ -91,7 +90,10 @@ open class DefaultEditingContext(
 		org.koin.core.context.GlobalContext
 			.get()
 			.createScope(
-				scopeId = System.identityHashCode(this).toString(),
+				// DefaultEditingContext does not override hashCode(), so this.hashCode()
+			// returns the identity hash code (equivalent to System.identityHashCode(this)).
+			// Each context instance gets a unique scope ID.
+			scopeId = this.hashCode().toString(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultEditingContext>(),
@@ -457,7 +459,6 @@ open class DefaultEditingContext(
 	/**
 	 * Add a node cell to the railway network grid
 	 */
-	@Synchronized
 	override fun putCell(
 		key: Point,
 		nodeCell: NodeCell
@@ -503,13 +504,12 @@ open class DefaultEditingContext(
 			inouts.add(nodeCell as InOut)
 		}
 		firePropertyChange(ContextChangeListener.CELL_ADDED, null, key)
-		logger.trace { "Added ${nodeCell.javaClass.simpleName} at (${key.x},${key.y})" }
+		logger.trace { "Added ${nodeCell::class.simpleName} at (${key.x},${key.y})" }
 	}
 
 	/**
 	 * Remove a node cell from the railway network grid
 	 */
-	@Synchronized
 	override fun removeCell(key: Point) {
 		checkNotFrozen("remove cell")
 		val grid = getGrid()

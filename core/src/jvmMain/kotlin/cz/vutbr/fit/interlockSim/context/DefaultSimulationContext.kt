@@ -652,7 +652,7 @@ open class DefaultSimulationContext(
 			getSegment(separator, section) ?: throw IllegalStateException("getSegment returned null for TrackSection")
 		} else {
 			val nodeCell: NodeCell = CellUtilities.assertNodeCell(separator)
-			val trackBlock: DynamicTrackBlock = Util.assertInstanceOf(DynamicTrackBlock::class.java, track)
+			val trackBlock: DynamicTrackBlock = Util.assertInstanceOf<DynamicTrackBlock>(track)
 			// Match Java 1:1: return directly (inner method should not return null here)
 			getSegment(nodeCell, trackBlock)
 		}

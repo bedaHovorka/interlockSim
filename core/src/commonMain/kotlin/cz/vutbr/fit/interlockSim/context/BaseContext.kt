@@ -103,7 +103,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @see Context
  * @see DefaultEditingContext
  * @see DefaultSimulationContext
- * @see javax.annotation.concurrent.NotThreadSafe
  */
 abstract class BaseContext<T : TrackBlock>(
 	cols: Int,
@@ -111,9 +110,11 @@ abstract class BaseContext<T : TrackBlock>(
 ) {
 	/**
 	 * Listeners for context change notifications.
-	 * Replaces deprecated Observable pattern (Java 21 migration).
+	 * Copy-on-write list — @Volatile guarantees visibility across threads.
+	 * Add/remove is not atomic but races are acceptable (single-threaded GUI/sim use).
 	 */
-	private val listeners = mutableListOf<ContextPropertyChangeListener>()
+	@Volatile
+	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
 	 * Graph representing track blocks and their connections.
@@ -237,29 +238,20 @@ abstract class BaseContext<T : TrackBlock>(
 	 * Add a listener for context changes.
 	 * Replaces deprecated addObserver(Observer) method.
 	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener registration
-	 * from multiple threads, even though the context itself is not thread-safe. This is a
-	 * common pattern where listener management is synchronized but usage is not.
-	 *
 	 * @param listener the listener to add
 	 */
-	@Synchronized
 	open fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.add(listener)
+		listeners = listeners + listener
 	}
 
 	/**
 	 * Remove a listener for context changes.
 	 * Replaces deprecated deleteObserver(Observer) method.
 	 *
-	 * **Thread Safety Note**: This method is synchronized to allow safe listener unregistration
-	 * from multiple threads, even though the context itself is not thread-safe.
-	 *
 	 * @param listener the listener to remove
 	 */
-	@Synchronized
 	open fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
-		listeners.remove(listener)
+		listeners = listeners - listener
 	}
 
 	/**
@@ -282,7 +274,7 @@ abstract class BaseContext<T : TrackBlock>(
 		oldValue: Any?,
 		newValue: Any?
 	) {
-		val snapshot = synchronized(this) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
 
@@ -344,7 +336,7 @@ abstract class BaseContext<T : TrackBlock>(
 		if (!frozen) {
 			frozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
-			val snapshot = synchronized(this) { listeners.toList() }
+			val snapshot = listeners
 			snapshot.forEach { it.propertyChange(ContextChangeEvent("frozen", false, true)) }
 		}
 	}
@@ -373,7 +365,7 @@ abstract class BaseContext<T : TrackBlock>(
 			return
 		}
 
-		val snapshot = synchronized(this) { listeners.toList() }
+		val snapshot = listeners
 		snapshot.forEach { it.propertyChange(ContextChangeEvent(propertyName, oldValue, newValue)) }
 	}
 }

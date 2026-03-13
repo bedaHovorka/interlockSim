@@ -28,9 +28,9 @@ val koinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Note: Although this module uses kotlin("multiplatform"), commonMain currently contains
-// JVM-only APIs (javax.xml.*, kDisco). The KMP structure is intentional for future
-// platform expansion; for now only the JVM target is active.
+// commonMain is now KMP-clean: no java.* / javax.* imports, no JVM-only idioms.
+// JVM-only code (xml/, context factories, DefaultSimulationContext) lives in jvmMain.
+// The KMP structure enables future non-JVM target additions.
 kotlin {
 	jvm {
 		compilations.all {
@@ -75,7 +75,6 @@ kotlin {
 				implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
 				implementation("org.slf4j:slf4j-api:$slf4jVersion")
 				implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
-				implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 			}
 		}
 		val commonTest by getting {
@@ -89,7 +88,12 @@ kotlin {
 				implementation("io.insert-koin:koin-test-junit5:$koinVersion")
 			}
 		}
-		val jvmMain by getting
+		val jvmMain by getting {
+			dependencies {
+				// kotlin-reflect is JVM-only; not needed in KMP commonMain
+				implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
+			}
+		}
 		val jvmTest by getting {
 			dependencies {
 				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
@@ -268,4 +272,52 @@ tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.con
 
 tasks.named("compileKotlinJvm") {
 	dependsOn(rootProject.tasks.named("checkKdisco"))
+}
+
+// ===========================================
+// CommonMain Purity Gate
+// ===========================================
+// Ensures commonMain stays free of JVM-only imports (java.*, javax.*) and idioms.
+// This is required for adding non-JVM KMP targets in the future.
+
+val checkCoreCommonMainPurity by tasks.registering {
+	group = "verification"
+	description = "Verify :core commonMain contains no java.* or javax.* imports"
+
+	val commonMainDir = file("src/commonMain/kotlin")
+
+	doLast {
+		if (!commonMainDir.exists()) {
+			logger.info("commonMain directory {} does not exist, skipping purity check.", commonMainDir)
+			return@doLast
+		}
+
+		val importRegex = Regex("^import\\s+(java|javax)\\..*")
+		val violations = mutableListOf<String>()
+
+		project.fileTree(commonMainDir).matching { include("**/*.kt") }.forEach { file ->
+			val lines = file.readLines()
+			lines.forEachIndexed { index, line ->
+				if (importRegex.containsMatchIn(line)) {
+					if (violations.isEmpty() || violations.last() != file.path) {
+						println("PURITY VIOLATION: ${file.path}")
+						violations.add(file.path)
+					}
+					println("${index + 1}: $line")
+				}
+			}
+		}
+
+		if (violations.isNotEmpty()) {
+			throw org.gradle.api.GradleException(
+				"ERROR: commonMain contains JVM-only imports. Move them to jvmMain."
+			)
+		}
+
+		println("commonMain purity check passed - no java.* or javax.* imports found.")
+	}
+}
+
+tasks.named("check") {
+	dependsOn(checkCoreCommonMainPurity)
 }

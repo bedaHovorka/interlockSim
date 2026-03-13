@@ -21,17 +21,17 @@ object Util {
 	/**
 	 * Generic type assertion and cast utility.
 	 *
-	 * @param T target type
-	 * @param clazz target class to cast to
+	 * @param T target type (reified)
 	 * @param obj object to cast
 	 * @return casted instance of type T
-	 * @throws IllegalStateException if obj is not an instance of clazz
+	 * @throws IllegalStateException if obj is not an instance of T
 	 */
-	fun <T> assertInstanceOf(
-		clazz: Class<T>,
-		obj: Any
-	): T {
-		requireValidState(clazz.isInstance(obj)) { "Expected instance of ${clazz.name} but got ${obj.javaClass.name}: $obj" }
-		return clazz.cast(obj)
+	inline fun <reified T> assertInstanceOf(obj: Any): T {
+		requireValidState(obj is T) {
+			val expectedName = T::class.simpleName ?: T::class.qualifiedName ?: T::class.toString()
+			val actualName = obj::class.simpleName ?: obj::class.qualifiedName ?: obj::class.toString()
+			"Expected instance of $expectedName but got $actualName: $obj"
+		}
+		return obj as T
 	}
 }

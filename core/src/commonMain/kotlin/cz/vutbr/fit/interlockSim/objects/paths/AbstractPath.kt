@@ -176,9 +176,9 @@ abstract class AbstractPath protected constructor(
 
 			val iterator = getIterator(sep)
 			while (iterator.hasNext()) {
-				val separator = Util.assertInstanceOf(DynamicPathSeparator::class.java, iterator.next())
+				val separator = Util.assertInstanceOf<DynamicPathSeparator>(iterator.next())
 				if (!iterator.hasNext()) break // Last element is semaphore, separatorSetting doesn't set it
-				val nextTrack = Util.assertInstanceOf(Track::class.java, iterator.next())
+				val nextTrack = Util.assertInstanceOf<Track>(iterator.next())
 
 				if (!separatorSetting(operationName, separator, previous, nextTrack)) {
 					if (operationName == IS_FREE_FROM) {

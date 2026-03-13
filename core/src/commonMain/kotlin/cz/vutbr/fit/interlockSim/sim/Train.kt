@@ -42,8 +42,7 @@ class Train :
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		private var countValue = 0
-		private val countLock = Any()
-		private fun nextCount(): Int = synchronized(countLock) { ++countValue }
+		private fun nextCount(): Int = ++countValue
 
 		/**
 		 * Maximum train acceleration in m/s²

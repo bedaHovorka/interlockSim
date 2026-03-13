@@ -16,14 +16,9 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
  * @param <N> node
  * @param <E> edge
  */
-class EnumUnorientedGraph<N, E>(
-	private val clazz: Class<N>
-) : AbstractUnorientedGraph<N, E>() where N : Enum<N> {
+class EnumUnorientedGraph<N, E> :
+	AbstractUnorientedGraph<N, E>() where N : Enum<N> {
 	private val map: MutableMap<N, MutableMap<N, E>> = HashMap()
-
-	/**
-	 * @param clazz
-	 */
 
 	override fun implementationContainer(): Any = map
 
@@ -31,20 +26,18 @@ class EnumUnorientedGraph<N, E>(
 		node1: N,
 		node2: N
 	): Boolean {
-		val ns = nodesInOrder(node1, node2)
-		val submap = getSubmap(ns)
+		val (first, second) = nodesInOrder(node1, node2)
+		val submap = map[first]
 		if (submap == null) return false
-		return submap.containsKey(ns[1])
+		return submap.containsKey(second)
 	}
 
 	override fun get(
 		first: N,
 		second: N
 	): E? {
-		val ns = nodesInOrder(first, second)
-		val submap = getSubmap(ns)
-		if (submap == null) return null
-		return submap[ns[1]]
+		val (n1, n2) = nodesInOrder(first, second)
+		return map[n1]?.get(n2)
 	}
 
 	override fun get(node: N): Collection<E> = throw NotImplementedException()
@@ -84,9 +77,9 @@ class EnumUnorientedGraph<N, E>(
 		second: N,
 		value: E
 	) {
-		val ns = nodesInOrder(first, second)
-		val submap = getSubmapWithCreation(ns)
-		submap[ns[1]] = value
+		val (n1, n2) = nodesInOrder(first, second)
+		val submap = getSubmapWithCreation(n1)
+		submap[n2] = value
 	}
 
 	override fun remove(
@@ -112,32 +105,12 @@ class EnumUnorientedGraph<N, E>(
 
 	override fun values(): Collection<E> = throw NotImplementedException()
 
-	@Suppress("UNCHECKED_CAST", "UNCHECKED_CAST")
-	private fun nodesInOrder(
-		n1: N,
-		n2: N
-	): Array<N> {
+	private fun nodesInOrder(n1: N, n2: N): Pair<N, N> {
 		requireValidState(n1 != n2) { "Cannot create edge between same node: $n1" }
-		@Suppress("UNCHECKED_CAST")
-		val nodes =
-			java.lang.reflect.Array
-				.newInstance(n1.javaClass, 2) as Array<N>
-		nodes[0] = n1
-		nodes[1] = n2
-		// Since N extends Enum<N>, we can safely cast to Array<Comparable>
-		@Suppress("UNCHECKED_CAST")
-		(nodes as Array<Comparable<N>>).sort()
-		return nodes
+		return if (n1 <= n2) Pair(n1, n2) else Pair(n2, n1)
 	}
 
-	private fun getSubmap(sortedNodes: Array<N>): MutableMap<N, E>? = map[sortedNodes[0]]
-
-	private fun getSubmapWithCreation(sortedNodes: Array<N>): MutableMap<N, E> {
-		var subMap = getSubmap(sortedNodes)
-		if (subMap == null) {
-			subMap = HashMap()
-			map[sortedNodes[0]] = subMap
-		}
-		return subMap
+	private fun getSubmapWithCreation(key: N): MutableMap<N, E> {
+		return map.getOrPut(key) { HashMap() }
 	}
 }

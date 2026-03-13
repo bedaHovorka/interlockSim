@@ -5,6 +5,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlin.reflect.KClass
 
 /**
  * Generates sequential names for newly created railway elements.
@@ -38,7 +39,7 @@ object AutoNameGenerator {
 	 * @return A unique sequential name
 	 */
 	fun generateName(
-		cellClass: Class<out NodeCell>,
+		cellClass: KClass<out NodeCell>,
 		context: EditingContext
 	): String {
 		val prefix = getPrefixForClass(cellClass)
@@ -64,11 +65,11 @@ object AutoNameGenerator {
 	/**
 	 * Returns the name prefix for a given cell class.
 	 */
-	private fun getPrefixForClass(cellClass: Class<out NodeCell>): String =
+	private fun getPrefixForClass(cellClass: KClass<out NodeCell>): String =
 		when (cellClass) {
-			RailSemaphore::class.java -> "S"
-			RailSwitch::class.java -> "SW"
-			InOut::class.java -> "IO"
+			RailSemaphore::class -> "S"
+			RailSwitch::class -> "SW"
+			InOut::class -> "IO"
 			else -> "E" // Generic element
 		}
 

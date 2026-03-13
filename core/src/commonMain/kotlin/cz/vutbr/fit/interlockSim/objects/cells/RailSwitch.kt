@@ -263,7 +263,7 @@ private fun putBranches() {
 	for (t in Type.entries) {
 		if (t.getKind() == RailSwitch.Kind.SIMPLE) {
 			for (st in SUPPORTED_SIMPLE_SPATIAL_TYPES) {
-				val confs = EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>(Cell.Segment::class.java)
+				val confs = EnumUnorientedGraph<Cell.Segment, RailSwitch.Conf>()
 				val merging = st.segments[if (t.getMergingPosition()) 0 else 1] // je v proti-directionu
 				val mainDir = anti(merging)
 				val set = branches.get(t, st)

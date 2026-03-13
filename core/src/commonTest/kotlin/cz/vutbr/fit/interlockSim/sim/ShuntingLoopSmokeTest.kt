@@ -102,8 +102,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()
 		val context =
-			Util.assertInstanceOf(
-				DefaultSimulationContext::class.java,
+			Util.assertInstanceOf<DefaultSimulationContext>(
 				factory.createContext(File(VYHYBNA_XML_PATH))
 			)
 

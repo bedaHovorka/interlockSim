@@ -73,22 +73,21 @@ class SwitchConfigurationTest : KoinTestBase() {
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)
-		vA = elementAt(context, DynamicRailSwitch::class.java, 15, 8)
-		vB = elementAt(context, DynamicRailSwitch::class.java, 26, 8)
-		zA = elementAt(context, DynamicRailSemaphore::class.java, 14, 8)
-		doA1 = elementAt(context, DynamicRailSemaphore::class.java, 16, 8)
-		doA2 = elementAt(context, DynamicRailSemaphore::class.java, 17, 9)
-		doB1 = elementAt(context, DynamicRailSemaphore::class.java, 25, 8)
-		doB2 = elementAt(context, DynamicRailSemaphore::class.java, 24, 9)
-		zB = elementAt(context, DynamicRailSemaphore::class.java, 27, 8)
+		vA = elementAt<DynamicRailSwitch>(context, 15, 8)
+		vB = elementAt<DynamicRailSwitch>(context, 26, 8)
+		zA = elementAt<DynamicRailSemaphore>(context, 14, 8)
+		doA1 = elementAt<DynamicRailSemaphore>(context, 16, 8)
+		doA2 = elementAt<DynamicRailSemaphore>(context, 17, 9)
+		doB1 = elementAt<DynamicRailSemaphore>(context, 25, 8)
+		doB2 = elementAt<DynamicRailSemaphore>(context, 24, 9)
+		zB = elementAt<DynamicRailSemaphore>(context, 27, 8)
 	}
 
 	/**
 	 * Get element from grid by coordinates (same pattern as ShuntingLoop).
 	 */
-	private fun <T : Cell> elementAt(
+	private inline fun <reified T : Cell> elementAt(
 		context: SimulationContext,
-		clazz: Class<T>,
 		x: Int,
 		y: Int
 	): T {
@@ -98,7 +97,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 		val cell =
 			context.getRailWayNetGrid()[point]
 				?: throw IllegalArgumentException("No cell at ($x, $y)")
-		return Util.assertInstanceOf(clazz, cell)
+		return Util.assertInstanceOf(cell)
 	}
 
 	/**

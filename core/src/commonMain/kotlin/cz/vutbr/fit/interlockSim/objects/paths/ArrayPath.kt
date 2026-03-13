@@ -62,9 +62,9 @@ class ArrayPath(
 	override fun removeFirst(): PathElement = deque.removeFirst()
 
 	// Path-specific typed accessors with runtime type validation
-	override fun getFirst(): PathSeparator = Util.assertInstanceOf(PathSeparator::class.java, deque.first())
+	override fun getFirst(): PathSeparator = Util.assertInstanceOf<PathSeparator>(deque.first())
 
-	override fun getLast(): OrientedPathSeparator = Util.assertInstanceOf(OrientedPathSeparator::class.java, deque.last())
+	override fun getLast(): OrientedPathSeparator = Util.assertInstanceOf<OrientedPathSeparator>(deque.last())
 
 	override fun getNext(current: TrackSection?): TrackSection? {
 // 		var trackBlock: DynamicTrackBlock? = null
