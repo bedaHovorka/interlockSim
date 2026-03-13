@@ -61,12 +61,14 @@ For complete build system documentation including dependency management, GitHub 
 
 ### Directory Structure
 
-- `src/main/java/` - Main source code
-- `src/test/java/` - Test source code
-- `src/main/resources/` - Resource files (XML schemas, examples)
-- `docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
+- `core/` - KMP `:core` subproject (domain model, simulation engine, XML)
+- `desktop-ui/` - JVM `:desktop-ui` subproject (GUI, DI bootstrap, Main entry)
+  - `desktop-ui/src/main/kotlin/` - Main source code
+  - `desktop-ui/src/test/kotlin/` - Test source code
+  - `desktop-ui/src/main/resources/` - Resource files (XML examples)
+  - `desktop-ui/docker-x11/` - SELinux policy modules for Docker X11 forwarding (Fedora)
 - `docs/` - Project documentation
-- `build/` - Compiled outputs, JARs, test results
+- `desktop-ui/build/` - Compiled outputs, JARs, test results
 
 ## Docker Setup (Recommended)
 

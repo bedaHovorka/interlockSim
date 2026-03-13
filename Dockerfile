@@ -48,6 +48,7 @@ COPY detekt.yml /build/interlockSim/
 COPY detekt-strict.yml /build/interlockSim/
 COPY .editorconfig /build/interlockSim/
 COPY core/build.gradle.kts /build/interlockSim/core/
+COPY desktop-ui/build.gradle.kts /build/interlockSim/desktop-ui/
 
 # Layer 2.5: Build kDisco 0.2.0 from source if not in cache
 # Mirrors the CI workflow (gradle-java21.yml / sonarqube.yml).
@@ -101,7 +102,7 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
 
 # Layer 4: Copy source code
 # This is the layer that changes most frequently
-COPY src/ /build/interlockSim/src/
+COPY desktop-ui/src/ /build/interlockSim/desktop-ui/src/
 COPY core/src/ /build/interlockSim/core/src/
 
 # Layer 5: Build and test with cache mount
@@ -113,9 +114,9 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
     ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
 
 # Verify JAR was created
-RUN ls -lh /build/interlockSim/build/libs/interlockSim.jar && \
+RUN ls -lh /build/interlockSim/desktop-ui/build/libs/interlockSim.jar && \
     echo "=== JAR Info ===" && \
-    jar tf /build/interlockSim/build/libs/interlockSim.jar | head -20
+    jar tf /build/interlockSim/desktop-ui/build/libs/interlockSim.jar | head -20
 
 # ============================================
 # Stage 2: Runtime with JRE and X11 support
@@ -138,10 +139,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy compiled uber JAR from builder stage (Gradle output)
-COPY --from=builder /build/interlockSim/build/libs/interlockSim.jar /app/
+COPY --from=builder /build/interlockSim/desktop-ui/build/libs/interlockSim.jar /app/
 
 # Copy resources if needed at runtime (XML schemas, examples)
-COPY --from=builder /build/interlockSim/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
+COPY --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
 # Create artifacts directory for extraction
