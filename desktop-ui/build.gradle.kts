@@ -370,6 +370,13 @@ tasks.jacocoTestCoverageVerification {
 // SonarQube — skip (root handles it)
 // ===========================================
 
+// sonarqube plugin is NOT declared in this subproject's plugins {} block.
+// The root project applies it and the Gradle SonarQube plugin automatically
+// propagates its extension to all subprojects, making the sonarqube {} DSL
+// available here without an explicit apply.
+// isSkipProject = true tells the scanner to ignore this subproject's own
+// contribution — the root aggregator config points sonar.sources directly
+// to desktop-ui/src/... and collects all coverage from there.
 sonarqube {
     isSkipProject = true
 }
