@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.hovorka.kdisco.engine.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -67,7 +68,7 @@ sealed class DynamicRailSemaphore(
 			logger.debug {
 				if (oldSignal != newSignal) {
 					"Semaphore ${staticRef.getName()} " +
-						"signal change: $oldSignal -> $newSignal at t=${jDisco.Process.time()}"
+						"signal change: $oldSignal -> $newSignal at t=${Process.time()}"
 				} else {
 					""
 				}

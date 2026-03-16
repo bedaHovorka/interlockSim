@@ -18,10 +18,10 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Head
-import cz.hovorka.kdisco.Link
-import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.engine.Condition
+import cz.hovorka.kdisco.engine.Head
+import cz.hovorka.kdisco.engine.Link
+import cz.hovorka.kdisco.engine.Process
 
 /**
  * Behaviour of InOut process
@@ -64,7 +64,7 @@ class InOutWorker(
 		}
 
 	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
-	override fun iteration() {
+	override suspend fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
@@ -155,7 +155,7 @@ class InOutWorker(
 	 * In InOut is new Train - process awakening signal
 	 * @param train
 	 */
-	fun enterTrain(train: Train) {
+	suspend fun enterTrain(train: Train) {
 		logger.debug { "InOutWorker ${inOut.name} entering train $train, queue empty: ${queqe.empty()}" }
 		if (queqe.empty()) {
 			train.into(queqe)

@@ -97,11 +97,11 @@ class ShuntingLoop(
 		private var presvihnuto: Double = 0.0
 		private var beginTime: Long = 0
 
-		override fun startAction() {
+		override suspend fun startAction() {
 			interLoopSleep()
 		}
 
-		override fun iteration() {
+		override suspend fun iteration() {
 			val iterationEndTime: Long = System.currentTimeMillis()
 			val targetInterval = (1000.0 / speedMultiplier).toLong()
 			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
@@ -118,7 +118,7 @@ class ShuntingLoop(
 			}
 		}
 
-		override fun interLoopSleep() {
+		override suspend fun interLoopSleep() {
 			beginTime = System.currentTimeMillis()
 			hold(1 + presvihnuto)
 			presvihnuto = 0.0
@@ -190,7 +190,7 @@ class ShuntingLoop(
 		return dynamicBlock
 	}
 
-	override fun startAction() {
+	override suspend fun startAction() {
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
 
 		// Conditionally activate real-time synchronization for GUI mode
@@ -201,7 +201,7 @@ class ShuntingLoop(
 		activate(generator)
 	}
 
-	override fun iteration() {
+	override suspend fun iteration() {
 		// stare vlaky
 		val iter: MutableIterator<Train> = approwedTrains.iterator()
 		while (iter.hasNext()) {
@@ -325,7 +325,7 @@ class ShuntingLoop(
 		}
 	}
 
-	override fun interLoopSleep() {
+	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			generator.terminate()
 			terminate()

@@ -17,7 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.engine.Process
 
 private val logger = KotlinLogging.logger {}
 

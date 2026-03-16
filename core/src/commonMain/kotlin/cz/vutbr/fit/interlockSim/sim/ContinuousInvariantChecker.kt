@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.engine.Continuous
 
 /**
  * Base class for validating continuous variable invariants during simulation.
@@ -26,7 +26,7 @@ import cz.hovorka.kdisco.Continuous
  * @see report The method providing diagnostic information on invariant violations
  */
 abstract class ContinuousInvariantChecker : Continuous() {
-	protected final override fun derivatives() {
+	final override fun derivatives() {
 		requireSimulation(check()) {
 			val sb = StringBuilder(time().toString()).append(" : ")
 			val msg = report(sb as StringBuilder)

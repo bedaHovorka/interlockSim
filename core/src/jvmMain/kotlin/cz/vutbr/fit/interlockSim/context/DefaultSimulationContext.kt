@@ -42,9 +42,9 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Random
+import cz.hovorka.kdisco.engine.DiscoException
+import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.engine.Random
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -180,7 +180,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Random number generator for name generation (jDisco)
 	 */
-	private val random: Random = Random(0)
+	private val random: Random = Random(0L)
 
 	/**
 	 * Topology navigator for pure topology navigation (no state dependencies).
@@ -1411,7 +1411,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Generate random name string (single character A-T)
 	 */
-	private fun randomString(): String = String(Character.toChars(65 + random.nextInt(20)))
+	private fun randomString(): String = String(Character.toChars(65 + random.randInt(0, 19)))
 
 	/**
 	 * Get the worker for an entry/exit point

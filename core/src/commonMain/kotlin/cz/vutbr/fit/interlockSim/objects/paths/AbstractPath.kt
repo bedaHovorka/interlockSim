@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.hovorka.kdisco.engine.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -183,7 +184,7 @@ abstract class AbstractPath protected constructor(
 				if (!separatorSetting(operationName, separator, previous, nextTrack)) {
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
-							"${jDisco.Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
+							"${Process.time()} PATH_NOT_FREE: Separator $separator prevents path - config cannot be set"
 						}
 					}
 					logger.debug { "Separator setting failed for operation: $operationName" }
@@ -194,7 +195,7 @@ abstract class AbstractPath protected constructor(
 				if (!trackOperation(nextTrack, separator)) {
 					if (operationName == IS_FREE_FROM) {
 						logger.info {
-							"${jDisco.Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
+							"${Process.time()} PATH_NOT_FREE: Track $nextTrack prevents path - " +
 								"state=${toTrackFacility(nextTrack).getState()}"
 						}
 					}

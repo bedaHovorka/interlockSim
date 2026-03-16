@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.engine.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -119,9 +120,9 @@ class SimpleTestProcess(
 	 * This method activates the train, transitioning it from PASSIVE to ACTIVE state.
 	 * The train's actions() method will then begin executing.
 	 */
-	override fun startAction() {
+	override suspend fun startAction() {
 		logger.debug { "SimpleTestProcess: Starting test with train ${train.name}" }
-		activate(train) // CRITICAL: activate the train process
+		Process.activate(train) // CRITICAL: activate the train process
 	}
 
 	/**
@@ -131,7 +132,7 @@ class SimpleTestProcess(
 	 * maximum simulation time has been exceeded. If either condition is met,
 	 * the process terminates.
 	 */
-	override fun iteration() {
+	override suspend fun iteration() {
 		val currentTime = time()
 		val isTerminated = train.terminated()
 
@@ -151,7 +152,7 @@ class SimpleTestProcess(
 	 * This method uses hold() to advance the simulation clock by 1 second,
 	 * allowing the train to make progress between checks.
 	 */
-	override fun interLoopSleep() {
+	override suspend fun interLoopSleep() {
 		hold(1.0) // Check every 1 second of simulation time
 	}
 
@@ -161,7 +162,7 @@ class SimpleTestProcess(
 	 * This method logs the completion of the test and can be used for cleanup
 	 * if needed.
 	 */
-	override fun byTerminateAction() {
+	override suspend fun byTerminateAction() {
 		logger.debug { "SimpleTestProcess: Test completed at t=${time()}" }
 	}
 

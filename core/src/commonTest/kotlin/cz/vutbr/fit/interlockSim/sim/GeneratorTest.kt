@@ -410,7 +410,7 @@ class GeneratorTest : KoinTestBase() {
 			val generator = Generator(mockContext, shuffleInOuts = false)
 
 			// Act
-			val iterationMethod = Generator::class.java.getDeclaredMethod("iteration")
+			val iterationMethod = Generator::class.java.declaredMethods.find { it.name == "iteration" }
 
 			// Assert
 			assertThat(iterationMethod).isNotNull()
@@ -428,7 +428,7 @@ class GeneratorTest : KoinTestBase() {
 			val generator = Generator(mockContext, shuffleInOuts = false)
 
 			// Act
-			val sleepMethod = Generator::class.java.getDeclaredMethod("interLoopSleep")
+			val sleepMethod = Generator::class.java.declaredMethods.find { it.name == "interLoopSleep" }
 
 			// Assert
 			assertThat(sleepMethod).isNotNull()

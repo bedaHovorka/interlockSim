@@ -25,12 +25,12 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Continuous
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Reporter
-import cz.hovorka.kdisco.Variable
-import cz.hovorka.kdisco.activate
+import cz.hovorka.kdisco.engine.Condition
+import cz.hovorka.kdisco.engine.Continuous
+import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.engine.Variable
+import cz.hovorka.kdisco.engine.dtMin
+import cz.hovorka.kdisco.engine.maxAbsError
 
 /**
  * Train Process
@@ -55,35 +55,6 @@ class Train :
 		private const val MINIMAL_DECELERATION = -3
 	}
 
-	private val r: Reporter =
-		object : Reporter() { // nesmi byt static!!!
-			private var started: Boolean = false
-
-			override fun actions() {
-				if (!started || !env.isReporting(ReportType.TRAIN_CONTINUOUS)) return // opti-hack
-				val builder = StringBuilder()
-				builder.append(getAcceleration()).append(' ')
-				builder.append(getVelocity()).append(' ')
-				builder.append(front.getTotalDistance()).append(' ')
-				// builder.append(tail.getTotalDistance()).append(' ')
-				builder.append(front.getFrontSection()).append(' ')
-				builder.append(tail.getTailSection()).append(' ')
-				val distanceToSemaphore: Double = distanceToSemaphore()
-				builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
-				env.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
-			}
-
-			override fun start(): Reporter {
-				started = true
-				return super.start()
-			}
-
-			override fun stop() {
-				started = false
-				super.stop()
-			}
-		}.setFrequency(1.0)
-
 	// GitHub #62: Support bidirectional train operation (reverse direction)
 	// Allow train engineer to move to opposite end and drive in reverse direction.
 	// This is a simulation simplification of locomotive coupling/uncoupling operations.
@@ -99,7 +70,7 @@ class Train :
 
 		val terminated: Condition = Condition { terminated() }
 
-		final override fun actions() {
+		final override suspend fun actions() {
 			var where: DynamicPathSeparator = timetable.getIn()
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
@@ -202,7 +173,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				requireSimulation(position.isActive() && pv.isActive) {
+				requireSimulation(position.isActive() && pv.isActive()) {
 					"Position and velocity integration must be active"
 				}
 				waitUntil {
@@ -234,19 +205,19 @@ class Train :
 		 * @param current
 		 * @param next
 		 */
-		abstract fun separatorAction(
+		abstract suspend fun separatorAction(
 			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
 		)
 
-		override fun start(): Site {
+		open fun start(): Site {
 			position.start()
 			pv.start()
 			return this
 		}
 
-		override fun stop() {
+		fun stop() {
 			position.stop()
 			pv.stop()
 		}
@@ -274,7 +245,7 @@ class Train :
 	}
 
 	private inner class Front : Site() {
-		private fun semaphoreAction(
+		private suspend fun semaphoreAction(
 			semaphore: DynamicRailSemaphore,
 			separator: DynamicPathSeparator,
 			current: TrackSection?,
@@ -459,7 +430,6 @@ class Train :
 			tail.stop()
 			this@Train.stop()
 			velocity.state = 0.0
-			r.stop()
 		}
 
 		private fun fireStart(
@@ -470,7 +440,6 @@ class Train :
 			this@Train.start()
 			front.start()
 			tail.start()
-			r.start()
 		}
 
 		@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
@@ -509,7 +478,7 @@ class Train :
 			}
 		}
 
-		override fun separatorAction(
+		override suspend fun separatorAction(
 			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
@@ -544,7 +513,7 @@ class Train :
 	private inner class Tail : Site() {
 		private var fromHome: Boolean = false
 
-		override fun separatorAction(
+		override suspend fun separatorAction(
 			where: DynamicPathSeparator,
 			current: TrackSection?,
 			next: TrackSection?
@@ -637,7 +606,7 @@ class Train :
 			fun getStopTest(): AccelerationStopTest = stopTest
 		}
 
-		override fun actions() {
+		override suspend fun actions() {
 			while (true) {
 				if (terminate) break
 				iteration()
@@ -646,7 +615,7 @@ class Train :
 			}
 		}
 
-		private fun iteration() {
+		private suspend fun iteration() {
 			val cond = requireSimulationNotNull(currentCondition) { "Current condition must not be null during iteration" }
 			accelerate = true
 			logger.trace {
@@ -675,7 +644,7 @@ class Train :
 			targetSpeed = speed
 			currentCondition = AccelerationStopCondition(test)
 			cancelAccelerating()
-			activate(this)
+			Process.activate(this)
 		}
 
 		/**
@@ -717,13 +686,13 @@ class Train :
 		fun cancelAccelerating() {
 			if (accelerate) {
 				accelerate = false
-				activate(this)
+				Process.activate(this)
 			}
 		}
 
 		override fun terminate() {
 			terminate = true
-			if (!terminated()) activate(this)
+			if (!terminated()) Process.activate(this)
 		}
 
 		override fun start(): Continuous = if (accelerate) super.start() else this
@@ -792,7 +761,7 @@ class Train :
 	override fun distanceToSemaphore(): Double =
 		if (pathToSemaphore == null) 0.0 else pathToSemaphore!!.length() - front.getPosition()
 
-	override fun actions() { // spusten odsouhlasenim
+	override suspend fun actions() { // spusten odsouhlasenim
 		// zarazeni do fronty vstupniho bodu (simulace systemu sousedni stanice)
 		val inout = timetable.getIn()
 		val worker: InOutWorker = env.getWorkerFor(inout)
@@ -808,13 +777,13 @@ class Train :
 		}
 		logger.info { "Train $number path is reserved, starting Front process" }
 
-		activate(front)
+		Process.activate(front)
 
 		waitUntil { front.getTotalDistance() >= getLength() }
-		activate(tail)
+		Process.activate(tail)
 
 		out()
-		(worker.getQueqe().first() as? Train)?.let { activate(it) }
+		(worker.getQueqe().first() as? Train)?.let { Process.activate(it) }
 		ap.start()
 
 		waitUntil(front.terminated)
@@ -822,8 +791,6 @@ class Train :
 		// predkem v systemu sousedni stanice
 
 		waitUntil(tail.terminated)
-		r.setFrequency(Double.POSITIVE_INFINITY)
-		r.stop()
 		stop()
 		motor.terminate()
 		env.releaseTrainReservations(name)
@@ -917,7 +884,7 @@ class Train :
 	 * @throws IllegalStateException if train is not stopped
 	 * @since GitHub #62: Bidirectional train operation support
 	 */
-	fun reverseDirection() {
+	suspend fun reverseDirection() {
 		// Validate preconditions
 		requireSimulation(getVelocity() == 0.0) {
 			"Train $number must be stopped (velocity = 0) to reverse direction. Current velocity: ${getVelocity()}"
@@ -1026,14 +993,14 @@ class Train :
 	@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 	override fun nextSemaphore(): OrientedPathSeparator? = pathToSemaphore?.getLast()
 
-	override fun start(): Train {
+	fun start(): Train {
 		acceleration.start()
 		velocity.start()
 		va.start()
 		return this
 	}
 
-	override fun stop() {
+	fun stop() {
 		acceleration.stop()
 		velocity.stop()
 		va.stop()

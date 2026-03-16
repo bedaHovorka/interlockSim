@@ -11,12 +11,12 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Random
-import cz.hovorka.kdisco.activate
-import cz.hovorka.kdisco.dtMax
-import cz.hovorka.kdisco.dtMin
-import cz.hovorka.kdisco.maxAbsError
-import cz.hovorka.kdisco.maxRelError
+import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.engine.dtMax
+import cz.hovorka.kdisco.engine.dtMin
+import cz.hovorka.kdisco.engine.maxAbsError
+import cz.hovorka.kdisco.engine.maxRelError
+import cz.hovorka.kdisco.engine.Random
 
 /**
  * Testing Generator
@@ -27,23 +27,23 @@ open class Generator(
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		init {
-			dtMin = 1e-6
-			dtMax = 1e-3
-			maxRelError = 1e-2
-			maxAbsError = 1e-2
-		}
 	}
 
-	protected var random = Random(0)
+	override suspend fun startAction() {
+		dtMin = 1e-6
+		dtMax = 1e-3
+		maxRelError = 1e-2
+		maxAbsError = 1e-2
+	}
+
+	protected var random = Random(0L)
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
 	private fun generateRandomTimetable(): Timetable {
 		val inOutsList = env.getInOuts().toMutableList()
 		if (shuffleInOuts) {
-			inOutsList.shuffle(random)
+			inOutsList.shuffle()
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
@@ -55,7 +55,7 @@ open class Generator(
 		return Timetable(inOutsList[0], inOutsList[1], Time(timeIn), Time(timeOut), 40.0)
 	}
 
-	override fun iteration() {
+	override suspend fun iteration() {
 		val train = Train(env, generateRandomTimetable())
 		logger.debug { "Generator: creating and placing train (total trains: ${trains.size + 1})" }
 		placeTrain(train)
@@ -66,15 +66,15 @@ open class Generator(
 	 * @param train
 	 */
 	protected open fun placeTrain(train: Train) {
-		activate(train)
+		Process.activate(train)
 	}
 
-	override fun interLoopSleep() {
+	override suspend fun interLoopSleep() {
 		hold(random.exp(43.0))
 		i++
 	}
 
-	override fun byTerminateAction() {
+	override suspend fun byTerminateAction() {
 		for (train in trains) {
 			while (!train.terminated()) {
 				hold(2.0)

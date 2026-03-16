@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.engine.Process
 
 /**
  * Exception thrown during simulation - at start, between start and end of simulation.
@@ -22,7 +22,7 @@ open class SimulationException(
 	cause: Throwable?,
 	private val obj: Any?
 ) : Exception(message, cause) {
-	private val time: Double = Process.time()
+	private val time: Double = runCatching { Process.time() }.getOrDefault(0.0)
 
 	/**
 	 * Create SimulationException with default FATAL severity

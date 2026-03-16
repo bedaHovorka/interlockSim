@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.engine.Process
 
 /**
  * Cycle process...
@@ -19,7 +19,7 @@ import cz.hovorka.kdisco.Process
 abstract class LoopProcess : Process() {
 	private var terminate = false
 
-	final override fun actions() {
+	final override suspend fun actions() {
 		startAction()
 		while (true) {
 			if (terminate) break
@@ -30,17 +30,17 @@ abstract class LoopProcess : Process() {
 		byTerminateAction()
 	}
 
-	protected open fun startAction() {
+	protected open suspend fun startAction() {
 		// EMPTY
 	}
 
-	protected open fun byTerminateAction() {
+	protected open suspend fun byTerminateAction() {
 		// EMPTY
 	}
 
-	protected abstract fun iteration()
+	protected abstract suspend fun iteration()
 
-	protected open fun interLoopSleep() {
+	protected open suspend fun interLoopSleep() {
 		passivate()
 	}
 
