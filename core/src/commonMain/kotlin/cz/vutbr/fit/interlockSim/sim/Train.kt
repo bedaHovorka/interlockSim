@@ -211,6 +211,7 @@ class Train :
 			next: TrackSection?
 		)
 
+		// Not an override: kdisco-engine Process has no start()/stop() — intentional design.
 		open fun start(): Site {
 			position.start()
 			pv.start()
@@ -220,6 +221,21 @@ class Train :
 		fun stop() {
 			position.stop()
 			pv.stop()
+		}
+
+		/**
+		 * Called by [Tail] when the train first enters the network from its home [InOut].
+		 * Corrects the initial position to account for the [Front]'s integration overshoot past
+		 * the train-length threshold, ensuring [LengthChecker] invariant (front − tail = length)
+		 * holds from the moment the tail enters.
+		 *
+		 * Without this correction, RKF45 may overshoot `front.getTotalDistance() >= length` by
+		 * several metres (one integration step ≈ dtMax × velocity), leaving tail at 0 while
+		 * front is already ahead by the overshoot amount, which violates `abs(front−tail−length) ≤ maxAbsError`.
+		 */
+		protected fun initPositionFromFrontOffset(frontTotalDistance: Double, trainLength: Double) {
+			val offset = frontTotalDistance - trainLength
+			if (offset > 0.0) position.state = offset
 		}
 
 		/**
@@ -523,6 +539,7 @@ class Train :
 			}
 			if (where == timetable.getIn()) {
 				fromHome = true
+				initPositionFromFrontOffset(front.getTotalDistance(), getLength())
 				start()
 			}
 
@@ -716,6 +733,13 @@ class Train :
 		}
 	}
 
+	private inner class TrainReporter : Continuous() {
+		override fun derivatives() {
+			env.report(name, this@Train, ReportType.TRAIN_CONTINUOUS)
+		}
+	}
+	private val reporter: TrainReporter = TrainReporter()
+
 	private val acceleration: Variable = Variable(0.0)
 	private val velocity: Variable = Variable(0.0)
 	private val va: SimpleIntegration = SimpleIntegration(velocity, acceleration)
@@ -785,12 +809,14 @@ class Train :
 		out()
 		(worker.getQueqe().first() as? Train)?.let { Process.activate(it) }
 		ap.start()
+		reporter.start()
 
 		waitUntil(front.terminated)
 		ap.stop()
 		// predkem v systemu sousedni stanice
 
 		waitUntil(tail.terminated)
+		reporter.stop()
 		stop()
 		motor.terminate()
 		env.releaseTrainReservations(name)
@@ -862,9 +888,9 @@ class Train :
 	 * ```kotlin
 	 * // In a custom interlocking/dispatcher process
 	 * class CustomInterlocking(context: SimulationContext) : Interlocking(context) {
-	 *     override fun actions() {
+	 *     override suspend fun actions() {
 	 *         val train = Train(env, timetable)
-	 *         activate(train)
+	 *         Process.activate(train)
 	 *
 	 *         // Wait for train to reach station
 	 *         waitUntil { train.getVelocity() == 0.0 }
@@ -878,8 +904,8 @@ class Train :
 	 * ```
 	 *
 	 * **Note:** This method uses `hold(30.0)` and must be called from within
-	 * a jDisco Process context (e.g., from another Process or from the train's
-	 * own actions() method).
+	 * a kdisco-engine coroutine process context (i.e., from a `suspend` function
+	 * inside a [Process.actions] override).
 	 *
 	 * @throws IllegalStateException if train is not stopped
 	 * @since GitHub #62: Bidirectional train operation support
