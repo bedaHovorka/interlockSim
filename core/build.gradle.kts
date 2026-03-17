@@ -37,6 +37,7 @@ kotlin {
 		compilations.all {
 			kotlinOptions {
 				jvmTarget = "21"
+				freeCompilerArgs += "-Xexpect-actual-classes"
 			}
 		}
 		testRuns["test"].executionTask.configure {
