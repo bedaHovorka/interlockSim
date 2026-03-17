@@ -25,6 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.platformSleep
+import cz.hovorka.kdisco.engine.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
@@ -106,13 +108,7 @@ class ShuntingLoop(
 			val targetInterval = (1000.0 / speedMultiplier).toLong()
 			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
 			if (sleepTime > 10) {
-				try {
-					Thread.sleep(sleepTime)
-				} catch (e: InterruptedException) {
-					requireSimulation(false) { "Unexpected thread interruption during real-time synchronization: $e" }
-					Thread.currentThread().interrupt() // Restore interrupt status
-					terminate()
-				}
+				platformSleep(sleepTime)
 			} else if (sleepTime < 0) {
 				presvihnuto = sleepTime / 1000.0
 			}
@@ -198,7 +194,7 @@ class ShuntingLoop(
 			activate(RealTimeSynch())
 		}
 
-		activate(generator)
+		Process.activate(generator)
 	}
 
 	override suspend fun iteration() {
@@ -328,7 +324,7 @@ class ShuntingLoop(
 	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			generator.terminate()
-			terminate()
+			env.stop()
 			return
 		}
 		hold(1.0)

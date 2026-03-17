@@ -43,7 +43,7 @@ open class Generator(
 	private fun generateRandomTimetable(): Timetable {
 		val inOutsList = env.getInOuts().toMutableList()
 		if (shuffleInOuts) {
-			inOutsList.shuffle()
+			inOutsList.shuffle(kotlin.random.Random(0))
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)

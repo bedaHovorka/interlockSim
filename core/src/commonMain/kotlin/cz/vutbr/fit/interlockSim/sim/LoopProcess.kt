@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.engine.DiscoException
 import cz.hovorka.kdisco.engine.Process
 
 /**
@@ -49,6 +50,13 @@ abstract class LoopProcess : Process() {
 	 */
 	final override fun terminate() {
 		terminate = true
-		if (!terminated()) Process.activate(this)
+		if (!terminated()) {
+			try {
+				Process.activate(this)
+			} catch (_: DiscoException) {
+				// Called from outside simulation context (e.g., EDT during stop());
+				// simScope.cancel() handles cleanup when the simulation ends.
+			}
+		}
 	}
 }
