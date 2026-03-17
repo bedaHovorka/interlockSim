@@ -45,6 +45,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.engine.DiscoException
 import cz.hovorka.kdisco.engine.Process
 import cz.hovorka.kdisco.engine.Random
+import cz.hovorka.kdisco.engine.Simulation
+import kotlinx.coroutines.runBlocking
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -176,6 +178,11 @@ open class DefaultSimulationContext(
 	 * Main simulation process
 	 */
 	private var mainProcess: LoopProcess? = null
+
+	/**
+	 * kdisco-engine Simulation instance; set in [run], used in [stop] to signal exit.
+	 */
+	private var simulation: Simulation? = null
 
 	/**
 	 * Random number generator for name generation (jDisco)
@@ -1122,11 +1129,17 @@ open class DefaultSimulationContext(
 			workers[dynamicInOut] = processFactory.createInOutWorker(this, dynamicInOut)
 		}
 
-		try {
+		val sim = Simulation.create {
 			Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
+		}
+		simulation = sim
+		try {
+			runBlocking { sim.run(Double.MAX_VALUE) }
 		} catch (e: DiscoException) {
-			logger.error(e) { "Failed to activate main simulation process" }
+			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
+		} finally {
+			simulation = null  // Release reference once sim.run() returns (natural end or stop() called)
 		}
 	}
 
@@ -1146,6 +1159,7 @@ open class DefaultSimulationContext(
 	 * terminations fail. Collects all exceptions and throws them after cleanup is complete.
 	 */
 	override fun stop() {
+		simulation?.stop()  // Signal kdisco-engine event loop to exit
 		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
