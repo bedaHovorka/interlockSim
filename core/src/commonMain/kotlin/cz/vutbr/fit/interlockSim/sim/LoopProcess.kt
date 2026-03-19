@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.hovorka.kdisco.engine.DiscoException
 import cz.hovorka.kdisco.engine.Process
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Cycle process...
@@ -18,6 +19,10 @@ import cz.hovorka.kdisco.engine.Process
  * this class allows inter-iteration termination of the process.
  */
 abstract class LoopProcess : Process() {
+	private companion object {
+		private val logger = KotlinLogging.logger {}
+	}
+
 	private var terminate = false
 
 	final override suspend fun actions() {
@@ -54,8 +59,7 @@ abstract class LoopProcess : Process() {
 			try {
 				Process.activate(this)
 			} catch (_: DiscoException) {
-				// Called from outside simulation context (e.g., EDT during stop());
-				// simScope.cancel() handles cleanup when the simulation ends.
+				logger.debug { "terminate(): activate() failed outside simulation context — simScope.cancel() handles cleanup" }
 			}
 		}
 	}

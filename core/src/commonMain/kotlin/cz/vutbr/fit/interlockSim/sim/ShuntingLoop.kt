@@ -108,6 +108,9 @@ class ShuntingLoop(
 			val targetInterval = (1000.0 / speedMultiplier).toLong()
 			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
 			if (sleepTime > 10) {
+				// platformSleep restores the interrupt flag on InterruptedException (JVM only).
+				// Simulation termination is handled by coroutine cancellation (simScope.cancel()),
+				// not by terminate() as in jDisco — this is intentional.
 				platformSleep(sleepTime)
 			} else if (sleepTime < 0) {
 				presvihnuto = sleepTime / 1000.0

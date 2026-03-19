@@ -64,8 +64,8 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pin to the Phase 2a commit: adds Continuous/Variable/Condition to kdisco-engine
-        KDISCO_COMMIT="011b1113734e4c3c15d428fac6520df01f1aaf7b"
+        # Pin to PR #9 merge: adds asKotlinRandom + overflow guard + nextDoubleNonZero
+        KDISCO_COMMIT="08b5fffa8fa9692c7b0067730b296951a418c398"
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
         cd /tmp/kdisco
         git checkout "$KDISCO_COMMIT"

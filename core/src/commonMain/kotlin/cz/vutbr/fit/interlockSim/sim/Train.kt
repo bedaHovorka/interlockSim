@@ -758,7 +758,8 @@ class Train :
 
 		override fun start(): TrainReporter {
 			started = true
-			return super.start() as TrainReporter
+			super.start()
+			return this
 		}
 
 		override fun stop() {
