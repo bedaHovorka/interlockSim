@@ -2,9 +2,9 @@ name: SonarQube Analysis
 
 on:
   push:
-    branches: [ main, develop, 'feature/**', 'fix/**', 'copilot/**', 'claude/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop, 'feature/**', 'fix/**', 'copilot/**', 'claude/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -58,21 +58,18 @@ jobs:
         restore-keys: |
           kdisco-
 
-    - name: Build kDisco 0.2.0 from source and publish to mavenLocal
+    - name: Build kDisco 0.3.0 from source and publish to mavenLocal
       if: steps.cache-kdisco.outputs.cache-hit != 'true'
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pin to the exact commit that constitutes the 0.2.0 release
-        KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"
+        # Pin to the Phase 2a commit: adds Continuous/Variable/Condition to kdisco-engine
+        KDISCO_COMMIT="011b1113734e4c3c15d428fac6520df01f1aaf7b"
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
         cd /tmp/kdisco
         git checkout "$KDISCO_COMMIT"
-        # Override the SNAPSHOT version to the release version for mavenLocal publishing
-        sed -i 's/version[[:space:]]*=[[:space:]]*"0\.2\.0-SNAPSHOT"/version = "0.2.0"/' build.gradle.kts
-        grep -E 'version[[:space:]]*=[[:space:]]*"0\.2\.0"' build.gradle.kts  # fail fast if sed had no effect
-        ./gradlew :kdisco-core-api:publishToMavenLocal
+        ./gradlew :kdisco-engine:publishJvmPublicationToMavenLocal
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4

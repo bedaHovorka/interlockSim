@@ -2,9 +2,9 @@ name: Gradle Build with Kotlin 2.0 and Java 21
 
 on:
   push:
-    branches: [ main, develop, 'feature/**', 'fix/**', 'copilot/**', 'claude/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop, 'feature/**', 'fix/**', 'copilot/**', 'claude/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -51,25 +51,22 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository/cz/hovorka/kdisco
-        key: kdisco-${{ hashFiles('gradle.properties') }}
+        key: kdisco-${{ hashFiles('gradle.properties', '.github/workflows/gradle-java21.yml') }}
         restore-keys: |
           kdisco-
 
-    - name: Build kDisco 0.2.0 from source and publish to mavenLocal
+    - name: Build kDisco 0.3.0 from source and publish to mavenLocal
       if: steps.cache-kdisco.outputs.cache-hit != 'true'
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pin to the exact commit that constitutes the 0.2.0 release
-        KDISCO_COMMIT="7cb97d0cd5747972775a4719f525a19928faa92b"
+        # Pin to the StrictMath.pow commit: deterministic adaptive step-size in RKF45
+        KDISCO_COMMIT="7fb0d68aa56507d6f0a9caf4d0b345865bfcb0bb"
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
         cd /tmp/kdisco
         git checkout "$KDISCO_COMMIT"
-        # Override the SNAPSHOT version to the release version for mavenLocal publishing
-        sed -i 's/version[[:space:]]*=[[:space:]]*"0\.2\.0-SNAPSHOT"/version = "0.2.0"/' build.gradle.kts
-        grep -E 'version[[:space:]]*=[[:space:]]*"0\.2\.0"' build.gradle.kts  # fail fast if sed had no effect
-        ./gradlew :kdisco-core-api:publishToMavenLocal
+        ./gradlew :kdisco-engine:publishJvmPublicationToMavenLocal
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4

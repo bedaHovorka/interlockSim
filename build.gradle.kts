@@ -46,14 +46,14 @@ val checkKdisco by tasks.registering {
     doLast {
         val kdiscoJar =
             file(
-                "${System.getProperty("user.home")}/.m2/repository/cz/hovorka/kdisco/kdisco-core-api-jvm/$kdiscoVersion/kdisco-core-api-jvm-$kdiscoVersion.jar",
+                "${System.getProperty("user.home")}/.m2/repository/cz/hovorka/kdisco/kdisco-engine-jvm/$kdiscoVersion/kdisco-engine-jvm-$kdiscoVersion.jar",
             )
 
         if (kdiscoJar.exists()) {
             println("✓ kDisco $kdiscoVersion found in mavenLocal: ${kdiscoJar.absolutePath}")
         } else {
             println("⚠ kDisco $kdiscoVersion not found in mavenLocal")
-            println("  To install: cd ~/work/kdisco && ./gradlew :kdisco-core-api:publishToMavenLocal")
+            println("  To install: cd ~/work/kdisco && ./gradlew :kdisco-engine:publishToMavenLocal")
         }
     }
 }

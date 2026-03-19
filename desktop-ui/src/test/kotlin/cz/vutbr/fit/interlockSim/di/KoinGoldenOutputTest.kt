@@ -374,8 +374,8 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	companion object {
 		/** Deterministic baseline for ShuntingLoop(60s) on vyhybna.xml */
 		private const val EXPECTED_GRAPH_SIZE = 10
-		private const val EXPECTED_OCCUPIED_BLOCKS = 5
-		private const val EXPECTED_RESERVED_BLOCKS = 8
+		private const val EXPECTED_OCCUPIED_BLOCKS = 3
+		private const val EXPECTED_RESERVED_BLOCKS = 9
 		private const val EXPECTED_TRAIN_COUNT = 2
 	}
 }
