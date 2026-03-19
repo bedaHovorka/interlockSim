@@ -51,7 +51,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository/cz/hovorka/kdisco
-        key: kdisco-${{ hashFiles('gradle.properties') }}
+        key: kdisco-${{ hashFiles('gradle.properties', '.github/workflows/gradle-java21.yml') }}
         restore-keys: |
           kdisco-
 
@@ -61,8 +61,8 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pin to the Phase 2a commit: adds Continuous/Variable/Condition to kdisco-engine
-        KDISCO_COMMIT="011b1113734e4c3c15d428fac6520df01f1aaf7b"
+        # Pin to the StrictMath.pow commit: deterministic adaptive step-size in RKF45
+        KDISCO_COMMIT="7fb0d68aa56507d6f0a9caf4d0b345865bfcb0bb"
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
         cd /tmp/kdisco
         git checkout "$KDISCO_COMMIT"
