@@ -25,12 +25,12 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.engine.Condition
-import cz.hovorka.kdisco.engine.Continuous
-import cz.hovorka.kdisco.engine.Process
-import cz.hovorka.kdisco.engine.Variable
-import cz.hovorka.kdisco.engine.dtMin
-import cz.hovorka.kdisco.engine.maxAbsError
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Variable
+import cz.hovorka.kdisco.dtMin
+import cz.hovorka.kdisco.maxAbsError
 
 /**
  * Train Process

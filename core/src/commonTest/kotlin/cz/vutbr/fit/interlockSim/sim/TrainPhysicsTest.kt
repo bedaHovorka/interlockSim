@@ -544,7 +544,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		velocityField.isAccessible = true
 
 		// Get the Variable object and set its state
-		val velocityVariable = velocityField.get(train) as cz.hovorka.kdisco.engine.Variable
+		val velocityVariable = velocityField.get(train) as cz.hovorka.kdisco.Variable
 		velocityVariable.state = velocity
 
 		// Verify the velocity was actually set

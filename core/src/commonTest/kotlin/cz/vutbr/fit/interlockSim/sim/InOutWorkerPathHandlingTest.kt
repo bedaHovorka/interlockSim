@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.hovorka.kdisco.engine.Head
+import cz.hovorka.kdisco.Head
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested

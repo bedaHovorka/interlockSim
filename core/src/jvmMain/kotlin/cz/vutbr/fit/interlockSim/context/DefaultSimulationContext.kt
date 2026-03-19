@@ -42,10 +42,10 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.engine.DiscoException
-import cz.hovorka.kdisco.engine.Process
-import cz.hovorka.kdisco.engine.Random
-import cz.hovorka.kdisco.engine.Simulation
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Random
+import cz.hovorka.kdisco.Simulation
 import kotlinx.coroutines.runBlocking
 
 /**

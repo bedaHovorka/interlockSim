@@ -16,8 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
-import cz.hovorka.kdisco.engine.DiscoException
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}

@@ -10,8 +10,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.hovorka.kdisco.engine.Continuous
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
 
 /**
  * Base class for validating continuous variable invariants during simulation.

@@ -26,7 +26,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformSleep
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 

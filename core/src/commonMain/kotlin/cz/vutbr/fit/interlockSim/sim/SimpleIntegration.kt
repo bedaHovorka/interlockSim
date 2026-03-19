@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.engine.Continuous
-import cz.hovorka.kdisco.engine.Variable
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Variable
 
 /**
  * Substitute for "SIMLIB Integrator"
