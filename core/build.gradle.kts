@@ -24,6 +24,7 @@ val junitPlatformVersion: String by project
 val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
+val coroutinesVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -70,7 +71,7 @@ kotlin {
 	sourceSets {
 		val commonMain by getting {
 			dependencies {
-				implementation("cz.hovorka.kdisco:kdisco-core-api-jvm:$kdiscoVersion")
+				implementation("cz.hovorka.kdisco:kdisco-engine-jvm:$kdiscoVersion")
 				implementation("io.insert-koin:koin-core:$koinVersion")
 				implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
 				implementation("org.slf4j:slf4j-api:$slf4jVersion")
@@ -92,6 +93,8 @@ kotlin {
 			dependencies {
 				// kotlin-reflect is JVM-only; not needed in KMP commonMain
 				implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
+				// runBlocking needed for bridging suspend Simulation.run() in DefaultSimulationContext
+				implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 			}
 		}
 		val jvmTest by getting {

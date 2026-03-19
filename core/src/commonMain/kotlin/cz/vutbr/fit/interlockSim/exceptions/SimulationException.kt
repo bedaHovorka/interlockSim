@@ -9,7 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.engine.Process
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Exception thrown during simulation - at start, between start and end of simulation.
@@ -22,7 +23,15 @@ open class SimulationException(
 	cause: Throwable?,
 	private val obj: Any?
 ) : Exception(message, cause) {
-	private val time: Double = Process.time()
+	companion object {
+		private val logger = KotlinLogging.logger {}
+	}
+
+	private val time: Double = runCatching { Process.time() }
+		.onFailure { e ->
+			if (e !is IllegalStateException) logger.debug(e) { "Process.time() failed unexpectedly" }
+		}
+		.getOrDefault(0.0)
 
 	/**
 	 * Create SimulationException with default FATAL severity
