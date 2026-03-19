@@ -54,7 +54,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository/cz/hovorka/kdisco
-        key: kdisco-${{ hashFiles('gradle.properties') }}
+        key: kdisco-${{ hashFiles('gradle.properties', '.github/workflows/sonarqube.yml') }}
         restore-keys: |
           kdisco-
 
