@@ -61,8 +61,8 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pin to the StrictMath.pow commit: deterministic adaptive step-size in RKF45
-        KDISCO_COMMIT="7fb0d68aa56507d6f0a9caf4d0b345865bfcb0bb"
+        # Pin to PR #9 merge commit: adds asKotlinRandom + overflow guard + nextDoubleNonZero
+        KDISCO_COMMIT="08b5fffa8fa9692c7b0067730b296951a418c398"
         git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
         cd /tmp/kdisco
         git checkout "$KDISCO_COMMIT"
