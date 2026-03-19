@@ -105,8 +105,6 @@ object AnimationStateCapture {
 		Process.time()
 	} catch (_: DiscoException) {
 		0.0
-	} catch (_: IllegalStateException) {
-		0.0
 	}
 
 	/**
