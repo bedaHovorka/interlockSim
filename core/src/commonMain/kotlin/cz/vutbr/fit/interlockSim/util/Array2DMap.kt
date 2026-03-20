@@ -283,5 +283,12 @@ private class SortedMutableSet<T>(
 
 	override fun contains(element: T): Boolean = list.binarySearch(element, comparator) >= 0
 
+	override fun remove(element: T): Boolean {
+		val idx = list.binarySearch(element, comparator)
+		if (idx < 0) return false
+		list.removeAt(idx)
+		return true
+	}
+
 	override fun clear() { list.clear() }
 }
