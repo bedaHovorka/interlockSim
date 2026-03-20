@@ -5,6 +5,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -38,8 +39,9 @@ class NativeSanityTest {
     fun `DefaultEditingContext can be created with valid dimensions`() {
         val ctx = DefaultEditingContext(30, 30)
         try {
-            assertNotNull(ctx)
             assertNotNull(ctx.getRailWayNetGrid())
+            assertEquals(30, ctx.getRailWayNetGrid().getCols())
+            assertEquals(30, ctx.getRailWayNetGrid().getRows())
         } finally {
             ctx.close()
         }
@@ -88,9 +90,8 @@ class NativeSanityTest {
 
     @Test
     fun `SimpleTestProcess compiles on native target`() {
-        // This test verifies that SimpleTestProcess.kt compiles on linuxX64.
-        // A runtime kDisco simulation is not run here because that would require
-        // a full kDisco simulation environment beyond this sanity check scope.
-        assertTrue(true, "SimpleTestProcess class compiles on native target")
+        // Verifies SimpleTestProcess.kt links on linuxX64 by referencing its class.
+        // Full simulation is not run here (requires a kDisco environment).
+        assertEquals("SimpleTestProcess", SimpleTestProcess::class.simpleName)
     }
 }
