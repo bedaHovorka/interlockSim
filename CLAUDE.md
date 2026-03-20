@@ -235,7 +235,7 @@ class MyClass(private val dependency: MyDependency)
 
 ### Critical DI Rules
 
-1. **sim/ package EXCLUDED** - No Koin injection in simulation classes until kDisco→Kalasim migration (Phase 2)
+1. **sim/ package**: Koin injection is now allowed. The restriction was tied to the jDisco→kDisco migration (Phase 1, complete 2026-03-20). kDisco is now the stable engine with native support.
 2. **Contexts are NOT singletons** - Use `factory` or `scope`, never `single`
 3. **Preserve factory patterns** - Inject factories, not products
 
@@ -254,13 +254,14 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 
 **Conservative approach differentiated by component type:**
 
-### Critical Restrictions (Until kDisco→Kalasim Migration, Phase 2)
+### Restrictions for sim/ Package (Logic Only — Koin Now Allowed)
 
 **Simulation Core (`sim/` package):**
 - **Minimal changes only** - Be extremely conservative with simulation logic
 - **No refactoring** - Do not restructure working simulation code
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
+- **Koin injection allowed** - The Koin restriction was lifted 2026-03-20 (kDisco Phase 1 complete)
 
 **kDisco Library:**
 - **Do not modify** - Maintained as separate project at https://github.com/bedavs/kdisco
