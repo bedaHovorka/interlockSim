@@ -298,7 +298,10 @@ ktlint {
 	}
 }
 
-// Disable ktlint checks (matching app module policy)
+// Disable ktlint checks — project-wide policy (desktop-ui has the same disable block).
+// Reason: legacy Java→Kotlin converted code uses tabs (per .editorconfig) which conflicts
+// with ktlint's default spaces rule. Detekt handles structural quality checks instead.
+// TODO: Re-enable ktlint project-wide once tab/space configuration is resolved (tracked).
 tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
 	enabled = false
 }
@@ -334,7 +337,7 @@ val checkCoreCommonMainPurity by tasks.registering {
 		// Catch inline fully-qualified java.* references (e.g. java.util.TreeSet, java.lang.*)
 		val inlineJavaRegex = Regex("(?<![\\w])java\\.[a-z]")
 		// Catch System.* calls (java.lang.System is implicitly available on JVM only)
-		val systemRegex = Regex("(?<![\\w.])System\\.(?:currentTimeMillis|arraycopy|identityHashCode|exit|getProperty|lineSeparator|err|out)\\b")
+		val systemRegex = Regex("(?<![\\w.])System\\.[a-zA-Z]")
 		val violations = mutableListOf<String>()
 
 		project.fileTree(commonMainDir).matching { include("**/*.kt") }.forEach { file ->
