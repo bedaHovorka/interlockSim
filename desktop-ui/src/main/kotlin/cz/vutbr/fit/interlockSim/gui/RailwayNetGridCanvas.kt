@@ -423,7 +423,7 @@ class RailwayNetGridCanvas :
 		cont.addPropertyChangeListener(this)
 		context = cont
 		val grid = cont.getRailWayNetGrid()
-		preferredSize = Dimension(CELL_WIDTH * grid.getCols(), CELL_HEIGHT * grid.getRows())
+		preferredSize = Dimension(CELL_WIDTH * grid.cols, CELL_HEIGHT * grid.rows)
 		size = preferredSize
 		revalidate()
 	}
@@ -506,13 +506,13 @@ class RailwayNetGridCanvas :
 		val grid = context!!.getRailWayNetGrid()
 		g.color = Color.GRAY
 		// Vertical lines
-		for (i in 0..grid.getCols()) {
+		for (i in 0..grid.cols) {
 			val x = i * CELL_WIDTH
 			g.drawLine(x, 0, x, height)
 		}
 
 		// Horizontal lines
-		for (i in 0..grid.getRows()) {
+		for (i in 0..grid.rows) {
 			val y = i * CELL_HEIGHT
 			g.drawLine(0, y, width, y)
 		}

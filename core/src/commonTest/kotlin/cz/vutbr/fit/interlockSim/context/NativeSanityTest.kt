@@ -40,8 +40,8 @@ class NativeSanityTest {
         val ctx = DefaultEditingContext(30, 30)
         try {
             assertNotNull(ctx.getRailWayNetGrid())
-            assertEquals(30, ctx.getRailWayNetGrid().getCols())
-            assertEquals(30, ctx.getRailWayNetGrid().getRows())
+            assertEquals(30, ctx.getRailWayNetGrid().cols)
+            assertEquals(30, ctx.getRailWayNetGrid().rows)
         } finally {
             ctx.close()
         }

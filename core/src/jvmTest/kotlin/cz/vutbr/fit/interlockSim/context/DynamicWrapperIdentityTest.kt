@@ -85,8 +85,8 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 				val grid = context.getRailWayNetGrid()
 
 				// When/Then: Iterate through all grid cells
-				val cols = grid.getCols()
-				val rows = grid.getRows()
+				val cols = grid.cols
+				val rows = grid.rows
 
 				for (x in 0 until cols) {
 					for (y in 0 until rows) {

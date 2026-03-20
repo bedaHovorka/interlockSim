@@ -445,8 +445,8 @@ class AnimationController(
 		val grid = context.getRailWayNetGrid()
 		val cache = mutableListOf<DynamicRailSemaphore>()
 
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val cell = grid.getCellAt(x, y)
 				if (cell is DynamicRailSemaphore) {
 					cache.add(cell)
@@ -469,8 +469,8 @@ class AnimationController(
 		val grid = context.getRailWayNetGrid()
 		val cache = mutableListOf<DynamicRailSwitch>()
 
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val cell = grid.getCellAt(x, y)
 				if (cell is DynamicRailSwitch) {
 					cache.add(cell)

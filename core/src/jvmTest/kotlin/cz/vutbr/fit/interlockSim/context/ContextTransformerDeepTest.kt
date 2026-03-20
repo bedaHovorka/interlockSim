@@ -448,8 +448,8 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val simulationContext = transformer.createSimulationContext(editingContext, processFactory)
 
 			// Assert
-			assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(35)
-			assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(45)
+			assertThat(simulationContext.getRailWayNetGrid().cols).isEqualTo(35)
+			assertThat(simulationContext.getRailWayNetGrid().rows).isEqualTo(45)
 		}
 	}
 }

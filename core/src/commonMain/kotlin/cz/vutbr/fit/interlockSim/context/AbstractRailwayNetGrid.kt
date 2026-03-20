@@ -22,9 +22,8 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 	cols: Int,
 	rows: Int
 ) : RailwayNetGrid<T> {
-	// Use private backing fields to avoid property getter clash
-	private val _cols: Int = cols
-	private val _rows: Int = rows
+	override val cols: Int = cols
+	override val rows: Int = rows
 
 	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = HashMap()
 	private val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
@@ -37,16 +36,11 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 		x: Int,
 		y: Int
 	): T? {
-		if (x < 0 || y < 0 || x >= _cols || y >= _rows) throw IndexOutOfBoundsException("Grid bounds")
+		if (x < 0 || y < 0 || x >= cols || y >= rows) throw IndexOutOfBoundsException("Grid bounds")
 		return cells.get(x, y)
 	}
 
 	override operator fun get(point: Point): T? = getCellAt(point.x, point.y)
-
-	// Implement interface methods
-	override fun getCols(): Int = _cols
-
-	override fun getRows(): Int = _rows
 
 	override fun iterator(): kotlin.collections.Iterator<Map.Entry<Point, T>> {
 		// Build entries from cells and return an immutable iterator

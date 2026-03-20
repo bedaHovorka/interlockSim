@@ -86,8 +86,8 @@ class ContextTransformerTest : KoinTestBase() {
 				// Act
 				transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
 					// Assert
-					assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(25)
-					assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(30)
+					assertThat(simulationContext.getRailWayNetGrid().cols).isEqualTo(25)
+					assertThat(simulationContext.getRailWayNetGrid().rows).isEqualTo(30)
 				}
 			}
 		}
@@ -411,8 +411,8 @@ class ContextTransformerTest : KoinTestBase() {
 				transformer.createSimulationContext(editingContext, processFactory).use { simulationContext ->
 					// Assert - Transformation succeeded without type checking
 					assertThat(simulationContext).isNotNull()
-					assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(20)
-					assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(20)
+					assertThat(simulationContext.getRailWayNetGrid().cols).isEqualTo(20)
+					assertThat(simulationContext.getRailWayNetGrid().rows).isEqualTo(20)
 
 					// Verify InOut list was copied via interface method
 					val inOuts = simulationContext.getInOuts()

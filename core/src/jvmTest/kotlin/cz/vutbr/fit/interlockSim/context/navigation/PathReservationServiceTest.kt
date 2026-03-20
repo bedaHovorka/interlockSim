@@ -605,8 +605,8 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
 			val grid = simulationContext.getRailWayNetGrid()
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell =
 						grid[
 							cz.vutbr.fit.interlockSim.util
@@ -946,8 +946,8 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
 			val grid = simulationContext.getRailWayNetGrid()
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell =
 						grid[
 							cz.vutbr.fit.interlockSim.util
@@ -1354,8 +1354,8 @@ class PathReservationServiceTest : KoinTestBase() {
 			var doA1Semaphore: DynamicRailSemaphore? = null
 
 			// Iterate through grid to find doA1 semaphore
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell =
 						grid[
 							cz.vutbr.fit.interlockSim.util
@@ -1602,8 +1602,8 @@ class PathReservationServiceTest : KoinTestBase() {
 		 */
 		private fun findSemaphoreByName(name: String): DynamicRailSemaphore {
 			val grid = simulationContext.getRailWayNetGrid()
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell =
 						grid[
 							cz.vutbr.fit.interlockSim.util

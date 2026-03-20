@@ -595,8 +595,8 @@ class XMLPolishTest : KoinTestBase() {
 
 			val context = editingContextFactory.createContext(stream)
 			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(500)
-			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(500)
+			assertThat(context.getRailWayNetGrid().cols).isEqualTo(500)
+			assertThat(context.getRailWayNetGrid().rows).isEqualTo(500)
 		}
 	}
 }

@@ -276,8 +276,8 @@ open class DefaultSimulationContext(
 		): DefaultSimulationContext {
 			// Create base simulation context
 			val grid = editingContext.getRailWayNetGrid()
-			val cols = grid.getCols()
-			val rows = grid.getRows()
+			val cols = grid.cols
+			val rows = grid.rows
 
 			val context = DefaultSimulationContext(cols, rows, processFactory)
 
@@ -452,8 +452,8 @@ open class DefaultSimulationContext(
 			val grid = simulationContext.getRailWayNetGrid()
 			val cache = mutableMapOf<PathSeparator, Point>()
 
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell = grid.getCellAt(x, y)
 					if (cell is PathSeparator) {
 						// Cell is PathSeparator - add directly
@@ -532,12 +532,12 @@ open class DefaultSimulationContext(
 			// 1. Validate grid dimensions
 			val sourceGrid = editingContext.getRailWayNetGrid()
 			val targetGrid = simulationContext.getGrid()
-			if (sourceGrid.getCols() != targetGrid.getCols() ||
-				sourceGrid.getRows() != targetGrid.getRows()
+			if (sourceGrid.cols != targetGrid.cols ||
+				sourceGrid.rows != targetGrid.rows
 			) {
 				errors.add(
-					"Grid dimensions mismatch: source ${sourceGrid.getCols()}x${sourceGrid.getRows()}, " +
-						"target ${targetGrid.getCols()}x${targetGrid.getRows()}"
+					"Grid dimensions mismatch: source ${sourceGrid.cols}x${sourceGrid.rows}, " +
+						"target ${targetGrid.cols}x${targetGrid.rows}"
 				)
 			}
 
@@ -623,7 +623,7 @@ open class DefaultSimulationContext(
 					"${nodeCells.size} cells (${simulationContext.staticToDynamicMap.size} wrappers), " +
 					"${targetGraphSize} graph entries, " +
 					"${targetInOuts.size} InOuts, " +
-					"grid ${targetGrid.getCols()}x${targetGrid.getRows()}"
+					"grid ${targetGrid.cols}x${targetGrid.rows}"
 			}
 		}
 	}
@@ -778,8 +778,8 @@ open class DefaultSimulationContext(
 		val grid = getInternalGrid()
 
 		// Iterate through all cells in the railway network grid
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val cell = grid.getCellAt(x, y) ?: continue
 
 				// Skip TrackBlockPart - these are not NodeCells and don't need dynamic wrappers
@@ -936,8 +936,8 @@ open class DefaultSimulationContext(
 
 		// Validate PathSeparators from grid
 		// Fix for Issue #280/#284: Grid now contains dynamic wrappers, not static cells
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val cell = grid.getCellAt(x, y) ?: continue
 
 				// Check if cell is a PathSeparator (static or dynamic)

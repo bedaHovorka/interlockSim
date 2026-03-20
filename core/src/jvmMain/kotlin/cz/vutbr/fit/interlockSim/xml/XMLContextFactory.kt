@@ -678,8 +678,8 @@ class XMLContextFactory : EditingContextFactory {
 
 		// Root element with grid dimensions
 		builder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
-		appendAttribute(builder, X, railwayNetGrid.getCols())
-		appendAttribute(builder, Y, railwayNetGrid.getRows())
+		appendAttribute(builder, X, railwayNetGrid.cols)
+		appendAttribute(builder, Y, railwayNetGrid.rows)
 		builder.append(">\n")
 
 		// Save all NodeCells from the grid (including isolated nodes)

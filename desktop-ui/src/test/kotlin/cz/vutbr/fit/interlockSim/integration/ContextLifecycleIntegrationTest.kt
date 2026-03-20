@@ -72,8 +72,8 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		// Phase 1: Create empty editing context
 		val editingContext: EditingContext = DefaultEditingContext(40, 40)
 		assertThat(editingContext).isNotNull()
-		assertThat(editingContext.getRailWayNetGrid().getCols()).isEqualTo(40)
-		assertThat(editingContext.getRailWayNetGrid().getRows()).isEqualTo(40)
+		assertThat(editingContext.getRailWayNetGrid().cols).isEqualTo(40)
+		assertThat(editingContext.getRailWayNetGrid().rows).isEqualTo(40)
 		assertThat(editingContext.getInOuts()).hasSize(0)
 
 		// Phase 2: Add first InOut
@@ -165,8 +165,8 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(simContextFrozen).isTrue()
 
 		// Phase 3: Verify structure preservation
-		assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(30)
-		assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(30)
+		assertThat(simulationContext.getRailWayNetGrid().cols).isEqualTo(30)
+		assertThat(simulationContext.getRailWayNetGrid().rows).isEqualTo(30)
 		val simContextInOuts: Collection<*> = simulationContext.getInOuts()
 		assertThat(simContextInOuts).hasSize(2)
 		assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
@@ -289,8 +289,8 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(loadedContext).isInstanceOf<EditingContext>()
 
 		// Phase 5: Verify structure integrity after round-trip
-		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(45)
-		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(45)
+		assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(45)
+		assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(45)
 		val loadedSimContext = loadedContext as EditingContext
 		val loadedInOuts: Collection<*> = loadedSimContext.getInOuts()
 		assertThat(loadedInOuts).hasSize(2)

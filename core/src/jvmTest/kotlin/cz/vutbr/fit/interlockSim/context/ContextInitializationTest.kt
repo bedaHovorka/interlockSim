@@ -101,10 +101,10 @@ class ContextInitializationTest : KoinTestBase() {
 			assertThat(grid)
 				.withMessage("Grid should be initialized")
 				.isNotNull()
-			assertThat(grid.getCols())
+			assertThat(grid.cols)
 				.withMessage("Grid should have non-zero width")
 				.isGreaterThan(0)
-			assertThat(grid.getRows())
+			assertThat(grid.rows)
 				.withMessage("Grid should have non-zero height")
 				.isGreaterThan(0)
 		}
@@ -189,8 +189,8 @@ class ContextInitializationTest : KoinTestBase() {
 			@Suppress("UNCHECKED_CAST")
 			val grid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
 			var inOutCount = 0
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell = grid.getCellAt(x, y)
 					if (cell is InOut) {
 						inOutCount++
@@ -269,10 +269,10 @@ class ContextInitializationTest : KoinTestBase() {
 			assertThat(grid)
 				.withMessage("Grid should be initialized")
 				.isNotNull()
-			assertThat(grid.getCols())
+			assertThat(grid.cols)
 				.withMessage("Grid width should be non-zero")
 				.isGreaterThan(0)
-			assertThat(grid.getRows())
+			assertThat(grid.rows)
 				.withMessage("Grid height should be non-zero")
 				.isGreaterThan(0)
 		}
@@ -295,8 +295,8 @@ class ContextInitializationTest : KoinTestBase() {
 			var inOutCount = 0
 			val inOutPoints = mutableListOf<DynamicInOut>()
 
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell = grid.getCellAt(x, y)
 					if (cell is DynamicInOut) {
 						inOutCount++

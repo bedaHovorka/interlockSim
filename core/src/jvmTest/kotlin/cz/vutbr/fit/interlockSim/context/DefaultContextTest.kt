@@ -83,8 +83,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert
 			assertThat(grid).isNotNull()
-			assertThat(grid.getCols()).isGreaterThan(0)
-			assertThat(grid.getRows()).isGreaterThan(0)
+			assertThat(grid.cols).isGreaterThan(0)
+			assertThat(grid.rows).isGreaterThan(0)
 		}
 	}
 
@@ -514,8 +514,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			// Assert - all intermediate points should pass containsKey check without assertion error
 			// This is the scenario described in issue #38
 			assertThatCode {
-				for (x in 0 until context.getRailWayNetGrid().getCols()) {
-					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+				for (x in 0 until context.getRailWayNetGrid().cols) {
+					for (y in 0 until context.getRailWayNetGrid().rows) {
 						val point = Point(x, y)
 						context.getRailWayNetGrid().containsKey(point)
 					}
@@ -538,8 +538,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Capture intermediate cells before removal
 			val cellsBeforeRemoval = mutableListOf<Point>()
-			for (x in 0 until context.getRailWayNetGrid().getCols()) {
-				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+			for (x in 0 until context.getRailWayNetGrid().cols) {
+				for (y in 0 until context.getRailWayNetGrid().rows) {
 					val point = Point(x, y)
 					if (context.getRailWayNetGrid().getCellAt(x, y) != null) {
 						cellsBeforeRemoval.add(point)
@@ -553,8 +553,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 			context.removeLine(trackBlock)
 
 			// Assert - intermediate cells should be removed (only original nodes remain)
-			for (x in 0 until context.getRailWayNetGrid().getCols()) {
-				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+			for (x in 0 until context.getRailWayNetGrid().cols) {
+				for (y in 0 until context.getRailWayNetGrid().rows) {
 					val point = Point(x, y)
 					val cell = context.getRailWayNetGrid().getCellAt(x, y)
 					if (point != pointA && point != pointB) {
@@ -568,8 +568,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert - all points should pass containsKey check without assertion error
 			assertThatCode {
-				for (x in 0 until context.getRailWayNetGrid().getCols()) {
-					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+				for (x in 0 until context.getRailWayNetGrid().cols) {
+					for (y in 0 until context.getRailWayNetGrid().rows) {
 						val point = Point(x, y)
 						context.getRailWayNetGrid().containsKey(point)
 					}
@@ -604,8 +604,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert - all points should pass containsKey check without assertion error
 			assertThatCode {
-				for (x in 0 until context.getRailWayNetGrid().getCols()) {
-					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+				for (x in 0 until context.getRailWayNetGrid().cols) {
+					for (y in 0 until context.getRailWayNetGrid().rows) {
 						val point = Point(x, y)
 						context.getRailWayNetGrid().containsKey(point)
 					}
@@ -650,8 +650,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Verify intermediate cells between nodes are removed
 			var intermediateCount = 0
-			for (x in 0 until context.getRailWayNetGrid().getCols()) {
-				for (y in 0 until context.getRailWayNetGrid().getRows()) {
+			for (x in 0 until context.getRailWayNetGrid().cols) {
+				for (y in 0 until context.getRailWayNetGrid().rows) {
 					val point = Point(x, y)
 					if (point != pointA && point != pointS && point != pointB) {
 						val cell = context.getRailWayNetGrid().getCellAt(x, y)
@@ -667,8 +667,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 
 			// Assert - grid should be consistent after all operations
 			assertThatCode {
-				for (x in 0 until context.getRailWayNetGrid().getCols()) {
-					for (y in 0 until context.getRailWayNetGrid().getRows()) {
+				for (x in 0 until context.getRailWayNetGrid().cols) {
+					for (y in 0 until context.getRailWayNetGrid().rows) {
 						val point = Point(x, y)
 						context.getRailWayNetGrid().containsKey(point)
 					}

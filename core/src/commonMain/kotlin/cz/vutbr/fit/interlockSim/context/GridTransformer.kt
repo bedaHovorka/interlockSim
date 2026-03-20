@@ -74,8 +74,8 @@ object GridTransformer {
 	 * @throws IllegalStateException if unknown cell type is encountered
 	 */
 	fun transformGrid(staticGrid: RailwayNetGrid<Cell>): TransformationResult {
-		val cols = staticGrid.getCols()
-		val rows = staticGrid.getRows()
+		val cols = staticGrid.cols
+		val rows = staticGrid.rows
 		
 		// Create new grid for dynamic cells
 		val dynamicGrid = DefaultRailWayNetGrid(cols, rows)

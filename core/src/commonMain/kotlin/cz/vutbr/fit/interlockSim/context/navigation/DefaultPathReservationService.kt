@@ -855,7 +855,7 @@ class DefaultPathReservationService(
 	 *
 	 * ## Grid Dimensions
 	 *
-	 * No hardcoded dimensions - uses grid.getCols() and grid.getRows() for
+	 * No hardcoded dimensions - uses grid.cols and grid.rows for
 	 * dynamic discovery. This is acceptable for reservePathToAny() which is
 	 * called infrequently (only when train needs new path).
 	 *
@@ -875,8 +875,8 @@ class DefaultPathReservationService(
 		val grid = environment.getRailWayNetGrid()
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val cell =
 					grid[
 						cz.vutbr.fit.interlockSim.util

@@ -467,10 +467,10 @@ open class DefaultEditingContext(
 		checkNotFrozen("add cell")
 		// Validate coordinates are within grid bounds
 		val grid = getGrid()
-		if (key.x < 0 || key.y < 0 || key.x >= grid.getCols() || key.y >= grid.getRows()) {
+		if (key.x < 0 || key.y < 0 || key.x >= grid.cols || key.y >= grid.rows) {
 			throw ContextCreationException(
 				"Cell coordinates (${key.x},${key.y}) are outside grid bounds " +
-					"(${grid.getCols()}x${grid.getRows()})"
+					"(${grid.cols}x${grid.rows})"
 			)
 		}
 		if (grid.put(key, nodeCell) === nodeCell) return
@@ -479,7 +479,7 @@ open class DefaultEditingContext(
 		for (s1: Segment in nodeCell.joins()) {
 			val p = s1.transform(key)
 			// Skip neighbor if it's outside grid bounds (boundary cells)
-			if (p.x < 0 || p.y < 0 || p.x >= grid.getCols() || p.y >= grid.getRows()) {
+			if (p.x < 0 || p.y < 0 || p.x >= grid.cols || p.y >= grid.rows) {
 				continue
 			}
 			val cell2 = grid.get(p)

@@ -183,8 +183,8 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 
 			// Verify structure is preserved
 			assertThat(loadedContext).isNotNull()
-			assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(100)
-			assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
 
 			// Verify the InOut cells exist at correct positions
 			val cellA = loadedContext.getRailWayNetGrid().getCellAt(10, 10)
@@ -256,8 +256,8 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 
 			// Verify grid size is preserved
 			val grid = loadedContext.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(50)
-			assertThat(grid.getRows()).isEqualTo(50)
+			assertThat(grid.cols).isEqualTo(50)
+			assertThat(grid.rows).isEqualTo(50)
 		}
 
 		@Test
@@ -275,8 +275,8 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val loadedContext = editingContextFactory.createContext(inputStream) as EditingContext
 
 			// Verify grid size
-			assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(100)
-			assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
 
 			// Verify key InOut points exist
 			val f1 = loadedContext.getRailWayNetGrid().getCellAt(37, 32)

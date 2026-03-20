@@ -55,8 +55,8 @@ class BaseContextTest : KoinTestBase() {
 	fun `create empty editing context succeeds`() {
 		editingContextFactory.createEmptyContext().use { context ->
 			// Assert - Default empty context has 100x100 grid (XMLContextFactory.DEFAULT_GRID_SIZE)
-			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(100)
-			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().cols).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().rows).isEqualTo(100)
 		}
 	}
 
@@ -67,8 +67,8 @@ class BaseContextTest : KoinTestBase() {
 	fun `create empty simulation context succeeds`() {
 		simulationContextFactory.createEmptyContext().use { context ->
 			// Assert - Default empty context has 100x100 grid (XMLContextFactory.DEFAULT_GRID_SIZE)
-			assertThat(context.getRailWayNetGrid().getCols()).isEqualTo(100)
-			assertThat(context.getRailWayNetGrid().getRows()).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().cols).isEqualTo(100)
+			assertThat(context.getRailWayNetGrid().rows).isEqualTo(100)
 		}
 	}
 

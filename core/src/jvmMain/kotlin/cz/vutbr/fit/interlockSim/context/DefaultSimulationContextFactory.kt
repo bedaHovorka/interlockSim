@@ -139,7 +139,7 @@ class DefaultSimulationContextFactory(
 	override fun createContext(editingContext: EditingContext): SimulationContext {
 		logger.debug {
 			"Creating SimulationContext from EditingContext via ContextTransformer: " +
-				"grid ${editingContext.getRailWayNetGrid().getCols()}x${editingContext.getRailWayNetGrid().getRows()}"
+				"grid ${editingContext.getRailWayNetGrid().cols}x${editingContext.getRailWayNetGrid().rows}"
 		}
 
 		val simulationContext =

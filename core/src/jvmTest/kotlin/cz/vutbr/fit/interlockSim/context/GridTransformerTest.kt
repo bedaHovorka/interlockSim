@@ -59,8 +59,8 @@ class GridTransformerTest : KoinTestBase() {
 			val result = GridTransformer.transformGrid(staticGrid)
 
 			// Assert - New grid is empty but has same dimensions
-			assertThat(result.dynamicGrid.getCols()).isEqualTo(10)
-			assertThat(result.dynamicGrid.getRows()).isEqualTo(10)
+			assertThat(result.dynamicGrid.cols).isEqualTo(10)
+			assertThat(result.dynamicGrid.rows).isEqualTo(10)
 			assertThat(result.staticToDynamicMap).hasSize(0)
 
 			// Verify it's a new grid instance
@@ -153,8 +153,8 @@ class GridTransformerTest : KoinTestBase() {
 			val result = GridTransformer.transformGrid(staticGrid)
 
 			// Assert - Dimensions preserved
-			assertThat(result.dynamicGrid.getCols()).isEqualTo(20)
-			assertThat(result.dynamicGrid.getRows()).isEqualTo(20)
+			assertThat(result.dynamicGrid.cols).isEqualTo(20)
+			assertThat(result.dynamicGrid.rows).isEqualTo(20)
 		}
 
 		@Test

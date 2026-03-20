@@ -234,8 +234,8 @@ class TrainPositionCalculator(
 		// Fallback: If not in cache, scan grid (should not happen after optimization)
 		if (result == null) {
 			val grid = context.getRailWayNetGrid()
-			for (x in 0 until grid.getCols()) {
-				for (y in 0 until grid.getRows()) {
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
 					val cell = grid.getCellAt(x, y)
 
 					// Direct identity match
