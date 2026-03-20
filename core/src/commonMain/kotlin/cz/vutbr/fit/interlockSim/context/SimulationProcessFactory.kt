@@ -20,7 +20,7 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
  * the Factory pattern. This allows:
  * - Different simulation engines to be plugged in
  * - Testing without concrete simulation dependencies
- * - Future migration from jDisco to DSOL/Kalasim
+ * - Future migration from kDisco to DSOL/Kalasim
  *
  * ## Design Decision (Issue #94)
  *
@@ -35,7 +35,7 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
  *
  * ## Future Migration
  *
- * When migrating from jDisco to DSOL/Kalasim:
+ * When migrating from kDisco to DSOL/Kalasim:
  * 1. Create new factory implementation with DSOL/Kalasim classes
  * 2. Implement DSOLSimulationEnvironment adapter
  * 3. Update DI configuration to use new factory

@@ -110,7 +110,7 @@ class ShuntingLoop(
 			if (sleepTime > 10) {
 				// platformSleep restores the interrupt flag on InterruptedException (JVM only).
 				// Simulation termination is handled by coroutine cancellation (simScope.cancel()),
-				// not by terminate() as in jDisco — this is intentional.
+				// not by terminate() as in kDisco — this is intentional.
 				platformSleep(sleepTime)
 			} else if (sleepTime < 0) {
 				presvihnuto = sleepTime / 1000.0

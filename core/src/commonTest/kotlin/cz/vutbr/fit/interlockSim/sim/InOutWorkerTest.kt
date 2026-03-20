@@ -41,7 +41,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  *
  * Note: These tests focus on InOutWorker setup and state management.
  * Full simulation execution tests (waitUntil, path reservation) require
- * jDisco framework and are beyond the scope of unit testing.
+ * kDisco framework and are beyond the scope of unit testing.
  */
 class InOutWorkerTest : KoinTestBase() {
 	@Nested

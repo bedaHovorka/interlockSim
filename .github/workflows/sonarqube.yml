@@ -11,7 +11,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: read  # Required for PR analysis
-  packages: read  # Required for GitHub Packages (jDisco dependency)
+  packages: read  # Required for GitHub Packages (kDisco dependency)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

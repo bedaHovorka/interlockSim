@@ -10,7 +10,7 @@ import javax.swing.JPanel
  *
  * This component appears at the top of the frame during simulation mode and is hidden
  * during editing mode. It provides real-time feedback on simulation progress without
- * simulation control buttons (due to jDisco framework limitations - simulations cannot
+ * simulation control buttons (due to kDisco framework limitations - simulations cannot
  * be paused, only started and stopped).
  *
  * **Layout Structure:**
@@ -28,7 +28,7 @@ import javax.swing.JPanel
  * All methods must be called from the Event Dispatch Thread (EDT).
  *
  * **Design Constraints:**
- * - No pause/resume buttons: jDisco simulations cannot be paused once started
+ * - No pause/resume buttons: kDisco simulations cannot be paused once started
  * - Time formatting: HH:MM:SS.mmm (hours:minutes:seconds.milliseconds)
  * - Status values: "Ready", "Running", "Stopped"
  *

@@ -24,13 +24,13 @@ private val logger = KotlinLogging.logger {}
 /**
  * Controller for railway simulation animation, managing state updates and rendering timing.
  *
- * This class bridges the jDisco simulation thread and the Swing Event Dispatch Thread (EDT),
+ * This class bridges the kDisco simulation thread and the Swing Event Dispatch Thread (EDT),
  * ensuring thread-safe animation state updates and synchronized rendering.
  *
  * ## Threading Model
  *
  * ```
- * jDisco Simulation Thread:
+ * kDisco Simulation Thread:
  *   └─> SimulationContext.report() / PropertyChangeSupport
  *        └─> PropertyChangeListener [on simulation thread]
  *             └─> SwingUtilities.invokeLater { updateState() } [marshals to EDT]
@@ -268,13 +268,13 @@ class AnimationController(
 	/**
 	 * ContextPropertyChangeListener implementation for simulation state updates.
 	 *
-	 * **Called on jDisco simulation thread** (not EDT!).
+	 * **Called on kDisco simulation thread** (not EDT!).
 	 * Marshals state capture and update to EDT via SwingUtilities.invokeLater.
 	 *
 	 * @param event ContextChangeEvent containing simulation reports and state changes
 	 */
 	override fun propertyChange(event: ContextChangeEvent) {
-		// This method executes on jDisco simulation thread!
+		// This method executes on kDisco simulation thread!
 		require(!SwingUtilities.isEventDispatchThread()) {
 			"PropertyChange event should come from simulation thread, not EDT"
 		}

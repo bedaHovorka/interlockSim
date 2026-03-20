@@ -63,7 +63,7 @@ class InOutWorker(
 			}
 		}
 
-	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
+	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for kDisco event-driven logic
 	override suspend fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false

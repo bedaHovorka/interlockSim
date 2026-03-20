@@ -41,7 +41,7 @@ private val logger = KotlinLogging.logger {}
  * ## Purpose
  *
  * These tests verify that ShuntingLoop simulation correctly interacts with the
- * path reservation system. Tests run real trains through the jDisco simulation
+ * path reservation system. Tests run real trains through the kDisco simulation
  * using vyhybna.xml (shunting loop configuration).
  *
  * ## What These Tests Validate
@@ -60,7 +60,7 @@ private val logger = KotlinLogging.logger {}
  * ## Limitations
  *
  * These tests use ShuntingLoop as the Process coordinator because individual
- * Train instances cannot be activated directly (jDisco Process lifecycle).
+ * Train instances cannot be activated directly (kDisco Process lifecycle).
  * For individual train movement tests with a dedicated test process, see
  * Issue #366.
  *

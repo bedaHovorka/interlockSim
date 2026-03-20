@@ -41,7 +41,7 @@ import org.junit.jupiter.api.Test
  * - Acceleration limits: ±MAXIMAL_ACCELERATION (4.0 m/s²) and MINIMAL_DECELERATION (-3.0 m/s²)
  *
  * Test Strategy:
- * - Use MockSimulationContext for time control without jDisco framework
+ * - Use MockSimulationContext for time control without kDisco framework
  * - Test Motor behavior indirectly through Train's public methods
  * - Validate kinematics against expected physics (tolerance: 1e-6 meters, 1e-9 seconds)
  * - Test edge cases: zero distance (SIM-001 mitigation), very small distances, negative distances
@@ -49,8 +49,8 @@ import org.junit.jupiter.api.Test
  *
  * Limitations:
  * - Motor is a private inner class - tested indirectly via public Train methods
- * - Full acceleration simulation requires jDisco framework - tests focus on state verification
- * - Exact acceleration curves require integration tests with jDisco ProcessManager
+ * - Full acceleration simulation requires kDisco framework - tests focus on state verification
+ * - Exact acceleration curves require integration tests with kDisco ProcessManager
  *
  * Railway Context:
  * This suite validates train acceleration characteristics similar to real electric/diesel
@@ -170,7 +170,7 @@ class TrainPhysicsTest : KoinTestBase() {
 			setTrainVelocity(train, 5.0)
 
 			// Motor inner class clamps acceleration to MAXIMAL_ACCELERATION (4.0 m/s²)
-			// Verify train was created successfully (acceleration limiting happens during jDisco simulation)
+			// Verify train was created successfully (acceleration limiting happens during kDisco simulation)
 			assertThat(train).isNotNull()
 		}
 
@@ -315,7 +315,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 * Railway context: Train's position within current track section updates
 		 * as it moves. This is tracked for collision detection and signal proximity.
 		 *
-		 * Note: Full position testing requires jDisco integration test with Site inner class
+		 * Note: Full position testing requires kDisco integration test with Site inner class
 		 */
 		@Test
 		fun `position updates correctly after movement step`() {
@@ -334,7 +334,7 @@ class TrainPhysicsTest : KoinTestBase() {
 		 *
 		 * Railway context: Train's velocity changes according to motor acceleration/deceleration.
 		 *
-		 * Note: Actual velocity state changes during jDisco simulation via SimpleIntegration
+		 * Note: Actual velocity state changes during kDisco simulation via SimpleIntegration
 		 */
 		@Test
 		fun `velocity updates correctly after movement step`() {
@@ -529,7 +529,7 @@ class TrainPhysicsTest : KoinTestBase() {
 	 * Helper to set train velocity for testing (works around private velocity field).
 	 * This is used to prepare trains with initial velocities for deceleration tests.
 	 *
-	 * Uses reflection to directly set the private velocity Variable field, since jDisco
+	 * Uses reflection to directly set the private velocity Variable field, since kDisco
 	 * simulation framework is not available in unit tests.
 	 *
 	 * @param train the train to configure

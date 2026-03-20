@@ -52,7 +52,7 @@ import kotlinx.coroutines.runBlocking
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
  *
  * Provides simulation-specific operations without editing capabilities:
- * - Running discrete event simulations using jDisco framework
+ * - Running discrete event simulations using kDisco framework
  * - Managing simulation processes (main process, InOut workers)
  * - Path finding for train navigation (pathToNextSemaphore)
  * - Simulation reporting and event logging
@@ -92,13 +92,13 @@ import kotlinx.coroutines.runBlocking
  * - Random number generator (for train naming)
  * - Dynamic wrapper mappings (staticToDynamicMap, staticTrackToDynamicMap)
  *
- * The jDisco discrete event simulation framework operates in a single thread,
+ * The kDisco discrete event simulation framework operates in a single thread,
  * ensuring sequential execution of all simulation events.
  *
  * ### Usage
  *
  * - Access DefaultSimulationContext only from the simulation thread
- * - All simulation events execute sequentially via jDisco
+ * - All simulation events execute sequentially via kDisco
  * - Do not share instances across thread boundaries
  * - Do NOT call editing methods (putCell, removeCell, etc.) - use EditingContext for that
  *
@@ -185,7 +185,7 @@ open class DefaultSimulationContext(
 	private var simulation: Simulation? = null
 
 	/**
-	 * Random number generator for name generation (jDisco)
+	 * Random number generator for name generation (kDisco)
 	 */
 	private val random: Random = Random(0L)
 

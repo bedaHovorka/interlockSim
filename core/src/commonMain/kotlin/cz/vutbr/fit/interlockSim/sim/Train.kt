@@ -740,7 +740,7 @@ class Train :
 		override fun derivatives() {
 			if (!started || !env.isReporting(ReportType.TRAIN_CONTINUOUS)) return
 			// Throttle to report at most once per 1.0 simulation-time unit,
-			// matching the old Reporter.setFrequency(1.0) behaviour from jDisco.
+			// matching the old Reporter.setFrequency(1.0) behaviour from kDisco.
 			val currentTime = Process.time()
 			val currentSecond = kotlin.math.floor(currentTime)
 			if (currentSecond <= lastReportTime) return

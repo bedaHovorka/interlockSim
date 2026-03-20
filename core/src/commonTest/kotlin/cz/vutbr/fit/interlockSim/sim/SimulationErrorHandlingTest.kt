@@ -53,7 +53,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - Test defensive programming (requireSimulation, requireSimulationNotNull)
  * - Validate exception types (SimulationException, TrackOperationException)
  * - Test edge cases (empty contexts, null parameters, zero lengths)
- * - Avoid testing jDisco internal error handling
+ * - Avoid testing kDisco internal error handling
  * - Focus on simulation domain errors, not framework errors
  *
  * Safety Context:
@@ -268,7 +268,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		/**
 		 * Test: Generator handles null random seed robustly
 		 *
-		 * Scenario: Generator uses jDisco.Random(0) for reproducibility.
+		 * Scenario: Generator uses kDisco.Random(0) for reproducibility.
 		 * Verifies random number generation is initialized.
 		 *
 		 * Safety: Deterministic behavior for testing and debugging.

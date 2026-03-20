@@ -4,9 +4,9 @@ This directory contains Java Microbenchmark Harness (JMH) benchmarks for the Rai
 
 ## Prerequisites
 
-### jDisco Dependency
+### kDisco Dependency
 
-Benchmarks require the jDisco simulation library to compile. Two options:
+Benchmarks require the kDisco simulation library to compile. Two options:
 
 **Option 1: GitHub Packages (Recommended for CI/CD)**
 
@@ -19,13 +19,13 @@ export GITHUB_TOKEN=your-personal-access-token
 **Option 2: Local Maven Install (Recommended for Development)**
 
 ```bash
-# Clone jDisco repository
+# Clone kDisco repository
 cd ~/work
-git clone https://github.com/bedaHovorka/jdisco.git
-cd jdisco
+git clone https://github.com/bedaHovorka/kdisco.git
+cd kdisco
 
 # Build and install to local Maven repository
-mvn clean install
+./gradlew :kdisco-core:publishToMavenLocal
 
 # Return to interlockSim
 cd ~/work/interlockSim
@@ -33,8 +33,8 @@ cd ~/work/interlockSim
 
 Verify installation:
 ```bash
-ls ~/.m2/repository/dk/ruc/keld/jdisco/1.2.0/
-# Should show: jdisco-1.2.0.jar, jdisco-1.2.0.pom
+ls ~/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/0.3.0-SNAPSHOT/
+# Should show: kdisco-core-jvm-0.3.0-SNAPSHOT.jar, kdisco-core-jvm-0.3.0-SNAPSHOT.pom
 ```
 
 ## Overview

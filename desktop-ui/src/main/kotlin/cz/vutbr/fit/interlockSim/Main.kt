@@ -144,7 +144,7 @@ class Main {
 	 *
 	 * **Threading Model:**
 	 * - Main thread: Creates Frame and SimulationContext on EDT via SwingUtilities.invokeLater
-	 * - Simulation thread: jDisco simulation runs on background thread
+	 * - Simulation thread: kDisco simulation runs on background thread
 	 * - EDT: GUI updates occur on EDT, marshaled by AnimationController
 	 *
 	 * **Command Usage:**
@@ -185,7 +185,7 @@ class Main {
 				frame.setContext(context)
 				frame.isVisible = true
 
-				// Run simulation on background thread (jDisco simulation thread)
+				// Run simulation on background thread (kDisco simulation thread)
 				Thread {
 					try {
 						context.run()

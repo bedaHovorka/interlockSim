@@ -47,7 +47,7 @@ private val logger = KotlinLogging.logger {}
  *
  * The rendering pipeline:
  * ```
- * 1. AnimationController captures state from SimulationContext (jDisco thread)
+ * 1. AnimationController captures state from SimulationContext (kDisco thread)
  * 2. State marshaled to EDT via SwingUtilities.invokeLater
  * 3. Swing Timer triggers repaint() at 30 FPS (on EDT)
  * 4. This renderer queries AnimationController.getCurrentState() (on EDT)

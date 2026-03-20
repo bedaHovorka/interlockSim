@@ -45,7 +45,7 @@ private val logger = KotlinLogging.logger {}
  * ```
  *
  * Thread Safety: This is a stateless singleton object, thread-safe for transformations.
- * However, the created SimulationContext instances are NOT thread-safe (jDisco single-threaded).
+ * However, the created SimulationContext instances are NOT thread-safe (kDisco single-threaded).
  *
  * Koin Integration: Register as singleton in simulationModule for dependency injection.
  *

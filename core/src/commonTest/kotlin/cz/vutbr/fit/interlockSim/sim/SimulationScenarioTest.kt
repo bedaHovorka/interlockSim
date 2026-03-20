@@ -32,7 +32,7 @@ import org.koin.test.inject
  * Configuration and setup tests for simulation scenarios.
  *
  * These tests validate that simulation components (Generator, Train, InOutWorker, Semaphore)
- * are correctly configured and initialized. They do NOT run the jDisco simulation
+ * are correctly configured and initialized. They do NOT run the kDisco simulation
  * event loop - for full simulation execution tests, see SimulationExecutionTest.
  *
  * Coverage Goals:
@@ -46,7 +46,7 @@ import org.koin.test.inject
  * - Check configuration parameters and initial states
  * - Verify relationships (InOut to Worker, Train to Timetable)
  * - Test through public APIs without Process.activate()
- * - No jDisco simulation execution (no context.run() or Head.run())
+ * - No kDisco simulation execution (no context.run() or Head.run())
  *
  * Railway Context:
  * These tests validate that railway simulation components are correctly configured

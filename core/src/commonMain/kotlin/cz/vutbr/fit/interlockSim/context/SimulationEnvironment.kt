@@ -66,7 +66,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  *
  * ## DSOL Migration
  *
- * When migrating from jDisco to DSOL:
+ * When migrating from kDisco to DSOL:
  * 1. Create DSOLSimulationEnvironment implementing this interface
  * 2. Update [SimulationProcessFactory] to accept SimulationEnvironment
  * 3. Simulation classes (Train, etc.) work unchanged

@@ -74,8 +74,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * **This interface is NOT thread-safe.** See [Context] for detailed thread safety
  * documentation and usage guidelines.
  *
- * All simulation operations must be performed within the jDisco simulation thread.
- * The jDisco discrete event simulation framework is single-threaded by design,
+ * All simulation operations must be performed within the kDisco simulation thread.
+ * The kDisco discrete event simulation framework is single-threaded by design,
  * ensuring sequential execution of all simulation events.
  *
  * @see Context

@@ -37,7 +37,7 @@ Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno Univ
 
 This project uses Gradle with Kotlin DSL. Java 21 LTS is required.
 
-**Recent migrations (January 2026):** Ant→Gradle, Java 11→21 LTS, Java→Kotlin, Observable→PropertyChangeSupport, SLF4J→kotlin-logging, jDisco extracted to separate repo.
+**Recent migrations (January 2026):** Ant→Gradle, Java 11→21 LTS, Java→Kotlin, Observable→PropertyChangeSupport, SLF4J→kotlin-logging, kDisco extracted to separate repo.
 
 ### Common Build Commands
 
@@ -160,8 +160,8 @@ For complete navigation services architecture, Koin DI integration patterns, and
 - `objects/paths/` - Route management
 
 **Simulation engine:**
-- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-api-jvm:0.2.0-SNAPSHOT`) — Kotlin wrapper over jDisco (Phase 1 migration complete 2026-03-04)
-- kDisco repo: https://github.com/bedavs/kdisco; jDisco (original): https://github.com/bedavs/jDisco
+- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-jvm:0.3.0-SNAPSHOT`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-04)
+- kDisco repo: https://github.com/bedavs/kdisco
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
 **GUI:**
@@ -214,7 +214,7 @@ src/
 **Completed:** January 2026 (100% of 94 files migrated)
 - Conservative structure-preserving approach with full test parity
 - Physics calculations validated against Java baseline
-- Full jDisco interoperability maintained
+- Full kDisco interoperability maintained
 
 ## Dependency Injection with Koin
 
@@ -263,7 +263,7 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 - **No unsolicited improvements** - Only make explicitly requested changes
 
 **kDisco Library:**
-- **Do not modify** - Maintained as separate project at https://github.com/bedavs/kdisco (wraps jDisco: https://github.com/bedavs/jDisco)
+- **Do not modify** - Maintained as separate project at https://github.com/bedavs/kdisco
 
 ### Flexible Development (Other Components)
 
@@ -398,10 +398,10 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 
 ## Future Development Considerations
 
-The project currently uses **kDisco** (Kotlin wrapper over jDisco, Phase 1 migration complete 2026-03-04). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
+The project currently uses **kDisco** (replaces jDisco, Phase 1 migration complete 2026-03-04). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
 
 **Migration status:**
-- ✅ **Phase 1 complete (2026-03-04):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-api-jvm:0.2.0`). See commit history on `feature/simulation-library-decision-round2`.
+- ✅ **Phase 1 complete (2026-03-04):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-jvm:0.3.0-SNAPSHOT`). See commit history on `feature/simulation-library-decision-round2`.
 - 🆕 **Phase 2 (future):** Migrate from kDisco to Kalasim (native Kotlin coroutines-based discrete event simulation).
 
 **Alternative frameworks researched (see `docs/jdisco-research.md`):**

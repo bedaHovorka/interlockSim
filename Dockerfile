@@ -77,7 +77,7 @@ COPY core/src/ /build/interlockSim/core/src/
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/cz/hovorka/kdisco/ && \
+    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
 

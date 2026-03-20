@@ -13,7 +13,7 @@
 #
 #      Usage:
 #        # Build services:
-#        docker-compose build app        # Build app (jDisco downloaded from GitHub Packages)
+#        docker-compose build app        # Build app (kDisco downloaded from GitHub Packages)
 #        docker-compose build text       # Build LaTeX thesis
 #
 #        # Run GUI editor (requires X11):
@@ -31,7 +31,7 @@
 
 services:
   # Build and run Java application with GUI support
-  # jDisco is automatically downloaded from GitHub Packages or uses local Maven cache
+  # kDisco is automatically downloaded from GitHub Packages or uses local Maven cache
   app:
     build:
       context: .
@@ -39,7 +39,7 @@ services:
       target: runner
       cache_from:
         - interlocksim:latest
-      # GitHub Packages authentication for jDisco dependency
+      # GitHub Packages authentication for kDisco dependency
       # Set GITHUB_ACTOR and GITHUB_TOKEN in environment or .env file
       args:
         GITHUB_ACTOR: ${GITHUB_ACTOR}

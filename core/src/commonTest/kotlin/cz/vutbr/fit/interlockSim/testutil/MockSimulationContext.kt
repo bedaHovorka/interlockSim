@@ -32,7 +32,7 @@ import java.io.InputStream
 
 /**
  * Mock implementation of SimulationContext for testing simulation components
- * without requiring jDisco framework initialization.
+ * without requiring kDisco framework initialization.
  */
 class MockSimulationContext(
 	private val delegate: DefaultSimulationContext

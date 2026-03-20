@@ -36,7 +36,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  * - Integration with MockSimulationContext
  *
  * Note: These tests focus on ShuntingLoop setup and configuration logic.
- * Full simulation execution tests require jDisco framework and are beyond
+ * Full simulation execution tests require kDisco framework and are beyond
  * the scope of unit testing (would be integration/system tests).
  */
 class ShuntingLoopTest : KoinTestBase() {

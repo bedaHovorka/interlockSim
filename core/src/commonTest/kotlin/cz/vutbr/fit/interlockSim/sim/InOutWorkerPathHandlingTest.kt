@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test
  * - Handle queue edge cases (empty queue, FIFO order, train removal)
  *
  * Note: Full simulation execution tests (waitUntil, actual path reservation)
- * require jDisco framework and are beyond scope of unit testing.
+ * require kDisco framework and are beyond scope of unit testing.
  */
 class InOutWorkerPathHandlingTest : KoinTestBase() {
 	private lateinit var context: MockSimulationContext
@@ -204,7 +204,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 
 		@Test
 		fun `worker handles queue overflow`() {
-			// Head (jDisco linked list) has no fixed capacity limit
+			// Head (kDisco linked list) has no fixed capacity limit
 			// Trains can queue indefinitely as they enter via Process.wait(queqe)
 			// Worker processes them one by one as paths become available
 
@@ -216,7 +216,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 		@Test
 		fun `worker maintains FIFO order`() {
 			// Queue.first() returns first train in queue
-			// Trains are linked via jDisco Link structure
+			// Trains are linked via kDisco Link structure
 			// FIFO order preserved: when first train leaves, next becomes head
 
 			val queue2 = worker.getQueqe()
@@ -272,7 +272,7 @@ class InOutWorkerPathHandlingTest : KoinTestBase() {
 
 		@Test
 		fun `worker enters iteration when queue non-empty`() {
-			// iteration() called by jDisco framework when worker activated
+			// iteration() called by kDisco framework when worker activated
 			// Condition: while (!queqe.empty()) ensures trains are processed
 
 			val loopCondition = !queue.empty()

@@ -56,7 +56,7 @@ private val logger = KotlinLogging.logger {}
  * - Real railway network topology (switches, semaphores, track blocks)
  * - Real PathReservationService with PathReservationRegistry
  * - Real TrainNavigationService
- * - Wrapped in MockSimulationContext to prevent jDisco simulation execution
+ * - Wrapped in MockSimulationContext to prevent kDisco simulation execution
  *
  * ## Design Approach
  *
@@ -74,11 +74,11 @@ private val logger = KotlinLogging.logger {}
  * - Trains wait when path is occupied by another train
  * - Path release makes blocks available for next train
  *
- * ## Testing Without jDisco Simulation
+ * ## Testing Without kDisco Simulation
  *
  * Per CLAUDE.md guidance, simulation classes should have minimal changes.
  * These tests validate the path reservation system at the service level
- * without executing the full jDisco event loop (context.run()).
+ * without executing the full kDisco event loop (context.run()).
  *
  * @since 2026-01-29 (Issue #295)
  */
@@ -101,7 +101,7 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 			)
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 
-		// Create real simulation context (wrapped to prevent jDisco execution)
+		// Create real simulation context (wrapped to prevent kDisco execution)
 		val loadedContext = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		context = MockSimulationContext(loadedContext)
 
