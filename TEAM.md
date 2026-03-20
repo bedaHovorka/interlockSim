@@ -29,7 +29,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Focus Areas:**
 1. **Simulation Engine**
-   - jDisco library usage and limitations
+   - kDisco library usage and limitations
    - DSOL/Kalasim migration planning (Goal 10)
    - Discrete-event simulation patterns
    - Event scheduling and timing correctness
@@ -65,7 +65,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Examples:**
 - "Review the train acceleration formula for correctness"
-- "Design migration strategy from jDisco to DSOL"
+- "Design migration strategy from kDisco to DSOL"
 - "Debug why trains are not stopping at signals"
 - "Evaluate performance impact of adding continuous terrain simulation"
 - "Resolve disagreement about event scheduling approach"
@@ -719,7 +719,7 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 
 ### Critical DI Rules (All Team Members)
 
-1. ❌ **NEVER inject into sim/ package** - Wait for jDisco migration
+1. ❌ **NEVER inject into sim/ package** - Wait for kDisco migration
 2. ✅ **Contexts are NOT singletons** - Use factory/scope patterns
 3. ✅ **Preserve factory patterns** - Inject factories, not products
 4. ✅ **Golden output validation required** - Simulation must be unchanged

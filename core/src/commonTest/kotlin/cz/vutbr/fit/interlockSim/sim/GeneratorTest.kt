@@ -27,15 +27,15 @@ import org.koin.test.get
 /**
  * Unit tests for {@link Generator}.
  *
- * The Generator is a jDisco LoopProcess that creates Train objects at scheduled intervals
+ * The Generator is a kDisco LoopProcess that creates Train objects at scheduled intervals
  * with random timetables. This test suite validates the observable behavior of the Generator
- * class without directly simulating jDisco processes.
+ * class without directly simulating kDisco processes.
  *
- * Testing Strategy (Conservative jDisco testing - see CLAUDE.md Code Modification Guidelines):
+ * Testing Strategy (Conservative kDisco testing - see CLAUDE.md Code Modification Guidelines):
  * - Test Generator through public APIs and data structures
  * - Test train list accumulation (trains collection is public)
  * - Test configuration flags (shuffleInOuts parameter)
- * - Avoid calling protected iteration() method which requires jDisco simulation time
+ * - Avoid calling protected iteration() method which requires kDisco simulation time
  * - Use MockSimulationContext wrapping TestContextBuilder for InOut availability
  * - Focus on state and properties rather than runtime behavior
  * - Document SIM-003 (unused variable increment in interLoopSleep)
@@ -47,10 +47,10 @@ import org.koin.test.get
  * - Configuration flag behavior
  * - Context integration through getInOuts()
  *
- * Limitations (Due to jDisco dependency):
- * - Cannot test iteration() directly without jDisco event simulation (would block on time())
+ * Limitations (Due to kDisco dependency):
+ * - Cannot test iteration() directly without kDisco event simulation (would block on time())
  * - Cannot test inter-arrival time scheduling without running full simulation
- * - Cannot test train placement and path setup without jDisco activation
+ * - Cannot test train placement and path setup without kDisco activation
  * - SIM-003 (unused variable i increment) - documented but not directly testable
  *
  * Railway Context:
@@ -232,7 +232,7 @@ class GeneratorTest : KoinTestBase() {
 		/**
 		 * Test: Generator has a protected Random field.
 		 *
-		 * The Generator uses jDisco Random for stochastic timetable generation.
+		 * The Generator uses kDisco Random for stochastic timetable generation.
 		 */
 		@Test
 		fun `generator has random field initialized`() {

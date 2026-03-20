@@ -110,7 +110,7 @@ class ExampleRegistry {
 	 * The console example runs at maximum speed without synchronization.
 	 *
 	 * **Threading Model:**
-	 * The simulation runs on a background thread (jDisco simulation thread), while the
+	 * The simulation runs on a background thread (kDisco simulation thread), while the
 	 * GUI updates occur on the EDT. AnimationController handles the thread marshaling.
 	 *
 	 * @param factory The simulation context factory

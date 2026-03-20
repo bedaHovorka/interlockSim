@@ -38,13 +38,13 @@ import org.junit.jupiter.api.Test
  * - Path availability: train waits when path is blocked
  * - Path release callback: train resumes when path becomes available
  *
- * NOTE: Train is a complex jDisco Process. These tests focus on:
+ * NOTE: Train is a complex kDisco Process. These tests focus on:
  * - Path reservation lifecycle (setup/teardown)
  * - Track occupancy transitions as train progresses
  * - Semaphore coordination with path setup
  *
  * Limitations:
- * - Full movement simulation requires jDisco framework execution
+ * - Full movement simulation requires kDisco framework execution
  * - These tests validate path interaction at construction/property level
  * - Dynamic movement and position tracking tested via mocks
  *

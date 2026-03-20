@@ -1,0 +1,122 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kdisco-core/0.3.0/kdisco-core-0.3.0.module",
+    "group": "cz.hovorka.kdisco",
+    "module": "kdisco-core",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.12"
+    }
+  },
+  "variants": [
+    {
+      "name": "jsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-dom-api-compat",
+          "version": {
+            "requires": "2.1.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kdisco-core-js-0.3.0.klib",
+          "url": "kdisco-core-js-0.3.0.klib",
+          "size": 76400,
+          "sha512": "bcb616a77133e985e2f8ff935d37698bbae7a206b31a60140a84909a3a576836b7fa08eaa8b42469a3900a0fd7376c51e6bafc5187773881cec09391a5d77e61",
+          "sha256": "af4f975b265d3d7f1584dbd4f258ba1cd436080b2f4fdeb07eab804ce0f0e083",
+          "sha1": "a8c85dd00ed0fbe9ac4b8e9e360279270d71718f",
+          "md5": "35d7f80bd502f97c6592201e81b87389"
+        }
+      ]
+    },
+    {
+      "name": "jsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-dom-api-compat",
+          "version": {
+            "requires": "2.1.10"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib"
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kdisco-core-js-0.3.0.klib",
+          "url": "kdisco-core-js-0.3.0.klib",
+          "size": 76400,
+          "sha512": "bcb616a77133e985e2f8ff935d37698bbae7a206b31a60140a84909a3a576836b7fa08eaa8b42469a3900a0fd7376c51e6bafc5187773881cec09391a5d77e61",
+          "sha256": "af4f975b265d3d7f1584dbd4f258ba1cd436080b2f4fdeb07eab804ce0f0e083",
+          "sha1": "a8c85dd00ed0fbe9ac4b8e9e360279270d71718f",
+          "md5": "35d7f80bd502f97c6592201e81b87389"
+        }
+      ]
+    },
+    {
+      "name": "jsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "files": [
+        {
+          "name": "kdisco-core-js-0.3.0-sources.jar",
+          "url": "kdisco-core-js-0.3.0-sources.jar",
+          "size": 23902,
+          "sha512": "d258df8f0485360afe4d521f972523e3d7cb47a7973287d04732cb90ca514bc6d51c084ae61a079afca67ff0a074115412df8bb0357b0fac126a6d032234a5b2",
+          "sha256": "2476098c53421083f7f5e18f59168b7752c63414c97e6f53e91474afb0cd06c9",
+          "sha1": "7968c4863c361be5ac18d68bcc2a4b42ff6ddf0c",
+          "md5": "a19e18af239e9dc9eb1bfda6a06b4c2c"
+        }
+      ]
+    }
+  ]
+}

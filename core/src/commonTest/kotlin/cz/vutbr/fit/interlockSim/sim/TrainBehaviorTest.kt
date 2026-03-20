@@ -30,7 +30,7 @@ import org.koin.test.inject
  * Configuration and physics validation tests for Train behavior.
  *
  * These tests validate train configuration, initial state, and physics constants
- * without running the jDisco simulation event loop. For full simulation execution
+ * without running the kDisco simulation event loop. For full simulation execution
  * tests that validate runtime behavior, see SimulationExecutionTest.
  *
  * Coverage Goals:
@@ -46,7 +46,7 @@ import org.koin.test.inject
  * - Verify physics constants and formulas are correctly documented
  * - Check initial state (train at rest)
  * - Test configuration through Train's public API
- * - No jDisco simulation execution (no context.run() or Head.run())
+ * - No kDisco simulation execution (no context.run() or Head.run())
  * - No Process.activate() calls (tests configuration, not runtime)
  *
  * Physics Documentation:
@@ -185,7 +185,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Test: Train acceleration curve is smooth
 		 *
 		 * Scenario: Train should accelerate smoothly using continuous integration
-		 * (SimpleIntegration with jDisco Variable), not discrete jumps.
+		 * (SimpleIntegration with kDisco Variable), not discrete jumps.
 		 *
 		 * Physics: Train uses Continuous simulation with ODE integration
 		 * velocity.rate = acceleration (via SimpleIntegration)
@@ -404,7 +404,7 @@ class TrainBehaviorTest : KoinTestBase() {
 		 * Scenario: Train stopped at red semaphore should remain stopped
 		 * until signal changes to allowing (green).
 		 *
-		 * Physics: jDisco Condition mechanism:
+		 * Physics: kDisco Condition mechanism:
 		 * - waitUntil(allowingSignal(semaphore))
 		 * - Condition checks: semaphore.signal.isAllowing()
 		 * - Process remains passivated until condition true

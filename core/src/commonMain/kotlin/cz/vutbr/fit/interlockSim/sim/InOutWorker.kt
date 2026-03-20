@@ -18,10 +18,10 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.engine.Condition
-import cz.hovorka.kdisco.engine.Head
-import cz.hovorka.kdisco.engine.Link
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Head
+import cz.hovorka.kdisco.Link
+import cz.hovorka.kdisco.Process
 
 /**
  * Behaviour of InOut process
@@ -63,7 +63,7 @@ class InOutWorker(
 			}
 		}
 
-	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
+	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for kDisco event-driven logic
 	override suspend fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false

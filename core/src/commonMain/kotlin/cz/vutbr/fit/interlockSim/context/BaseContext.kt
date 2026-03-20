@@ -88,7 +88,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Thread safety is intentionally NOT implemented because:
  * 1. Railway network operations are inherently sequential
  * 2. GUI editors operate in a single thread (Swing EDT)
- * 3. jDisco discrete event simulation framework operates in a single thread
+ * 3. kDisco discrete event simulation framework operates in a single thread
  * 4. No current use cases require concurrent access
  * 5. Thread-safety would add complexity and performance overhead
  *

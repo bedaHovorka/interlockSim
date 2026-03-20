@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.engine.DiscoException
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**

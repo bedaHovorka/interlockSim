@@ -22,10 +22,10 @@ import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
 /**
- * Full simulation execution tests with running jDisco event loop.
+ * Full simulation execution tests with running kDisco event loop.
  *
  * These tests run complete simulations using context.run() to validate
- * that the jDisco simulation framework works correctly for critical scenarios.
+ * that the kDisco simulation framework works correctly for critical scenarios.
  * Unlike SimulationScenarioTest and TrainBehaviorTest which test configuration,
  * these tests run actual simulations.
  *
@@ -37,7 +37,7 @@ import org.koin.test.inject
  * - Full shunting loop: End-to-end scenario from entry to exit
  *
  * Test Strategy:
- * - Run actual jDisco simulations with context.run()
+ * - Run actual kDisco simulations with context.run()
  * - Use ShuntingLoop as main process (required by vyhybna.xml)
  * - Run with short simulation times (10-30 seconds) for fast execution
  * - Validate results after simulation completes
@@ -58,7 +58,7 @@ import org.koin.test.inject
  * - Uses vyhybna.xml (SIM-004 limitation: ShuntingLoop hardcoded for this config)
  * - Simulation runs to completion or endTime, whichever comes first
  * - Tests verify observable state after simulation (train counts, positions)
- * - No mocking of jDisco internals (Process, Head, Link, Condition)
+ * - No mocking of kDisco internals (Process, Head, Link, Condition)
  *
  * @see SimulationScenarioTest Configuration tests (no simulation execution)
  * @see TrainBehaviorTest Physics validation tests (no simulation execution)

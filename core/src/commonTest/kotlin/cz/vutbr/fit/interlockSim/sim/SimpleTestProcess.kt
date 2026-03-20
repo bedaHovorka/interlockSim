@@ -9,14 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.engine.Process
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Minimal test Process coordinator for isolated Train unit testing.
  *
  * This Process extends LoopProcess to coordinate a single Train instance
- * within the jDisco simulation framework. Unlike ShuntingLoop (which manages
+ * within the kDisco simulation framework. Unlike ShuntingLoop (which manages
  * multiple trains, queues, and dispatching), SimpleTestProcess focuses on
  * single-train scenarios for unit testing.
  *
@@ -57,7 +57,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * because it validates end-to-end interlocking behavior. Future tests may migrate
  * to SimpleTestProcess pattern for unit-level Train validation.
  *
- * ## jDisco Process Lifecycle
+ * ## kDisco Process Lifecycle
  *
  * The Process lifecycle follows this pattern (from LoopProcess base class):
  *
@@ -190,7 +190,7 @@ class SimpleTestProcess(
 	 * - Add properties that are commonly asserted across multiple tests
 	 * - Keep properties immutable (val, not var)
 	 * - Document units (velocity in m/s, position in meters)
-	 * - Avoid exposing internal jDisco state (Process.time, Process.entity)
+	 * - Avoid exposing internal kDisco state (Process.time, Process.entity)
 	 *
 	 * @property velocity Current train velocity in meters per second (≥ 0.0)
 	 * @property position Current position along track in meters (≥ 0.0)

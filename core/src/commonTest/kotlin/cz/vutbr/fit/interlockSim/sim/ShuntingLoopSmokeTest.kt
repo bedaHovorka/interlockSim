@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
  *
  * **Purpose:**
  * These tests verify that the ShuntingLoop simulation runs successfully with actual
- * jDisco discrete event simulation, ensuring trains complete their journeys and exit
+ * kDisco discrete event simulation, ensuring trains complete their journeys and exit
  * the system without deadlocks.
  *
  * **Background (Issue #280):**
@@ -60,7 +60,7 @@ import java.util.concurrent.TimeUnit
  *
  * **Integration Test Tag:**
  * These tests are tagged with @Tag("integration-test") because they:
- * - Require full jDisco discrete event simulation framework
+ * - Require full kDisco discrete event simulation framework
  * - Execute real-time simulation with timing constraints
  * - Take longer to execute than unit tests
  * - Validate end-to-end system behavior
@@ -136,7 +136,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			context.run()
 
 			// Assert: Simulation initialization and startup completed successfully
-			// Success: context.run() returned without exception, jDisco processes terminated normally
+			// Success: context.run() returned without exception, kDisco processes terminated normally
 			logger.info { "Basic simulation smoke test completed successfully" }
 		}
 
@@ -524,7 +524,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		 * **Expected behavior:**
 		 * - Simulation runs for extended period without crashes
 		 * - Memory usage remains stable (no memory leaks)
-		 * - jDisco event queue processes events correctly
+		 * - kDisco event queue processes events correctly
 		 * - All trains complete their journeys
 		 */
 		@Test

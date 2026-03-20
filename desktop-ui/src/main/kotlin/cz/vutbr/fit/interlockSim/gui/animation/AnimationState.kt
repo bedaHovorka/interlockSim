@@ -21,12 +21,12 @@ import cz.vutbr.fit.interlockSim.util.PointF
  *
  * This data class captures the complete visual state of the railway simulation
  * at a specific moment in time. It is designed to be thread-safe and immutable,
- * allowing safe transfer of simulation state from the jDisco simulation thread
+ * allowing safe transfer of simulation state from the kDisco simulation thread
  * to the Swing Event Dispatch Thread (EDT) for rendering.
  *
  * ## Threading Model
  *
- * - **Captured on:** jDisco simulation thread (via PropertyChangeListener or Reporter)
+ * - **Captured on:** kDisco simulation thread (via PropertyChangeListener or Reporter)
  * - **Used on:** Swing EDT (by AnimatedSimulationCellRenderer)
  * - **Immutability:** All fields are `val` with immutable collections
  *

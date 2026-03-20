@@ -15,7 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Default implementation of SimulationProcessFactory using jDisco-based classes.
+ * Default implementation of SimulationProcessFactory using kDisco-based classes.
  *
  * This factory creates concrete simulation process instances:
  * - Generator: Main process for generating trains
@@ -30,7 +30,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Future Migration
  *
- * When migrating from jDisco to DSOL/Kalasim:
+ * When migrating from kDisco to DSOL/Kalasim:
  * 1. Create DSOLSimulationProcessFactory (or similar)
  * 2. Update Koin DI configuration to use new factory
  * 3. All context code continues to work unchanged

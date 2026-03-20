@@ -31,9 +31,9 @@ import org.junit.jupiter.api.*
  * - Train-track communication (enter/leave notifications)
  * - Multiple sensor triggering in correct order
  *
- * NOTE: Train is a complex jDisco Process that uses discrete-event simulation.
+ * NOTE: Train is a complex kDisco Process that uses discrete-event simulation.
  * These tests validate state transitions through public APIs and observable behavior.
- * Full integration testing would require running the complete jDisco simulation.
+ * Full integration testing would require running the complete kDisco simulation.
  *
  * Coverage:
  * - Train state transitions through velocity and acceleration changes
@@ -41,7 +41,7 @@ import org.junit.jupiter.api.*
  * - Multiple sensor interactions in sequence
  *
  * Limitations:
- * - Cannot fully test jDisco Process event scheduling without running simulation
+ * - Cannot fully test kDisco Process event scheduling without running simulation
  * - Motor acceleration physics tested in TrainPhysicsTest
  * - Full path reservation tested in AbstractPathTest
  */

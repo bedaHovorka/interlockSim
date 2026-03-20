@@ -77,9 +77,9 @@ Users can simulate realistic railway scenarios with multiple trains operating si
 **Dependencies:** None (foundation goal)
 
 **Implementation Notes:**
-- Requires jDisco scheduler modifications for concurrent entity management
+- Requires kDisco scheduler modifications for concurrent entity management
 - Consider prototype with 3-train scenario first
-- High risk - may require DSOL migration if jDisco proves limiting
+- High risk - may require DSOL migration if kDisco proves limiting
 - Foundation for Goals 3, 9, and 10
 
 ---
@@ -174,7 +174,7 @@ Users can save the complete state of a running simulation at any point and resto
 **Dependencies:** Goal 7 (speed control), Goal 8 (pause)
 
 **Implementation Notes:**
-- Requires serialization of jDisco process state
+- Requires serialization of kDisco process state
 - Consider versioning for save file compatibility
 - Foundation for Goals 15 and 18
 
@@ -199,7 +199,7 @@ Users can automatically collect key performance indicators during simulation inc
 
 **Implementation Notes:**
 - Build statistics collection framework
-- Consider integration with existing jDisco statistics capabilities
+- Consider integration with existing kDisco statistics capabilities
 - Foundation for Goals 13, 17, and 18
 
 ---
@@ -222,7 +222,7 @@ Users can adjust simulation speed from slow motion (for detailed observation) to
 **Dependencies:** None (quick win)
 
 **Implementation Notes:**
-- jDisco already supports speed control; needs UI exposure
+- kDisco already supports speed control; needs UI exposure
 - Quick win - implement early for immediate value
 
 ---
@@ -245,7 +245,7 @@ Users can pause the simulation at any moment and advance it one event at a time 
 **Dependencies:** Goal 7 (speed control)
 
 **Implementation Notes:**
-- jDisco supports pause; add single-step capability
+- kDisco supports pause; add single-step capability
 - Quick win - implement early for immediate value
 
 ---
@@ -623,11 +623,11 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 ### High-Risk Goals
 
 **Goal 1: Multi-Train Simulation**
-- **Risk:** jDisco scheduler may require fundamental architectural changes; concurrent entity management introduces race conditions and event ordering complexity
+- **Risk:** kDisco scheduler may require fundamental architectural changes; concurrent entity management introduces race conditions and event ordering complexity
 - **Impact:** Critical - blocks Goals 3, 9, 10
 - **Mitigation:**
   - Prototype with 3-train scenario before full implementation
-  - Consider DSOL migration if jDisco proves limiting
+  - Consider DSOL migration if kDisco proves limiting
   - Isolate scheduler changes behind abstraction layer
   - Extensive testing with various train counts
 
@@ -654,7 +654,7 @@ Users with disabilities can fully use InterlockSim through comprehensive accessi
 | Goal | Risk | Mitigation |
 |------|------|------------|
 | 4: Interlocking Validation | Requires formal safety rule knowledge | External specialist consultation |
-| 5: Save/Restore State | jDisco process serialization complexity | Incremental implementation, test extensively |
+| 5: Save/Restore State | kDisco process serialization complexity | Incremental implementation, test extensively |
 | 9: Conflict Resolution | Algorithm complexity for temporal conflicts | Start with simple detection, enhance iteratively |
 
 ### Dependency Risks

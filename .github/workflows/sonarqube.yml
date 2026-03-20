@@ -11,7 +11,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: read  # Required for PR analysis
-  packages: read  # Required for GitHub Packages (jDisco dependency)
+  packages: read  # Required for GitHub Packages (kDisco dependency)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -49,27 +49,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-sonar
 
-    - name: Cache kDisco release artifacts
-      id: cache-kdisco
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository/cz/hovorka/kdisco
-        key: kdisco-${{ hashFiles('gradle.properties', '.github/workflows/sonarqube.yml') }}
-        restore-keys: |
-          kdisco-
-
-    - name: Build kDisco 0.3.0 from source and publish to mavenLocal
-      if: steps.cache-kdisco.outputs.cache-hit != 'true'
-      env:
-        GITHUB_ACTOR: ${{ github.actor }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install kDisco 0.3.0 artifacts from repository
       run: |
-        # Pin to PR #9 merge: adds asKotlinRandom + overflow guard + nextDoubleNonZero
-        KDISCO_COMMIT="08b5fffa8fa9692c7b0067730b296951a418c398"
-        git clone https://github.com/bedaHovorka/kdisco.git /tmp/kdisco
-        cd /tmp/kdisco
-        git checkout "$KDISCO_COMMIT"
-        ./gradlew :kdisco-engine:publishJvmPublicationToMavenLocal
+        mkdir -p ~/.m2/repository/cz/hovorka/kdisco
+        cp -r docker-kdisco/cz/hovorka/kdisco/. ~/.m2/repository/cz/hovorka/kdisco/
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4

@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
  * Unit tests for SimpleTestProcess.
  *
  * These tests validate that SimpleTestProcess correctly coordinates a single
- * Train instance within the jDisco simulation framework.
+ * Train instance within the kDisco simulation framework.
  *
  * ## Test Scenarios
  *

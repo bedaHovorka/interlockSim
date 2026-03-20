@@ -32,7 +32,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
  * Thread safety is intentionally NOT implemented because:
  * 1. BaseContext (which uses HashMapGraph) operates in a single thread
  * 2. Swing GUI editor runs on Event Dispatch Thread (EDT)
- * 3. jDisco discrete event simulation framework is single-threaded
+ * 3. kDisco discrete event simulation framework is single-threaded
  * 4. No current use cases require concurrent access to the graph
  * 5. Thread-safety would add complexity and performance overhead
  *

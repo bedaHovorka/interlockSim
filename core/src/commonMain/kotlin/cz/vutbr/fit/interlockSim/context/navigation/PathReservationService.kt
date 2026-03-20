@@ -327,7 +327,7 @@ interface PathReservationService {
 	 * 3. For each semaphore, check `isPathAvailable(start, semaphore)`
 	 * 4. Return true if ANY semaphore has a free path, false otherwise
 	 *
-	 * ## Use Case: jDisco Condition Polling
+	 * ## Use Case: kDisco Condition Polling
 	 *
 	 * ```kotlin
 	 * private val pathFree = Condition {

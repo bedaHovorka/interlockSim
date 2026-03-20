@@ -52,10 +52,10 @@ import org.junit.jupiter.api.Test
  * 5. Semaphore Gridlock: Signal configuration prevents forward progress
  *
  * Implementation Notes:
- * - Tests use mock objects and manual path construction (not full jDisco simulation)
+ * - Tests use mock objects and manual path construction (not full kDisco simulation)
  * - Deadlock detection is validated through path reservation state analysis
  * - Conservative approach: test through public APIs of Train, Path, and Track
- * - Does NOT attempt to run full discrete-event simulation (requires jDisco framework)
+ * - Does NOT attempt to run full discrete-event simulation (requires kDisco framework)
  * - Focuses on logical properties that should prevent deadlock at design level
  *
  * Integration Test Notes:

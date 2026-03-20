@@ -147,12 +147,12 @@ class SimulationLifecycleTest : KoinTestBase() {
 	 * It verifies that:
 	 * 1. Thread count remains stable across multiple context creations
 	 * 2. Threads don't accumulate across multiple simulation runs
-	 * 3. jDisco's thread pooling works correctly
+	 * 3. kDisco's thread pooling works correctly
 	 *
 	 * ## Implementation Notes:
 	 *
-	 * **jDisco Threading Model:**
-	 * - jDisco uses daemon threads (one per Process/Coroutine)
+	 * **kDisco Threading Model:**
+	 * - kDisco uses daemon threads (one per Process/Coroutine)
 	 * - Threads are pooled and reused via Runner.firstFree linked list
 	 * - Threads only created when processes actually activate() and run
 	 * - Threads sleep (wait()) when returned to pool, not destroyed
@@ -171,14 +171,14 @@ class SimulationLifecycleTest : KoinTestBase() {
 	 *
 	 * **Future Enhancement:**
 	 * Comprehensive thread leak testing with full simulation runs is deferred because:
-	 * - ShuntingLoop requires specific vyhybna.xml structure and is tightly coupled to jDisco
+	 * - ShuntingLoop requires specific vyhybna.xml structure and is tightly coupled to kDisco
 	 * - Simulation timing (simulation time vs wall-clock time) makes tests complex
 	 * - Full simulation tests are better handled during DSOL/Kalasim migration (per CLAUDE.md)
 	 * - Current test adequately verifies no resource leaks at context level
 	 *
 	 * This test provides sufficient value by:
 	 * - Verifying context creation/disposal doesn't leak threads
-	 * - Demonstrating jDisco thread pooling works correctly
+	 * - Demonstrating kDisco thread pooling works correctly
 	 * - Establishing baseline for future migration testing
 	 */
 	@Test
@@ -201,7 +201,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 			// Create new simulation context for each run
 			val simulationContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			// Start simulation (creates jDisco threads)
+			// Start simulation (creates kDisco threads)
 			// Note: We don't actually run it, just initialize to see thread creation
 			// A full run would require a proper scenario with Generator
 			val threadsAfterCreate = getActiveDaemonThreads()
@@ -237,7 +237,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 		val minThreadCount = threadCountsAfterStop.minOrNull() ?: 0
 
 		// Threads should not grow by more than 10 per iteration
-		// (jDisco should reuse pooled threads)
+		// (kDisco should reuse pooled threads)
 		val threadGrowth = maxThreadCount - initialCount
 		println("Thread growth: $threadGrowth (max=$maxThreadCount, initial=$initialCount)")
 
@@ -254,7 +254,7 @@ class SimulationLifecycleTest : KoinTestBase() {
 	}
 
 	/**
-	 * Helper: Get all active daemon threads (jDisco uses daemon threads)
+	 * Helper: Get all active daemon threads (kDisco uses daemon threads)
 	 */
 	private fun getActiveDaemonThreads(): List<Thread> {
 		val rootThreadGroup = getRootThreadGroup()

@@ -55,7 +55,7 @@ class ShuntingLoopPathReservationTest : KoinTestBase() {
 	 * - Singleton pattern ensures same wrapper instance reuse
 	 *
 	 * NOTE: This test creates ShuntingLoop but does NOT run the simulation
-	 * (would require jDisco integration). The fix ensures cache validation
+	 * (would require kDisco integration). The fix ensures cache validation
 	 * happens at construction time, catching errors before simulation runs.
 	 */
 	@Test

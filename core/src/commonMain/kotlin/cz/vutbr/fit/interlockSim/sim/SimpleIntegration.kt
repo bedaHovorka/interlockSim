@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.engine.Continuous
-import cz.hovorka.kdisco.engine.Variable
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Variable
 
 /**
  * Substitute for "SIMLIB Integrator"
- * Integrates dx.state into x.state using jDisco continuous simulation.
+ * Integrates dx.state into x.state using kDisco continuous simulation.
  *
  * @param x integrator output (position)
  * @param dx integrator input (velocity)

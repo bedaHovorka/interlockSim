@@ -13,7 +13,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
-import cz.hovorka.kdisco.engine.Variable
+import cz.hovorka.kdisco.Variable
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -22,11 +22,11 @@ import org.junit.jupiter.api.Test
 /**
  * Unit tests for {@link SimpleIntegration}.
  *
- * SimpleIntegration is an ODE integrator that bridges jDisco Continuous simulation
+ * SimpleIntegration is an ODE integrator that bridges kDisco Continuous simulation
  * with train physics. It implements Euler integration: dx/dt = velocity becomes
  * x_new = x_old + velocity * dt.
  *
- * NOTE: Full derivatives() testing requires jDisco framework understanding.
+ * NOTE: Full derivatives() testing requires kDisco framework understanding.
  * The derivatives() method is protected, so we test the coupling mechanism
  * by verifying that SimpleIntegration correctly maintains the relationship
  * between position and velocity Variables. Tests focus on:
@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test
  * - State consistency
  *
  * Conservative approach: Test through Variable creation, initialization,
- * and reference handling without introspecting jDisco internals.
+ * and reference handling without introspecting kDisco internals.
  */
 @DisplayName("SimpleIntegration ODE Integrator Tests")
 class SimpleIntegrationTest {
@@ -339,7 +339,7 @@ class SimpleIntegrationTest {
 
 		@Test
 		fun `SimpleIntegration works with continuous simulation lifecycle`() {
-			// SimpleIntegration extends jDisco.Continuous
+			// SimpleIntegration extends kDisco.Continuous
 			position.state = 0.0
 			velocity.state = 10.0
 
@@ -395,8 +395,8 @@ class SimpleIntegrationTest {
 		}
 
 		@Test
-		fun `SimpleIntegration extends jDisco Continuous`() {
-			// Verify that SimpleIntegration is usable in jDisco simulation framework
+		fun `SimpleIntegration extends kDisco Continuous`() {
+			// Verify that SimpleIntegration is usable in kDisco simulation framework
 			val testIntegrator = SimpleIntegration(position, velocity)
 
 			assertThat(testIntegrator).isNotNull()
