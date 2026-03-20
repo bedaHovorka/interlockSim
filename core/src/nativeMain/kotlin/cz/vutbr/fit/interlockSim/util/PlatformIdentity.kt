@@ -1,3 +1,7 @@
 package cz.vutbr.fit.interlockSim.util
 
-actual fun platformIdentityCode(obj: Any): String = obj.hashCode().toString()
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.identityHashCode
+
+@OptIn(ExperimentalNativeApi::class)
+actual fun platformIdentityCode(obj: Any): String = obj.identityHashCode().toString()

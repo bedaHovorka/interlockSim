@@ -44,9 +44,10 @@ val commonCoreTestModule: Module =
         }
 
         factory<DefaultSimulationContext> {
-            val editingCtx = get<DefaultEditingContext>()
             val processFactory = get<SimulationProcessFactory>()
-            DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+            get<DefaultEditingContext>().use { editingCtx ->
+                DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+            }
         }
 
         // Define editingScope for per-context lifecycle management
