@@ -69,8 +69,9 @@ kotlin {
 		}
 	}
 
-	// linuxX64 target: library only (no executable), for native compilation verification.
-	// kDisco 0.3.0 ships a linuxX64 klib; kotlinx-coroutines-core and koin-core also have native variants.
+	// linuxX64 target: runs native commonTest subset (NativeSanityTest).
+	// kDisco 0.3.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
+	// Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
 	linuxX64()
 
 	sourceSets {
@@ -112,6 +113,32 @@ kotlin {
 				runtimeOnly("ch.qos.logback:logback-classic:$logbackVersion")
 			}
 		}
+	}
+}
+
+// ===========================================
+// linuxX64 Test Output Configuration
+// ===========================================
+
+tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
+	testLogging {
+		events("passed", "skipped", "failed")
+		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+		showStandardStreams = false
+		afterSuite(
+			KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+				if (desc.parent == null) {
+					println("\n:core linuxX64 Test Results: ${result.resultType}")
+					println("  Tests run: ${result.testCount}")
+					println("  Passed: ${result.successfulTestCount}")
+					println("  Failed: ${result.failedTestCount}")
+					println("  Skipped: ${result.skippedTestCount}")
+				}
+			}),
+		)
 	}
 }
 
