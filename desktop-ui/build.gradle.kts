@@ -43,7 +43,7 @@ java {
 }
 
 dependencies {
-    implementation("cz.hovorka.kdisco:kdisco-engine-jvm:$kdiscoVersion")
+    implementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
     implementation("org.slf4j:slf4j-api:$slf4jVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
     implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
