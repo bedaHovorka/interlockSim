@@ -803,8 +803,12 @@ open class DefaultSimulationContext(
 						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 						// These semaphores might be used in paths before they're encountered as separate cells
 						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
-						if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore
-						if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore
+						if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
+							staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore
+						}
+						if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
+							staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore
+						}
 						// Also add to dynamicInOuts list if it doesn't exist yet
 						if (dynamicInOuts == null) {
 							dynamicInOuts = mutableListOf()
@@ -848,7 +852,9 @@ open class DefaultSimulationContext(
 			}
 
 			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
-			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]!!
+			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) {
+				staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]!!
+			}
 
 			// Recursively map any internal TrackSection objects
 			mapInternalSections(dynamicBlock)
@@ -928,38 +934,24 @@ open class DefaultSimulationContext(
 	 * All separators and track facilities must be wrapped at initialization - discovering an
 	 * unwrapped element during simulation indicates a bug.
 	 */
-	private fun validateDynamicMapping() {
-		// Use internal grid to access all cells (including TrackBlockPart), not just NodeCells
+	private fun collectUnmappedSeparators(unmappedSeparators: MutableList<String>) {
 		val grid = getInternalGrid()
-		val unmappedSeparators = mutableListOf<String>()
-		val unmappedTracks = mutableListOf<String>()
-
-		// Validate PathSeparators from grid
-		// Fix for Issue #280/#284: Grid now contains dynamic wrappers, not static cells
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
 				val cell = grid.getCellAt(x, y) ?: continue
-
-				// Check if cell is a PathSeparator (static or dynamic)
 				when {
-					// Skip non-PathSeparator cells (e.g., TrackBlockPart)
 					cell !is PathSeparator -> continue
-
-					// Dynamic wrapper: check if its staticRef is in the map
 					cell is DynamicPathSeparator -> {
-						val staticRef =
-							when (cell) {
-								is DynamicInOut -> cell.staticRef
-								is DynamicRailSemaphore -> cell.staticRef
-								is DynamicRailSwitch -> cell.staticRef
-								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
-							}
+						val staticRef = when (cell) {
+							is DynamicInOut -> cell.staticRef
+							is DynamicRailSemaphore -> cell.staticRef
+							is DynamicRailSwitch -> cell.staticRef
+							else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
+						}
 						if (staticRef !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")
 						}
 					}
-
-					// Static cell: check if it's in the map directly
 					else -> {
 						if (cell !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y)")
@@ -968,41 +960,41 @@ open class DefaultSimulationContext(
 				}
 			}
 		}
+	}
 
-		// Validate all TrackFacility objects (including internal sections)
+	private fun collectUnmappedTracks(unmappedTracks: MutableList<String>) {
 		val graph = getGraph()
 		for (trackBlock in graph.values()) {
-			// Check top-level TrackBlock
 			val trackFacility = trackBlock as TrackFacility
 			if (trackFacility !in staticTrackToDynamicMap) {
 				unmappedTracks.add("TrackBlock ${platformIdentityCode(trackBlock)}")
 			}
-
-			// Check internal TrackSections
 			val ends = trackBlock.ends()
 			for (end in ends) {
 				var currentSection: TrackSection? = trackBlock.getNextTrackSection(end, null)
 				val visited = mutableSetOf<TrackSection>()
-
 				while (currentSection != null && currentSection !in visited) {
 					visited.add(currentSection)
-
-					// Skip if section is the TrackBlock itself
 					if (currentSection === trackBlock) break
-
-					// Check if internal section is mapped
 					if (currentSection is TrackFacility && currentSection !in staticTrackToDynamicMap) {
 						unmappedTracks.add(
 							"TrackSection ${platformIdentityCode(currentSection)} " +
 								"in TrackBlock ${platformIdentityCode(trackBlock)}"
 						)
 					}
-
 					val nextSeparator = currentSection.getSecondEnd(end)
 					currentSection = trackBlock.getNextTrackSection(nextSeparator, currentSection)
 				}
 			}
 		}
+	}
+
+	private fun validateDynamicMapping() {
+		val unmappedSeparators = mutableListOf<String>()
+		val unmappedTracks = mutableListOf<String>()
+
+		collectUnmappedSeparators(unmappedSeparators)
+		collectUnmappedTracks(unmappedTracks)
 
 		if (unmappedSeparators.isNotEmpty() || unmappedTracks.isNotEmpty()) {
 			val message =

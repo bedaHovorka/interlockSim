@@ -117,8 +117,12 @@ object GridTransformer {
 			if (cell is InOut && dynamicCell is DynamicInOut) {
 				// Map InOut's semaphores to their Dynamic wrappers
 				// These semaphores might be used in paths before they're encountered as separate cells
-				if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) staticToDynamicMap[cell.getInSemaphore()] = dynamicCell.inSemaphore
-				if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) staticToDynamicMap[cell.getOutSemaphore()] = dynamicCell.outSemaphore
+				if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
+					staticToDynamicMap[cell.getInSemaphore()] = dynamicCell.inSemaphore
+				}
+				if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
+					staticToDynamicMap[cell.getOutSemaphore()] = dynamicCell.outSemaphore
+				}
 			}
 		}
 		
