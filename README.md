@@ -55,7 +55,7 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 - **Java**: JDK 21 or later (Java 21 LTS minimum)
 - **Build Tool**: Gradle (wrapper included)
 - **Dependencies**: Automatically managed via Gradle
-  - kDisco 1.2.0 (from Maven local repository, Java 6 compatible)
+  - kdisco-core-jvm 0.3.0 (from GitHub Packages or docker-kdisco vendored artifacts)
   - JUnit 5.11.4 (from Maven Central)
   - AssertJ 3.27.6 (from Maven Central)
   - MockK 1.13.14 (from Maven Central) - Kotlin-native mocking for sealed classes

@@ -33,8 +33,8 @@ cd ~/work/interlockSim
 
 Verify installation:
 ```bash
-ls ~/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/0.3.0-SNAPSHOT/
-# Should show: kdisco-core-jvm-0.3.0-SNAPSHOT.jar, kdisco-core-jvm-0.3.0-SNAPSHOT.pom
+ls ~/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/0.3.0/
+# Should show: kdisco-core-jvm-0.3.0.jar, kdisco-core-jvm-0.3.0.pom
 ```
 
 ## Overview

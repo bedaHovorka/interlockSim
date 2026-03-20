@@ -59,7 +59,7 @@ abstract class LoopProcess : Process() {
 			try {
 				Process.activate(this)
 			} catch (_: DiscoException) {
-				logger.debug { "terminate(): activate() failed outside simulation context — simScope.cancel() handles cleanup" }
+				logger.debug { "terminate(): activate() failed outside simulation — will exit at next iteration check" }
 			}
 		}
 	}

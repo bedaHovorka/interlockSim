@@ -53,7 +53,7 @@ val checkKdisco by tasks.registering {
             println("✓ kDisco $kdiscoVersion found in mavenLocal: ${kdiscoJar.absolutePath}")
         } else {
             println("⚠ kDisco $kdiscoVersion not found in mavenLocal")
-            println("  To install: cd ~/work/kdisco && ./gradlew :kdisco-engine:publishToMavenLocal")
+            println("  To install: cd ~/work/kdisco && ./gradlew :kdisco-core:publishToMavenLocal")
         }
     }
 }
