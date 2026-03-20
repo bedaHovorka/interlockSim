@@ -121,7 +121,6 @@ interface SimulationContext :
 			/**
 			 * all standard reports (without debug)
 			 */
-			@JvmField
 			val ALL: Array<ReportType> = entries.filter { it != _DEBUG }.toTypedArray()
 		}
 	}

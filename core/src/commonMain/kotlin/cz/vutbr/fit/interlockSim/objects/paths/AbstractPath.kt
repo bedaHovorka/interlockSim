@@ -165,7 +165,6 @@ abstract class AbstractPath protected constructor(
 	 *                       The lambda receives a Track parameter (guaranteed to be a TrackFacility).
 	 * @return true if all operations succeeded, false otherwise
 	 */
-	@Throws(TrackOperationException::class)
 	private fun pathIterating(
 		sep: DynamicPathSeparator,
 		operationName: String,
@@ -220,7 +219,6 @@ abstract class AbstractPath protected constructor(
 		}
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun separatorSetting(
 		methodName: String,
 		dynamicSeparator: DynamicPathSeparator,
@@ -264,7 +262,6 @@ abstract class AbstractPath protected constructor(
 		return true
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun setUpSemaphores(sep: DynamicPathSeparator) {
 		// ukolem je natavit zpetnym pruchodem rychlosti semaforu podle vyhybek
 		var previousSwitch: DynamicPathSeparator? = null

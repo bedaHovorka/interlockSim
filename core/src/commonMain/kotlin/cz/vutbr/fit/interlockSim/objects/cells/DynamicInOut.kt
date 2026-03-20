@@ -140,7 +140,6 @@ class DynamicInOut(
 		return null
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun getSemaphoreForWithException(
 		from: Cell.Segment?,
 		to: Cell.Segment?

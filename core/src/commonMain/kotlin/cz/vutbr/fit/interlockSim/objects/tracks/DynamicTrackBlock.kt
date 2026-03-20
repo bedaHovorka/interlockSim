@@ -372,7 +372,6 @@ class DynamicTrackBlock(
 		return ok
 	}
 
-	@Throws(TrackReservationException::class)
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
 		to: TrackFacility.State,

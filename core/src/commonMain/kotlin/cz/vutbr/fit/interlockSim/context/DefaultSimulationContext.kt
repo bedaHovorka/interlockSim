@@ -41,6 +41,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
@@ -106,7 +107,8 @@ import kotlinx.coroutines.runBlocking
  * @see BaseContext
  * @see EditingContext
  * @see SimulationProcessFactory
- * @see javax.annotation.concurrent.NotThreadSafe
+ *
+ * **Note:** Transitional implementation. Will be superseded in Phase 2 (Kalasim migration).
  */
 open class DefaultSimulationContext(
 	cols: Int,
@@ -128,10 +130,10 @@ open class DefaultSimulationContext(
 	 * @see close
 	 */
 	override val scope =
-		org.koin.core.context.GlobalContext
+		org.koin.mp.KoinPlatformTools.defaultContext()
 			.get()
 			.createScope(
-				scopeId = System.identityHashCode(this).toString(),
+				scopeId = platformIdentityCode(this),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultSimulationContext>(),
@@ -313,10 +315,10 @@ open class DefaultSimulationContext(
 					if (inout is InOut && dynamicInOut is DynamicInOut) {
 						logger.debug {
 							"GridTransformer mapped InOut ${inout.getName()}: " +
-								"inSem@${System.identityHashCode(inout.getInSemaphore())} -> " +
-								"${System.identityHashCode(dynamicInOut.inSemaphore)}, " +
-								"outSem@${System.identityHashCode(inout.getOutSemaphore())} -> " +
-								"${System.identityHashCode(dynamicInOut.outSemaphore)}"
+								"inSem@${platformIdentityCode(inout.getInSemaphore())} -> " +
+								"${platformIdentityCode(dynamicInOut.inSemaphore)}, " +
+								"outSem@${platformIdentityCode(inout.getOutSemaphore())} -> " +
+								"${platformIdentityCode(dynamicInOut.outSemaphore)}"
 						}
 					}
 				}
@@ -400,8 +402,8 @@ open class DefaultSimulationContext(
 				wrappedCount++
 
 				logger.trace {
-					"Wrapped TrackBlock ${System.identityHashCode(staticTrackBlock)} -> " +
-						"DynamicTrackBlock ${System.identityHashCode(dynamicTrackBlock)}"
+					"Wrapped TrackBlock ${platformIdentityCode(staticTrackBlock)} -> " +
+						"DynamicTrackBlock ${platformIdentityCode(dynamicTrackBlock)}"
 				}
 			}
 
@@ -497,7 +499,7 @@ open class DefaultSimulationContext(
 				}
 				require(dynamicWrapper is DynamicInOut) {
 					"Wrapper for InOut $inout (${inout.getName()}) is not a DynamicInOut. " +
-						"Type: ${dynamicWrapper.javaClass.simpleName}. " +
+						"Type: ${dynamicWrapper::class.simpleName ?: "unknown"}. " +
 						"This indicates GridTransformer created wrong wrapper type."
 				}
 			}
@@ -638,7 +640,7 @@ open class DefaultSimulationContext(
 		if (track != null) return getSegment(separator, track)
 		requireSimulation(secondEndTrack != null) { "secondEndTrack cannot be null for separator $separator" }
 		requireSimulation(separator is OrientedPathSeparator) {
-			"PathSeparator must be OrientedPathSeparator, got ${separator.javaClass.simpleName}"
+			"PathSeparator must be OrientedPathSeparator, got ${separator::class.simpleName ?: "unknown"}"
 		}
 		val segment = getSegment(separator, secondEndTrack!!)
 		// Match Java 1:1: return null when segment doesn't exist
@@ -782,13 +784,13 @@ open class DefaultSimulationContext(
 
 				// Skip TrackBlockPart - these are not NodeCells and don't need dynamic wrappers
 				if (cell !is NodeCell) {
-					logger.trace { "Skipping ${cell.javaClass.simpleName} at ($x,$y) - not a NodeCell" }
+					logger.trace { "Skipping ${cell::class.simpleName ?: "unknown"} at ($x,$y) - not a NodeCell" }
 					continue
 				}
 
 				// Skip if already mapped (handles case where getInOuts was called early)
 				if (cell in staticToDynamicMap) {
-					logger.trace { "Skipping ${cell::class.java.simpleName} at ($x,$y) - already mapped" }
+					logger.trace { "Skipping ${cell::class.simpleName ?: "unknown"} at ($x,$y) - already mapped" }
 					continue
 				}
 
@@ -801,8 +803,8 @@ open class DefaultSimulationContext(
 						// CRITICAL: Map InOut's semaphores to their Dynamic wrappers
 						// These semaphores might be used in paths before they're encountered as separate cells
 						// We use putIfAbsent to avoid overwriting if the semaphore was already mapped
-						staticToDynamicMap.putIfAbsent(cell.getInSemaphore(), dynamic.inSemaphore)
-						staticToDynamicMap.putIfAbsent(cell.getOutSemaphore(), dynamic.outSemaphore)
+						if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore
+						if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore
 						// Also add to dynamicInOuts list if it doesn't exist yet
 						if (dynamicInOuts == null) {
 							dynamicInOuts = mutableListOf()
@@ -846,7 +848,7 @@ open class DefaultSimulationContext(
 			}
 
 			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
-			staticTrackToDynamicMap.putIfAbsent(dynamicBlock, staticTrackToDynamicMap[staticTrack]!!)
+			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]!!
 
 			// Recursively map any internal TrackSection objects
 			mapInternalSections(dynamicBlock)
@@ -889,17 +891,18 @@ open class DefaultSimulationContext(
 
 				// Check if this is a TrackFacility that needs mapping
 				if (currentSection is TrackFacility) {
-					if (!staticTrackToDynamicMap.containsKey(currentSection)) {
+					val section = currentSection // capture for smart-cast in lambdas
+					if (!staticTrackToDynamicMap.containsKey(section)) {
 						// Create and map DynamicTrack wrapper for internal section
-						val dynamicSection = DynamicTrack(currentSection)
-						staticTrackToDynamicMap[currentSection] = dynamicSection
+						val dynamicSection = DynamicTrack(section)
+						staticTrackToDynamicMap[section] = dynamicSection
 						logger.debug {
-							"Mapped internal TrackSection ${System.identityHashCode(currentSection)} " +
-								"within TrackBlock ${System.identityHashCode(trackBlock)}"
+							"Mapped internal TrackSection ${platformIdentityCode(section)} " +
+								"within TrackBlock ${platformIdentityCode(trackBlock)}"
 						}
 					} else {
 						logger.trace {
-							"Internal section ${System.identityHashCode(currentSection)} already mapped"
+							"Internal section ${platformIdentityCode(section)} already mapped"
 						}
 					}
 				}
@@ -913,7 +916,7 @@ open class DefaultSimulationContext(
 
 		if (visited.isNotEmpty() && visited.size > 1) {
 			logger.info {
-				"TrackBlock ${System.identityHashCode(trackBlock)} contains ${visited.size} sections"
+				"TrackBlock ${platformIdentityCode(trackBlock)} contains ${visited.size} sections"
 			}
 		}
 	}
@@ -949,17 +952,17 @@ open class DefaultSimulationContext(
 								is DynamicInOut -> cell.staticRef
 								is DynamicRailSemaphore -> cell.staticRef
 								is DynamicRailSwitch -> cell.staticRef
-								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell.javaClass.simpleName}")
+								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
 							}
 						if (staticRef !in staticToDynamicMap) {
-							unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y) - staticRef not mapped")
+							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")
 						}
 					}
 
 					// Static cell: check if it's in the map directly
 					else -> {
 						if (cell !in staticToDynamicMap) {
-							unmappedSeparators.add("${cell.javaClass.simpleName} at ($x,$y)")
+							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y)")
 						}
 					}
 				}
@@ -972,7 +975,7 @@ open class DefaultSimulationContext(
 			// Check top-level TrackBlock
 			val trackFacility = trackBlock as TrackFacility
 			if (trackFacility !in staticTrackToDynamicMap) {
-				unmappedTracks.add("TrackBlock ${System.identityHashCode(trackBlock)}")
+				unmappedTracks.add("TrackBlock ${platformIdentityCode(trackBlock)}")
 			}
 
 			// Check internal TrackSections
@@ -990,8 +993,8 @@ open class DefaultSimulationContext(
 					// Check if internal section is mapped
 					if (currentSection is TrackFacility && currentSection !in staticTrackToDynamicMap) {
 						unmappedTracks.add(
-							"TrackSection ${System.identityHashCode(currentSection)} " +
-								"in TrackBlock ${System.identityHashCode(trackBlock)}"
+							"TrackSection ${platformIdentityCode(currentSection)} " +
+								"in TrackBlock ${platformIdentityCode(trackBlock)}"
 						)
 					}
 
@@ -1037,7 +1040,7 @@ open class DefaultSimulationContext(
 	override fun toDynamic(separator: PathSeparator): DynamicPathSeparator {
 		// If already dynamic, return as-is (idempotent operation)
 		if (separator is DynamicPathSeparator) {
-			logger.trace { "toDynamic: separator already dynamic, returning as-is: ${separator.javaClass.simpleName}" }
+			logger.trace { "toDynamic: separator already dynamic, returning as-is: ${separator::class.simpleName ?: "unknown"}" }
 			return separator
 		}
 
@@ -1045,7 +1048,7 @@ open class DefaultSimulationContext(
 		val dynamic =
 			staticToDynamicMap[separator]
 				?: throw IllegalStateException(
-					"Dynamic wrapper not found for separator: $separator (${separator.javaClass.simpleName}). " +
+					"Dynamic wrapper not found for separator: $separator (${separator::class.simpleName ?: "unknown"}). " +
 						"Map contains ${staticToDynamicMap.size} entries. " +
 						"This indicates the separator was not registered during initialization. " +
 						"Ensure initializeDynamicMapping() completed successfully before simulation starts."
@@ -1053,9 +1056,9 @@ open class DefaultSimulationContext(
 
 		// Verify singleton behavior: same static object always returns same wrapper instance
 		logger.trace {
-			"toDynamic: converted static ${separator.javaClass.simpleName} " +
-				"(identity: ${System.identityHashCode(separator)}) to " +
-				"${dynamic.javaClass.simpleName} (identity: ${System.identityHashCode(dynamic)})"
+			"toDynamic: converted static ${separator::class.simpleName ?: "unknown"} " +
+				"(identity: ${platformIdentityCode(separator)}) to " +
+				"${dynamic::class.simpleName ?: "unknown"} (identity: ${platformIdentityCode(dynamic)})"
 		}
 
 		return dynamic
@@ -1076,15 +1079,14 @@ open class DefaultSimulationContext(
 		}
 
 		throw IllegalStateException(
-			"Dynamic wrapper not found for track: ${System.identityHashCode(track)} " +
-				"(${track.javaClass.simpleName}). " +
+			"Dynamic wrapper not found for track: ${platformIdentityCode(track)} " +
+				"(${track::class.simpleName ?: "unknown"}). " +
 				"Map contains ${staticTrackToDynamicMap.size} entries. " +
 				"This indicates the track was not registered during initialization. " +
 				"Ensure initializeDynamicMapping() completed successfully before simulation starts."
 		)
 	}
 
-	@Throws(EmptyContextException::class, SimulationException::class)
 	override fun run() {
 		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
 		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
@@ -1120,7 +1122,7 @@ open class DefaultSimulationContext(
 
 		logger.info {
 			"Starting simulation: ${inouts.size} InOut points, ${getGraph().size()} track blocks, " +
-				"main process=${requireNotNull(mainProcess) { "mainProcess must be initialized" }.javaClass.simpleName}"
+				"main process=${requireNotNull(mainProcess) { "mainProcess must be initialized" }::class.simpleName ?: "unknown"}"
 		}
 
 		// Use factory to create worker for each InOut
@@ -1336,14 +1338,8 @@ open class DefaultSimulationContext(
 		if (!isReporting(type)) return
 
 		val buf = if (report is StringBuilder) report else StringBuilder(report)
-		try {
-			if (obj.javaClass.getMethod("toString") != Any::class.java.getMethod("toString")) {
-				buf.insert(0, ' ')
-				buf.insert(0, obj)
-			}
-		} catch (e: Exception) {
-			logger.error(e) { "Error generating simulation report for type $type" }
-		}
+		buf.insert(0, ' ')
+		buf.insert(0, obj)
 		buf.insert(0, ' ')
 		buf.insert(0, Process.time())
 		simulationLogger.info { buf }
@@ -1425,7 +1421,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Generate random name string (single character A-T)
 	 */
-	private fun randomString(): String = String(Character.toChars(65 + random.randInt(0, 19)))
+	private fun randomString(): String = (65 + random.randInt(0, 19)).toChar().toString()
 
 	/**
 	 * Get the worker for an entry/exit point

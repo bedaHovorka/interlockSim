@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
 import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -104,7 +105,7 @@ class ShuntingLoop(
 		}
 
 		override suspend fun iteration() {
-			val iterationEndTime: Long = System.currentTimeMillis()
+			val iterationEndTime: Long = currentTimeMillisKMP()
 			val targetInterval = (1000.0 / speedMultiplier).toLong()
 			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
 			if (sleepTime > 10) {
@@ -118,7 +119,7 @@ class ShuntingLoop(
 		}
 
 		override suspend fun interLoopSleep() {
-			beginTime = System.currentTimeMillis()
+			beginTime = currentTimeMillisKMP()
 			hold(1 + presvihnuto)
 			presvihnuto = 0.0
 		}

@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.core
 
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.util.Point
+import kotlin.math.sqrt
 
 /**
  * Cell in Grid
@@ -193,7 +194,7 @@ fun conflict(
 	if (a == null || b == null) return false
 	val dx = a.dx - b.dx
 	val dy = a.dy - b.dy
-	if (Math.sqrt((dx * dx + dy * dy).toDouble()) <= 0.5) return true
+	if (sqrt((dx * dx + dy * dy).toDouble()) <= 0.5) return true
 	return false
 }
 

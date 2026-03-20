@@ -43,7 +43,7 @@ object AutoNameGenerator {
 		context: EditingContext
 	): String {
 		val prefix = getPrefixForClass(cellClass)
-		val counter = counters.getOrDefault(prefix, 0)
+		val counter = counters[prefix] ?: 0
 
 		var candidateNumber = counter + 1
 		var candidateName = "$prefix$candidateNumber"

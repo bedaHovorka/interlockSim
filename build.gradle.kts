@@ -8,8 +8,8 @@
 
 plugins {
     // Declare versions for subprojects (apply false — subprojects opt in)
-    kotlin("jvm") version "2.0.20" apply false
-    kotlin("multiplatform") version "2.0.20" apply false
+    kotlin("jvm") version "2.1.10" apply false
+    kotlin("multiplatform") version "2.1.10" apply false
     id("com.gradleup.shadow") version "8.3.8" apply false
     id("org.jlleitschuh.gradle.ktlint") version "12.1.2" apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.7" apply false

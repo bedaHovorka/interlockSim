@@ -141,7 +141,6 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 
 	// seznam s dirama
 	private class RelocableList<T> : AbstractMutableList<T?>() {
-		@Transient
 		private var elements: Array<T?>? = null
 
 		override fun add(
@@ -164,7 +163,7 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 			if (resize) {
 				@Suppress("UNCHECKED_CAST")
 				val p = arrayOfNulls<Any>(index + 1) as Array<T?>
-				if (elements != null) System.arraycopy(elements, 0, p, 0, elements!!.size)
+				if (elements != null) elements!!.copyInto(p, 0, 0, elements!!.size)
 				elements = p
 			}
 			elements!![index] = element
@@ -186,7 +185,6 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 	 * Compare points in order for grid
 	 */
 	companion object {
-		@JvmField
 		val POINT_COMPARATOR: Comparator<Point> =
 			Comparator { o1, o2 ->
 				val dy = o1.y - o2.y
@@ -195,7 +193,7 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 	}
 
 	private val array = RelocableList<RelocableList<V>>()
-	private val _keys: java.util.TreeSet<Point> = java.util.TreeSet(POINT_COMPARATOR)
+	private val _keys: SortedMutableSet<Point> = SortedMutableSet(POINT_COMPARATOR)
 
 	override val keys: MutableSet<Point>
 		get() = _keys
@@ -261,4 +259,29 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 		_keys.clear()
 		array.clear()
 	}
+}
+
+/**
+ * KMP-compatible sorted set backed by a sorted list with binary search.
+ * Replaces java.util.TreeSet for use in commonMain (no JVM dependency).
+ */
+private class SortedMutableSet<T>(
+	private val comparator: Comparator<T>
+) : AbstractMutableSet<T>() {
+	private val list = mutableListOf<T>()
+
+	override val size: Int get() = list.size
+
+	override fun add(element: T): Boolean {
+		val idx = list.binarySearch(element, comparator)
+		if (idx >= 0) return false
+		list.add(-(idx + 1), element)
+		return true
+	}
+
+	override fun iterator(): MutableIterator<T> = list.iterator()
+
+	override fun contains(element: T): Boolean = list.binarySearch(element, comparator) >= 0
+
+	override fun clear() { list.clear() }
 }

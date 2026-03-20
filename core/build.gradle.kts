@@ -29,9 +29,9 @@ val coroutinesVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// commonMain is now KMP-clean: no java.* / javax.* imports, no JVM-only idioms.
-// JVM-only code (xml/, context factories, DefaultSimulationContext) lives in jvmMain.
-// The KMP structure enables future non-JVM target additions.
+// commonMain is KMP-clean: no java.*/javax.* imports, no JVM-only idioms.
+// JVM-only code (xml/, context factories) lives in jvmMain.
+// linuxX64 target added for native compilation verification.
 kotlin {
 	jvm {
 		compilations.all {
@@ -69,37 +69,43 @@ kotlin {
 		}
 	}
 
+	// linuxX64 target: library only (no executable), for native compilation verification.
+	// kDisco 0.3.0 ships a linuxX64 klib; kotlinx-coroutines-core and koin-core also have native variants.
+	linuxX64()
+
 	sourceSets {
 		val commonMain by getting {
 			dependencies {
-				implementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
+				// KMP multiplatform artifacts (jvm + linuxX64 klibsavailable in mavenLocal)
+				implementation("cz.hovorka.kdisco:kdisco-core:$kdiscoVersion")
 				implementation("io.insert-koin:koin-core:$koinVersion")
-				implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
-				implementation("org.slf4j:slf4j-api:$slf4jVersion")
+				implementation("io.github.oshai:kotlin-logging:$kotlinLoggingVersion")
 				implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
+				// runBlocking needed for DefaultSimulationContext (bridging suspend Simulation.run())
+				implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 			}
 		}
 		val commonTest by getting {
 			dependencies {
 				implementation(kotlin("test"))
-				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
-				implementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
 				implementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
-				implementation("io.mockk:mockk:$mockkVersion")
 				implementation("io.insert-koin:koin-test:$koinVersion")
-				implementation("io.insert-koin:koin-test-junit5:$koinVersion")
 			}
 		}
 		val jvmMain by getting {
 			dependencies {
 				// kotlin-reflect is JVM-only; not needed in KMP commonMain
 				implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
-				// runBlocking needed for bridging suspend Simulation.run() in DefaultSimulationContext
-				implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+				// SLF4J API for JVM (logging backend wiring)
+				implementation("org.slf4j:slf4j-api:$slf4jVersion")
 			}
 		}
 		val jvmTest by getting {
 			dependencies {
+				implementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
+				implementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
+				implementation("io.mockk:mockk:$mockkVersion")
+				implementation("io.insert-koin:koin-test-junit5:$koinVersion")
 				runtimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
 				runtimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 				runtimeOnly("org.junit.platform:junit-platform-console:$junitPlatformVersion")
@@ -296,13 +302,24 @@ val checkCoreCommonMainPurity by tasks.registering {
 			return@doLast
 		}
 
+		// Catch import-level java.*/javax.* references
 		val importRegex = Regex("^import\\s+(java|javax)\\..*")
+		// Catch inline fully-qualified java.* references (e.g. java.util.TreeSet, java.lang.*)
+		val inlineJavaRegex = Regex("(?<![\\w])java\\.[a-z]")
+		// Catch System.* calls (java.lang.System is implicitly available on JVM only)
+		val systemRegex = Regex("(?<![\\w.])System\\.(?:currentTimeMillis|arraycopy|identityHashCode|exit|getProperty|lineSeparator|err|out)\\b")
 		val violations = mutableListOf<String>()
 
 		project.fileTree(commonMainDir).matching { include("**/*.kt") }.forEach { file ->
 			val lines = file.readLines()
 			lines.forEachIndexed { index, line ->
-				if (importRegex.containsMatchIn(line)) {
+				val trimmed = line.trim()
+				// Skip comment lines
+				if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
+				val hasViolation = importRegex.containsMatchIn(line) ||
+					inlineJavaRegex.containsMatchIn(line) ||
+					systemRegex.containsMatchIn(line)
+				if (hasViolation) {
 					if (violations.isEmpty() || violations.last() != file.path) {
 						println("PURITY VIOLATION: ${file.path}")
 						violations.add(file.path)
@@ -314,11 +331,11 @@ val checkCoreCommonMainPurity by tasks.registering {
 
 		if (violations.isNotEmpty()) {
 			throw org.gradle.api.GradleException(
-				"ERROR: commonMain contains JVM-only imports. Move them to jvmMain."
+				"ERROR: commonMain contains JVM-only code. Move java.*/System.* usages to jvmMain."
 			)
 		}
 
-		println("commonMain purity check passed - no java.* or javax.* imports found.")
+		println("commonMain purity check passed - no JVM-only code found.")
 	}
 }
 
