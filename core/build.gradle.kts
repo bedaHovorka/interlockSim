@@ -72,7 +72,7 @@ kotlin {
 	sourceSets {
 		val commonMain by getting {
 			dependencies {
-				implementation("cz.hovorka.kdisco:kdisco-engine-jvm:$kdiscoVersion")
+				implementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
 				implementation("io.insert-koin:koin-core:$koinVersion")
 				implementation("io.github.oshai:kotlin-logging-jvm:$kotlinLoggingVersion")
 				implementation("org.slf4j:slf4j-api:$slf4jVersion")
