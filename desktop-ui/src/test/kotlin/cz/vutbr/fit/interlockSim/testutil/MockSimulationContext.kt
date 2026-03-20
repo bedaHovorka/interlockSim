@@ -33,7 +33,7 @@ import java.io.InputStream
 
 /**
  * Mock implementation of {@link SimulationContext} for testing simulation components
- * without requiring jDisco framework initialization.
+ * without requiring kDisco framework initialization.
  *
  * <p>This mock provides controllable simulation time and test-friendly implementations
  * of simulation methods. It extends the test context builder functionality to support

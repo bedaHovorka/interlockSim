@@ -30,8 +30,8 @@
         <appender-ref ref="CONSOLE"/>
     </logger>
 
-    <!-- Separate logger for jDisco reports -->
-    <logger name="jDisco.statistics" level="INFO" additivity="false">
+    <!-- Separate logger for kDisco reports -->
+    <logger name="kDisco.statistics" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
     </logger>
 

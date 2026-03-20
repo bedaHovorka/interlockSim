@@ -58,7 +58,7 @@ private val logger = KotlinLogging.logger {}
  * ### Rationale
  *
  * Railway interlocking simulations are inherently sequential by design:
- * - The jDisco discrete event simulation framework operates in a single thread
+ * - The kDisco discrete event simulation framework operates in a single thread
  * - Physical railway operations follow sequential causality (trains cannot
  *   simultaneously occupy the same track)
  * - The simulation model enforces discrete event ordering

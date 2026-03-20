@@ -22,7 +22,7 @@ open class SimulationException(
 	cause: Throwable?,
 	private val obj: Any?
 ) : Exception(message, cause) {
-	private val time: Double = Process.time()
+	private val time: Double = runCatching { Process.time() }.getOrDefault(Double.NaN)
 
 	/**
 	 * Create SimulationException with default FATAL severity

@@ -9,13 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Minimal test Process coordinator for isolated Train unit testing.
  *
  * This Process extends LoopProcess to coordinate a single Train instance
- * within the jDisco simulation framework. Unlike ShuntingLoop (which manages
+ * within the kDisco simulation framework. Unlike ShuntingLoop (which manages
  * multiple trains, queues, and dispatching), SimpleTestProcess focuses on
  * single-train scenarios for unit testing.
  *
@@ -56,7 +57,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * because it validates end-to-end interlocking behavior. Future tests may migrate
  * to SimpleTestProcess pattern for unit-level Train validation.
  *
- * ## jDisco Process Lifecycle
+ * ## kDisco Process Lifecycle
  *
  * The Process lifecycle follows this pattern (from LoopProcess base class):
  *
@@ -119,9 +120,9 @@ class SimpleTestProcess(
 	 * This method activates the train, transitioning it from PASSIVE to ACTIVE state.
 	 * The train's actions() method will then begin executing.
 	 */
-	override fun startAction() {
+	override suspend fun startAction() {
 		logger.debug { "SimpleTestProcess: Starting test with train ${train.name}" }
-		activate(train) // CRITICAL: activate the train process
+		Process.activate(train) // CRITICAL: activate the train process
 	}
 
 	/**
@@ -131,7 +132,7 @@ class SimpleTestProcess(
 	 * maximum simulation time has been exceeded. If either condition is met,
 	 * the process terminates.
 	 */
-	override fun iteration() {
+	override suspend fun iteration() {
 		val currentTime = time()
 		val isTerminated = train.terminated()
 
@@ -151,7 +152,7 @@ class SimpleTestProcess(
 	 * This method uses hold() to advance the simulation clock by 1 second,
 	 * allowing the train to make progress between checks.
 	 */
-	override fun interLoopSleep() {
+	override suspend fun interLoopSleep() {
 		hold(1.0) // Check every 1 second of simulation time
 	}
 
@@ -161,7 +162,7 @@ class SimpleTestProcess(
 	 * This method logs the completion of the test and can be used for cleanup
 	 * if needed.
 	 */
-	override fun byTerminateAction() {
+	override suspend fun byTerminateAction() {
 		logger.debug { "SimpleTestProcess: Test completed at t=${time()}" }
 	}
 
@@ -189,7 +190,7 @@ class SimpleTestProcess(
 	 * - Add properties that are commonly asserted across multiple tests
 	 * - Keep properties immutable (val, not var)
 	 * - Document units (velocity in m/s, position in meters)
-	 * - Avoid exposing internal jDisco state (Process.time, Process.entity)
+	 * - Avoid exposing internal kDisco state (Process.time, Process.entity)
 	 *
 	 * @property velocity Current train velocity in meters per second (≥ 0.0)
 	 * @property position Current position along track in meters (≥ 0.0)

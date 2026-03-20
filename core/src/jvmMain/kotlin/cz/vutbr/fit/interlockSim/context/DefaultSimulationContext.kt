@@ -45,12 +45,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Random
+import cz.hovorka.kdisco.Simulation
+import kotlinx.coroutines.runBlocking
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
  *
  * Provides simulation-specific operations without editing capabilities:
- * - Running discrete event simulations using jDisco framework
+ * - Running discrete event simulations using kDisco framework
  * - Managing simulation processes (main process, InOut workers)
  * - Path finding for train navigation (pathToNextSemaphore)
  * - Simulation reporting and event logging
@@ -90,13 +92,13 @@ import cz.hovorka.kdisco.Random
  * - Random number generator (for train naming)
  * - Dynamic wrapper mappings (staticToDynamicMap, staticTrackToDynamicMap)
  *
- * The jDisco discrete event simulation framework operates in a single thread,
+ * The kDisco discrete event simulation framework operates in a single thread,
  * ensuring sequential execution of all simulation events.
  *
  * ### Usage
  *
  * - Access DefaultSimulationContext only from the simulation thread
- * - All simulation events execute sequentially via jDisco
+ * - All simulation events execute sequentially via kDisco
  * - Do not share instances across thread boundaries
  * - Do NOT call editing methods (putCell, removeCell, etc.) - use EditingContext for that
  *
@@ -178,9 +180,14 @@ open class DefaultSimulationContext(
 	private var mainProcess: LoopProcess? = null
 
 	/**
-	 * Random number generator for name generation (jDisco)
+	 * kdisco-engine Simulation instance; set in [run], used in [stop] to signal exit.
 	 */
-	private val random: Random = Random(0)
+	private var simulation: Simulation? = null
+
+	/**
+	 * Random number generator for name generation (kDisco)
+	 */
+	private val random: Random = Random(0L)
 
 	/**
 	 * Topology navigator for pure topology navigation (no state dependencies).
@@ -1122,11 +1129,17 @@ open class DefaultSimulationContext(
 			workers[dynamicInOut] = processFactory.createInOutWorker(this, dynamicInOut)
 		}
 
-		try {
+		val sim = Simulation.create {
 			Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
+		}
+		simulation = sim
+		try {
+			runBlocking { sim.run(Double.MAX_VALUE) }
 		} catch (e: DiscoException) {
-			logger.error(e) { "Failed to activate main simulation process" }
+			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
+		} finally {
+			simulation = null  // Release reference once sim.run() returns (natural end or stop() called)
 		}
 	}
 
@@ -1146,6 +1159,7 @@ open class DefaultSimulationContext(
 	 * terminations fail. Collects all exceptions and throws them after cleanup is complete.
 	 */
 	override fun stop() {
+		simulation?.stop()  // Signal kdisco-engine event loop to exit
 		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 
@@ -1411,7 +1425,7 @@ open class DefaultSimulationContext(
 	/**
 	 * Generate random name string (single character A-T)
 	 */
-	private fun randomString(): String = String(Character.toChars(65 + random.nextInt(20)))
+	private fun randomString(): String = String(Character.toChars(65 + random.randInt(0, 19)))
 
 	/**
 	 * Get the worker for an entry/exit point

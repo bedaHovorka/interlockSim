@@ -57,7 +57,7 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Future Migration
  *
- * When migrating from jDisco to DSOL/Kalasim:
+ * When migrating from kDisco to DSOL/Kalasim:
  * 1. Create DSOLSimulationProcessFactory (or similar)
  * 2. Update Koin DI configuration to inject the new process factory
  * 3. This factory continues to work unchanged

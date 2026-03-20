@@ -41,8 +41,8 @@
 	<!-- Suppress verbose object logging during tests -->
 	<logger name="cz.vutbr.fit.interlockSim.objects" level="WARN"/>
 
-	<!-- jDisco statistics suppressed during tests -->
-	<logger name="jDisco.statistics" level="ERROR"/>
+	<!-- kDisco statistics suppressed during tests -->
+	<logger name="kDisco.statistics" level="ERROR"/>
 
 	<!-- Root logger - WARN level for tests -->
 	<root level="WARN">

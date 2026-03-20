@@ -224,7 +224,7 @@ class SimulationExceptionTest : KoinTestBase() {
 			val time1 = exception1.getTime()
 			val time2 = exception2.getTime()
 
-			// Assert - times may be the same depending on jDisco time, so just verify both are valid
+			// Assert - times may be the same depending on kDisco time, so just verify both are valid
 			assertThat(time1).isNotNull()
 			assertThat(time2).isNotNull()
 		}

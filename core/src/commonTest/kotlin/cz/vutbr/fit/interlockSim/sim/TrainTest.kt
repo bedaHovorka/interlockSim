@@ -30,8 +30,8 @@ import org.junit.jupiter.api.Test
 /**
  * Unit tests for {@link Train}.
  *
- * NOTE: Train is a complex jDisco Process that uses coroutines and discrete-event
- * simulation. Full testing would require integration tests with jDisco framework.
+ * NOTE: Train is a complex kDisco Process that uses coroutines and discrete-event
+ * simulation. Full testing would require integration tests with kDisco framework.
  * These unit tests focus on verifiable aspects like construction and basic properties.
  *
  * Coverage:
@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test
  * - Basic validation of constructor parameters
  *
  * Limitations:
- * - Cannot fully test jDisco Process behavior without running simulation
+ * - Cannot fully test kDisco Process behavior without running simulation
  * - Complex movement and acceleration logic requires integration testing
  * - Semaphore interactions tested only at construction level
  */

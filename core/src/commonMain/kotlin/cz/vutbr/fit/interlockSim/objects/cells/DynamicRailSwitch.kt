@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -95,7 +96,7 @@ class DynamicRailSwitch(
 		val oldConf = conf
 		conf = if (conf == Conf.MAIN) Conf.BRANCH else Conf.MAIN
 		logger.info {
-			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
+			"${Process.time()} Switch ${staticRef.hashCode()} position change: $oldConf -> $conf"
 		}
 		listeners.forEach { it.propertyChange(ContextChangeEvent("conf", oldConf, conf)) }
 	}
@@ -111,7 +112,7 @@ class DynamicRailSwitch(
 		// Tier 1: Unlock switch after canceling path setup (Issue #291)
 		unlock()
 		logger.debug {
-			"${jDisco.Process.time()} Switch ${this.hashCode()} unlocked after cancelPathSetup"
+			"${Process.time()} Switch ${this.hashCode()} unlocked after cancelPathSetup"
 		}
 	}
 
@@ -130,7 +131,7 @@ class DynamicRailSwitch(
 		val oldConf = conf
 		val newConf = getPathConfWithException(from, to)
 		logger.info {
-			"${jDisco.Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
+			"${Process.time()} Switch ${this.hashCode()} path setup: from=$from to=$to, " +
 				"conf=$newConf, allowedSpeed=$allowedSpeed"
 		}
 		conf = newConf
@@ -140,7 +141,7 @@ class DynamicRailSwitch(
 		// Tier 1: Lock switch after configuration (Issue #291)
 		lock()
 		logger.info {
-			"${jDisco.Process.time()} Switch ${this.hashCode()} LOCKED after setUpPath, locked=$locked"
+			"${Process.time()} Switch ${this.hashCode()} LOCKED after setUpPath, locked=$locked"
 		}
 	}
 
@@ -180,7 +181,7 @@ class DynamicRailSwitch(
 		val oldLocked = locked
 		locked = true
 		logger.debug {
-			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} locked"
+			"${Process.time()} Switch ${staticRef.hashCode()} locked"
 		}
 		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}
@@ -197,7 +198,7 @@ class DynamicRailSwitch(
 		val oldLocked = locked
 		locked = false
 		logger.debug {
-			"${jDisco.Process.time()} Switch ${staticRef.hashCode()} unlocked"
+			"${Process.time()} Switch ${staticRef.hashCode()} unlocked"
 		}
 		listeners.forEach { it.propertyChange(ContextChangeEvent("locked", oldLocked, locked)) }
 	}

@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -94,11 +95,19 @@ object AnimationStateCapture {
 	/**
 	 * Capture current simulation time.
 	 *
-	 * Uses jDisco Process.time() to get current simulation time in seconds.
+	 * Uses kdisco-engine Process.time() to get current simulation time in seconds.
+	 * Returns 0.0 if called outside a simulation coroutine context (e.g. from GUI thread
+	 * before simulation starts), since Process.time() requires an active simulation.
 	 *
-	 * @return Current simulation time in seconds
+	 * @return Current simulation time in seconds, or 0.0 if not inside a simulation
 	 */
-	private fun captureSimulationTime(): Double = Process.time()
+	private fun captureSimulationTime(): Double = try {
+		Process.time()
+	} catch (_: DiscoException) {
+		0.0
+	} catch (_: IllegalStateException) {
+		0.0
+	}
 
 	/**
 	 * Capture state of all active trains in simulation.

@@ -9,7 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Cycle process...
@@ -17,9 +19,13 @@ import cz.hovorka.kdisco.Process
  * this class allows inter-iteration termination of the process.
  */
 abstract class LoopProcess : Process() {
+	private companion object {
+		private val logger = KotlinLogging.logger {}
+	}
+
 	private var terminate = false
 
-	final override fun actions() {
+	final override suspend fun actions() {
 		startAction()
 		while (true) {
 			if (terminate) break
@@ -30,17 +36,17 @@ abstract class LoopProcess : Process() {
 		byTerminateAction()
 	}
 
-	protected open fun startAction() {
+	protected open suspend fun startAction() {
 		// EMPTY
 	}
 
-	protected open fun byTerminateAction() {
+	protected open suspend fun byTerminateAction() {
 		// EMPTY
 	}
 
-	protected abstract fun iteration()
+	protected abstract suspend fun iteration()
 
-	protected open fun interLoopSleep() {
+	protected open suspend fun interLoopSleep() {
 		passivate()
 	}
 
@@ -49,6 +55,12 @@ abstract class LoopProcess : Process() {
 	 */
 	final override fun terminate() {
 		terminate = true
-		if (!terminated()) Process.activate(this)
+		if (!terminated()) {
+			try {
+				Process.activate(this)
+			} catch (_: DiscoException) {
+				logger.debug { "terminate(): activate() failed outside simulation — will exit at next iteration check" }
+			}
+		}
 	}
 }

@@ -18,12 +18,12 @@ Author: Bedrich Hovorka
 **InterlockSim** is a Kotlin-based railway interlocking simulator that combines:
 
 - **Graphical Editor** - Design railway track layouts with switches, semaphores, and entry/exit points
-- **Discrete Event Simulation** - Simulate train movements and interlocking logic using the jDisco framework
+- **Discrete Event Simulation** - Simulate train movements and interlocking logic using the kDisco framework
 - **Continuous Simulation** - Model continuous train positions and speeds
 - **XML Configuration** - Define and save railway networks in a structured XML format
 - **Process-Oriented Modeling** - Built-in examples demonstrate shunting yard operations
 
-The simulator uses a combined discrete-continuous simulation approach powered by the jDisco library (Keld Helsgaun, Roskilde University).
+The simulator uses a combined discrete-continuous simulation approach powered by the kDisco library (Keld Helsgaun, Roskilde University).
 
 ---
 
@@ -32,7 +32,7 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 - **Interactive track editor** with grid-based layout
 - **Animated GUI simulation** ⭐ NEW - Real-time train movement visualization with event logging (30 FPS)
 - **XML schema-validated** railway network definitions
-- **Discrete event simulation engine** (jDisco-based)
+- **Discrete event simulation engine** (kDisco-based)
 - **Built-in examples** including shunting loop scenarios
 - **Swing GUI** for visualization and editing
 - **Assertion-based validation** for simulation integrity
@@ -55,7 +55,7 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 - **Java**: JDK 21 or later (Java 21 LTS minimum)
 - **Build Tool**: Gradle (wrapper included)
 - **Dependencies**: Automatically managed via Gradle
-  - jDisco 1.2.0 (from Maven local repository, Java 6 compatible)
+  - kdisco-core-jvm 0.3.0 (from GitHub Packages or docker-kdisco vendored artifacts)
   - JUnit 5.11.4 (from Maven Central)
   - AssertJ 3.27.6 (from Maven Central)
   - MockK 1.13.14 (from Maven Central) - Kotlin-native mocking for sealed classes
@@ -291,7 +291,7 @@ interlockSim/
 │           ├── util/          # Utility class tests
 │           ├── testutil/      # Test utilities and builders
 │           └── xml/           # XML parsing tests
-├── jdisco/                # jDisco library (separate Maven module, Java 6)
+├── kdisco/                # kDisco library (separate Maven module, Java 6)
 ├── build/                 # Build output
 │   ├── classes/java/main/ # Compiled main classes
 │   ├── classes/java/test/ # Compiled test classes
@@ -322,7 +322,7 @@ Railway networks are defined using XML with the following elements:
 
 ### Simulation Engine
 
-Built on **jDisco** (Java framework for combined discrete and continuous simulation):
+Built on **kDisco** (Java framework for combined discrete and continuous simulation):
 - Process-oriented simulation paradigm
 - Discrete event scheduling
 - Continuous variable support
@@ -411,7 +411,7 @@ docker compose build app
 
 **Root Dockerfile (multi-stage build):**
 1. **Builder stage** - Uses Eclipse Temurin 21 JDK
-   - Builds jDisco dependency (Maven install, Java 6 compatibility)
+   - Builds kDisco dependency (Maven install, Java 6 compatibility)
    - Resolves dependencies via Gradle (automatic download)
    - Compiles Java sources (Java 21 target)
    - Runs all tests (build fails if tests fail)
@@ -442,7 +442,7 @@ The application uses SLF4J with Logback for comprehensive logging of simulation 
 ### Log Configuration
 
 **Main application:** `src/main/resources/logback.xml`
-**jDisco tests:** `jdisco/src/test/resources/simplelogger.properties`
+**kDisco tests:** `kdisco/src/test/resources/simplelogger.properties`
 
 ### Log Levels
 
@@ -487,7 +487,7 @@ docker compose run -e ROOT_LOG_LEVEL=DEBUG app java -jar interlockSim.jar exampl
 The following loggers are pre-configured in `logback.xml`:
 
 - `cz.vutbr.fit.interlockSim.simulation` - Simulation events (INFO)
-- `jDisco.statistics` - jDisco statistical reports (INFO)
+- `kDisco.statistics` - kDisco statistical reports (INFO)
 - `cz.vutbr.fit.interlockSim.sim.Train` - Train behavior (DEBUG)
 - `cz.vutbr.fit.interlockSim.sim.ShuntingLoop` - Shunting operations (DEBUG)
 - `cz.vutbr.fit.interlockSim.objects.paths.AbstractPath` - Path management (DEBUG)
@@ -514,7 +514,7 @@ Comprehensive JUnit 5.11.4 test suite with AssertK 0.28.1 assertions located in 
 **Coverage by package:**
 - objects.tracks/ - 85% (excellent), xml/ - 85% (excellent)
 - util/ - 75% (good), objects.cells/ - 72% (good), context/ - 70% (good)
-- objects.paths/ - 52% (medium), sim/ - 33% (limited by jDisco framework)
+- objects.paths/ - 52% (medium), sim/ - 33% (limited by kDisco framework)
 
 **Test expansion phases completed (2026-01-10):**
 1. Safety-critical components (Train physics, Track state, RailSwitch, RailSemaphore)
@@ -584,7 +584,7 @@ Output: `build/docs/javadoc/` directory
 
 ## Future Development
 
-The project currently uses **jDisco** (2004, no longer maintained). Research has identified modern alternatives for potential migration:
+The project currently uses **kDisco** (2004, no longer maintained). Research has identified modern alternatives for potential migration:
 
 - **DSOL** - Combined discrete-continuous simulation (Java 17+, actively maintained)
 - **Kalasim** - Discrete event simulation (Kotlin-native with coroutines)
@@ -600,7 +600,7 @@ See `jdisco-research.md` for comprehensive analysis.
 © 2006-2007 Bedrich Hovorka
 BSc Thesis, Brno University of Technology
 
-**jDisco Library**
+**kDisco Library**
 © 2001-2004 Keld Helsgaun, Roskilde University, Denmark
 Research use only
 
@@ -610,7 +610,7 @@ Research use only
 
 This repository includes:
 
-- Complete Java source code (interlockSim + jDisco library)
+- Complete Java source code (interlockSim + kDisco library)
 - Gradle build system with Kotlin DSL
 - Comprehensive JUnit 5 test suite (237 tests)
 - XML schemas and example configurations

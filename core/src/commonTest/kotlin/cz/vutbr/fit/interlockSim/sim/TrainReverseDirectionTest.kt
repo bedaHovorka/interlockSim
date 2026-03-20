@@ -47,7 +47,7 @@ private val logger = KotlinLogging.logger {}
  *
  * Train.reverseDirection() includes additional simulation behavior (hold(30.0)
  * to simulate engineer movement) that requires running simulation. That full
- * integration test scenario requires stopping a train mid-simulation in jDisco,
+ * integration test scenario requires stopping a train mid-simulation in kDisco,
  * which is complex to test. This test focuses on the core timetable reversal
  * logic that Train.reverseDirection() delegates to.
  *

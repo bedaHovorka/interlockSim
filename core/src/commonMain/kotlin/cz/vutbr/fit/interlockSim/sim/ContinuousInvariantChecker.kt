@@ -11,24 +11,33 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
 
 /**
  * Base class for validating continuous variable invariants during simulation.
  *
- * Extends jDisco's Continuous to check state invariants at each integration step.
+ * Extends kDisco's Continuous to check state invariants at each integration step.
  * Subclasses implement [check] to define invariant conditions and [report] for diagnostics.
  *
  * **Warning:** The [derivatives] method still uses `assert()` internally. Invariant violations
  * will only be detected if assertions are enabled (-ea JVM flag). This is a legacy limitation
- * from jDisco integration. Consider migrating to explicit exception throwing for production safety.
+ * from kDisco integration. Consider migrating to explicit exception throwing for production safety.
  *
  * @see check The method defining the invariant condition
  * @see report The method providing diagnostic information on invariant violations
  */
 abstract class ContinuousInvariantChecker : Continuous() {
-	protected final override fun derivatives() {
+	/**
+	 * Checks the invariant at each integration step and throws [cz.vutbr.fit.interlockSim.exceptions.SimulationException]
+	 * if the condition is violated.
+	 *
+	 * **Visibility note:** `derivatives()` is public in kdisco-engine's [Continuous] (no access modifier),
+	 * so this `final override` is also public. This is intentional and required by the new API —
+	 * the widening from the old kDisco `protected` visibility is not a bug.
+	 */
+	final override fun derivatives() {
 		requireSimulation(check()) {
-			val sb = StringBuilder(time().toString()).append(" : ")
+			val sb = StringBuilder(Process.time().toString()).append(" : ")
 			val msg = report(sb as StringBuilder)
 			msg.toString()
 		}

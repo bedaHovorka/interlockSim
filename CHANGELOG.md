@@ -176,7 +176,7 @@ Complete animated GUI visualization system for real-time railway simulation.
 - Conservative structure-preserving approach
 - Full test parity (242 tests passing)
 - Physics calculations validated against Java baseline (tolerance: 1e-9s, 1e-6m)
-- Full jDisco interoperability maintained
+- kDisco simulation library integration
 
 #### Build System
 - Gradle with Kotlin DSL (replaces Ant)
@@ -252,7 +252,7 @@ Initial BSc thesis release (Brno University of Technology, 2006/2007)
 - Railway interlocking simulator with discrete event simulation
 - Graphical editor for railway network construction
 - XML-based network configuration (`data.xsd` schema)
-- jDisco discrete event simulation framework integration
+- kDisco discrete event simulation framework integration
 - Example scenarios (shunting loop - `vyhybna.xml`)
 - Swing-based GUI with track layout editor
 - Track facilities: switches, semaphores, entry/exit points (InOut)

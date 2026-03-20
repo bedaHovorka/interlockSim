@@ -25,6 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
+import cz.vutbr.fit.interlockSim.util.platformSleep
+import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
@@ -97,28 +99,25 @@ class ShuntingLoop(
 		private var presvihnuto: Double = 0.0
 		private var beginTime: Long = 0
 
-		override fun startAction() {
+		override suspend fun startAction() {
 			interLoopSleep()
 		}
 
-		override fun iteration() {
+		override suspend fun iteration() {
 			val iterationEndTime: Long = System.currentTimeMillis()
 			val targetInterval = (1000.0 / speedMultiplier).toLong()
 			val sleepTime: Long = targetInterval - (iterationEndTime - beginTime)
 			if (sleepTime > 10) {
-				try {
-					Thread.sleep(sleepTime)
-				} catch (e: InterruptedException) {
-					requireSimulation(false) { "Unexpected thread interruption during real-time synchronization: $e" }
-					Thread.currentThread().interrupt() // Restore interrupt status
-					terminate()
-				}
+				// platformSleep restores the interrupt flag on InterruptedException (JVM only).
+				// Simulation termination is handled by LoopProcess.terminate() setting the flag
+				// which is checked between iterations — platformSleep interrupt does not cause a tight loop.
+				platformSleep(sleepTime)
 			} else if (sleepTime < 0) {
 				presvihnuto = sleepTime / 1000.0
 			}
 		}
 
-		override fun interLoopSleep() {
+		override suspend fun interLoopSleep() {
 			beginTime = System.currentTimeMillis()
 			hold(1 + presvihnuto)
 			presvihnuto = 0.0
@@ -190,7 +189,7 @@ class ShuntingLoop(
 		return dynamicBlock
 	}
 
-	override fun startAction() {
+	override suspend fun startAction() {
 		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
 
 		// Conditionally activate real-time synchronization for GUI mode
@@ -198,10 +197,10 @@ class ShuntingLoop(
 			activate(RealTimeSynch())
 		}
 
-		activate(generator)
+		Process.activate(generator)
 	}
 
-	override fun iteration() {
+	override suspend fun iteration() {
 		// stare vlaky
 		val iter: MutableIterator<Train> = approwedTrains.iterator()
 		while (iter.hasNext()) {
@@ -325,10 +324,10 @@ class ShuntingLoop(
 		}
 	}
 
-	override fun interLoopSleep() {
+	override suspend fun interLoopSleep() {
 		if (time() >= endTime) {
 			generator.terminate()
-			terminate()
+			env.stop()
 			return
 		}
 		hold(1.0)

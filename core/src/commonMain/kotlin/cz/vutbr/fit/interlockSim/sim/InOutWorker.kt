@@ -63,8 +63,8 @@ class InOutWorker(
 			}
 		}
 
-	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for jDisco event-driven logic
-	override fun iteration() {
+	@Suppress("NestedBlockDepth") // Legacy sim/ code - deep nesting required for kDisco event-driven logic
+	override suspend fun iteration() {
 		while (!queqe.empty()) {
 			myIdle = false
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
@@ -155,7 +155,7 @@ class InOutWorker(
 	 * In InOut is new Train - process awakening signal
 	 * @param train
 	 */
-	fun enterTrain(train: Train) {
+	suspend fun enterTrain(train: Train) {
 		logger.debug { "InOutWorker ${inOut.name} entering train $train, queue empty: ${queqe.empty()}" }
 		if (queqe.empty()) {
 			train.into(queqe)
