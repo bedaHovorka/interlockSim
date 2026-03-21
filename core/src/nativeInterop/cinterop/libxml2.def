@@ -1,4 +1,4 @@
 headers = libxml/parser.h libxml/xmlschemas.h libxml/xmlerror.h libxml/tree.h
 package = libxml2
 compilerOpts.linux = -I/usr/include/libxml2
-linkerOpts.linux = -L/usr/lib64 -L/usr/lib/x86_64-linux-gnu -lxml2
+linkerOpts.linux = -lxml2

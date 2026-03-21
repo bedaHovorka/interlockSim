@@ -52,36 +52,39 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 
 	@Test
 	fun `unmapped InOut throws IllegalStateException`() {
-		val context = createEmptyContext()
-		val unmappedInOut = InOut("unmapped-inout", true, Cell.SpatialType.HORIZONTAL)
+		createEmptyContext().use { context ->
+			val unmappedInOut = InOut("unmapped-inout", true, Cell.SpatialType.HORIZONTAL)
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmappedInOut)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmappedInOut)
+			}
+			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
-		assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 	}
 
 	@Test
 	fun `unmapped RailSemaphore throws IllegalStateException`() {
-		val context = createEmptyContext()
-		val unmappedSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		unmappedSemaphore.setName("unmapped-semaphore")
+		createEmptyContext().use { context ->
+			val unmappedSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+			unmappedSemaphore.setName("unmapped-semaphore")
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmappedSemaphore)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmappedSemaphore)
+			}
+			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
-		assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 	}
 
 	@Test
 	fun `unmapped RailSwitch throws IllegalStateException`() {
-		val context = createEmptyContext()
-		val unmappedSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		unmappedSwitch.setName("unmapped-switch")
+		createEmptyContext().use { context ->
+			val unmappedSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+			unmappedSwitch.setName("unmapped-switch")
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmappedSwitch)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmappedSwitch)
+			}
+			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
-		assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 	}
 }

@@ -3,6 +3,9 @@ package cz.vutbr.fit.interlockSim.xml
 /**
  * Embedded XSD schema for railway network XML validation.
  * Source: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd
+ *
+ * Embedded as a string constant because commonMain has no file I/O on native targets.
+ * A JVM test (XmlSchemaDriftTest) verifies this constant stays in sync with data.xsd.
  */
 object XmlSchemaContent {
 	const val SCHEMA_XSD: String = """<?xml version="1.0" encoding="utf-8"?>

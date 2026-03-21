@@ -50,14 +50,14 @@ class InOutWrapperCreationTest : KoinComponent {
 	 */
 	@Test
 	fun `getInOuts retrieves existing wrappers without creating duplicates`() {
-		val context = loadVyhybnaContext()
+		loadVyhybnaContext().use { context ->
+			val inouts1 = context.getInOuts()
+			val inouts2 = context.getInOuts()
 
-		val inouts1 = context.getInOuts()
-		val inouts2 = context.getInOuts()
+			assertThat(inouts1).isNotNull()
+			assertThat(inouts2).isNotNull()
 
-		assertThat(inouts1).isNotNull()
-		assertThat(inouts2).isNotNull()
-
-		assertThat(inouts1).isSameInstanceAs(inouts2)
+			assertThat(inouts1).isSameInstanceAs(inouts2)
+		}
 	}
 }

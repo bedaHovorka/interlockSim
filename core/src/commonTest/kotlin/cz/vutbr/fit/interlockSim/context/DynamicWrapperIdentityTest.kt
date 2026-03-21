@@ -5,6 +5,8 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import kotlin.test.AfterTest
@@ -57,13 +59,13 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	 */
 	@Test
 	fun `getInOuts returns same instances as staticToDynamicMap`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			val inoutsFromGetter = context.getInOuts()
 
-		val inoutsFromGetter = context.getInOuts()
-
-		for (dynamicInOut in inoutsFromGetter) {
-			val fromMap = context.toDynamic(dynamicInOut.staticRef)
-			assertThat(fromMap).isSameInstanceAs(dynamicInOut)
+			for (dynamicInOut in inoutsFromGetter) {
+				val fromMap = context.toDynamic(dynamicInOut.staticRef)
+				assertThat(fromMap).isSameInstanceAs(dynamicInOut)
+			}
 		}
 	}
 
@@ -75,31 +77,15 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	 */
 	@Test
 	fun `grid cells match staticToDynamicMap entries`() {
-		val context = loadVyhybnaSimulationContext()
-		val grid = context.getRailWayNetGrid()
+		loadVyhybnaSimulationContext().use { context ->
+			val grid = context.getRailWayNetGrid()
 
-		val cols = grid.cols
-		val rows = grid.rows
-
-		for (x in 0 until cols) {
-			for (y in 0 until rows) {
-				val cell = grid.getCellAt(x, y)
-				when (cell) {
-					is DynamicInOut -> {
-						val fromMap = context.toDynamic(cell.staticRef)
-						assertThat(fromMap).isSameInstanceAs(cell)
-					}
-					is DynamicRailSwitch -> {
-						val fromMap = context.toDynamic(cell.staticRef)
-						assertThat(fromMap).isSameInstanceAs(cell)
-					}
-					is DynamicRailSemaphore -> {
-						val fromMap = context.toDynamic(cell.staticRef)
-						assertThat(fromMap).isSameInstanceAs(cell)
-					}
-					else -> {
-						// No validation needed for non-wrapper cells
-					}
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid.getCellAt(x, y)
+					val staticRef = staticRefOf(cell) ?: continue
+					val fromMap = context.toDynamic(staticRef)
+					assertThat(fromMap).isSameInstanceAs(cell)
 				}
 			}
 		}
@@ -110,18 +96,18 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	 */
 	@Test
 	fun `toDynamic returns same instance for repeated calls`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			val firstInOut = context.getInOuts().first()
+			val staticRef = firstInOut.staticRef
 
-		val firstInOut = context.getInOuts().first()
-		val staticRef = firstInOut.staticRef
+			val wrapper1 = context.toDynamic(staticRef)
+			val wrapper2 = context.toDynamic(staticRef)
+			val wrapper3 = context.toDynamic(staticRef)
 
-		val wrapper1 = context.toDynamic(staticRef)
-		val wrapper2 = context.toDynamic(staticRef)
-		val wrapper3 = context.toDynamic(staticRef)
-
-		assertThat(wrapper1).isSameInstanceAs(firstInOut)
-		assertThat(wrapper2).isSameInstanceAs(firstInOut)
-		assertThat(wrapper3).isSameInstanceAs(firstInOut)
+			assertThat(wrapper1).isSameInstanceAs(firstInOut)
+			assertThat(wrapper2).isSameInstanceAs(firstInOut)
+			assertThat(wrapper3).isSameInstanceAs(firstInOut)
+		}
 	}
 
 	/**
@@ -129,18 +115,26 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	 */
 	@Test
 	fun `InOut semaphores are properly mapped to dynamic wrappers`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			for (dynamicInOut in context.getInOuts()) {
+				val staticInOut = dynamicInOut.staticRef
+				val inSemaphore = staticInOut.getInSemaphore()
+				val outSemaphore = staticInOut.getOutSemaphore()
 
-		for (dynamicInOut in context.getInOuts()) {
-			val staticInOut = dynamicInOut.staticRef
-			val inSemaphore = staticInOut.getInSemaphore()
-			val outSemaphore = staticInOut.getOutSemaphore()
+				val dynamicInSemaphore = context.toDynamic(inSemaphore)
+				val dynamicOutSemaphore = context.toDynamic(outSemaphore)
 
-			val dynamicInSemaphore = context.toDynamic(inSemaphore)
-			val dynamicOutSemaphore = context.toDynamic(outSemaphore)
-
-			assertThat(dynamicInSemaphore).isSameInstanceAs(dynamicInOut.inSemaphore)
-			assertThat(dynamicOutSemaphore).isSameInstanceAs(dynamicInOut.outSemaphore)
+				assertThat(dynamicInSemaphore).isSameInstanceAs(dynamicInOut.inSemaphore)
+				assertThat(dynamicOutSemaphore).isSameInstanceAs(dynamicInOut.outSemaphore)
+			}
 		}
+	}
+
+	/** Extract the static reference from a dynamic wrapper, or null for non-wrapper cells. */
+	private fun staticRefOf(cell: Cell?): PathSeparator? = when (cell) {
+		is DynamicInOut -> cell.staticRef
+		is DynamicRailSwitch -> cell.staticRef
+		is DynamicRailSemaphore -> cell.staticRef
+		else -> null
 	}
 }

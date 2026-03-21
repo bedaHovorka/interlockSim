@@ -1,8 +1,12 @@
 package cz.vutbr.fit.interlockSim.xml
 
+import assertk.assertThat
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isTrue
 import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class XmlSchemaValidatorTest {
 
@@ -15,17 +19,16 @@ class XmlSchemaValidatorTest {
 				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
 			</net>"""
 		val result = validator.validate(xml)
-		assertTrue(result.isValid, "Valid XML should pass: ${result.errors}")
+		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
 	fun xmlWithUnknownRootElementFailsValidation() {
-		// The XSD defines <net> as the known root; an unknown root should fail
 		val xml = """<?xml version="1.0"?>
 			<unknown X="10" Y="10"/>"""
 		val result = validator.validate(xml)
-		assertFalse(result.isValid, "Unknown root element should fail validation")
-		assertTrue(result.errors.isNotEmpty())
+		assertThat(result.isValid).isFalse()
+		assertThat(result.errors).isNotEmpty()
 	}
 
 	@Test
@@ -36,7 +39,7 @@ class XmlSchemaValidatorTest {
 				<UnknownElement X="1" Y="1"/>
 			</net>"""
 		val result = validator.validate(xml)
-		assertTrue(result.isValid, "Permissive XSD net element accepts unknown children: ${result.errors}")
+		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
@@ -45,7 +48,7 @@ class XmlSchemaValidatorTest {
 		val xml = """<?xml version="1.0"?>
 			<net X="10" Y="10"/>"""
 		val result = validator.validate(xml)
-		assertTrue(result.isValid, "Empty net should pass XSD: ${result.errors}")
+		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
@@ -55,21 +58,21 @@ class XmlSchemaValidatorTest {
 				<unclosed>
 			</net>"""
 		val result = validator.validate(xml)
-		assertFalse(result.isValid, "Malformed XML should fail validation")
-		assertTrue(result.errors.isNotEmpty())
+		assertThat(result.isValid).isFalse()
+		assertThat(result.errors).isNotEmpty()
 	}
 
 	@Test
 	fun successFactoryCreatesValidResult() {
 		val result = XmlValidationResult.success()
-		assertTrue(result.isValid)
-		assertTrue(result.errors.isEmpty())
+		assertThat(result.isValid).isTrue()
+		assertThat(result.errors).isEmpty()
 	}
 
 	@Test
 	fun failureFactoryCreatesInvalidResult() {
 		val result = XmlValidationResult.failure(listOf("error1", "error2"))
-		assertFalse(result.isValid)
-		assertTrue(result.errors.size == 2)
+		assertThat(result.isValid).isFalse()
+		assertThat(result.errors).hasSize(2)
 	}
 }

@@ -49,42 +49,44 @@ class CacheValidationCacheHitBehaviorTest : KoinComponent {
 
 	@Test
 	fun `same wrapper returned for repeated toDynamic calls with same static object`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			val dynamicInOut = context.getInOuts().first()
+			val staticInOut = dynamicInOut.staticRef
 
-		val dynamicInOut = context.getInOuts().first()
-		val staticInOut = dynamicInOut.staticRef
+			val wrapper1 = context.toDynamic(staticInOut)
+			val wrapper2 = context.toDynamic(staticInOut)
+			val wrapper3 = context.toDynamic(staticInOut)
 
-		val wrapper1 = context.toDynamic(staticInOut)
-		val wrapper2 = context.toDynamic(staticInOut)
-		val wrapper3 = context.toDynamic(staticInOut)
-
-		assertThat(wrapper1).isSameInstanceAs(wrapper2)
-		assertThat(wrapper2).isSameInstanceAs(wrapper3)
-		assertThat(wrapper1).isSameInstanceAs(dynamicInOut)
+			assertThat(wrapper1).isSameInstanceAs(wrapper2)
+			assertThat(wrapper2).isSameInstanceAs(wrapper3)
+			assertThat(wrapper1).isSameInstanceAs(dynamicInOut)
+		}
 	}
 
 	@Test
 	fun `same wrapper returned for InOut semaphore repeated calls`() {
-		val context = loadVyhybnaSimulationContext()
-		val dynamicInOut = context.getInOuts().first()
-		val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
+		loadVyhybnaSimulationContext().use { context ->
+			val dynamicInOut = context.getInOuts().first()
+			val staticSemaphore = dynamicInOut.staticRef.getInSemaphore()
 
-		val wrapper1 = context.toDynamic(staticSemaphore)
-		val wrapper2 = context.toDynamic(staticSemaphore)
-		val wrapper3 = context.toDynamic(staticSemaphore)
+			val wrapper1 = context.toDynamic(staticSemaphore)
+			val wrapper2 = context.toDynamic(staticSemaphore)
+			val wrapper3 = context.toDynamic(staticSemaphore)
 
-		assertThat(wrapper1).isSameInstanceAs(wrapper2)
-		assertThat(wrapper2).isSameInstanceAs(wrapper3)
-		assertThat(wrapper1).isSameInstanceAs(dynamicInOut.inSemaphore)
+			assertThat(wrapper1).isSameInstanceAs(wrapper2)
+			assertThat(wrapper2).isSameInstanceAs(wrapper3)
+			assertThat(wrapper1).isSameInstanceAs(dynamicInOut.inSemaphore)
+		}
 	}
 
 	@Test
 	fun `toDynamic is identity function for already-dynamic separators`() {
-		val context = loadVyhybnaSimulationContext()
-		val dynamicInOut = context.getInOuts().first()
+		loadVyhybnaSimulationContext().use { context ->
+			val dynamicInOut = context.getInOuts().first()
 
-		val result = context.toDynamic(dynamicInOut)
+			val result = context.toDynamic(dynamicInOut)
 
-		assertThat(result).isSameInstanceAs(dynamicInOut)
+			assertThat(result).isSameInstanceAs(dynamicInOut)
+		}
 	}
 }

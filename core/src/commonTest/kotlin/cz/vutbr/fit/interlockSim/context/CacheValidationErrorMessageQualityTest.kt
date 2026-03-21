@@ -51,48 +51,52 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 
 	@Test
 	fun `error includes separator class name`() {
-		val context = createEmptyContext()
-		val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+		createEmptyContext().use { context ->
+			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmapped)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmapped)
+			}
+			assertThat(exception.message).isNotNull().contains("RailSemaphore")
 		}
-		assertThat(exception.message).isNotNull().contains("RailSemaphore")
 	}
 
 	@Test
 	fun `error includes map size information`() {
-		val context = createEmptyContext()
-		val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
+		createEmptyContext().use { context ->
+			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmapped)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmapped)
+			}
+			val message = exception.message!!
+			assertThat(message).contains("Map contains")
+			assertThat(message).contains("entries")
 		}
-		val message = exception.message!!
-		assertThat(message).contains("Map contains")
-		assertThat(message).contains("entries")
 	}
 
 	@Test
 	fun `error includes separator name if available`() {
-		val context = createEmptyContext()
-		val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		unmapped.setName("test-semaphore")
+		createEmptyContext().use { context ->
+			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
+			unmapped.setName("test-semaphore")
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmapped)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmapped)
+			}
+			assertThat(exception.message).isNotNull().contains("test-semaphore")
 		}
-		assertThat(exception.message).isNotNull().contains("test-semaphore")
 	}
 
 	@Test
 	fun `error includes initialization prerequisite instructions`() {
-		val context = createEmptyContext()
-		val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
+		createEmptyContext().use { context ->
+			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
-		val exception = assertFailsWith<IllegalStateException> {
-			context.toDynamic(unmapped)
+			val exception = assertFailsWith<IllegalStateException> {
+				context.toDynamic(unmapped)
+			}
+			assertThat(exception.message).isNotNull().contains("initializeDynamicMapping()")
 		}
-		assertThat(exception.message).isNotNull().contains("initializeDynamicMapping()")
 	}
 }

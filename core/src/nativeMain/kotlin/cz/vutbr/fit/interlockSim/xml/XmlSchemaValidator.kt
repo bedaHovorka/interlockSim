@@ -18,6 +18,10 @@ import libxml2.xmlSchemaValidateDoc
 
 actual class XmlSchemaValidator actual constructor() {
 
+	// Unlike the JVM actual (which pre-compiles the Schema once at construction),
+	// the native actual re-parses XmlSchemaContent.SCHEMA_XSD on every call.
+	// libxml2's xmlSchemaPtr is not safely reusable across calls in K/N, so this
+	// trade-off is intentional. For this project's validation volume it is acceptable.
 	actual fun validate(xmlContent: String): XmlValidationResult {
 		xmlResetLastError()
 

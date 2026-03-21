@@ -49,23 +49,24 @@ class CacheValidationCompletenessTest : KoinComponent {
 
 	@Test
 	fun `validateDynamicMapping succeeds for complete vyhybna`() {
-		val context = loadVyhybnaSimulationContext()
-		val inouts = context.getInOuts()
-		assertThat(inouts).isNotNull()
+		loadVyhybnaSimulationContext().use { context ->
+			val inouts = context.getInOuts()
+			assertThat(inouts).isNotNull()
+		}
 	}
 
 	@Test
 	fun `all InOut semaphores are mapped after initialization`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			for (dynamicInOut in context.getInOuts()) {
+				val staticInOut = dynamicInOut.staticRef
 
-		for (dynamicInOut in context.getInOuts()) {
-			val staticInOut = dynamicInOut.staticRef
+				val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
+				val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
 
-			val inSemaphore = context.toDynamic(staticInOut.getInSemaphore())
-			val outSemaphore = context.toDynamic(staticInOut.getOutSemaphore())
-
-			assertThat(inSemaphore).isNotNull()
-			assertThat(outSemaphore).isNotNull()
+				assertThat(inSemaphore).isNotNull()
+				assertThat(outSemaphore).isNotNull()
+			}
 		}
 	}
 }

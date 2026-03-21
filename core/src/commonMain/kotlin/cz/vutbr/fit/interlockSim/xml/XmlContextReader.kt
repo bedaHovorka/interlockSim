@@ -3,15 +3,19 @@ package cz.vutbr.fit.interlockSim.xml
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
+import io.github.oshai.kotlinlogging.KotlinLogging
 import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.XmlReader
 import nl.adaptivity.xmlutil.xmlStreaming
+
+private val logger = KotlinLogging.logger {}
 
 /**
  * KMP XML parser that replicates [XMLContextFactory] SAX handler logic using
@@ -47,8 +51,8 @@ class XmlContextReader {
 	 * @param xmlContent the XML string
 	 * @param skipStructuralValidation if true, skip InOut count validation
 	 * @return parsed DefaultEditingContext
-	 * @throws IllegalArgumentException on parse errors
-	 * @throws IllegalStateException on structural validation errors
+	 * @throws IllegalArgumentException on name validation errors
+	 * @throws IllegalStateException on parse or structural validation errors
 	 */
 	fun parse(
 		xmlContent: String,
@@ -78,23 +82,17 @@ class XmlContextReader {
 
 							"InOut" -> {
 								val ctx = requireContext(editingContext)
-								val node = parseInOut(attrs)
-								val key = parsePoint(attrs, prefix = null)
-								ctx.putCell(key, node)
+								putNodeCell(ctx, attrs, parseInOut(attrs))
 							}
 
 							"RailSemaphore" -> {
 								val ctx = requireContext(editingContext)
-								val node = parseRailSemaphore(attrs)
-								val key = parsePoint(attrs, prefix = null)
-								ctx.putCell(key, node)
+								putNodeCell(ctx, attrs, parseRailSemaphore(attrs))
 							}
 
 							"RailSwitch" -> {
 								val ctx = requireContext(editingContext)
-								val node = parseRailSwitch(attrs)
-								val key = parsePoint(attrs, prefix = null)
-								ctx.putCell(key, node)
+								putNodeCell(ctx, attrs, parseRailSwitch(attrs))
 							}
 
 							"SimpleTrackBlock" -> {
@@ -103,7 +101,12 @@ class XmlContextReader {
 							}
 
 							else -> {
-								// Ignore unknown elements (whitespace, comments, etc.)
+								if (!NodeCellFactory.isKnownTag(localName)) {
+									logger.warn {
+										"Unrecognized XML element <$localName> — " +
+											"skipping (possible typo?)"
+									}
+								}
 							}
 						}
 					}
@@ -127,13 +130,27 @@ class XmlContextReader {
 
 		if (!skipStructuralValidation) {
 			val inOutsCount = ctx.getInOuts().size
-			check(inOutsCount >= MIN_INOUT_ELEMENTS) {
-				"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements " +
-					"(entry and exit points). Found: $inOutsCount"
+			if (inOutsCount < MIN_INOUT_ELEMENTS) {
+				ctx.close()
+				error(
+					"Railway network must have at least $MIN_INOUT_ELEMENTS InOut elements " +
+						"(entry and exit points). Found: $inOutsCount"
+				)
 			}
 		}
 
 		return ctx
+	}
+
+	// --- Element helpers ---
+
+	private fun putNodeCell(
+		ctx: DefaultEditingContext,
+		attrs: Map<String, String>,
+		node: NodeCell
+	) {
+		val key = parsePoint(attrs, prefix = null)
+		ctx.putCell(key, node)
 	}
 
 	// --- Element parsers ---

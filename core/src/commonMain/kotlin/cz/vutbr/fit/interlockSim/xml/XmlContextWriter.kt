@@ -7,6 +7,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
+import cz.vutbr.fit.interlockSim.util.Doubleton
 import cz.vutbr.fit.interlockSim.util.Point
 
 /**
@@ -42,23 +43,34 @@ class XmlContextWriter {
 		val railwayNetGrid = context.getRailWayNetGrid()
 		val builder = StringBuilder()
 
-		// XML declaration and DOCTYPE
+		writeHeader(builder, railwayNetGrid)
+		writeNodes(builder, context, railwayNetGrid)
+		writeEdges(builder, context)
+		writeFooter(builder)
+
+		return builder.toString()
+	}
+
+	private fun writeHeader(builder: StringBuilder, grid: RailwayNetGrid<*>) {
 		builder.append("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
 		builder.append(ROOT_ELEMENT_NAME).append(">\n")
-
-		// Root element with grid dimensions
 		builder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
-		appendAttribute(builder, X, railwayNetGrid.cols)
-		appendAttribute(builder, Y, railwayNetGrid.rows)
+		appendAttribute(builder, X, grid.cols)
+		appendAttribute(builder, Y, grid.rows)
 		builder.append(">\n")
+	}
 
-		// Collect all Points that have NodeCells
+	private fun writeFooter(builder: StringBuilder) {
+		builder.append("</").append(ROOT_ELEMENT_NAME).append(">\n")
+	}
+
+	private fun collectNodes(
+		context: DefaultEditingContext,
+		railwayNetGrid: RailwayNetGrid<*>
+	): Set<Point> {
 		val allNodes = linkedSetOf<Point>()
-
-		// Add all nodes from the graph (nodes with connections)
 		allNodes.addAll(context.getGraph().nodeSet())
 
-		// Add any isolated NodeCells from the grid that aren't in the graph
 		@Suppress("UNCHECKED_CAST")
 		val cellGrid = railwayNetGrid as RailwayNetGrid<Cell>
 		for (entry in cellGrid) {
@@ -67,16 +79,23 @@ class XmlContextWriter {
 				allNodes.add(entry.key)
 			}
 		}
+		return allNodes
+	}
 
-		// Write all NodeCells
-		for (point in allNodes) {
+	private fun writeNodes(
+		builder: StringBuilder,
+		context: DefaultEditingContext,
+		railwayNetGrid: RailwayNetGrid<*>
+	) {
+		for (point in collectNodes(context, railwayNetGrid)) {
 			val cell = railwayNetGrid[point]
 			if (cell is NodeCell) {
 				writeNodeCell(builder, point, cell)
 			}
 		}
+	}
 
-		// Write all TrackBlocks (edges in the graph)
+	private fun writeEdges(builder: StringBuilder, context: DefaultEditingContext) {
 		for (entry in context.getGraph().entrySet()) {
 			val key = entry.key
 			val value = entry.value
@@ -92,11 +111,6 @@ class XmlContextWriter {
 
 			writeTrackBlock(builder, p1, p2, key, value)
 		}
-
-		// Close root element
-		builder.append("</").append(ROOT_ELEMENT_NAME).append(">\n")
-
-		return builder.toString()
 	}
 
 	private fun writeNodeCell(
@@ -141,10 +155,11 @@ class XmlContextWriter {
 		appendAttribute(builder, TO + X, p2.x)
 		appendAttribute(builder, TO + Y, p2.y)
 
-		// Get segments from Doubleton
+		// The graph contract guarantees Doubleton<Point, Segment> keys —
+		// each edge maps two Points to their respective Segments.
 		@Suppress("UNCHECKED_CAST")
 		val doubleton =
-			key as cz.vutbr.fit.interlockSim.util.Doubleton<Point, Cell.Segment>
+			key as Doubleton<Point, Cell.Segment>
 		val seg1 = doubleton.getValue(p1)
 		val seg2 = doubleton.getValue(p2)
 		checkNotNull(seg1) { "Segment for point $p1 not found" }
@@ -181,7 +196,7 @@ class XmlContextWriter {
 		name: String,
 		value: String
 	) {
-		builder.append(name).append("=\"").append(value).append("\" ")
+		builder.append(name).append("=\"").append(escapeXml(value)).append("\" ")
 	}
 
 	private fun appendEnumAttribute(
@@ -191,4 +206,11 @@ class XmlContextWriter {
 	) {
 		builder.append(name).append("=\"").append(value.name).append("\" ")
 	}
+
+	private fun escapeXml(value: String): String = value
+		.replace("&", "&amp;")
+		.replace("<", "&lt;")
+		.replace(">", "&gt;")
+		.replace("\"", "&quot;")
+		.replace("'", "&apos;")
 }

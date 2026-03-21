@@ -1,5 +1,10 @@
 package cz.vutbr.fit.interlockSim.xml
 
+import assertk.assertThat
+import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -10,9 +15,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -33,59 +35,42 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesGridDimensions() {
-		val originalXml = minimalNetworkXml()
-
-		val ctx1 = reader.parse(originalXml)
+		val ctx1 = reader.parse(minimalNetworkXml())
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
-			assertEquals(30, ctx2.getRailWayNetGrid().cols)
-			assertEquals(30, ctx2.getRailWayNetGrid().rows)
-		} finally {
-			ctx2.close()
+		reader.parse(generatedXml).use { ctx2 ->
+			assertThat(ctx2.getRailWayNetGrid().cols).isEqualTo(30)
+			assertThat(ctx2.getRailWayNetGrid().rows).isEqualTo(30)
 		}
 	}
 
 	@Test
 	fun roundTripPreservesInOutCount() {
-		val originalXml = minimalNetworkXml()
-
-		val ctx1 = reader.parse(originalXml)
+		val ctx1 = reader.parse(minimalNetworkXml())
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
-			assertEquals(2, ctx2.getInOuts().size)
-		} finally {
-			ctx2.close()
+		reader.parse(generatedXml).use { ctx2 ->
+			assertThat(ctx2.getInOuts()).hasSize(2)
 		}
 	}
 
 	@Test
 	fun roundTripPreservesInOutPositionsAndNames() {
-		val originalXml = minimalNetworkXml()
-
-		val ctx1 = reader.parse(originalXml)
+		val ctx1 = reader.parse(minimalNetworkXml())
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
+		reader.parse(generatedXml).use { ctx2 ->
 			val grid = ctx2.getRailWayNetGrid()
 			val cellA = grid[Point(1, 1)]
-			assertNotNull(cellA, "Cell at (1,1) should exist")
-			assertIs<InOut>(cellA)
-			assertEquals("A", cellA.getName())
+			assertThat(cellA).isNotNull().isInstanceOf<InOut>()
+			assertThat((cellA as InOut).getName()).isEqualTo("A")
 
 			val cellB = grid[Point(5, 5)]
-			assertNotNull(cellB, "Cell at (5,5) should exist")
-			assertIs<InOut>(cellB)
-			assertEquals("B", cellB.getName())
-		} finally {
-			ctx2.close()
+			assertThat(cellB).isNotNull().isInstanceOf<InOut>()
+			assertThat((cellB as InOut).getName()).isEqualTo("B")
 		}
 	}
 
@@ -102,17 +87,13 @@ class XmlRoundTripTest {
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
+		reader.parse(generatedXml).use { ctx2 ->
 			val cell = ctx2.getRailWayNetGrid()[Point(3, 3)]
-			assertNotNull(cell)
-			assertIs<RailSemaphore>(cell)
-			assertEquals(Cell.SpatialType.VERTICAL, cell.getSpatialType())
-			assertIs<OrientedPathSeparator>(cell)
-			assertEquals(true, (cell as OrientedPathSeparator).getOrientation())
-			assertEquals("S1", cell.getName())
-		} finally {
-			ctx2.close()
+			assertThat(cell).isNotNull().isInstanceOf<RailSemaphore>()
+			assertThat(cell!!.getSpatialType()).isEqualTo(Cell.SpatialType.VERTICAL)
+			assertThat(cell).isInstanceOf<OrientedPathSeparator>()
+			assertThat((cell as OrientedPathSeparator).getOrientation()).isEqualTo(true)
+			assertThat((cell as RailSemaphore).getName()).isEqualTo("S1")
 		}
 	}
 
@@ -129,15 +110,11 @@ class XmlRoundTripTest {
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
+		reader.parse(generatedXml).use { ctx2 ->
 			val cell = ctx2.getRailWayNetGrid()[Point(3, 3)]
-			assertNotNull(cell)
-			assertIs<RailSwitch>(cell)
-			assertEquals(RailSwitch.Type.SIMPLE_LEFT_FALSE, cell.type)
-			assertEquals("W1", cell.getName())
-		} finally {
-			ctx2.close()
+			assertThat(cell).isNotNull().isInstanceOf<RailSwitch>()
+			assertThat((cell as RailSwitch).type).isEqualTo(RailSwitch.Type.SIMPLE_LEFT_FALSE)
+			assertThat(cell.getName()).isEqualTo("W1")
 		}
 	}
 
@@ -156,26 +133,21 @@ class XmlRoundTripTest {
 		val generatedXml = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(generatedXml)
-		try {
+		reader.parse(generatedXml).use { ctx2 ->
 			val graph = ctx2.getGraph()
 			val edges = graph.entrySet()
-			assertEquals(1, edges.size, "Should have exactly one track block")
+			assertThat(edges).hasSize(1)
 
 			val entry = edges.first()
 			val trackBlock = entry.value
-			assertEquals(100.0, trackBlock.length())
-		} finally {
-			ctx2.close()
+			assertThat(trackBlock.length()).isEqualTo(100.0)
 		}
 	}
 
 	@Test
 	fun doubleRoundTripProducesStableXml() {
-		val originalXml = minimalNetworkXml()
-
 		// First round trip
-		val ctx1 = reader.parse(originalXml)
+		val ctx1 = reader.parse(minimalNetworkXml())
 		val xml1 = writer.generate(ctx1)
 		ctx1.close()
 
@@ -185,7 +157,7 @@ class XmlRoundTripTest {
 		ctx2.close()
 
 		// The XML from second round trip should be identical to first
-		assertEquals(xml1, xml2, "Double round-trip should produce stable XML")
+		assertThat(xml2).isEqualTo(xml1)
 	}
 
 	// --- Helper methods ---

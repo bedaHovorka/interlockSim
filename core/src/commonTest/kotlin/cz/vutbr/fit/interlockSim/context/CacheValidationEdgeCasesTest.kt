@@ -49,41 +49,42 @@ class CacheValidationEdgeCasesTest : KoinComponent {
 
 	@Test
 	fun `multiple different wrapper types can coexist in cache`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			val inouts = context.getInOuts()
+			val dynamicInOut = inouts.first()
+			val dynamicSemaphore = dynamicInOut.inSemaphore
 
-		val inouts = context.getInOuts()
-		val dynamicInOut = inouts.first()
-		val dynamicSemaphore = dynamicInOut.inSemaphore
+			val retrievedInOut = context.toDynamic(dynamicInOut.staticRef)
+			val retrievedSemaphore = context.toDynamic(dynamicSemaphore.staticRef)
 
-		val retrievedInOut = context.toDynamic(dynamicInOut.staticRef)
-		val retrievedSemaphore = context.toDynamic(dynamicSemaphore.staticRef)
-
-		assertThat(retrievedInOut).isSameInstanceAs(dynamicInOut)
-		assertThat(retrievedSemaphore).isSameInstanceAs(dynamicSemaphore)
+			assertThat(retrievedInOut).isSameInstanceAs(dynamicInOut)
+			assertThat(retrievedSemaphore).isSameInstanceAs(dynamicSemaphore)
+		}
 	}
 
 	@Test
 	fun `cache preserves wrapper identity across different access patterns`() {
-		val context = loadVyhybnaSimulationContext()
+		loadVyhybnaSimulationContext().use { context ->
+			val fromGetInOuts = context.getInOuts().first()
+			val fromToDynamic = context.toDynamic(fromGetInOuts.staticRef)
 
-		val fromGetInOuts = context.getInOuts().first()
-		val fromToDynamic = context.toDynamic(fromGetInOuts.staticRef)
-
-		assertThat(fromToDynamic).isSameInstanceAs(fromGetInOuts)
+			assertThat(fromToDynamic).isSameInstanceAs(fromGetInOuts)
+		}
 	}
 
 	@Test
 	fun `nested dynamic objects - InOut contains semaphores`() {
-		val context = loadVyhybnaSimulationContext()
-		val dynamicInOut = context.getInOuts().first()
+		loadVyhybnaSimulationContext().use { context ->
+			val dynamicInOut = context.getInOuts().first()
 
-		val inSemaphore = dynamicInOut.inSemaphore
-		val outSemaphore = dynamicInOut.outSemaphore
+			val inSemaphore = dynamicInOut.inSemaphore
+			val outSemaphore = dynamicInOut.outSemaphore
 
-		val fromCache1 = context.toDynamic(inSemaphore.staticRef)
-		val fromCache2 = context.toDynamic(outSemaphore.staticRef)
+			val fromCache1 = context.toDynamic(inSemaphore.staticRef)
+			val fromCache2 = context.toDynamic(outSemaphore.staticRef)
 
-		assertThat(fromCache1).isSameInstanceAs(inSemaphore)
-		assertThat(fromCache2).isSameInstanceAs(outSemaphore)
+			assertThat(fromCache1).isSameInstanceAs(inSemaphore)
+			assertThat(fromCache2).isSameInstanceAs(outSemaphore)
+		}
 	}
 }

@@ -24,8 +24,8 @@ import cz.vutbr.fit.interlockSim.xml.XmlContextReader
  * Cross-platform test fixtures with embedded XML strings.
  *
  * Replaces [TestFixtures] (JVM-only, file-based) for commonTest usage.
- * All XML strings are canonical representations of the test fixture files
- * from `src/test/resources/`.
+ * All XML strings are embedded because commonTest has no file I/O on native targets.
+ * A JVM test (XmlRoundTripTest) validates these against the file-based fixtures.
  */
 object CommonTestFixtures {
 
@@ -170,7 +170,11 @@ object CommonTestFixtures {
 		processFactory: SimulationProcessFactory
 	): DefaultSimulationContext {
 		val editingCtx = reader.parse(xml)
-		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		try {
+			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		} finally {
+			editingCtx.close()
+		}
 	}
 
 	/**
@@ -181,6 +185,10 @@ object CommonTestFixtures {
 		processFactory: SimulationProcessFactory
 	): DefaultSimulationContext {
 		val editingCtx = DefaultEditingContext(100, 100)
-		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		try {
+			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		} finally {
+			editingCtx.close()
+		}
 	}
 }

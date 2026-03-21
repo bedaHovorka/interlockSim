@@ -1,5 +1,10 @@
 package cz.vutbr.fit.interlockSim.xml
 
+import assertk.assertThat
+import assertk.assertions.contains
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isTrue
+import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -11,8 +16,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertContains
-import kotlin.test.assertTrue
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -30,13 +33,10 @@ class XmlContextWriterTest {
 
 	@Test
 	fun generateProducesXmlDeclarationAndDoctype() {
-		val ctx = createMinimalContext()
-		try {
+		createMinimalContext().use { ctx ->
 			val xml = XmlContextWriter().generate(ctx)
-			assertTrue(xml.startsWith("<?xml version=\"1.0\"?>"))
-			assertContains(xml, "<!DOCTYPE net>")
-		} finally {
-			ctx.close()
+			assertThat(xml).startsWith("<?xml version=\"1.0\"?>")
+			assertThat(xml).contains("<!DOCTYPE net>")
 		}
 	}
 
@@ -44,136 +44,93 @@ class XmlContextWriterTest {
 	fun generateProducesRootElementWithDimensions() {
 		val ctx = DefaultEditingContext(20, 25)
 		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
-		try {
-			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "<net X=\"20\" Y=\"25\" >")
-			assertContains(xml, "</net>")
-		} finally {
-			ctx.close()
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("<net X=\"20\" Y=\"25\" >")
+			assertThat(xml).contains("</net>")
 		}
 	}
 
 	@Test
 	fun generateContainsInOutElements() {
-		val ctx = createMinimalContext()
-		try {
+		createMinimalContext().use { ctx ->
 			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "<InOut ")
-			assertContains(xml, "name=\"A\"")
-			assertContains(xml, "name=\"B\"")
-			assertContains(xml, "SpatialType=\"HORIZONTAL\"")
-		} finally {
-			ctx.close()
+			assertThat(xml).contains("<InOut ")
+			assertThat(xml).contains("name=\"A\"")
+			assertThat(xml).contains("name=\"B\"")
+			assertThat(xml).contains("SpatialType=\"HORIZONTAL\"")
 		}
 	}
 
 	@Test
 	fun generateContainsOrientationForInOut() {
-		val ctx = createMinimalContext()
-		try {
+		createMinimalContext().use { ctx ->
 			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "orientation=\"false\"")
-			assertContains(xml, "orientation=\"true\"")
-		} finally {
-			ctx.close()
+			assertThat(xml).contains("orientation=\"false\"")
+			assertThat(xml).contains("orientation=\"true\"")
 		}
 	}
 
 	@Test
 	fun generateContainsRailSemaphore() {
 		val ctx = DefaultEditingContext(30, 30)
-		ctx.putCell(
-			Point(1, 1),
-			InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		)
-		ctx.putCell(
-			Point(3, 3),
-			RailSemaphore("S1", true, Cell.SpatialType.VERTICAL)
-		)
-		try {
-			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "<RailSemaphore ")
-			assertContains(xml, "SpatialType=\"VERTICAL\"")
-			assertContains(xml, "orientation=\"true\"")
-			assertContains(xml, "name=\"S1\"")
-		} finally {
-			ctx.close()
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.putCell(Point(3, 3), RailSemaphore("S1", true, Cell.SpatialType.VERTICAL))
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("<RailSemaphore ")
+			assertThat(xml).contains("SpatialType=\"VERTICAL\"")
+			assertThat(xml).contains("orientation=\"true\"")
+			assertThat(xml).contains("name=\"S1\"")
 		}
 	}
 
 	@Test
 	fun generateContainsRailSwitch() {
 		val ctx = DefaultEditingContext(30, 30)
-		ctx.putCell(
-			Point(1, 1),
-			InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		)
-		ctx.putCell(
-			Point(5, 5),
-			RailSwitch("W1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE)
-		)
-		try {
-			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "<RailSwitch ")
-			assertContains(xml, "Type=\"SIMPLE_LEFT_FALSE\"")
-			assertContains(xml, "name=\"W1\"")
-		} finally {
-			ctx.close()
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.putCell(Point(5, 5), RailSwitch("W1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_FALSE))
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("<RailSwitch ")
+			assertThat(xml).contains("Type=\"SIMPLE_LEFT_FALSE\"")
+			assertThat(xml).contains("name=\"W1\"")
 		}
 	}
 
 	@Test
 	fun generateContainsTrackBlockWhenCellsAreJoined() {
-		val ctx = createContextWithTrack()
-		try {
+		createContextWithTrack().use { ctx ->
 			val xml = XmlContextWriter().generate(ctx)
-			assertContains(xml, "<SimpleTrackBlock ")
-			assertContains(xml, "fromX=")
-			assertContains(xml, "toX=")
-			assertContains(xml, "length=")
-			assertContains(xml, "maxSpeedfrom=")
-			assertContains(xml, "maxSpeedto=")
-		} finally {
-			ctx.close()
+			assertThat(xml).contains("<SimpleTrackBlock ")
+			assertThat(xml).contains("fromX=")
+			assertThat(xml).contains("toX=")
+			assertThat(xml).contains("length=")
+			assertThat(xml).contains("maxSpeedfrom=")
+			assertThat(xml).contains("maxSpeedto=")
 		}
 	}
 
 	@Test
 	fun generateOmitsNameForUnnamedSemaphore() {
 		val ctx = DefaultEditingContext(30, 30)
-		ctx.putCell(
-			Point(1, 1),
-			InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		)
-		ctx.putCell(
-			Point(3, 3),
-			RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		)
-		try {
-			val xml = XmlContextWriter().generate(ctx)
-			// The unnamed semaphore should not have a name attribute
-			// (its getName() returns auto-generated name which is non-empty)
-			// Actually unnamed semaphores still get auto-generated names via setName
-			// so we just verify it contains a RailSemaphore element
-			assertContains(xml, "<RailSemaphore ")
-		} finally {
-			ctx.close()
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.putCell(Point(3, 3), RailSemaphore(true, Cell.SpatialType.HORIZONTAL))
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("<RailSemaphore ")
 		}
 	}
 
 	@Test
 	fun generateProducesTabIndentedElements() {
-		val ctx = createMinimalContext()
-		try {
+		createMinimalContext().use { ctx ->
 			val xml = XmlContextWriter().generate(ctx)
-			val lines = xml.lines()
-			val inOutLines = lines.filter { it.contains("<InOut ") }
-			assertTrue(inOutLines.isNotEmpty())
+			val inOutLines = xml.lines().filter { it.contains("<InOut ") }
+			assertThat(inOutLines).isNotEmpty()
 			for (line in inOutLines) {
-				assertTrue(line.startsWith("\t"), "Element should be tab-indented: $line")
+				assertThat(line.startsWith("\t")).isTrue()
 			}
-		} finally {
-			ctx.close()
 		}
 	}
 
@@ -181,14 +138,8 @@ class XmlContextWriterTest {
 
 	private fun createMinimalContext(): DefaultEditingContext {
 		val ctx = DefaultEditingContext(30, 30)
-		ctx.putCell(
-			Point(1, 1),
-			InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		)
-		ctx.putCell(
-			Point(5, 5),
-			InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		)
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.putCell(Point(5, 5), InOut("B", true, Cell.SpatialType.HORIZONTAL))
 		return ctx
 	}
 
