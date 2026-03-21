@@ -75,7 +75,13 @@ kotlin {
 	// linuxX64 target: runs native commonTest subset (NativeSanityTest).
 	// kDisco 0.3.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
 	// Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
-	linuxX64()
+	linuxX64 {
+		compilations["main"].cinterops {
+			create("libxml2") {
+				defFile = file("src/nativeInterop/cinterop/libxml2.def")
+			}
+		}
+	}
 
 	sourceSets {
 		val commonMain by getting {
