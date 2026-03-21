@@ -139,6 +139,7 @@
   <!-- South Layer 3 switches - MERGE switches (tracks converge here) -->
   <RailSwitch X="52" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
   <RailSwitch X="52" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
+  <!-- SIMPLE_RIGHT_TRUE (not FALSE): bypass row needs segment D for the Y=22 car-train terminal siding -->
   <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE"/>
 
   <!-- South Layer 4 signals (between merge and diverge switches) -->
