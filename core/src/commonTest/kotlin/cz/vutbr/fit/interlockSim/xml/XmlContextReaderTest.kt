@@ -337,7 +337,7 @@ class XmlContextReaderTest {
 					fromSegment="F" toSegment="A"
 					length="50.0" maxSpeedfrom="60.0" maxSpeedto="60.0"/>
 			</net>"""
-		val path = "/tmp/interlockSim-reader-test-${currentTimeMillisKMP()}.xml"
+		val path = "interlockSim-reader-test-${currentTimeMillisKMP()}.xml"
 		writeTextFile(path, xml)
 		try {
 			XmlContextReader().parseFile(path).use { ctx ->
