@@ -19,3 +19,5 @@ actual fun writeTextFile(path: String, content: String) {
 actual fun deleteFile(path: String) {
 	java.io.File(path).delete()
 }
+
+actual fun fileExists(path: String): Boolean = java.io.File(path).exists()

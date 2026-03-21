@@ -31,3 +31,13 @@ expect fun writeTextFile(path: String, content: String)
  * @param path Absolute or relative file path
  */
 expect fun deleteFile(path: String)
+
+/**
+ * Checks whether a file exists at the given path.
+ *
+ * KMP expect/actual: JVM uses [java.io.File.exists]; native uses POSIX access(F_OK).
+ *
+ * @param path Absolute or relative file path
+ * @return true if the file exists, false otherwise
+ */
+expect fun fileExists(path: String): Boolean

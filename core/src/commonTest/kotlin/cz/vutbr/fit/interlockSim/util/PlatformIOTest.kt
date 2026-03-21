@@ -65,10 +65,25 @@ class PlatformIOTest {
 	}
 
 	@Test
-	fun `deleteFile removes the file so readTextFile throws afterwards`() {
+	fun `deleteFile removes file so it no longer exists`() {
 		val path = tempPath("delete")
 		writeTextFile(path, "some content")
+		assertThat(fileExists(path)).isEqualTo(true)
 		deleteFile(path)
+		assertThat(fileExists(path)).isEqualTo(false)
 		assertFailsWith<IllegalStateException> { readTextFile(path) }
+	}
+
+	@Test
+	fun `fileExists returns false for non-existent path`() {
+		val path = "/tmp/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
+		assertThat(fileExists(path)).isEqualTo(false)
+	}
+
+	@Test
+	fun `fileExists returns true for existing file`() {
+		val path = tempPath("exists")
+		writeTextFile(path, "content")
+		assertThat(fileExists(path)).isEqualTo(true)
 	}
 }
