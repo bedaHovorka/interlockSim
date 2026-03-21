@@ -63,6 +63,7 @@ For complete build system documentation including dependency management, GitHub 
 
 - `core/` - KMP `:core` subproject (domain model, simulation engine, XML)
 - `desktop-ui/` - JVM `:desktop-ui` subproject (GUI, DI bootstrap, Main entry)
+- `fast-sim/` - native `:fast-sim` subproject (linuxX64 CLI binary, **requires Linux host**)
   - `desktop-ui/src/main/kotlin/` - Main source code
   - `desktop-ui/src/test/kotlin/` - Test source code
   - `desktop-ui/src/main/resources/` - Resource files (XML examples)
