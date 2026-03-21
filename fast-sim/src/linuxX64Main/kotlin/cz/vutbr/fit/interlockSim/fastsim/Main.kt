@@ -44,10 +44,10 @@ fun main(args: Array<String>) {
 			else -> { printUsage(); 2 }
 		}
 	} catch (e: IllegalArgumentException) {
-		System.err.println("Error: ${e.message}")
+		eprintln("Error: ${e.message}")
 		2
 	} catch (e: Exception) {
-		System.err.println("Error: ${e.message}")
+		eprintln("Error: ${e.message}")
 		1
 	} finally {
 		stopKoin()
@@ -63,7 +63,7 @@ private fun runExample(args: Array<String>): Int {
 	}
 	val name = args[1]
 	val endTime = args[2].toLongOrNull() ?: run {
-		System.err.println("Error: endTime must be a number, got '${args[2]}'")
+		eprintln("Error: endTime must be a number, got '${args[2]}'")
 		return 2
 	}
 	val ctx = NativeExampleRegistry.create(name, endTime)
@@ -79,7 +79,7 @@ private fun runSim(args: Array<String>): Int {
 	}
 	val path = args[1]
 	val endTime = args[2].toLongOrNull() ?: run {
-		System.err.println("Error: endTime must be a number, got '${args[2]}'")
+		eprintln("Error: endTime must be a number, got '${args[2]}'")
 		return 2
 	}
 	val ctx = NativeContextFactory().createFromFile(path)
@@ -90,11 +90,11 @@ private fun runSim(args: Array<String>): Int {
 }
 
 private fun printUsage() {
-	System.err.println(
+	eprintln(
 		"""
 		Usage:
 		  fast-sim example <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.available})
-		  fast-sim sim <path> <endTime>        Run simulation from XML file
+		  fast-sim sim <path> <endTime>        Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
 		  fast-sim --version                   Print version
 		""".trimIndent()
 	)
