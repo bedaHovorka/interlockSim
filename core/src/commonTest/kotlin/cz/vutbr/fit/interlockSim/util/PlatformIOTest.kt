@@ -63,4 +63,12 @@ class PlatformIOTest {
 		val path = "/tmp/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
 		assertFailsWith<IllegalStateException> { readTextFile(path) }
 	}
+
+	@Test
+	fun `deleteFile removes the file so readTextFile throws afterwards`() {
+		val path = tempPath("delete")
+		writeTextFile(path, "some content")
+		deleteFile(path)
+		assertFailsWith<IllegalStateException> { readTextFile(path) }
+	}
 }
