@@ -7,13 +7,22 @@
  *
  * Bedrich Hovorka
  */
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import platform.posix.fprintf
+import platform.posix.stderr
 import kotlin.system.exitProcess
+
+/** Writes [message] followed by a newline to stderr. Native-compatible replacement for [System.err.println]. */
+private fun eprintln(message: String?) {
+	fprintf(stderr, "%s\n", message ?: "null")
+}
 
 /**
  * Entry point for the :fast-sim native CLI binary.
