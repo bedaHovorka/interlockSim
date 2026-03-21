@@ -741,6 +741,20 @@ class Train :
 		}
 	}
 
+	/**
+	 * Periodic 1 Hz reporter for continuous train telemetry.
+	 *
+	 * The `while (!terminate) { ... hold(1.0) }` pattern is **not** an infinite loop —
+	 * it is the standard kDisco idiom for a periodic Process. `hold(1.0)` is a
+	 * *suspending* call that yields to the simulation scheduler and resumes after
+	 * 1.0 simulation-time unit has elapsed. The loop therefore fires once per
+	 * simulated second and blocks between firings, consuming no CPU.
+	 *
+	 * Termination is co-operative: [terminate] sets the flag and calls
+	 * `Process.activate(this)` to wake up a mid-hold suspension, after which the
+	 * loop condition `!terminate` is false and [actions] returns normally.
+	 * This mirrors the identical pattern used by [Motor].
+	 */
 	private inner class TrainReporter : Process() {
 		private var terminate = false
 
