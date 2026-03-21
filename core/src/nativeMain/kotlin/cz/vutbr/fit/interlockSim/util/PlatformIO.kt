@@ -25,16 +25,17 @@ actual fun readTextFile(path: String): String = memScoped {
 		check(fseek(file, 0L, SEEK_END) == 0) { "Cannot seek to end of file: $path" }
 		val size = ftell(file)
 		check(size >= 0L) { "Cannot determine size of file: $path" }
-		check(size <= Int.MAX_VALUE.toLong()) { "File too large to read into memory: $path (size=$size)" }
+		check(size < Int.MAX_VALUE.toLong()) { "File too large to read into memory: $path (size=$size)" }
 		check(fseek(file, 0L, SEEK_SET) == 0) { "Cannot seek to start of file: $path" }
 		if (size == 0L) return@memScoped ""
 
-		val buffer = allocArray<ByteVar>(size + 1)
+		val len = size.toInt()
+		val buffer = allocArray<ByteVar>(len + 1)
 		val bytesRead = fread(buffer, 1.convert(), size.convert(), file)
 		check(bytesRead.toLong() == size) {
 			"Failed to read all bytes from file: $path (read ${bytesRead.toLong()} of $size)"
 		}
-		buffer[size.toInt()] = 0
+		buffer[len] = 0
 		buffer.toKString()
 	} finally {
 		fclose(file)
