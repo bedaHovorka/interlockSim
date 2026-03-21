@@ -14,8 +14,6 @@
 package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
-import assertk.assertions.isEqualTo
-import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import kotlin.test.BeforeTest
 import kotlin.test.Test

@@ -12,12 +12,8 @@ package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
 import assertk.assertions.isEmpty
-import assertk.assertions.isEqualTo
-import assertk.assertions.isFalse
-import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
-import cz.vutbr.fit.interlockSim.testutil.withMessage
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
