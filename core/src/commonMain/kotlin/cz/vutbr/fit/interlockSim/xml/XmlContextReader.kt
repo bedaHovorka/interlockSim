@@ -88,7 +88,7 @@ class XmlContextReader {
 						val localName = reader.localName
 						val attrs = readAttributes(reader)
 
-						val pair = pair(localName, netElementDepth, attrs, editingContext)
+						val pair = processStartElement(localName, netElementDepth, attrs, editingContext)
 						editingContext = pair.first
 						netElementDepth = pair.second
 					}
@@ -124,7 +124,7 @@ class XmlContextReader {
 		return ctx
 	}
 
-	private fun pair(
+	private fun processStartElement(
 		localName: String,
 		netElementDepth: Int,
 		attrs: Map<String, String>,
