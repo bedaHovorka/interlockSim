@@ -12,9 +12,6 @@ plugins {
 	id("org.jlleitschuh.gradle.ktlint")
 }
 
-// Load versions from root gradle.properties
-val kotlinVersion: String by project
-
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -32,7 +29,9 @@ kotlin {
 	sourceSets {
 		val linuxX64Main by getting {
 			dependencies {
-				// All simulation logic, XML parsing, Koin DI come transitively via :core
+				// :core commonMain uses KMP artifacts with linuxX64 klibs:
+				// koin-core 3.5.6, kdisco-core 0.3.0, xmlutil:core 0.91.0-RC1,
+				// kotlin-logging 7.0.3 — all validated by :core:compileKotlinLinuxX64 passing.
 				implementation(project(":core"))
 			}
 		}
@@ -51,8 +50,10 @@ tasks.named("compileKotlinLinuxX64") {
 // Detekt Configuration
 // ===========================================
 
+// :fast-sim is entirely new Kotlin code (not converted from Java), so detekt-strict.yml applies.
+// See CLAUDE.md: "detekt-strict.yml — strict rules for new Kotlin code written from scratch".
 detekt {
-	config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
+	config.setFrom(files("${rootProject.projectDir}/detekt-strict.yml"))
 	buildUponDefaultConfig = true
 	allRules = false
 	source.setFrom("src/linuxX64Main/kotlin")
@@ -62,6 +63,8 @@ detekt {
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+	// Detekt runs on the JVM as a static analysis tool regardless of the compilation
+	// target. jvmTarget here refers to Detekt's analysis engine, not the native binary.
 	jvmTarget = "21"
 	reports {
 		html.required.set(true)
@@ -101,7 +104,10 @@ ktlint {
 	}
 }
 
-// Disabled for consistency with :core and :desktop-ui — see their build files for rationale.
+// Disable ktlint checks — project-wide policy (:core and :desktop-ui have the same disable block).
+// Reason: tabs per .editorconfig conflict with ktlint's default spaces rule.
+// Detekt handles structural quality checks instead.
+// TODO: Re-enable ktlint project-wide once tab/space configuration is resolved (tracked).
 tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
 	enabled = false
 }

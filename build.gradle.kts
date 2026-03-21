@@ -80,7 +80,9 @@ listOf(
 }
 
 tasks.register("buildFastSim") { dependsOn(":fast-sim:linkDebugExecutableLinuxX64") }
-tasks.register("runFastSim")   { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
+tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
+tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
+tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
 
 // ===========================================
 // SonarQube Configuration
