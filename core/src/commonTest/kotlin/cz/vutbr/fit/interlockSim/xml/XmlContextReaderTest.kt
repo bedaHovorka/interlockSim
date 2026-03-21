@@ -348,4 +348,66 @@ class XmlContextReaderTest {
 			deleteFile(path)
 		}
 	}
+
+	// --- Tests for new XML attributes: currentMaxSpeed, currentTrackLength, currentNameString ---
+
+	@Test
+	fun parseNetElementWithCurrentMaxSpeed() {
+		val xml = """<?xml version="1.0"?>
+			<net X="10" Y="10" currentMaxSpeed="120.0">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+			</net>"""
+		XmlContextReader().parse(xml).use { ctx ->
+			assertThat(ctx.currentMaxSpeed).isEqualTo(120.0)
+		}
+	}
+
+	@Test
+	fun parseNetElementWithCurrentTrackLength() {
+		val xml = """<?xml version="1.0"?>
+			<net X="10" Y="10" currentTrackLength="400.0">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+			</net>"""
+		XmlContextReader().parse(xml).use { ctx ->
+			assertThat(ctx.currentTrackLength).isEqualTo(400.0)
+		}
+	}
+
+	@Test
+	fun parseNetElementWithCurrentNameString() {
+		val xml = """<?xml version="1.0"?>
+			<net X="10" Y="10" currentNameString="My Network">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+			</net>"""
+		XmlContextReader().parse(xml).use { ctx ->
+			assertThat(ctx.currentNameString).isEqualTo("My Network")
+		}
+	}
+
+	@Test
+	fun parseNetElementWithAllThreeNewAttributes() {
+		val xml = """<?xml version="1.0"?>
+			<net X="15" Y="15" currentMaxSpeed="90.5" currentTrackLength="250.0" currentNameString="Full Test">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+			</net>"""
+		XmlContextReader().parse(xml).use { ctx ->
+			assertThat(ctx.currentMaxSpeed).isEqualTo(90.5)
+			assertThat(ctx.currentTrackLength).isEqualTo(250.0)
+			assertThat(ctx.currentNameString).isEqualTo("Full Test")
+		}
+	}
+
+	@Test
+	fun parseNetElementWithoutNewAttributesUsesDefaults() {
+		val xml = """<?xml version="1.0"?>
+			<net X="10" Y="10">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+			</net>"""
+		XmlContextReader().parse(xml).use { ctx ->
+			// Defaults must not be changed by absent attributes
+			// (exact default values are defined in DefaultEditingContext)
+			assertThat(ctx.currentMaxSpeed >= 0.0).isEqualTo(true)
+			assertThat(ctx.currentTrackLength >= 0.0).isEqualTo(true)
+		}
+	}
 }
