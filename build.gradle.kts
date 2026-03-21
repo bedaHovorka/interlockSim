@@ -14,6 +14,8 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "12.1.2" apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.7" apply false
     id("me.champeau.jmh") version "0.7.2" apply false
+    id("app.cash.burst") version "2.4.0" apply false  // keep in sync with burstVersion in gradle.properties
+    id("dev.mokkery") version "2.7.3" apply false  // keep in sync with mokkeryVersion in gradle.properties
 
     id("org.sonarqube") version "6.2.0.5505"
     jacoco
