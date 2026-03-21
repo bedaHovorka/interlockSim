@@ -10,9 +10,11 @@
 package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -161,11 +163,17 @@ class Issue316RegressionTest : KoinTestBase() {
 		// We simulate enough merges (9+) to exceed the 2-occurrence threshold:
 		//   Loop 1: B → zB → vB → doB1 → vA → zA → A
 		//   Loop 2: A → zA → vA → doB1 → vB → zB → B   (B appears 2nd time — allowed)
-		//   Loop 3 attempt: B → zB  (zB/B would appear 3rd time — must be rejected gracefully)
+		//   Loop 3 attempt: B → zB  (B would appear 3rd time — must be rejected gracefully)
 		//
 		// For simplicity we simulate this as sequential path extensions using the
 		// available separators: B, zB, vB, doB1, vA, zA, A, then cycle back B, zB, vB...
 		// Each PathInfo covers one segment (separator → track → separator).
+		//
+		// NOTE: Segments 3→4 and 8→9 are topologically discontinuous (doB1→switchVA has no
+		// direct track in the test setup). This is an acceptable proxy for the bug scenario:
+		// the test validates PathInfo structural integrity (no malformed path, no truncation)
+		// rather than physical reachability.  The cycle guard fires on separator identity,
+		// not on track adjacency, so disconnected segments still exercise the fix correctly.
 
 		val trainId = "train_issue316"
 
@@ -176,14 +184,14 @@ class Issue316RegressionTest : KoinTestBase() {
 			Triple(inOutB, trackBtoZB, semaphoreZB),           // 1: B → zB
 			Triple(semaphoreZB, trackZBtoVB, switchVB),        // 2: zB → vB
 			Triple(switchVB, trackVBtoDoB1, semaphoreDoB1),    // 3: vB → doB1
-			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 4: vA → zA
+			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 4: vA → zA  (discontinuous from 3 — see note above)
 			Triple(semaphoreZA, trackZAtoA, inOutA),           // 5: zA → A
 			// Loop 2 (forward A→B, re-using same track blocks in reverse is not possible
 			// without actual reverse paths, so we simulate by re-using B→A segments)
 			Triple(inOutB, trackBtoZB, semaphoreZB),           // 6: B → zB  (2nd occurrence of B — allowed)
 			Triple(semaphoreZB, trackZBtoVB, switchVB),        // 7: zB → vB (2nd occurrence of zB — allowed)
 			Triple(switchVB, trackVBtoDoB1, semaphoreDoB1),    // 8: vB → doB1 (2nd occurrence of vB — allowed)
-			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 9: vA → zA  (2nd occurrence of vA — allowed)
+			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 9: vA → zA  (discontinuous from 8 — see note above)
 			Triple(semaphoreZA, trackZAtoA, inOutA),           // 10: zA → A  (2nd occurrence of zA — allowed)
 		)
 
@@ -213,7 +221,7 @@ class Issue316RegressionTest : KoinTestBase() {
 
 			val reservedPath = currentPathInfo!!.reservedPath
 			// A valid PathInfo must have at least 1 element
-			assertThat(reservedPath.size > 0).isTrue()
+			assertThat(reservedPath.size).isGreaterThan(0)
 
 			// A valid PathInfo must NOT end with a separator at the very last position
 			// unless it's also the ONLY element (single-element path is valid: start == target)
@@ -234,7 +242,7 @@ class Issue316RegressionTest : KoinTestBase() {
 
 				// Also verify path size never DECREASES after a valid merge
 				// (truncation was causing the path to shrink unexpectedly)
-				assertThat(reservedPath.size >= lastValidSize).isTrue()
+				assertThat(reservedPath.size).isGreaterThanOrEqualTo(lastValidSize)
 			}
 
 			// Update last valid size — after 3+ occurrence guard the size stays the same
@@ -247,7 +255,67 @@ class Issue316RegressionTest : KoinTestBase() {
 		// the PathInfo must still be non-null and its reserved path must be non-empty.
 		val finalPathInfo = registry.getPathInfo(trainId)
 		assertThat(finalPathInfo).isNotNull()
-		assertThat(finalPathInfo!!.reservedPath.size > 0).isTrue()
+		assertThat(finalPathInfo!!.reservedPath.size).isGreaterThan(0)
+	}
+
+	@Test
+	@DisplayName("3rd occurrence of separator triggers cycle guard: PathInfo stays unchanged (Issue #316 fix)")
+	fun cycleGuardFires_returnsUnchangedPathInfo() {
+		// This test directly exercises the `return old` code path in mergePathInfo().
+		//
+		// Setup: register 2 normal merges so inOutB appears twice in the merged path.
+		// Then attempt a 3rd merge that would cause inOutB to appear a 3rd time.
+		// Expected: registry retains the PathInfo from after the 2nd merge (unchanged).
+
+		val trainId = "train_cycle_guard"
+
+		// Step 1: register first segment B → zB
+		val seg1 = createPathInfo(
+			start = inOutB,
+			target = semaphoreZB,
+			path = listOf(inOutB, trackBtoZB, semaphoreZB)
+		)
+		registry.registerPathInfo(trainId, seg1)
+
+		// Step 2: register segment that brings inOutB back (2nd occurrence — allowed)
+		// We re-use the same track to simulate "circular route" without reverse paths
+		val seg2 = createPathInfo(
+			start = inOutB,
+			target = semaphoreZB,
+			path = listOf(inOutB, trackBtoZB, semaphoreZB)
+		)
+		registry.registerPathInfo(trainId, seg2)
+
+		// Capture PathInfo after the 2nd merge — this should be preserved after the guard fires
+		val pathInfoAfterTwoMerges = registry.getPathInfo(trainId)
+		assertThat(pathInfoAfterTwoMerges).isNotNull()
+		val sizeAfterTwoMerges = pathInfoAfterTwoMerges!!.reservedPath.size
+
+		// Step 3: attempt a 3rd merge with inOutB — this would make inOutB appear 3+ times
+		// The cycle guard MUST fire and return the old PathInfo unchanged
+		val seg3 = createPathInfo(
+			start = inOutB,
+			target = semaphoreZB,
+			path = listOf(inOutB, trackBtoZB, semaphoreZB)
+		)
+		registry.registerPathInfo(trainId, seg3)
+
+		// Verify: PathInfo is still non-null and has the SAME size as after the 2nd merge
+		// (i.e. the 3rd merge was rejected — `return old` fired)
+		val pathInfoAfterGuard = registry.getPathInfo(trainId)
+		assertThat(pathInfoAfterGuard).isNotNull()
+		assertThat(pathInfoAfterGuard!!.reservedPath.size).isEqualTo(sizeAfterTwoMerges)
+
+		// Verify the path is still structurally valid (no consecutive separators)
+		val pathElements = pathInfoAfterGuard.reservedPath.toList()
+		assertThat(pathElements.size).isGreaterThan(0)
+		if (pathElements.size > 1) {
+			val lastElement = pathElements.last()
+			val secondToLast = pathElements[pathElements.size - 2]
+			val lastIsSeparator = lastElement is DynamicPathSeparator
+			val secondToLastIsAlsoSeparator = secondToLast is DynamicPathSeparator
+			assertThat(lastIsSeparator && secondToLastIsAlsoSeparator).isFalse()
+		}
 	}
 
 	// Helper: create PathInfo from a list of path elements

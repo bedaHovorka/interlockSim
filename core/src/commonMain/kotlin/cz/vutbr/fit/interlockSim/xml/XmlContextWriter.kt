@@ -58,6 +58,9 @@ class XmlContextWriter {
 		builder.append('<').append(ROOT_ELEMENT_NAME).append(' ')
 		appendAttribute(builder, X, grid.cols)
 		appendAttribute(builder, Y, grid.rows)
+		// Numeric properties are always emitted (even at their default 0.0) so that a
+		// future reader can always rely on their presence.  The string property is only
+		// emitted when non-empty to avoid spurious empty-attribute noise in saved files.
 		appendAttribute(builder, "currentMaxSpeed", context.currentMaxSpeed)
 		appendAttribute(builder, "currentTrackLength", context.currentTrackLength)
 		if (context.currentNameString.isNotEmpty()) {

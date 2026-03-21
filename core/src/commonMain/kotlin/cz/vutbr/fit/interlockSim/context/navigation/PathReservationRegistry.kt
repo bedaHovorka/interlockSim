@@ -592,10 +592,27 @@ class PathReservationRegistry(
 	 * When old and new have the same block with different entry directions,
 	 * the NEW direction overwrites the old (most recent direction is used).
 	 *
+	 * ## Resource Safety
+	 *
+	 * `mergePathInfo()` is a **pure data-structure operation** — it does not acquire or
+	 * release track blocks or switches. All resource locking happens in
+	 * `DefaultPathReservationService.reservePath()` via `registerAtomic()` and
+	 * `registerSwitches()`, which use their own tracking maps (`trainToBlocks` /
+	 * `trainToSwitches`). Those maps are independent of PathInfo, so `releasePath()` can
+	 * still find and free all resources even when `return old` aborts the PathInfo merge.
+	 *
+	 * **PathInfo / block divergence (accepted trade-off):** When `return old` fires, the
+	 * train's `trainToBlocks` entry already contains the newly reserved blocks (step 2d in
+	 * `reservePath()`), but `trainToPathInfo` still holds the pre-merge `old`. This means
+	 * `TrainNavigationService` will not guide the train through those new blocks — the train
+	 * effectively ignores the just-reserved segment. This is intentional: the cycle guard
+	 * prevents a malformed PathInfo from being stored. The train will retry on its next
+	 * dispatch tick.
+	 *
 	 * @param old Previous PathInfo (Tail may still be navigating through this)
 	 * @param new New PathInfo (Front just reserved this)
-	 * @return Merged PathInfo covering both old and new paths
-	 * @throws IllegalStateException if new.start appears multiple times in path
+	 * @return Merged PathInfo covering both old and new paths, or [old] unchanged if the
+	 *         merge would create a third occurrence of any separator (cycle guard)
 	 * @since Issue #296 Phase 8
 	 */
 	private fun mergePathInfo(

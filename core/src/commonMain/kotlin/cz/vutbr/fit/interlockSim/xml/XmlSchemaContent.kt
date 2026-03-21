@@ -48,8 +48,8 @@ object XmlSchemaContent {
              </xs:sequence>
              <xs:attribute name="X" type="xs:int" use="required"/>
              <xs:attribute name="Y" type="xs:int" use="required"/>
-             <xs:attribute name="currentMaxSpeed" type="xs:decimal" use="optional"/>
-             <xs:attribute name="currentTrackLength" type="xs:decimal" use="optional"/>
+             <xs:attribute name="currentMaxSpeed" type="xs:double" use="optional"/>
+             <xs:attribute name="currentTrackLength" type="xs:double" use="optional"/>
              <xs:attribute name="currentNameString" type="xs:string" use="optional"/>
            </xs:complexType>
          </xs:element>
