@@ -1,17 +1,21 @@
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -23,7 +27,7 @@ import org.koin.core.context.stopKoin
  *
  * @since 2026-03-20 (KMP Step 4 — linuxX64 native test subset)
  */
-class NativeSanityTest {
+class NativeSanityTest : KoinComponent {
 
     @BeforeTest
     fun setUpKoin() {
@@ -93,5 +97,33 @@ class NativeSanityTest {
         // Verifies SimpleTestProcess.kt links on linuxX64 by referencing its class.
         // Full simulation is not run here (requires a kDisco environment).
         assertEquals("SimpleTestProcess", SimpleTestProcess::class.simpleName)
+    }
+
+    @Test
+    fun `DefaultSimulationContext scope opens and closes without error`() {
+        val processFactory = get<SimulationProcessFactory>()
+        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        val simCtx = DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+        try {
+            assertNotNull(simCtx, "Simulation context should not be null")
+            // Scope is created internally by DefaultSimulationContext constructor.
+            // Verify it is accessible and open.
+            assertNotNull(simCtx.scope, "Simulation context scope should not be null")
+        } finally {
+            simCtx.close()
+        }
+    }
+
+    @Test
+    fun `TopologyNavigator resolves from simulation context`() {
+        val processFactory = get<SimulationProcessFactory>()
+        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        val simCtx = DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+        try {
+            val navigator: TopologyNavigator = simCtx.getTopologyNavigator()
+            assertNotNull(navigator, "TopologyNavigator should be resolvable from simulation context")
+        } finally {
+            simCtx.close()
+        }
     }
 }
