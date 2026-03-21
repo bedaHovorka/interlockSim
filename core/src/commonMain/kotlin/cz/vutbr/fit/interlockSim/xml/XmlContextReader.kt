@@ -69,55 +69,9 @@ class XmlContextReader {
 						val localName = reader.localName
 						val attrs = readAttributes(reader)
 
-						when (localName) {
-							ROOT_ELEMENT_NAME -> {
-								netElementDepth++
-								check(netElementDepth <= 1) {
-									"Nested net elements are not allowed"
-								}
-								val cols = requireInt(attrs, X)
-								val rows = requireInt(attrs, Y)
-								editingContext = DefaultEditingContext(cols, rows)
-							}
-
-							"InOut" -> {
-								val ctx = requireContext(editingContext)
-								putNodeCell(ctx, attrs, parseInOut(attrs))
-							}
-
-							"RailSemaphore" -> {
-								val ctx = requireContext(editingContext)
-								putNodeCell(ctx, attrs, parseRailSemaphore(attrs))
-							}
-
-							"RailSwitch" -> {
-								val ctx = requireContext(editingContext)
-								putNodeCell(ctx, attrs, parseRailSwitch(attrs))
-							}
-
-							"SimpleTrackBlock" -> {
-								val ctx = requireContext(editingContext)
-								parseAndInsertTrackBlock(ctx, attrs)
-							}
-
-							else -> {
-								// Behavioral note: the old JVM SAX handler threw SAXException on
-								// unknown elements. This KMP reader intentionally warns and skips.
-								// Rationale:
-								//   1. data.xsd declares <net> with no content model, so XSD
-								//      validation cannot restrict which child elements appear —
-								//      unknown tags cannot be caught at the schema layer.
-								//   2. Warn-and-skip is consistent with lenient KMP XML parsing;
-								//      the WARN log is the diagnostic signal for typos.
-								// A typo in a tag name produces an empty network + a WARN log.
-								if (!NodeCellFactory.isKnownTag(localName)) {
-									logger.warn {
-										"Unrecognized XML element <$localName> — " +
-											"skipping (possible typo?)"
-									}
-								}
-							}
-						}
+						val pair = pair(localName, netElementDepth, attrs, editingContext)
+						editingContext = pair.first
+						netElementDepth = pair.second
 					}
 
 					EventType.END_ELEMENT -> {
@@ -149,6 +103,66 @@ class XmlContextReader {
 		}
 
 		return ctx
+	}
+
+	private fun pair(
+		localName: String,
+		netElementDepth: Int,
+		attrs: Map<String, String>,
+		editingContext: DefaultEditingContext?
+	): Pair<DefaultEditingContext?, Int> {
+		var netElementDepth1 = netElementDepth
+		var editingContext1 = editingContext
+		when (localName) {
+			ROOT_ELEMENT_NAME -> {
+				netElementDepth1++
+				check(netElementDepth1 <= 1) {
+					"Nested net elements are not allowed"
+				}
+				val cols = requireInt(attrs, X)
+				val rows = requireInt(attrs, Y)
+				editingContext1 = DefaultEditingContext(cols, rows)
+			}
+
+			"InOut" -> {
+				val ctx = requireContext(editingContext1)
+				putNodeCell(ctx, attrs, parseInOut(attrs))
+			}
+
+			"RailSemaphore" -> {
+				val ctx = requireContext(editingContext1)
+				putNodeCell(ctx, attrs, parseRailSemaphore(attrs))
+			}
+
+			"RailSwitch" -> {
+				val ctx = requireContext(editingContext1)
+				putNodeCell(ctx, attrs, parseRailSwitch(attrs))
+			}
+
+			"SimpleTrackBlock" -> {
+				val ctx = requireContext(editingContext1)
+				parseAndInsertTrackBlock(ctx, attrs)
+			}
+
+			else -> {
+				// Behavioral note: the old JVM SAX handler threw SAXException on
+				// unknown elements. This KMP reader intentionally warns and skips.
+				// Rationale:
+				//   1. data.xsd declares <net> with no content model, so XSD
+				//      validation cannot restrict which child elements appear —
+				//      unknown tags cannot be caught at the schema layer.
+				//   2. Warn-and-skip is consistent with lenient KMP XML parsing;
+				//      the WARN log is the diagnostic signal for typos.
+				// A typo in a tag name produces an empty network + a WARN log.
+				if (!NodeCellFactory.isKnownTag(localName)) {
+					logger.warn {
+						"Unrecognized XML element <$localName> — " +
+							"skipping (possible typo?)"
+					}
+				}
+			}
+		}
+		return Pair(editingContext1, netElementDepth1)
 	}
 
 	// --- Element helpers ---
