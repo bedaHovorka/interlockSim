@@ -10,6 +10,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
+import cz.vutbr.fit.interlockSim.util.deleteFile
+import cz.vutbr.fit.interlockSim.util.writeTextFile
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -321,6 +324,28 @@ class XmlContextReaderTest {
 			</net>"""
 		XmlContextReader().parse(xml).use { ctx ->
 			assertThat(ctx.getInOuts().size).isEqualTo(1)
+		}
+	}
+
+	@Test
+	fun parseFileLoadsContextFromDisk() {
+		val xml = """<?xml version="1.0"?>
+			<net X="20" Y="20">
+				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+				<SimpleTrackBlock fromX="1" fromY="1" toX="5" toY="5"
+					fromSegment="F" toSegment="A"
+					length="50.0" maxSpeedfrom="60.0" maxSpeedto="60.0"/>
+			</net>"""
+		val path = "/tmp/interlockSim-reader-test-${currentTimeMillisKMP()}.xml"
+		writeTextFile(path, xml)
+		try {
+			XmlContextReader().parseFile(path).use { ctx ->
+				assertThat(ctx.getRailWayNetGrid().cols).isEqualTo(20)
+				assertThat(ctx.getInOuts().size).isEqualTo(2)
+			}
+		} finally {
+			deleteFile(path)
 		}
 	}
 }
