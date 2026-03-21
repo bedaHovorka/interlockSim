@@ -53,6 +53,9 @@ jdisco/target/
 .ivy2/
 lib/
 
+# Kotlin
+.kotlin/
+
 # Gradle artifacts
 .gradle/
 .gradle-build-cache/

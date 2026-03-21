@@ -84,7 +84,7 @@ object ContextTransformer {
 	): SimulationContext {
 		logger.info {
 			"Transforming EditingContext to SimulationContext: " +
-				"grid ${editingContext.getRailWayNetGrid().getCols()}x${editingContext.getRailWayNetGrid().getRows()}, " +
+				"grid ${editingContext.getRailWayNetGrid().cols}x${editingContext.getRailWayNetGrid().rows}, " +
 				"${editingContext.getGraph().size()} track blocks"
 		}
 

@@ -91,8 +91,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(100)
-			assertThat(grid.getRows()).isEqualTo(100)
+			assertThat(grid.cols).isEqualTo(100)
+			assertThat(grid.rows).isEqualTo(100)
 		}
 
 		@Test
@@ -190,8 +190,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(50)
-			assertThat(grid.getRows()).isEqualTo(50)
+			assertThat(grid.cols).isEqualTo(50)
+			assertThat(grid.rows).isEqualTo(50)
 			// Should have 2 InOut elements (minimum required)
 			assertThat(context.getInOuts()::size).isEqualTo(2)
 		}
@@ -234,8 +234,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
 			// Check grid size (from rudyUjezd.xml: X=100, Y=100)
-			assertThat(grid.getCols()).isEqualTo(100)
-			assertThat(grid.getRows()).isEqualTo(100)
+			assertThat(grid.cols).isEqualTo(100)
+			assertThat(grid.rows).isEqualTo(100)
 			// Check presence of at least one InOut, RailSwitch, and RailSemaphore
 			var hasInOut = false
 			var hasSwitch = false
@@ -470,8 +470,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			// Verify structure is preserved
 			assertThat(loadedContext).isNotNull()
-			assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(100)
-			assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(100)
+			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(100)
 
 			// Verify the InOut cell exists
 			var foundInOut = false
@@ -518,8 +518,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			// Verify grid size is preserved
 			val grid = loadedContext.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(50)
-			assertThat(grid.getRows()).isEqualTo(50)
+			assertThat(grid.cols).isEqualTo(50)
+			assertThat(grid.rows).isEqualTo(50)
 		}
 
 		@Test
@@ -599,8 +599,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(500)
-			assertThat(grid.getRows()).isEqualTo(500)
+			assertThat(grid.cols).isEqualTo(500)
+			assertThat(grid.rows).isEqualTo(500)
 		}
 
 		@Test
@@ -618,8 +618,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(10)
-			assertThat(grid.getRows()).isEqualTo(10)
+			assertThat(grid.cols).isEqualTo(10)
+			assertThat(grid.rows).isEqualTo(10)
 		}
 
 		@Test
@@ -750,7 +750,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		private fun findYardAccessPoint(context: EditingContext): InOut? {
 			// For yard, we look for InOuts in middle Y range
 			val grid = context.getRailWayNetGrid()
-			val midY = grid.getRows() / 2
+			val midY = grid.rows / 2
 
 			for (entry in grid) {
 				val cell = entry.value
@@ -861,8 +861,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			assertThat(context).isNotNull()
 			val grid = context.getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(70)
-			assertThat(grid.getRows()).isEqualTo(25)
+			assertThat(grid.cols).isEqualTo(70)
+			assertThat(grid.rows).isEqualTo(25)
 
 			// Verify grid is not empty
 			var hasElements = false
@@ -937,14 +937,14 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val grid = context.getRailWayNetGrid()
 
 			// Find signals in north throat area (X=1-20)
-			val northSignals = findSignalsInArea(context, 1, 20, 0, grid.getRows() - 1)
+			val northSignals = findSignalsInArea(context, 1, 20, 0, grid.rows - 1)
 			assertThat(northSignals.size)
 				.withMessage("North throat should have entry signals")
 				.isGreaterThan(3)
 
 			// Find signals in south throat area (X=50-69)
 			val southSignals =
-				findSignalsInArea(context, 50, grid.getCols() - 1, 0, grid.getRows() - 1)
+				findSignalsInArea(context, 50, grid.cols - 1, 0, grid.rows - 1)
 			assertThat(southSignals.size)
 				.withMessage("South throat should have exit signals")
 				.isGreaterThan(3)
@@ -1030,8 +1030,8 @@ class XMLContextFactoryTest : KoinTestBase() {
 
 			// Verify structure preserved
 			assertThat(loadedContext).isNotNull()
-			assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(70)
-			assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(25)
+			assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(70)
+			assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(25)
 
 			// Verify element counts match
 			val originalCounts = countElements(originalContext.getRailWayNetGrid() as DefaultRailWayNetGrid)

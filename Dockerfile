@@ -31,7 +31,8 @@ WORKDIR /build/interlockSim
 
 # Install git before COPY layers so this layer is cached independently of source changes.
 # Moving it here avoids re-downloading git on every gradle.properties / build.gradle.kts bump.
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/include/unicode /usr/include/libxml2/unicode
 
 # Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
 # These files are checked into git and ensure consistent Gradle version

@@ -155,7 +155,7 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// Then: The grid should be accessible and match
 			val grid = canvas.getEditingContext().getRailWayNetGrid()
-			assertThat(grid.getCols()).isEqualTo(100) // Default grid size from XMLContextFactory.createEmptyContext()
+			assertThat(grid.cols).isEqualTo(100) // Default grid size from XMLContextFactory.createEmptyContext()
 		}
 	}
 
@@ -240,8 +240,8 @@ class RailwayNetGridCanvasTest : AbstractFrameTestBase() {
 
 			// Then: Preferred size should match grid dimensions
 			val grid = editingContext.getRailWayNetGrid()
-			val expectedWidth = RailwayNetGridCanvas.getCellWidth() * grid.getCols()
-			val expectedHeight = RailwayNetGridCanvas.getCellHeight() * grid.getRows()
+			val expectedWidth = RailwayNetGridCanvas.getCellWidth() * grid.cols
+			val expectedHeight = RailwayNetGridCanvas.getCellHeight() * grid.rows
 
 			assertThat(canvas.preferredSize.width).isEqualTo(expectedWidth)
 			assertThat(canvas.preferredSize.height).isEqualTo(expectedHeight)

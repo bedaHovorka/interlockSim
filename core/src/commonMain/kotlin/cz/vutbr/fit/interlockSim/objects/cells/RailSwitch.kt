@@ -190,28 +190,21 @@ class RailSwitch : NodeCell {
 	}
 }
 
-private class SwitchMap<V> : HashMap<Type, HashMap<Cell.SpatialType, V>>() {
+private class SwitchMap<V> {
+	private val map: HashMap<Type, HashMap<Cell.SpatialType, V>> = HashMap()
+
 	fun put(
 		t: Type,
 		st: Cell.SpatialType,
 		v: V
 	) {
-		var subMap = get(t)
-		if (subMap == null) {
-			subMap = HashMap()
-			put(t, subMap)
-		}
-		subMap.put(st, v)
+		map.getOrPut(t) { HashMap() }[st] = v
 	}
 
 	fun get(
 		t: Type,
 		st: Cell.SpatialType
-	): V? {
-		val subMap = get(t)
-		if (subMap == null) return null
-		return subMap.get(st)
-	}
+	): V? = map[t]?.get(st)
 }
 
 private val logger = KotlinLogging.logger {}

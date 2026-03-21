@@ -78,7 +78,7 @@ class DynamicRailSwitch(
 	 * Not thread-safe by design: concurrent add/remove may lose an update.
 	 * Acceptable because simulation and GUI both run single-threaded.
 	 */
-	@Volatile
+	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
@@ -145,7 +145,6 @@ class DynamicRailSwitch(
 		}
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun getPathConfWithException(
 		from: Cell.Segment?,
 		to: Cell.Segment?

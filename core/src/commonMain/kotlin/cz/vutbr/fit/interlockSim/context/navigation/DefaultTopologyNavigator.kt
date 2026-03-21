@@ -375,14 +375,11 @@ class DefaultTopologyNavigator(
 		current ?: return null
 
 		// Query graph for all edges assigned to this location
-		// Note: assignedEdges signature is problematic - returns raw Java Map
-		// Use explicit cast and Java Map methods
-		@Suppress("UNCHECKED_CAST")
-		val assignedEdges = context.getGraph().assignedEdges(location) as java.util.Map<Cell.Segment, TrackBlock>
+		val assignedEdges = context.getGraph().assignedEdges(location)
 
-		// Find the segment that connects to the current block using Java Map iteration
-		for (segment in assignedEdges.keySet()) {
-			if (assignedEdges.get(segment) == current) {
+		// Find the segment that connects to the current block
+		for (segment in assignedEdges.keys) {
+			if (assignedEdges[segment] == current) {
 				return segment
 			}
 		}

@@ -74,8 +74,8 @@ object GridTransformer {
 	 * @throws IllegalStateException if unknown cell type is encountered
 	 */
 	fun transformGrid(staticGrid: RailwayNetGrid<Cell>): TransformationResult {
-		val cols = staticGrid.getCols()
-		val rows = staticGrid.getRows()
+		val cols = staticGrid.cols
+		val rows = staticGrid.rows
 		
 		// Create new grid for dynamic cells
 		val dynamicGrid = DefaultRailWayNetGrid(cols, rows)
@@ -117,8 +117,12 @@ object GridTransformer {
 			if (cell is InOut && dynamicCell is DynamicInOut) {
 				// Map InOut's semaphores to their Dynamic wrappers
 				// These semaphores might be used in paths before they're encountered as separate cells
-				staticToDynamicMap.putIfAbsent(cell.getInSemaphore(), dynamicCell.inSemaphore)
-				staticToDynamicMap.putIfAbsent(cell.getOutSemaphore(), dynamicCell.outSemaphore)
+				if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) {
+					staticToDynamicMap[cell.getInSemaphore()] = dynamicCell.inSemaphore
+				}
+				if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) {
+					staticToDynamicMap[cell.getOutSemaphore()] = dynamicCell.outSemaphore
+				}
 			}
 		}
 		

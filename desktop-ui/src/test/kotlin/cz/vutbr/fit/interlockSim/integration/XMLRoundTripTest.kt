@@ -275,12 +275,12 @@ class XMLRoundTripTest : KoinTestBase() {
 		val loadedContext = xmlFactory.createContext(xmlFile) as EditingContext
 
 		// Verify basic structure is preserved
-		val originalCols = originalContext.getRailWayNetGrid().getCols()
-		val loadedCols = loadedContext.getRailWayNetGrid().getCols()
+		val originalCols = originalContext.getRailWayNetGrid().cols
+		val loadedCols = loadedContext.getRailWayNetGrid().cols
 		assertThat(loadedCols).isEqualTo(originalCols)
 
-		val originalRows = originalContext.getRailWayNetGrid().getRows()
-		val loadedRows = loadedContext.getRailWayNetGrid().getRows()
+		val originalRows = originalContext.getRailWayNetGrid().rows
+		val loadedRows = loadedContext.getRailWayNetGrid().rows
 		assertThat(loadedRows).isEqualTo(originalRows)
 
 		// Verify InOuts count
@@ -295,8 +295,8 @@ class XMLRoundTripTest : KoinTestBase() {
 
 		// Verify at least one switch exists (vyhybna has switches)
 		var foundSwitch = false
-		for (x in 0 until loadedContext.getRailWayNetGrid().getCols()) {
-			for (y in 0 until loadedContext.getRailWayNetGrid().getRows()) {
+		for (x in 0 until loadedContext.getRailWayNetGrid().cols) {
+			for (y in 0 until loadedContext.getRailWayNetGrid().rows) {
 				val cell = loadedContext.getRailWayNetGrid().getCellAt(x, y)
 				if (cell is RailSwitch) {
 					foundSwitch = true
@@ -309,8 +309,8 @@ class XMLRoundTripTest : KoinTestBase() {
 
 		// Verify at least one semaphore exists
 		var foundSemaphore = false
-		for (x in 0 until loadedContext.getRailWayNetGrid().getCols()) {
-			for (y in 0 until loadedContext.getRailWayNetGrid().getRows()) {
+		for (x in 0 until loadedContext.getRailWayNetGrid().cols) {
+			for (y in 0 until loadedContext.getRailWayNetGrid().rows) {
 				val cell = loadedContext.getRailWayNetGrid().getCellAt(x, y)
 				if (cell is RailSemaphore) {
 					foundSemaphore = true

@@ -46,7 +46,7 @@ class DynamicTrack(
 	 * Not thread-safe by design: concurrent add/remove may lose an update.
 	 * Acceptable because simulation and GUI both run single-threaded.
 	 */
-	@Volatile
+	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	// Static properties delegated from wrapped object
@@ -276,7 +276,6 @@ class DynamicTrack(
 		return ok
 	}
 
-	@Throws(TrackOperationException::class)
 	private fun exceptionStateChange(
 		from: TrackFacility.State,
 		to: TrackFacility.State

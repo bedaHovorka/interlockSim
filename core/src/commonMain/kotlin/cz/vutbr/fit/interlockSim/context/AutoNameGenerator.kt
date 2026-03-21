@@ -43,7 +43,7 @@ object AutoNameGenerator {
 		context: EditingContext
 	): String {
 		val prefix = getPrefixForClass(cellClass)
-		val counter = counters.getOrDefault(prefix, 0)
+		val counter = counters[prefix] ?: 0
 
 		var candidateNumber = counter + 1
 		var candidateName = "$prefix$candidateNumber"
@@ -95,8 +95,8 @@ object AutoNameGenerator {
 	private fun buildNameCache(context: EditingContext) {
 		val names = mutableSetOf<String>()
 		val grid = context.getRailWayNetGrid()
-		for (x in 0 until grid.getCols()) {
-			for (y in 0 until grid.getRows()) {
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
 				val point =
 					cz.vutbr.fit.interlockSim.util
 						.Point(x, y)

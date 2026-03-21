@@ -285,8 +285,8 @@ class ComplexNetworkTest : KoinTestBase() {
 		var switchCount = 0
 		var semaphoreCount = 0
 
-		for (x in 0 until edContext.getRailWayNetGrid().getCols()) {
-			for (y in 0 until edContext.getRailWayNetGrid().getRows()) {
+		for (x in 0 until edContext.getRailWayNetGrid().cols) {
+			for (y in 0 until edContext.getRailWayNetGrid().rows) {
 				val cell = edContext.getRailWayNetGrid().getCellAt(x, y)
 				when (cell) {
 					is RailSwitch -> switchCount++

@@ -1,16 +1,21 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.isSameAs
+import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
-import java.io.InputStream
+import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 
 /**
  * Regression tests for wrapper identity preservation after PR #95.
@@ -23,18 +28,27 @@ import java.io.InputStream
  * Regression: ShuntingLoop trains getting stuck due to duplicate DynamicInOut
  * wrapper creation in getInOuts() that overwrote GridTransformer's mappings.
  *
- * See investigation plan in git history for detailed root cause analysis.
+ * Migrated to commonTest: 2026-03 (KMP Task 6)
  */
-@DisplayName("Dynamic Wrapper Identity Tests (PR #95 Regression)")
-class DynamicWrapperIdentityTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
+class DynamicWrapperIdentityTest : KoinComponent {
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+	@BeforeTest
+	fun setUp() {
+		startKoin {
+			modules(commonCoreTestModule)
 		}
+	}
+
+	@AfterTest
+	fun tearDown() {
+		stopKoin()
+	}
+
+	private fun loadVyhybnaSimulationContext(): DefaultSimulationContext {
+		val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.VYHYBNA_XML)
+		val processFactory = get<SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+	}
 
 	/**
 	 * Test that getInOuts() returns the same wrapper instances that are in staticToDynamicMap.
@@ -42,25 +56,15 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	 * CRITICAL: getInOuts() must NOT create new wrappers. It should retrieve existing
 	 * wrappers from staticToDynamicMap that were created by GridTransformer during
 	 * context initialization.
-	 *
-	 * Failure mode: If getInOuts() creates duplicate wrappers, train path progression
-	 * fails because navigation compares wrapper instances for equality.
 	 */
 	@Test
 	fun `getInOuts returns same instances as staticToDynamicMap`() {
-		// Given: Simulation context with InOuts
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-				(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-					// When: Retrieving InOuts via getInOuts()
-					val inoutsFromGetter = context.getInOuts()
+		loadVyhybnaSimulationContext().use { context ->
+			val inoutsFromGetter = context.getInOuts()
 
-					// Then: Each InOut wrapper must be same instance as in staticToDynamicMap
-					for (dynamicInOut in inoutsFromGetter) {
-						val fromMap = context.toDynamic(dynamicInOut.staticRef)
-						assertThat(fromMap).isSameAs(dynamicInOut)
-					}
-				}
+			for (dynamicInOut in inoutsFromGetter) {
+				val fromMap = context.toDynamic(dynamicInOut.staticRef)
+				assertThat(fromMap).isSameInstanceAs(dynamicInOut)
 			}
 		}
 	}
@@ -70,49 +74,18 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 	 *
 	 * CRITICAL: GridTransformer creates dynamic wrappers and places them in both
 	 * the grid and staticToDynamicMap. These must be the same instances.
-	 *
-	 * Failure mode: If different wrappers exist in grid vs map, path lookups fail
-	 * because identity comparison (===) returns false for logically equal wrappers.
 	 */
 	@Test
 	fun `grid cells match staticToDynamicMap entries`() {
-		// Given: Simulation context with dynamic grid
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-				val grid = context.getRailWayNetGrid()
+		loadVyhybnaSimulationContext().use { context ->
+			val grid = context.getRailWayNetGrid()
 
-				// When/Then: Iterate through all grid cells
-				val cols = grid.getCols()
-				val rows = grid.getRows()
-
-				for (x in 0 until cols) {
-					for (y in 0 until rows) {
-						val cell = grid.getCellAt(x, y)
-						when (cell) {
-							is DynamicInOut -> {
-								// Grid DynamicInOut must match staticToDynamicMap entry
-								val fromMap = context.toDynamic(cell.staticRef)
-								assertThat(fromMap).isSameAs(cell)
-							}
-							is DynamicRailSwitch -> {
-								// Grid DynamicRailSwitch must match staticToDynamicMap entry
-								val fromMap = context.toDynamic(cell.staticRef)
-								assertThat(fromMap).isSameAs(cell)
-							}
-							is DynamicRailSemaphore -> {
-								// Grid DynamicRailSemaphore must match staticToDynamicMap entry
-								val fromMap = context.toDynamic(cell.staticRef)
-								assertThat(fromMap).isSameAs(cell)
-							}
-							// TrackBlockPart cells are not wrappers, skip them
-							else -> {
-								// No validation needed for non-wrapper cells
-							}
-						}
-					}
+			for (x in 0 until grid.cols) {
+				for (y in 0 until grid.rows) {
+					val cell = grid.getCellAt(x, y)
+					val staticRef = staticRefOf(cell) ?: continue
+					val fromMap = context.toDynamic(staticRef)
+					assertThat(fromMap).isSameInstanceAs(cell)
 				}
 			}
 		}
@@ -120,64 +93,48 @@ class DynamicWrapperIdentityTest : KoinTestBase() {
 
 	/**
 	 * Test that toDynamic() returns same wrapper instance for repeated calls.
-	 *
-	 * This verifies the singleton guarantee: calling toDynamic() multiple times
-	 * with the same static object must return the exact same wrapper instance.
 	 */
 	@Test
 	fun `toDynamic returns same instance for repeated calls`() {
-		// Given: Simulation context
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-				// When: Retrieving an InOut and calling toDynamic multiple times
-				val firstInOut = context.getInOuts().first()
-				val staticRef = firstInOut.staticRef
+		loadVyhybnaSimulationContext().use { context ->
+			val firstInOut = context.getInOuts().first()
+			val staticRef = firstInOut.staticRef
 
-				val wrapper1 = context.toDynamic(staticRef)
-				val wrapper2 = context.toDynamic(staticRef)
-				val wrapper3 = context.toDynamic(staticRef)
+			val wrapper1 = context.toDynamic(staticRef)
+			val wrapper2 = context.toDynamic(staticRef)
+			val wrapper3 = context.toDynamic(staticRef)
 
-				// Then: All calls must return the same instance
-				assertThat(wrapper1).isSameAs(firstInOut)
-				assertThat(wrapper2).isSameAs(firstInOut)
-				assertThat(wrapper3).isSameAs(firstInOut)
-			}
+			assertThat(wrapper1).isSameInstanceAs(firstInOut)
+			assertThat(wrapper2).isSameInstanceAs(firstInOut)
+			assertThat(wrapper3).isSameInstanceAs(firstInOut)
 		}
 	}
 
 	/**
-	 * Test that InOut semaphores are properly mapped.
-	 *
-	 * Each InOut has embedded in/out semaphores. These semaphores must be mapped
-	 * to their corresponding DynamicRailSemaphore wrappers.
+	 * Test that InOut semaphores are properly mapped to dynamic wrappers.
 	 */
 	@Test
 	fun `InOut semaphores are properly mapped to dynamic wrappers`() {
-		// Given: Simulation context with InOuts
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		(editingContextFactory.createContext(xmlStream) as EditingContext).use { editingContext ->
-			(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { context ->
-				// When/Then: Check each InOut's semaphores
-				for (dynamicInOut in context.getInOuts()) {
-					// InOut's embedded semaphores must be in staticToDynamicMap
-					val staticInOut = dynamicInOut.staticRef
-					val inSemaphore = staticInOut.getInSemaphore()
-					val outSemaphore = staticInOut.getOutSemaphore()
+		loadVyhybnaSimulationContext().use { context ->
+			for (dynamicInOut in context.getInOuts()) {
+				val staticInOut = dynamicInOut.staticRef
+				val inSemaphore = staticInOut.getInSemaphore()
+				val outSemaphore = staticInOut.getOutSemaphore()
 
-					// toDynamic() should find the semaphore wrappers
-					val dynamicInSemaphore = context.toDynamic(inSemaphore)
-					val dynamicOutSemaphore = context.toDynamic(outSemaphore)
+				val dynamicInSemaphore = context.toDynamic(inSemaphore)
+				val dynamicOutSemaphore = context.toDynamic(outSemaphore)
 
-					// Verify these are the same instances as in DynamicInOut
-					assertThat(dynamicInSemaphore).isSameAs(dynamicInOut.inSemaphore)
-					assertThat(dynamicOutSemaphore).isSameAs(dynamicInOut.outSemaphore)
-				}
+				assertThat(dynamicInSemaphore).isSameInstanceAs(dynamicInOut.inSemaphore)
+				assertThat(dynamicOutSemaphore).isSameInstanceAs(dynamicInOut.outSemaphore)
 			}
 		}
+	}
+
+	/** Extract the static reference from a dynamic wrapper, or null for non-wrapper cells. */
+	private fun staticRefOf(cell: Cell?): PathSeparator? = when (cell) {
+		is DynamicInOut -> cell.staticRef
+		is DynamicRailSwitch -> cell.staticRef
+		is DynamicRailSemaphore -> cell.staticRef
+		else -> null
 	}
 }

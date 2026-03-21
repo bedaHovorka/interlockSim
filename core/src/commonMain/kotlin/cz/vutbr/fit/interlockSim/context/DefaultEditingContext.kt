@@ -26,6 +26,7 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.putMulti
 import cz.vutbr.fit.interlockSim.util.valuesMulti
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
@@ -87,7 +88,7 @@ open class DefaultEditingContext(
 	 * @see close
 	 */
 	override val scope =
-		org.koin.core.context.GlobalContext
+		org.koin.mp.KoinPlatformTools.defaultContext()
 			.get()
 			.createScope(
 				// DefaultEditingContext does not override hashCode(), so this.hashCode()
@@ -368,7 +369,7 @@ open class DefaultEditingContext(
 		val vx = to.x - middle.x
 		val vy = to.y - middle.y
 
-		if (Math.abs(ux) > 1 || Math.abs(uy) > 1 || Math.abs(vx) > 1 || Math.abs(vy) > 1) {
+		if (abs(ux) > 1 || abs(uy) > 1 || abs(vx) > 1 || abs(vy) > 1) {
 			return null
 		}
 
@@ -404,8 +405,8 @@ open class DefaultEditingContext(
 			return false
 		}
 
-		var dx = Math.abs(p2Mut.x - p1Mut.x)
-		var dy = Math.abs(p2Mut.y - p1Mut.y)
+		var dx = abs(p2Mut.x - p1Mut.x)
+		var dy = abs(p2Mut.y - p1Mut.y)
 		val swapped = dy > dx
 
 		if (swapped) {
@@ -466,10 +467,10 @@ open class DefaultEditingContext(
 		checkNotFrozen("add cell")
 		// Validate coordinates are within grid bounds
 		val grid = getGrid()
-		if (key.x < 0 || key.y < 0 || key.x >= grid.getCols() || key.y >= grid.getRows()) {
+		if (key.x < 0 || key.y < 0 || key.x >= grid.cols || key.y >= grid.rows) {
 			throw ContextCreationException(
 				"Cell coordinates (${key.x},${key.y}) are outside grid bounds " +
-					"(${grid.getCols()}x${grid.getRows()})"
+					"(${grid.cols}x${grid.rows})"
 			)
 		}
 		if (grid.put(key, nodeCell) === nodeCell) return
@@ -478,7 +479,7 @@ open class DefaultEditingContext(
 		for (s1: Segment in nodeCell.joins()) {
 			val p = s1.transform(key)
 			// Skip neighbor if it's outside grid bounds (boundary cells)
-			if (p.x < 0 || p.y < 0 || p.x >= grid.getCols() || p.y >= grid.getRows()) {
+			if (p.x < 0 || p.y < 0 || p.x >= grid.cols || p.y >= grid.rows) {
 				continue
 			}
 			val cell2 = grid.get(p)
@@ -524,7 +525,7 @@ open class DefaultEditingContext(
 			firePropertyChange(
 				ContextChangeListener.CELL_REMOVED,
 				null,
-				String.format("Cell removed at (%d,%d)", key.x, key.y)
+				"Cell removed at (${key.x},${key.y})"
 			)
 		}
 	}
@@ -540,7 +541,7 @@ open class DefaultEditingContext(
 		firePropertyChange(
 			ContextChangeListener.TRACK_BLOCK_REMOVED,
 			null,
-			String.format("TrackBlock %s removed", line)
+			"TrackBlock $line removed"
 		)
 	}
 
@@ -582,13 +583,7 @@ open class DefaultEditingContext(
 			firePropertyChange(
 				ContextChangeListener.JOIN_FAILED,
 				null,
-				String.format(
-					"Join not success between (%d,%d) and (%d,%d)",
-					key1.x,
-					key1.y,
-					key2.x,
-					key2.y
-				)
+				"Join not success between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
 			)
 			return
 		}
@@ -600,13 +595,7 @@ open class DefaultEditingContext(
 		firePropertyChange(
 			ContextChangeListener.JOIN_CREATED,
 			null,
-			String.format(
-				"Join created between (%d,%d) and (%d,%d)",
-				key1.x,
-				key1.y,
-				key2.x,
-				key2.y
-			)
+			"Join created between (${key1.x},${key1.y}) and (${key2.x},${key2.y})"
 		)
 	}
 

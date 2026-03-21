@@ -38,14 +38,14 @@ interface RailwayNetGrid<out T : Cell> : Iterable<Map.Entry<Point, T>> {
 	operator fun get(point: Point): T?
 
 	/**
-	 * @return count of colums (width)
+	 * Count of columns (width)
 	 */
-	fun getCols(): Int
+	val cols: Int
 
 	/**
-	 * @return count of rows (height)
+	 * Count of rows (height)
 	 */
-	fun getRows(): Int
+	val rows: Int
 
 	/**
 	 * @param out

@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.objects.paths
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
-import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -165,7 +164,6 @@ abstract class AbstractPath protected constructor(
 	 *                       The lambda receives a Track parameter (guaranteed to be a TrackFacility).
 	 * @return true if all operations succeeded, false otherwise
 	 */
-	@Throws(TrackOperationException::class)
 	private fun pathIterating(
 		sep: DynamicPathSeparator,
 		operationName: String,
@@ -220,7 +218,6 @@ abstract class AbstractPath protected constructor(
 		}
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun separatorSetting(
 		methodName: String,
 		dynamicSeparator: DynamicPathSeparator,
@@ -264,7 +261,6 @@ abstract class AbstractPath protected constructor(
 		return true
 	}
 
-	@Throws(PathSeparatorChangeException::class)
 	private fun setUpSemaphores(sep: DynamicPathSeparator) {
 		// ukolem je natavit zpetnym pruchodem rychlosti semaforu podle vyhybek
 		var previousSwitch: DynamicPathSeparator? = null

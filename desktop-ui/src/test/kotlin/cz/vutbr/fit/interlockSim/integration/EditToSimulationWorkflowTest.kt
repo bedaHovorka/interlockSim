@@ -106,8 +106,8 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		assertThat(loadedContext).isNotNull()
 
 		// Step 5: Verify network integrity
-		assertThat(loadedContext.getRailWayNetGrid().getCols()).isEqualTo(50)
-		assertThat(loadedContext.getRailWayNetGrid().getRows()).isEqualTo(50)
+		assertThat(loadedContext.getRailWayNetGrid().cols).isEqualTo(50)
+		assertThat(loadedContext.getRailWayNetGrid().rows).isEqualTo(50)
 		val loadedSimCtx = loadedContext as EditingContext
 		val loadedInOuts: Collection<*> = loadedSimCtx.getInOuts()
 		assertThat(loadedInOuts).hasSize(2)
@@ -154,8 +154,8 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 
 		// Verify transformation succeeded
 		assertThat(simulationContext).isNotNull()
-		assertThat(simulationContext.getRailWayNetGrid().getCols()).isEqualTo(30)
-		assertThat(simulationContext.getRailWayNetGrid().getRows()).isEqualTo(30)
+		assertThat(simulationContext.getRailWayNetGrid().cols).isEqualTo(30)
+		assertThat(simulationContext.getRailWayNetGrid().rows).isEqualTo(30)
 
 		// Verify cells are preserved
 		val cellA = simulationContext.getRailWayNetGrid().getCellAt(5, 5)

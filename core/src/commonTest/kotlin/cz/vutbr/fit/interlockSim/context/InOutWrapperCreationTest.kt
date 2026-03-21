@@ -2,12 +2,16 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isNotNull
-import assertk.assertions.isSameAs
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import assertk.assertions.isSameInstanceAs
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 
 /**
  * Test that verifies InOut wrappers are created correctly without duplication.
@@ -16,43 +20,44 @@ import org.koin.test.inject
  * - getInOuts() does NOT create duplicate wrappers
  * - getInOuts() retrieves wrappers from staticToDynamicMap
  * - Multiple calls to getInOuts() return the same instances
+ *
+ * Migrated to commonTest: 2026-03 (KMP Task 6)
  */
-@DisplayName("InOut Wrapper Creation Test (PR #95 Fix)")
-class InOutWrapperCreationTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
+class InOutWrapperCreationTest : KoinComponent {
 
-	private fun loadVyhybnaContext(): SimulationContext =
-		TestFixtures.loadShuntingXml().use { xmlStream ->
-			val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-			simulationContextFactory.createContext(editingContext)
+	@BeforeTest
+	fun setUp() {
+		startKoin {
+			modules(commonCoreTestModule)
 		}
+	}
+
+	@AfterTest
+	fun tearDown() {
+		stopKoin()
+	}
+
+	private fun loadVyhybnaContext(): SimulationContext {
+		val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.VYHYBNA_XML)
+		val processFactory = get<SimulationProcessFactory>()
+		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+	}
 
 	/**
 	 * Test that getInOuts() successfully retrieves wrappers from staticToDynamicMap.
-	 *
-	 * This test verifies:
-	 * 1. Context creation succeeds
-	 * 2. getInOuts() can be called without exceptions
-	 * 3. Wrappers are retrieved (not created) from staticToDynamicMap
 	 *
 	 * If this test passes, it confirms the duplicate wrapper bug is fixed.
 	 */
 	@Test
 	fun `getInOuts retrieves existing wrappers without creating duplicates`() {
-		// Given: Simulation context loaded from vyhybna.xml
-		val context = loadVyhybnaContext()
+		loadVyhybnaContext().use { context ->
+			val inouts1 = context.getInOuts()
+			val inouts2 = context.getInOuts()
 
-		// When: Call getInOuts() multiple times
-		val inouts1 = context.getInOuts()
-		val inouts2 = context.getInOuts()
+			assertThat(inouts1).isNotNull()
+			assertThat(inouts2).isNotNull()
 
-		// Then: Both calls should succeed and return non-null
-		assertThat(inouts1).isNotNull()
-		assertThat(inouts2).isNotNull()
-
-		// Verify they return the same collection (singleton behavior)
-		@Suppress("DEPRECATION")
-		assertThat(inouts1).isSameAs(inouts2)
+			assertThat(inouts1).isSameInstanceAs(inouts2)
+		}
 	}
 }
