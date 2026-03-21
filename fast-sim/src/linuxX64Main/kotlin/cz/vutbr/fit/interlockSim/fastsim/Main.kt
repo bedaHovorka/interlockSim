@@ -19,6 +19,8 @@ import platform.posix.fprintf
 import platform.posix.stderr
 import kotlin.system.exitProcess
 
+private const val MIN_ARGS_COUNT = 3
+
 /** Writes [message] followed by a newline to stderr. Native-compatible replacement for [System.err.println]. */
 private fun eprintln(message: String?) {
 	fprintf(stderr, "%s\n", message ?: "null")
@@ -37,6 +39,7 @@ private fun eprintln(message: String?) {
  *
  * @since Issue #415 (fast-sim native CLI)
  */
+@Suppress("TooGenericExceptionCaught")
 fun main(args: Array<String>) {
 	if (args.isEmpty()) {
 		printUsage()
@@ -65,8 +68,9 @@ fun main(args: Array<String>) {
 	exitProcess(exitCode)
 }
 
+@Suppress("ReturnCount")
 private fun runExample(args: Array<String>): Int {
-	if (args.size < 3) {
+	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
 	}
@@ -81,8 +85,9 @@ private fun runExample(args: Array<String>): Int {
 	return 0
 }
 
+@Suppress("ReturnCount")
 private fun runSim(args: Array<String>): Int {
-	if (args.size < 3) {
+	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
 	}
@@ -102,7 +107,7 @@ private fun printUsage() {
 	eprintln(
 		"""
 		Usage:
-		  fast-sim example <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.available})
+		  fast-sim example <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
 		  fast-sim sim <path> <endTime>        Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
 		  fast-sim --version                   Print version
 		""".trimIndent()

@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.fastsim
 
 internal object EmbeddedResources {
-	val VYHYBNA_XML: String = """<?xml version="1.0"?>
+	const val VYHYBNA_XML: String = """<?xml version="1.0"?>
 <!DOCTYPE net>
 <net X="100" Y="100">
   <RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL" orientation="true" name="doA1"/>
