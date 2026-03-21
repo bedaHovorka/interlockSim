@@ -10,6 +10,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.readTextFile
 import io.github.oshai.kotlinlogging.KotlinLogging
 import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.XmlReader
@@ -46,6 +47,24 @@ class XmlContextReader {
 	}
 
 	/**
+	 * Parse an XML file into a [DefaultEditingContext].
+	 *
+	 * Reads the file using [readTextFile] (platform-agnostic file I/O),
+	 * then delegates to [parse].
+	 *
+	 * @param path Path to the XML file (absolute or relative)
+	 * @param skipStructuralValidation if true, skip InOut count validation
+	 * @return parsed DefaultEditingContext
+	 * @throws IllegalStateException if the file cannot be opened or read
+	 * @throws IllegalArgumentException on name validation errors
+	 * @throws IllegalStateException on parse or structural validation errors
+	 */
+	fun parseFile(
+		path: String,
+		skipStructuralValidation: Boolean = false
+	): DefaultEditingContext = parse(readTextFile(path), skipStructuralValidation)
+
+	/**
 	 * Parse XML string into a [DefaultEditingContext].
 	 *
 	 * @param xmlContent the XML string
@@ -69,7 +88,7 @@ class XmlContextReader {
 						val localName = reader.localName
 						val attrs = readAttributes(reader)
 
-						val pair = pair(localName, netElementDepth, attrs, editingContext)
+						val pair = processStartElement(localName, netElementDepth, attrs, editingContext)
 						editingContext = pair.first
 						netElementDepth = pair.second
 					}
@@ -105,7 +124,7 @@ class XmlContextReader {
 		return ctx
 	}
 
-	private fun pair(
+	private fun processStartElement(
 		localName: String,
 		netElementDepth: Int,
 		attrs: Map<String, String>,
