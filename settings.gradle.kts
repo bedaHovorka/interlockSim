@@ -9,6 +9,7 @@ rootProject.name = "interlockSim"
 
 include(":core")
 include(":desktop-ui")
+include(":fast-sim")
 
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)

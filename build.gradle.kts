@@ -79,6 +79,9 @@ listOf(
     tasks.register(name) { dependsOn(":desktop-ui:$name") }
 }
 
+tasks.register("buildFastSim") { dependsOn(":fast-sim:linkDebugExecutableLinuxX64") }
+tasks.register("runFastSim")   { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
+
 // ===========================================
 // SonarQube Configuration
 // ===========================================
