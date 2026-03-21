@@ -79,7 +79,7 @@ listOf(
     tasks.register(name) { dependsOn(":desktop-ui:$name") }
 }
 
-tasks.register("buildFastSim") { dependsOn(":fast-sim:linkDebugExecutableLinuxX64") }
+tasks.register("buildFastSim") { dependsOn(":fast-sim:linkDebugExecutableLinuxX64") }  // debug; flip to Release once #415 lands
 tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
 tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
 tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
