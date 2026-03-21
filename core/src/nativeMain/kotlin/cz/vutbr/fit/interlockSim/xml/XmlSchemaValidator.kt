@@ -26,17 +26,19 @@ actual class XmlSchemaValidator actual constructor() {
 	actual fun validate(xmlContent: String): XmlValidationResult {
 		xmlResetLastError()
 
-		// Encode once — cinterop would encode again if we passed the String directly.
+		// xmlReadMemory's cinterop binding maps `const char*` to `String?`, so K/N
+		// handles UTF-8 encoding internally. We compute the byte count separately via
+		// encodeToByteArray() — both use UTF-8, so the sizes are guaranteed to match.
 		// XML_PARSE_NONET blocks network access to prevent XXE via external entity URIs.
 		// Note: XML_PARSE_NOENT would *expand* entities (wrong direction for XXE prevention).
-		val xmlBytes = xmlContent.encodeToByteArray()
-		val doc = xmlReadMemory(xmlContent, xmlBytes.size, null, null, XML_PARSE_NONET.toInt())
+		val xmlByteCount = xmlContent.encodeToByteArray().size
+		val doc = xmlReadMemory(xmlContent, xmlByteCount, null, null, XML_PARSE_NONET.toInt())
 			?: return XmlValidationResult.failure(
-				listOf(
-					extractLastError()
-						?: "Failed to parse XML document"
-				)
+			listOf(
+				extractLastError()
+					?: "Failed to parse XML document"
 			)
+		)
 
 		return try {
 			validateWithSchema(doc)
@@ -54,14 +56,14 @@ actual class XmlSchemaValidator actual constructor() {
 		// creates a temporary that may be freed before
 		// xmlSchemaParse reads it).
 		val xsdContent = XmlSchemaContent.SCHEMA_XSD
-		val xsdBytes = xsdContent.encodeToByteArray()
-		val xsdDoc = xmlReadMemory(xsdContent, xsdBytes.size, null, null, XML_PARSE_NONET.toInt())
+		val xsdByteCount = xsdContent.encodeToByteArray().size
+		val xsdDoc = xmlReadMemory(xsdContent, xsdByteCount, null, null, XML_PARSE_NONET.toInt())
 			?: return XmlValidationResult.failure(
-				listOf(
-					extractLastError()
-						?: "Failed to parse XSD as XML document"
-				)
+			listOf(
+				extractLastError()
+					?: "Failed to parse XSD as XML document"
 			)
+		)
 
 		// Note: xmlSchemaNewDocParserCtxt takes ownership of the
 		// xsdDoc — do NOT call xmlFreeDoc on it separately.
