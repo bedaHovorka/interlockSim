@@ -1331,6 +1331,8 @@ open class DefaultSimulationContext(
 
 		val buf = if (report is StringBuilder) report else StringBuilder(report)
 		buf.insert(0, ' ')
+		// obj.toString() used directly (no reflection check); objects without custom toString()
+		// emit ClassName@hashcode in the log — acceptable trade-off for KMP compatibility
 		buf.insert(0, obj)
 		buf.insert(0, ' ')
 		buf.insert(0, Process.time())

@@ -28,77 +28,77 @@ import org.koin.dsl.module
  * @since 2026-03-20 (KMP Step 4 — split commonTest for linuxX64)
  */
 val commonCoreTestModule: Module =
-    module {
-        single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+	module {
+		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 
-        // Default editing context factory: creates a minimal linear-track context
-        factory<DefaultEditingContext> {
-            val ctx = DefaultEditingContext(30, 30)
-            val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-            val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-            val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
-            ctx.putCell(Point(1, 1), inA)
-            ctx.putCell(Point(5, 5), inB)
-            ctx.joinCells(Point(1, 1), Point(5, 5), track)
-            ctx
-        }
+		// Default editing context factory: creates a minimal linear-track context
+		factory<DefaultEditingContext> {
+			val ctx = DefaultEditingContext(30, 30)
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
+			ctx.putCell(Point(1, 1), inA)
+			ctx.putCell(Point(5, 5), inB)
+			ctx.joinCells(Point(1, 1), Point(5, 5), track)
+			ctx
+		}
 
-        factory<DefaultSimulationContext> {
-            val processFactory = get<SimulationProcessFactory>()
-            get<DefaultEditingContext>().use { editingCtx ->
-                DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
-            }
-        }
+		factory<DefaultSimulationContext> {
+			val processFactory = get<SimulationProcessFactory>()
+			get<DefaultEditingContext>().use { editingCtx ->
+				DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+			}
+		}
 
-        // Define editingScope for per-context lifecycle management
-        scope<DefaultEditingContext> {
-            scoped<TopologyNavigator> {
-                val context =
-                    getSource<DefaultEditingContext>()
-                        ?: throw IllegalStateException("DefaultEditingContext source not found in scope")
-                DefaultTopologyNavigator(context)
-            }
-        }
+		// Define editingScope for per-context lifecycle management
+		scope<DefaultEditingContext> {
+			scoped<TopologyNavigator> {
+				val context =
+					getSource<DefaultEditingContext>()
+						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
+				DefaultTopologyNavigator(context)
+			}
+		}
 
-        // Define simulationScope for per-context lifecycle management
-        scope<DefaultSimulationContext> {
-            scoped<TopologyNavigator> {
-                val context =
-                    getSource<DefaultSimulationContext>()
-                        ?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-                DefaultTopologyNavigator(context)
-            }
+		// Define simulationScope for per-context lifecycle management
+		scope<DefaultSimulationContext> {
+			scoped<TopologyNavigator> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultTopologyNavigator(context)
+			}
 
-            scoped<PathReservationRegistry> {
-                val context =
-                    getSource<DefaultSimulationContext>()
-                        ?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-                PathReservationRegistry(context)
-            }
+			scoped<PathReservationRegistry> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				PathReservationRegistry(context)
+			}
 
-            scoped<PathInfoBuilder> {
-                val context =
-                    getSource<DefaultSimulationContext>()
-                        ?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-                PathInfoBuilder(context)
-            }
+			scoped<PathInfoBuilder> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				PathInfoBuilder(context)
+			}
 
-            scoped<PathReservationService> {
-                val context =
-                    getSource<DefaultSimulationContext>()
-                        ?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-                val navigator: TopologyNavigator = get()
-                val registry: PathReservationRegistry = get()
-                val pathInfoBuilder: PathInfoBuilder = get()
-                DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
-            }
+			scoped<PathReservationService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val navigator: TopologyNavigator = get()
+				val registry: PathReservationRegistry = get()
+				val pathInfoBuilder: PathInfoBuilder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
+			}
 
-            scoped<TrainNavigationService> {
-                val context =
-                    getSource<DefaultSimulationContext>()
-                        ?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-                val registry: PathReservationRegistry = get()
-                DefaultTrainNavigationService(context, registry)
-            }
-        }
-    }
+			scoped<TrainNavigationService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val registry: PathReservationRegistry = get()
+				DefaultTrainNavigationService(context, registry)
+			}
+		}
+	}
