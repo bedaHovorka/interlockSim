@@ -69,8 +69,8 @@ class MenuBar : JMenuBar() {
 
 			try {
 				// Use lenient parsing to separate unparseable XML from validation errors
-				val editingContextFactory = getKoin().get<XMLContextFactory>()
-				val parseResult = editingContextFactory.createContextLenient(selectedFile)
+				val xmlContextFactory = getKoin().get<XMLContextFactory>()
+				val parseResult = xmlContextFactory.createContextLenient(selectedFile)
 
 				when {
 					// Case 1: Successfully parsed with no errors
@@ -100,7 +100,7 @@ class MenuBar : JMenuBar() {
 							frame.modificationTracker.setCurrentFile(selectedFile)
 							frame.modificationTracker.markClean()
 
-							// Check if context has insufficient InOuts and show warning (Issue #XXX, PR #358)
+							// Check if context has insufficient InOuts and show warning (Issue #80)
 							val inOutsCount = context.getInOuts().size
 							val minRequired = XMLContextFactory.MIN_INOUT_ELEMENTS
 							if (inOutsCount < minRequired) {
@@ -193,13 +193,13 @@ class MenuBar : JMenuBar() {
 		val editingContext = frame.railwayNetGridCanvas.getEditingContext()
 
 		// Validate InOut count before saving (Issue #80)
-		val inOutCount = editingContext.getInOuts().size
+		val inOutsCount = editingContext.getInOuts().size
 		val minRequired = XMLContextFactory.MIN_INOUT_ELEMENTS
 		if (!validateForSave(editingContext)) {
 			JOptionPane.showMessageDialog(
 				this,
 				"Railway network must have at least $minRequired InOut elements (entry and exit points).\n\n" +
-					"Current count: $inOutCount\n\n" +
+					"Current count: $inOutsCount\n\n" +
 					"InOut elements define where trains enter and exit the railway network.\n" +
 					"Please add more InOut elements before saving.",
 				"Cannot Save - Insufficient InOut Elements",
