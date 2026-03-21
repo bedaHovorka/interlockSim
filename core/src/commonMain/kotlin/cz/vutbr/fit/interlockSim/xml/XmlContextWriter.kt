@@ -99,16 +99,8 @@ class XmlContextWriter {
 		for (entry in context.getGraph().entrySet()) {
 			val key = entry.key
 			val value = entry.value
-			val keyIterator = key.iterator()
-			check(keyIterator.hasNext()) {
-				"Doubleton should have at least one element"
-			}
-			val p1 = keyIterator.next()
-			check(keyIterator.hasNext()) {
-				"Doubleton should have two elements"
-			}
-			val p2 = keyIterator.next()
-
+			// Doubleton guarantees exactly 2 elements; destructure via toList().
+			val (p1, p2) = key.toList()
 			writeTrackBlock(builder, p1, p2, key, value)
 		}
 	}

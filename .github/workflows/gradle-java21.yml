@@ -66,7 +66,7 @@ jobs:
     - name: Install libxml2 development headers
       run: |
         sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev libicu-dev
-        sudo ln -s /usr/include/unicode /usr/include/libxml2/unicode
+        sudo ln -sf /usr/include/unicode /usr/include/libxml2/unicode
 
     - name: Compile Kotlin and Java sources
       timeout-minutes: 15
@@ -91,6 +91,9 @@ jobs:
 
     - name: Run linuxX64 native tests
       timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :core:linuxX64Test --no-daemon --stacktrace
 
     - name: Verify Koin DI Configuration

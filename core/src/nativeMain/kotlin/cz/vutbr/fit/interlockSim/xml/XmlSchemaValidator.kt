@@ -4,9 +4,10 @@ package cz.vutbr.fit.interlockSim.xml
 
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.toKString
+import libxml2.XML_PARSE_NONET
 import libxml2.xmlFreeDoc
 import libxml2.xmlGetLastError
-import libxml2.xmlParseMemory
+import libxml2.xmlReadMemory
 import libxml2.xmlResetLastError
 import libxml2.xmlSchemaFree
 import libxml2.xmlSchemaFreeParserCtxt
@@ -25,9 +26,11 @@ actual class XmlSchemaValidator actual constructor() {
 	actual fun validate(xmlContent: String): XmlValidationResult {
 		xmlResetLastError()
 
-		// Parse XML document
-		val xmlByteCount = xmlContent.encodeToByteArray().size
-		val doc = xmlParseMemory(xmlContent, xmlByteCount)
+		// Encode once — cinterop would encode again if we passed the String directly.
+		// XML_PARSE_NONET blocks network access to prevent XXE via external entity URIs.
+		// Note: XML_PARSE_NOENT would *expand* entities (wrong direction for XXE prevention).
+		val xmlBytes = xmlContent.encodeToByteArray()
+		val doc = xmlReadMemory(xmlContent, xmlBytes.size, null, null, XML_PARSE_NONET.toInt())
 			?: return XmlValidationResult.failure(
 				listOf(
 					extractLastError()
@@ -51,8 +54,8 @@ actual class XmlSchemaValidator actual constructor() {
 		// creates a temporary that may be freed before
 		// xmlSchemaParse reads it).
 		val xsdContent = XmlSchemaContent.SCHEMA_XSD
-		val xsdByteCount = xsdContent.encodeToByteArray().size
-		val xsdDoc = xmlParseMemory(xsdContent, xsdByteCount)
+		val xsdBytes = xsdContent.encodeToByteArray()
+		val xsdDoc = xmlReadMemory(xsdContent, xsdBytes.size, null, null, XML_PARSE_NONET.toInt())
 			?: return XmlValidationResult.failure(
 				listOf(
 					extractLastError()
