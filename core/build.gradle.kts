@@ -10,6 +10,8 @@ plugins {
 	kotlin("multiplatform")
 	id("io.gitlab.arturbosch.detekt")
 	id("org.jlleitschuh.gradle.ktlint")
+	id("app.cash.burst")
+	id("dev.mokkery")
 	jacoco
 }
 
@@ -25,6 +27,7 @@ val assertkVersion: String by project
 val mockkVersion: String by project
 val koinVersion: String by project
 val coroutinesVersion: String by project
+val xmlutilVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -72,7 +75,13 @@ kotlin {
 	// linuxX64 target: runs native commonTest subset (NativeSanityTest).
 	// kDisco 0.3.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
 	// Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
-	linuxX64()
+	linuxX64 {
+		compilations["main"].cinterops {
+			create("libxml2") {
+				defFile = file("src/nativeInterop/cinterop/libxml2.def")
+			}
+		}
+	}
 
 	sourceSets {
 		val commonMain by getting {
@@ -84,6 +93,7 @@ kotlin {
 				implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
 				// runBlocking needed for DefaultSimulationContext (bridging suspend Simulation.run())
 				implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+				implementation("io.github.pdvrieze.xmlutil:core:$xmlutilVersion")
 			}
 		}
 		val commonTest by getting {

@@ -15,9 +15,9 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Test suite for Array2DMap EntrySet modification operations.
@@ -28,7 +28,7 @@ import org.junit.jupiter.api.assertThrows
 class Array2DMapEntrySetModificationTest {
 	private lateinit var map: Array2DMap<String>
 
-	@BeforeEach
+	@BeforeTest
 	fun setUp() {
 		map = Array2DMap()
 		// Populate with test data
@@ -41,16 +41,16 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testIteratorRemove() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 		val iterator = entrySet.iterator()
-
-		// When: Remove first entry via iterator
 		val firstEntry = iterator.next()
 		val key = firstEntry.key
+
+		// When
 		iterator.remove()
 
-		// Then: Entry removed from map
+		// Then
 		assertThat(map.containsKey(key)).isFalse()
 		assertThat(map.size).isEqualTo(4)
 		assertThat(entrySet).hasSize(4)
@@ -58,38 +58,38 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testIteratorRemoveWithoutNext() {
-		// Given: Iterator not advanced
+		// Given
 		val iterator = map.entries.iterator()
 
-		// Then: remove() throws IllegalStateException
-		assertThrows<IllegalStateException> {
+		// When / Then
+		assertFailsWith<IllegalStateException> {
 			iterator.remove()
 		}
 	}
 
 	@Test
 	fun testIteratorRemoveCalledTwice() {
-		// Given: Iterator with one entry consumed
+		// Given
 		val iterator = map.entries.iterator()
 		iterator.next()
 		iterator.remove()
 
-		// Then: Second remove() throws IllegalStateException
-		assertThrows<IllegalStateException> {
+		// When / Then
+		assertFailsWith<IllegalStateException> {
 			iterator.remove()
 		}
 	}
 
 	@Test
 	fun testSetRemoveSingleEntry() {
-		// Given: EntrySet with known entry
+		// Given
 		val entrySet = map.entries
 		val entryToRemove = entrySet.first { it.key == Point(1, 0) }
 
-		// When: Remove entry via Set.remove()
+		// When
 		val removed = entrySet.remove(entryToRemove)
 
-		// Then: Entry removed successfully
+		// Then
 		assertThat(removed).isTrue()
 		assertThat(map.containsKey(Point(1, 0))).isFalse()
 		assertThat(map.size).isEqualTo(4)
@@ -98,7 +98,7 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testSetRemoveNonExistentEntry() {
-		// Given: EntrySet and fake entry
+		// Given
 		val entrySet = map.entries
 		val fakeEntry = object : MutableMap.MutableEntry<Point, String> {
 			override val key = Point(99, 99)
@@ -106,24 +106,24 @@ class Array2DMapEntrySetModificationTest {
 			override fun setValue(newValue: String) = "Fake"
 		}
 
-		// When: Try to remove non-existent entry
+		// When
 		val removed = entrySet.remove(fakeEntry)
 
-		// Then: Returns false, map unchanged
+		// Then
 		assertThat(removed).isFalse()
 		assertThat(map.size).isEqualTo(5)
 	}
 
 	@Test
 	fun testSetRemoveAll() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 		val entriesToRemove = entrySet.filter { it.key.x == 0 }.toSet()
 
-		// When: Remove multiple entries via removeAll()
+		// When
 		val modified = entrySet.removeAll(entriesToRemove)
 
-		// Then: Entries removed successfully
+		// Then
 		assertThat(modified).isTrue()
 		assertThat(map.containsKey(Point(0, 0))).isFalse()
 		assertThat(map.containsKey(Point(0, 1))).isFalse()
@@ -134,28 +134,28 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testSetRemoveAllWithEmptyCollection() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 		val initialSize = map.size
 
-		// When: removeAll with empty collection
+		// When
 		val modified = entrySet.removeAll(emptySet())
 
-		// Then: No changes
+		// Then
 		assertThat(modified).isFalse()
 		assertThat(map.size).isEqualTo(initialSize)
 	}
 
 	@Test
 	fun testSetRetainAll() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 		val entriesToKeep = entrySet.filter { it.key.x == 1 }.toSet()
 
-		// When: Retain specific entries via retainAll()
+		// When
 		val modified = entrySet.retainAll(entriesToKeep)
 
-		// Then: Only retained entries remain
+		// Then
 		assertThat(modified).isTrue()
 		assertThat(map.containsKey(Point(0, 0))).isFalse()
 		assertThat(map.containsKey(Point(0, 1))).isFalse()
@@ -167,13 +167,13 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testSetRetainAllWithEmptyCollection() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 
-		// When: retainAll with empty collection
+		// When
 		val modified = entrySet.retainAll(emptySet())
 
-		// Then: All entries removed
+		// Then
 		assertThat(modified).isTrue()
 		assertThat(map).isEmpty()
 		assertThat(entrySet).isEmpty()
@@ -181,65 +181,63 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testSetClear() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
 		assertThat(entrySet).hasSize(5)
 
-		// When: Clear the entry set
+		// When
 		entrySet.clear()
 
-		// Then: All entries removed from map
+		// Then
 		assertThat(map).isEmpty()
 		assertThat(entrySet).isEmpty()
 	}
 
 	@Test
 	fun testSetModificationsReflectInMap() {
-		// Given: EntrySet and initial map state
+		// Given
 		val entrySet = map.entries
 		val initialKeys = map.keys.toSet()
-
-		// When: Modify entry set
 		val firstEntry = entrySet.first()
+
+		// When
 		entrySet.remove(firstEntry)
 
-		// Then: Map reflects the change
+		// Then
 		assertThat(map.keys).hasSize(initialKeys.size - 1)
 		assertThat(map.containsKey(firstEntry.key)).isFalse()
 	}
 
 	@Test
 	fun testIteratorRemoveAll() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
-
-		// When: Remove all entries via iterator
 		val iterator = entrySet.iterator()
+
+		// When
 		while (iterator.hasNext()) {
 			iterator.next()
 			iterator.remove()
 		}
 
-		// Then: Map is empty
+		// Then
 		assertThat(map).isEmpty()
 		assertThat(entrySet).isEmpty()
 	}
 
 	@Test
 	fun testMixedIteratorAndSetOperations() {
-		// Given: EntrySet with entries
+		// Given
 		val entrySet = map.entries
-
-		// When: Remove via iterator
 		val iterator = entrySet.iterator()
 		val firstEntry = iterator.next()
-		iterator.remove()
 
-		// And: Remove via Set.remove()
+		// When
+		iterator.remove()
 		val secondEntry = entrySet.first()
 		entrySet.remove(secondEntry)
 
-		// Then: Both removals reflected in map
+		// Then
 		assertThat(map.containsKey(firstEntry.key)).isFalse()
 		assertThat(map.containsKey(secondEntry.key)).isFalse()
 		assertThat(map.size).isEqualTo(3)
@@ -247,22 +245,16 @@ class Array2DMapEntrySetModificationTest {
 
 	@Test
 	fun testEntrySetSizeConsistency() {
-		// Given: Map and entry set
+		// Given
 		val entrySet = map.entries
-
-		// Then: Size should always match
 		assertThat(entrySet.size).isEqualTo(map.size)
 
-		// When: Modify via entry set
+		// When / Then — remove one
 		entrySet.remove(entrySet.first())
-
-		// Then: Size still matches
 		assertThat(entrySet.size).isEqualTo(map.size)
 
-		// When: Clear via entry set
+		// When / Then — clear all
 		entrySet.clear()
-
-		// Then: Both empty
 		assertThat(entrySet.size).isEqualTo(0)
 		assertThat(map.size).isEqualTo(0)
 	}

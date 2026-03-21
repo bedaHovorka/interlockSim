@@ -63,6 +63,11 @@ jobs:
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
 
+    - name: Install libxml2 development headers
+      run: |
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev libicu-dev
+        sudo ln -sf /usr/include/unicode /usr/include/libxml2/unicode
+
     - name: Build and test with coverage
       env:
         GITHUB_ACTOR: ${{ github.actor }}

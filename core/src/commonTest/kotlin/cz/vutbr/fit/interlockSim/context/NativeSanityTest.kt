@@ -1,17 +1,23 @@
 package cz.vutbr.fit.interlockSim.context
 
+import assertk.assertThat
+import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
+import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
-import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -23,7 +29,7 @@ import org.koin.core.context.stopKoin
  *
  * @since 2026-03-20 (KMP Step 4 — linuxX64 native test subset)
  */
-class NativeSanityTest {
+class NativeSanityTest : KoinComponent {
 
     @BeforeTest
     fun setUpKoin() {
@@ -37,61 +43,67 @@ class NativeSanityTest {
 
     @Test
     fun `DefaultEditingContext can be created with valid dimensions`() {
-        val ctx = DefaultEditingContext(30, 30)
-        try {
-            assertNotNull(ctx.getRailWayNetGrid())
-            assertEquals(30, ctx.getRailWayNetGrid().cols)
-            assertEquals(30, ctx.getRailWayNetGrid().rows)
-        } finally {
-            ctx.close()
+        DefaultEditingContext(30, 30).use { ctx ->
+            assertThat(ctx.getRailWayNetGrid()).isNotNull()
+            assertThat(ctx.getRailWayNetGrid().cols).isEqualTo(30)
+            assertThat(ctx.getRailWayNetGrid().rows).isEqualTo(30)
         }
     }
 
     @Test
     fun `InOut can be placed in editing context`() {
-        val ctx = DefaultEditingContext(30, 30)
-        try {
+        DefaultEditingContext(30, 30).use { ctx ->
             val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
             ctx.putCell(Point(1, 1), inA)
             val found = ctx.getRailWayNetGrid().getCellAt(1, 1)
-            assertEquals(inA, found)
-        } finally {
-            ctx.close()
+            assertThat(found).isEqualTo(inA)
         }
     }
 
     @Test
     fun `two InOuts can be connected by a SimpleTrackBlock`() {
-        val ctx = DefaultEditingContext(30, 30)
-        try {
+        DefaultEditingContext(30, 30).use { ctx ->
             val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
             val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
             val track = SimpleTrackBlock(inA, inB, 100.0, 80.0)
             ctx.putCell(Point(1, 1), inA)
             ctx.putCell(Point(5, 5), inB)
             ctx.joinCells(Point(1, 1), Point(5, 5), track)
-            val inOuts = ctx.getInOuts()
-            assertEquals(2, inOuts.size)
-        } finally {
-            ctx.close()
+            assertThat(ctx.getInOuts()).hasSize(2)
         }
     }
 
     @Test
     fun `AutoNameGenerator generates non-empty names`() {
-        val ctx = DefaultEditingContext(30, 30)
-        try {
+        DefaultEditingContext(30, 30).use { ctx ->
             val name = AutoNameGenerator.generateName(InOut::class, ctx)
-            assertTrue(name.isNotEmpty(), "Generated name should not be empty")
-        } finally {
-            ctx.close()
+            assertThat(name).isNotEmpty()
         }
     }
 
     @Test
     fun `SimpleTestProcess compiles on native target`() {
         // Verifies SimpleTestProcess.kt links on linuxX64 by referencing its class.
-        // Full simulation is not run here (requires a kDisco environment).
-        assertEquals("SimpleTestProcess", SimpleTestProcess::class.simpleName)
+        assertThat(SimpleTestProcess::class.simpleName).isEqualTo("SimpleTestProcess")
+    }
+
+    @Test
+    fun `DefaultSimulationContext scope opens and closes without error`() {
+        val processFactory = get<SimulationProcessFactory>()
+        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
+            assertThat(simCtx).isNotNull()
+            assertThat(simCtx.scope).isNotNull()
+        }
+    }
+
+    @Test
+    fun `TopologyNavigator resolves from simulation context`() {
+        val processFactory = get<SimulationProcessFactory>()
+        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
+            val navigator: TopologyNavigator = simCtx.getTopologyNavigator()
+            assertThat(navigator).isNotNull()
+        }
     }
 }

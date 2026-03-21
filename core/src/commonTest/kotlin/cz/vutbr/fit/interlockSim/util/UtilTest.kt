@@ -6,8 +6,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 class UtilTest {
 	@Test
@@ -20,7 +20,7 @@ class UtilTest {
 	@Test
 	fun `assertNodeCell throws AssertionError for wrong type`() {
 		val dummy = "String"
-		assertThrows<IllegalStateException> { CellUtilities.assertNodeCell(dummy) }
+		assertFailsWith<IllegalStateException> { CellUtilities.assertNodeCell(dummy) }
 	}
 
 	@Test
@@ -32,6 +32,6 @@ class UtilTest {
 
 	@Test
 	fun `assertInstanceOf throws AssertionError for wrong type`() {
-		assertThrows<IllegalStateException> { Util.assertInstanceOf<NodeCell>("not a node cell") }
+		assertFailsWith<IllegalStateException> { Util.assertInstanceOf<NodeCell>("not a node cell") }
 	}
 }

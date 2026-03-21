@@ -67,16 +67,6 @@ fun <T> Assert<KProperty0<T?>>.isNotNull() =
 	}
 
 /**
- * Extension function to add a description/message to an assertion.
- */
-fun <T> Assert<T>.withMessage(message: String): Assert<T> {
-	// Note: AssertK doesn't support post-hoc message addition like AssertJ
-	// The message parameter is effectively ignored here
-	// For proper message support, use: assertThat(value, name = "message").assertion()
-	return this
-}
-
-/**
  * Extension function to assert that a collection has size greater than or equal to expected.
  *
  * Usage: assertThat(collection).hasSizeGreaterThanOrEqualTo(1)
