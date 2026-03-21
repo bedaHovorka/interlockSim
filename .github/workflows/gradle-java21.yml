@@ -64,7 +64,9 @@ jobs:
       run: chmod +x gradlew
 
     - name: Install libxml2 development headers
-      run: sudo apt-get update && sudo apt-get install -y libxml2-dev
+      run: |
+        sudo apt-get update && sudo apt-get install -y libxml2-dev libicu-dev
+        sudo ln -s /usr/include/unicode /usr/include/libxml2/unicode
 
     - name: Compile Kotlin and Java sources
       timeout-minutes: 15
