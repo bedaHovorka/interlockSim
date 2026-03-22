@@ -19,6 +19,8 @@ import kotlin.system.exitProcess
 
 private const val MIN_ARGS_COUNT = 3
 private const val CMD_VERSION = "--version"
+private const val CMD_HELP = "--help"
+private const val CMD_HELP_SHORT = "-h"
 private const val CMD_EXAMPLE = "example"
 private const val CMD_SIM = "sim"
 private const val VERSION_STRING = "fast-sim 1.0"
@@ -36,6 +38,7 @@ private fun eprintln(message: String?) {
  * - `fast-sim example <name> <endTime>` — run a built-in example
  * - `fast-sim sim <path> <endTime>` — run simulation from XML file
  * - `fast-sim --version` — print version and exit (no Koin started)
+ * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
  * - No args or unknown command → print usage to stderr, exit 2
  *
  * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
@@ -49,9 +52,13 @@ fun main(args: Array<String>) {
 		exitProcess(2)
 	}
 
-	// --version is handled before Koin init: it needs no DI and must be near-instant
+	// --version and --help are handled before Koin init: they need no DI and must be near-instant
 	if (args[0] == CMD_VERSION) {
 		println(VERSION_STRING)
+		exitProcess(0)
+	}
+	if (args[0] == CMD_HELP || args[0] == CMD_HELP_SHORT) {
+		printUsage()
 		exitProcess(0)
 	}
 
@@ -109,6 +116,7 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
 		eprintln("Error: endTime must be a number, got '${args[2]}'")
 		return 2
 	}
+	eprintln("Note: fast-sim sim uses ShuntingLoop process — network must be vyhybna.xml-compatible (SIM-004).")
 	val ctx = factory.createFromFile(path)
 	ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 	try {

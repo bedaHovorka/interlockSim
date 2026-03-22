@@ -17,23 +17,12 @@ import cz.vutbr.fit.interlockSim.xml.XmlContextReader
 /**
  * Cross-platform test fixture helpers for common parsing and context-creation patterns.
  *
- * XML strings are sourced from [NetworkResources] — the single source of truth.
- * This object is intentionally in commonMain of :core-test so it is available
- * to both JVM test code and linuxX64 test code without duplication.
+ * XML strings live in [NetworkResources] — use that directly for raw XML.
+ * This object provides only parsing/factory helpers that are used across modules.
+ * It is intentionally in commonMain of :core-test so it is available to both JVM
+ * and linuxX64 test code without duplication.
  */
 object CommonTestFixtures {
-
-	/** Shunting loop — canonical test fixture (vyhybna.xml). @see NetworkResources.VYHYBNA_XML */
-	val VYHYBNA_XML = NetworkResources.VYHYBNA_XML
-
-	val LINEAR_TRACK_XML = NetworkResources.LINEAR_TRACK_XML
-	val MINIMAL_NETWORK_XML = NetworkResources.MINIMAL_NETWORK_XML
-	val SINGLE_INOUT_XML = NetworkResources.SINGLE_INOUT_XML
-	val ZERO_INOUTS_XML = NetworkResources.ZERO_INOUTS_XML
-	val SWITCH_BASIC_XML = NetworkResources.SWITCH_BASIC_XML
-	val SEMAPHORE_BASIC_XML = NetworkResources.SEMAPHORE_BASIC_XML
-	val TWO_TRACKS_PARALLEL_XML = NetworkResources.TWO_TRACKS_PARALLEL_XML
-	val EMPTY_GRID_XML = NetworkResources.EMPTY_GRID_XML
 
 	private val reader = XmlContextReader()
 

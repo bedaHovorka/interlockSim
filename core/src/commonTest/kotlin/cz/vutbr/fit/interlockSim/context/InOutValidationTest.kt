@@ -21,6 +21,7 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.AfterTest
@@ -68,7 +69,7 @@ class InOutValidationTest {
 	@Test
 	fun `XML with 0 InOuts throws IllegalStateException`() {
 		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(CommonTestFixtures.ZERO_INOUTS_XML)
+			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
 		}
 		assertThat(exception.message ?: "").transform { it.contains("at least 1") }
 			.isEqualTo(true)
@@ -82,7 +83,7 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 1 InOut passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(CommonTestFixtures.SINGLE_INOUT_XML)
+		val context = CommonTestFixtures.parseEditingContext(NetworkResources.SINGLE_INOUT_XML)
 		assertThat(context.getInOuts()).hasSize(1)
 		context.close()
 	}
@@ -94,7 +95,7 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 2 InOuts passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+		val context = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
 		assertThat(context.getInOuts()).hasSize(2)
 		context.close()
 	}
@@ -106,7 +107,7 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 2 or more InOuts passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(CommonTestFixtures.VYHYBNA_XML)
+		val context = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML)
 		val inOutCount = context.getInOuts().size
 		assertThat(inOutCount).isEqualTo(2)
 		context.close()
@@ -161,7 +162,7 @@ class InOutValidationTest {
 	@Test
 	fun `Error message explains InOut requirement clearly`() {
 		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(CommonTestFixtures.ZERO_INOUTS_XML)
+			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
 		}
 		assertThat(exception.message ?: "").transform { it.contains("entry") }
 			.isEqualTo(true)
@@ -175,7 +176,7 @@ class InOutValidationTest {
 	@Test
 	fun `Error message reflects MIN_INOUT_ELEMENTS constant value`() {
 		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(CommonTestFixtures.ZERO_INOUTS_XML)
+			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
 		}
 		assertThat(exception.message ?: "").transform { it.contains("at least 1") }
 			.isEqualTo(true)
