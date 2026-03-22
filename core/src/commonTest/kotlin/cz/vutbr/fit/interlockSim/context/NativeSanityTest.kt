@@ -11,6 +11,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.sim.SimpleTestProcess
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.AfterTest
@@ -90,7 +91,7 @@ class NativeSanityTest : KoinComponent {
     @Test
     fun `DefaultSimulationContext scope opens and closes without error`() {
         val processFactory = get<SimulationProcessFactory>()
-        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
         DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
             assertThat(simCtx).isNotNull()
             assertThat(simCtx.scope).isNotNull()
@@ -100,7 +101,7 @@ class NativeSanityTest : KoinComponent {
     @Test
     fun `TopologyNavigator resolves from simulation context`() {
         val processFactory = get<SimulationProcessFactory>()
-        val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.LINEAR_TRACK_XML)
+        val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
         DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
             val navigator: TopologyNavigator = simCtx.getTopologyNavigator()
             assertThat(navigator).isNotNull()

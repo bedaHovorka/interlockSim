@@ -101,6 +101,8 @@ kotlin {
 				implementation(kotlin("test"))
 				implementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
 				implementation("io.insert-koin:koin-test:$koinVersion")
+				// Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
+				implementation(project(":core-test"))
 			}
 		}
 		val jvmMain by getting {
