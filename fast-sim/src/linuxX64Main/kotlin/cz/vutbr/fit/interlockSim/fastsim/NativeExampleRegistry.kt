@@ -33,9 +33,15 @@ internal object NativeExampleRegistry {
 			else -> throw IllegalArgumentException("Unknown example: '$name'. Available: $AVAILABLE")
 		}
 
+	@Suppress("TooGenericExceptionCaught")
 	private fun createShuntingLoop(endTime: Long, factory: NativeContextFactory): DefaultSimulationContext {
 		val ctx = factory.createFromXml(EmbeddedResources.VYHYBNA_XML)
-		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
+		try {
+			ctx.setMainProcess(ShuntingLoop(ctx, endTime))
+		} catch (e: Exception) {
+			ctx.close()
+			throw e
+		}
 		return ctx
 	}
 }

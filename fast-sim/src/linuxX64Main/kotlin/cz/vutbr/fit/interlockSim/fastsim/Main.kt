@@ -117,8 +117,8 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
 		return 2
 	}
 	val ctx = factory.createFromFile(path)
-	ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 	try {
+		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		ctx.run()
 		println("Simulation complete.")
 		return 0
