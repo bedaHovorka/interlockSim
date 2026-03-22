@@ -25,7 +25,7 @@ internal object NativeExampleRegistry {
 
 	private const val EXAMPLE_SHUNTING_LOOP = "shuntingLoop"
 
-	val AVAILABLE: List<String> = listOf(EXAMPLE_SHUNTING_LOOP)
+	val AVAILABLE: Set<String> = setOf(EXAMPLE_SHUNTING_LOOP)
 
 	fun create(name: String, endTime: Long, factory: NativeContextFactory): DefaultSimulationContext =
 		when (name) {

@@ -116,7 +116,6 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
 		eprintln("Error: endTime must be a number, got '${args[2]}'")
 		return 2
 	}
-	eprintln("Note: fast-sim sim uses ShuntingLoop process — network must be vyhybna.xml-compatible (SIM-004).")
 	val ctx = factory.createFromFile(path)
 	ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 	try {
@@ -135,6 +134,7 @@ private fun printUsage() {
 		  fast-sim $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
 		  fast-sim $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
 		  fast-sim $CMD_VERSION                  Print version
+		  fast-sim $CMD_HELP / $CMD_HELP_SHORT             Print this help
 		""".trimIndent()
 	)
 }

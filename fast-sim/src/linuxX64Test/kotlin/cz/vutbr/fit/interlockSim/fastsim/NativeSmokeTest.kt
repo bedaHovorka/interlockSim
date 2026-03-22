@@ -93,4 +93,12 @@ class NativeSmokeTest {
 			ctx.close()
 		}
 	}
+
+	@Test
+	fun `NativeContextFactory createFromFile throws on nonexistent path`() {
+		val factory = NativeContextFactory()
+		assertFailsWith<Exception> {
+			factory.createFromFile("/nonexistent/path/to/network.xml")
+		}
+	}
 }

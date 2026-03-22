@@ -55,6 +55,10 @@ tasks.named("compileKotlinJvm") {
 	dependsOn(rootProject.tasks.named("checkKdisco"))
 }
 
+tasks.named("compileKotlinLinuxX64") {
+	dependsOn(rootProject.tasks.named("checkKdisco"))
+}
+
 // ===========================================
 // Detekt Configuration
 // ===========================================
@@ -90,7 +94,8 @@ dependencies {
 }
 
 // Suppress automatic SonarQube sub-module detection for :core-test.
-// Test support code is excluded from coverage requirements via root sonar.coverage.exclusions.
+// Requires the sonarqube plugin applied at root (build.gradle.kts) via id("org.sonarqube").
+// Test support code is excluded from coverage requirements via root sonar.coverage.exclusions = "core-test/**".
 sonarqube {
 	isSkipProject = true
 }
