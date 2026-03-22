@@ -18,7 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
+import kotlin.test.assertFailsWith
 
 /**
  * Smoke tests for the :fast-sim native CLI module.
@@ -41,11 +41,11 @@ class NativeSmokeTest {
 	}
 
 	@Test
-	fun `EmbeddedResources VYHYBNA_XML parses to a valid editing context`() {
+	fun `EmbeddedResources VYHYBNA_XML parses to context with 2 InOuts`() {
 		val factory = NativeContextFactory()
 		val ctx = factory.createFromXml(EmbeddedResources.VYHYBNA_XML)
 		try {
-			assertNotNull(ctx)
+			assertEquals(2, ctx.getInOutsList().size)
 		} finally {
 			ctx.close()
 		}
@@ -66,11 +66,29 @@ class NativeSmokeTest {
 	}
 
 	@Test
-	fun `NativeContextFactory createFromXml returns context for valid XML`() {
+	fun `NativeContextFactory createFromXml returns context with 2 InOuts for LINEAR_TRACK_XML`() {
 		val factory = NativeContextFactory()
 		val ctx = factory.createFromXml(NetworkResources.LINEAR_TRACK_XML)
 		try {
-			assertNotNull(ctx)
+			assertEquals(2, ctx.getInOutsList().size)
+		} finally {
+			ctx.close()
+		}
+	}
+
+	@Test
+	fun `NativeExampleRegistry create throws IllegalArgumentException for unknown example name`() {
+		assertFailsWith<IllegalArgumentException> {
+			NativeExampleRegistry.create("nonexistent", 10, NativeContextFactory())
+		}
+	}
+
+	@Test
+	fun `NativeExampleRegistry shuntingLoop runs to completion with short endTime`() {
+		val factory = NativeContextFactory()
+		val ctx = NativeExampleRegistry.create("shuntingLoop", 5, factory)
+		try {
+			ctx.run()
 		} finally {
 			ctx.close()
 		}

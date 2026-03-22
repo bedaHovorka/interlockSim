@@ -4,9 +4,8 @@
  * :core-test — shared test-support library for interlockSim
  *
  * Contains test fixtures and utilities shared across :core, :desktop-ui, and :fast-sim.
- * Lives in commonMain (not test source sets) so it is accessible from both production and
- * test code in consuming modules — e.g. fast-sim/linuxX64Main for EmbeddedResources and
- * core/commonTest for CommonTestFixtures.
+ * Lives in commonMain (not test source sets) so it is accessible from test scopes
+ * in consuming modules — core/commonTest, desktop-ui/test, and fast-sim/linuxX64Test.
  *
  * KMP targets: jvm (for :desktop-ui tests, :core jvmTest), linuxX64 (for :fast-sim)
  */
@@ -43,8 +42,8 @@ kotlin {
 				// koin-core: needed for CommonCoreTestModule (scoped, getSource, module DSL)
 				// (:core uses implementation(koin-core) which is not transitive to consumers)
 				implementation("io.insert-koin:koin-core:$koinVersion")
-				// assertk for CommonAssertKExtensions
-				implementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
+				// assertk: api so consumers (core, desktop-ui, fast-sim) get it transitively
+				api("com.willowtreeapps.assertk:assertk:$assertkVersion")
 			}
 		}
 	}

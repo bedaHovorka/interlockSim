@@ -7,8 +7,6 @@
  *
  * Bedrich Hovorka
  */
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
-
 package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
@@ -26,6 +24,7 @@ private const val CMD_SIM = "sim"
 private const val VERSION_STRING = "fast-sim 1.0"
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 private fun eprintln(message: String?) {
 	fprintf(stderr, "%s\n", message ?: "null")
 }
@@ -126,8 +125,8 @@ private fun printUsage() {
 		"""
 		Usage:
 		  fast-sim $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
-		  fast-sim $CMD_SIM <path> <endTime>        Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
-		  fast-sim $CMD_VERSION                   Print version
+		  fast-sim $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
+		  fast-sim $CMD_VERSION                  Print version
 		""".trimIndent()
 	)
 }

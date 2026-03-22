@@ -33,8 +33,6 @@ kotlin {
 				// koin-core 3.5.6, kdisco-core 0.3.0, xmlutil:core 0.91.0-RC1,
 				// kotlin-logging 7.0.3 — all validated by :core:compileKotlinLinuxX64 passing.
 				implementation(project(":core"))
-				// :core-test provides NetworkResources.VYHYBNA_XML for EmbeddedResources
-				implementation(project(":core-test"))
 			}
 		}
 		val linuxX64Test by getting {

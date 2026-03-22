@@ -28,6 +28,7 @@ import org.koin.core.component.inject
  */
 internal class NativeContextFactory : KoinComponent {
 	private val processFactory: SimulationProcessFactory by inject()
+	private val reader = XmlContextReader()
 
 	/**
 	 * Create a [DefaultSimulationContext] from an XML string.
@@ -39,7 +40,7 @@ internal class NativeContextFactory : KoinComponent {
 	 * @return Simulation context ready for [DefaultSimulationContext.run]
 	 */
 	fun createFromXml(xml: String): DefaultSimulationContext {
-		val editingCtx = XmlContextReader().parse(xml)
+		val editingCtx = reader.parse(xml)
 		return try {
 			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 		} finally {
@@ -57,7 +58,7 @@ internal class NativeContextFactory : KoinComponent {
 	 * @return Simulation context ready for [DefaultSimulationContext.run]
 	 */
 	fun createFromFile(path: String): DefaultSimulationContext {
-		val editingCtx = XmlContextReader().parseFile(path)
+		val editingCtx = reader.parseFile(path)
 		return try {
 			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 		} finally {
