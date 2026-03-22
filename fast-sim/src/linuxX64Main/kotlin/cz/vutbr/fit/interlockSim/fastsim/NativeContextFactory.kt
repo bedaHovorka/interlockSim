@@ -26,30 +26,42 @@ import org.koin.core.component.inject
  *
  * @since Issue #415 (fast-sim native CLI)
  */
-class NativeContextFactory : KoinComponent {
+internal class NativeContextFactory : KoinComponent {
 	private val processFactory: SimulationProcessFactory by inject()
 
 	/**
 	 * Create a [DefaultSimulationContext] from an XML string.
 	 *
+	 * The intermediate [cz.vutbr.fit.interlockSim.context.DefaultEditingContext] is always closed
+	 * (its per-context Koin scope is released) even if transformation fails.
+	 *
 	 * @param xml Railway network XML content (conforming to data.xsd)
 	 * @return Simulation context ready for [DefaultSimulationContext.run]
 	 */
-	fun createFromXml(xml: String): DefaultSimulationContext =
-		DefaultSimulationContext.fromEditingContext(
-			XmlContextReader().parse(xml),
-			processFactory
-		)
+	fun createFromXml(xml: String): DefaultSimulationContext {
+		val editingCtx = XmlContextReader().parse(xml)
+		return try {
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		} finally {
+			editingCtx.close()
+		}
+	}
 
 	/**
 	 * Create a [DefaultSimulationContext] from an XML file path.
 	 *
+	 * The intermediate [cz.vutbr.fit.interlockSim.context.DefaultEditingContext] is always closed
+	 * (its per-context Koin scope is released) even if transformation fails.
+	 *
 	 * @param path Absolute or relative path to the XML file
 	 * @return Simulation context ready for [DefaultSimulationContext.run]
 	 */
-	fun createFromFile(path: String): DefaultSimulationContext =
-		DefaultSimulationContext.fromEditingContext(
-			XmlContextReader().parseFile(path),
-			processFactory
-		)
+	fun createFromFile(path: String): DefaultSimulationContext {
+		val editingCtx = XmlContextReader().parseFile(path)
+		return try {
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
+		} finally {
+			editingCtx.close()
+		}
+	}
 }

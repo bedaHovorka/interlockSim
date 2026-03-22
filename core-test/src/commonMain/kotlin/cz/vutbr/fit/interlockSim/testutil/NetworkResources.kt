@@ -1,35 +1,25 @@
-/*
- * Brno University of Technology
+/* Brno University of Technology
  * Faculty of Information Technology
  *
  * BSc Thesis  2006/2007
  *
  * Railway Interlocking Simulator
  *
- * Common Test Fixtures for KMP commonTest
- *
- * Provides embedded XML fixture strings and helper functions
- * for cross-platform tests (JVM + Native).
- *
- * @since 2026-03 (KMP Task 6 — Phase 2 test migration)
+ * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.testutil
 
-import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
-import cz.vutbr.fit.interlockSim.xml.XmlContextReader
-
 /**
- * Cross-platform test fixtures with embedded XML strings.
+ * Canonical XML network definitions shared across test fixtures and embedded binary resources.
  *
- * Replaces [TestFixtures] (JVM-only, file-based) for commonTest usage.
- * All XML strings are embedded because commonTest has no file I/O on native targets.
- * A JVM test (XmlRoundTripTest) validates these against the file-based fixtures.
+ * Single source of truth for all XML railway network strings used in tests and native CLI examples.
+ * Consumed by:
+ * - [CommonTestFixtures] (test fixtures in :core, :desktop-ui, :fast-sim tests)
+ * - [cz.vutbr.fit.interlockSim.fastsim.EmbeddedResources] (:fast-sim linuxX64 embedded examples)
  */
-object CommonTestFixtures {
+object NetworkResources {
 
-	/** Shunting loop — canonical test fixture (vyhybna.xml) */
+	/** Shunting loop — canonical test fixture (vyhybna.xml). Used by ShuntingLoop simulation. */
 	val VYHYBNA_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -57,7 +47,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Linear track — two InOuts connected by a single track block */
+	/** Two-node linear track connecting InOut A and InOut B. */
 	val LINEAR_TRACK_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -68,7 +58,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Minimal network — two InOuts, no track blocks */
+	/** Minimal two-InOut network without any track blocks. */
 	val MINIMAL_NETWORK_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -78,7 +68,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Single InOut — minimum valid network (bidirectional operation) */
+	/** Network with a single InOut element (used for InOut validation tests). */
 	val SINGLE_INOUT_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -87,7 +77,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Zero InOuts — invalid network, should fail validation */
+	/** Empty network with no InOut elements (used for validation error tests). */
 	val ZERO_INOUTS_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -95,7 +85,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Switch basic — single switch with two outputs */
+	/** Network with a simple right-diverging switch. */
 	val SWITCH_BASIC_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -110,7 +100,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Semaphore basic — single semaphore between two InOuts */
+	/** Network with a horizontal semaphore. */
 	val SEMAPHORE_BASIC_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -123,7 +113,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Two parallel tracks — independent InOut pairs */
+	/** Two parallel tracks with independent InOut pairs. */
 	val TWO_TRACKS_PARALLEL_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -137,7 +127,7 @@ object CommonTestFixtures {
 		|</net>
 	""".trimMargin()
 
-	/** Empty grid — just two InOuts in a 50x50 grid */
+	/** Small grid with two InOut elements (used for grid/cell tests). */
 	val EMPTY_GRID_XML = """
 		|<?xml version="1.0"?>
 		|<!DOCTYPE net>
@@ -146,49 +136,4 @@ object CommonTestFixtures {
 		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
 		|</net>
 	""".trimMargin()
-
-	private val reader = XmlContextReader()
-
-	/**
-	 * Parse XML string into a [DefaultEditingContext].
-	 */
-	fun parseEditingContext(xml: String): DefaultEditingContext = reader.parse(xml)
-
-	/**
-	 * Parse XML string into a [DefaultEditingContext], optionally skipping structural validation.
-	 */
-	fun parseEditingContext(
-		xml: String,
-		skipStructuralValidation: Boolean
-	): DefaultEditingContext = reader.parse(xml, skipStructuralValidation)
-
-	/**
-	 * Parse XML string and create a [DefaultSimulationContext].
-	 */
-	fun parseSimulationContext(
-		xml: String,
-		processFactory: SimulationProcessFactory
-	): DefaultSimulationContext {
-		val editingCtx = reader.parse(xml)
-		try {
-			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
-		} finally {
-			editingCtx.close()
-		}
-	}
-
-	/**
-	 * Create an empty simulation context (no cells, no InOuts).
-	 * Equivalent to [SimulationContextFactory.createEmptyContext] but KMP-compatible.
-	 */
-	fun createEmptySimulationContext(
-		processFactory: SimulationProcessFactory
-	): DefaultSimulationContext {
-		val editingCtx = DefaultEditingContext(100, 100)
-		try {
-			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
-		} finally {
-			editingCtx.close()
-		}
-	}
 }

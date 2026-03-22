@@ -1,0 +1,99 @@
+/*
+ * core-test/build.gradle.kts
+ *
+ * :core-test — shared test-support library for interlockSim
+ *
+ * Contains test fixtures and utilities shared across :core, :desktop-ui, and :fast-sim.
+ * Lives in commonMain (not test source sets) so it is accessible from both production and
+ * test code in consuming modules — e.g. fast-sim/linuxX64Main for EmbeddedResources and
+ * core/commonTest for CommonTestFixtures.
+ *
+ * KMP targets: jvm (for :desktop-ui tests, :core jvmTest), linuxX64 (for :fast-sim)
+ */
+
+plugins {
+	kotlin("multiplatform")
+	id("io.gitlab.arturbosch.detekt")
+}
+
+// Load versions from root gradle.properties
+val assertkVersion: String by project
+val koinVersion: String by project
+val kotlinVersion: String by project
+
+group = "cz.vutbr.fit"
+version = "1.0"
+
+kotlin {
+	jvm {
+		compilations.all {
+			kotlinOptions {
+				jvmTarget = "21"
+			}
+		}
+	}
+
+	linuxX64()
+
+	sourceSets {
+		val commonMain by getting {
+			dependencies {
+				// :core commonMain provides domain classes, XmlContextReader, xmlutil, kdisco
+				implementation(project(":core"))
+				// koin-core: needed for CommonCoreTestModule (scoped, getSource, module DSL)
+				// (:core uses implementation(koin-core) which is not transitive to consumers)
+				implementation("io.insert-koin:koin-core:$koinVersion")
+				// assertk for CommonAssertKExtensions
+				implementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
+			}
+		}
+	}
+}
+
+// ===========================================
+// checkKdisco dependency
+// ===========================================
+
+tasks.named("compileKotlinJvm") {
+	dependsOn(rootProject.tasks.named("checkKdisco"))
+}
+
+// ===========================================
+// Detekt Configuration
+// ===========================================
+
+// :core-test holds legacy-adjacent test support code; use permissive detekt.yml (not strict).
+detekt {
+	config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
+	buildUponDefaultConfig = true
+	allRules = false
+	source.setFrom("src/commonMain/kotlin")
+	ignoreFailures = false
+	baseline = file("${rootProject.projectDir}/detekt-baseline.xml")
+	parallel = true
+}
+
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+	jvmTarget = "21"
+	reports {
+		html.required.set(true)
+		xml.required.set(true)
+		txt.required.set(true)
+		sarif.required.set(false)
+		md.required.set(false)
+	}
+}
+
+tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
+	jvmTarget = "21"
+}
+
+dependencies {
+	detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
+}
+
+// Suppress automatic SonarQube sub-module detection for :core-test.
+// Test support code is excluded from coverage requirements via root sonar.coverage.exclusions.
+sonarqube {
+	isSkipProject = true
+}

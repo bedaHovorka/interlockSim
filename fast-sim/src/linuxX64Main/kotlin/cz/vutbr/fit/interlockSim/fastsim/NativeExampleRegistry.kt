@@ -22,16 +22,19 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
  * @since Issue #415 (fast-sim native CLI)
  */
 internal object NativeExampleRegistry {
-	val AVAILABLE: List<String> = listOf("shuntingLoop")
 
-	fun create(name: String, endTime: Long): DefaultSimulationContext =
+	private const val EXAMPLE_SHUNTING_LOOP = "shuntingLoop"
+
+	val AVAILABLE: List<String> = listOf(EXAMPLE_SHUNTING_LOOP)
+
+	fun create(name: String, endTime: Long, factory: NativeContextFactory): DefaultSimulationContext =
 		when (name) {
-			"shuntingLoop" -> createShuntingLoop(endTime)
+			EXAMPLE_SHUNTING_LOOP -> createShuntingLoop(endTime, factory)
 			else -> throw IllegalArgumentException("Unknown example: '$name'. Available: $AVAILABLE")
 		}
 
-	private fun createShuntingLoop(endTime: Long): DefaultSimulationContext {
-		val ctx = NativeContextFactory().createFromXml(EmbeddedResources.VYHYBNA_XML)
+	private fun createShuntingLoop(endTime: Long, factory: NativeContextFactory): DefaultSimulationContext {
+		val ctx = factory.createFromXml(EmbeddedResources.VYHYBNA_XML)
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		return ctx
 	}

@@ -8,6 +8,7 @@
 rootProject.name = "interlockSim"
 
 include(":core")
+include(":core-test")
 include(":desktop-ui")
 include(":fast-sim")
 

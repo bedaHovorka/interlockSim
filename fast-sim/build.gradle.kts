@@ -33,6 +33,15 @@ kotlin {
 				// koin-core 3.5.6, kdisco-core 0.3.0, xmlutil:core 0.91.0-RC1,
 				// kotlin-logging 7.0.3 — all validated by :core:compileKotlinLinuxX64 passing.
 				implementation(project(":core"))
+				// :core-test provides NetworkResources.VYHYBNA_XML for EmbeddedResources
+				implementation(project(":core-test"))
+			}
+		}
+		val linuxX64Test by getting {
+			dependencies {
+				implementation(kotlin("test"))
+				// :core-test provides CommonTestFixtures, NetworkResources, CommonCoreTestModule
+				implementation(project(":core-test"))
 			}
 		}
 	}
@@ -44,6 +53,32 @@ kotlin {
 
 tasks.named("compileKotlinLinuxX64") {
 	dependsOn(rootProject.tasks.named("checkKdisco"))
+}
+
+// ===========================================
+// linuxX64 Test Output Configuration
+// ===========================================
+
+tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
+	testLogging {
+		events("passed", "skipped", "failed")
+		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+		showExceptions = true
+		showCauses = true
+		showStackTraces = true
+		showStandardStreams = false
+		afterSuite(
+			KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+				if (desc.parent == null) {
+					println("\n:fast-sim linuxX64 Test Results: ${result.resultType}")
+					println("  Tests run: ${result.testCount}")
+					println("  Passed: ${result.successfulTestCount}")
+					println("  Failed: ${result.failedTestCount}")
+					println("  Skipped: ${result.skippedTestCount}")
+				}
+			}),
+		)
+	}
 }
 
 // ===========================================
