@@ -8,6 +8,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -45,7 +46,7 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	}
 
 	private fun loadVyhybnaSimulationContext(): DefaultSimulationContext {
-		val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.VYHYBNA_XML)
+		val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML)
 		val processFactory = get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 	}

@@ -4,6 +4,7 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -38,7 +39,7 @@ class InOutWrapperCreationTest : KoinComponent {
 	}
 
 	private fun loadVyhybnaContext(): SimulationContext {
-		val editingCtx = CommonTestFixtures.parseEditingContext(CommonTestFixtures.VYHYBNA_XML)
+		val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML)
 		val processFactory = get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 	}
