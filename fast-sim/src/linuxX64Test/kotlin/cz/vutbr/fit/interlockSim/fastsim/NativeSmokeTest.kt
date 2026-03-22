@@ -16,6 +16,8 @@ import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import cz.vutbr.fit.interlockSim.util.deleteFile
+import cz.vutbr.fit.interlockSim.util.writeTextFile
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -95,9 +97,26 @@ class NativeSmokeTest {
 	}
 
 	@Test
+	fun `NativeContextFactory createFromFile returns context from valid XML file`() {
+		val path = "/tmp/fast-sim-test-vyhybna.xml"
+		writeTextFile(path, NetworkResources.VYHYBNA_XML)
+		val factory = NativeContextFactory()
+		val ctx = try {
+			factory.createFromFile(path)
+		} finally {
+			deleteFile(path)
+		}
+		try {
+			assertEquals(2, ctx.getInOutsList().size)
+		} finally {
+			ctx.close()
+		}
+	}
+
+	@Test
 	fun `NativeContextFactory createFromFile throws on nonexistent path`() {
 		val factory = NativeContextFactory()
-		assertFailsWith<Exception> {
+		assertFailsWith<IllegalStateException> {
 			factory.createFromFile("/nonexistent/path/to/network.xml")
 		}
 	}
