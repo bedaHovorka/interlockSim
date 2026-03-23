@@ -25,6 +25,7 @@ class TextReporter(
 		)
 	}
 
+	// Not thread-safe: assumes single-threaded kDisco event delivery.
 	private val trainNames = mutableSetOf<String>()
 	private var lastSimTime = 0.0
 	private val startWallTime = currentTimeMillisKMP()
@@ -37,7 +38,7 @@ class TextReporter(
 		// (e.g. "Train" instead of "Train #1") because obj.toString() can contain
 		// spaces that get split by fromContextChangeEvent(). Use combined
 		// source+message to detect and extract the full train identifier.
-		// TODO (#416): fragile — couples train counting to the English word "approved" in
+		// See #425: fragile — couples train counting to the English word "approved" in
 		//  the message. A proper fix would emit a dedicated TRAIN_APPROVED ReportType from
 		//  the simulation layer instead of parsing free-form text.
 		if (simEvent.eventType == ReportType.TRAIN_EVENTS) {

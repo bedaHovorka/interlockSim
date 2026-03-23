@@ -55,6 +55,11 @@ private fun eprintln(message: String?) {
  * Handles `--version`, `--help`, and empty args before Koin is started.
  * For these early-exit arguments, prints the appropriate output and calls [exitProcess].
  * If none of these arguments are present, returns normally and the program continues.
+ *
+ * Note: `--version` and `--help` are checked position-independently (anywhere in args),
+ * so `fast-sim --verbose --help` works correctly. As a side effect, placing them after
+ * positional args (e.g. `fast-sim sim file.xml 60 --version`) also triggers early exit —
+ * this is intentional: these are meta-flags, not simulation parameters.
  */
 private fun handleEarlyExitArgs(args: Array<String>) {
 	if (args.isEmpty()) {
