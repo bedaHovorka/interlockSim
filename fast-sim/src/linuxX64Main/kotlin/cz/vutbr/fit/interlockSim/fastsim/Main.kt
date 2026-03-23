@@ -11,6 +11,10 @@ package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.TextReporter
+import cz.vutbr.fit.interlockSim.sim.Verbosity
+import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
+import io.github.oshai.kotlinlogging.Level
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import platform.posix.fprintf
@@ -23,6 +27,8 @@ private const val CMD_HELP = "--help"
 private const val CMD_HELP_SHORT = "-h"
 private const val CMD_EXAMPLE = "example"
 private const val CMD_SIM = "sim"
+private const val CMD_VERBOSE = "--verbose"
+private const val CMD_QUIET = "--quiet"
 private const val VERSION_STRING = "fast-sim 1.0"
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
@@ -45,30 +51,73 @@ private fun eprintln(message: String?) {
  *
  * @since Issue #415 (fast-sim native CLI)
  */
-@Suppress("TooGenericExceptionCaught")
-fun main(args: Array<String>) {
+/**
+ * Handles `--version`, `--help`, and empty args before Koin is started.
+ * For these early-exit arguments, prints the appropriate output and calls [exitProcess].
+ * If none of these arguments are present, returns normally and the program continues.
+ *
+ * Note: `--version` and `--help` are checked position-independently (anywhere in args),
+ * so `fast-sim --verbose --help` works correctly. As a side effect, placing them after
+ * positional args (e.g. `fast-sim sim file.xml 60 --version`) also triggers early exit —
+ * this is intentional: these are meta-flags, not simulation parameters.
+ */
+private fun handleEarlyExitArgs(args: Array<String>) {
 	if (args.isEmpty()) {
 		printUsage()
 		exitProcess(2)
 	}
-
-	// --version and --help are handled before Koin init: they need no DI and must be near-instant
-	if (args[0] == CMD_VERSION) {
+	if (CMD_VERSION in args) {
 		println(VERSION_STRING)
 		exitProcess(0)
 	}
-	if (args[0] == CMD_HELP || args[0] == CMD_HELP_SHORT) {
+	if (CMD_HELP in args || CMD_HELP_SHORT in args) {
 		printUsage()
 		exitProcess(0)
 	}
+}
 
+private fun parseVerbosity(args: Array<String>): Verbosity = when {
+	CMD_QUIET in args && CMD_VERBOSE in args -> {
+		eprintln("Warning: both --quiet and --verbose specified; --quiet takes precedence")
+		Verbosity.QUIET
+	}
+	CMD_QUIET in args -> Verbosity.QUIET
+	CMD_VERBOSE in args -> Verbosity.VERBOSE
+	else -> Verbosity.DEFAULT
+}
+
+/**
+ * Entry point for the :fast-sim native CLI binary.
+ *
+ * Supported modes:
+ * - `fast-sim example <name> <endTime>` — run a built-in example
+ * - `fast-sim sim <path> <endTime>` — run simulation from XML file
+ * - `fast-sim --version` — print version and exit (no Koin started)
+ * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
+ * - No args or unknown command → print usage to stderr, exit 2
+ *
+ * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
+ *
+ * @since Issue #415 (fast-sim native CLI)
+ */
+@Suppress("TooGenericExceptionCaught")
+fun main(args: Array<String>) {
+	handleEarlyExitArgs(args)
+
+	KotlinLoggingConfiguration.logLevel = Level.OFF
 	startKoin { modules(coreModule) }
+
+	val verbosity = parseVerbosity(args)
+	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET }.toTypedArray()
 
 	val factory = NativeContextFactory()
 	val exitCode = try {
-		when (args[0]) {
-			CMD_EXAMPLE -> runExample(args, factory)
-			CMD_SIM     -> runSim(args, factory)
+		if (positionalArgs.isEmpty()) {
+			printUsage()
+			2
+		} else when (positionalArgs[0]) {
+			CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
+			CMD_SIM     -> runSim(positionalArgs, factory, verbosity)
 			else        -> { printUsage(); 2 }
 		}
 	} catch (e: IllegalArgumentException) {
@@ -85,7 +134,7 @@ fun main(args: Array<String>) {
 }
 
 @Suppress("ReturnCount")
-private fun runExample(args: Array<String>, factory: NativeContextFactory): Int {
+private fun runExample(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
@@ -96,9 +145,11 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory): Int 
 		return 2
 	}
 	val ctx = NativeExampleRegistry.create(name, endTime, factory)
+	val reporter = TextReporter(verbosity)
+	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.run()
-		println("Simulation complete.")
+		reporter.printSummary()
 		return 0
 	} finally {
 		ctx.close()
@@ -106,7 +157,7 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory): Int 
 }
 
 @Suppress("ReturnCount")
-private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
+private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
@@ -117,10 +168,12 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
 		return 2
 	}
 	val ctx = factory.createFromFile(path)
+	val reporter = TextReporter(verbosity)
+	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		ctx.run()
-		println("Simulation complete.")
+		reporter.printSummary()
 		return 0
 	} finally {
 		ctx.close()
@@ -131,10 +184,10 @@ private fun printUsage() {
 	eprintln(
 		"""
 		Usage:
-		  fast-sim $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
-		  fast-sim $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
-		  fast-sim $CMD_VERSION                  Print version
-		  fast-sim $CMD_HELP / $CMD_HELP_SHORT             Print this help
+		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
+		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
+		  fast-sim $CMD_VERSION                                Print version
+		  fast-sim $CMD_HELP / $CMD_HELP_SHORT                          Print this help
 		""".trimIndent()
 	)
 }

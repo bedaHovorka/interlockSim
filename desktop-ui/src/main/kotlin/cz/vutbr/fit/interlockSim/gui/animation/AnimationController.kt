@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.sim.SimulationEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -282,7 +283,7 @@ class AnimationController(
 		logger.trace { "PropertyChange event received from simulation thread: ${event.propertyName}" }
 
 		// Extract event information if available
-		val simulationEvent = extractSimulationEvent(event)
+		val simulationEvent = SimulationEvent.fromContextChangeEvent(event)
 
 		// Marshal state capture and update to EDT
 		SwingUtilities.invokeLater {
@@ -391,46 +392,6 @@ class AnimationController(
 			"State updates must occur on EDT (actual thread: ${Thread.currentThread().name})"
 		}
 		currentState = newState
-	}
-
-	/**
-	 * Extract simulation event from ContextChangeEvent.
-	 *
-	 * This method parses property change events from the simulation context
-	 * and converts them to SimulationEvent instances for the event timeline.
-	 *
-	 * The message from DefaultSimulationContext.report() is already formatted as:
-	 * "[simulationTime] [object] message"
-	 *
-	 * **Called on simulation thread** (not EDT!).
-	 *
-	 * @param event ContextChangeEvent from simulation context
-	 * @return SimulationEvent if the event can be parsed, null otherwise
-	 */
-	private fun extractSimulationEvent(event: ContextChangeEvent): SimulationEvent? {
-		// Try to extract report type from property name
-		val reportType =
-			try {
-				SimulationContext.ReportType.valueOf(event.propertyName)
-			} catch (e: IllegalArgumentException) {
-				return null
-			}
-
-		// Extract message from new value (format: "time object message")
-		val fullMessage = event.newValue?.toString() ?: return null
-
-		// Parse simulation time from the beginning of the message
-		val parts = fullMessage.trim().split(Regex("\\s+"), limit = 2)
-		if (parts.isEmpty()) return null
-
-		val simulationTime = parts[0].toDoubleOrNull() ?: 0.0
-		val message = if (parts.size > 1) parts[1] else fullMessage
-
-		return SimulationEvent(
-			simulationTime = simulationTime,
-			eventType = reportType,
-			message = message
-		)
 	}
 
 	/**

@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.sim.SimulationEvent
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import javax.swing.JTextArea
@@ -57,6 +58,7 @@ class EventTimelinePanelTest {
 			SimulationEvent(
 				simulationTime = 123.456,
 				eventType = ReportType.TRAIN_EVENTS,
+				source = "",
 				message = "Train 1 stopped"
 			)
 
@@ -80,6 +82,7 @@ class EventTimelinePanelTest {
 				SimulationEvent(
 					simulationTime = 1.0,
 					eventType = ReportType.TRAIN_EVENTS,
+					source = "",
 					message = "Test"
 				)
 
@@ -100,6 +103,7 @@ class EventTimelinePanelTest {
 				SimulationEvent(
 					simulationTime = 1.0,
 					eventType = ReportType.PATH_SETTING,
+					source = "",
 					message = "Path reserved"
 				)
 
@@ -115,10 +119,10 @@ class EventTimelinePanelTest {
 		SwingUtilities.invokeAndWait {
 			// Add some events
 			panel.addEvent(
-				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Event 1")
+				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "", "Event 1")
 			)
 			panel.addEvent(
-				SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "Event 2")
+				SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "", "Event 2")
 			)
 
 			// Verify events were added
@@ -137,9 +141,9 @@ class EventTimelinePanelTest {
 	fun `addEvents batch adds multiple events`() {
 		val events =
 			listOf(
-				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Event 1"),
-				SimulationEvent(2.0, ReportType.NODE_EVENTS, "Event 2"),
-				SimulationEvent(3.0, ReportType.PATH_SETTING, "Event 3")
+				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "", "Event 1"),
+				SimulationEvent(2.0, ReportType.NODE_EVENTS, "", "Event 2"),
+				SimulationEvent(3.0, ReportType.PATH_SETTING, "", "Event 3")
 			)
 
 		SwingUtilities.invokeAndWait {
@@ -174,7 +178,7 @@ class EventTimelinePanelTest {
 			// Add event with filter enabled
 			panel.setFilterEnabled(ReportType.TRAIN_EVENTS, true)
 			panel.addEvent(
-				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Visible event")
+				SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "", "Visible event")
 			)
 			assertThat(textArea.text).contains("Visible event")
 
@@ -191,10 +195,10 @@ class EventTimelinePanelTest {
 	@Test
 	fun `multiple event types display correctly`() {
 		SwingUtilities.invokeAndWait {
-			panel.addEvent(SimulationEvent(1.0, ReportType.PATH_SETTING, "Path event"))
-			panel.addEvent(SimulationEvent(2.0, ReportType.NODE_EVENTS, "Node event"))
-			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "Train event"))
-			panel.addEvent(SimulationEvent(4.0, ReportType.TRAIN_CONTINUOUS, "Continuous event"))
+			panel.addEvent(SimulationEvent(1.0, ReportType.PATH_SETTING, "", "Path event"))
+			panel.addEvent(SimulationEvent(2.0, ReportType.NODE_EVENTS, "", "Node event"))
+			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "", "Train event"))
+			panel.addEvent(SimulationEvent(4.0, ReportType.TRAIN_CONTINUOUS, "", "Continuous event"))
 
 			val text = textArea.text
 			assertThat(text).contains("[PATH_SETTING] Path event")
@@ -216,7 +220,7 @@ class EventTimelinePanelTest {
 	fun `enabling TRAIN_CONTINUOUS filter shows continuous events`() {
 		SwingUtilities.invokeAndWait {
 			// Add a continuous event (won't show initially)
-			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_CONTINUOUS, "Position update"))
+			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_CONTINUOUS, "", "Position update"))
 			assertThat(textArea.text).isEqualTo("")
 
 			// Enable filter
@@ -232,9 +236,9 @@ class EventTimelinePanelTest {
 			panel.setMaxEvents(2)
 
 			// Add 3 events
-			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "Event 1"))
-			panel.addEvent(SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "Event 2"))
-			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "Event 3"))
+			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "", "Event 1"))
+			panel.addEvent(SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "", "Event 2"))
+			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "", "Event 3"))
 
 			// Only last 2 events should be visible
 			val text = textArea.text
@@ -247,9 +251,9 @@ class EventTimelinePanelTest {
 	@Test
 	fun `events are displayed in chronological order`() {
 		SwingUtilities.invokeAndWait {
-			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "First"))
-			panel.addEvent(SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "Second"))
-			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "Third"))
+			panel.addEvent(SimulationEvent(1.0, ReportType.TRAIN_EVENTS, "", "First"))
+			panel.addEvent(SimulationEvent(2.0, ReportType.TRAIN_EVENTS, "", "Second"))
+			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "", "Third"))
 
 			val text = textArea.text
 			val firstIndex = text.indexOf("First")
