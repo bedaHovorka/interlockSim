@@ -191,7 +191,12 @@ class ShuntingLoop(
 	}
 
 	override suspend fun startAction() {
-		env.addReportTypes(ReportType.TRAIN_EVENTS, ReportType.TRAIN_CONTINUOUS, ReportType.NODE_EVENTS)
+		env.addReportTypes(
+			ReportType.TRAIN_APPROVED,
+			ReportType.TRAIN_EVENTS,
+			ReportType.TRAIN_CONTINUOUS,
+			ReportType.NODE_EVENTS
+		)
 
 		// Conditionally activate real-time synchronization for GUI mode
 		if (enableRealTimeSync) {

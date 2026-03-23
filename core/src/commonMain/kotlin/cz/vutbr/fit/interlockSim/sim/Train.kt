@@ -820,7 +820,11 @@ class Train :
 		val worker: InOutWorker = env.getWorkerFor(inout)
 		logger.debug { "Train $number approved for movement from ${inout.name} to ${timetable.getOut().name}" }
 		worker.enterTrain(this)
-		env.report("approved ${inout.name}->${timetable.getOut().name}", this, ReportType.TRAIN_EVENTS)
+		env.report(
+			"""train="$name" route=${inout.name}->${timetable.getOut().name}""",
+			this,
+			ReportType.TRAIN_APPROVED
+		)
 
 		// Wait for InOutWorker to reserve initial path before starting Front
 		// This prevents race condition where Front checks for reserved path before InOutWorker completes

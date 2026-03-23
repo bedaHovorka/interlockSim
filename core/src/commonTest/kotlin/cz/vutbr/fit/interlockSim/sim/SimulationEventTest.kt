@@ -44,6 +44,16 @@ class SimulationEventTest {
 	}
 
 	@Test
+	fun fromContextChangeEventParsesTrainApprovedEvent() {
+		val cce = ContextChangeEvent("TRAIN_APPROVED", null, """14.5 Train #1 train="Train #1" route=IO1->IO2""")
+		val event = SimulationEvent.fromContextChangeEvent(cce)!!
+		assertEquals(14.5, event.simulationTime)
+		assertEquals(ReportType.TRAIN_APPROVED, event.eventType)
+		assertEquals("Train", event.source)
+		assertEquals("""#1 train="Train #1" route=IO1->IO2""", event.message)
+	}
+
+	@Test
 	fun fromContextChangeEventParsesNodeEvent() {
 		val cce = ContextChangeEvent("NODE_EVENTS", null, "10.0 IO1 waiting to free aPath")
 		val event = SimulationEvent.fromContextChangeEvent(cce)!!
