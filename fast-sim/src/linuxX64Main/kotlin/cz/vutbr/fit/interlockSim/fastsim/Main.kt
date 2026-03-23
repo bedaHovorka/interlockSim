@@ -11,6 +11,10 @@ package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.TextReporter
+import cz.vutbr.fit.interlockSim.sim.Verbosity
+import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
+import io.github.oshai.kotlinlogging.Level
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import platform.posix.fprintf
@@ -23,6 +27,8 @@ private const val CMD_HELP = "--help"
 private const val CMD_HELP_SHORT = "-h"
 private const val CMD_EXAMPLE = "example"
 private const val CMD_SIM = "sim"
+private const val CMD_VERBOSE = "--verbose"
+private const val CMD_QUIET = "--quiet"
 private const val VERSION_STRING = "fast-sim 1.0"
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
@@ -63,12 +69,20 @@ fun main(args: Array<String>) {
 	}
 
 	startKoin { modules(coreModule) }
+	KotlinLoggingConfiguration.logLevel = Level.OFF
+
+	val verbosity = when {
+		CMD_QUIET in args -> Verbosity.QUIET
+		CMD_VERBOSE in args -> Verbosity.VERBOSE
+		else -> Verbosity.DEFAULT
+	}
+	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET }.toTypedArray()
 
 	val factory = NativeContextFactory()
 	val exitCode = try {
-		when (args[0]) {
-			CMD_EXAMPLE -> runExample(args, factory)
-			CMD_SIM     -> runSim(args, factory)
+		when (positionalArgs[0]) {
+			CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
+			CMD_SIM     -> runSim(positionalArgs, factory, verbosity)
 			else        -> { printUsage(); 2 }
 		}
 	} catch (e: IllegalArgumentException) {
@@ -85,7 +99,7 @@ fun main(args: Array<String>) {
 }
 
 @Suppress("ReturnCount")
-private fun runExample(args: Array<String>, factory: NativeContextFactory): Int {
+private fun runExample(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
@@ -96,9 +110,11 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory): Int 
 		return 2
 	}
 	val ctx = NativeExampleRegistry.create(name, endTime, factory)
+	val reporter = TextReporter(verbosity)
+	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.run()
-		println("Simulation complete.")
+		reporter.printSummary()
 		return 0
 	} finally {
 		ctx.close()
@@ -106,7 +122,7 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory): Int 
 }
 
 @Suppress("ReturnCount")
-private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
+private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
@@ -117,10 +133,12 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory): Int {
 		return 2
 	}
 	val ctx = factory.createFromFile(path)
+	val reporter = TextReporter(verbosity)
+	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		ctx.run()
-		println("Simulation complete.")
+		reporter.printSummary()
 		return 0
 	} finally {
 		ctx.close()
@@ -131,10 +149,10 @@ private fun printUsage() {
 	eprintln(
 		"""
 		Usage:
-		  fast-sim $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
-		  fast-sim $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
-		  fast-sim $CMD_VERSION                  Print version
-		  fast-sim $CMD_HELP / $CMD_HELP_SHORT             Print this help
+		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_EXAMPLE <name> <endTime>   Run a built-in example (available: ${NativeExampleRegistry.AVAILABLE})
+		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
+		  fast-sim $CMD_VERSION                                Print version
+		  fast-sim $CMD_HELP / $CMD_HELP_SHORT                          Print this help
 		""".trimIndent()
 	)
 }
