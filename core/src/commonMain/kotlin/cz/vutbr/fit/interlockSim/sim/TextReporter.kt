@@ -37,6 +37,9 @@ class TextReporter(
 		// (e.g. "Train" instead of "Train #1") because obj.toString() can contain
 		// spaces that get split by fromContextChangeEvent(). Use combined
 		// source+message to detect and extract the full train identifier.
+		// TODO (#416): fragile — couples train counting to the English word "approved" in
+		//  the message. A proper fix would emit a dedicated TRAIN_APPROVED ReportType from
+		//  the simulation layer instead of parsing free-form text.
 		if (simEvent.eventType == ReportType.TRAIN_EVENTS) {
 			val combined = "${simEvent.source} ${simEvent.message}"
 			val approvedIndex = combined.indexOf("approved")
@@ -58,6 +61,9 @@ class TextReporter(
 		)
 	}
 
-	private fun formatEvent(event: SimulationEvent): String =
-		"t=${event.simulationTime}  [${event.eventType.name}]  ${event.source} ${event.message}"
+	private fun formatEvent(event: SimulationEvent): String {
+		val prefix = "t=${event.simulationTime}  [${event.eventType.name}]"
+		return if (event.source.isEmpty()) "$prefix  ${event.message}"
+		else "$prefix  ${event.source} ${event.message}"
+	}
 }

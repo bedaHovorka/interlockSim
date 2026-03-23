@@ -15,7 +15,7 @@ data class SimulationEvent(
 		val hours = totalSeconds / 3600
 		val minutes = (totalSeconds % 3600) / 60
 		val seconds = totalSeconds % 60
-		val millis = ((simulationTime - totalSeconds) * 1000).roundToInt()
+		val millis = ((simulationTime - totalSeconds) * 1000).roundToInt().coerceIn(0, 999)
 		return "${hours.pad(2)}:${minutes.pad(2)}:${seconds.pad(2)}.${millis.pad(3)}"
 	}
 

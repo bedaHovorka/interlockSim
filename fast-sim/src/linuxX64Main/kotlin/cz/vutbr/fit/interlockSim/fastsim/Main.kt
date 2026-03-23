@@ -53,24 +53,29 @@ private fun eprintln(message: String?) {
  */
 /**
  * Handles `--version`, `--help`, and empty args before Koin is started.
- * Returns `null` when the program should continue, otherwise calls [exitProcess].
+ * For these early-exit arguments, prints the appropriate output and calls [exitProcess].
+ * If none of these arguments are present, returns normally and the program continues.
  */
 private fun handleEarlyExitArgs(args: Array<String>) {
 	if (args.isEmpty()) {
 		printUsage()
 		exitProcess(2)
 	}
-	if (args[0] == CMD_VERSION) {
+	if (CMD_VERSION in args) {
 		println(VERSION_STRING)
 		exitProcess(0)
 	}
-	if (args[0] == CMD_HELP || args[0] == CMD_HELP_SHORT) {
+	if (CMD_HELP in args || CMD_HELP_SHORT in args) {
 		printUsage()
 		exitProcess(0)
 	}
 }
 
 private fun parseVerbosity(args: Array<String>): Verbosity = when {
+	CMD_QUIET in args && CMD_VERBOSE in args -> {
+		eprintln("Warning: both --quiet and --verbose specified; --quiet takes precedence")
+		Verbosity.QUIET
+	}
 	CMD_QUIET in args -> Verbosity.QUIET
 	CMD_VERBOSE in args -> Verbosity.VERBOSE
 	else -> Verbosity.DEFAULT
@@ -94,15 +99,18 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
 fun main(args: Array<String>) {
 	handleEarlyExitArgs(args)
 
-	startKoin { modules(coreModule) }
 	KotlinLoggingConfiguration.logLevel = Level.OFF
+	startKoin { modules(coreModule) }
 
 	val verbosity = parseVerbosity(args)
 	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET }.toTypedArray()
 
 	val factory = NativeContextFactory()
 	val exitCode = try {
-		when (positionalArgs[0]) {
+		if (positionalArgs.isEmpty()) {
+			printUsage()
+			2
+		} else when (positionalArgs[0]) {
 			CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
 			CMD_SIM     -> runSim(positionalArgs, factory, verbosity)
 			else        -> { printUsage(); 2 }

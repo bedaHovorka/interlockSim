@@ -4,6 +4,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class SimulationEventTest {
@@ -93,6 +94,15 @@ class SimulationEventTest {
 	fun formatTimeFloatingPointEdgeCase() {
 		val event = SimulationEvent(45.678, ReportType.TRAIN_EVENTS, "src", "msg")
 		assertEquals("00:00:45.678", event.formatTime())
+	}
+
+	@Test
+	fun formatTimeMillisDoesNotOverflow() {
+		// roundToInt() of (0.9995 * 1000) = 999.5 would give 1000 without coerceIn
+		val event = SimulationEvent(1.9995, ReportType.TRAIN_EVENTS, "src", "msg")
+		val result = event.formatTime()
+		assertFalse(result.contains(".1000"), "millis must not overflow to 1000: $result")
+		assertEquals("00:00:01.999", result)
 	}
 
 	@Test
