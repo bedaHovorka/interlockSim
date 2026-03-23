@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.sim.SimulationEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.FlowLayout
