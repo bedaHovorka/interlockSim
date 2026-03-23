@@ -51,14 +51,15 @@ private fun eprintln(message: String?) {
  *
  * @since Issue #415 (fast-sim native CLI)
  */
-@Suppress("TooGenericExceptionCaught")
-fun main(args: Array<String>) {
+/**
+ * Handles `--version`, `--help`, and empty args before Koin is started.
+ * Returns `null` when the program should continue, otherwise calls [exitProcess].
+ */
+private fun handleEarlyExitArgs(args: Array<String>) {
 	if (args.isEmpty()) {
 		printUsage()
 		exitProcess(2)
 	}
-
-	// --version and --help are handled before Koin init: they need no DI and must be near-instant
 	if (args[0] == CMD_VERSION) {
 		println(VERSION_STRING)
 		exitProcess(0)
@@ -67,15 +68,36 @@ fun main(args: Array<String>) {
 		printUsage()
 		exitProcess(0)
 	}
+}
+
+private fun parseVerbosity(args: Array<String>): Verbosity = when {
+	CMD_QUIET in args -> Verbosity.QUIET
+	CMD_VERBOSE in args -> Verbosity.VERBOSE
+	else -> Verbosity.DEFAULT
+}
+
+/**
+ * Entry point for the :fast-sim native CLI binary.
+ *
+ * Supported modes:
+ * - `fast-sim example <name> <endTime>` — run a built-in example
+ * - `fast-sim sim <path> <endTime>` — run simulation from XML file
+ * - `fast-sim --version` — print version and exit (no Koin started)
+ * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
+ * - No args or unknown command → print usage to stderr, exit 2
+ *
+ * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
+ *
+ * @since Issue #415 (fast-sim native CLI)
+ */
+@Suppress("TooGenericExceptionCaught")
+fun main(args: Array<String>) {
+	handleEarlyExitArgs(args)
 
 	startKoin { modules(coreModule) }
 	KotlinLoggingConfiguration.logLevel = Level.OFF
 
-	val verbosity = when {
-		CMD_QUIET in args -> Verbosity.QUIET
-		CMD_VERBOSE in args -> Verbosity.VERBOSE
-		else -> Verbosity.DEFAULT
-	}
+	val verbosity = parseVerbosity(args)
 	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET }.toTypedArray()
 
 	val factory = NativeContextFactory()
