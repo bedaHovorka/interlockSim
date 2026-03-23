@@ -99,7 +99,7 @@ class TextReporterIntegrationTest {
 	}
 
 	@Test
-	fun summaryHasExpectedFormat() {
+	fun summaryIncludesTrainCountGreaterThanZero() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		val ctx = NativeExampleRegistry.create("shuntingLoop", 60, NativeContextFactory())
@@ -113,6 +113,7 @@ class TextReporterIntegrationTest {
 		val summary = output.last()
 		assertTrue(summary.startsWith("---"), "Summary should start with ---: $summary")
 		assertTrue(summary.contains("trains"), "Summary should mention trains: $summary")
+		assertTrue(!summary.contains("0 trains"), "Should have at least 1 train: $summary")
 		assertTrue(summary.contains("sim time"), "Summary should mention sim time: $summary")
 		assertTrue(summary.contains("wall"), "Summary should mention wall time: $summary")
 	}

@@ -86,6 +86,20 @@ class TextReporterTest {
 	}
 
 	@Test
+	fun summaryCountsTrainsWithSpacesInName() {
+		// Real Train objects have name "Train #N" which contains a space.
+		// Report format: "<time> Train #1 approved IO1->IO2" — split limit=3 gives
+		// source="Train", message="#1 approved IO1->IO2". Train counting must handle this.
+		val output = mutableListOf<String>()
+		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+		fireEvent(reporter, ReportType.TRAIN_EVENTS, "1.0 Train #1 approved IO1->IO2")
+		fireEvent(reporter, ReportType.TRAIN_EVENTS, "2.0 Train #2 approved IO2->IO1")
+		reporter.printSummary()
+		val summary = output.last()
+		assertTrue(summary.contains("2 trains"), "Summary should say 2 trains: $summary")
+	}
+
+	@Test
 	fun summaryIncludesSimTime() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }

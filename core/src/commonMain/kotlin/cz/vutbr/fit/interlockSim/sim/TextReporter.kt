@@ -33,10 +33,16 @@ class TextReporter(
 		val simEvent = SimulationEvent.fromContextChangeEvent(event) ?: return
 		lastSimTime = simEvent.simulationTime
 
-		if (simEvent.eventType == ReportType.TRAIN_EVENTS &&
-			simEvent.message.startsWith("approved")
-		) {
-			trainNames.add(simEvent.source)
+		// Track unique trains from "approved" events. The source may be truncated
+		// (e.g. "Train" instead of "Train #1") because obj.toString() can contain
+		// spaces that get split by fromContextChangeEvent(). Use combined
+		// source+message to detect and extract the full train identifier.
+		if (simEvent.eventType == ReportType.TRAIN_EVENTS) {
+			val combined = "${simEvent.source} ${simEvent.message}"
+			val approvedIndex = combined.indexOf("approved")
+			if (approvedIndex > 0) {
+				trainNames.add(combined.substring(0, approvedIndex).trim())
+			}
 		}
 
 		if (simEvent.eventType !in allowedTypes) return
