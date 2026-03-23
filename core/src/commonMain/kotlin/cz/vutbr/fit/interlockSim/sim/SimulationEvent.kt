@@ -15,6 +15,7 @@ data class SimulationEvent(
 		val hours = totalSeconds / 3600
 		val minutes = (totalSeconds % 3600) / 60
 		val seconds = totalSeconds % 60
+		// roundToInt() is intentional: more accurate than truncation; coerceIn guards the 999.5→1000 overflow
 		val millis = ((simulationTime - totalSeconds) * 1000).roundToInt().coerceIn(0, 999)
 		return "${hours.pad(2)}:${minutes.pad(2)}:${seconds.pad(2)}.${millis.pad(3)}"
 	}
@@ -33,7 +34,6 @@ data class SimulationEvent(
 			}
 			val fullMessage = event.newValue?.toString() ?: return null
 			val parts = fullMessage.trim().split(Regex("\\s+"), limit = 3)
-			if (parts.isEmpty()) return null
 			val simulationTime = parts[0].toDoubleOrNull() ?: 0.0
 			val source = if (parts.size > 1) parts[1] else ""
 			// When only one non-time token exists (degenerate input), source and message are the same token.
