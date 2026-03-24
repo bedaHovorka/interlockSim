@@ -255,7 +255,7 @@ jobs:
           ELAPSED_SEC=$(awk "BEGIN {printf \"%.2f\", $ELAPSED_MS / 1000}")
 
           # Verify output contains simulation summary with at least 1 train
-          if echo "$OUTPUT" | grep -qP '--- Simulation complete: [1-9]\d* trains'; then
+          if echo "$OUTPUT" | grep -qP -- '--- Simulation complete: [1-9]\d* trains'; then
             echo "✓ Native smoke test passed (${ELAPSED_SEC}s)"
             echo "$OUTPUT"
           else
