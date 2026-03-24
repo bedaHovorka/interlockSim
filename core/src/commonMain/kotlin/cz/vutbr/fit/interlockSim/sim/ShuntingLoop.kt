@@ -87,6 +87,14 @@ class ShuntingLoop(
 		// MAX_TRAINS = 2 enforces physical capacity constraint
 		// All 5 generated trains complete sequentially via queueing mechanism
 		private const val MAX_TRAINS: Int = 2
+
+		/** Report types enabled by the shunting-loop simulation scenario. */
+		internal val ENABLED_REPORT_TYPES = arrayOf(
+			ReportType.TRAIN_APPROVED,
+			ReportType.TRAIN_EVENTS,
+			ReportType.TRAIN_CONTINUOUS,
+			ReportType.NODE_EVENTS
+		)
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
@@ -191,12 +199,7 @@ class ShuntingLoop(
 	}
 
 	override suspend fun startAction() {
-		env.addReportTypes(
-			ReportType.TRAIN_APPROVED,
-			ReportType.TRAIN_EVENTS,
-			ReportType.TRAIN_CONTINUOUS,
-			ReportType.NODE_EVENTS
-		)
+		env.addReportTypes(*ENABLED_REPORT_TYPES)
 
 		// Conditionally activate real-time synchronization for GUI mode
 		if (enableRealTimeSync) {

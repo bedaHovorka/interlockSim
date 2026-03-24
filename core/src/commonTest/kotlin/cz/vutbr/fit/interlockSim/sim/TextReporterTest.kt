@@ -335,4 +335,37 @@ class TextReporterTest {
 		val summary = output.last()
 		assertTrue(summary.contains("0 trains"), "Non-approved events should not count trains: $summary")
 	}
+
+	// --- Contract tests: verify Train.formatApprovalMessage produces TextReporter-parseable output ---
+
+	@Test
+	fun trainFormatApprovalMessageParsedByTextReporter() {
+		// Verify that the structured format produced by Train.formatApprovalMessage
+		// is correctly parsed by TextReporter's TRAIN_APPROVED regex
+		val msg = Train.formatApprovalMessage("Train #1", "IO1", "IO2")
+		val output = mutableListOf<String>()
+		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+		fireEvent(reporter, ReportType.TRAIN_APPROVED, "1.0 Train $msg")
+		reporter.printSummary()
+		val summary = output.last()
+		assertTrue(summary.contains("1 trains"), "formatApprovalMessage output should be parseable: $summary")
+	}
+
+	@Test
+	fun trainFormatApprovalMessageContainsStructuredPayload() {
+		val msg = Train.formatApprovalMessage("Express #42", "StationA", "StationB")
+		assertTrue(msg.contains("""train="Express #42""""), "Should contain train name: $msg")
+		assertTrue(msg.contains("route=StationA->StationB"), "Should contain route: $msg")
+	}
+
+	@Test
+	fun trainFormatApprovalMessageWithSpecialCharsInName() {
+		val msg = Train.formatApprovalMessage("IC 503 Praha-Brno", "Praha", "Brno")
+		val output = mutableListOf<String>()
+		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+		fireEvent(reporter, ReportType.TRAIN_APPROVED, "1.0 src $msg")
+		reporter.printSummary()
+		val summary = output.last()
+		assertTrue(summary.contains("1 trains"), "Should count train with special chars: $summary")
+	}
 }
