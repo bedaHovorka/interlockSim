@@ -241,15 +241,15 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :fast-sim:linuxX64Test --no-daemon --stacktrace
 
-    - name: Smoke test — native binary (shuntingLoop 60s)
-      timeout-minutes: 2
+    - name: Smoke test — native binary (shuntingLoop 300s)
+      timeout-minutes: 8
       run: |
         BINARY=fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
-        echo "Starting native smoke test (shunting loop, 60 simulated seconds)..."
+        echo "Starting native smoke test (shunting loop, 300 simulated seconds)..."
 
         START_TIME=$(date +%s%N)
 
-        if OUTPUT=$("$BINARY" example shuntingLoop 60 2>&1); then
+        if OUTPUT=$("$BINARY" example shuntingLoop 300 2>&1); then
           END_TIME=$(date +%s%N)
           ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))
           ELAPSED_SEC=$(awk "BEGIN {printf \"%.2f\", $ELAPSED_MS / 1000}")
