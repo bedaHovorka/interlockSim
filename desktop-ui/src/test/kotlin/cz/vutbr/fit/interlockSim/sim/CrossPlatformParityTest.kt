@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -65,6 +66,7 @@ class CrossPlatformParityTest {
 
 		/**
 		 * Paths relative to the Gradle test working directory (`desktop-ui/`).
+		 * Gradle's test task sets workingDir to the subproject directory.
 		 * - JAR: `desktop-ui/build/libs/interlockSim.jar` → `build/libs/interlockSim.jar`
 		 * - Native: `fast-sim/build/bin/...` → `../fast-sim/build/bin/...`
 		 */
@@ -131,6 +133,7 @@ class CrossPlatformParityTest {
 	}
 
 	@Test
+	@Timeout(value = 300, unit = TimeUnit.SECONDS)
 	fun `JVM and native produce structurally equivalent output`() {
 		assumeTrue(JAR_PATH.exists()) {
 			"JVM JAR not found at ${JAR_PATH.absolutePath} — run ./gradlew :desktop-ui:shadowJar first"
