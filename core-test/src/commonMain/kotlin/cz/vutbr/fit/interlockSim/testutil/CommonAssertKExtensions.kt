@@ -54,12 +54,9 @@ fun <R> Assert<Result<R>>.hasMessageContaining(substring: String): Assert<Result
 /**
  * Extension function for message content assertions on Throwable types.
  *
- * @JvmName is required: while the two hasMessageContaining overloads differ by receiver type
- * in Kotlin (Assert<Result<R>> vs Assert<Throwable>), JVM type erasure causes a signature clash.
- * kotlin.jvm.JvmName is available in common source sets (declared in kotlin-stdlib-common).
- *
- * The JVM-only versions in AssertKExtensions.kt (core/jvmTest, desktop-ui/test) are the
- * original implementations; these commonMain versions are the KMP-compatible replacements.
+ * @JvmName is required: both overloads erase to the same JVM signature
+ * `hasMessageContaining(Assert, String): Assert` because extension receivers
+ * become the first parameter and generics are erased.
  */
 @kotlin.jvm.JvmName("hasMessageContainingThrowable")
 fun Assert<Throwable>.hasMessageContaining(substring: String): Assert<Throwable> =

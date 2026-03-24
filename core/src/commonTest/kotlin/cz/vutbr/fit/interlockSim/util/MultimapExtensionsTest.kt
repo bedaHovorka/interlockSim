@@ -200,16 +200,13 @@ class MultimapExtensionsTest {
 	// === Ordering and sorting ===
 
 	@Test
-	fun keys_sortedByNaturalOrder() {
-// Sorted map maintains sorted order
+	fun keys_afterOutOfOrderInsertion_containsAllKeys() {
 		multiMap.putMulti("C", 3)
 		multiMap.putMulti("A", 1)
 		multiMap.putMulti("B", 2)
 
-// Get values in key order by traversing
 		val values = multiMap.valuesMulti()
 
-// Sorted map keys are sorted, valuesMulti returns in key order
 		assertThat(values as Iterable<Int>).containsExactlyInAnyOrder(1, 2, 3)
 	}
 

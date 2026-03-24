@@ -25,7 +25,7 @@ class Array2DMapTest {
 	// Note: Original JVM test used TreeMap(POINT_COMPARATOR) for comparator-ordered reference.
 	// mutableMapOf (LinkedHashMap) is sufficient here because all assertions check containment
 	// semantics (equals, get, containsKey, entries Set.equals) — none rely on iteration order.
-	private val treeMap = mutableMapOf<Point, Int>()
+	private val referenceMap = mutableMapOf<Point, Int>()
 	private val BOUND: Int = 1000
 
 	companion object {
@@ -39,7 +39,7 @@ class Array2DMapTest {
 	fun testClear() {
 		EQ()
 		array2DMap.clear()
-		treeMap.clear()
+		referenceMap.clear()
 		assertThat(array2DMap.size).isEqualTo(0)
 		EQ()
 	}
@@ -49,7 +49,7 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testEntrySet() {
-		assertThat(array2DMap.entries).isEqualTo(treeMap.entries)
+		assertThat(array2DMap.entries).isEqualTo(referenceMap.entries)
 	}
 
 	/**
@@ -61,7 +61,7 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				val integer1 = treeMap.get(p)
+				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
 				assertThat(integer2).isEqualTo(integer1)
 			}
@@ -77,7 +77,7 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				val integer1 = treeMap.get(p)
+				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
 				assertThat(integer2).isEqualTo(integer1)
 			}
@@ -94,7 +94,7 @@ class Array2DMapTest {
 			val y = RANDOM.nextInt(BOUND)
 			val newInt = RANDOM.nextInt()
 			val p = Point(x, y)
-			val integer1 = treeMap.put(p, newInt)
+			val integer1 = referenceMap.put(p, newInt)
 			val integer2 = array2DMap.put(p, newInt)
 			assertThat(integer2).isEqualTo(integer1)
 		}
@@ -120,7 +120,7 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				assertThat(array2DMap.containsKey(p)).isEqualTo(treeMap.containsKey(p))
+				assertThat(array2DMap.containsKey(p)).isEqualTo(referenceMap.containsKey(p))
 			}
 		}
 	}
@@ -135,7 +135,7 @@ class Array2DMapTest {
 			val treeList = ArrayList<Int?>()
 			for (x in 0 until BOUND) {
 				val p = Point(x, y)
-				val double1 = treeMap.get(p)
+				val double1 = referenceMap.get(p)
 				treeList.add(double1)
 			}
 			val row = array2DMap.getRow(y)
@@ -146,7 +146,7 @@ class Array2DMapTest {
 	}
 
 	private fun EQ() {
-		assertThat(array2DMap).isEqualTo(treeMap)
+		assertThat(array2DMap).isEqualTo(referenceMap)
 	}
 
 	/**
