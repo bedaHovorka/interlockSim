@@ -38,20 +38,6 @@ private fun eprintln(message: String?) {
 }
 
 /**
- * Entry point for the :fast-sim native CLI binary.
- *
- * Supported modes:
- * - `fast-sim example <name> <endTime>` — run a built-in example
- * - `fast-sim sim <path> <endTime>` — run simulation from XML file
- * - `fast-sim --version` — print version and exit (no Koin started)
- * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
- * - No args or unknown command → print usage to stderr, exit 2
- *
- * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
- *
- * @since Issue #415 (fast-sim native CLI)
- */
-/**
  * Handles `--version`, `--help`, and empty args before Koin is started.
  * For these early-exit arguments, prints the appropriate output and calls [exitProcess].
  * If none of these arguments are present, returns normally and the program continues.

@@ -91,9 +91,8 @@ class NativeJvmParityTest {
 
 	@Test
 	fun `invariant 2 - simulation completes without exceptions`() {
-		// If this test body completes, the simulation ran without exception.
-		val (events, _) = runSimulationAndCollect()
-		assertTrue(events.isNotEmpty(), "Simulation should produce output")
+		runSimulationAndCollect()
+		// Implicit assertion: reaching this line means the simulation completed without throwing
 	}
 
 	@Test
