@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**' ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -214,7 +214,7 @@ jobs:
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: wrapper
-        cache-read-only: true
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
         build-scan-publish: true
         build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
         build-scan-terms-of-use-agree: "yes"
@@ -234,13 +234,18 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --stacktrace
 
-    - name: Sanity check — print version
+    - name: Sanity check — verify version
       run: |
         BINARY=fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
         echo "Binary path: $BINARY"
         echo "Binary size: $(stat --format='%s' "$BINARY" | numfmt --to=iec-i --suffix=B)"
         echo ""
-        "$BINARY" --version
+        VERSION=$("$BINARY" --version)
+        echo "Binary version: $VERSION"
+        if ! echo "$VERSION" | grep -q 'fast-sim'; then
+          echo "ERROR: --version output does not contain 'fast-sim'. Actual output: '$VERSION'"
+          exit 1
+        fi
 
     - name: Upload fast-sim native binary
       uses: actions/upload-artifact@v4
