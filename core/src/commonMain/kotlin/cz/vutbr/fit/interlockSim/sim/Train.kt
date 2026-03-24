@@ -53,6 +53,13 @@ class Train :
 		 * Minimum train deceleration in m/s² (negative value for braking)
 		 */
 		private const val MINIMAL_DECELERATION = -3
+
+		/**
+		 * Formats the structured TRAIN_APPROVED message payload.
+		 * The format is consumed by [TextReporter]'s regex: `train="([^"]+)"`.
+		 */
+		internal fun formatApprovalMessage(trainName: String, inName: String, outName: String): String =
+			"""train="$trainName" route=$inName->$outName"""
 	}
 
 	// GitHub #62: Support bidirectional train operation (reverse direction)
@@ -820,7 +827,11 @@ class Train :
 		val worker: InOutWorker = env.getWorkerFor(inout)
 		logger.debug { "Train $number approved for movement from ${inout.name} to ${timetable.getOut().name}" }
 		worker.enterTrain(this)
-		env.report("approved ${inout.name}->${timetable.getOut().name}", this, ReportType.TRAIN_EVENTS)
+		env.report(
+			formatApprovalMessage(name, inout.name, timetable.getOut().name),
+			this,
+			ReportType.TRAIN_APPROVED
+		)
 
 		// Wait for InOutWorker to reserve initial path before starting Front
 		// This prevents race condition where Front checks for reserved path before InOutWorker completes

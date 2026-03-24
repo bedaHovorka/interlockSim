@@ -103,6 +103,11 @@ interface SimulationContext :
 		NODE_EVENTS,
 
 		/**
+		 * train path approvals (reservation granted to enter network)
+		 */
+		TRAIN_APPROVED,
+
+		/**
 		 * train discrete events: stop on signal, exiting system ...
 		 */
 		TRAIN_EVENTS,
