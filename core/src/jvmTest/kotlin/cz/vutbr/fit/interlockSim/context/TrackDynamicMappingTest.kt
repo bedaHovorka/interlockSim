@@ -73,7 +73,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		fun toDynamic_unmappedTrack_throwsException() {
 			// Arrange
 			val context = factory.createEmptyContext()
-			val contextWithTracks = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val contextWithTracks = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Get a track from the context with tracks
 			val graph = contextWithTracks.getGraph()
@@ -103,7 +103,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - track mapping with eager creation")
 		fun vyhybnaXml_trackMappingEagerCreation() {
 			// Arrange - Load vyhybna.xml configuration
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Initialize dynamic mapping (normally called by run())
 			context.initializeDynamicMapping()
@@ -141,7 +141,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - graph contains multiple track blocks")
 		fun vyhybnaXml_graphHasMultipleTracks() {
 			// Arrange
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Act
 			val graph = context.getGraph()

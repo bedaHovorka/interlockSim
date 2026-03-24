@@ -66,14 +66,12 @@ class PathTrackIntegrationTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load XML fixtures for testing via classpath resources
-		val linearStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			?: error("Test fixture not found: linear-track.xml")
-		val switchStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
-			?: error("Test fixture not found: switch-basic.xml")
-
-		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
-		linearContext = simulationContextFactory.createContext(linearStream) as DefaultSimulationContext
-		switchContext = simulationContextFactory.createContext(switchStream) as DefaultSimulationContext
+		linearContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+			?: error("Test fixture not found: linear-track.xml"))
+			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+		switchContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
+			?: error("Test fixture not found: switch-basic.xml"))
+			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 
 		// Initialize dynamic mappings for both contexts
 		// This is required because tests use toDynamic() without calling run()

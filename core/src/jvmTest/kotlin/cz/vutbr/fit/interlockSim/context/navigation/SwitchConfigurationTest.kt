@@ -65,10 +65,9 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val resourceStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: error("Resource not found: vyhybna.xml")
-
-		val editingContext = editingContextFactory.createContext(resourceStream) as EditingContext
+		val editingContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			?: error("Resource not found: vyhybna.xml"))
+			.use { editingContextFactory.createContext(it) } as EditingContext
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)

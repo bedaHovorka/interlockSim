@@ -101,9 +101,11 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()
 		val context =
-			Util.assertInstanceOf<DefaultSimulationContext>(
-				factory.createContext(loadVyhybnaStream())
-			)
+			loadVyhybnaStream().use { stream ->
+				Util.assertInstanceOf<DefaultSimulationContext>(
+					factory.createContext(stream)
+				)
+			}
 
 		// Initialize dynamic wrapper map by calling getInOuts()
 		context.getInOuts()

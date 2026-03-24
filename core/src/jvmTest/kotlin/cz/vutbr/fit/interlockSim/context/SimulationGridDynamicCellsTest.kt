@@ -81,7 +81,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `simulation grid stores DynamicRailSemaphore not static RailSemaphore`() {
 			// Arrange: Load vyhybna.xml and create simulation context
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find any semaphore cell in the grid
@@ -111,7 +111,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `all semaphores in simulation grid are dynamic wrappers`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find all cells that are instances of DynamicRailSemaphore
@@ -148,7 +148,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `simulation grid stores DynamicInOut not static InOut`() {
 			// Arrange: Load vyhybna.xml and create simulation context
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find any InOut cell in the grid
@@ -178,7 +178,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `all InOuts in simulation grid are dynamic wrappers`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find all cells that are instances of DynamicInOut
@@ -214,7 +214,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `grid navigation returns dynamic wrappers directly`() {
 			// Arrange: Load vyhybna.xml and create simulation context
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find position of any semaphore in grid
@@ -245,7 +245,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `grid navigation returns same instance on repeated calls`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Find any semaphore position
@@ -287,7 +287,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `all NodeCells in simulation grid are dynamic wrappers`() {
 			// Arrange: Load vyhybna.xml and create simulation context
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find all cells that are DynamicPathSeparator instances
@@ -321,7 +321,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `TrackBlockPart cells are not transformed to dynamic wrappers`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Find all TrackBlockPart cells
@@ -357,7 +357,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `grid contains both dynamic NodeCells and static TrackBlockPart`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Act: Count dynamic NodeCells and static TrackBlockPart
@@ -395,7 +395,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `staticToDynamicMap contains mappings for all NodeCells`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Act: Access staticToDynamicMap via reflection (it's private)
 			val staticToDynamicMapField =
@@ -427,7 +427,7 @@ class SimulationGridDynamicCellsTest : KoinTestBase() {
 		fun `toDynamic returns same instance as grid navigation`() {
 			// Arrange
 			val factory = getKoin().get<SimulationContextFactory>()
-			val context = factory.createContext(loadVyhybnaStream()) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			val grid = context.getRailWayNetGrid()
 
 			// Find a semaphore in the grid

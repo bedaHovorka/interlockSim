@@ -22,12 +22,12 @@ import cz.vutbr.fit.interlockSim.testutil.buildMinimalEditing
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.File
 import java.io.FileInputStream
@@ -63,25 +63,12 @@ import java.util.concurrent.atomic.AtomicInteger
 class ConcurrentSaveTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 
+	@TempDir
+	lateinit var tempDir: File
+
 	companion object {
 		private const val TEST_FILE_PREFIX = "concurrent-test-network"
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
-		private val tempDir = File(System.getProperty("java.io.tmpdir"))
-	}
-
-	@AfterEach
-	fun cleanupTestFiles() {
-		// Clean up any test files created during tests
-		val testFiles =
-			tempDir.listFiles { _, name ->
-				name.startsWith(TEST_FILE_PREFIX) && name.endsWith(".xml")
-			}
-
-		if (testFiles != null) {
-			for (file in testFiles) {
-				file.delete()
-			}
-		}
 	}
 
 	@Test
