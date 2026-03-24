@@ -27,7 +27,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Comprehensive unit tests for context initialization via factory pattern.
@@ -148,11 +147,10 @@ class ContextInitializationTest : KoinTestBase() {
 		@Test
 		@DisplayName("valid XML file loads correctly")
 		fun xmlFile_valid_loadsContext() {
-			// Arrange
-			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml")
-
-			// Act
-			val context = editingContextFactory.createContext(xmlFile)
+			// Arrange & Act
+			val context = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/minimal-network.xml")
+				?: error("Test fixture not found: minimal-network.xml"))
+				.use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -172,11 +170,10 @@ class ContextInitializationTest : KoinTestBase() {
 		@Test
 		@DisplayName("linear track XML loads with two InOut endpoints")
 		fun linearTrackFile_loadsWithEndpoints() {
-			// Arrange
-			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-
-			// Act
-			val context = editingContextFactory.createContext(xmlFile)
+			// Arrange & Act
+			val context = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+				?: error("Test fixture not found: linear-track.xml"))
+				.use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -212,7 +209,7 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("nonexistent file throws exception")
 		fun xmlFile_notFound_throwsException() {
 			// Arrange
-			val xmlFile = File("nonexistent/path/does-not-exist.xml")
+			val xmlFile = java.io.File("nonexistent/path/does-not-exist.xml")
 
 			// Act & Assert
 			assertk
@@ -230,13 +227,12 @@ class ContextInitializationTest : KoinTestBase() {
 		@Test
 		@DisplayName("malformed XML file throws exception")
 		fun xmlFile_malformed_throwsException() {
-			// Arrange
-			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/invalid-malformed-xml.xml")
-
-			// Act & Assert
+			// Arrange & Act & Assert
 			assertk
 				.assertFailure {
-					editingContextFactory.createContext(xmlFile)
+					(javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/invalid-malformed-xml.xml")
+						?: error("Test fixture not found: invalid-malformed-xml.xml"))
+						.use { editingContextFactory.createContext(it) }
 				}.isInstanceOf(Exception::class)
 		}
 	}
@@ -249,8 +245,9 @@ class ContextInitializationTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
-			val xmlFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-			val editingContext = editingContextFactory.createContext(xmlFile) as EditingContext
+			val editingContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+				?: error("Test fixture not found: linear-track.xml"))
+				.use { editingContextFactory.createContext(it) } as EditingContext
 			linearTrackContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 

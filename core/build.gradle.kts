@@ -44,8 +44,6 @@ kotlin {
 			}
 		}
 		testRuns["test"].executionTask.configure {
-			// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
-			workingDir = rootProject.projectDir.resolve("desktop-ui")
 			useJUnitPlatform {
 				excludeTags("integration-test")
 			}
@@ -161,9 +159,6 @@ tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("
 val integrationTest by tasks.registering(Test::class) {
 	group = "verification"
 	description = "Run :core integration tests (tagged with @Tag(\"integration-test\"))"
-
-	// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
-	workingDir = rootProject.projectDir.resolve("desktop-ui")
 
 	useJUnitPlatform {
 		includeTags("integration-test")

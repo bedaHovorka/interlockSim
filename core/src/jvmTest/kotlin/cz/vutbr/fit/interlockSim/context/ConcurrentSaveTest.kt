@@ -22,12 +22,12 @@ import cz.vutbr.fit.interlockSim.testutil.buildMinimalEditing
 import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.io.TempDir
 import org.koin.test.inject
 import java.io.File
 import java.io.FileInputStream
@@ -63,25 +63,12 @@ import java.util.concurrent.atomic.AtomicInteger
 class ConcurrentSaveTest : KoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 
+	@TempDir
+	lateinit var tempDir: File
+
 	companion object {
 		private const val TEST_FILE_PREFIX = "concurrent-test-network"
 		private const val DEFAULT_TIMEOUT_SECONDS = 10
-	}
-
-	@AfterEach
-	fun cleanupTestFiles() {
-		// Clean up any test files created during tests
-		val currentDir = File(".")
-		val testFiles =
-			currentDir.listFiles { _, name ->
-				name.startsWith(TEST_FILE_PREFIX) && name.endsWith(".xml")
-			}
-
-		if (testFiles != null) {
-			for (file in testFiles) {
-				file.delete()
-			}
-		}
 	}
 
 	@Test
@@ -109,7 +96,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 						val context = buildMinimalEditing()
 
 						// Save to unique file
-						val file = File("$TEST_FILE_PREFIX-$threadId.xml")
+						val file = File(tempDir, "$TEST_FILE_PREFIX-$threadId.xml")
 						editingContextFactory.saveContext(context, file)
 
 						successCount.incrementAndGet()
@@ -138,7 +125,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 
 		// Verify all files were created and are valid
 		for (i in 0 until threadCount) {
-			val file = File("$TEST_FILE_PREFIX-$i.xml")
+			val file = File(tempDir, "$TEST_FILE_PREFIX-$i.xml")
 			assertThat(file).exists().isFile()
 
 			// Verify file is valid XML by loading it
@@ -153,7 +140,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	@DisplayName("Concurrent saves to same file should handle gracefully")
 	fun concurrentSave_sameFile_handlesGracefully() {
 		// Arrange
-		val targetFile = File("$TEST_FILE_PREFIX-same.xml")
+		val targetFile = File(tempDir, "$TEST_FILE_PREFIX-same.xml")
 		val context = buildMinimalEditing()
 
 		val threadCount = 5
@@ -206,7 +193,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 		// Arrange
 		val context = buildLinearTrack()
 
-		val file = File("$TEST_FILE_PREFIX-modify.xml")
+		val file = File(tempDir, "$TEST_FILE_PREFIX-modify.xml")
 
 		val startLatch = CountDownLatch(1)
 		val doneLatch = CountDownLatch(2)
@@ -277,7 +264,7 @@ class ConcurrentSaveTest : KoinTestBase() {
 	@DisplayName("Repeated concurrent saves should maintain consistency")
 	fun repeatedConcurrentSaves_maintainsConsistency() {
 		// Arrange
-		val targetFile = File("$TEST_FILE_PREFIX-repeated.xml")
+		val targetFile = File(tempDir, "$TEST_FILE_PREFIX-repeated.xml")
 		val context = buildMinimalEditing()
 
 		// Save initial file

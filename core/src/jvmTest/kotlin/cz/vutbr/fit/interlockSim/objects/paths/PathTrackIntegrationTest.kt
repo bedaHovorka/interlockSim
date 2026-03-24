@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Integration tests for path-track coordination in railway interlocking.
@@ -66,13 +65,13 @@ class PathTrackIntegrationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		// Load XML fixtures for testing
-		val linearFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
-		val switchFile = File("src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
-
-		// Create contexts from fixtures (will be wrapped in MockSimulationContext as needed)
-		linearContext = simulationContextFactory.createContext(linearFile) as DefaultSimulationContext
-		switchContext = simulationContextFactory.createContext(switchFile) as DefaultSimulationContext
+		// Load XML fixtures for testing via classpath resources
+		linearContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+			?: error("Test fixture not found: linear-track.xml"))
+			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+		switchContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
+			?: error("Test fixture not found: switch-basic.xml"))
+			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 
 		// Initialize dynamic mappings for both contexts
 		// This is required because tests use toDynamic() without calling run()
