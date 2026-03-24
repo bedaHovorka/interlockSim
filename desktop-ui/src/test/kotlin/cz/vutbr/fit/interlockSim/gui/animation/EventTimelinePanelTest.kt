@@ -73,6 +73,24 @@ class EventTimelinePanelTest {
 	}
 
 	@Test
+	fun `train approvals are displayed by default`() {
+		val event =
+			SimulationEvent(
+				simulationTime = 10.0,
+				eventType = ReportType.TRAIN_APPROVED,
+				source = "",
+				message = """train="Train #1" route=IO1->IO2"""
+			)
+
+		SwingUtilities.invokeAndWait {
+			panel.addEvent(event)
+
+			assertThat(textArea.text).contains("[TRAIN_APPROVED]")
+			assertThat(textArea.text).contains("""train="Train #1"""")
+		}
+	}
+
+	@Test
 	fun `addEvent respects filter settings`() {
 		SwingUtilities.invokeAndWait {
 			// Disable TRAIN_EVENTS filter
@@ -161,6 +179,7 @@ class EventTimelinePanelTest {
 		SwingUtilities.invokeAndWait {
 			// Initially, TRAIN_EVENTS should be enabled (default)
 			assertThat(panel.isFilterEnabled(ReportType.TRAIN_EVENTS)).isTrue()
+			assertThat(panel.isFilterEnabled(ReportType.TRAIN_APPROVED)).isTrue()
 
 			// Disable filter
 			panel.setFilterEnabled(ReportType.TRAIN_EVENTS, false)
@@ -197,12 +216,14 @@ class EventTimelinePanelTest {
 		SwingUtilities.invokeAndWait {
 			panel.addEvent(SimulationEvent(1.0, ReportType.PATH_SETTING, "", "Path event"))
 			panel.addEvent(SimulationEvent(2.0, ReportType.NODE_EVENTS, "", "Node event"))
+			panel.addEvent(SimulationEvent(2.5, ReportType.TRAIN_APPROVED, "", """train="Train #5" route=A->B"""))
 			panel.addEvent(SimulationEvent(3.0, ReportType.TRAIN_EVENTS, "", "Train event"))
 			panel.addEvent(SimulationEvent(4.0, ReportType.TRAIN_CONTINUOUS, "", "Continuous event"))
 
 			val text = textArea.text
 			assertThat(text).contains("[PATH_SETTING] Path event")
 			assertThat(text).contains("[NODE_EVENTS] Node event")
+			assertThat(text).contains("[TRAIN_APPROVED] train=\"Train #5\" route=A->B")
 			assertThat(text).contains("[TRAIN_EVENTS] Train event")
 			// TRAIN_CONTINUOUS is disabled by default, so it won't appear
 		}
@@ -278,6 +299,32 @@ class EventTimelinePanelTest {
 		SwingUtilities.invokeAndWait {
 			val border = panel.border
 			assertThat(border).isEqualTo(border) // Border exists
+		}
+	}
+
+	@Test
+	fun `disabling TRAIN_APPROVED filter hides approval events`() {
+		SwingUtilities.invokeAndWait {
+			// Add a TRAIN_APPROVED event (visible by default)
+			panel.addEvent(
+				SimulationEvent(1.0, ReportType.TRAIN_APPROVED, "", """train="Train #1" route=IO1->IO2""")
+			)
+			assertThat(textArea.text).contains("[TRAIN_APPROVED]")
+
+			// Disable filter — event should disappear
+			panel.setFilterEnabled(ReportType.TRAIN_APPROVED, false)
+			assertThat(textArea.text).isEqualTo("")
+
+			// Re-enable — event should reappear
+			panel.setFilterEnabled(ReportType.TRAIN_APPROVED, true)
+			assertThat(textArea.text).contains("[TRAIN_APPROVED]")
+		}
+	}
+
+	@Test
+	fun `TRAIN_APPROVED filter is enabled by default`() {
+		SwingUtilities.invokeAndWait {
+			assertThat(panel.isFilterEnabled(ReportType.TRAIN_APPROVED)).isTrue()
 		}
 	}
 }

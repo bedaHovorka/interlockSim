@@ -113,6 +113,7 @@ class EventTimelinePanel : JPanel() {
 		mapOf(
 			ReportType.PATH_SETTING to JCheckBox("Path Commands", true),
 			ReportType.NODE_EVENTS to JCheckBox("Node Events", true),
+			ReportType.TRAIN_APPROVED to JCheckBox("Train Approvals", true),
 			ReportType.TRAIN_EVENTS to JCheckBox("Train Events", true),
 			ReportType.TRAIN_CONTINUOUS to JCheckBox("Train Updates", false) // Initially disabled (high frequency)
 		)
