@@ -37,7 +37,7 @@ internal object SignalState {
 }
 
 /** Returns `true` if a SIGINT signal has been received since program start. */
-fun isInterrupted(): Boolean = SignalState.INTERRUPTED.value != 0
+internal fun isInterrupted(): Boolean = SignalState.INTERRUPTED.value != 0
 
 /** Installs a POSIX signal handler that sets the [SignalState.INTERRUPTED] flag on SIGINT. */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)

@@ -9,9 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.fastsim
 
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isTrue
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 /**
  * Tests for the SIGINT signal handler infrastructure.
@@ -25,11 +27,21 @@ class SignalHandlerTest {
 
 	@Test
 	fun `SIGINT exit code follows Unix convention of 128 plus signal number`() {
-		assertEquals(130, SIGINT_EXIT_CODE)
+		assertThat(SIGINT_EXIT_CODE).isEqualTo(130)
 	}
 
 	@Test
 	fun `interrupted flag is initially false`() {
-		assertFalse(isInterrupted())
+		assertThat(isInterrupted()).isFalse()
+	}
+
+	@Test
+	fun `isInterrupted returns true after flag is set`() {
+		try {
+			SignalState.INTERRUPTED.value = 1
+			assertThat(isInterrupted()).isTrue()
+		} finally {
+			SignalState.INTERRUPTED.value = 0
+		}
 	}
 }
