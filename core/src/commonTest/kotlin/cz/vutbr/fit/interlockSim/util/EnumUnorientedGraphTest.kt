@@ -150,10 +150,10 @@ class EnumUnorientedGraphTest {
 	}
 
 	@Test
-	fun contains_afterRemoval_returnsFalse() {
+	fun contains_afterPut_returnsTrue() {
 		graph.put(Direction.NORTH, Direction.SOUTH, 100)
-		// Note: remove() throws NotImplementedException, so we can't test this
-		// Just verify contains works correctly
+		// Note: remove() throws NotImplementedException, so we can't test removal
+		// Just verify contains works correctly after put
 		assertThat(graph.contains(Direction.NORTH, Direction.SOUTH)).isTrue()
 	}
 
@@ -165,10 +165,8 @@ class EnumUnorientedGraphTest {
 
 		val joined: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
-		@Suppress("UNCHECKED_CAST")
-		val joinedMap = joined as Map<Direction, Int>
-		assertThat(joinedMap).hasSize(1)
-		assertThat(joinedMap).containsEntry(Direction.SOUTH, 100)
+		assertThat(joined).hasSize(1)
+		assertThat(joined).containsEntry(Direction.SOUTH, 100)
 	}
 
 	@Test
@@ -179,10 +177,8 @@ class EnumUnorientedGraphTest {
 
 		val joined: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
-		@Suppress("UNCHECKED_CAST")
-		val joinedMap = joined as Map<Direction, Int>
-		assertThat(joinedMap).hasSize(3)
-		assertThat(joinedMap)
+		assertThat(joined).hasSize(3)
+		assertThat(joined)
 			.containsEntry(Direction.SOUTH, 100)
 			.containsEntry(Direction.EAST, 150)
 			.containsEntry(Direction.WEST, 200)
@@ -194,8 +190,7 @@ class EnumUnorientedGraphTest {
 
 		val joined: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.EAST)
 
-		@Suppress("UNCHECKED_CAST")
-		assertThat(joined as Map<Direction, Int>).isEmpty()
+		assertThat(joined).isEmpty()
 	}
 
 	@Test
@@ -205,10 +200,8 @@ class EnumUnorientedGraphTest {
 		val fromNorth: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 		val fromSouth: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.SOUTH)
 
-		@Suppress("UNCHECKED_CAST")
-		assertThat(fromNorth as Map<Direction, Int>).containsEntry(Direction.SOUTH, 100)
-		@Suppress("UNCHECKED_CAST")
-		assertThat(fromSouth as Map<Direction, Int>).containsEntry(Direction.NORTH, 100)
+		assertThat(fromNorth).containsEntry(Direction.SOUTH, 100)
+		assertThat(fromSouth).containsEntry(Direction.NORTH, 100)
 	}
 
 	@Test
@@ -222,10 +215,8 @@ class EnumUnorientedGraphTest {
 
 		val joined: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.NORTH)
 
-		@Suppress("UNCHECKED_CAST")
-		val joinedMap = joined as Map<Direction, Int>
-		assertThat(joinedMap).hasSize(3)
-		assertThat(joinedMap)
+		assertThat(joined).hasSize(3)
+		assertThat(joined)
 			.containsEntry(Direction.SOUTH, 1)
 			.containsEntry(Direction.EAST, 2)
 			.containsEntry(Direction.WEST, 3)
@@ -315,12 +306,9 @@ class EnumUnorientedGraphTest {
 		val southNeighbors: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.SOUTH)
 		val eastNeighbors: Map<Direction, Int> = graph.getJoinedNodesAndEdges(Direction.EAST)
 
-		@Suppress("UNCHECKED_CAST")
-		assertThat(northNeighbors as Map<Direction, Int>).hasSize(1)
-		@Suppress("UNCHECKED_CAST")
-		assertThat(southNeighbors as Map<Direction, Int>).hasSize(2)
-		@Suppress("UNCHECKED_CAST")
-		assertThat(eastNeighbors as Map<Direction, Int>).hasSize(2)
+		assertThat(northNeighbors).hasSize(1)
+		assertThat(southNeighbors).hasSize(2)
+		assertThat(eastNeighbors).hasSize(2)
 	}
 
 	@Test

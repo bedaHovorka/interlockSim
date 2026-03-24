@@ -16,6 +16,7 @@ package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
 import assertk.assertions.contains
+import assertk.assertions.containsExactly
 import assertk.assertions.containsExactlyInAnyOrder
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
@@ -265,7 +266,7 @@ class MultimapExtensionsTest {
 		val list = ArrayList(values)
 		assertThat(list)
 			.withMessage("LinkedHashSet should maintain insertion order")
-			.containsExactlyInAnyOrder(3, 1, 2)
+			.containsExactly(3, 1, 2)
 	}
 
 	// === Complex scenarios ===

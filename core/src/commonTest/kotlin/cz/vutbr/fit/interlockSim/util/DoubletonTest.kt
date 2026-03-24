@@ -91,37 +91,33 @@ class DoubletonTest {
 
 	private lateinit var setOpsDoubleton: Doubleton<String, Int>
 
-	private fun setUpSetOps() {
+	@BeforeTest
+	fun setUpSetOps() {
 		setOpsDoubleton = Doubleton("A", "B")
 	}
 
 	@Test
 	fun size_alwaysReturnsTwo() {
-		setUpSetOps()
 		assertThat(setOpsDoubleton.size).isEqualTo(2)
 	}
 
 	@Test
 	fun isEmpty_alwaysReturnsFalse() {
-		setUpSetOps()
 		assertThat(setOpsDoubleton.isEmpty()).isFalse()
 	}
 
 	@Test
 	fun contains_firstElement_returnsTrue() {
-		setUpSetOps()
 		assertThat(setOpsDoubleton.contains("A")).isTrue()
 	}
 
 	@Test
 	fun contains_secondElement_returnsTrue() {
-		setUpSetOps()
 		assertThat(setOpsDoubleton.contains("B")).isTrue()
 	}
 
 	@Test
 	fun contains_nonExistentElement_returnsFalse() {
-		setUpSetOps()
 		assertThat(setOpsDoubleton.contains("C")).isFalse()
 	}
 
@@ -136,7 +132,6 @@ class DoubletonTest {
 
 	@Test
 	fun iterator_iteratesOverBothElements() {
-		setUpSetOps()
 		val it = setOpsDoubleton.iterator()
 
 		assertThat(it.hasNext()).isTrue()
@@ -151,7 +146,6 @@ class DoubletonTest {
 
 	@Test
 	fun iterator_afterExhaustion_throwsException() {
-		setUpSetOps()
 		val it = setOpsDoubleton.iterator()
 		it.next()
 		it.next()
@@ -163,7 +157,6 @@ class DoubletonTest {
 
 	@Test
 	fun iterator_remove_throwsException() {
-		setUpSetOps()
 		val it = setOpsDoubleton.iterator()
 		it.next()
 

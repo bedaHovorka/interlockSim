@@ -22,6 +22,9 @@ import kotlin.test.Test
  */
 class Array2DMapTest {
 	private val array2DMap: Array2DMap<Int> = Array2DMap()
+	// Note: Original JVM test used TreeMap(POINT_COMPARATOR) for comparator-ordered reference.
+	// mutableMapOf (LinkedHashMap) is sufficient here because all assertions check containment
+	// semantics (equals, get, containsKey, entries Set.equals) — none rely on iteration order.
 	private val treeMap = mutableMapOf<Point, Int>()
 	private val BOUND: Int = 1000
 
