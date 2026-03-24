@@ -21,7 +21,6 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Unit tests for switch configuration during path reservation.
@@ -66,10 +65,10 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val resourcePath = javaClass.getResource("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		assertThat(resourcePath).isNotNull()
+		val resourceStream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			?: error("Resource not found: vyhybna.xml")
 
-		val editingContext = editingContextFactory.createContext(File(resourcePath!!.path)) as EditingContext
+		val editingContext = editingContextFactory.createContext(resourceStream) as EditingContext
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)
