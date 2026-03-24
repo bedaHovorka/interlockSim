@@ -69,6 +69,22 @@ services:
     # stdin_open: true
     # tty: true
 
+  # Native fast-sim CLI binary (no JVM, minimal image)
+  # Usage:
+  #   docker compose build fast-sim
+  #   docker compose run fast-sim example shuntingLoop 60
+  fast-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.fast-sim
+      args:
+        GITHUB_ACTOR: ${GITHUB_ACTOR}
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        BUILDKIT_INLINE_CACHE: 1
+    image: interlocksim-fast-sim:latest
+    container_name: interlocksim-fast-sim
+    command: ["example", "shuntingLoop", "60"]
+
   # Build LaTeX thesis with Czech language tools
   text:
     build:
