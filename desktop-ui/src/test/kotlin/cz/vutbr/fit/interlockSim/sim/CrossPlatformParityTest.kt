@@ -172,10 +172,16 @@ class CrossPlatformParityTest {
 		assertThat(jvmTs, name = "JVM timestamps\n$diag").isNotEmpty()
 		assertThat(nativeTs, name = "Native timestamps\n$diag").isNotEmpty()
 		for (i in 1 until jvmTs.size) {
-			assertThat(jvmTs[i] >= jvmTs[i - 1], name = "JVM chronological at $i: ${jvmTs[i]} >= ${jvmTs[i - 1]}").isTrue()
+			assertThat(
+				jvmTs[i] >= jvmTs[i - 1],
+				name = "JVM chronological at $i: ${jvmTs[i]} >= ${jvmTs[i - 1]}"
+			).isTrue()
 		}
 		for (i in 1 until nativeTs.size) {
-			assertThat(nativeTs[i] >= nativeTs[i - 1], name = "Native chronological at $i: ${nativeTs[i]} >= ${nativeTs[i - 1]}").isTrue()
+			assertThat(
+				nativeTs[i] >= nativeTs[i - 1],
+				name = "Native chronological at $i: ${nativeTs[i]} >= ${nativeTs[i - 1]}"
+			).isTrue()
 		}
 
 		// Invariant 5: Both mention trains in summary
