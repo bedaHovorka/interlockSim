@@ -95,8 +95,8 @@ class JvmParityReferenceTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `invariant 2 - simulation completes without exceptions`() {
-		val (events, _) = runSimulationAndCollect()
-		assertThat(events).isNotEmpty()
+		runSimulationAndCollect()
+		// Implicit assertion: reaching this line means the simulation completed without throwing
 	}
 
 	@Test

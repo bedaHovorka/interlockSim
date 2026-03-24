@@ -16,6 +16,7 @@ import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.deleteFile
 import cz.vutbr.fit.interlockSim.util.writeTextFile
 import kotlin.test.assertContains
@@ -98,7 +99,7 @@ class NativeSmokeTest {
 
 	@Test
 	fun `NativeContextFactory createFromFile returns context from valid XML file`() {
-		val path = "/tmp/fast-sim-test-vyhybna.xml"
+		val path = "/tmp/fast-sim-test-vyhybna-${currentTimeMillisKMP()}.xml"
 		writeTextFile(path, NetworkResources.VYHYBNA_XML)
 		val factory = NativeContextFactory()
 		val ctx = try {
