@@ -78,15 +78,13 @@ class TextReporter(
 			val wallTenths = (wallMs / 100).coerceAtLeast(0) // integer tenths of seconds
 			return "${wallTenths / 10}.${wallTenths % 10}"
 		}
+
+		private val APPROVED_TRAIN_NAME_REGEX = Regex("""train="([^"]+)"""")
 	}
 
 	private fun formatEvent(event: SimulationEvent): String {
 		val prefix = "t=${event.simulationTime}  [${event.eventType.name}]"
 		return if (event.source.isEmpty()) "$prefix  ${event.message}"
 		else "$prefix  ${event.source} ${event.message}"
-	}
-
-	private companion object {
-		private val APPROVED_TRAIN_NAME_REGEX = Regex("""train="([^"]+)"""")
 	}
 }
