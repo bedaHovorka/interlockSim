@@ -23,11 +23,6 @@
 # Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
 FROM eclipse-temurin:21-jdk AS builder
 
-# Build arguments for GitHub Packages authentication
-# Required to download kdisco-core from GitHub Packages (bedaHovorka/kdisco)
-ARG GITHUB_ACTOR
-ARG GITHUB_TOKEN
-
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
 # libicu-dev: transitive dependency of libxml2-dev on Debian
@@ -65,8 +60,7 @@ COPY docker-kdisco/ /root/kdisco-prebuild/
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
-    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
+    cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
 # Layer 4: Copy source code (changes most frequently)
@@ -82,8 +76,7 @@ ENV GRADLE_OPTS="-Xmx2g"
 RUN --mount=type=cache,target=/root/.gradle/caches \
     --mount=type=cache,target=/root/.gradle/wrapper \
     --mount=type=cache,target=/root/.m2/repository \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
-    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
+    cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
 
 # Verify binary was created
@@ -96,7 +89,7 @@ FROM debian:bookworm-slim
 
 # Install only the runtime library the native binary links against.
 # libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2)
-# libicu is NOT needed at runtime — only libxml2-dev pulls it in at build time.
+# Note: libxml2 depends on libicu72 transitively; apt installs it automatically.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 \
     && rm -rf /var/lib/apt/lists/*
