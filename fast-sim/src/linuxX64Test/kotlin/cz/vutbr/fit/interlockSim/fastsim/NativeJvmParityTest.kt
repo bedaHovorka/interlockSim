@@ -135,9 +135,12 @@ class NativeJvmParityTest {
 		assertTrue(summary.contains("trains"), "Summary should mention trains")
 		assertTrue(summary.contains("sim time"), "Summary should mention sim time")
 		assertTrue(summary.contains("wall"), "Summary should mention wall time")
-		assertTrue(!summary.contains("0 trains"), "Should have at least 1 train: $summary")
+		assertTrue(
+			!Regex("""\b0\s+trains\b""").containsMatchIn(summary),
+			"Should have at least 1 train: $summary"
+		)
 
-		// Verify sim time is approximately the end time
+		// Verify sim time is positive
 		val simTimeMatch = Regex("""([\d.]+)s sim time""").find(summary)
 		assertTrue(simTimeMatch != null, "Summary should contain sim time value")
 		val simTime = simTimeMatch.groupValues[1].toDouble()

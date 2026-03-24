@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.io.File
@@ -43,6 +44,7 @@ import java.util.concurrent.TimeUnit
  * @since Issue #417 (native vs JVM semantic parity)
  * @see TextReporter
  */
+@Tag("integration-test")
 @DisplayName("JVM Parity Reference Tests (Issue #417)")
 class JvmParityReferenceTest : KoinTestBase() {
 
@@ -140,8 +142,12 @@ class JvmParityReferenceTest : KoinTestBase() {
 		assertThat(summary.contains("trains"), name = "Summary mentions trains").isTrue()
 		assertThat(summary.contains("sim time"), name = "Summary mentions sim time").isTrue()
 		assertThat(summary.contains("wall"), name = "Summary mentions wall time").isTrue()
-		assertThat(!summary.contains("0 trains"), name = "At least 1 train in: $summary").isTrue()
+		assertThat(
+			!Regex("""\b0\s+trains\b""").containsMatchIn(summary),
+			name = "At least 1 train in: $summary"
+		).isTrue()
 
+		// Verify sim time is positive
 		val simTimeMatch = Regex("""([\d.]+)s sim time""").find(summary)
 		assertThat(simTimeMatch).isNotNull()
 		val simTime = simTimeMatch!!.groupValues[1].toDouble()
