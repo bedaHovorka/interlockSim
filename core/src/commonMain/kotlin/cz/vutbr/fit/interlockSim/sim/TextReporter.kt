@@ -54,12 +54,20 @@ class TextReporter(
 	}
 
 	fun printSummary() {
-		val wallSeconds = (currentTimeMillisKMP() - startWallTime) / 1000.0
-		val wallFormatted = ((wallSeconds * 10).toLong() / 10.0).toString()
+		val wallMs = currentTimeMillisKMP() - startWallTime
+		val wallFormatted = formatWallTime(wallMs)
 		output(
 			"--- Simulation complete: ${trainNames.size} trains, " +
 				"${lastSimTime}s sim time, ${wallFormatted}s wall ---"
 		)
+	}
+
+	internal companion object {
+		/** Format wall-clock milliseconds as "N.D" (integer seconds with one decimal). */
+		fun formatWallTime(wallMs: Long): String {
+			val wallTenths = (wallMs / 100).coerceAtLeast(0) // integer tenths of seconds
+			return "${wallTenths / 10}.${wallTenths % 10}"
+		}
 	}
 
 	private fun formatEvent(event: SimulationEvent): String {
