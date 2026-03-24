@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Tests for Track-to-Dynamic mapping in SimulationContext
@@ -39,6 +38,10 @@ import java.io.File
 @DisplayName("Track-to-Dynamic Mapping")
 class TrackDynamicMappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
+
+	private fun loadVyhybnaStream() =
+		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			?: error("Resource not found: vyhybna.xml")
 
 	@Nested
 	@DisplayName("Unit Tests - Track Mapping")
@@ -70,8 +73,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		fun toDynamic_unmappedTrack_throwsException() {
 			// Arrange
 			val context = factory.createEmptyContext()
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val contextWithTracks = factory.createContext(xmlFile) as DefaultSimulationContext
+			val contextWithTracks = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Get a track from the context with tracks
 			val graph = contextWithTracks.getGraph()
@@ -101,8 +103,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - track mapping with eager creation")
 		fun vyhybnaXml_trackMappingEagerCreation() {
 			// Arrange - Load vyhybna.xml configuration
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Initialize dynamic mapping (normally called by run())
 			context.initializeDynamicMapping()
@@ -140,8 +141,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - graph contains multiple track blocks")
 		fun vyhybnaXml_graphHasMultipleTracks() {
 			// Arrange
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Act
 			val graph = context.getGraph()

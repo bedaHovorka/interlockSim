@@ -22,7 +22,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -50,8 +49,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 
 	companion object {
 		private const val END_TIME = 60L
-		private val VYHYBNA_XML_PATH =
-			"src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+		private const val VYHYBNA_RESOURCE = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
 	}
 
@@ -62,8 +60,10 @@ class JvmParityReferenceTest : KoinTestBase() {
 	 */
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
 		val factory = getKoin().get<SimulationContextFactory>()
+		val stream = javaClass.getResourceAsStream(VYHYBNA_RESOURCE)
+			?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
 		val context = Util.assertInstanceOf<DefaultSimulationContext>(
-			factory.createContext(File(VYHYBNA_XML_PATH))
+			stream.use { factory.createContext(it) }
 		)
 		context.getInOuts()
 		context.setMainProcess(ShuntingLoop(context, END_TIME))

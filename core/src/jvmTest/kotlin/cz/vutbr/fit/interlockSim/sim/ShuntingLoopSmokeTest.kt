@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -76,10 +75,6 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
-		// Path to vyhybna.xml test fixture (shunting loop configuration)
-		private val VYHYBNA_XML_PATH =
-			"src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-
 		/**
 		 * Standard simulation end time for integration tests requiring both trains to complete.
 		 *
@@ -99,12 +94,18 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	 * @param endTime Simulation end time in seconds
 	 * @return Configured simulation context with ShuntingLoop as main process
 	 */
+	private fun loadVyhybnaStream() =
+		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			?: error("Resource not found: vyhybna.xml")
+
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()
 		val context =
-			Util.assertInstanceOf<DefaultSimulationContext>(
-				factory.createContext(File(VYHYBNA_XML_PATH))
-			)
+			loadVyhybnaStream().use { stream ->
+				Util.assertInstanceOf<DefaultSimulationContext>(
+					factory.createContext(stream)
+				)
+			}
 
 		// Initialize dynamic wrapper map by calling getInOuts()
 		context.getInOuts()
