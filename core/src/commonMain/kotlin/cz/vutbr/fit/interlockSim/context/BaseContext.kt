@@ -110,10 +110,11 @@ abstract class BaseContext<T : TrackBlock>(
 ) {
 	/**
 	 * Listeners for context change notifications.
-	 * Copy-on-write list — @Volatile guarantees visibility across threads.
-	 * Add/remove is not atomic but races are acceptable (single-threaded GUI/sim use).
+	 * Copy-on-write list for safe iteration during notification.
+	 *
+	 * **Thread safety:** Not thread-safe. All access must occur on a single thread
+	 * (editor thread during construction, or simulation thread during execution).
 	 */
-	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
