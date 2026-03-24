@@ -15,11 +15,35 @@ import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.github.oshai.kotlinlogging.Level
+import kotlinx.cinterop.staticCFunction
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import platform.posix.SIGINT
 import platform.posix.fprintf
+import platform.posix.signal
 import platform.posix.stderr
+import kotlin.concurrent.AtomicInt
 import kotlin.system.exitProcess
+
+/** Unix convention exit code for processes terminated by SIGINT (128 + 2). */
+const val SIGINT_EXIT_CODE = 130
+
+/**
+ * Holds the atomic SIGINT flag. Encapsulated in an object because the signal handler
+ * (a C static function) cannot capture closures — it accesses this singleton directly.
+ */
+internal object SignalState {
+	val INTERRUPTED = AtomicInt(0)
+}
+
+/** Returns `true` if a SIGINT signal has been received since program start. */
+fun isInterrupted(): Boolean = SignalState.INTERRUPTED.value != 0
+
+/** Installs a POSIX signal handler that sets the [SignalState.INTERRUPTED] flag on SIGINT. */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private fun installSignalHandler() {
+	signal(SIGINT, staticCFunction<Int, Unit> { _ -> SignalState.INTERRUPTED.value = 1 })
+}
 
 private const val MIN_ARGS_COUNT = 3
 private const val CMD_VERSION = "--version"
@@ -82,7 +106,7 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
  * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
  * - No args or unknown command → print usage to stderr, exit 2
  *
- * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
+ * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments, 130 = interrupted (SIGINT)
  *
  * @since Issue #415 (fast-sim native CLI)
  */
@@ -90,6 +114,7 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
 fun main(args: Array<String>) {
 	handleEarlyExitArgs(args)
 
+	installSignalHandler()
 	KotlinLoggingConfiguration.logLevel = Level.OFF
 	startKoin { modules(coreModule) }
 
@@ -136,7 +161,13 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory, verbo
 	try {
 		ctx.run()
 		reporter.printSummary()
-		return 0
+		return if (isInterrupted()) SIGINT_EXIT_CODE else 0
+	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+		if (isInterrupted()) {
+			reporter.printSummary()
+			return SIGINT_EXIT_CODE
+		}
+		throw e
 	} finally {
 		ctx.close()
 	}
@@ -160,7 +191,13 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		ctx.run()
 		reporter.printSummary()
-		return 0
+		return if (isInterrupted()) SIGINT_EXIT_CODE else 0
+	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+		if (isInterrupted()) {
+			reporter.printSummary()
+			return SIGINT_EXIT_CODE
+		}
+		throw e
 	} finally {
 		ctx.close()
 	}
