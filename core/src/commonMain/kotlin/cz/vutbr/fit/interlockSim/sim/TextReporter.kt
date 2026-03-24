@@ -54,8 +54,9 @@ class TextReporter(
 	}
 
 	fun printSummary() {
-		val wallSeconds = (currentTimeMillisKMP() - startWallTime) / 1000.0
-		val wallFormatted = ((wallSeconds * 10).toLong() / 10.0).toString()
+		val wallMs = currentTimeMillisKMP() - startWallTime
+		val wallTenths = wallMs / 100 // integer tenths of seconds
+		val wallFormatted = "${wallTenths / 10}.${wallTenths % 10}"
 		output(
 			"--- Simulation complete: ${trainNames.size} trains, " +
 				"${lastSimTime}s sim time, ${wallFormatted}s wall ---"

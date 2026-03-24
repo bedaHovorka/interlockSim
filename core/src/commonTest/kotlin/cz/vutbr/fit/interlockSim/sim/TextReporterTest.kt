@@ -109,6 +109,22 @@ class TextReporterTest {
 	}
 
 	@Test
+	fun summaryWallTimeHasCleanDecimalFormat() {
+		val output = mutableListOf<String>()
+		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+		fireEvent(reporter, ReportType.TRAIN_EVENTS, "1.0 vlak1 approved IO1->IO2")
+		reporter.printSummary()
+		val summary = output.last()
+		// Wall time must be a clean "N.D" format (integer dot single digit), no IEEE 754 artifacts
+		val wallTimeMatch = Regex("""(\d+\.\d)s wall""").find(summary)
+		assertTrue(wallTimeMatch != null, "Summary wall time should match N.Ds format: $summary")
+		// Ensure no extra decimal digits (e.g. "3.1000000000000001")
+		val wallValue = wallTimeMatch!!.groupValues[1]
+		assertEquals(wallValue, wallValue.trimEnd('0').let { if (it.endsWith('.')) it + "0" else it },
+			"Wall time should have exactly one decimal digit: $wallValue")
+	}
+
+	@Test
 	fun nonReportTypePropertyIsIgnored() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
