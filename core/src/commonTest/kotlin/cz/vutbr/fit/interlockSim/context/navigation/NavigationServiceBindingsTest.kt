@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
-import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -249,7 +249,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 
 			// No path reserved for this train, so navigation should not find reserved path
 			val reserved = service.isPathReservedForTrain("unknownTrain", inOuts[0])
-			assertThat(reserved).isEqualTo(false)
+			assertThat(reserved).isFalse()
 		}
 	}
 

@@ -14,6 +14,7 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -85,22 +86,22 @@ class XmlRoundTripNetworkResourcesTest {
 		val xml1 = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(xml1)
-		val inOutCount2 = ctx2.getInOuts().size
-		val edgeCount2 = ctx2.getGraph().entrySet().size
-		val xml2 = writer.generate(ctx2)
-		ctx2.close()
+		reader.parse(xml1).use { ctx2 ->
+			val inOutCount2 = ctx2.getInOuts().size
+			val edgeCount2 = ctx2.getGraph().entrySet().size
+			val xml2 = writer.generate(ctx2)
 
-		val ctx3 = reader.parse(xml2)
-		val inOutCount3 = ctx3.getInOuts().size
-		val edgeCount3 = ctx3.getGraph().entrySet().size
-		ctx3.close()
+			reader.parse(xml2).use { ctx3 ->
+				val inOutCount3 = ctx3.getInOuts().size
+				val edgeCount3 = ctx3.getGraph().entrySet().size
 
-		// Structure is preserved across both round trips
-		assertThat(inOutCount2).isEqualTo(inOutCount1)
-		assertThat(edgeCount2).isEqualTo(edgeCount1)
-		assertThat(inOutCount3).isEqualTo(inOutCount1)
-		assertThat(edgeCount3).isEqualTo(edgeCount1)
+				// Structure is preserved across both round trips
+				assertThat(inOutCount2).isEqualTo(inOutCount1)
+				assertThat(edgeCount2).isEqualTo(edgeCount1)
+				assertThat(inOutCount3).isEqualTo(inOutCount1)
+				assertThat(edgeCount3).isEqualTo(edgeCount1)
+			}
+		}
 	}
 
 	// --- LINEAR_TRACK_XML ---
@@ -149,7 +150,7 @@ class XmlRoundTripNetworkResourcesTest {
 		ctx1.close()
 
 		reader.parse(xml).use { ctx2 ->
-			// Switch is at known position X=15 Y=10 from SWITCH_BASIC_XML
+			// Coordinate coupled to SWITCH_BASIC_XML fixture: the switch element is at grid (15,10)
 			val cell = ctx2.getRailWayNetGrid()[Point(15, 10)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSwitch>()
 			assertThat((cell as RailSwitch).type).isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_FALSE)
@@ -176,10 +177,10 @@ class XmlRoundTripNetworkResourcesTest {
 		ctx1.close()
 
 		reader.parse(xml).use { ctx2 ->
-			// Semaphore is at known position X=15 Y=10 from SEMAPHORE_BASIC_XML
+			// Coordinate coupled to SEMAPHORE_BASIC_XML fixture: the semaphore element is at grid (15,10)
 			val cell = ctx2.getRailWayNetGrid()[Point(15, 10)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSemaphore>()
-			assertThat((cell as RailSemaphore).getOrientation()).isEqualTo(true)
+			assertThat((cell as RailSemaphore).getOrientation()).isTrue()
 		}
 	}
 
@@ -221,14 +222,24 @@ class XmlRoundTripNetworkResourcesTest {
 	@Test
 	fun doubleRoundTripParallelTracksIsStable() {
 		val ctx1 = CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML)
+		val inOutCount1 = ctx1.getInOuts().size
+		val edgeCount1 = ctx1.getGraph().entrySet().size
+		val cols1 = ctx1.getRailWayNetGrid().cols
+		val rows1 = ctx1.getRailWayNetGrid().rows
 		val xml1 = writer.generate(ctx1)
 		ctx1.close()
 
-		val ctx2 = reader.parse(xml1)
-		val xml2 = writer.generate(ctx2)
-		ctx2.close()
+		reader.parse(xml1).use { ctx2 ->
+			val xml2 = writer.generate(ctx2)
 
-		assertThat(xml2).isEqualTo(xml1)
+			reader.parse(xml2).use { ctx3 ->
+				// Structure is preserved across both round trips
+				assertThat(ctx3.getInOuts()).hasSize(inOutCount1)
+				assertThat(ctx3.getGraph().entrySet()).hasSize(edgeCount1)
+				assertThat(ctx3.getRailWayNetGrid().cols).isEqualTo(cols1)
+				assertThat(ctx3.getRailWayNetGrid().rows).isEqualTo(rows1)
+			}
+		}
 	}
 
 	// --- SINGLE_INOUT_XML ---

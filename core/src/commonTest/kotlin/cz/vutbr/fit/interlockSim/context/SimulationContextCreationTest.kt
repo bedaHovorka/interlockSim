@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
-import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -76,7 +75,7 @@ class SimulationContextCreationTest : KoinComponent {
 			processFactory
 		).use { simCtx ->
 			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts().size).isGreaterThan(0)
+			assertThat(simCtx.getInOuts()).hasSize(2)
 			assertThat(simCtx.isFrozen()).isTrue()
 		}
 	}
@@ -89,6 +88,7 @@ class SimulationContextCreationTest : KoinComponent {
 		).use { simCtx ->
 			assertThat(simCtx).isNotNull()
 			assertThat(simCtx.getInOuts()).hasSize(3)
+			assertThat(simCtx.isFrozen()).isTrue()
 		}
 	}
 
@@ -100,6 +100,7 @@ class SimulationContextCreationTest : KoinComponent {
 		).use { simCtx ->
 			assertThat(simCtx).isNotNull()
 			assertThat(simCtx.getInOuts()).hasSize(2)
+			assertThat(simCtx.isFrozen()).isTrue()
 		}
 	}
 
