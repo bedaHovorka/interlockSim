@@ -234,6 +234,13 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --stacktrace
 
+    - name: Run fast-sim native tests
+      timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :fast-sim:linuxX64Test --no-daemon --stacktrace
+
     - name: Sanity check — verify version
       run: |
         BINARY=fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
