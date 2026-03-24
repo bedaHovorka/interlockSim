@@ -89,8 +89,8 @@ class CrossPlatformParityTest {
 
 		var stdout = ""
 		var stderr = ""
-		val stdoutReader = Thread { stdout = process.inputStream.bufferedReader().readText() }
-		val stderrReader = Thread { stderr = process.errorStream.bufferedReader().readText() }
+		val stdoutReader = Thread { stdout = process.inputStream.bufferedReader().readText() }.apply { isDaemon = true }
+		val stderrReader = Thread { stderr = process.errorStream.bufferedReader().readText() }.apply { isDaemon = true }
 		stdoutReader.start()
 		stderrReader.start()
 
@@ -103,8 +103,8 @@ class CrossPlatformParityTest {
 				"Process timed out after ${TIMEOUT_SECONDS}s: ${command.joinToString(" ")}\nstderr: $stderr"
 			)
 		}
-		stdoutReader.join(5000)
-		stderrReader.join(5000)
+		stdoutReader.join()
+		stderrReader.join()
 		return ProcessResult(process.exitValue(), stdout, stderr)
 	}
 
@@ -169,11 +169,13 @@ class CrossPlatformParityTest {
 		// Invariant 4: Timestamps are chronological in both
 		val jvmTs = parseTimestamps(jvmEvents)
 		val nativeTs = parseTimestamps(nativeEvents)
+		assertThat(jvmTs, name = "JVM timestamps\n$diag").isNotEmpty()
+		assertThat(nativeTs, name = "Native timestamps\n$diag").isNotEmpty()
 		for (i in 1 until jvmTs.size) {
-			assertThat(jvmTs[i] >= jvmTs[i - 1], name = "JVM chronological at $i").isTrue()
+			assertThat(jvmTs[i] >= jvmTs[i - 1], name = "JVM chronological at $i: ${jvmTs[i]} >= ${jvmTs[i - 1]}").isTrue()
 		}
 		for (i in 1 until nativeTs.size) {
-			assertThat(nativeTs[i] >= nativeTs[i - 1], name = "Native chronological at $i").isTrue()
+			assertThat(nativeTs[i] >= nativeTs[i - 1], name = "Native chronological at $i: ${nativeTs[i]} >= ${nativeTs[i - 1]}").isTrue()
 		}
 
 		// Invariant 5: Both mention trains in summary
