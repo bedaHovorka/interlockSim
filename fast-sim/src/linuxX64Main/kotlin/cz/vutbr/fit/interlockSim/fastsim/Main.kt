@@ -161,13 +161,9 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory, verbo
 	try {
 		ctx.run()
 		reporter.printSummary()
-		return if (isInterrupted()) SIGINT_EXIT_CODE else 0
+		return 0
 	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-		if (isInterrupted()) {
-			reporter.printSummary()
-			return SIGINT_EXIT_CODE
-		}
-		throw e
+		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
 	}
@@ -191,16 +187,27 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		ctx.run()
 		reporter.printSummary()
-		return if (isInterrupted()) SIGINT_EXIT_CODE else 0
+		return 0
 	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-		if (isInterrupted()) {
-			reporter.printSummary()
-			return SIGINT_EXIT_CODE
-		}
-		throw e
+		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
 	}
+}
+
+/**
+ * Handles exceptions thrown during simulation execution.
+ * If SIGINT was received (mid-run interruption), prints partial summary and returns 130.
+ * Otherwise, re-throws the original exception.
+ */
+private fun handleInterruptedRun(reporter: TextReporter, e: Exception): Int {
+	if (isInterrupted()) {
+		// Safe: TextReporter captures data at PropertyChangeEvent time, not at print time,
+		// so printSummary() does not depend on live context state.
+		reporter.printSummary()
+		return SIGINT_EXIT_CODE
+	}
+	throw e
 }
 
 private fun printUsage() {
