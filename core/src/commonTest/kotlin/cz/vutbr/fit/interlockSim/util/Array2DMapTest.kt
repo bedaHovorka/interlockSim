@@ -13,19 +13,19 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isLessThan
-import org.junit.jupiter.api.Test
-import java.util.ArrayList
-import java.util.List
-import java.util.Map
-import java.util.Random
-import java.util.TreeMap
+import kotlin.math.sign
+import kotlin.random.Random
+import kotlin.test.Test
 
 /**
- * Test compares {@link Array2DMap} with {@link TreeMap}
+ * Test compares [Array2DMap] with a sorted TreeMap-like reference.
  */
 class Array2DMapTest {
 	private val array2DMap: Array2DMap<Int> = Array2DMap()
-	private val treeMap: TreeMap<Point, Int> = TreeMap(Array2DMap.POINT_COMPARATOR)
+	// Note: Original JVM test used TreeMap(POINT_COMPARATOR) for comparator-ordered reference.
+	// mutableMapOf (LinkedHashMap) is sufficient here because all assertions check containment
+	// semantics (equals, get, containsKey, entries Set.equals) — none rely on iteration order.
+	private val referenceMap = mutableMapOf<Point, Int>()
 	private val BOUND: Int = 1000
 
 	companion object {
@@ -33,27 +33,27 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#clear()}.
+	 * Test method for [Array2DMap.clear].
 	 */
 	@Test
 	fun testClear() {
 		EQ()
 		array2DMap.clear()
-		treeMap.clear()
+		referenceMap.clear()
 		assertThat(array2DMap.size).isEqualTo(0)
 		EQ()
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#entrySet()}.
+	 * Test method for [Array2DMap.entries].
 	 */
 	@Test
 	fun testEntrySet() {
-		assertThat(array2DMap.entries).isEqualTo(treeMap.entries)
+		assertThat(array2DMap.entries).isEqualTo(referenceMap.entries)
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#get(Int, Int)}.
+	 * Test method for [Array2DMap.get].
 	 */
 	@Test
 	fun testGetIntInt() {
@@ -61,7 +61,7 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				val integer1 = treeMap.get(p)
+				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
 				assertThat(integer2).isEqualTo(integer1)
 			}
@@ -69,7 +69,7 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#get(java.lang.Object)}.
+	 * Test method for [Array2DMap.get].
 	 */
 	@Test
 	fun testGetObject() {
@@ -77,7 +77,7 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				val integer1 = treeMap.get(p)
+				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
 				assertThat(integer2).isEqualTo(integer1)
 			}
@@ -85,7 +85,7 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#put(java.awt.Point, java.lang.Object)}.
+	 * Test method for [Array2DMap.put].
 	 */
 	@Test
 	fun testPutPointV() {
@@ -94,7 +94,7 @@ class Array2DMapTest {
 			val y = RANDOM.nextInt(BOUND)
 			val newInt = RANDOM.nextInt()
 			val p = Point(x, y)
-			val integer1 = treeMap.put(p, newInt)
+			val integer1 = referenceMap.put(p, newInt)
 			val integer2 = array2DMap.put(p, newInt)
 			assertThat(integer2).isEqualTo(integer1)
 		}
@@ -103,7 +103,7 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#remove(java.lang.Object)}.
+	 * Test method for [Array2DMap.remove].
 	 */
 	@Test
 	fun testRemoveObject() {
@@ -112,7 +112,7 @@ class Array2DMapTest {
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#containsKey(java.lang.Object)}.
+	 * Test method for [Array2DMap.containsKey].
 	 */
 	@Test
 	fun testContainsKeyObject() {
@@ -120,13 +120,13 @@ class Array2DMapTest {
 		for (x in 0 until BOUND) {
 			for (y in 0 until BOUND) {
 				val p = Point(x, y)
-				assertThat(array2DMap.containsKey(p)).isEqualTo(treeMap.containsKey(p))
+				assertThat(array2DMap.containsKey(p)).isEqualTo(referenceMap.containsKey(p))
 			}
 		}
 	}
 
 	/**
-	 * Test method for {@link cz.vutbr.fit.interlockSim.util.Array2DMap#getRow(Int)}.
+	 * Test method for [Array2DMap.getRow].
 	 */
 	@Test
 	fun testGetRow() {
@@ -135,7 +135,7 @@ class Array2DMapTest {
 			val treeList = ArrayList<Int?>()
 			for (x in 0 until BOUND) {
 				val p = Point(x, y)
-				val double1 = treeMap.get(p)
+				val double1 = referenceMap.get(p)
 				treeList.add(double1)
 			}
 			val row = array2DMap.getRow(y)
@@ -146,11 +146,11 @@ class Array2DMapTest {
 	}
 
 	private fun EQ() {
-		assertThat(array2DMap).isEqualTo(treeMap)
+		assertThat(array2DMap).isEqualTo(referenceMap)
 	}
 
 	/**
-	 * Test method for {@link Array2DMap#POINT_COMPARATOR}
+	 * Test method for [Array2DMap.POINT_COMPARATOR]
 	 *
 	 */
 	@Test
@@ -197,45 +197,15 @@ class Array2DMapTest {
 		p2: Point
 	) {
 		val c = Array2DMap.POINT_COMPARATOR
-		val fc = Integer.signum(c.compare(p1, p2))
+		val fc = c.compare(p1, p2).sign
 		if (p1 == p2) {
 			assertThat(fc).isEqualTo(0)
 		}
 		// asymmetry
-		assertThat(fc).isEqualTo(-Integer.signum(c.compare(p2, p1)))
+		assertThat(fc).isEqualTo(-c.compare(p2, p1).sign)
 	}
 
 	private fun randomPoint(): Point = Point(RANDOM.nextInt(BOUND), RANDOM.nextInt(BOUND))
-
-	private fun tst(map: Map<Point, Int>): Long {
-		val keys = ArrayList<Point>()
-		for (i in 0 until BOUND) {
-			val randomPoint = randomPoint()
-			keys.add(randomPoint)
-			@Suppress("UNCHECKED_CAST")
-			(map as MutableMap<Point, Int>).put(randomPoint, i)
-		}
-		assertThat(keys.size).isGreaterThan(0)
-
-		val delays: MutableList<Long> = ArrayList()
-
-		for (i in 0 until 100) {
-			val before = System.nanoTime()
-			for (key in keys) {
-				map.get(key)
-			}
-			delays.add(System.nanoTime() - before)
-		}
-		return avg(delays as List<Long>)
-	}
-
-	private fun avg(c: List<Long>): Long {
-		var sum = 0L
-		for (l in c) {
-			sum += l
-		}
-		return sum / c.size
-	}
 
 	/**
 	 * Test getRow with a sparse row containing null gaps (non-contiguous x values).
