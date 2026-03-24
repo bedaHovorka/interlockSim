@@ -2,28 +2,29 @@ package cz.vutbr.fit.interlockSim.util
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isNotEqualTo
+import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEmpty
 import kotlin.test.Test
 
 class PlatformIdentityTest {
 
 	/**
-	 * Two data class instances with equal values must get DIFFERENT identity codes,
-	 * because [platformIdentityCode] is identity-based (per-instance), not value-based.
+	 * Identity codes for equal-by-value instances should generally differ.
+	 * We create 100 instances and verify that not all collapse to the same code,
+	 * which makes the test robust against rare hash collisions.
 	 */
 	@Test
-	fun `equal data class instances get different identity codes`() {
-		data class Point(val x: Int, val y: Int)
+	fun `equal data class instances generally get different identity codes`() {
+		data class TestPoint(val x: Int, val y: Int)
 
-		val a = Point(1, 2)
-		val b = Point(1, 2)
+		val instances = List(100) { TestPoint(1, 2) }
 
-		// Sanity: the two instances are equal by value
-		assertThat(a).isEqualTo(b)
+		// Sanity: all instances are equal by value
+		assertThat(instances.distinct().size).isEqualTo(1)
 
-		// Identity codes must differ because they are separate instances
-		assertThat(platformIdentityCode(a)).isNotEqualTo(platformIdentityCode(b))
+		// Identity codes should not all be the same — at least 2 distinct values expected
+		val distinctCodes = instances.map { platformIdentityCode(it) }.toSet()
+		assertThat(distinctCodes.size).isGreaterThan(1)
 	}
 
 	@Test
