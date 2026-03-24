@@ -15,11 +15,56 @@ import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.github.oshai.kotlinlogging.Level
+import kotlinx.cinterop.staticCFunction
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import platform.posix.SIGINT
 import platform.posix.fprintf
+import platform.posix.signal
 import platform.posix.stderr
+import kotlin.concurrent.AtomicInt
 import kotlin.system.exitProcess
+
+/** Unix convention exit code for processes terminated by SIGINT (128 + 2). */
+const val SIGINT_EXIT_CODE = 130
+
+/**
+ * Holds the atomic SIGINT flag. Encapsulated in an object because the signal handler
+ * (a C static function) cannot capture closures — it accesses this singleton directly.
+ */
+internal object SignalState {
+	val INTERRUPTED = AtomicInt(0)
+}
+
+/** Returns `true` if a SIGINT signal has been received since program start. */
+internal fun isInterrupted(): Boolean = SignalState.INTERRUPTED.value != 0
+
+/**
+ * Installs a POSIX signal handler that sets the [SignalState.INTERRUPTED] flag on SIGINT.
+ *
+ * **Limitation — implicit assumption on ctx.run() behavior:**
+ * The handler only sets an atomic flag; it does not forcibly terminate the simulation.
+ * Exit code 130 is only reachable if `ctx.run()` throws an exception while the flag is set
+ * (e.g., a syscall returns EINTR and kDisco propagates it). If the simulation completes
+ * normally despite SIGINT (short simulation, or kDisco/libc restarts interrupted syscalls),
+ * the process exits 0 with complete results — this is acceptable behavior.
+ *
+ * True cooperative shutdown (periodic [isInterrupted] checks inside the simulation loop)
+ * is future work and would require changes in kDisco or the simulation process itself.
+ *
+ * **Limitation — signal() vs sigaction() SA_RESTART behavior:**
+ * POSIX `signal()` has implementation-defined SA_RESTART semantics. On Linux/glibc,
+ * SA_RESTART is set by default, meaning blocking syscalls (read, sleep, etc.) are
+ * automatically restarted after the handler returns rather than failing with EINTR.
+ * This means `ctx.run()` will likely complete normally after SIGINT — the process then
+ * exits 0. Using `sigaction()` with SA_RESTART cleared would give portable control over
+ * syscall interruption, but is a non-trivial change deferred to a future iteration.
+ */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private fun installSignalHandler() {
+	// See KDoc above for SA_RESTART implications of signal() vs sigaction().
+	signal(SIGINT, staticCFunction<Int, Unit> { _ -> SignalState.INTERRUPTED.value = 1 })
+}
 
 private const val MIN_ARGS_COUNT = 3
 private const val CMD_VERSION = "--version"
@@ -82,7 +127,7 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
  * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
  * - No args or unknown command → print usage to stderr, exit 2
  *
- * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments
+ * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments, 130 = interrupted (SIGINT)
  *
  * @since Issue #415 (fast-sim native CLI)
  */
@@ -90,6 +135,7 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
 fun main(args: Array<String>) {
 	handleEarlyExitArgs(args)
 
+	installSignalHandler()
 	KotlinLoggingConfiguration.logLevel = Level.OFF
 	startKoin { modules(coreModule) }
 
@@ -137,6 +183,8 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory, verbo
 		ctx.run()
 		reporter.printSummary()
 		return 0
+	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
 	}
@@ -161,9 +209,26 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 		ctx.run()
 		reporter.printSummary()
 		return 0
+	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
 	}
+}
+
+/**
+ * Handles exceptions thrown during simulation execution.
+ * If SIGINT was received (mid-run interruption), prints partial summary and returns 130.
+ * Otherwise, re-throws the original exception.
+ */
+private fun handleInterruptedRun(reporter: TextReporter, e: Exception): Int {
+	if (isInterrupted()) {
+		// Safe: TextReporter captures data at PropertyChangeEvent time, not at print time,
+		// so printSummary() does not depend on live context state.
+		reporter.printSummary()
+		return SIGINT_EXIT_CODE
+	}
+	throw e
 }
 
 private fun printUsage() {
