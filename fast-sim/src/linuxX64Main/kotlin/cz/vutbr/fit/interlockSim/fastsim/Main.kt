@@ -39,9 +39,30 @@ internal object SignalState {
 /** Returns `true` if a SIGINT signal has been received since program start. */
 internal fun isInterrupted(): Boolean = SignalState.INTERRUPTED.value != 0
 
-/** Installs a POSIX signal handler that sets the [SignalState.INTERRUPTED] flag on SIGINT. */
+/**
+ * Installs a POSIX signal handler that sets the [SignalState.INTERRUPTED] flag on SIGINT.
+ *
+ * **Limitation — implicit assumption on ctx.run() behavior:**
+ * The handler only sets an atomic flag; it does not forcibly terminate the simulation.
+ * Exit code 130 is only reachable if `ctx.run()` throws an exception while the flag is set
+ * (e.g., a syscall returns EINTR and kDisco propagates it). If the simulation completes
+ * normally despite SIGINT (short simulation, or kDisco/libc restarts interrupted syscalls),
+ * the process exits 0 with complete results — this is acceptable behavior.
+ *
+ * True cooperative shutdown (periodic [isInterrupted] checks inside the simulation loop)
+ * is future work and would require changes in kDisco or the simulation process itself.
+ *
+ * **Limitation — signal() vs sigaction() SA_RESTART behavior:**
+ * POSIX `signal()` has implementation-defined SA_RESTART semantics. On Linux/glibc,
+ * SA_RESTART is set by default, meaning blocking syscalls (read, sleep, etc.) are
+ * automatically restarted after the handler returns rather than failing with EINTR.
+ * This means `ctx.run()` will likely complete normally after SIGINT — the process then
+ * exits 0. Using `sigaction()` with SA_RESTART cleared would give portable control over
+ * syscall interruption, but is a non-trivial change deferred to a future iteration.
+ */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 private fun installSignalHandler() {
+	// See KDoc above for SA_RESTART implications of signal() vs sigaction().
 	signal(SIGINT, staticCFunction<Int, Unit> { _ -> SignalState.INTERRUPTED.value = 1 })
 }
 

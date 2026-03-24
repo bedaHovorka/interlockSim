@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 
 /**
@@ -24,6 +25,11 @@ import kotlin.test.Test
  * @since Issue #436 (graceful SIGINT shutdown)
  */
 class SignalHandlerTest {
+
+	@BeforeTest
+	fun resetSignalState() {
+		SignalState.INTERRUPTED.value = 0
+	}
 
 	@Test
 	fun `SIGINT exit code follows Unix convention of 128 plus signal number`() {
@@ -37,11 +43,7 @@ class SignalHandlerTest {
 
 	@Test
 	fun `isInterrupted returns true after flag is set`() {
-		try {
-			SignalState.INTERRUPTED.value = 1
-			assertThat(isInterrupted()).isTrue()
-		} finally {
-			SignalState.INTERRUPTED.value = 0
-		}
+		SignalState.INTERRUPTED.value = 1
+		assertThat(isInterrupted()).isTrue()
 	}
 }
