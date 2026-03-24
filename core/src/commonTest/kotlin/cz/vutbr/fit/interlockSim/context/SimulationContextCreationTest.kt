@@ -27,7 +27,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 
@@ -119,23 +118,25 @@ class SimulationContextCreationTest : KoinComponent {
 
 	@Test
 	fun transformationPreservesGridDimensions() {
-		val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
-		val editingCols = editingCtx.getRailWayNetGrid().cols
-		val editingRows = editingCtx.getRailWayNetGrid().rows
+		CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { editingCtx ->
+			val editingCols = editingCtx.getRailWayNetGrid().cols
+			val editingRows = editingCtx.getRailWayNetGrid().rows
 
-		DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
-			assertThat(simCtx.getRailWayNetGrid().cols).isEqualTo(editingCols)
-			assertThat(simCtx.getRailWayNetGrid().rows).isEqualTo(editingRows)
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
+				assertThat(simCtx.getRailWayNetGrid().cols).isEqualTo(editingCols)
+				assertThat(simCtx.getRailWayNetGrid().rows).isEqualTo(editingRows)
+			}
 		}
 	}
 
 	@Test
 	fun transformationPreservesTrackBlockCount() {
-		val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML)
-		val editingEdges = editingCtx.getGraph().entrySet().size
+		CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { editingCtx ->
+			val editingEdges = editingCtx.getGraph().entrySet().size
 
-		DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
-			assertThat(simCtx.getGraph().entrySet().size).isEqualTo(editingEdges)
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
+				assertThat(simCtx.getGraph().entrySet().size).isEqualTo(editingEdges)
+			}
 		}
 	}
 
@@ -192,19 +193,20 @@ class SimulationContextCreationTest : KoinComponent {
 
 	@Test
 	fun simulationContextFromProgrammaticEditingContext() {
-		val editingCtx = DefaultEditingContext(30, 30)
-		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		val track = SimpleTrackBlock(inA, inB, 200.0, 60.0)
-		editingCtx.putCell(Point(1, 1), inA)
-		editingCtx.putCell(Point(10, 10), inB)
-		editingCtx.joinCells(Point(1, 1), Point(10, 10), track)
+		DefaultEditingContext(30, 30).use { editingCtx ->
+			val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+			val track = SimpleTrackBlock(inA, inB, 200.0, 60.0)
+			editingCtx.putCell(Point(1, 1), inA)
+			editingCtx.putCell(Point(10, 10), inB)
+			editingCtx.joinCells(Point(1, 1), Point(10, 10), track)
 
-		DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(2)
-			assertThat(simCtx.isFrozen()).isTrue()
-			assertThat(simCtx.getGraph().entrySet().size).isEqualTo(1)
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(2)
+				assertThat(simCtx.isFrozen()).isTrue()
+				assertThat(simCtx.getGraph().entrySet().size).isEqualTo(1)
+			}
 		}
 	}
 

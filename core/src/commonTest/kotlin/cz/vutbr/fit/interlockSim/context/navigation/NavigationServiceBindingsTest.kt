@@ -114,13 +114,10 @@ class NavigationServiceBindingsTest : KoinComponent {
 		).use { simCtx ->
 			val navigator = simCtx.getTopologyNavigator()
 			val inOuts = simCtx.getInOuts().toList()
-			assertThat(inOuts.size).isGreaterThan(0)
+			assertThat(inOuts).hasSize(2)
 
-			// At least one InOut pair should have a topological path
-			if (inOuts.size >= 2) {
-				val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
-				assertThat(paths.size).isGreaterThan(0)
-			}
+			val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
+			assertThat(paths.size).isGreaterThan(0)
 		}
 	}
 

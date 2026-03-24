@@ -56,11 +56,12 @@ class XmlRoundTripNetworkResourcesTest {
 	@Test
 	fun roundTripVyhybnaPreservesInOutCount() {
 		val ctx1 = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML)
+		val inOutCount = ctx1.getInOuts().size
 		val xml = writer.generate(ctx1)
 		ctx1.close()
 
 		reader.parse(xml).use { ctx2 ->
-			assertThat(ctx2.getInOuts()).hasSize(ctx1InOutCount())
+			assertThat(ctx2.getInOuts()).hasSize(inOutCount)
 		}
 	}
 
@@ -246,11 +247,4 @@ class XmlRoundTripNetworkResourcesTest {
 		}
 	}
 
-	// --- Helper ---
-
-	private fun ctx1InOutCount(): Int {
-		CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { ctx ->
-			return ctx.getInOuts().size
-		}
-	}
 }
