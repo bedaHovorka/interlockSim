@@ -82,7 +82,7 @@ compute_stats() {
 
 # Run a single iteration and collect metrics
 # Usage: run_once <label> <command...>
-# Writes to: $TMPDIR/{label}_wall.txt, {label}_rss.txt, {label}_events.txt, {label}_first_event.txt
+# Writes to: $WORK_DIR/{label}_wall.txt, {label}_rss.txt, {label}_events.txt, {label}_first_event.txt
 run_once() {
 	local label="$1"
 	shift

@@ -11,26 +11,26 @@ Issue [#418](https://github.com/bedavs/interlockSim/issues/418) — Last issue i
 | JVM | openjdk version "21.0.10" 2026-01-20 |
 | Native binary | `fast-sim.kexe` (Kotlin/Native linuxX64 release) |
 | Kernel | 6.19.8-200.fc43.x86_64 |
-| CPU | Intel Core Ultra 9 285HX |
-| Date | 2026-03-24 |
+| CPU | Intel(R) Core(TM) Ultra 9 285HX |
+| Date | 2026-03-25 |
 
 ## Results
 
 | Metric | JVM (cold) | Native | Ratio (JVM/Native) |
 |--------|-----------|--------|---------------------|
-| Wall-clock median | 0.636s | 0.093s | **6.8x** |
-| Wall-clock mean | 0.629s | 0.095s | |
-| Wall-clock stddev | 0.023s | 0.007s | |
-| Wall-clock min | 0.599s | 0.087s | |
-| Wall-clock max | 0.662s | 0.110s | |
-| Peak RSS (median) | 193.8 MB | 31.1 MB | **6.2x** |
-| Time to first event (median) | 0.648s | 0.093s | **6.9x** |
+| Wall-clock median | 0.688s | 0.099s | **6.9x** |
+| Wall-clock mean | 0.700s | 0.100s | |
+| Wall-clock stddev | 0.060s | 0.011s | |
+| Wall-clock min | 0.614s | 0.087s | |
+| Wall-clock max | 0.852s | 0.127s | |
+| Peak RSS (median) | 192.5 MB | 31.0 MB | **6.1x** |
+| Time to first event (median) | 0.688s | 0.095s | **7.2x** |
 | Event count | 7 | 4 | see note below |
-| Events/sec (median wall) | 11.0 | 43.0 | **3.9x** |
+| Events/sec (median wall) | 10.1 | 40.4 | **4.0x** |
 
 ## Methodology
 
-- **Wall-clock time**: Measured with nanosecond-precision `date +%s%N`, averaged over 10 iterations
+- **Wall-clock time**: Measured with nanosecond-precision `date +%s%N`, per-iteration measurements summarized as mean/median/stddev/min/max
 - **Peak RSS**: Measured via `/usr/bin/time -v` (GNU time) Maximum resident set size
 - **Time to first event**: Wall time from process start until first `t=` output line (5 iterations)
 - **JVM cold**: Fresh `java -jar` invocation each iteration (no JVM warm-up between runs)
@@ -55,8 +55,8 @@ bash fast-sim/benchmark/benchmark.sh > docs/FAST_SIM_BENCHMARK.md
 ### Startup Time
 
 The native binary avoids JVM class loading, bytecode verification, and JIT compilation
-overhead. The time-to-first-event ratio of **6.9x** is dominated by JVM startup cost
-(~0.55s of the JVM's 0.648s is pure startup overhead before any simulation logic runs).
+overhead. The time-to-first-event ratio of **7.2x** is dominated by JVM startup cost
+(~0.59s of the JVM's 0.688s is pure startup overhead before any simulation logic runs).
 
 For a CLI tool that runs a short simulation and exits, this startup cost dominates the
 total wall-clock time, making the native binary nearly 7x faster end-to-end.
@@ -64,7 +64,7 @@ total wall-clock time, making the native binary nearly 7x faster end-to-end.
 ### Memory Usage
 
 Kotlin/Native produces a standalone binary (~4 MB) with no JVM heap overhead.
-The native binary uses **6.2x less memory** (31 MB vs 194 MB peak RSS).
+The native binary uses **6.1x less memory** (31 MB vs 193 MB peak RSS).
 
 The JVM's baseline memory consumption (~190 MB) includes the JVM runtime, class metadata,
 JIT compiler working memory, and default heap allocation. The native binary's 31 MB
@@ -73,18 +73,21 @@ includes only the compiled code and simulation data structures.
 ### Simulation Throughput
 
 Both implementations run the same `:core` simulation logic (shared Kotlin Multiplatform code).
-The wall-clock ratio of **6.8x** is almost entirely attributable to JVM startup time rather
+The wall-clock ratio of **6.9x** is almost entirely attributable to JVM startup time rather
 than simulation throughput differences. For longer simulations (higher `endTime`), the ratio
 would converge toward 1.0x as startup cost becomes a smaller fraction of total runtime.
 
 ### Event Count Difference
 
 The JVM and native runs produce slightly different event counts (7 vs 4) despite running
-the same `shuntingLoop` example with the same `endTime=60`. This is a known effect of
-floating-point timing differences between JVM and Kotlin/Native runtimes: the continuous
-simulation engine (kDisco) uses floating-point arithmetic for event scheduling, and minor
-platform differences in FP rounding can cause events near the simulation boundary to be
-included or excluded. Both outputs represent valid simulation runs.
+the same `shuntingLoop` example with the same `endTime=60`. This difference is expected:
+the continuous simulation engine (kDisco) uses both a pseudo-random generator and
+floating-point arithmetic for event scheduling, and neither the RNG sequence nor FP
+boundary behavior is guaranteed to be bit-for-bit identical across JVM and Kotlin/Native
+runtimes. Minor differences in RNG draws and/or floating-point rounding near the simulation
+end-time can cause events close to the boundary to be included or excluded — which is why
+parity tests intentionally avoid asserting exact event counts. Both outputs represent valid
+simulation runs.
 
 ## Conclusion
 
