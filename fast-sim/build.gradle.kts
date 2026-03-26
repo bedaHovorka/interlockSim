@@ -2,7 +2,7 @@
  * fast-sim/build.gradle.kts
  *
  * :fast-sim — native linuxX64 simulation CLI
- * Compiles to a statically-linked native binary with no JVM dependency.
+ * Compiles to a native binary with no JVM dependency.
  * Depends on :core (commonMain provides simulation engine, XML parsing, domain model).
  */
 

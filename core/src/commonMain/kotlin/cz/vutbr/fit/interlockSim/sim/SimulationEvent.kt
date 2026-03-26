@@ -35,8 +35,7 @@ data class SimulationEvent(
 			val fullMessage = event.newValue?.toString() ?: return null
 			val parts = fullMessage.trim().split(Regex("\\s+"), limit = 3)
 			val simulationTime = parts[0].toDoubleOrNull() ?: return null
-			val source = if (parts.size > 1) parts[1] else ""
-			// When only one non-time token exists (degenerate input), source and message are the same token.
+			val source = if (parts.size > 2) parts[1] else ""
 			val message = if (parts.size > 2) parts[2] else if (parts.size > 1) parts[1] else fullMessage
 			return SimulationEvent(simulationTime, reportType, source, message)
 		}

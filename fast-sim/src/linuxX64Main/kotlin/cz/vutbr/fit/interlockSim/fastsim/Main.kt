@@ -26,7 +26,7 @@ import kotlin.concurrent.AtomicInt
 import kotlin.system.exitProcess
 
 /** Unix convention exit code for processes terminated by SIGINT (128 + 2). */
-const val SIGINT_EXIT_CODE = 130
+internal const val SIGINT_EXIT_CODE = 130
 
 /**
  * Holds the atomic SIGINT flag. Encapsulated in an object because the signal handler

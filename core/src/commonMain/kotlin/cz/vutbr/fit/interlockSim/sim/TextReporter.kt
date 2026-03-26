@@ -48,15 +48,6 @@ class TextReporter(
 			if (match != null) {
 				trainNames.add(match.groupValues[1])
 			}
-		} else if (simEvent.eventType == ReportType.TRAIN_EVENTS) {
-			// Backward compatibility for legacy logs that still emit TRAIN_EVENTS with
-			// the word "approved" in the message (pre-TRAIN_APPROVED). This path can be
-			// removed once all emitters migrate to TRAIN_APPROVED.
-			val combined = "${simEvent.source} ${simEvent.message}"
-			val approvedIndex = combined.indexOf("approved")
-			if (approvedIndex > 0) {
-				trainNames.add(combined.substring(0, approvedIndex).trim())
-			}
 		}
 
 		if (simEvent.eventType !in allowedTypes) return

@@ -60,7 +60,7 @@ COPY docker-kdisco/ /root/kdisco-prebuild/
 RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
 # Layer 4: Copy source code (changes most frequently)
@@ -76,7 +76,7 @@ ENV GRADLE_OPTS="-Xmx2g"
 RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
 
 # Verify binary was created

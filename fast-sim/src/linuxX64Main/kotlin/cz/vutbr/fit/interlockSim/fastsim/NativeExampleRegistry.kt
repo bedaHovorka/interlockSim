@@ -30,7 +30,7 @@ internal object NativeExampleRegistry {
 	fun create(name: String, endTime: Long, factory: NativeContextFactory): DefaultSimulationContext =
 		when (name) {
 			EXAMPLE_SHUNTING_LOOP -> createShuntingLoop(endTime, factory)
-			else -> throw IllegalArgumentException("Unknown example: '$name'. Available: $AVAILABLE")
+			else -> throw IllegalArgumentException("Unknown example: '$name'. Available: ${AVAILABLE.sorted().joinToString()}")
 		}
 
 	@Suppress("TooGenericExceptionCaught")

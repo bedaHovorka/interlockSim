@@ -78,7 +78,7 @@ class SimulationEventTest {
 		val cce = ContextChangeEvent("TRAIN_EVENTS", null, "5.0 vlak1")
 		val event = SimulationEvent.fromContextChangeEvent(cce)!!
 		assertEquals(5.0, event.simulationTime)
-		assertEquals("vlak1", event.source)
+		assertEquals("", event.source)
 		assertEquals("vlak1", event.message)
 	}
 

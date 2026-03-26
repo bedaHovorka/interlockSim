@@ -229,29 +229,6 @@ class TextReporterTest {
 		assertTrue(summary.contains("0 trains"), "No train should be counted without regex match: $summary")
 	}
 
-	@Test
-	fun legacyTrainEventsFallbackCountsApprovedTrains() {
-		// Legacy path: TRAIN_EVENTS with "approved" keyword (backward compat)
-		val output = mutableListOf<String>()
-		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		fireEvent(reporter, ReportType.TRAIN_EVENTS, "1.0 vlak1 approved IO1->IO2")
-		reporter.printSummary()
-		val summary = output.last()
-		assertTrue(summary.contains("1 trains"), "Legacy fallback should count 1 train: $summary")
-	}
-
-	@Test
-	fun legacyFallbackIgnoresApprovedAtStartOfCombined() {
-		// approvedIndex must be > 0 (not at position 0) to extract train name
-		val output = mutableListOf<String>()
-		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		// SimulationEvent parsing: "1.0 approved" -> source="approved", message="approved"
-		// combined = "approved approved", approvedIndex=0 -> skipped
-		fireEvent(reporter, ReportType.TRAIN_EVENTS, "1.0 approved something")
-		reporter.printSummary()
-		val summary = output.last()
-		assertTrue(summary.contains("0 trains"), "Should not count when 'approved' is at position 0: $summary")
-	}
 
 	@Test
 	fun summaryWithZeroTrains() {
@@ -298,9 +275,7 @@ class TextReporterTest {
 	fun formatEventWithEmptySource() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		// Two-part message: "5.0 msg" -> source="msg", message="msg"
-		// But source is not empty so it goes through else branch
-		// To test empty source, we need a degenerate one-part message that still parses
+		// Three-part message: "5.0 pathSet some-details" -> source="pathSet", message="some-details"
 		fireEvent(reporter, ReportType.PATH_SETTING, "5.0 pathSet some-details")
 		assertTrue(output[0].contains("pathSet"))
 	}
@@ -326,14 +301,14 @@ class TextReporterTest {
 	}
 
 	@Test
-	fun legacyFallbackDoesNotCountNonApprovedTrainEvents() {
+	fun trainEventsDoNotCountTrains() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		fireEvent(reporter, ReportType.TRAIN_EVENTS, "1.0 vlak1 stopped at signal")
 		fireEvent(reporter, ReportType.TRAIN_EVENTS, "2.0 vlak1 exiting system")
 		reporter.printSummary()
 		val summary = output.last()
-		assertTrue(summary.contains("0 trains"), "Non-approved events should not count trains: $summary")
+		assertTrue(summary.contains("0 trains"), "TRAIN_EVENTS should not count trains: $summary")
 	}
 
 	// --- Contract tests: verify Train.formatApprovalMessage produces TextReporter-parseable output ---
