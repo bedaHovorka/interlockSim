@@ -49,6 +49,7 @@ COPY detekt.yml /build/interlockSim/
 COPY detekt-strict.yml /build/interlockSim/
 COPY .editorconfig /build/interlockSim/
 COPY core/build.gradle.kts /build/interlockSim/core/
+COPY core-test/build.gradle.kts /build/interlockSim/core-test/
 COPY desktop-ui/build.gradle.kts /build/interlockSim/desktop-ui/
 
 # Layer 2.5: Pre-stage kdisco-core-jvm:0.3.0 artifacts
@@ -61,9 +62,9 @@ COPY docker-kdisco/ /root/kdisco-prebuild/
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
 # Install pre-staged kdisco into mounted mavenLocal, then resolve all deps.
-RUN --mount=type=cache,target=/root/.gradle/caches \
-    --mount=type=cache,target=/root/.gradle/wrapper \
-    --mount=type=cache,target=/root/.m2/repository \
+RUN --mount=type=cache,target=/root/.gradle/caches,id=app-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=app-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=app-m2 \
     cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew dependencies --no-daemon --warning-mode=summary
@@ -72,12 +73,13 @@ RUN --mount=type=cache,target=/root/.gradle/caches \
 # This is the layer that changes most frequently
 COPY desktop-ui/src/ /build/interlockSim/desktop-ui/src/
 COPY core/src/ /build/interlockSim/core/src/
+COPY core-test/src/ /build/interlockSim/core-test/src/
 
 # Layer 5: Build and test with cache mount
 # Tests run during build (haltOnFailure), creating uber JAR with shadowJar
-RUN --mount=type=cache,target=/root/.gradle/caches \
-    --mount=type=cache,target=/root/.gradle/wrapper \
-    --mount=type=cache,target=/root/.m2/repository \
+RUN --mount=type=cache,target=/root/.gradle/caches,id=app-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=app-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=app-m2 \
     cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
