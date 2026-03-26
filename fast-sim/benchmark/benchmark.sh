@@ -35,6 +35,10 @@ if ! command -v java >/dev/null 2>&1; then
 	echo >&2 "ERROR: java not found in PATH"
 	errors=1
 fi
+if ! command -v bc >/dev/null 2>&1; then
+	echo >&2 "ERROR: bc not found in PATH"
+	errors=1
+fi
 
 # We need GNU time for peak RSS measurement
 GNU_TIME=""
@@ -94,14 +98,21 @@ run_once() {
 	local start_ns
 	start_ns=$(now_ns)
 
+	local exit_code=0
 	if [ -n "$GNU_TIME" ]; then
-		"$GNU_TIME" -v "$@" >"$tmpout" 2>"$tmptiming" || true
+		"$GNU_TIME" -v "$@" >"$tmpout" 2>"$tmptiming" || exit_code=$?
 	else
-		"$@" >"$tmpout" 2>/dev/null || true
+		"$@" >"$tmpout" 2>/dev/null || exit_code=$?
 	fi
 
 	local end_ns
 	end_ns=$(now_ns)
+
+	if [ "$exit_code" -ne 0 ]; then
+		echo >&2 "  WARNING: command failed (exit $exit_code); skipping iteration"
+		rm -f "$tmpout" "$tmptiming"
+		return 1
+	fi
 
 	# Wall-clock time in seconds
 	local wall_ns=$(( end_ns - start_ns ))
@@ -110,7 +121,7 @@ run_once() {
 	# Peak RSS in KB (from GNU time output)
 	if [ -n "$GNU_TIME" ]; then
 		local rss_kb
-		rss_kb=$(grep "Maximum resident set size" "$tmptiming" | awk '{print $NF}')
+		rss_kb=$(LC_ALL=C awk '/Maximum resident set size/ {print $NF}' "$tmptiming")
 		if [ -n "$rss_kb" ]; then
 			echo "$rss_kb" >> "$WORK_DIR/${label}_rss.txt"
 		fi
@@ -118,12 +129,12 @@ run_once() {
 
 	# Count event lines (lines starting with "t=")
 	local event_count
-	event_count=$(grep -c '^t=' "$tmpout" || echo 0)
+	event_count=$(LC_ALL=C awk '/^t=/ {n++} END {print n+0}' "$tmpout")
 	echo "$event_count" >> "$WORK_DIR/${label}_events.txt"
 
 	# Time to first event: find first "t=" line
 	local first_event_line
-	first_event_line=$(grep -m1 '^t=' "$tmpout" || true)
+	first_event_line=$(LC_ALL=C awk '/^t=/ {print; exit}' "$tmpout")
 	if [ -n "$first_event_line" ]; then
 		# We measure wall time to first event by re-running with a pipe approach
 		# Instead, we approximate: for short sims, startup dominates
@@ -176,16 +187,22 @@ echo >&2 ""
 echo >&2 "Running JVM cold ($ITERATIONS iterations)..."
 for i in $(seq 1 "$ITERATIONS"); do
 	echo -n >&2 "  [$i/$ITERATIONS] "
-	run_once "jvm" java -jar "$JVM_JAR" example shuntingLoop "$END_TIME"
-	echo >&2 "done"
+	if run_once "jvm" java -jar "$JVM_JAR" example shuntingLoop "$END_TIME"; then
+		echo >&2 "done"
+	else
+		echo >&2 "FAILED (skipped)"
+	fi
 done
 
 # --- Native runs ---
 echo >&2 "Running Native ($ITERATIONS iterations)..."
 for i in $(seq 1 "$ITERATIONS"); do
 	echo -n >&2 "  [$i/$ITERATIONS] "
-	run_once "native" "$NATIVE_BIN" example shuntingLoop "$END_TIME"
-	echo >&2 "done"
+	if run_once "native" "$NATIVE_BIN" example shuntingLoop "$END_TIME"; then
+		echo >&2 "done"
+	else
+		echo >&2 "FAILED (skipped)"
+	fi
 done
 
 # --- Time-to-first-event measurement (separate, lighter runs) ---
@@ -214,12 +231,18 @@ read -r jvm_wall_mean jvm_wall_median jvm_wall_stddev jvm_wall_min jvm_wall_max 
 read -r nat_wall_mean nat_wall_median nat_wall_stddev nat_wall_min nat_wall_max \
 	<<< "$(compute_stats "$WORK_DIR/native_wall.txt")"
 
-jvm_events=$(tail -1 "$WORK_DIR/jvm_events.txt")
-nat_events=$(tail -1 "$WORK_DIR/native_events.txt")
+jvm_events_median="N/A"
+nat_events_median="N/A"
+if [ -f "$WORK_DIR/jvm_events.txt" ]; then
+	read -r _ jvm_events_median _ _ _ <<< "$(compute_stats "$WORK_DIR/jvm_events.txt")"
+fi
+if [ -f "$WORK_DIR/native_events.txt" ]; then
+	read -r _ nat_events_median _ _ _ <<< "$(compute_stats "$WORK_DIR/native_events.txt")"
+fi
 
-# Events per second (using median wall time)
-jvm_eps=$(echo "scale=1; $jvm_events / $jvm_wall_median" | bc)
-nat_eps=$(echo "scale=1; $nat_events / $nat_wall_median" | bc)
+# Events per second (using median wall time and median event count)
+jvm_eps=$(echo "scale=1; $jvm_events_median / $jvm_wall_median" | bc 2>/dev/null || echo "N/A")
+nat_eps=$(echo "scale=1; $nat_events_median / $nat_wall_median" | bc 2>/dev/null || echo "N/A")
 
 # RSS stats
 jvm_rss_median="N/A"
@@ -228,8 +251,8 @@ jvm_rss_mb="N/A"
 nat_rss_mb="N/A"
 rss_ratio="N/A"
 if [ -f "$WORK_DIR/jvm_rss.txt" ] && [ -f "$WORK_DIR/native_rss.txt" ]; then
-	read -r jvm_rss_mean jvm_rss_median _ _ _ <<< "$(compute_stats "$WORK_DIR/jvm_rss.txt")"
-	read -r nat_rss_mean nat_rss_median _ _ _ <<< "$(compute_stats "$WORK_DIR/native_rss.txt")"
+	read -r _ jvm_rss_median _ _ _ <<< "$(compute_stats "$WORK_DIR/jvm_rss.txt")"
+	read -r _ nat_rss_median _ _ _ <<< "$(compute_stats "$WORK_DIR/native_rss.txt")"
 	jvm_rss_mb=$(echo "scale=1; $jvm_rss_median / 1024" | bc)
 	nat_rss_mb=$(echo "scale=1; $nat_rss_median / 1024" | bc)
 	rss_ratio=$(echo "scale=1; $jvm_rss_median / $nat_rss_median" | bc)
@@ -278,7 +301,7 @@ echo "| Wall-clock min | ${jvm_wall_min}s | ${nat_wall_min}s | |"
 echo "| Wall-clock max | ${jvm_wall_max}s | ${nat_wall_max}s | |"
 echo "| Peak RSS (median) | ${jvm_rss_mb} MB | ${nat_rss_mb} MB | ${rss_ratio}x |"
 echo "| Time to first event (median) | ${jvm_fe_median}s | ${nat_fe_median}s | ${fe_ratio}x |"
-echo "| Event count | $jvm_events | $nat_events | |"
+echo "| Event count (median) | $jvm_events_median | $nat_events_median | |"
 echo "| Events/sec (median wall) | $jvm_eps | $nat_eps | ${eps_ratio}x |"
 echo ""
 echo "## Methodology"
