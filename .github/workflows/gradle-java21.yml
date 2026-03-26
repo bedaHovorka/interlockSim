@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop, 'feature/**', 'feat/**' ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -155,11 +155,13 @@ jobs:
         echo "Timeout: 8 minutes. Expected: ~4-5 minutes."
         echo ""
 
-        # Run simulation with timing metrics
+        # Run simulation with timing metrics, capture output for cross-platform comparison
+        set -o pipefail  # Ensure pipe propagates java exit code, not tee's
         START_TIME=$(date +%s%N)
 
         if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml \
-          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 300; then
+          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 300 \
+          | tee jvm-smoke-output.txt; then
 
           END_TIME=$(date +%s%N)
           ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))
@@ -190,10 +192,19 @@ jobs:
           exit $EXIT_CODE
         fi
 
+    - name: Upload JVM smoke test output
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: jvm-smoke-output-${{ github.sha }}
+        path: jvm-smoke-output.txt
+        retention-days: 30
+        if-no-files-found: error
+
   fast-sim:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [build]
+    needs: [build]  # Gate: don't spend native build time unless JVM build passes
 
     steps:
     - name: Checkout repository
@@ -258,6 +269,8 @@ jobs:
           if echo "$OUTPUT" | grep -qP -- '--- Simulation complete: [1-9]\d* trains'; then
             echo "✓ Native smoke test passed (${ELAPSED_SEC}s)"
             echo "$OUTPUT"
+            # Save output for cross-platform comparison
+            echo "$OUTPUT" > native-smoke-output.txt
           else
             echo "✗ Native smoke test: unexpected output (missing summary or 0 trains)"
             echo "$OUTPUT"
@@ -293,6 +306,15 @@ jobs:
         if-no-files-found: error
         compression-level: 9
 
+    - name: Upload native smoke test output
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: native-smoke-output-${{ github.sha }}
+        path: native-smoke-output.txt
+        retention-days: 30
+        if-no-files-found: error
+
     - name: Add fast-sim summary
       if: success()
       run: |
@@ -305,3 +327,129 @@ jobs:
         echo "**Size:** $SIZE" >> $GITHUB_STEP_SUMMARY
         echo "**Artifact:** fast-sim-linux-x64-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
         echo "**Retention:** 30 days" >> $GITHUB_STEP_SUMMARY
+
+  compare-outputs:
+    name: Compare JVM vs Native smoke-test outputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build, fast-sim]
+
+    steps:
+    - name: Download JVM smoke test output
+      uses: actions/download-artifact@v4
+      with:
+        name: jvm-smoke-output-${{ github.sha }}
+
+    - name: Download native smoke test output
+      uses: actions/download-artifact@v4
+      with:
+        name: native-smoke-output-${{ github.sha }}
+
+    - name: Compare structural invariants
+      run: |
+        echo "Comparing JVM vs native smoke test outputs..."
+        echo ""
+        FAIL=0
+
+        # --- Invariant 1: Both outputs are non-empty ---
+        if [ ! -s jvm-smoke-output.txt ]; then
+          echo "FAIL: JVM output is empty"
+          FAIL=1
+        fi
+        if [ ! -s native-smoke-output.txt ]; then
+          echo "FAIL: Native output is empty"
+          FAIL=1
+        fi
+
+        # --- Invariant 2: Both contain event lines (t=<number>) ---
+        JVM_EVENTS=$(grep -cE 't=[0-9]' jvm-smoke-output.txt || true)
+        NATIVE_EVENTS=$(grep -cE 't=[0-9]' native-smoke-output.txt || true)
+        echo "JVM event lines:    $JVM_EVENTS"
+        echo "Native event lines: $NATIVE_EVENTS"
+        if [ "$JVM_EVENTS" -eq 0 ]; then
+          echo "FAIL: JVM output has no event lines"
+          FAIL=1
+        fi
+        if [ "$NATIVE_EVENTS" -eq 0 ]; then
+          echo "FAIL: Native output has no event lines"
+          FAIL=1
+        fi
+
+        # --- Invariant 3: Both contain a summary line ---
+        JVM_SUMMARY=$(grep -- '^--- Simulation complete:' jvm-smoke-output.txt || true)
+        NATIVE_SUMMARY=$(grep -- '^--- Simulation complete:' native-smoke-output.txt || true)
+        echo "JVM summary:    $JVM_SUMMARY"
+        echo "Native summary: $NATIVE_SUMMARY"
+        if [ -z "$JVM_SUMMARY" ]; then
+          echo "FAIL: JVM output missing simulation summary"
+          FAIL=1
+        fi
+        if [ -z "$NATIVE_SUMMARY" ]; then
+          echo "FAIL: Native output missing simulation summary"
+          FAIL=1
+        fi
+
+        # --- Invariant 4: Timestamps are chronologically ordered ---
+        for PLATFORM in jvm native; do
+          FILE="${PLATFORM}-smoke-output.txt"
+          PREV=0
+          ORDERED=true
+          while IFS= read -r ts; do
+            if awk "BEGIN { exit ($ts < $PREV) ? 0 : 1 }"; then
+              echo "FAIL: $PLATFORM timestamps not chronological: $ts < $PREV"
+              ORDERED=false
+              FAIL=1
+              break
+            fi
+            PREV=$ts
+          done < <(grep -oE 't=[0-9.]+' "$FILE" | sed 's/t=//')
+          if [ "$ORDERED" = true ]; then
+            echo "$PLATFORM timestamps: chronological OK"
+          fi
+        done
+
+        # --- Invariant 5: Both summaries mention trains ---
+        if [ -n "$JVM_SUMMARY" ] && ! echo "$JVM_SUMMARY" | grep -q 'trains'; then
+          echo "FAIL: JVM summary does not mention trains"
+          FAIL=1
+        fi
+        if [ -n "$NATIVE_SUMMARY" ] && ! echo "$NATIVE_SUMMARY" | grep -q 'trains'; then
+          echo "FAIL: Native summary does not mention trains"
+          FAIL=1
+        fi
+
+        # --- Invariant 6: Event counts within same order of magnitude (0.5x-2.0x) ---
+        if [ "$JVM_EVENTS" -gt 0 ] && [ "$NATIVE_EVENTS" -gt 0 ]; then
+          RATIO=$(awk "BEGIN { printf \"%.2f\", $JVM_EVENTS / $NATIVE_EVENTS }")
+          echo "Event count ratio (JVM/Native): $RATIO"
+          if awk "BEGIN { exit ($RATIO < 0.5 || $RATIO > 2.0) ? 0 : 1 }"; then
+            echo "FAIL: Event count ratio $RATIO outside acceptable range [0.5, 2.0]"
+            FAIL=1
+          fi
+        fi
+
+        echo ""
+        if [ "$FAIL" -eq 0 ]; then
+          echo "All 6 structural invariants passed."
+        else
+          echo "One or more structural invariants FAILED."
+          exit 1
+        fi
+
+    - name: Add comparison summary
+      if: always()
+      run: |
+        echo "## Cross-Platform Output Comparison (Issue #439)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Scenario:** shuntingLoop (endTime=300)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        JVM_EVENTS=$(grep -cE 't=[0-9]' jvm-smoke-output.txt 2>/dev/null || echo 0)
+        NATIVE_EVENTS=$(grep -cE 't=[0-9]' native-smoke-output.txt 2>/dev/null || echo 0)
+        JVM_SUMMARY=$(grep -- '^--- Simulation complete:' jvm-smoke-output.txt 2>/dev/null || true)
+        NATIVE_SUMMARY=$(grep -- '^--- Simulation complete:' native-smoke-output.txt 2>/dev/null || true)
+
+        echo "| Metric | JVM | Native |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Event lines | $JVM_EVENTS | $NATIVE_EVENTS |" >> $GITHUB_STEP_SUMMARY
+        echo "| Summary | ${JVM_SUMMARY:-missing} | ${NATIVE_SUMMARY:-missing} |" >> $GITHUB_STEP_SUMMARY
