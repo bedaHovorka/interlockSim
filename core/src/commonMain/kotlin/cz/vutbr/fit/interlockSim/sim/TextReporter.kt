@@ -68,7 +68,7 @@ class TextReporter(
 		val wallFormatted = formatWallTime(wallMs)
 		output(
 			"--- Simulation complete: ${trainNames.size} trains, " +
-				"${lastSimTime}s sim time, ${wallFormatted}s wall ---"
+				"${formatSimTime(lastSimTime)}s sim time, ${wallFormatted}s wall ---"
 		)
 	}
 
@@ -77,6 +77,12 @@ class TextReporter(
 		fun formatWallTime(wallMs: Long): String {
 			val wallTenths = (wallMs / 100).coerceAtLeast(0) // integer tenths of seconds
 			return "${wallTenths / 10}.${wallTenths % 10}"
+		}
+
+		/** Format simulation time as "N.D" (integer seconds with one decimal). */
+		fun formatSimTime(simTime: Double): String {
+			val tenths = (simTime * 10).toLong().coerceAtLeast(0)
+			return "${tenths / 10}.${tenths % 10}"
 		}
 
 		private val APPROVED_TRAIN_NAME_REGEX = Regex("""train="([^"]+)"""")

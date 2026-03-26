@@ -110,11 +110,10 @@ abstract class BaseContext<T : TrackBlock>(
 ) {
 	/**
 	 * Listeners for context change notifications.
-	 * Copy-on-write list for safe iteration during notification.
-	 *
-	 * **Thread safety:** Not thread-safe. All access must occur on a single thread
-	 * (editor thread during construction, or simulation thread during execution).
+	 * Copy-on-write list — @Volatile guarantees cross-thread visibility
+	 * (kDisco simulation thread → EDT via SwingUtilities.invokeLater).
 	 */
+	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**

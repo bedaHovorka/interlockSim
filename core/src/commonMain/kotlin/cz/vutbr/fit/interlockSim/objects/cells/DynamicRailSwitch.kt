@@ -74,10 +74,10 @@ class DynamicRailSwitch(
 		private set
 
 	/**
-	 * Listeners for switch state changes. Copy-on-write list for safe iteration during notification.
-	 *
-	 * **Thread safety:** Not thread-safe. All access must occur on the simulation thread.
+	 * Listeners for switch state changes.
+	 * Copy-on-write list — @Volatile guarantees cross-thread visibility.
 	 */
+	@kotlin.concurrent.Volatile
 	private var listeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
