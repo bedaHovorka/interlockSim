@@ -75,9 +75,6 @@ Relates to #292 - Path discovery architecture implementation
   - [x] Code quality checks passed
   - [x] JaCoCo coverage report generated
   - [x] SonarCloud scan completed (Quality Gate: PASSED)
-- [x] ✓ Code Review (Claude) - [View Workflow](https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml)
-  - [x] Automated code review completed
-  - [x] No major issues found
 
 ### How to Verify CI Status
 

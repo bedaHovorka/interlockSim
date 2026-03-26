@@ -87,7 +87,6 @@ This checklist ensures all PRs properly document CI status and test coverage imp
 - [ ] **Verify all checks pass**
   - Gradle Build (Java 21) - ✓ green
   - SonarQube Analysis - ✓ green
-  - Claude Code Review - ✓ green
 
 - [ ] **Download and review coverage report**
   - Download: `jacoco-coverage-report-{sha}.zip`
@@ -227,7 +226,6 @@ gh run watch
 
 - Gradle Build: https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml
 - SonarQube: https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml
-- Code Review: https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml
 
 ---
 
