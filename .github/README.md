@@ -42,7 +42,6 @@ We've created comprehensive documentation to address all three requirements:
 **CI/CD Pipeline Documentation:**
 - **Gradle Build (Java 21)** - 9 steps, ~15-20 min, produces JAR and test results
 - **SonarQube Analysis** - Coverage reporting, ~15-20 min, produces coverage reports
-- **Claude Code Review** - Automated review for PRs
 
 ### 3. CI/CD Quick Reference
 

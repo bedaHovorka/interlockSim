@@ -61,8 +61,6 @@
   - [ ] Code quality checks passed
   - [ ] JaCoCo coverage report generated
   - [ ] SonarCloud scan completed (if configured)
-- [ ] ✓ Code Review (Claude) - [View Workflow](.github/workflows/claude-code-review.yml)
-  - [ ] Automated code review completed
 
 ### How to Verify CI Status
 
@@ -141,4 +139,3 @@
 ## Review Notes
 
 <!-- Any additional notes for reviewers -->
-

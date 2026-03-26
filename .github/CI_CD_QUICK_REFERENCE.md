@@ -18,18 +18,11 @@ Add these badges to your PR description or documentation to show build status:
 [![SonarQube](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
 ```
 
-### Code Review Status
-
-```markdown
-[![Claude Code Review](https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml)
-```
-
 ### All Badges Together
 
 ```markdown
 [![Gradle Build](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml)
 [![SonarQube](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
-[![Claude Code Review](https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/claude-code-review.yml)
 ```
 
 ## CI Workflow Overview
@@ -71,17 +64,6 @@ Add these badges to your PR description or documentation to show build status:
 - `jacoco-coverage-report-{sha}` - HTML coverage report (30-day retention)
 
 **Triggers:** Push/PR to `main`, `develop`, `feature/**`, `fix/**`, `copilot/**`, `claude/**`
-
-### 3. Claude Code Review
-
-**File:** `.github/workflows/claude-code-review.yml`
-
-**Triggers:** Pull requests only
-
-**Features:**
-- Automated architecture review
-- Code quality analysis
-- Best practice suggestions
 
 ## Quick Commands
 

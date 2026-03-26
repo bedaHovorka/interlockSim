@@ -183,19 +183,6 @@ Our CI/CD pipeline includes three main workflows:
 - Skips gracefully if not configured
 - View results at: https://sonarcloud.io/project/overview?id=bedaHovorka_interlockSim
 
-#### 3. Claude Code Review
-
-**File:** `.github/workflows/claude-code-review.yml`
-
-**Purpose:** Automated code review using Claude AI
-
-**Triggers:** Pull requests
-
-**Features:**
-- Automated code quality review
-- Architecture consistency checks
-- Best practice suggestions
-
 ### Verifying CI Status
 
 Before merging a PR, ensure all CI checks pass:

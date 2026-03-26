@@ -320,7 +320,6 @@ GitHub Actions workflows in `.github/workflows/`:
 - `gradle-java21.yml` - Build, test, package JAR
 - `sonarqube.yml` - Code quality analysis
 - `claude.yml` - Claude AI integration
-- `claude-code-review.yml` - Automated code reviews
 
 ## Additional Resources
 
