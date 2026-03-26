@@ -57,9 +57,9 @@ COPY fast-sim/build.gradle.kts /build/fast-sim/
 COPY docker-kdisco/ /root/kdisco-prebuild/
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
-RUN --mount=type=cache,target=/root/.gradle/caches \
-    --mount=type=cache,target=/root/.gradle/wrapper \
-    --mount=type=cache,target=/root/.m2/repository \
+RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
     cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
@@ -73,9 +73,9 @@ RUN mkdir -p /build/desktop-ui/src/main/kotlin
 
 # Layer 5: Build release native binary
 ENV GRADLE_OPTS="-Xmx2g"
-RUN --mount=type=cache,target=/root/.gradle/caches \
-    --mount=type=cache,target=/root/.gradle/wrapper \
-    --mount=type=cache,target=/root/.m2/repository \
+RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
     cp -r /root/kdisco-prebuild/. /root/.m2/repository/ && \
     ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
 
