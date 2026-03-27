@@ -109,7 +109,7 @@ class MenuBar : JMenuBar() {
 									"WARNING: This railway network has insufficient InOut elements " +
 										"($inOutsCount found, $minRequired required).\n\n" +
 										"The editor will prevent saving this context until you add at least " +
-										"$minRequired InOut element(s).\n\n" +
+										"$minRequired InOut element (entry/exit point).\n\n" +
 										"InOut elements define entry/exit points for trains.",
 									"Validation Warning",
 									JOptionPane.WARNING_MESSAGE
