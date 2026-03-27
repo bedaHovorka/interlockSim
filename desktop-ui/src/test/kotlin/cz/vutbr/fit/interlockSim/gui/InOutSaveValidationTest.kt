@@ -12,10 +12,12 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -72,6 +74,37 @@ class InOutSaveValidationTest : KoinTestBase() {
 			.withInOut("Exit1", 10, 10, false)
 			.withInOut("Entry2", 5, 5, true)
 			.buildEditingContext()
+		assertThat(MenuBar.validateForSave(context)).isTrue()
+	}
+
+	@Test
+	@DisplayName("MIN_INOUT_ELEMENTS constant value is 1")
+	fun minInOutElementsConstantIsOne() {
+		assertThat(XMLContextFactory.MIN_INOUT_ELEMENTS).isEqualTo(1)
+	}
+
+	@Test
+	@DisplayName("validateForSave is idempotent — repeated calls return same result")
+	fun validateForSave_isIdempotent() {
+		val context = TestContextBuilder()
+			.withInOut("OnlyEntry", 1, 1, true)
+			.buildEditingContext()
+		val first = MenuBar.validateForSave(context)
+		val second = MenuBar.validateForSave(context)
+		val third = MenuBar.validateForSave(context)
+		assertThat(first).isTrue()
+		assertThat(second).isTrue()
+		assertThat(third).isTrue()
+	}
+
+	@Test
+	@DisplayName("context with 10 InOuts can be saved")
+	fun contextWith10InOutsCanBeSaved() {
+		var builder = TestContextBuilder()
+		for (i in 1..10) {
+			builder = builder.withInOut("InOut$i", i, i, true)
+		}
+		val context = builder.buildEditingContext()
 		assertThat(MenuBar.validateForSave(context)).isTrue()
 	}
 }
