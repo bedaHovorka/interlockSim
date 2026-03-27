@@ -345,6 +345,7 @@ tasks.named("integrationTest") {
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+    mustRunAfter(tasks.named("integrationTest"))
 
     executionData.setFrom(
         fileTree(layout.buildDirectory).include("jacoco/*.exec")
