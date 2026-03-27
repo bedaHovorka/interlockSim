@@ -44,8 +44,6 @@ kotlin {
 			}
 		}
 		testRuns["test"].executionTask.configure {
-			// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
-			workingDir = rootProject.projectDir.resolve("desktop-ui")
 			useJUnitPlatform {
 				excludeTags("integration-test")
 			}
@@ -101,6 +99,8 @@ kotlin {
 				implementation(kotlin("test"))
 				implementation("com.willowtreeapps.assertk:assertk:$assertkVersion")
 				implementation("io.insert-koin:koin-test:$koinVersion")
+				// Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
+				implementation(project(":core-test"))
 			}
 		}
 		val jvmMain by getting {
@@ -159,9 +159,6 @@ tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("
 val integrationTest by tasks.registering(Test::class) {
 	group = "verification"
 	description = "Run :core integration tests (tagged with @Tag(\"integration-test\"))"
-
-	// Use desktop-ui dir so relative File paths like "src/test/resources/..." resolve correctly
-	workingDir = rootProject.projectDir.resolve("desktop-ui")
 
 	useJUnitPlatform {
 		includeTags("integration-test")

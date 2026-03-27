@@ -1,0 +1,102 @@
+#
+#      Brno University of Technology
+#      Faculty of Information Technology
+#
+#      BSc Thesis       2006/2007
+#
+#      Railway Interlocking Simulator
+#
+#      fast-sim: native linuxX64 CLI binary
+#      Multi-stage build: Debian Bookworm builder → bookworm-slim runtime
+#
+#      Usage:
+#        docker compose build fast-sim
+#        docker compose run fast-sim example shuntingLoop 60
+#
+
+# syntax=docker/dockerfile:1.4
+
+# ============================================
+# Stage 1: Build native binary with Gradle
+# ============================================
+# Eclipse Temurin provides JDK 21 on Debian Bookworm base.
+# Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
+FROM eclipse-temurin:21-jdk AS builder
+
+# Install git and native build dependencies
+# libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
+# libicu-dev: transitive dependency of libxml2-dev on Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    libxml2-dev \
+    libicu-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/include/unicode /usr/include/libxml2/unicode
+
+WORKDIR /build
+
+# Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
+COPY gradlew /build/
+COPY gradlew.bat /build/
+COPY gradle/ /build/gradle/
+RUN chmod +x gradlew
+
+# Layer 2: Copy build configuration files (cached until config changes)
+COPY settings.gradle.kts /build/
+COPY gradle.properties /build/
+COPY build.gradle.kts /build/
+COPY detekt.yml /build/
+COPY detekt-strict.yml /build/
+COPY .editorconfig /build/
+COPY core/build.gradle.kts /build/core/
+COPY core-test/build.gradle.kts /build/core-test/
+COPY desktop-ui/build.gradle.kts /build/desktop-ui/
+COPY fast-sim/build.gradle.kts /build/fast-sim/
+
+# Layer 2.5: Pre-stage kDisco artifacts for offline build
+COPY docker-kdisco/ /root/kdisco-prebuild/
+
+# Layer 3: Resolve dependencies with BuildKit cache mount
+RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
+    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    ./gradlew dependencies --no-daemon --warning-mode=summary
+
+# Layer 4: Copy source code (changes most frequently)
+COPY core/src/ /build/core/src/
+COPY core-test/src/ /build/core-test/src/
+COPY fast-sim/src/ /build/fast-sim/src/
+# desktop-ui source needed for Gradle configuration resolution (settings.gradle.kts includes it)
+# but not compiled — only an empty placeholder is required.
+RUN mkdir -p /build/desktop-ui/src/main/kotlin
+
+# Layer 5: Build release native binary
+ENV GRADLE_OPTS="-Xmx2g"
+RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
+    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
+    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
+    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
+
+# Verify binary was created
+RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
+
+# ============================================
+# Stage 2: Minimal runtime image
+# ============================================
+FROM debian:bookworm-slim
+
+# Install only the runtime library the native binary links against.
+# libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2)
+# Note: libxml2 depends on libicu72 transitively; apt installs it automatically.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy native binary from builder
+COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
+    /usr/local/bin/fast-sim
+
+ENTRYPOINT ["fast-sim"]
+CMD ["--help"]

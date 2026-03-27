@@ -30,7 +30,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
-import java.io.File
 
 /**
  * Tests for Issue #214: Pre-Wrap All Tracks at Initialization
@@ -43,6 +42,10 @@ import java.io.File
 @DisplayName("Eager Track Wrapping (Issue #214)")
 class EagerTrackWrappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
+
+	private fun loadVyhybnaStream() =
+		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			?: error("Resource not found: vyhybna.xml")
 
 	@Nested
 	@DisplayName("Unit Tests - Eager Wrapping")
@@ -108,8 +111,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - all tracks wrapped after run initialization")
 		fun vyhybnaXml_allTracksWrappedAfterRunInit() {
 			// Arrange - Load vyhybna.xml configuration
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Act - Call initializeDynamicMapping (normally called by run())
 			// We can't call run() in tests because it blocks, so we call the initialization directly
@@ -150,8 +152,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 		@DisplayName("vyhybna.xml - graph contains multiple track blocks")
 		fun vyhybnaXml_graphHasMultipleTracks() {
 			// Arrange
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			// Act
 			val graph = context.getGraph()
@@ -168,8 +169,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 		@Test
 		@DisplayName("vyhybna.xml - static track blocks map to dynamic wrappers")
 		fun vyhybnaXml_staticTrackLookupsReturnDynamicWrapper() {
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 
 			context.initializeDynamicMapping()
 
@@ -200,12 +200,9 @@ class EagerTrackWrappingTest : KoinTestBase() {
 		@Test
 		@DisplayName("initialization time acceptable for vyhybna.xml")
 		fun initializationTimeAcceptable() {
-			// Arrange
-			val xmlFile = File("src/main/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-
 			// Act - Measure initialization time
 			val start = System.currentTimeMillis()
-			val context = factory.createContext(xmlFile) as DefaultSimulationContext
+			val context = loadVyhybnaStream().use { factory.createContext(it) } as DefaultSimulationContext
 			context.initializeDynamicMapping()
 			val duration = System.currentTimeMillis() - start
 

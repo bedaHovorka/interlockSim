@@ -21,6 +21,8 @@ import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.gui.Frame
+import cz.vutbr.fit.interlockSim.sim.TextReporter
+import cz.vutbr.fit.interlockSim.sim.Verbosity
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -124,7 +126,12 @@ class Main {
 		try {
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
 			val context = exampleFactory(simulationContextFactory, args)
-			context.use { it.run() } // context closed after simulation
+			val reporter = TextReporter(Verbosity.DEFAULT)
+			context.addPropertyChangeListener(reporter)
+			context.use {
+				it.run()
+				reporter.printSummary()
+			} // context closed after simulation
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "Example context creation failed" }
 		} catch (e: SimulationException) {

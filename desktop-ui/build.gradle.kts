@@ -61,6 +61,8 @@ dependencies {
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
+    // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
+    testImplementation(project(":core-test"))
 }
 
 application {

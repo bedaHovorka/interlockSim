@@ -79,6 +79,11 @@ listOf(
     tasks.register(name) { dependsOn(":desktop-ui:$name") }
 }
 
+tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
+tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
+tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
+tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
+
 // ===========================================
 // SonarQube Configuration
 // ===========================================
@@ -115,6 +120,10 @@ sonar {
 
         property("sonar.sourceEncoding", "ISO-8859-1")
         property("sonar.qualitygate.wait", "false")
+
+        // :fast-sim compiles to linuxX64 native — JaCoCo cannot instrument native code.
+        // :core-test is test-support infrastructure, not production code requiring coverage.
+        property("sonar.coverage.exclusions", "fast-sim/**,core-test/**")
     }
 }
 

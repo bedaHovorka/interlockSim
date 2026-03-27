@@ -15,6 +15,7 @@ package cz.vutbr.fit.interlockSim.context
 import assertk.assertThat
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
+import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -43,7 +44,7 @@ class CacheValidationCacheHitBehaviorTest : KoinComponent {
 
 	private fun loadVyhybnaSimulationContext(): DefaultSimulationContext =
 		CommonTestFixtures.parseSimulationContext(
-			CommonTestFixtures.VYHYBNA_XML,
+			NetworkResources.VYHYBNA_XML,
 			get<SimulationProcessFactory>()
 		)
 
