@@ -198,10 +198,10 @@ class MenuBar : JMenuBar() {
 		if (!validateForSave(editingContext)) {
 			JOptionPane.showMessageDialog(
 				this,
-				"Railway network must have at least $minRequired InOut elements (entry and exit points).\n\n" +
+				"Railway network must have at least $minRequired InOut element (entry/exit point).\n\n" +
 					"Current count: $inOutsCount\n\n" +
-					"InOut elements define where trains enter and exit the railway network.\n" +
-					"Please add more InOut elements before saving.",
+					"An InOut element defines where trains can enter and/or exit the railway network.\n" +
+					"Please add the required InOut element before saving.",
 				"Cannot Save - Insufficient InOut Elements",
 				JOptionPane.ERROR_MESSAGE
 			)
