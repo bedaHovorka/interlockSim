@@ -853,7 +853,8 @@ open class DefaultSimulationContext(
 
 			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
 			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) {
-				staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]!!
+				staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]
+				?: error("Expected DynamicTrack for $staticTrack to be registered in the map")
 			}
 
 			// Recursively map any internal TrackSection objects
