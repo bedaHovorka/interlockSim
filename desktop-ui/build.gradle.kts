@@ -339,8 +339,17 @@ tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
 
+tasks.named("integrationTest") {
+    finalizedBy(tasks.jacocoTestReport)
+}
+
 tasks.jacocoTestReport {
-    dependsOn(tasks.test)
+    dependsOn(tasks.test, tasks.named("integrationTest"))
+
+    executionData.setFrom(
+        fileTree(layout.buildDirectory).include("jacoco/*.exec")
+    )
+
     reports {
         xml.required.set(true)
         xml.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/test/jacocoTestReport.xml"))

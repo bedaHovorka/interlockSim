@@ -221,10 +221,10 @@ jacoco {
 }
 
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
-	dependsOn(tasks.named("jvmTest"))
+	dependsOn(tasks.named("jvmTest"), tasks.named("integrationTest"))
 
 	executionData.setFrom(
-		fileTree(layout.buildDirectory).include("jacoco/jvmTest.exec")
+		fileTree(layout.buildDirectory).include("jacoco/*.exec")
 	)
 	sourceDirectories.setFrom(
 		files("src/commonMain/kotlin", "src/jvmMain/kotlin")

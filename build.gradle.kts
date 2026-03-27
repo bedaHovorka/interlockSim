@@ -140,5 +140,42 @@ sonar {
 }
 
 tasks.named("sonar") {
-    dependsOn(":desktop-ui:test", ":desktop-ui:jacocoTestReport", ":core:jvmTest")
+    dependsOn(
+        ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
+        ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
+    )
+}
+
+// ===========================================
+// Aggregated JaCoCo Report (cross-module)
+// ===========================================
+
+val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
+    group = "verification"
+    description = "Generate aggregated JaCoCo coverage report across all modules"
+
+    dependsOn(
+        ":core:jvmTest", ":core:integrationTest",
+        ":desktop-ui:test", ":desktop-ui:integrationTest",
+    )
+
+    executionData.setFrom(
+        fileTree("core/build").include("jacoco/*.exec"),
+        fileTree("desktop-ui/build").include("jacoco/*.exec"),
+    )
+    sourceDirectories.setFrom(
+        files("core/src/commonMain/kotlin", "core/src/jvmMain/kotlin", "desktop-ui/src/main/kotlin")
+    )
+    classDirectories.setFrom(
+        fileTree("core/build/classes/kotlin/jvm/main"),
+        fileTree("desktop-ui/build/classes/kotlin/main"),
+    )
+
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(file("build/reports/jacoco/aggregated/jacocoTestReport.xml"))
+        html.required.set(true)
+        html.outputLocation.set(file("build/reports/jacoco/aggregated/html"))
+        csv.required.set(false)
+    }
 }
