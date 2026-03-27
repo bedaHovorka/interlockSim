@@ -1089,6 +1089,216 @@ class XMLContextFactoryTest : KoinTestBase() {
 	}
 
 	@Nested
+	@DisplayName("Praha Topology Improvements (PR #347)")
+	inner class PragueTopologyImprovementsTests {
+
+		@Test
+		@DisplayName("Praha XML loads with exact element counts after PR #347 additions")
+		fun testPragueExactElementCounts() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml) as EditingContext
+
+			@Suppress("UNCHECKED_CAST")
+			val cellGrid = context.getRailWayNetGrid() as RailwayNetGrid<Cell>
+
+			var inOutCount = 0
+			var switchCount = 0
+			var semaphoreCount = 0
+			for (entry in cellGrid) {
+				when (entry.value) {
+					is InOut -> inOutCount++
+					is RailSwitch -> switchCount++
+					is RailSemaphore -> semaphoreCount++
+				}
+			}
+
+			// Count unique track blocks via graph (SimpleTrackBlocks are graph edges, not grid cells)
+			val seenBlocks = java.util.IdentityHashMap<TrackSection, Unit>()
+			val graph = (context as DefaultEditingContext).getGraph()
+			for (node in graph.nodeSet()) {
+				for (entry in graph.assignedEdges(node).entries) {
+					val edge = entry.value
+					if (edge is TrackSection) {
+						seenBlocks[edge] = Unit
+					}
+				}
+			}
+			val trackBlockCount = seenBlocks.size
+
+			assertThat(inOutCount)
+				.withMessage("Praha should have exactly 12 InOut elements after PR #347")
+				.isEqualTo(12)
+			assertThat(switchCount)
+				.withMessage("Praha should have exactly 41 switches after PR #347")
+				.isEqualTo(41)
+			assertThat(semaphoreCount)
+				.withMessage("Praha should have exactly 56 signals after PR #347 (55 original + 1 car train terminal approach)")
+				.isEqualTo(56)
+			assertThat(trackBlockCount)
+				.withMessage("Praha should have exactly 111 track blocks after PR #347")
+				.isEqualTo(111)
+		}
+
+		@Test
+		@DisplayName("N-Bypass InOut is present at grid (2,20) with entry orientation")
+		fun testPragueNorthBypassInOutPresent() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml)
+
+			val cell = context.getRailWayNetGrid().getCellAt(2, 20)
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+
+			val inOut = cell as InOut
+			assertThat(inOut.getName())
+				.withMessage("N-Bypass InOut should have correct name")
+				.isEqualTo("N-Bypass")
+			assertThat(inOut.getOrientation())
+				.withMessage("N-Bypass InOut should be an entry point (orientation=false)")
+				.isFalse()
+		}
+
+		@Test
+		@DisplayName("S-CarTrain InOut is present at grid (60,22) with exit orientation")
+		fun testPragueCarTrainTerminalInOutPresent() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml)
+
+			val cell = context.getRailWayNetGrid().getCellAt(60, 22)
+			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
+
+			val inOut = cell as InOut
+			assertThat(inOut.getName())
+				.withMessage("S-CarTrain InOut should have correct name")
+				.isEqualTo("S-CarTrain")
+			assertThat(inOut.getOrientation())
+				.withMessage("S-CarTrain InOut should be an exit point (orientation=true)")
+				.isTrue()
+		}
+
+		@Test
+		@DisplayName("Bypass route N-Bypass to S-Bypass is navigable")
+		fun testPragueBypassRouteNavigable() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml) as EditingContext
+
+			var nBypass: InOut? = null
+			var sBypass: InOut? = null
+			for (entry in context.getRailWayNetGrid()) {
+				val cell = entry.value
+				if (cell is InOut) {
+					when (cell.getName()) {
+						"N-Bypass" -> nBypass = cell
+						"S-Bypass" -> sBypass = cell
+					}
+				}
+			}
+
+			assertThat(nBypass)
+				.withMessage("N-Bypass InOut should exist in Praha XML")
+				.isNotNull()
+			assertThat(sBypass)
+				.withMessage("S-Bypass InOut should exist in Praha XML")
+				.isNotNull()
+
+			assertThat(existPath(nBypass!!, sBypass!!, context as DefaultEditingContext))
+				.withMessage("Path should exist from N-Bypass to S-Bypass")
+				.isTrue()
+		}
+
+		@Test
+		@DisplayName("S-CarTrain terminal is reachable from the N-Bypass entry")
+		fun testPragueCarTrainTerminalAccessible() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml) as EditingContext
+
+			// S-CarTrain is accessible from N-Bypass via the Y=20/Y=22 bypass corridor
+			var nBypass: InOut? = null
+			var sCarTrain: InOut? = null
+			for (entry in context.getRailWayNetGrid()) {
+				val cell = entry.value
+				if (cell is InOut) {
+					when (cell.getName()) {
+						"N-Bypass" -> nBypass = cell
+						"S-CarTrain" -> sCarTrain = cell
+					}
+				}
+			}
+
+			assertThat(nBypass)
+				.withMessage("N-Bypass InOut should exist in Praha XML")
+				.isNotNull()
+			assertThat(sCarTrain)
+				.withMessage("S-CarTrain InOut should exist in Praha XML")
+				.isNotNull()
+
+			assertThat(existPath(nBypass!!, sCarTrain!!, context as DefaultEditingContext))
+				.withMessage("Path should exist from N-Bypass to S-CarTrain via bypass corridor (Y=20→Y=22)")
+				.isTrue()
+		}
+
+		@Test
+		@DisplayName("Switch orientations at new bypass infrastructure are railway-domain correct")
+		fun testPragueSwitchOrientationsAtNewInfrastructure() {
+			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
+			val context = editingContextFactory.createContext(xml)
+
+			val switchAt6x20 = context.getRailWayNetGrid().getCellAt(6, 20)
+			assertThat(switchAt6x20).isNotNull().isInstanceOf(RailSwitch::class)
+			assertThat((switchAt6x20 as RailSwitch).type)
+				.withMessage("Bypass entry switch at (6,20) must be SIMPLE_LEFT_TRUE for correct bypass diverge")
+				.isEqualTo(RailSwitch.Type.SIMPLE_LEFT_TRUE)
+
+			val switchAt52x20 = context.getRailWayNetGrid().getCellAt(52, 20)
+			assertThat(switchAt52x20).isNotNull().isInstanceOf(RailSwitch::class)
+			assertThat((switchAt52x20 as RailSwitch).type)
+				.withMessage("Bypass exit switch at (52,20) must be SIMPLE_RIGHT_TRUE to allow diverge toward Y=22")
+				.isEqualTo(RailSwitch.Type.SIMPLE_RIGHT_TRUE)
+		}
+
+		/**
+		 * Path existence check for Praha topology improvement tests.
+		 * Reuses the BFS approach from ComplexStationConfigurationTests.
+		 */
+		private fun existPath(
+			from: InOut,
+			to: InOut,
+			context: DefaultEditingContext
+		): Boolean {
+			val fromLoc = context.getRailWayNetGrid().getLocation(from) ?: return false
+			val toLoc = context.getRailWayNetGrid().getLocation(to) ?: return false
+			if (fromLoc == toLoc) return true
+
+			val graph = context.getGraph()
+			val visited = mutableSetOf<Point>()
+			val queue = mutableListOf(fromLoc)
+
+			while (queue.isNotEmpty()) {
+				val current = queue.removeFirst()
+				if (current in visited) continue
+				visited.add(current)
+				if (current == toLoc) return true
+
+				val edges = graph.assignedEdges(current)
+				for (entry in edges.entries) {
+					val trackBlock = entry.value
+					if (trackBlock !is TrackSection) continue
+
+					val ends = trackBlock.ends()
+					for (pathSeparator in ends) {
+						if (pathSeparator !is cz.vutbr.fit.interlockSim.objects.cells.NodeCell) continue
+
+						val endLocation = context.getRailWayNetGrid().getLocation(pathSeparator) ?: continue
+						if (endLocation != current && endLocation !in visited) {
+							queue.add(endLocation)
+						}
+					}
+				}
+			}
+			return false
+		}
+	}
+
+	@Nested
 	@DisplayName("Name attribute persistence and validation (Issue #306)")
 	inner class NameAttributeTests {
 		@Test

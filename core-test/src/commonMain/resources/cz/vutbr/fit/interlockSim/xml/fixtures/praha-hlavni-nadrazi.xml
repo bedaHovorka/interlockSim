@@ -14,7 +14,7 @@
      - Car train terminal siding (Y=22)
 
      Grid: 70x25
-     Total elements: 41 switches, 55 signals, 12 InOuts, 111 track blocks
+     Total elements: 41 switches, 56 signals, 12 InOuts, 111 track blocks
 -->
 <net X="70" Y="25">
   <!-- North entry points -->
@@ -142,6 +142,9 @@
   <!-- SIMPLE_RIGHT_TRUE (not FALSE): bypass row needs segment D for the Y=22 car-train terminal siding -->
   <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE"/>
 
+  <!-- Car train terminal approach signal (node cell required for track block endpoint at Y=22) -->
+  <RailSemaphore X="52" Y="22" SpatialType="HORIZONTAL" orientation="true"/>
+
   <!-- South Layer 4 signals (between merge and diverge switches) -->
   <RailSemaphore X="54" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
   <RailSemaphore X="54" Y="12" SpatialType="HORIZONTAL" orientation="true"/>
@@ -228,7 +231,7 @@
   <SimpleTrackBlock fromX="14" fromY="14" toX="16" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
   <SimpleTrackBlock fromX="14" fromY="16" toX="16" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
   <SimpleTrackBlock fromX="14" fromY="18" toX="16" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="18" toX="16" toY="20" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
+  <SimpleTrackBlock fromX="14" fromY="18" toX="16" toY="20" fromSegment="D" toSegment="B" length="28.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
 
   <!-- Platform zone (main tracks) -->
   <SimpleTrackBlock fromX="16" fromY="4" toX="42" toY="4" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
