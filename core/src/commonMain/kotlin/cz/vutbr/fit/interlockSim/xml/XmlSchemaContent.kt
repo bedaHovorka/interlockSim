@@ -37,12 +37,13 @@ object XmlSchemaContent {
 
          <xs:element name="net">
            <xs:complexType>
-             <!-- xs:any processContents="lax" is used so that child elements such as RailSwitch,
-                  RailSemaphore, InOut and SimpleTrackBlock (and potential future extensions)
-                  can appear as children of <net> in flexible order without hard-coding the set
-                  of allowed elements in this XSD. Application-level validation in
-                  XMLContextFactory.Handler.classification() enforces the precise element-name
-                  constraints at parse time. -->
+             <!-- xs:any processContents="lax" is used here to allow child elements such as
+                  RailSwitch, RailSemaphore, InOut and SimpleTrackBlock (declared as global
+                  xs:elements in this schema) to appear in arbitrary order and to keep the
+                  content model forward compatible with additional element types. Although these
+                  elements could be referenced explicitly via xs:element ref="...", this schema
+                  relies on application-level validation in XMLContextFactory.Handler.classification()
+                  to enforce the actual element name and semantic constraints at parse time. -->
              <xs:sequence minOccurs="0" maxOccurs="unbounded">
                <xs:any processContents="lax"/>
              </xs:sequence>

@@ -114,6 +114,7 @@ class Doubleton<T, V>(first: T, second: T) : AbstractMutableSet<T>() {
 	 * @return true if {@code obj} is a {@link Set} containing exactly the same two elements
 	 * (regardless of order); associated values (firstValue, secondValue) are ignored
 	 */
+	@Suppress("kotlin:S2097") // Intentional: Doubleton equals any Set with same elements (AbstractMutableSet contract)
 	override fun equals(obj: Any?): Boolean {
 		// Early reference check
 		if (this === obj) return true
