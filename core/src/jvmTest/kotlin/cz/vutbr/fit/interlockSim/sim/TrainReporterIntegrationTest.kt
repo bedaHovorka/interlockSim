@@ -76,7 +76,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 		val reportCount = countTrainContinuousEvents(ctx)
 
-		ctx.run() // covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
+		try {
+			ctx.run() // covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
+		} finally {
+			ctx.close()
+		}
 
 		// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 		// is registered (which is always true after ShuntingLoop.actions() runs).
@@ -99,7 +103,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 		val reportCount = countTrainContinuousEvents(ctx)
 
-		ctx.run() // covers: TrainReporter terminate() path when simulation ends
+		try {
+			ctx.run() // covers: TrainReporter terminate() path when simulation ends
+		} finally {
+			ctx.close()
+		}
 
 		// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 		// is registered (which is always true after ShuntingLoop.actions() runs).
@@ -142,7 +150,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// SimpleTestProcess does not enable TRAIN_CONTINUOUS — the key condition under test
 		val testProcess = SimpleTestProcess(train, endTime = 10.0)
 		ctx.setMainProcess(testProcess)
-		ctx.run()
+		try {
+			ctx.run()
+		} finally {
+			ctx.close()
+		}
 
 		// TrainReporter ran (train moved) but isReporting(TRAIN_CONTINUOUS) was always false,
 		// so env.report() was never reached and no property change events fired.
@@ -151,7 +163,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("TRAIN_CONTINUOUS enabled — reporter fires at ≥ 25 events in 30 s (≈ 1 Hz lower bound)")
+	@DisplayName("TRAIN_CONTINUOUS enabled — reporter fires at ≥ 20 events in 30 s (≈ 1 Hz lower bound)")
 	@Tag("integration-test")
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun trainReporterRateLowerBound() {
@@ -163,7 +175,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 		val reportCount = countTrainContinuousEvents(ctx)
 
-		ctx.run()
+		try {
+			ctx.run()
+		} finally {
+			ctx.close()
+		}
 
 		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate lower bound (endTime=30, ~1 Hz)")
 			.isGreaterThanOrEqualTo(20)

@@ -142,7 +142,11 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 10.0))
 
-		ctx.run()
+		try {
+			ctx.run()
+		} finally {
+			ctx.close()
+		}
 
 		// At 1 Hz over 10 simulated seconds we expect roughly 10 iterations.
 		// Allow generous ±4 slack to tolerate discrete-event boundary effects.
@@ -158,7 +162,11 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 
-		ctx.run() // must not hang
+		try {
+			ctx.run() // must not hang
+		} finally {
+			ctx.close()
+		}
 
 		assertThat(lp.iterationCount.get(), name = "iterations after termination").isGreaterThan(0)
 	}
@@ -172,7 +180,11 @@ class LoopProcessTest : KoinTestBase() {
 		// terminateExtra = 2 → driver calls terminate() 3 times total (2 extra + 1 real)
 		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0, terminateExtra = 2))
 
-		ctx.run() // must complete without exception or hang
+		try {
+			ctx.run() // must complete without exception or hang
+		} finally {
+			ctx.close()
+		}
 
 		// byTerminateAction must fire exactly once regardless of extra terminate() calls
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction call count").isLessThanOrEqualTo(1)
@@ -187,7 +199,11 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 
-		ctx.run()
+		try {
+			ctx.run()
+		} finally {
+			ctx.close()
+		}
 
 		assertThat(lp.startCount.get(), name = "startAction call count").isLessThanOrEqualTo(1)
 		assertThat(lp.startCount.get(), name = "startAction called at least once").isGreaterThan(0)
@@ -201,7 +217,11 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 
-		ctx.run()
+		try {
+			ctx.run()
+		} finally {
+			ctx.close()
+		}
 
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction call count").isLessThanOrEqualTo(1)
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction called at least once").isGreaterThan(0)

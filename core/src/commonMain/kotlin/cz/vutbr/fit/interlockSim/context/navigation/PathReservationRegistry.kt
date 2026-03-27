@@ -615,6 +615,41 @@ class PathReservationRegistry(
 	 *         merge would create a third occurrence of any separator (cycle guard)
 	 * @since Issue #296 Phase 8
 	 */
+	/**
+	 * Adds [element] to [mergedPath] with cycle detection for path separators.
+	 * Returns [old] PathInfo if a cycle is detected (3+ occurrences), null otherwise.
+	 */
+	private fun addElementWithCycleDetection(
+		element: cz.vutbr.fit.interlockSim.objects.core.PathElement,
+		mergedPath: ArrayPath,
+		trainId: String,
+		old: PathInfo,
+		new: PathInfo
+	): PathInfo? {
+		if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
+			mergedPath.any { it == element }
+		) {
+			val occurrenceCount = mergedPath.count { it == element }
+			if (occurrenceCount >= 2) {
+				// 3rd occurrence — infinite loop detected (Issue #316)
+				logger.warn {
+					"mergePathInfo: merge for train $trainId would create cycle (separator $element at 3+ occurrences). " +
+						"Keeping existing valid PathInfo unchanged. " +
+						"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+				}
+				return old
+			}
+			// 2nd occurrence — legitimate circular route
+			logger.info {
+				"mergePathInfo: LEGITIMATE CIRCULAR ROUTE - separator $element appears ${occurrenceCount + 1}x " +
+					"in path (train '$trainId' progressing through circular shunting loop). " +
+					"Allowing (old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
+			}
+		}
+		mergedPath.add(element)
+		return null
+	}
+
 	private fun mergePathInfo(
 		trainId: String,
 		old: PathInfo,
@@ -651,36 +686,8 @@ class PathReservationRegistry(
 					"mergePathInfo: skipping overlap element $element (old.target == new.start)"
 				}
 			} else {
-				// Smart cycle detection: allow ONE full circular loop (2 occurrences), prevent infinite loops (3+)
-				if (element is cz.vutbr.fit.interlockSim.objects.core.PathSeparator &&
-					mergedPath.any { it == element }
-				) {
-					// Count how many times this separator already appears in merged path
-					val occurrenceCount = mergedPath.count { it == element }
-
-					if (occurrenceCount >= 2) {
-						// This would be the 3rd occurrence - infinite loop detected
-						// Issue #316 fix: abort the entire merge and return the existing valid PathInfo
-						// (a truncated PathInfo is worse than the original because it may end with a
-						// separator without proper closure, causing infinite cycle-detection loops)
-						logger.warn {
-							"mergePathInfo: merge for train $trainId would create cycle (separator $element at 3+ occurrences). " +
-								"Keeping existing valid PathInfo unchanged. " +
-								"(old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-						}
-						return old
-					} else {
-						// 2nd occurrence - legitimate circular route (train completing one loop)
-						logger.info {
-							"mergePathInfo: LEGITIMATE CIRCULAR ROUTE - separator $element appears ${occurrenceCount + 1}x " +
-								"in path (train '$trainId' progressing through circular shunting loop). " +
-								"Allowing (old: ${old.start}→${old.target}, new: ${new.start}→${new.target})"
-						}
-						mergedPath.add(element)
-					}
-				} else {
-					mergedPath.add(element)
-				}
+				val cycleAbort = addElementWithCycleDetection(element, mergedPath, trainId, old, new)
+				if (cycleAbort != null) return cycleAbort
 			}
 		}
 
