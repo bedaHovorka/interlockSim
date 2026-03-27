@@ -37,11 +37,11 @@ object XmlSchemaContent {
 
          <xs:element name="net">
            <xs:complexType>
-             <!-- xs:any processContents="lax" is used because the child elements (RailSwitch,
-                  RailSemaphore, InOut, SimpleTrackBlock) are declared as top-level xs:elements
-                  in this schema, which cannot be referenced directly inside a complexType sequence
-                  without namespace qualification. Application-level validation in
-                  XMLContextFactory.Handler.classification() enforces the actual element name
+             <!-- xs:any processContents="lax" is used so that child elements such as RailSwitch,
+                  RailSemaphore, InOut and SimpleTrackBlock (and potential future extensions)
+                  can appear as children of <net> in flexible order without hard-coding the set
+                  of allowed elements in this XSD. Application-level validation in
+                  XMLContextFactory.Handler.classification() enforces the precise element-name
                   constraints at parse time. -->
              <xs:sequence minOccurs="0" maxOccurs="unbounded">
                <xs:any processContents="lax"/>
