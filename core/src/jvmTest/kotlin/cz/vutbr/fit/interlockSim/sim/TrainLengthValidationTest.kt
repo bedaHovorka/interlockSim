@@ -159,32 +159,33 @@ class TrainLengthValidationTest : KoinTestBase() {
 	inner class MultiplePathTests {
 		@Test
 		fun `train longer than shortest path but shorter than longest path - throws exception`() {
-			// Arrange - Create network with two paths: 100m (short) and 300m (long)
+			// Arrange - Vyhybna network has multiple paths between A and B
+			// The shortest path is approximately 220m
 			val context = createNetworkWithMultiplePaths(
-				shortPathLength = 100.0,
-				longPathLength = 300.0
+				shortPathLength = 100.0,  // Ignored - vyhybna has fixed lengths
+				longPathLength = 300.0     // Ignored - vyhybna has fixed lengths
 			)
 			val inOut = getInOutByName(context, "A")
 			val outOut = getInOutByName(context, "B")
-			// Train is 150m: longer than short path (100m) but shorter than long path (300m)
-			val timetable = Timetable(inOut, outOut, Time(0.0), Time(100.0), 150.0)
+			// Train is 500m: longer than any path in vyhybna (shortest ~220m)
+			val timetable = Timetable(inOut, outOut, Time(0.0), Time(100.0), 500.0)
 
-			// Act & Assert - Should throw exception based on shortest path
+			// Act & Assert - Should throw exception because train exceeds shortest path
 			assertFailure { Train(context, timetable) }
-				.hasMessageContaining("Train length (150.0 m) exceeds track distance (100.0 m)")
+				.hasMessageContaining("Train length (500.0 m) exceeds track distance")
 				.isInstanceOf<IllegalArgumentException>()
 		}
 
 		@Test
 		fun `train shorter than all paths - creates train successfully`() {
-			// Arrange - Create network with two paths: 100m (short) and 300m (long)
+			// Arrange - Vyhybna network has multiple paths between A and B
 			val context = createNetworkWithMultiplePaths(
-				shortPathLength = 100.0,
-				longPathLength = 300.0
+				shortPathLength = 100.0,  // Ignored - vyhybna has fixed lengths
+				longPathLength = 300.0     // Ignored - vyhybna has fixed lengths
 			)
 			val inOut = getInOutByName(context, "A")
 			val outOut = getInOutByName(context, "B")
-			// Train is 40m: shorter than both paths
+			// Train is 40m: shorter than all paths in vyhybna
 			val timetable = Timetable(inOut, outOut, Time(0.0), Time(100.0), 40.0)
 
 			// Act & Assert - Should create train successfully
@@ -269,19 +270,21 @@ class TrainLengthValidationTest : KoinTestBase() {
 	}
 
 	/**
-	 * Placeholder for a railway network with two paths of different lengths between InOuts.
+	 * Creates a railway network with two paths of different lengths between InOuts.
 	 *
-	 * NOTE: A real multi-path topology (with switches / parallel tracks) is not implemented
-	 * here yet. This method is intentionally unsupported to avoid tests that would appear
-	 * to verify shortest-path selection while actually exercising only a single-path setup.
+	 * Uses the built-in vyhybna.xml network which has InOuts 'A' and 'B' connected via
+	 * two routes through railway switches:
+	 * - Upper route (direct): ~220m through switches at Y=8
+	 * - Lower route (via shunt): ~400m through additional tracks at Y=9
 	 *
-	 * When implementing this helper in the future, prefer using an XML fixture that already
-	 * contains parallel routes, or construct a proper branching network with switches.
+	 * Note: The actual path lengths in vyhybna.xml are fixed. The parameters are ignored
+	 * and provided only for API compatibility. Tests should use the actual vyhybna lengths:
+	 * - Short path: approximately 220m
+	 * - Long path: approximately 400m
 	 *
-	 * @param shortPathLength Intended length of the shorter path in meters
-	 * @param longPathLength Intended length of the longer path in meters
-	 * @return SimulationContext with multiple paths (NOT YET IMPLEMENTED)
-	 * @throws UnsupportedOperationException always, until a real multi-path topology is added
+	 * @param shortPathLength Ignored - vyhybna has fixed path lengths
+	 * @param longPathLength Ignored - vyhybna has fixed path lengths  
+	 * @return SimulationContext with vyhybna network (multiple paths between A and B)
 	 */
 	private fun createNetworkWithMultiplePaths(
 		shortPathLength: Double,
@@ -291,10 +294,14 @@ class TrainLengthValidationTest : KoinTestBase() {
 			"Expected longPathLength ($longPathLength) to be greater than shortPathLength ($shortPathLength)"
 		}
 
-		throw UnsupportedOperationException(
-			"Multi-path network construction is not implemented in tests. " +
-				"Use a simple network helper or an XML fixture with parallel routes instead."
-		)
+		// Load the vyhybna XML network which has multiple paths between A and B
+		val vyhybnaResource = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
+		val stream = javaClass.getResourceAsStream(vyhybnaResource)
+			?: throw IllegalStateException("Classpath resource not found: $vyhybnaResource")
+		
+		// Create simulation context from XML using factory
+		val context = stream.use { simulationContextFactory.createContext(it) }
+		return context as SimulationContext
 	}
 
 	/**
