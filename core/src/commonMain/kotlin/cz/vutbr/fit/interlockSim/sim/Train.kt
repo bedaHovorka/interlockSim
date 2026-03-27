@@ -884,9 +884,11 @@ class Train :
 				"Train length validation passed: train=$trainLength m, " +
 					"shortest path=$shortestPathDistance m (${inOut.name} → ${outOut.name})"
 			}
+		} catch (e: IllegalArgumentException) {
+			// Rethrow validation failures (train too long, no route, etc.)
+			throw e
 		} catch (e: Exception) {
-			// Gracefully handle test mocks or incomplete contexts
-			// In production, topology navigation should work; in tests with mocks, skip validation
+			// Gracefully handle test mocks or incomplete contexts that don't have topology navigation
 			logger.trace {
 				"Train length validation skipped (likely test mock): ${e.message}"
 			}
