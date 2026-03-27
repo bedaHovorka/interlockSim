@@ -269,36 +269,32 @@ class TrainLengthValidationTest : KoinTestBase() {
 	}
 
 	/**
-	 * Creates a railway network with two paths of different lengths between InOuts.
+	 * Placeholder for a railway network with two paths of different lengths between InOuts.
 	 *
-	 * Network layout (simplified):
-	 * ```
-	 *        short path (direct)
-	 *    [A] ---------------- [B]
-	 *        \              /
-	 *         long path (detour)
-	 * ```
+	 * NOTE: A real multi-path topology (with switches / parallel tracks) is not implemented
+	 * here yet. This method is intentionally unsupported to avoid tests that would appear
+	 * to verify shortest-path selection while actually exercising only a single-path setup.
 	 *
-	 * Note: This is a simplified representation. Actual implementation creates
-	 * a network with two parallel tracks of different lengths.
+	 * When implementing this helper in the future, prefer using an XML fixture that already
+	 * contains parallel routes, or construct a proper branching network with switches.
 	 *
-	 * @param shortPathLength Length of the shorter path in meters
-	 * @param longPathLength Length of the longer path in meters
-	 * @return SimulationContext with multiple paths
+	 * @param shortPathLength Intended length of the shorter path in meters
+	 * @param longPathLength Intended length of the longer path in meters
+	 * @return SimulationContext with multiple paths (NOT YET IMPLEMENTED)
+	 * @throws UnsupportedOperationException always, until a real multi-path topology is added
 	 */
 	private fun createNetworkWithMultiplePaths(
 		shortPathLength: Double,
 		longPathLength: Double
 	): SimulationContext {
-		// For simplicity, we'll create a network similar to createSimpleNetwork
-		// but with knowledge that the test is about shortest path validation.
-		// In a real multi-path scenario, you'd need switches to create branching.
-		// For this test, we'll just validate that the shortest path is used.
+		require(longPathLength > shortPathLength) {
+			"Expected longPathLength ($longPathLength) to be greater than shortPathLength ($shortPathLength)"
+		}
 
-		// Note: Full multi-path implementation would require RailSwitch setup.
-		// For now, we use the simple network approach and trust the validation
-		// logic to find the shortest path when multiple paths exist.
-		return createSimpleNetwork(shortPathLength)
+		throw UnsupportedOperationException(
+			"Multi-path network construction is not implemented in tests. " +
+				"Use a simple network helper or an XML fixture with parallel routes instead."
+		)
 	}
 
 	/**
