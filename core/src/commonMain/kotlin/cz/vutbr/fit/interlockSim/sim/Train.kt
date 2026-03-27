@@ -744,46 +744,30 @@ class Train :
 	/**
 	 * Periodic 1 Hz reporter for continuous train telemetry.
 	 *
-	 * The `while (!terminate) { ... hold(1.0) }` pattern used here is **not** an infinite
-	 * loop — `hold(1.0)` is a *suspending* call that yields to the simulation scheduler
-	 * and resumes after 1.0 simulation-time unit has elapsed. The loop therefore fires
-	 * once per simulated second and blocks between firings, consuming no CPU.
+	 * Extends [LoopProcess] to use the standard loop + cooperative-termination pattern.
+	 * Reporting logic is in [iteration]; the 1-second delay between reports is in
+	 * [interLoopSleep]. Safe termination (including DiscoException-guarded activate())
+	 * is provided by [LoopProcess.terminate].
 	 *
-	 * Termination is co-operative: [terminate] sets the flag and calls
-	 * `Process.activate(this)` to wake up a mid-hold suspension, after which the
-	 * loop condition `!terminate` is false and [actions] returns normally. This mirrors
-	 * the pattern used by [Motor].
-	 *
-	 * Note: New periodic processes in this codebase should normally use [LoopProcess],
-	 * which encapsulates this pattern and avoids describing behavior with explicit
-	 * `while (true)`/`while (!terminate)` loops in [Process.actions]. [TrainReporter]
-	 * predates [LoopProcess] and is kept in this explicit form for historical reasons;
-	 * its use of the loop is intentional and safe because of the suspending `hold` and
-	 * cooperative termination mechanism described above.
+	 * @see LoopProcess
 	 */
-	private inner class TrainReporter : Process() {
-		private var terminate = false
-
-		override suspend fun actions() {
-			while (!terminate) {
-				if (env.isReporting(ReportType.TRAIN_CONTINUOUS)) {
-					val builder = StringBuilder()
-					builder.append(getAcceleration()).append(' ')
-					builder.append(getVelocity()).append(' ')
-					builder.append(front.getTotalDistance()).append(' ')
-					builder.append(front.getFrontSection()).append(' ')
-					builder.append(tail.getTailSection()).append(' ')
-					val distanceToSemaphore: Double = distanceToSemaphore()
-					builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
-					env.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
-				}
-				hold(1.0)
+	private inner class TrainReporter : LoopProcess() {
+		override suspend fun iteration() {
+			if (env.isReporting(ReportType.TRAIN_CONTINUOUS)) {
+				val builder = StringBuilder()
+				builder.append(getAcceleration()).append(' ')
+				builder.append(getVelocity()).append(' ')
+				builder.append(front.getTotalDistance()).append(' ')
+				builder.append(front.getFrontSection()).append(' ')
+				builder.append(tail.getTailSection()).append(' ')
+				val distanceToSemaphore: Double = distanceToSemaphore()
+				builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
+				env.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
 			}
 		}
 
-		override fun terminate() {
-			terminate = true
-			if (!terminated()) Process.activate(this)
+		override suspend fun interLoopSleep() {
+			hold(1.0)
 		}
 	}
 	private val reporter: TrainReporter = TrainReporter()
