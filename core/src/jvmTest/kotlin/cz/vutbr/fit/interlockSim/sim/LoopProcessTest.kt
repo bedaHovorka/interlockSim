@@ -176,6 +176,7 @@ class LoopProcessTest : KoinTestBase() {
 
 		// byTerminateAction must fire exactly once regardless of extra terminate() calls
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction call count").isLessThanOrEqualTo(1)
+		assertThat(lp.terminateCount.get(), name = "byTerminateAction called at least once").isGreaterThan(0)
 	}
 
 	@Test
