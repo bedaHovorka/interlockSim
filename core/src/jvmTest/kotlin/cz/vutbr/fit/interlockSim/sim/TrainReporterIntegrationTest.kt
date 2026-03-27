@@ -8,13 +8,16 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -105,6 +108,66 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// Upper bound: at ~1 Hz and endTime=10, max 2 concurrent trains → at most 20 reports.
 		// 100 = 5× slack. Would fail if throttle were hold(0.001) → ~2000 reports.
 		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS throttle upper bound (endTime=10)")
+			.isLessThan(100)
+	}
+
+	@Test
+	@DisplayName("TRAIN_CONTINUOUS disabled — TrainReporter fires 0 reporting events")
+	@Tag("integration-test")
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
+	fun trainReporterDisabledNoEvents() {
+		// Use a simple linear path context where SimpleTestProcess acts as main process.
+		// SimpleTestProcess does NOT call addReportTypes(TRAIN_CONTINUOUS), so
+		// allowedReportTypes stays empty throughout the simulation.
+		// TrainReporter.iteration() checks isReporting(TRAIN_CONTINUOUS) — which returns
+		// false — so env.report() is never called and no TRAIN_CONTINUOUS events fire.
+		val ctx = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+
+		val reportCount = AtomicInteger(0)
+		ctx.addPropertyChangeListener(ContextPropertyChangeListener { event ->
+			if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) reportCount.incrementAndGet()
+		})
+
+		val inOuts = ctx.getInOuts().toList()
+		require(inOuts.size >= 2) { "Test requires at least 2 InOuts" }
+		val startInOut = inOuts[0]
+		val targetInOut = inOuts[1]
+
+		// Reserve path so train can actually move (exercises TrainReporter.iteration() repeatedly)
+		ctx.getPathReservationService().reservePath("Test#1", startInOut, targetInOut)
+
+		val timetable = Timetable(startInOut, targetInOut, Time(0.0), Time(60.0), 100.0)
+		val train = Train(ctx, timetable)
+
+		// SimpleTestProcess does not enable TRAIN_CONTINUOUS — the key condition under test
+		val testProcess = SimpleTestProcess(train, endTime = 10.0)
+		ctx.setMainProcess(testProcess)
+		ctx.run()
+
+		// TrainReporter ran (train moved) but isReporting(TRAIN_CONTINUOUS) was always false,
+		// so env.report() was never reached and no property change events fired.
+		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS events when reporting disabled")
+			.isEqualTo(0)
+	}
+
+	@Test
+	@DisplayName("TRAIN_CONTINUOUS enabled — reporter fires at ≥ 25 events in 30 s (≈ 1 Hz lower bound)")
+	@Tag("integration-test")
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun trainReporterRateLowerBound() {
+		// Same setup as trainReporterEnabledPathCoverage but with tighter bounds:
+		// - Lower bound: >= 25 proves ~1 Hz cadence (not spurious single event)
+		// - Upper bound: < 100 (tighter than 300) — would catch hold(0.01) throttle bug
+		val ctx = loadVyhybnaContext()
+		ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+
+		val reportCount = countTrainContinuousEvents(ctx)
+
+		ctx.run()
+
+		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate lower bound (endTime=30, ~1 Hz)")
+			.isGreaterThanOrEqualTo(20)
+		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate upper bound (endTime=30)")
 			.isLessThan(100)
 	}
 }
