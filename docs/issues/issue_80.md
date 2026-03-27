@@ -24,10 +24,10 @@ Called before every save attempt. On failure, shows an error dialog and returns 
 
 ```
 Cannot Save - Insufficient InOut Elements
-Railway network must have at least 1 InOut elements (entry and exit points).
+Railway network must have at least 1 InOut entry/exit point.
 Current count: 0
-InOut elements define where trains enter and exit the railway network.
-Please add more InOut elements before saving.
+InOut entry/exit points define where trains enter and exit the railway network.
+Please add at least one InOut entry/exit point before saving.
 ```
 
 All three save paths go through `performSave()`:
