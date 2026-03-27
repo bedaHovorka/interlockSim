@@ -222,22 +222,23 @@ jacoco {
 
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
 	dependsOn(tasks.named("jvmTest"))
+	mustRunAfter(tasks.named("integrationTest"))
 
 	executionData.setFrom(
-		fileTree(layout.buildDirectory).include("jacoco/jvmTest.exec")
+		fileTree(layout.buildDirectory).include("jacoco/*.exec")
 	)
 	sourceDirectories.setFrom(
 		files("src/commonMain/kotlin", "src/jvmMain/kotlin")
 	)
 	classDirectories.setFrom(
-		fileTree("${layout.buildDirectory.get()}/classes/kotlin/jvm/main")
+		fileTree(layout.buildDirectory.dir("classes/kotlin/jvm/main"))
 	)
 
 	reports {
 		xml.required.set(true)
-		xml.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/jvmTest/jacocoTestReport.xml"))
+		xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/jvmTest/jacocoTestReport.xml"))
 		html.required.set(true)
-		html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/jacoco/jvmTest/html"))
+		html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/jvmTest/html"))
 		csv.required.set(false)
 	}
 }
