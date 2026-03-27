@@ -895,10 +895,12 @@ class Train :
 			// Rethrow validation failures (train too long, no route, etc.)
 			throw e
 		} catch (e: Exception) {
-			// Gracefully handle test mocks or incomplete contexts that don't have topology navigation
-			logger.trace {
-				"Train length validation skipped (likely test mock): ${e.message}"
+			// Any other exception indicates an unexpected failure in topology/navigation logic.
+			// Log at WARN and rethrow so that validation is not silently bypassed.
+			logger.warn(e) {
+				"Train length validation failed due to unexpected error; simulation will be aborted: ${e.message}"
 			}
+			throw e
 		}
 	}
 
