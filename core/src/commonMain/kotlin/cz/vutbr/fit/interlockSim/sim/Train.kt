@@ -741,38 +741,33 @@ class Train :
 		}
 	}
 
-	private inner class TrainReporter : Continuous() {
-		private var started: Boolean = false
-		private var lastReportTime: Double = -1.0
-
-		override fun derivatives() {
-			if (!started || !env.isReporting(ReportType.TRAIN_CONTINUOUS)) return
-			// Throttle to report at most once per 1.0 simulation-time unit,
-			// matching the old Reporter.setFrequency(1.0) behaviour from kDisco.
-			val currentTime = Process.time()
-			val currentSecond = kotlin.math.floor(currentTime)
-			if (currentSecond <= lastReportTime) return
-			lastReportTime = currentSecond
-			val builder = StringBuilder()
-			builder.append(getAcceleration()).append(' ')
-			builder.append(getVelocity()).append(' ')
-			builder.append(front.getTotalDistance()).append(' ')
-			builder.append(front.getFrontSection()).append(' ')
-			builder.append(tail.getTailSection()).append(' ')
-			val distanceToSemaphore: Double = distanceToSemaphore()
-			builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
-			env.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
+	/**
+	 * Periodic 1 Hz reporter for continuous train telemetry.
+	 *
+	 * Extends [LoopProcess] to use the standard loop + cooperative-termination pattern.
+	 * Reporting logic is in [iteration]; the 1-second delay between reports is in
+	 * [interLoopSleep]. Safe termination (including DiscoException-guarded activate())
+	 * is provided by [LoopProcess.terminate].
+	 *
+	 * @see LoopProcess
+	 */
+	private inner class TrainReporter : LoopProcess() {
+		override suspend fun iteration() {
+			if (env.isReporting(ReportType.TRAIN_CONTINUOUS)) {
+				val builder = StringBuilder()
+				builder.append(getAcceleration()).append(' ')
+				builder.append(getVelocity()).append(' ')
+				builder.append(front.getTotalDistance()).append(' ')
+				builder.append(front.getFrontSection()).append(' ')
+				builder.append(tail.getTailSection()).append(' ')
+				val distanceToSemaphore: Double = distanceToSemaphore()
+				builder.append(if (distanceToSemaphore > 0) distanceToSemaphore else 0)
+				env.report(builder, this@Train, ReportType.TRAIN_CONTINUOUS)
+			}
 		}
 
-		override fun start(): TrainReporter {
-			started = true
-			super.start()
-			return this
-		}
-
-		override fun stop() {
-			started = false
-			super.stop()
+		override suspend fun interLoopSleep() {
+			hold(1.0)
 		}
 	}
 	private val reporter: TrainReporter = TrainReporter()
@@ -936,14 +931,14 @@ class Train :
 		out()
 		(worker.getQueqe().first() as? Train)?.let { Process.activate(it) }
 		ap.start()
-		reporter.start()
+		Process.activate(reporter)
 
 		waitUntil(front.terminated)
 		ap.stop()
 		// predkem v systemu sousedni stanice
 
 		waitUntil(tail.terminated)
-		reporter.stop()
+		reporter.terminate()
 		stop()
 		motor.terminate()
 		env.releaseTrainReservations(name)
