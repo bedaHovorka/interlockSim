@@ -116,10 +116,21 @@ jobs:
         fi
 
         echo "🔍 Running SonarCloud analysis..."
+
+        # Explicitly pass PR parameters when triggered by a pull_request event so that
+        # SonarCloud always uses PR analysis mode (no coverage gate) for PRs, even when
+        # a competing push-triggered branch analysis is also in flight for the same branch.
+        PR_ARGS=""
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          PR_ARGS="-Dsonar.pullrequest.key=${{ github.event.pull_request.number }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.pullrequest.base=${{ github.base_ref }}"
+          echo "PR analysis mode: PR #${{ github.event.pull_request.number }} (${{ github.head_ref }} → ${{ github.base_ref }})"
+        fi
+
         ./gradlew sonar \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=$SONAR_ORGANIZATION \
           -Dsonar.token=$SONAR_TOKEN \
+          $PR_ARGS \
           --no-daemon --warning-mode=all --stacktrace
 
         echo "✓ SonarCloud analysis completed successfully"
