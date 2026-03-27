@@ -36,10 +36,14 @@ abstract class LoopProcess : Process() {
 		byTerminateAction()
 	}
 
+	// suspend needed: subclasses call suspend fns (e.g. interLoopSleep)
+	@Suppress("RedundantSuspendModifier")
 	protected open suspend fun startAction() {
 		// EMPTY
 	}
 
+	// suspend needed: subclasses may call hold(), passivate() etc.
+	@Suppress("RedundantSuspendModifier")
 	protected open suspend fun byTerminateAction() {
 		// EMPTY
 	}
