@@ -193,6 +193,8 @@ class Issue316RegressionTest : KoinTestBase() {
 			Triple(switchVB, trackVBtoDoB1, semaphoreDoB1),    // 8: vB → doB1 (2nd occurrence of vB — allowed)
 			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 9: vA → zA  (discontinuous from 8 — see note above)
 			Triple(semaphoreZA, trackZAtoA, inOutA),           // 10: zA → A  (2nd occurrence of zA — allowed)
+			// Loop 3 attempt: re-introduce B → zB, which would create a 3rd occurrence of the separator
+			Triple(inOutB, trackBtoZB, semaphoreZB),           // 11: B → zB  (3rd occurrence of B — merge should be rejected)
 		)
 
 		// Register first segment to initialise PathInfo
