@@ -52,7 +52,7 @@ COPY core/build.gradle.kts /build/interlockSim/core/
 COPY core-test/build.gradle.kts /build/interlockSim/core-test/
 COPY desktop-ui/build.gradle.kts /build/interlockSim/desktop-ui/
 
-# Layer 2.5: Pre-stage kdisco-core-jvm:0.3.0 artifacts
+# Layer 2.5: Pre-stage kdisco-core-jvm:0.4.0 artifacts
 # Copied to /root/kdisco-prebuild/ (not /root/.m2/) because the build-step
 # cache mount at /root/.m2/repository would shadow a direct COPY there.
 # The RUN step below installs from this location into the mounted mavenLocal.

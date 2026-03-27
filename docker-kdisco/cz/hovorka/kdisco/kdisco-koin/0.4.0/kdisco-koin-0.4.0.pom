@@ -9,12 +9,12 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>cz.hovorka.kdisco</groupId>
   <artifactId>kdisco-koin</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <dependencies>
     <dependency>
       <groupId>cz.hovorka.kdisco</groupId>
       <artifactId>kdisco-core</artifactId>
-      <version>0.3.0</version>
+      <version>0.4.0</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>

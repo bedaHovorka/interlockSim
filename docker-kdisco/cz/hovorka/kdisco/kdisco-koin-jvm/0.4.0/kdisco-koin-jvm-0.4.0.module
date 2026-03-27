@@ -1,10 +1,10 @@
 {
   "formatVersion": "1.1",
   "component": {
-    "url": "../../kdisco-koin/0.3.0/kdisco-koin-0.3.0.module",
+    "url": "../../kdisco-koin/0.4.0/kdisco-koin-0.4.0.module",
     "group": "cz.hovorka.kdisco",
     "module": "kdisco-koin",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -29,7 +29,7 @@
           "group": "cz.hovorka.kdisco",
           "module": "kdisco-core",
           "version": {
-            "requires": "0.3.0"
+            "requires": "0.4.0"
           }
         },
         {
@@ -42,8 +42,8 @@
       ],
       "files": [
         {
-          "name": "kdisco-koin-jvm-0.3.0.jar",
-          "url": "kdisco-koin-jvm-0.3.0.jar",
+          "name": "kdisco-koin-jvm-0.4.0.jar",
+          "url": "kdisco-koin-jvm-0.4.0.jar",
           "size": 23470,
           "sha512": "05887c36ae4e5c338ef7754a68e2d05c5698e088f48d185aaf272d5ec584a3ecaa14fdc87ccf507c8134f4e8e92796d6c2ff651f746236c75446ecffce9b2eb3",
           "sha256": "435bb8fa1fe4c579e8113785f76c4bac2b5e61e414c9f2f0e9743232a8451763",
@@ -66,7 +66,7 @@
           "group": "cz.hovorka.kdisco",
           "module": "kdisco-core",
           "version": {
-            "requires": "0.3.0"
+            "requires": "0.4.0"
           }
         },
         {
@@ -99,8 +99,8 @@
       ],
       "files": [
         {
-          "name": "kdisco-koin-jvm-0.3.0.jar",
-          "url": "kdisco-koin-jvm-0.3.0.jar",
+          "name": "kdisco-koin-jvm-0.4.0.jar",
+          "url": "kdisco-koin-jvm-0.4.0.jar",
           "size": 23470,
           "sha512": "05887c36ae4e5c338ef7754a68e2d05c5698e088f48d185aaf272d5ec584a3ecaa14fdc87ccf507c8134f4e8e92796d6c2ff651f746236c75446ecffce9b2eb3",
           "sha256": "435bb8fa1fe4c579e8113785f76c4bac2b5e61e414c9f2f0e9743232a8451763",
@@ -122,8 +122,8 @@
       },
       "files": [
         {
-          "name": "kdisco-koin-jvm-0.3.0-sources.jar",
-          "url": "kdisco-koin-jvm-0.3.0-sources.jar",
+          "name": "kdisco-koin-jvm-0.4.0-sources.jar",
+          "url": "kdisco-koin-jvm-0.4.0-sources.jar",
           "size": 7008,
           "sha512": "27f52baf77161e71d3a8d86e17d7c8c407be58af216c9d437d7c52203e8ccb9835a84e336bbc45a02e30c4ec43dda5dbd9e770b9bc45c2800e24375e871fcaaa",
           "sha256": "0e13bda0adadf7cd945e3156f5bd0d283d6e53a8e70ef8ca6ec0e21121212fc8",

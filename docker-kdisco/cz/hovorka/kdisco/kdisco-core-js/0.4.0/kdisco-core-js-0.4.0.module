@@ -1,10 +1,10 @@
 {
   "formatVersion": "1.1",
   "component": {
-    "url": "../../kdisco-core/0.3.0/kdisco-core-0.3.0.module",
+    "url": "../../kdisco-core/0.4.0/kdisco-core-0.4.0.module",
     "group": "cz.hovorka.kdisco",
     "module": "kdisco-core",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -35,13 +35,13 @@
       ],
       "files": [
         {
-          "name": "kdisco-core-js-0.3.0.klib",
-          "url": "kdisco-core-js-0.3.0.klib",
-          "size": 76400,
-          "sha512": "bcb616a77133e985e2f8ff935d37698bbae7a206b31a60140a84909a3a576836b7fa08eaa8b42469a3900a0fd7376c51e6bafc5187773881cec09391a5d77e61",
-          "sha256": "af4f975b265d3d7f1584dbd4f258ba1cd436080b2f4fdeb07eab804ce0f0e083",
-          "sha1": "a8c85dd00ed0fbe9ac4b8e9e360279270d71718f",
-          "md5": "35d7f80bd502f97c6592201e81b87389"
+          "name": "kdisco-core-js-0.4.0.klib",
+          "url": "kdisco-core-js-0.4.0.klib",
+          "size": 80194,
+          "sha512": "4467d4e20bc64bd4cf4f246a3fbd245de923058ce42eb55d6623f8ab99ece3e9687f4ee9ad3fee080c7f69cd6d566d791644f5cc6256898a4e72faefcd0eca35",
+          "sha256": "99474cf1962e153032f4d32ba3ef124f5c45a9243be76ee0351269d78c1cd33f",
+          "sha1": "4c9ebd2aa48a48b00c8fdd7913bff73d299f3ae0",
+          "md5": "9870b3acf166a93b9b8eca6556bebd30"
         }
       ]
     },
@@ -85,13 +85,13 @@
       ],
       "files": [
         {
-          "name": "kdisco-core-js-0.3.0.klib",
-          "url": "kdisco-core-js-0.3.0.klib",
-          "size": 76400,
-          "sha512": "bcb616a77133e985e2f8ff935d37698bbae7a206b31a60140a84909a3a576836b7fa08eaa8b42469a3900a0fd7376c51e6bafc5187773881cec09391a5d77e61",
-          "sha256": "af4f975b265d3d7f1584dbd4f258ba1cd436080b2f4fdeb07eab804ce0f0e083",
-          "sha1": "a8c85dd00ed0fbe9ac4b8e9e360279270d71718f",
-          "md5": "35d7f80bd502f97c6592201e81b87389"
+          "name": "kdisco-core-js-0.4.0.klib",
+          "url": "kdisco-core-js-0.4.0.klib",
+          "size": 80194,
+          "sha512": "4467d4e20bc64bd4cf4f246a3fbd245de923058ce42eb55d6623f8ab99ece3e9687f4ee9ad3fee080c7f69cd6d566d791644f5cc6256898a4e72faefcd0eca35",
+          "sha256": "99474cf1962e153032f4d32ba3ef124f5c45a9243be76ee0351269d78c1cd33f",
+          "sha1": "4c9ebd2aa48a48b00c8fdd7913bff73d299f3ae0",
+          "md5": "9870b3acf166a93b9b8eca6556bebd30"
         }
       ]
     },
@@ -108,13 +108,13 @@
       },
       "files": [
         {
-          "name": "kdisco-core-js-0.3.0-sources.jar",
-          "url": "kdisco-core-js-0.3.0-sources.jar",
-          "size": 23902,
-          "sha512": "d258df8f0485360afe4d521f972523e3d7cb47a7973287d04732cb90ca514bc6d51c084ae61a079afca67ff0a074115412df8bb0357b0fac126a6d032234a5b2",
-          "sha256": "2476098c53421083f7f5e18f59168b7752c63414c97e6f53e91474afb0cd06c9",
-          "sha1": "7968c4863c361be5ac18d68bcc2a4b42ff6ddf0c",
-          "md5": "a19e18af239e9dc9eb1bfda6a06b4c2c"
+          "name": "kdisco-core-js-0.4.0-sources.jar",
+          "url": "kdisco-core-js-0.4.0-sources.jar",
+          "size": 24408,
+          "sha512": "6904d724c3ddc1a406e9cf70f5fc1d7e552ab69ce6a3eccceebdefd41ea8334782c2566dec6b3673049136f5353feb1fa8a8261920304945d5a106b303a3d54f",
+          "sha256": "bb6970ec8f7d4454ba39c4e4b3f01408e0f28db17d2b91f8da1a10733539bced",
+          "sha1": "9d2d7bc2f1a485bbcf4b869e0b8ea4ba0838f0b6",
+          "md5": "c32278edc3e66dbbee94a3f775f8e061"
         }
       ]
     }

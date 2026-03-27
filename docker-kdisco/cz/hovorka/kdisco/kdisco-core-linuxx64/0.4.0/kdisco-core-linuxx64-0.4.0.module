@@ -1,10 +1,10 @@
 {
   "formatVersion": "1.1",
   "component": {
-    "url": "../../kdisco-core/0.3.0/kdisco-core-0.3.0.module",
+    "url": "../../kdisco-core/0.4.0/kdisco-core-0.4.0.module",
     "group": "cz.hovorka.kdisco",
     "module": "kdisco-core",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -49,13 +49,13 @@
       ],
       "files": [
         {
-          "name": "kdisco-core-linuxX64Main-0.3.0.klib",
-          "url": "kdisco-core-linuxx64-0.3.0.klib",
-          "size": 76357,
-          "sha512": "35820d5232ec0ae107577f5cd49ffa73819043da97f1d6d4369e547b9542537907b77453bfaead19afe6921481a10befa478f0e30b6253da85813ee7d23e1054",
-          "sha256": "f67277ab27d03fd638a28463d97a06f944b7543837d915aaa842af6534de2862",
-          "sha1": "2639e834214effa7cdc40aa90e94bb232574167b",
-          "md5": "cb0eeb1f787dbb0e5fe7b37c940258bb"
+          "name": "kdisco-core-linuxX64Main-0.4.0.klib",
+          "url": "kdisco-core-linuxx64-0.4.0.klib",
+          "size": 80170,
+          "sha512": "7b1da73ea6783f5fe580fc0c51d48acba0658ccd8eb4eba023c7ad3c02eefe8e86ad1b295be3796ff48f758ccdf724bf6b3045957e8dbfcc3ba6443e697887a8",
+          "sha256": "d6981e0f15f9577d4bd65c2dfb76f676c189bbf4b3e01ba2048cd39cb23a6836",
+          "sha1": "1ed63f58252e8b33a13c2285e4466078de80f8ad",
+          "md5": "ff659e0e6e76d6e8f41bd1cab730552e"
         }
       ]
     },
@@ -72,13 +72,13 @@
       },
       "files": [
         {
-          "name": "kdisco-core-linuxx64-0.3.0-sources.jar",
-          "url": "kdisco-core-linuxx64-0.3.0-sources.jar",
-          "size": 23969,
-          "sha512": "e257f5a0103aa2e0ff8c9f02d63e8809c17657cc5587d9ad4f862b823731ef8b66bdcdd727aa31ff42f748ddc2671fc0abfdc99303fde037cc5af15f0c3af8fa",
-          "sha256": "0aedd2718f311b7e301c4b3ba63e23bcd930ad3067346c1c83dafc41f016b978",
-          "sha1": "a88ca9835cf44c426a1d1669a2485f7454eee7f3",
-          "md5": "7631af55db5b3b802c10492fe3d8a951"
+          "name": "kdisco-core-linuxx64-0.4.0-sources.jar",
+          "url": "kdisco-core-linuxx64-0.4.0-sources.jar",
+          "size": 24475,
+          "sha512": "6b09bb79d12faab8ad2f0d7ba69b2cb48744e05997e6a645365072622e1c711cee2f7b95b413b5c6f6435ae60e75d1fa6fa27c9892bf43c2b6d0ce7bdbd6a6b4",
+          "sha256": "fb31e5309bce22d62673a4d6f7a709a63d6ec9d4d80a45a77e438e5644249d20",
+          "sha1": "97774148162ee2ced6ba08893f42e118b216c95e",
+          "md5": "e58e5f597ab1530b65f650edda656d04"
         }
       ]
     }

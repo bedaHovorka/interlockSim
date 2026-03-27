@@ -1,10 +1,10 @@
 {
   "formatVersion": "1.1",
   "component": {
-    "url": "../../kdisco-core/0.3.0/kdisco-core-0.3.0.module",
+    "url": "../../kdisco-core/0.4.0/kdisco-core-0.4.0.module",
     "group": "cz.hovorka.kdisco",
     "module": "kdisco-core",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -26,8 +26,8 @@
       },
       "files": [
         {
-          "name": "kdisco-core-jvm-0.3.0.jar",
-          "url": "kdisco-core-jvm-0.3.0.jar",
+          "name": "kdisco-core-jvm-0.4.0.jar",
+          "url": "kdisco-core-jvm-0.4.0.jar",
           "size": 60106,
           "sha512": "73c58a499a12aa13a6ac3446a76e1d8b90b711b09b000e22a6abb66d8c1923d4d98a2a538d4231b5b5fd5f23fd7d709c95ba31d6b34c57510a315e9bfceca3d2",
           "sha256": "d4267928d16f7653c387ee6a99ec213783b2d164570cae9b8a28937b00105b90",
@@ -69,8 +69,8 @@
       ],
       "files": [
         {
-          "name": "kdisco-core-jvm-0.3.0.jar",
-          "url": "kdisco-core-jvm-0.3.0.jar",
+          "name": "kdisco-core-jvm-0.4.0.jar",
+          "url": "kdisco-core-jvm-0.4.0.jar",
           "size": 60106,
           "sha512": "73c58a499a12aa13a6ac3446a76e1d8b90b711b09b000e22a6abb66d8c1923d4d98a2a538d4231b5b5fd5f23fd7d709c95ba31d6b34c57510a315e9bfceca3d2",
           "sha256": "d4267928d16f7653c387ee6a99ec213783b2d164570cae9b8a28937b00105b90",
@@ -92,8 +92,8 @@
       },
       "files": [
         {
-          "name": "kdisco-core-jvm-0.3.0-sources.jar",
-          "url": "kdisco-core-jvm-0.3.0-sources.jar",
+          "name": "kdisco-core-jvm-0.4.0-sources.jar",
+          "url": "kdisco-core-jvm-0.4.0-sources.jar",
           "size": 23401,
           "sha512": "2b0b6da9ceb50eab7747faec20bfc48725cc87f8e07daff493b2e3f7ba82b84da7b91041560d34f020137b2ef87f40fcfcc6bebed395fb5c9b2e0e4ffe60981f",
           "sha256": "c619cef5dc7d2c582ff7249d059bf3facedcf91f165d929d0e28d42a5458994d",

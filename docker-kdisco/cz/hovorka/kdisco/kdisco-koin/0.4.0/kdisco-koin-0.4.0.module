@@ -3,7 +3,7 @@
   "component": {
     "group": "cz.hovorka.kdisco",
     "module": "kdisco-koin",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -27,7 +27,7 @@
           "group": "cz.hovorka.kdisco",
           "module": "kdisco-core",
           "version": {
-            "requires": "0.3.0"
+            "requires": "0.4.0"
           }
         },
         {
@@ -40,8 +40,8 @@
       ],
       "files": [
         {
-          "name": "kdisco-koin-metadata-0.3.0.jar",
-          "url": "kdisco-koin-0.3.0.jar",
+          "name": "kdisco-koin-metadata-0.4.0.jar",
+          "url": "kdisco-koin-0.4.0.jar",
           "size": 689,
           "sha512": "a9ea4418e607bb6003e8f06b3a53174db79c9769b0f92529f7869a2c4c3ae54c1e61d23d4e3d1986bb03b96f4c771e7ac76e013c9bf4aa9a8f8836b05a6e225e",
           "sha256": "dcb65bbf45c6233a42d0d987e5704cd52c189e50277552ad120a195dbe6db3d2",
@@ -62,8 +62,8 @@
       },
       "files": [
         {
-          "name": "kdisco-koin-kotlin-0.3.0-sources.jar",
-          "url": "kdisco-koin-0.3.0-sources.jar",
+          "name": "kdisco-koin-kotlin-0.4.0-sources.jar",
+          "url": "kdisco-koin-0.4.0-sources.jar",
           "size": 261,
           "sha512": "1487e5a20c9e4d74f298e07c42e96a61be11b7a768c3fbc199ee138cd68e1fc2267d1cfe3f11f288acc05df755315344d052cc5f6f751f126ab4fe1caa5125ea",
           "sha256": "c6deada2fac53b8ea6523dbda77597b128006674616f140f04df23264c6d1aa3",
@@ -82,10 +82,10 @@
         "org.jetbrains.kotlin.platform.type": "jvm"
       },
       "available-at": {
-        "url": "../../kdisco-koin-jvm/0.3.0/kdisco-koin-jvm-0.3.0.module",
+        "url": "../../kdisco-koin-jvm/0.4.0/kdisco-koin-jvm-0.4.0.module",
         "group": "cz.hovorka.kdisco",
         "module": "kdisco-koin-jvm",
-        "version": "0.3.0"
+        "version": "0.4.0"
       }
     },
     {
@@ -98,10 +98,10 @@
         "org.jetbrains.kotlin.platform.type": "jvm"
       },
       "available-at": {
-        "url": "../../kdisco-koin-jvm/0.3.0/kdisco-koin-jvm-0.3.0.module",
+        "url": "../../kdisco-koin-jvm/0.4.0/kdisco-koin-jvm-0.4.0.module",
         "group": "cz.hovorka.kdisco",
         "module": "kdisco-koin-jvm",
-        "version": "0.3.0"
+        "version": "0.4.0"
       }
     },
     {
@@ -116,10 +116,10 @@
         "org.jetbrains.kotlin.platform.type": "jvm"
       },
       "available-at": {
-        "url": "../../kdisco-koin-jvm/0.3.0/kdisco-koin-jvm-0.3.0.module",
+        "url": "../../kdisco-koin-jvm/0.4.0/kdisco-koin-jvm-0.4.0.module",
         "group": "cz.hovorka.kdisco",
         "module": "kdisco-koin-jvm",
-        "version": "0.3.0"
+        "version": "0.4.0"
       }
     }
   ]
