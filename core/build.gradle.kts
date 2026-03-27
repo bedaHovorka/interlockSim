@@ -221,7 +221,7 @@ jacoco {
 }
 
 val jacocoTestReport by tasks.registering(JacocoReport::class) {
-	dependsOn(tasks.named("jvmTest"), tasks.named("integrationTest"))
+	dependsOn(tasks.named("jvmTest"))
 
 	executionData.setFrom(
 		fileTree(layout.buildDirectory).include("jacoco/*.exec")

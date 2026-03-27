@@ -344,7 +344,7 @@ tasks.named("integrationTest") {
 }
 
 tasks.jacocoTestReport {
-    dependsOn(tasks.test, tasks.named("integrationTest"))
+    dependsOn(tasks.test)
 
     executionData.setFrom(
         fileTree(layout.buildDirectory).include("jacoco/*.exec")
