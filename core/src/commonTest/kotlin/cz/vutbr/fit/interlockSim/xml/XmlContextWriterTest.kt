@@ -3,6 +3,7 @@ package cz.vutbr.fit.interlockSim.xml
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isNotEmpty
+import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
@@ -46,7 +47,7 @@ class XmlContextWriterTest {
 		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
 		ctx.use {
 			val xml = XmlContextWriter().generate(it)
-			assertThat(xml).contains("<net X=\"20\" Y=\"25\" >")
+			assertThat(xml).contains("<net X=\"20\" Y=\"25\"")
 			assertThat(xml).contains("</net>")
 		}
 	}
@@ -131,6 +132,50 @@ class XmlContextWriterTest {
 			for (line in inOutLines) {
 				assertThat(line.startsWith("\t")).isTrue()
 			}
+		}
+	}
+
+	@Test
+	fun generateIncludesCurrentMaxSpeedInNetElement() {
+		val ctx = DefaultEditingContext(20, 20)
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.currentMaxSpeed = 120.0
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("currentMaxSpeed=\"120.0\"")
+		}
+	}
+
+	@Test
+	fun generateIncludesCurrentTrackLengthInNetElement() {
+		val ctx = DefaultEditingContext(20, 20)
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.currentTrackLength = 250.5
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("currentTrackLength=\"250.5\"")
+		}
+	}
+
+	@Test
+	fun generateIncludesCurrentNameStringWhenNonEmpty() {
+		val ctx = DefaultEditingContext(20, 20)
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		ctx.currentNameString = "Test Network"
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml).contains("currentNameString=\"Test Network\"")
+		}
+	}
+
+	@Test
+	fun generateOmitsCurrentNameStringWhenEmpty() {
+		val ctx = DefaultEditingContext(20, 20)
+		ctx.putCell(Point(1, 1), InOut("A", false, Cell.SpatialType.HORIZONTAL))
+		// currentNameString is empty by default
+		ctx.use {
+			val xml = XmlContextWriter().generate(it)
+			assertThat(xml.contains("currentNameString")).isFalse()
 		}
 	}
 

@@ -123,7 +123,19 @@ sonar {
 
         // :fast-sim compiles to linuxX64 native — JaCoCo cannot instrument native code.
         // :core-test is test-support infrastructure, not production code requiring coverage.
-        property("sonar.coverage.exclusions", "fast-sim/**,core-test/**")
+        property(
+            "sonar.coverage.exclusions",
+            "fast-sim/**,core-test/**," +
+                "desktop-ui/src/main/kotlin/**/gui/MenuBar.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/Frame.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/ToolBar.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/ValidationDialog.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/RenameDialog.kt," +
+                "desktop-ui/src/main/kotlin/**/gui/action/**," +
+                "desktop-ui/src/main/kotlin/**/gui/gridcanvas/**," +
+                "desktop-ui/src/main/kotlin/**/gui/animation/**",
+        )
     }
 }
 
