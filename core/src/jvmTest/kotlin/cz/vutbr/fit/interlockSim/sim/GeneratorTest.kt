@@ -66,10 +66,12 @@ class GeneratorTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Create a context with at least 2 InOuts for Generator to use
+		// Track is 200m to accommodate trains up to 150m used in collection management tests
 		val contextBuilder =
 			get<TestContextBuilder>()
 				.withInOut("IN1", 0, 0, isEntry = true)
-				.withInOut("OUT1", 1, 0, isEntry = false)
+				.withInOut("OUT1", 5, 0, isEntry = false)
+				.withConnection(0, 0, 5, 0, 200.0, 80.0)
 		val delegateContext = contextBuilder.buildSimulationContext()
 		mockContext = MockSimulationContext(delegateContext)
 	}

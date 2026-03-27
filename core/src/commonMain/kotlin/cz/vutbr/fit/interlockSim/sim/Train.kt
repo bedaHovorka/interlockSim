@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -804,6 +805,7 @@ class Train :
 	 * Create train
 	 * @param env The simulation environment
 	 * @param timetable Train timetable
+	 * @throws SimulationException if train length exceeds track distance between InOuts
 	 */
 	constructor(env: SimulationEnvironment?, timetable: Timetable?) {
 		this.env = requireSimulationNotNull(env) { "env must not be null" }
@@ -815,7 +817,92 @@ class Train :
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
 		trainNavService = env.getTrainNavigationService()
+		
+		// Issue #60: Validate train length against track distance between InOuts
+		validateTrainLength(env, validatedTimetable, this.length)
+		
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
+	}
+	
+	/**
+	 * Validates that train length does not exceed the shortest track distance between InOuts.
+	 *
+	 * **Issue #60: Track Length Validation**
+	 * - Calculates shortest path distance between origin and destination InOuts
+	 * - Ensures train can physically fit on the track
+	 * - Prevents runtime simulation errors from track being too short
+	 *
+	 * **Implementation:**
+	 * - Uses TopologyNavigator to find all possible paths
+	 * - Calculates total track distance for each path
+	 * - Validates train length against shortest available path
+	 * - Gracefully handles test mocks by catching exceptions
+	 *
+	 * @param env Simulation environment providing topology navigator
+	 * @param timetable Train timetable with origin and destination InOuts
+	 * @param trainLength Length of the train in meters
+	 * @throws SimulationException if train length exceeds shortest track distance
+	 * @since 2026-02-06 (Issue #60)
+	 */
+	private fun validateTrainLength(
+		env: SimulationEnvironment,
+		timetable: Timetable,
+		trainLength: Double
+	) {
+		val inOut = timetable.getIn()
+		val outOut = timetable.getOut()
+
+		// Skip validation if either InOut is not registered in this context (e.g. mock objects in tests)
+		val contextInOuts = env.getInOuts()
+		if (!contextInOuts.contains(inOut) || !contextInOuts.contains(outOut)) {
+			logger.trace { "Train length validation skipped: InOuts not registered in context (likely test mock)" }
+			return
+		}
+
+		try {
+			val topologyNavigator = env.getTopologyNavigator()
+			
+			// Find all topologically possible paths between InOuts
+			val paths = topologyNavigator.findAllTopologicalPaths(
+				start = inOut,
+				target = outOut,
+				maxDepth = 100
+			)
+			
+			requireSimulation(paths.isNotEmpty()) {
+				"Train length validation failed: No route exists between " +
+					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+					"Railway network must provide at least one path between entry and exit points."
+			}
+			
+			// Calculate distance for each path and find the shortest using idiomatic Kotlin
+			val shortestPathDistance = paths.minOf { path ->
+				path.sumOf { section -> section.length() }
+			}
+			
+			// Validate train length against shortest path
+			requireSimulation(trainLength <= shortestPathDistance) {
+				"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
+					"between InOut '${inOut.name}' and InOut '${outOut.name}'. " +
+					"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
+					"Reduce train length or increase track distance to resolve this issue."
+			}
+			
+			logger.debug {
+				"Train length validation passed: train=$trainLength m, " +
+					"shortest path=$shortestPathDistance m (${inOut.name} → ${outOut.name})"
+			}
+		} catch (e: SimulationException) {
+			// Rethrow validation failures (train too long, no route, etc.)
+			throw e
+		} catch (e: Exception) {
+			// Any other exception indicates an unexpected failure in topology/navigation logic.
+			// Log at WARN and rethrow so that validation is not silently bypassed.
+			logger.warn(e) {
+				"Train length validation failed due to unexpected error; simulation will be aborted: ${e.message}"
+			}
+			throw e
+		}
 	}
 
 	override fun distanceToSemaphore(): Double =
