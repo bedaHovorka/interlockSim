@@ -14,6 +14,7 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -39,7 +40,7 @@ import org.junit.jupiter.api.Test
  *
  * **Issue #60 Requirements:**
  * 1. Detect when track length between InOuts is shorter than train length
- * 2. Throw IllegalArgumentException with clear error message
+ * 2. Throw SimulationException with clear error message
  * 3. Validate at train creation time (not at XML parsing)
  * 4. Include specific values in error message (train length, track distance)
  *
@@ -121,7 +122,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 				.hasMessageContaining("Train length (150.0 m) exceeds track distance (100.0 m)")
 				.hasMessageContaining("InOut 'A' and InOut 'B'")
 				.hasMessageContaining("Minimum track length required: 150.0 m, available: 100.0 m")
-				.isInstanceOf<IllegalArgumentException>()
+				.isInstanceOf<SimulationException>()
 		}
 
 		@Test
@@ -136,7 +137,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			assertFailure { Train(context, timetable) }
 				.hasMessageContaining("Train length (500.0 m) exceeds track distance (50.0 m)")
 				.hasMessageContaining("InOut 'A' and InOut 'B'")
-				.isInstanceOf<IllegalArgumentException>()
+				.isInstanceOf<SimulationException>()
 		}
 
 		@Test
@@ -150,7 +151,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should throw exception indicating no path exists
 			assertFailure { Train(context, timetable) }
 				.hasMessageContaining("No route exists between InOut 'A' and InOut 'B'")
-				.isInstanceOf<IllegalArgumentException>()
+				.isInstanceOf<SimulationException>()
 		}
 	}
 
@@ -173,7 +174,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 			// Act & Assert - Should throw exception because train exceeds shortest path
 			assertFailure { Train(context, timetable) }
 				.hasMessageContaining("Train length (500.0 m) exceeds track distance")
-				.isInstanceOf<IllegalArgumentException>()
+				.isInstanceOf<SimulationException>()
 		}
 
 		@Test
@@ -283,7 +284,7 @@ class TrainLengthValidationTest : KoinTestBase() {
 	 * - Long path: approximately 400m
 	 *
 	 * @param shortPathLength Ignored - vyhybna has fixed path lengths
-	 * @param longPathLength Ignored - vyhybna has fixed path lengths  
+	 * @param longPathLength Ignored - vyhybna has fixed path lengths
 	 * @return SimulationContext with vyhybna network (multiple paths between A and B)
 	 */
 	private fun createNetworkWithMultiplePaths(

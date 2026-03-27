@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -804,7 +805,7 @@ class Train :
 	 * Create train
 	 * @param env The simulation environment
 	 * @param timetable Train timetable
-	 * @throws IllegalArgumentException if train length exceeds track distance between InOuts
+	 * @throws SimulationException if train length exceeds track distance between InOuts
 	 */
 	constructor(env: SimulationEnvironment?, timetable: Timetable?) {
 		this.env = requireSimulationNotNull(env) { "env must not be null" }
@@ -840,7 +841,7 @@ class Train :
 	 * @param env Simulation environment providing topology navigator
 	 * @param timetable Train timetable with origin and destination InOuts
 	 * @param trainLength Length of the train in meters
-	 * @throws IllegalArgumentException if train length exceeds shortest track distance
+	 * @throws SimulationException if train length exceeds shortest track distance
 	 * @since 2026-02-06 (Issue #60)
 	 */
 	private fun validateTrainLength(
@@ -868,7 +869,7 @@ class Train :
 				maxDepth = 100
 			)
 			
-			require(paths.isNotEmpty()) {
+			requireSimulation(paths.isNotEmpty()) {
 				"Train length validation failed: No route exists between " +
 					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
 					"Railway network must provide at least one path between entry and exit points."
@@ -880,7 +881,7 @@ class Train :
 			}
 			
 			// Validate train length against shortest path
-			require(trainLength <= shortestPathDistance) {
+			requireSimulation(trainLength <= shortestPathDistance) {
 				"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
 					"between InOut '${inOut.name}' and InOut '${outOut.name}'. " +
 					"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
@@ -891,7 +892,7 @@ class Train :
 				"Train length validation passed: train=$trainLength m, " +
 					"shortest path=$shortestPathDistance m (${inOut.name} → ${outOut.name})"
 			}
-		} catch (e: IllegalArgumentException) {
+		} catch (e: SimulationException) {
 			// Rethrow validation failures (train too long, no route, etc.)
 			throw e
 		} catch (e: Exception) {
