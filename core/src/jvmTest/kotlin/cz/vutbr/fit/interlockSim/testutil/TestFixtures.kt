@@ -55,6 +55,8 @@ object TestFixtures {
 
 	fun loadInvalidNameTooLongXml(): InputStream = loadTestFixture("invalid-name-too-long.xml")
 
+	fun loadSwitchBetweenSemaphoresXml(): InputStream = loadTestFixture("switch-between-semaphores.xml")
+
 	fun loadInvalidInOutXml(fixtureName: String): InputStream = loadTestFixture(fixtureName)
 
 	private fun loadMainResource(resourceName: String): InputStream =

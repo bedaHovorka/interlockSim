@@ -37,27 +37,32 @@ import java.util.concurrent.TimeUnit.SECONDS
  *
  * ## Purpose
  *
- * Covers line 282 of AbstractPath.kt where ABSOLUTE_MAX_SPEED is used as fallback
- * when a semaphore has no preceding switch during backward iteration.
+ * Covers both branches of line 282 of AbstractPath.kt:
+ * - Null branch: `previousSwitch == null` -> ABSOLUTE_MAX_SPEED (existing test)
+ * - Non-null branch: `previousSwitch?.allowedSpeed()` when a switch precedes a semaphore
  *
  * ## Approach
  *
- * 1. Load vyhybna.xml and create a SimulationContext
- * 2. Build a full path (InOut1 to InOut2) from topology results
+ * 1. Load XML and create a SimulationContext
+ * 2. Build a full path from topology results
  * 3. Configure switches in the path (same as PathReservationService would)
- * 4. Call path.setUpPath(inOut1, trainId) which triggers setUpSemaphores()
- * 5. During backward iteration from InOut_A end, semaphore zA has no preceding
- *    switch, so the fallback ABSOLUTE_MAX_SPEED is used at line 282
+ * 4. Call path.setUpPath(startSep, trainId) which triggers setUpSemaphores()
  *
- * ## Topology (vyhybna.xml)
+ * ## Topologies
  *
+ * ### vyhybna.xml (null branch)
  * InOut_B(30,8) - track - zB(27,8) - track - vB(26,8) - track - doB1(25,8)
  *   ... middle tracks ...
  * doA1(16,8) - track - vA(15,8) - track - zA(14,8) - track - InOut_A(11,8)
  *
- * setUpSemaphores iterates backward from getSecondEnd(inOut1). When iterating
- * from InOut_A end: InOut_A(else), track(prevTrack), zA(semaphore with prevSwitch==null
- * -> ABSOLUTE_MAX_SPEED at line 282), track, vA(switch -> prevSwitch), ...
+ * ### switch-between-semaphores.xml (non-null branch)
+ * InOut_A(5,10) - track - semA(8,10) - track - sw1(12,10) - track - semB(15,10) - track - InOut_B(18,10)
+ *                                                    \- siding - InOut_C(18,11)
+ * Both semaphores have orientation=false (direction=F, facing toward higher X).
+ * Backward iteration from InOut_B encounters previousTrack on the F-segment side,
+ * so isSeparatorInDirection returns true for both semaphores:
+ * semB (in-direction, prevSwitch=null -> null branch), sw1 (prevSwitch=sw1),
+ * semA (in-direction, prevSwitch=sw1 -> non-null branch at line 282).
  *
  * @since Issue #357
  */
@@ -156,6 +161,85 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 			// Step 7: Verify the path was successfully set up
 			// isSetUpPath returns true when all tracks are reserved
 			val isSetUp = path.isSetUpPath(inOut1)
+			assertThat(isSetUp).isTrue()
+		} finally {
+			simulationContext.close()
+		}
+	}
+
+	@Test
+	@DisplayName("setUpSemaphores uses switch allowedSpeed when preceding switch exists")
+	fun setUpSemaphoresUsesSwitchSpeedWhenPrecedingSwitchExists() {
+		val xmlStream = TestFixtures.loadSwitchBetweenSemaphoresXml()
+
+		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
+		val simulationContext =
+			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
+
+		try {
+			// Step 1: Get topology navigator
+			val navigator: TopologyNavigator = simulationContext.scope.get()
+
+			// Step 2: Get InOut elements - find A and B by name
+			val inOutsList = simulationContext.getInOuts().toList()
+			val inOutA = inOutsList.first { it.name == "A" }
+			val inOutB = inOutsList.first { it.name == "B" }
+
+			// Step 3: Get topology path (track sections) for A -> B
+			val candidatePaths = navigator.findAllTopologicalPaths(inOutA, inOutB)
+			assertThat(candidatePaths.size).isGreaterThanOrEqualTo(1)
+			val trackSections: List<TrackSection> = candidatePaths[0]
+
+			// Step 4: Build an ArrayPath from topology results
+			val path = ArrayPath(simulationContext)
+			path.add(inOutA)
+			var currentSeparator: DynamicPathSeparator = inOutA
+			for (trackSection in trackSections) {
+				path.add(trackSection)
+				val staticResult = trackSection.getSecondEnd(currentSeparator)
+				currentSeparator = simulationContext.toDynamic(staticResult)
+				path.add(currentSeparator)
+			}
+			assertThat(path.size).isGreaterThanOrEqualTo(3)
+
+			// Step 5: Configure switches in the path
+			val pathElements = path.toList()
+			val trainOccupant = TestTrackOccupant("test-train-switch")
+			for ((index, element) in pathElements.withIndex()) {
+				if (element is DynamicRailSwitch) {
+					var previous: Track? = null
+					for (i in (index - 1) downTo 0) {
+						if (pathElements[i] is Track) {
+							previous = pathElements[i] as Track
+							break
+						}
+					}
+					var next: Track? = null
+					for (i in (index + 1) until pathElements.size) {
+						if (pathElements[i] is Track) {
+							next = pathElements[i] as Track
+							break
+						}
+					}
+					if (next != null) {
+						val from = simulationContext.getSegment(element, previous, next)
+						val to = simulationContext.getSegment(element, next, previous)
+						element.setUpPath(from, to, element.allowedSpeed(), trainOccupant)
+					}
+				}
+			}
+
+			// Step 6: Call setUpPath which triggers setUpSemaphores()
+			// setUpSemaphores(inOutA) iterates backward from getSecondEnd(inOutA) = inOutB.
+			// Both semaphores have orientation=false -> direction()=F, matching the
+			// F-segment where previousTrack connects during backward iteration.
+			// Backward iteration: InOut_B, track, semB (direction=F, prevSwitch=null),
+			//   track, sw1 (switch -> prevSwitch=sw1), track,
+			//   semA (direction=F, prevSwitch=sw1 -> non-null branch at line 282)
+			path.setUpPath(inOutA, "test-train-switch")
+
+			// Step 7: Verify the path was successfully set up
+			val isSetUp = path.isSetUpPath(inOutA)
 			assertThat(isSetUp).isTrue()
 		} finally {
 			simulationContext.close()
