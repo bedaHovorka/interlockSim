@@ -77,3 +77,4 @@ Thumbs.db
 
 # Claude Code configuration (local settings and skills)
 .claude/
+desktop-ui/aaa.xml
