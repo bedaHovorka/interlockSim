@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.paths
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.domain.MINIMAL_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -278,7 +279,7 @@ abstract class AbstractPath protected constructor(
 					// Semaphore element: configure with previous track and switch speed
 					if (previousTrack == null) continue
 					if (context.isSeparatorInDirection(element, previousTrack, null)) {
-						val speed = previousSwitch?.allowedSpeed() ?: PathElement.ABSOLUTE_MAX_SPEED
+						val speed = previousSwitch?.allowedSpeed() ?: ABSOLUTE_MAX_SPEED
 						val segment = context.getSegment(element, null, previousTrack)
 						val segment2 = context.getSegment(element, previousTrack, null)
 						element.setUpSpeed(segment, segment2, speed)

@@ -106,12 +106,12 @@ object XmlSchemaContent {
 
          <xs:element name="SimpleTrackBlock">
            <xs:complexType>
-             <xs:attribute name="fromX" type="xs:positiveInteger"></xs:attribute>
-             <xs:attribute name="fromY" type="xs:positiveInteger"></xs:attribute>
+             <xs:attribute name="fromX" type="xs:nonNegativeInteger"></xs:attribute>
+             <xs:attribute name="fromY" type="xs:nonNegativeInteger"></xs:attribute>
              <xs:attribute name="fromSegment" type="xs:string"></xs:attribute>
              <xs:attribute name="toSegment" type="xs:string"></xs:attribute>
-             <xs:attribute name="toX" type="xs:positiveInteger"></xs:attribute>
-             <xs:attribute name="toY" type="xs:positiveInteger"></xs:attribute>
+             <xs:attribute name="toX" type="xs:nonNegativeInteger"></xs:attribute>
+             <xs:attribute name="toY" type="xs:nonNegativeInteger"></xs:attribute>
              <xs:attribute name="length" type="xs:double"></xs:attribute>
              <xs:attribute name="maxSpeedfrom" type="xs:double"></xs:attribute>
              <xs:attribute name="maxSpeedto" type="xs:double"></xs:attribute>

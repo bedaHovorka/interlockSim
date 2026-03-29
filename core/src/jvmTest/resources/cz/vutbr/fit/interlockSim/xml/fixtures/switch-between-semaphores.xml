@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<net X="100" Y="100">
+  <InOut X="5" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+  <RailSemaphore X="8" Y="10" SpatialType="HORIZONTAL" orientation="false" name="semA"/>
+  <RailSwitch X="12" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="sw1"/>
+  <RailSemaphore X="15" Y="10" SpatialType="HORIZONTAL" orientation="false" name="semB"/>
+  <InOut X="18" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+  <InOut X="18" Y="11" SpatialType="HORIZONTAL" orientation="true" name="C"/>
+  <SimpleTrackBlock fromX="5" fromY="10" toX="8" toY="10" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="8" fromY="10" toX="12" toY="10" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="12" fromY="10" toX="15" toY="10" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="15" fromY="10" toX="18" toY="10" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+  <SimpleTrackBlock fromX="12" fromY="10" toX="18" toY="11" fromSegment="G" toSegment="A" length="60.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+</net>

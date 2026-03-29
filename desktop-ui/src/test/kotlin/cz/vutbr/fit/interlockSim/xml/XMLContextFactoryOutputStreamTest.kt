@@ -538,7 +538,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 	}
 
 	@Nested
-	@DisplayName("Pre-Save Validation (Issue #XXX, PR #358)")
+	@DisplayName("Pre-Save Validation (Issue #80, PR #357)")
 	inner class PreSaveValidationTests {
 		@Test
 		@DisplayName("saveContext to File rejects context with 0 InOuts")

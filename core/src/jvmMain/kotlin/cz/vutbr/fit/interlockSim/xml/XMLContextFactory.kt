@@ -252,7 +252,7 @@ class XMLContextFactory : EditingContextFactory {
 	/**
 	 * Saves an editing context to an output stream.
 	 *
-	 * Pre-save validation (Issue #XXX, PR #358):
+	 * Pre-save validation (Issue #80, PR #357):
 	 * - Validates InOut count before serialization
 	 * - Prevents saving invalid contexts (< MIN_INOUT_ELEMENTS InOuts)
 	 * - Returns false if validation fails
@@ -293,7 +293,7 @@ class XMLContextFactory : EditingContextFactory {
 	/**
 	 * Saves an editing context to a file.
 	 *
-	 * Pre-save validation (Issue #XXX, PR #358):
+	 * Pre-save validation (Issue #80, PR #357):
 	 * - Validates InOut count before serialization
 	 * - Prevents saving invalid contexts (< MIN_INOUT_ELEMENTS InOuts)
 	 * - Returns false if validation fails
