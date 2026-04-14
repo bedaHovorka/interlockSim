@@ -183,7 +183,7 @@ class EditorExceptionTest {
 		@Test
 		fun `stack trace is preserved`() {
 			val exception = EditorException(testMessage)
-			assertThat(exception.stackTrace).isNotNull()
+			assertThat(exception.stackTrace.isNotEmpty()).isEqualTo(true)
 		}
 	}
 
@@ -196,9 +196,9 @@ class EditorExceptionTest {
 			val data = TestData(42)
 			val exception = EditorException(Severity.ERROR, testMessage, data)
 			val result = exception.getObject()
-			assertThat(result).isNotNull()
-			assertThat(result as Any).isInstanceOf<TestData>()
-			assertThat((result as TestData).value).isEqualTo(42)
+			assertThat(result).isNotNull().isInstanceOf<TestData>()
+			val testData = result as TestData
+			assertThat(testData.value).isEqualTo(42)
 		}
 
 		@Test

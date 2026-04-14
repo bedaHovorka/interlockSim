@@ -21,10 +21,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import org.junit.jupiter.api.BeforeEach
+import cz.vutbr.fit.interlockSim.testutil.coreTestModule
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import org.junit.jupiter.api.TestInstance
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import java.io.InputStream
 
 /**
@@ -32,29 +35,40 @@ import java.io.InputStream
  * instantiable but were not exercised by existing tests (NoPathExists, Conflict).
  */
 @DisplayName("PathReservationService.ReservationResult (Issue #453)")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ReservationResultTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
-
 	private lateinit var blocks: List<DynamicTrackBlock>
 
-	@BeforeEach
-	fun setUp() {
-		val xmlStream: InputStream =
-			TestFixtures.loadShuntingXml()
-				?: throw IllegalStateException("vyhybna.xml not found in resources")
-		val editing = editingContextFactory.createContext(xmlStream) as EditingContext
-		val simCtx = simulationContextFactory.createContext(editing) as DefaultSimulationContext
-		val inOuts = simCtx.getInOuts().toList()
-		val navigator: TopologyNavigator = simCtx.scope.get()
-		blocks =
-			navigator
-				.findAllTopologicalPaths(inOuts[0], inOuts[1])
-				.first()
-				.mapNotNull { section ->
-					val block = section.getTrackBlock()
-					if (block is DynamicTrackBlock) block else null
-				}.distinct()
+	@BeforeAll
+	fun initFixture() {
+		// Build the shared fixture once per class. KoinTestBase runs its own
+		// @BeforeEach/@AfterEach start/stop cycle per test, so here we bring up
+		// Koin briefly, materialize the fixture data, then tear it down again
+		// so the per-test lifecycle remains unchanged.
+		val koinApp = startKoin { modules(coreTestModule) }
+		try {
+			val editingContextFactory = koinApp.koin.get<EditingContextFactory>()
+			val simulationContextFactory = koinApp.koin.get<SimulationContextFactory>()
+			val xmlStream: InputStream =
+				TestFixtures.loadShuntingXml()
+					?: throw IllegalStateException("vyhybna.xml not found in resources")
+			val editing = editingContextFactory.createContext(xmlStream) as EditingContext
+			val simCtx = simulationContextFactory.createContext(editing) as DefaultSimulationContext
+			val inOuts = simCtx.getInOuts().toList()
+			check(inOuts.size >= 2) { "fixture expected ≥2 InOuts; got ${inOuts.size}" }
+			val navigator: TopologyNavigator = simCtx.scope.get()
+			val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
+			check(paths.isNotEmpty()) { "fixture expected ≥1 topological path between inOuts[0] and inOuts[1]" }
+			blocks =
+				paths
+					.first()
+					.mapNotNull { section ->
+						val block = section.getTrackBlock()
+						if (block is DynamicTrackBlock) block else null
+					}.distinct()
+		} finally {
+			stopKoin()
+		}
 	}
 
 	@Test
