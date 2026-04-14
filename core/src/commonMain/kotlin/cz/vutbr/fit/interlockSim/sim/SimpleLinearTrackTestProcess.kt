@@ -131,10 +131,12 @@ class SimpleLinearTrackTestProcess(
 			}
 			remaining.removeFirst()
 			val inOuts = env.getInOuts()
-			val inIo = inOuts.find { it.name == spec.inName }
-				?: error("No DynamicInOut named '${spec.inName}' in context")
-			val outIo = inOuts.find { it.name == spec.outName }
-				?: error("No DynamicInOut named '${spec.outName}' in context")
+			val inIo = requireSimulationNotNull(inOuts.find { it.name == spec.inName }) {
+				"No DynamicInOut named '${spec.inName}' in context"
+			}
+			val outIo = requireSimulationNotNull(inOuts.find { it.name == spec.outName }) {
+				"No DynamicInOut named '${spec.outName}' in context"
+			}
 			val timetable = Timetable(inIo, outIo, Time(spec.inTime), Time(spec.outTime), spec.length)
 			val train = Train(env, timetable)
 			logger.debug { "Injecting test train ${train.name}: ${spec.inName} -> ${spec.outName} at t=$now" }
