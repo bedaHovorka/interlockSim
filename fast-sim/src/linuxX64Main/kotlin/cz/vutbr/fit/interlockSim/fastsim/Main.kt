@@ -206,11 +206,11 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 	if (issues.isNotEmpty()) {
 		ctx.close()
 		eprintln("Error: network is not vyhybna-compatible (required by ShuntingLoop process)")
-		eprintln("  Missing elements:")
+		eprintln("  Issues:")
 		for (issue in issues) {
 			eprintln("    - $issue")
 		}
-		eprintln("  Canonical example: src/main/resources/cz/vutbr/fit/interlockSim/xml/vyhybna.xml")
+		eprintln("  Canonical example: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 		return 2
 	}
 	val reporter = TextReporter(verbosity)
