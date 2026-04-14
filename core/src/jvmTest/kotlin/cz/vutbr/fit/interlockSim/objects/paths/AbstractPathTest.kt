@@ -10,9 +10,11 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
@@ -20,7 +22,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.testutil.createMockTrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
@@ -858,6 +862,65 @@ class AbstractPathTest : KoinTestBase() {
 			assertThat(context)
 				.withMessage("context should be the same as provided")
 				.isEqualTo(mockContext)
+		}
+	}
+
+	/**
+	 * Nested test group: Aggregate Operations
+	 * Paths are aggregates — track-facility operations (enter/leave/getTrackOccupant)
+	 * must raise UnsupportedOperationException, while getState() must return FREE as a
+	 * safe default. Covers Issue #453 coverage gap in AbstractPath.
+	 */
+	@Nested
+	@DisplayName("Aggregate Operation Semantics (Issue #453)")
+	inner class AggregateOperationTests {
+		private fun buildPath(): ArrayPath {
+			val track = SimpleTrackBlock(end1, end2, 100.0, 80.0)
+			val path = ArrayPath(mockContext)
+			path.addFirst(end1)
+			path.addLast(track)
+			path.addLast(end2)
+			return path
+		}
+
+		@Test
+		fun `getState returns FREE for path aggregate`() {
+			val path = buildPath()
+
+			val state = path.getState()
+
+			assertThat(state)
+				.withMessage("Path aggregate getState() should return FREE")
+				.isEqualTo(TrackFacility.State.FREE)
+		}
+
+		@Test
+		fun `enter throws UnsupportedOperationException`() {
+			val path = buildPath()
+			val occupant = createMockTrackOccupant(name = "T1")
+
+			assertFailure {
+				path.enter(occupant)
+			}.isInstanceOf<UnsupportedOperationException>()
+		}
+
+		@Test
+		fun `leave throws UnsupportedOperationException`() {
+			val path = buildPath()
+			val occupant = createMockTrackOccupant(name = "T1")
+
+			assertFailure {
+				path.leave(occupant)
+			}.isInstanceOf<UnsupportedOperationException>()
+		}
+
+		@Test
+		fun `getTrackOccupant throws UnsupportedOperationException`() {
+			val path = buildPath()
+
+			assertFailure {
+				path.getTrackOccupant()
+			}.isInstanceOf<UnsupportedOperationException>()
 		}
 	}
 }
