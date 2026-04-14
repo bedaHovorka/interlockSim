@@ -181,8 +181,9 @@ class SimpleLinearTrackTestProcess(
 
 		// Record each active train as "progressing through a block" per tick.
 		// Cheap proxy so that tests can assert motion without log parsing.
+		// KMP-safe increment: Map.merge() is a JVM-only default method.
 		for (t in approwedTrains) {
-			blockTransitionsByTrain.merge(t.name, 1, Int::plus)
+			blockTransitionsByTrain[t.name] = (blockTransitionsByTrain[t.name] ?: 0) + 1
 		}
 
 		// Cadence aligned with ShuntingLoop.
