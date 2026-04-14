@@ -182,8 +182,8 @@ class ShuntingLoop(
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val B: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_B_X, COORD_IN_B_Y)
-		val A: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_A_X, COORD_IN_A_Y)
+		val inB: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_B_X, COORD_IN_B_Y)
+		val inA: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_A_X, COORD_IN_A_Y)
 		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZA_X, COORD_SEM_ZA_Y)
 		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA1_X, COORD_SEM_DOA1_Y)
 		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB1_X, COORD_SEM_DOB1_Y)
@@ -195,8 +195,8 @@ class ShuntingLoop(
 
 		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
-		val kA: DynamicTrackBlock = getBlock(context, "kA", A, zA)
-		val kB: DynamicTrackBlock = getBlock(context, "kB", B, zB)
+		val kA: DynamicTrackBlock = getBlock(context, "kA", inA, zA)
+		val kB: DynamicTrackBlock = getBlock(context, "kB", inB, zB)
 
 		// Issue #296: Removed manual path construction (~100 lines)
 		// Paths are now discovered dynamically using TopologyNavigator when needed
