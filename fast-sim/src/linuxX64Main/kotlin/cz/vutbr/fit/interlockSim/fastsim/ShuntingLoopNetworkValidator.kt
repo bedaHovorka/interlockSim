@@ -20,8 +20,10 @@ import kotlin.reflect.KClass
  * [cz.vutbr.fit.interlockSim.sim.ShuntingLoop] process expects at fixed coordinates.
  *
  * Required by Issue #435 — previously, loading a non-vyhybna-compatible network
- * caused a confusing cast/IllegalArgument crash inside ShuntingLoop's init block.
- * This validator fails fast with an actionable error before ShuntingLoop is constructed.
+ * failed confusingly inside ShuntingLoop's init block: missing cells led to
+ * IllegalArgumentException, while wrong-type cells failed via Util.assertInstanceOf
+ * with IllegalStateException. This validator fails fast with an actionable error
+ * before ShuntingLoop is constructed.
  *
  * @since Issue #435
  */
