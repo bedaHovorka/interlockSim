@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import kotlin.reflect.KClass
 
 /**
@@ -35,21 +36,19 @@ internal object ShuntingLoopNetworkValidator {
 	private const val LABEL_SWITCH = "RailSwitch"
 	private const val LABEL_SEMAPHORE = "RailSemaphore"
 
-	// Coordinates are ShuntingLoop's hardcoded vyhybna.xml lookups (see ShuntingLoop.init).
-	// They must exactly match that contract, so extracting them to named constants
-	// would only duplicate labels already present in the Required.label field.
-	@Suppress("MagicNumber")
+	// Coordinates are sourced from ShuntingLoop.Companion constants so there is
+	// exactly one authoritative list of the vyhybna network contract.
 	private val REQUIRED_CELLS: List<Required> = listOf(
-		Required(11, 8, DynamicInOut::class, LABEL_IN_OUT),
-		Required(30, 8, DynamicInOut::class, LABEL_IN_OUT),
-		Required(15, 8, DynamicRailSwitch::class, LABEL_SWITCH),
-		Required(26, 8, DynamicRailSwitch::class, LABEL_SWITCH),
-		Required(14, 8, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(16, 8, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(17, 9, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(24, 9, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(25, 8, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(27, 8, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y, DynamicInOut::class, LABEL_IN_OUT),
+		Required(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y, DynamicInOut::class, LABEL_IN_OUT),
+		Required(ShuntingLoop.COORD_SW_A_X, ShuntingLoop.COORD_SW_A_Y, DynamicRailSwitch::class, LABEL_SWITCH),
+		Required(ShuntingLoop.COORD_SW_B_X, ShuntingLoop.COORD_SW_B_Y, DynamicRailSwitch::class, LABEL_SWITCH),
+		Required(ShuntingLoop.COORD_SEM_ZA_X, ShuntingLoop.COORD_SEM_ZA_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_SEM_DOA1_X, ShuntingLoop.COORD_SEM_DOA1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_SEM_DOA2_X, ShuntingLoop.COORD_SEM_DOA2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_SEM_DOB2_X, ShuntingLoop.COORD_SEM_DOB2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+		Required(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
 	)
 
 	/**

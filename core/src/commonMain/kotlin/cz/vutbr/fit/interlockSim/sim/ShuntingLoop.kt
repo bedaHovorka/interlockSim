@@ -95,6 +95,30 @@ class ShuntingLoop(
 			ReportType.TRAIN_CONTINUOUS,
 			ReportType.NODE_EVENTS
 		)
+
+		// Vyhybna network coordinate contract.
+		// Single source of truth: ShuntingLoop.init uses these and
+		// ShuntingLoopNetworkValidator (in :fast-sim) iterates them.
+		const val COORD_IN_A_X = 11
+		const val COORD_IN_A_Y = 8
+		const val COORD_IN_B_X = 30
+		const val COORD_IN_B_Y = 8
+		const val COORD_SW_A_X = 15
+		const val COORD_SW_A_Y = 8
+		const val COORD_SW_B_X = 26
+		const val COORD_SW_B_Y = 8
+		const val COORD_SEM_ZA_X = 14
+		const val COORD_SEM_ZA_Y = 8
+		const val COORD_SEM_DOA1_X = 16
+		const val COORD_SEM_DOA1_Y = 8
+		const val COORD_SEM_DOA2_X = 17
+		const val COORD_SEM_DOA2_Y = 9
+		const val COORD_SEM_DOB1_X = 25
+		const val COORD_SEM_DOB1_Y = 8
+		const val COORD_SEM_DOB2_X = 24
+		const val COORD_SEM_DOB2_Y = 9
+		const val COORD_SEM_ZB_X = 27
+		const val COORD_SEM_ZB_Y = 8
 	}
 
 	// fronta neodsouhlasenych - za jinych okolnosti seznam ze ktereho si dispecer vybere
@@ -158,16 +182,16 @@ class ShuntingLoop(
 		}
 		// Sit jiz musi byt nactena z vyhybna.xml !!!
 
-		val B: DynamicInOut = elementAt<DynamicInOut>(context, 30, 8)
-		val A: DynamicInOut = elementAt<DynamicInOut>(context, 11, 8)
-		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 14, 8)
-		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 16, 8)
-		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 25, 8)
-		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 27, 8)
-		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 17, 9)
-		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, 24, 9)
-		val vA: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, 15, 8)
-		val vB: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, 26, 8)
+		val B: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_B_X, COORD_IN_B_Y)
+		val A: DynamicInOut = elementAt<DynamicInOut>(context, COORD_IN_A_X, COORD_IN_A_Y)
+		val zA: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZA_X, COORD_SEM_ZA_Y)
+		val doA1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA1_X, COORD_SEM_DOA1_Y)
+		val doB1: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB1_X, COORD_SEM_DOB1_Y)
+		val zB: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_ZB_X, COORD_SEM_ZB_Y)
+		val doA2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOA2_X, COORD_SEM_DOA2_Y)
+		val doB2: DynamicRailSemaphore = elementAt<DynamicRailSemaphore>(context, COORD_SEM_DOB2_X, COORD_SEM_DOB2_Y)
+		val vA: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, COORD_SW_A_X, COORD_SW_A_Y)
+		val vB: DynamicRailSwitch = elementAt<DynamicRailSwitch>(context, COORD_SW_B_X, COORD_SW_B_Y)
 
 		val k1: DynamicTrackBlock = getBlock(context, "k1", doA1, doB1)
 		val k2: DynamicTrackBlock = getBlock(context, "k2", doA2, doB2)
