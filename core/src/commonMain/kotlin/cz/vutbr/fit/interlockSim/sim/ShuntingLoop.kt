@@ -105,6 +105,9 @@ class ShuntingLoop(
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
+	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
+	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
+	// dispatcher becomes concurrent, these need atomicfu.
 	private var trainsEnteredCount: Int = 0
 	private var trainsExitedCount: Int = 0
 	private var maxConcurrentTrainsCount: Int = 0
@@ -265,7 +268,8 @@ class ShuntingLoop(
 		return when (result) {
 			is PathReservationService.ReservationResult.Success -> {
 				logger.debug { "Reserved path from ${sem.name} for $trainName" }
-				blockTransitionsByTrain.merge(trainName, 1, Int::plus)
+				// KMP-safe increment: Map.merge() is a JVM-only default method.
+				blockTransitionsByTrain[trainName] = (blockTransitionsByTrain[trainName] ?: 0) + 1
 				true
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
