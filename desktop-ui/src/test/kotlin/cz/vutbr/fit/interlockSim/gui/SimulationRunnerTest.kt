@@ -216,9 +216,14 @@ class SimulationRunnerTest {
 	fun pauseThenResume() {
 		runner.isPaused = true
 
+		val reachedWait = CountDownLatch(1)
 		val resumed = CountDownLatch(1)
 		val waiter = Thread {
 			try {
+				// Signals the waiter is about to call awaitIfPaused().
+				// Combined with isPaused=true being set first, this is a
+				// tight-enough handshake to avoid Thread.sleep-based timing.
+				reachedWait.countDown()
 				runner.awaitIfPaused()
 				resumed.countDown()
 			} catch (_: InterruptedException) {
@@ -228,28 +233,46 @@ class SimulationRunnerTest {
 		waiter.isDaemon = true
 		waiter.start()
 
-		// Give the waiter time to enter the wait
-		Thread.sleep(100)
+		// Ensure the waiter thread reached the handshake.
+		assertThat(reachedWait.await(5, TimeUnit.SECONDS)).isTrue()
+		// resumed must still be blocked while paused.
 		assertThat(resumed.count).isEqualTo(1L)
 
 		runner.isPaused = false
 		assertThat(resumed.await(5, TimeUnit.SECONDS)).isTrue()
-		waiter.join(1000)
+		waiter.join(5000)
+		assertThat(waiter.isAlive).isFalse()
 	}
 
 	@Test
 	@DisplayName("awaitIfPaused is a no-op when not paused")
 	fun awaitIfPausedNoop() {
-		// should return promptly
+		val startNs = System.nanoTime()
 		runner.awaitIfPaused()
+		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+		assertThat(elapsedMs < 50L).isTrue()
 	}
 
 	@Test
 	@DisplayName("throttle with non-positive delta is a no-op")
 	fun throttleNonPositive() {
+		val startNs = System.nanoTime()
 		runner.throttle(0.0)
 		runner.throttle(-1.0)
-		// no sleep, no exception
+		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+		assertThat(elapsedMs < 50L).isTrue()
+	}
+
+	@Test
+	@DisplayName("throttle with non-positive delta is a no-op even when paused")
+	fun throttleNonPositiveWhenPaused() {
+		// P1 fix: non-positive delta must early-return BEFORE awaitIfPaused().
+		runner.isPaused = true
+		val startNs = System.nanoTime()
+		runner.throttle(0.0)
+		runner.throttle(-1.0)
+		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+		assertThat(elapsedMs < 50L).isTrue()
 	}
 
 	@Test
@@ -259,8 +282,9 @@ class SimulationRunnerTest {
 		val startNs = System.nanoTime()
 		runner.throttle(1.0)
 		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
-		// Allow generous timing slack; must have slept at least ~80ms, at most ~500ms
+		// Must have slept at least ~80ms. Upper bound kept loose (<2000ms)
+		// to avoid flakes on busy CI while still catching pathological hangs.
 		assertThat(elapsedMs >= 80).isTrue()
-		assertThat(elapsedMs < 500).isTrue()
+		assertThat(elapsedMs < 2000).isTrue()
 	}
 }

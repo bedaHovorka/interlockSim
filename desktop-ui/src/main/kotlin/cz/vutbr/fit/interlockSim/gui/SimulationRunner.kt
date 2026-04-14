@@ -124,14 +124,26 @@ class SimulationRunner(
 				logger.debug { "start() ignored — simulation thread already alive" }
 				return
 			}
-			val thread = Thread({
-				try {
-					context.run()
-				} catch (e: InterruptedException) {
-					logger.debug { "Simulation thread interrupted: ${e.message}" }
-					Thread.currentThread().interrupt()
-				}
-			}, "SimulationRunner-sim")
+			val thread = Thread(
+				@Suppress("TooGenericExceptionCaught")
+				{
+					try {
+						context.run()
+					} catch (e: InterruptedException) {
+						logger.debug { "Simulation thread interrupted: ${e.message}" }
+						Thread.currentThread().interrupt()
+					} catch (t: Throwable) {
+						logger.error(t) { "Simulation thread terminated unexpectedly" }
+					} finally {
+						synchronized(lifecycleLock) {
+							if (simThread === Thread.currentThread()) {
+								simThread = null
+							}
+						}
+					}
+				},
+				"SimulationRunner-sim"
+			)
 			thread.isDaemon = true
 			simThread = thread
 			thread.start()
@@ -143,17 +155,19 @@ class SimulationRunner(
 	 * wakes any paused wait. Safe to call when not started. Idempotent.
 	 */
 	fun stop() {
+		// Interrupt under lifecycleLock only; do NOT hold two locks at once.
 		synchronized(lifecycleLock) {
 			val thread = simThread
-			// Release any paused wait so the thread can observe interrupt.
-			synchronized(pauseLock) {
-				pauseLock.notifyAll()
-			}
 			if (thread != null && thread.isAlive) {
 				thread.interrupt()
 			}
-			simThread = null
 		}
+		// Wake any paused wait OUTSIDE lifecycleLock so we never hold both locks.
+		synchronized(pauseLock) {
+			pauseLock.notifyAll()
+		}
+		// simThread is cleared by the simulation thread's own finally block
+		// once it truly terminates.
 	}
 
 	/** True if a simulation thread has been started and is still alive. */
@@ -183,10 +197,10 @@ class SimulationRunner(
 	 */
 	@Throws(InterruptedException::class)
 	fun throttle(simDeltaSeconds: Double) {
-		awaitIfPaused()
 		if (simDeltaSeconds <= 0.0) return
+		awaitIfPaused()
 		val speed = speedMultiplierBacking
-		val sleepMs = (simDeltaSeconds / speed * MILLIS_PER_SECOND).toLong()
+		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
 		if (sleepMs > 0) {
 			Thread.sleep(sleepMs)
 		}
