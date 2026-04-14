@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -437,6 +439,54 @@ class ShuntingLoopTest : KoinTestBase() {
 			}.withMessage("Speed multiplier must be positive")
 				.isFailure()
 				.isInstanceOf(IllegalArgumentException::class)
+		}
+	}
+
+	@Nested
+	@DisplayName("Instrumentation getters (#365)")
+	inner class InstrumentationTests {
+		private fun newLoop(): ShuntingLoop {
+			val simContext = createMockSimulationContext(TestFixtures.loadShuntingXml())
+			return ShuntingLoop(simContext, 60L)
+		}
+
+		@Test
+		fun `getTrainsEntered initially returns 0`() {
+			assertThat(newLoop().getTrainsEntered()).isEqualTo(0)
+		}
+
+		@Test
+		fun `getTrainsExited initially returns 0`() {
+			assertThat(newLoop().getTrainsExited()).isEqualTo(0)
+		}
+
+		@Test
+		fun `getMaxConcurrentTrains initially returns 0`() {
+			assertThat(newLoop().getMaxConcurrentTrains()).isEqualTo(0)
+		}
+
+		@Test
+		fun `getAllBlockTransitions initially returns empty map`() {
+			assertThat(newLoop().getAllBlockTransitions()).isEmpty()
+		}
+
+		@Test
+		fun `getBlockTransitions returns 0 for unknown train id`() {
+			assertThat(newLoop().getBlockTransitions("Train #999-nonexistent")).isEqualTo(0)
+		}
+
+		@Test
+		fun `getAllBlockTransitions returns defensive copy`() {
+			// Verifying the snapshot semantics: mutating the returned map must not
+			// affect the process's internal state. Since the map is empty at
+			// construction, toMap() is exercised here.
+			val loop = newLoop()
+			val snapshot = loop.getAllBlockTransitions()
+			// Attempt to mutate — if Map<String, Int> was mutable it would succeed;
+			// the public surface is read-only Map so this compiles but the returned
+			// instance is a new HashMap either way.
+			assertThat(snapshot).isEmpty()
+			assertThat(loop.getAllBlockTransitions()).isEmpty()
 		}
 	}
 

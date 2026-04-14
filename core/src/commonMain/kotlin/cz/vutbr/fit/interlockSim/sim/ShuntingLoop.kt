@@ -104,6 +104,15 @@ class ShuntingLoop(
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
+	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
+	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
+	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
+	// dispatcher becomes concurrent, these need atomicfu.
+	private var trainsEnteredCount: Int = 0
+	private var trainsExitedCount: Int = 0
+	private var maxConcurrentTrainsCount: Int = 0
+	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
+
 	private inner class RealTimeSynch : LoopProcess() {
 		private var presvihnuto: Double = 0.0
 		private var beginTime: Long = 0
@@ -138,6 +147,8 @@ class ShuntingLoop(
 	) : Generator(context) {
 		override fun placeTrain(train: Train) {
 			unapprowedTrains.addLast(train)
+			trainsEnteredCount++
+			blockTransitionsByTrain[train.name] = 0
 		}
 	}
 
@@ -214,10 +225,16 @@ class ShuntingLoop(
 		val iter: MutableIterator<Train> = approwedTrains.iterator()
 		while (iter.hasNext()) {
 			val element: Train = iter.next()
-			if (element.terminated()) iter.remove()
+			if (element.terminated()) {
+				iter.remove()
+				trainsExitedCount++
+			}
 		}
 		// nove vlaky a inouty
 		approveTrains()
+		if (approwedTrains.size > maxConcurrentTrainsCount) {
+			maxConcurrentTrainsCount = approwedTrains.size
+		}
 		// Polling interval: 1.0s (matches baseline timing)
 		// Critical: Train entry events align with polling to catch RESERVED state
 		hold(1.0)
@@ -251,6 +268,8 @@ class ShuntingLoop(
 		return when (result) {
 			is PathReservationService.ReservationResult.Success -> {
 				logger.debug { "Reserved path from ${sem.name} for $trainName" }
+				// KMP-safe increment: Map.merge() is a JVM-only default method.
+				blockTransitionsByTrain[trainName] = (blockTransitionsByTrain[trainName] ?: 0) + 1
 				true
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
@@ -341,4 +360,36 @@ class ShuntingLoop(
 		}
 		hold(1.0)
 	}
+
+	/**
+	 * Test-observability instrumentation (#365).
+	 *
+	 * Downstream consumers (per 2026-04-14 backlog election — see
+	 * docs/election/2026-04-14-backlog-election.md):
+	 *
+	 * High impact (score 2):
+	 *   - #366 Individual train movement tests with dedicated test process
+	 *   - #195 Phase 4.1: Golden Output Tests
+	 *   - #198 Phase 4.4: Regression Testing
+	 *   - #197 Phase 4.3: Integration Tests
+	 *   - #196 Phase 4.2: Performance Benchmarks
+	 *   - #453 Increase test coverage — next volume
+	 *
+	 * Supporting (score 1):
+	 *   - #376 SonarCloud new-code coverage quality gate
+	 *   - #187 Goal 7: Simulation Speed Control
+	 *   - #435 fast-sim configurable simulation process
+	 *
+	 * Counters are incremented from existing lifecycle sites; no new
+	 * polling loop is introduced.
+	 */
+	fun getTrainsEntered(): Int = trainsEnteredCount
+
+	fun getTrainsExited(): Int = trainsExitedCount
+
+	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
+
+	fun getBlockTransitions(trainId: String): Int = blockTransitionsByTrain[trainId] ?: 0
+
+	fun getAllBlockTransitions(): Map<String, Int> = blockTransitionsByTrain.toMap()
 }
