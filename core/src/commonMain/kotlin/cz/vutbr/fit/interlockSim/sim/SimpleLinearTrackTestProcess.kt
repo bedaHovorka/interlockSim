@@ -113,11 +113,10 @@ class SimpleLinearTrackTestProcess(
 	private inner class InjectingGenerator(
 		context: SimulationEnvironment
 	) : Generator(context) {
-		private val remaining: ArrayDeque<TrainSpec> = ArrayDeque(trainSpecs)
-
-		override suspend fun startAction() {
-			super.startAction()
-		}
+		// Sort by inTime so an earlier-due spec placed later in the list is not
+		// delayed behind a later-due first element (see PR #456 review).
+		private val remaining: ArrayDeque<TrainSpec> =
+			ArrayDeque(trainSpecs.sortedBy { it.inTime })
 
 		override suspend fun iteration() {
 			if (remaining.isEmpty()) {
