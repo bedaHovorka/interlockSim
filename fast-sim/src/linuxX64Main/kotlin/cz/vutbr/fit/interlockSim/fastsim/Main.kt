@@ -202,6 +202,17 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 		return 2
 	}
 	val ctx = factory.createFromFile(path)
+	val issues = ShuntingLoopNetworkValidator.validateVyhybnaCompatible(ctx)
+	if (issues.isNotEmpty()) {
+		ctx.close()
+		eprintln("Error: network is not vyhybna-compatible (required by ShuntingLoop process)")
+		eprintln("  Issues:")
+		for (issue in issues) {
+			eprintln("    - $issue")
+		}
+		eprintln("  Canonical example: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		return 2
+	}
 	val reporter = TextReporter(verbosity)
 	ctx.addPropertyChangeListener(reporter)
 	try {
