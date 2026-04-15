@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -68,9 +69,7 @@ class SimulationScenarioTest : KoinTestBase() {
 	fun setUp() {
 		// Load vyhybna.xml - realistic railway network configuration
 		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+			TestFixtures.loadShuntingXml()
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 		val loadedContext = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		context = MockSimulationContext(loadedContext)

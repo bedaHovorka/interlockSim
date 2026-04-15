@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -493,7 +494,7 @@ class ShuntingLoopTest : KoinTestBase() {
 	private fun shuntingXml(): InputStream = xml("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 
 	private fun xml(name: String): InputStream {
-		val xml = javaClass.getResourceAsStream(name)
+		val xml = Resources.read(name.trimStart('/')).byteInputStream()
 		requireNotNull(xml) { "$name must exist in resources" }
 		return xml
 	}

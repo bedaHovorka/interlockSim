@@ -15,6 +15,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -58,7 +59,7 @@ import org.junit.jupiter.api.Test
 @DisplayName("Simulation Grid Dynamic Cells Verification (Issue #281)")
 class SimulationGridDynamicCellsTest : KoinTestBase() {
 	private fun loadVyhybnaStream() =
-		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		TestFixtures.loadShuntingXml()
 			?: error("Resource not found: vyhybna.xml")
 
 	@Nested

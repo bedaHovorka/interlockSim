@@ -14,6 +14,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -60,7 +61,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 	 */
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
 		val factory = getKoin().get<SimulationContextFactory>()
-		val stream = javaClass.getResourceAsStream(VYHYBNA_RESOURCE)
+		val stream = Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
 			?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
 		val context = Util.assertInstanceOf<DefaultSimulationContext>(
 			stream.use { factory.createContext(it) }

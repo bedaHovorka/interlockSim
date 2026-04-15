@@ -19,6 +19,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -44,7 +45,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaStream() =
-		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		TestFixtures.loadShuntingXml()
 			?: error("Resource not found: vyhybna.xml")
 
 	@Nested

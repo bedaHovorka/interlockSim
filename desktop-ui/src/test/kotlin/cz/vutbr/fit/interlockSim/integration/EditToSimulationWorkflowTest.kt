@@ -189,7 +189,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		// Load a pre-built network
 		val context =
 			editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+				TestFixtures.loadLinearTrackXml()
 			)
 
 		assertThat(context).isNotNull()
