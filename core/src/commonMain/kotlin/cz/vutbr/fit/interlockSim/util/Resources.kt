@@ -19,7 +19,9 @@ package cz.vutbr.fit.interlockSim.util
  * - Native (linuxX64) actual reads from a Gradle-configured list of root
  *   directories on disk — "emulation on Linux" of JVM classpath lookup.
  *
- * @throws IllegalArgumentException if the resource cannot be located or read.
+ * @throws IllegalArgumentException if the resource cannot be located.
+ *   Other I/O failures during reading propagate as platform-specific exceptions
+ *   (on JVM: `java.io.IOException`; on native: `kotlinx.io.IOException`).
  */
 expect object Resources {
 	fun read(path: String): String
