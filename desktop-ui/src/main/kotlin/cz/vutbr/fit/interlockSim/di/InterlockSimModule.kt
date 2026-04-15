@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.di
 
 import cz.vutbr.fit.interlockSim.ExampleRegistry
 import cz.vutbr.fit.interlockSim.Main
-import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -31,18 +30,6 @@ import org.koin.dsl.module
  * @see org.koin.core.context.startKoin
  * @see cz.vutbr.fit.interlockSim.Main
  */
-
-/**
- * Utility module
- *
- * Manages utilities and example registry
- * - MyResourceBundle for resource loading
- * - ExampleRegistry for simulation examples
- */
-val utilModule: Module =
-	module {
-		single<MyResourceBundle> { MyResourceBundle() }
-	}
 
 /**
  * Domain objects module
@@ -161,7 +148,6 @@ val interlockSimModule: Module =
 	module {
 		// Include all sub-modules
 		includes(
-			utilModule,
 			objectsModule, // Domain objects (minimal - see design decision)
 			xmlModule,
 			editingModule,
