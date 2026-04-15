@@ -46,7 +46,6 @@ class EagerTrackWrappingTest : KoinTestBase() {
 
 	private fun loadVyhybnaStream() =
 		TestFixtures.loadShuntingXml()
-			?: error("Resource not found: vyhybna.xml")
 
 	@Nested
 	@DisplayName("Unit Tests - Eager Wrapping")

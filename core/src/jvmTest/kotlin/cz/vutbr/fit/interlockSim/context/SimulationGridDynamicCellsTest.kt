@@ -60,7 +60,6 @@ import org.junit.jupiter.api.Test
 class SimulationGridDynamicCellsTest : KoinTestBase() {
 	private fun loadVyhybnaStream() =
 		TestFixtures.loadShuntingXml()
-			?: error("Resource not found: vyhybna.xml")
 
 	@Nested
 	@DisplayName("Dynamic semaphore storage")

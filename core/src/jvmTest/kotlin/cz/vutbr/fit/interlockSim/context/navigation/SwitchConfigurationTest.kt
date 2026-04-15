@@ -66,9 +66,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext = (TestFixtures.loadShuntingXml()
-			?: error("Resource not found: vyhybna.xml"))
-			.use { editingContextFactory.createContext(it) } as EditingContext
+		val editingContext = TestFixtures.loadShuntingXml().use { editingContextFactory.createContext(it) } as EditingContext
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)

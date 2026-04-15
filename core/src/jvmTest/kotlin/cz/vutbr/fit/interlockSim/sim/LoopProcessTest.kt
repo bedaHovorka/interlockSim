@@ -49,7 +49,6 @@ class LoopProcessTest : KoinTestBase() {
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
 		val stream = TestFixtures.loadShuntingXml()
-			?: error("Resource not found: vyhybna.xml")
 		return stream.use { s ->
 			Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
 		}.also { it.getInOuts() }

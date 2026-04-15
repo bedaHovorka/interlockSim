@@ -299,7 +299,6 @@ class TrainLengthValidationTest : KoinTestBase() {
 		// Load the vyhybna XML network which has multiple paths between A and B
 		val vyhybnaResource = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
 		val stream = Resources.read(vyhybnaResource.trimStart('/')).byteInputStream()
-			?: throw IllegalStateException("Classpath resource not found: $vyhybnaResource")
 		
 		// Create simulation context from XML using factory
 		val context = stream.use { simulationContextFactory.createContext(it) }

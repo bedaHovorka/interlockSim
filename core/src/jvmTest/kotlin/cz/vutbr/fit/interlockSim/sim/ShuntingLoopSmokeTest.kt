@@ -97,7 +97,6 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	 */
 	private fun loadVyhybnaStream() =
 		TestFixtures.loadShuntingXml()
-			?: error("Resource not found: vyhybna.xml")
 
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()

@@ -81,8 +81,12 @@ class ExampleRegistry {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		return Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			.byteInputStream()
+		val xml = try {
+			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Resource file vyhybna.xml not found", e)
+		}
+		return xml.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
 				val time = args[2].toLong()
@@ -119,8 +123,12 @@ class ExampleRegistry {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		return Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			.byteInputStream()
+		val xml = try {
+			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Resource file vyhybna.xml not found", e)
+		}
+		return xml.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
 				val time = args[2].toLong()
