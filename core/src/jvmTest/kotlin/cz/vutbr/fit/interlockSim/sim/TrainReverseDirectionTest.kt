@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -79,9 +80,7 @@ class TrainReverseDirectionTest : KoinTestBase() {
 
 		// Load vyhybna.xml - realistic railway network
 		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+			TestFixtures.loadShuntingXml()
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 
 		context = simulationContextFactory.createContext(xml) as DefaultSimulationContext

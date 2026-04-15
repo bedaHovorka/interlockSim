@@ -129,11 +129,12 @@ sonar {
         property("sonar.sourceEncoding", "UTF-8")
         property("sonar.qualitygate.wait", "false")
 
-        // :fast-sim compiles to linuxX64 native — JaCoCo cannot instrument native code.
+        // :fast-sim and :core's nativeMain compile to linuxX64 native — JaCoCo cannot
+        // instrument native code (coverage comes from :core:linuxX64Test).
         // :core-test is test-support infrastructure, not production code requiring coverage.
         property(
             "sonar.coverage.exclusions",
-            "fast-sim/**,core-test/**," +
+            "fast-sim/**,core-test/**,core/src/nativeMain/**," +
                 "desktop-ui/src/main/kotlin/**/gui/MenuBar.kt," +
                 "desktop-ui/src/main/kotlin/**/gui/Frame.kt," +
                 "desktop-ui/src/main/kotlin/**/gui/RailwayNetGridCanvas.kt," +

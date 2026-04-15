@@ -1,3 +1,12 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
@@ -13,65 +22,12 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import org.koin.java.KoinJavaComponent.getKoin
-import java.io.InputStream
-
-/**
- * Centralized test fixture repository (core module version).
- *
- * Provides consistent access to XML configuration files and common network topologies.
- */
-object TestFixtures {
-	fun loadShuntingXml(): InputStream = loadMainResource("vyhybna.xml")
-
-	fun loadLinearTrackXml(): InputStream = loadTestFixture("linear-track.xml")
-
-	fun loadMinimalNetworkXml(): InputStream = loadTestFixture("minimal-network.xml")
-
-	fun loadSwitchBasicXml(): InputStream = loadTestFixture("switch-basic.xml")
-
-	fun loadSemaphoreBasicXml(): InputStream = loadTestFixture("semaphore-basic.xml")
-
-	fun loadTwoTracksParallelXml(): InputStream = loadTestFixture("two-tracks-parallel.xml")
-
-	fun loadEmptyGridXml(): InputStream = loadTestFixture("empty-grid.xml")
-
-	fun loadPrahaHlavniNadraziXml(): InputStream = loadTestFixture("praha-hlavni-nadrazi.xml")
-
-	fun loadRudyUjezdXml(): InputStream = loadTestFixture("rudyUjezd.xml")
-
-	fun loadLegacyNetworkNoNamesXml(): InputStream = loadTestFixture("legacy-network-no-names.xml")
-
-	fun loadValidSpecialCharsNamesXml(): InputStream = loadTestFixture("valid-special-chars-names.xml")
-
-	fun loadInvalidMalformedXml(): InputStream = loadTestFixture("invalid-malformed-xml.xml")
-
-	fun loadInvalidMissingGridSizeXml(): InputStream = loadTestFixture("invalid-missing-grid-size.xml")
-
-	fun loadInvalidMissingSpatialTypeXml(): InputStream = loadTestFixture("invalid-missing-spatial-type.xml")
-
-	fun loadInvalidWrongRootElementXml(): InputStream = loadTestFixture("invalid-wrong-root-element.xml")
-
-	fun loadInvalidNameSpecialCharsXml(): InputStream = loadTestFixture("invalid-name-special-chars.xml")
-
-	fun loadInvalidNameTooLongXml(): InputStream = loadTestFixture("invalid-name-too-long.xml")
-
-	fun loadSwitchBetweenSemaphoresXml(): InputStream = loadTestFixture("switch-between-semaphores.xml")
-
-	fun loadInvalidInOutXml(fixtureName: String): InputStream = loadTestFixture(fixtureName)
-
-	private fun loadMainResource(resourceName: String): InputStream =
-		javaClass.getResourceAsStream(
-			"/cz/vutbr/fit/interlockSim/resource/$resourceName"
-		) ?: error("Resource not found in main resources: $resourceName")
-
-	private fun loadTestFixture(fixtureFilename: String): InputStream =
-		javaClass.getResourceAsStream(
-			"/cz/vutbr/fit/interlockSim/xml/fixtures/$fixtureFilename"
-		) ?: error("Test fixture not found: $fixtureFilename")
-}
 
 /**
  * Common network topology fixtures for testing (core module version).
+ *
+ * Programmatically builds EditingContext / SimulationContext from well-known topologies.
+ * XML-loading helpers live in [TestFixtures].
  */
 object TestTopologies {
 	fun simpleLinearPath(): EditingContext =

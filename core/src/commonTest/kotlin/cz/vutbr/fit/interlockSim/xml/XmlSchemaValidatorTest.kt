@@ -14,19 +14,13 @@ class XmlSchemaValidatorTest {
 
 	@Test
 	fun validMinimalXmlPassesValidation() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		val result = validator.validate(xml)
+		val result = validator.validate(InlineXmlSnippets.VALID_MINIMAL_ONE_INOUT)
 		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
 	fun xmlWithUnknownRootElementFailsValidation() {
-		val xml = """<?xml version="1.0"?>
-			<unknown X="10" Y="10"/>"""
-		val result = validator.validate(xml)
+		val result = validator.validate(InlineXmlSnippets.UNKNOWN_ROOT_ELEMENT)
 		assertThat(result.isValid).isFalse()
 		assertThat(result.errors).isNotEmpty()
 	}
@@ -34,30 +28,20 @@ class XmlSchemaValidatorTest {
 	@Test
 	fun xmlWithUnknownChildElementPassesPermissiveXsd() {
 		// The XSD net element has no type definition, so it accepts any child content
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<UnknownElement X="1" Y="1"/>
-			</net>"""
-		val result = validator.validate(xml)
+		val result = validator.validate(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD)
 		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
 	fun emptyNetElementPassesXsdValidation() {
 		// Note: XSD allows empty net, structural validation (InOut count) is in XmlContextReader
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10"/>"""
-		val result = validator.validate(xml)
+		val result = validator.validate(InlineXmlSnippets.EMPTY_NET_SELF_CLOSED)
 		assertThat(result.isValid).isTrue()
 	}
 
 	@Test
 	fun malformedXmlFailsValidation() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<unclosed>
-			</net>"""
-		val result = validator.validate(xml)
+		val result = validator.validate(InlineXmlSnippets.MALFORMED_UNCLOSED_TAG)
 		assertThat(result.isValid).isFalse()
 		assertThat(result.errors).isNotEmpty()
 	}

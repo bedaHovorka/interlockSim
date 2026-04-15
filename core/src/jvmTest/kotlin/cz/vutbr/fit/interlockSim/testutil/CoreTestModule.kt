@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
-import cz.vutbr.fit.interlockSim.MyResourceBundle
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -65,7 +64,6 @@ private class CoreTestEditingContextFactory : EditingContextFactory {
  */
 val coreTestModule: Module =
 	module {
-		single { MyResourceBundle() }
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 		single { GridTransformer }
 		single { ContextTransformer }

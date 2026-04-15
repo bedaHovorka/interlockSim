@@ -14,9 +14,8 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
-import org.koin.mp.KoinPlatform.getKoin
-import java.io.InputStream
 
 /**
  * Registry of available simulation examples.
@@ -35,14 +34,12 @@ import java.io.InputStream
  * @since January 2026 (refactored from reflection-based system)
  */
 class ExampleRegistry {
-	private val myResourceBundle: MyResourceBundle by getKoin().inject()
-
 	/**
 	 * Registry of console-based examples. Maps example name to factory function.
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample
+			"shuntingLoop" to ::createShuntingLoopExample,
 		)
 
 	/**
@@ -53,7 +50,7 @@ class ExampleRegistry {
 	 */
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopGuiExample
+			"shuntingLoop" to ::createShuntingLoopGuiExample,
 		)
 
 	/**
@@ -79,24 +76,25 @@ class ExampleRegistry {
 	 */
 	private fun createShuntingLoopExample(
 		factory: SimulationContextFactory,
-		args: Array<String>
+		args: Array<String>,
 	): SimulationContext {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		val stream: InputStream =
-			myResourceBundle.getFile("vyhybna.xml")
-				?: throw ContextCreationException("Resource file vyhybna.xml not found")
-
-		// Use .use {} to ensure stream is properly closed
-		return stream.use {
-			val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(it))
-			val time = args[2].toLong()
-			// Initialize dynamic wrapper map by calling getInOuts()
-			context.getInOuts()
-			context.setMainProcess(ShuntingLoop(context, time))
-			context
+		val xml = try {
+			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Resource file vyhybna.xml not found", e)
 		}
+		return xml.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val time = args[2].toLong()
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				context.setMainProcess(ShuntingLoop(context, time))
+				context
+			}
 	}
 
 	/**
@@ -120,24 +118,25 @@ class ExampleRegistry {
 	 */
 	private fun createShuntingLoopGuiExample(
 		factory: SimulationContextFactory,
-		args: Array<String>
+		args: Array<String>,
 	): SimulationContext {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		val stream: InputStream =
-			myResourceBundle.getFile("vyhybna.xml")
-				?: throw ContextCreationException("Resource file vyhybna.xml not found")
-
-		// Use .use {} to ensure stream is properly closed
-		return stream.use {
-			val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(it))
-			val time = args[2].toLong()
-			// Initialize dynamic wrapper map by calling getInOuts()
-			context.getInOuts()
-			// Enable real-time synchronization for GUI mode with 1x speed multiplier
-			context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, speedMultiplier = 1.0))
-			context
+		val xml = try {
+			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+		} catch (e: IllegalArgumentException) {
+			throw ContextCreationException("Resource file vyhybna.xml not found", e)
 		}
+		return xml.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val time = args[2].toLong()
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				// Enable real-time synchronization for GUI mode with 1x speed multiplier
+				context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, speedMultiplier = 1.0))
+				context
+			}
 	}
 }

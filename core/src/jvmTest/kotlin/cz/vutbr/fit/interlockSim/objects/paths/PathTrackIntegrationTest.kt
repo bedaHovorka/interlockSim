@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -66,10 +67,10 @@ class PathTrackIntegrationTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load XML fixtures for testing via classpath resources
-		linearContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+		linearContext = (TestFixtures.loadLinearTrackXml()
 			?: error("Test fixture not found: linear-track.xml"))
 			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
-		switchContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/switch-basic.xml")
+		switchContext = (TestFixtures.loadSwitchBasicXml()
 			?: error("Test fixture not found: switch-basic.xml"))
 			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 

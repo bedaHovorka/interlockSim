@@ -6,7 +6,6 @@ import cz.vutbr.fit.interlockSim.di.guiModule
 import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.di.objectsModule
 import cz.vutbr.fit.interlockSim.di.simulationDesktopModule
-import cz.vutbr.fit.interlockSim.di.utilModule
 import cz.vutbr.fit.interlockSim.di.xmlModule
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -22,7 +21,6 @@ import org.koin.dsl.module
 val testModuleLightweight: Module =
 	module {
 		includes(
-			utilModule,
 			objectsModule,
 			xmlModule,
 			editingModule,
@@ -59,7 +57,6 @@ val testModuleFull: Module =
 val integrationTestModule: Module =
 	module {
 		includes(
-			utilModule,
 			objectsModule,
 			xmlModule,
 			editingModule,

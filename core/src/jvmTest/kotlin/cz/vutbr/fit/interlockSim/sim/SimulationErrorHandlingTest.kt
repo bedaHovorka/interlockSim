@@ -16,6 +16,7 @@ import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -73,9 +74,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 	fun setUp() {
 		// Load valid vyhybna.xml for tests that need valid context
 		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+			TestFixtures.loadShuntingXml()
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 		val editingContext = editingContextFactory.createContext(xml) as EditingContext
 		val loadedContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
@@ -435,11 +434,7 @@ class SimulationErrorHandlingTest : KoinTestBase() {
 		@Tag("known-issue-SIM-004")
 		fun `ShuntingLoop detects wrong network configuration`() {
 			// Arrange - Load different network (not vyhybna.xml)
-			val xml =
-				javaClass.getResourceAsStream(
-					"/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml"
-				)
-			requireNotNull(xml) { "linear-track.xml fixture must exist" }
+			val xml = TestFixtures.loadLinearTrackXml()
 			val editingContext = editingContextFactory.createContext(xml) as EditingContext
 			val wrongContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 			val mockContext = MockSimulationContext(wrongContext)

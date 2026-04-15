@@ -36,15 +36,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseMinimalNetworkWithTwoInOutsAndTrack() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-				<SimpleTrackBlock fromX="1" fromY="1" toX="5" toY="5"
-					fromSegment="F" toSegment="A"
-					length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_TWO_INOUTS_WITH_TRACK).use { ctx ->
 			assertThat(ctx.getRailWayNetGrid().cols).isEqualTo(30)
 			assertThat(ctx.getRailWayNetGrid().rows).isEqualTo(30)
 			assertThat(ctx.getInOuts().size).isEqualTo(2)
@@ -53,13 +45,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetworkWithRailSwitch() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSwitch X="3" Y="3" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_WITH_UNNAMED_SWITCH).use { ctx ->
 			val cell = ctx.getRailWayNetGrid()[Point(3, 3)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSwitch>()
 		}
@@ -67,13 +53,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetworkWithRailSemaphore() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSemaphore X="3" Y="3" SpatialType="VERTICAL" orientation="true"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_WITH_UNNAMED_SEMAPHORE).use { ctx ->
 			val cell = ctx.getRailWayNetGrid()[Point(3, 3)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSemaphore>()
 		}
@@ -81,13 +61,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetworkWithNamedRailSemaphore() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSemaphore X="3" Y="3" SpatialType="HORIZONTAL" orientation="true" name="S1"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_WITH_NAMED_SEMAPHORE).use { ctx ->
 			val cell = ctx.getRailWayNetGrid()[Point(3, 3)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSemaphore>()
 			assertThat((cell as RailSemaphore).getName()).isEqualTo("S1")
@@ -96,13 +70,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetworkWithNamedRailSwitch() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSwitch X="3" Y="3" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="W1"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_WITH_NAMED_SWITCH).use { ctx ->
 			val cell = ctx.getRailWayNetGrid()[Point(3, 3)]
 			assertThat(cell).isNotNull().isInstanceOf<RailSwitch>()
 			assertThat((cell as RailSwitch).getName()).isEqualTo("W1")
@@ -111,22 +79,14 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseSingleInOutNetworkIsValid() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_SINGLE_INOUT).use { ctx ->
 			assertThat(ctx.getInOuts().size).isEqualTo(1)
 		}
 	}
 
 	@Test
 	fun parseGridDimensions() {
-		val xml = """<?xml version="1.0"?>
-			<net X="15" Y="20">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_NON_SQUARE_GRID).use { ctx ->
 			assertThat(ctx.getRailWayNetGrid().cols).isEqualTo(15)
 			assertThat(ctx.getRailWayNetGrid().rows).isEqualTo(20)
 		}
@@ -134,12 +94,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseInOutOrientation() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_TWO_INOUTS).use { ctx ->
 			val cellA = ctx.getRailWayNetGrid()[Point(1, 1)]
 			assertThat(cellA).isNotNull().isInstanceOf<InOut>()
 			assertThat((cellA as InOut).getName()).isEqualTo("A")
@@ -152,14 +107,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseAllSpatialTypes() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSemaphore X="3" Y="3" SpatialType="VERTICAL" orientation="true"/>
-				<RailSemaphore X="5" Y="5" SpatialType="DIAGONAL1" orientation="false"/>
-				<RailSemaphore X="7" Y="7" SpatialType="DIAGONAL2" orientation="true"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.READER_ALL_SPATIAL_TYPES).use { ctx ->
 			val horiz = ctx.getRailWayNetGrid()[Point(1, 1)]
 			assertThat(horiz).isNotNull()
 			assertThat(horiz!!.getSpatialType()).isEqualTo(Cell.SpatialType.HORIZONTAL)
@@ -182,20 +130,14 @@ class XmlContextReaderTest {
 
 	@Test
 	fun rejectEmptyNetWhenStructuralValidationEnabled() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-			</net>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml, skipStructuralValidation = false)
+			XmlContextReader().parse(InlineXmlSnippets.EMPTY_NET_OPEN_CLOSE, skipStructuralValidation = false)
 		}
 	}
 
 	@Test
 	fun acceptEmptyNetWhenStructuralValidationSkipped() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-			</net>"""
-		XmlContextReader().parse(xml, skipStructuralValidation = true).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.EMPTY_NET_OPEN_CLOSE, skipStructuralValidation = true).use { ctx ->
 			assertThat(ctx.getInOuts().size).isEqualTo(0)
 		}
 	}
@@ -209,85 +151,51 @@ class XmlContextReaderTest {
 
 	@Test
 	fun rejectMissingNetElement() {
-		val xml = """<?xml version="1.0"?>
-			<other X="10" Y="10"/>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.ROOT_IS_OTHER)
 		}
 	}
 
 	@Test
 	fun rejectMissingGridAttribute() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.NET_MISSING_Y_ATTR)
 		}
 	}
 
 	@Test
 	fun rejectInvalidSpatialType() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="INVALID" orientation="false" name="A"/>
-			</net>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.INOUT_INVALID_SPATIAL_TYPE)
 		}
 	}
 
 	@Test
 	fun rejectTrackBlockWithSameFromAndTo() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<SimpleTrackBlock fromX="1" fromY="1" toX="1" toY="1"
-					fromSegment="F" toSegment="A"
-					length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
-			</net>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.TRACK_FROM_EQUALS_TO)
 		}
 	}
 
 	@Test
 	fun rejectTrackBlockReferencingMissingCell() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<SimpleTrackBlock fromX="1" fromY="1" toX="9" toY="9"
-					fromSegment="F" toSegment="A"
-					length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
-			</net>"""
 		assertFailsWith<IllegalStateException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.TRACK_REFERENCES_MISSING_CELL)
 		}
 	}
 
 	@Test
 	fun rejectNameTooLong() {
 		val longName = "a".repeat(51)
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSemaphore X="3" Y="3" SpatialType="HORIZONTAL" orientation="true" name="$longName"/>
-			</net>"""
 		assertFailsWith<IllegalArgumentException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.readerNetWithSemaphoreName(longName))
 		}
 	}
 
 	@Test
 	fun rejectNameWithInvalidCharacters() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSwitch X="3" Y="3" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="bad name!"/>
-			</net>"""
 		assertFailsWith<IllegalArgumentException> {
-			XmlContextReader().parse(xml)
+			XmlContextReader().parse(InlineXmlSnippets.readerNetWithSwitchName("bad name!"))
 		}
 	}
 
@@ -301,12 +209,7 @@ class XmlContextReaderTest {
 		)
 		for ((index, type) in types.withIndex()) {
 			val y = 1 + index * 2
-			val xml = """<?xml version="1.0"?>
-				<net X="30" Y="30">
-					<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-					<RailSwitch X="3" Y="$y" SpatialType="HORIZONTAL" Type="$type"/>
-				</net>"""
-			XmlContextReader().parse(xml).use { ctx ->
+			XmlContextReader().parse(InlineXmlSnippets.readerNetWithSwitchType(type, y)).use { ctx ->
 				val cell = ctx.getRailWayNetGrid()[Point(3, y)]
 				assertThat(cell).isNotNull()
 				assertThat(cell!!).isInstanceOf<RailSwitch>()
@@ -317,28 +220,15 @@ class XmlContextReaderTest {
 
 	@Test
 	fun unknownElementsAreIgnored() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<SomeUnknownElement foo="bar"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD_INOUT).use { ctx ->
 			assertThat(ctx.getInOuts().size).isEqualTo(1)
 		}
 	}
 
 	@Test
 	fun parseFileLoadsContextFromDisk() {
-		val xml = """<?xml version="1.0"?>
-			<net X="20" Y="20">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-				<SimpleTrackBlock fromX="1" fromY="1" toX="5" toY="5"
-					fromSegment="F" toSegment="A"
-					length="50.0" maxSpeedfrom="60.0" maxSpeedto="60.0"/>
-			</net>"""
 		val path = "interlockSim-reader-test-${currentTimeMillisKMP()}.xml"
-		writeTextFile(path, xml)
+		writeTextFile(path, InlineXmlSnippets.READER_PARSE_FILE_NETWORK)
 		try {
 			XmlContextReader().parseFile(path).use { ctx ->
 				assertThat(ctx.getRailWayNetGrid().cols).isEqualTo(20)
@@ -353,44 +243,28 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetElementWithCurrentMaxSpeed() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10" currentMaxSpeed="120.0">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.NET_CURRENT_MAX_SPEED).use { ctx ->
 			assertThat(ctx.currentMaxSpeed).isEqualTo(120.0)
 		}
 	}
 
 	@Test
 	fun parseNetElementWithCurrentTrackLength() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10" currentTrackLength="400.0">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.NET_CURRENT_TRACK_LENGTH).use { ctx ->
 			assertThat(ctx.currentTrackLength).isEqualTo(400.0)
 		}
 	}
 
 	@Test
 	fun parseNetElementWithCurrentNameString() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10" currentNameString="My Network">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.NET_CURRENT_NAME_STRING).use { ctx ->
 			assertThat(ctx.currentNameString).isEqualTo("My Network")
 		}
 	}
 
 	@Test
 	fun parseNetElementWithAllThreeNewAttributes() {
-		val xml = """<?xml version="1.0"?>
-			<net X="15" Y="15" currentMaxSpeed="90.5" currentTrackLength="250.0" currentNameString="Full Test">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.NET_ALL_CURRENT_ATTRS).use { ctx ->
 			assertThat(ctx.currentMaxSpeed).isEqualTo(90.5)
 			assertThat(ctx.currentTrackLength).isEqualTo(250.0)
 			assertThat(ctx.currentNameString).isEqualTo("Full Test")
@@ -399,11 +273,7 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseNetElementWithoutNewAttributesUsesDefaults() {
-		val xml = """<?xml version="1.0"?>
-			<net X="10" Y="10">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			</net>"""
-		XmlContextReader().parse(xml).use { ctx ->
+		XmlContextReader().parse(InlineXmlSnippets.VALID_MINIMAL_ONE_INOUT).use { ctx ->
 			// Defaults must not be changed by absent attributes
 			// (exact default values are defined in DefaultEditingContext)
 			assertThat(ctx.currentMaxSpeed >= 0.0).isEqualTo(true)

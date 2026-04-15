@@ -7,6 +7,7 @@ import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -65,9 +66,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 
 	@BeforeEach
 	fun setUp() {
-		val editingContext = (javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: error("Resource not found: vyhybna.xml"))
-			.use { editingContextFactory.createContext(it) } as EditingContext
+		val editingContext = TestFixtures.loadShuntingXml().use { editingContextFactory.createContext(it) } as EditingContext
 		context = ContextTransformer.createSimulationContext(editingContext, processFactory)
 
 		// Get elements from grid by coordinates (same as ShuntingLoop)

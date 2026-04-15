@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<net X="30" Y="30">
+	<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+	<RailSwitch X="3" Y="3" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="W1"/>
+	<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+</net>

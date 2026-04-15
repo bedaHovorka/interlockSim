@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -75,9 +76,7 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 	fun setUp() {
 		// Load vyhybna.xml - the ONLY configuration where ShuntingLoop can operate (SIM-004)
 		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+			TestFixtures.loadShuntingXml()
 		val context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
 		validContext = MockSimulationContext(context)
 		testContext = context // Track underlying context for cleanup (MockSimulationContext delegates to it)

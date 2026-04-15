@@ -10,106 +10,44 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.BuiltinNetworks
+import cz.vutbr.fit.interlockSim.util.Resources
 
 /**
- * Canonical XML network definitions shared across test fixtures and embedded binary resources.
+ * Canonical XML network definitions shared across test fixtures.
  *
- * [VYHYBNA_XML] delegates to [BuiltinNetworks] (single source of truth in :core/commonMain).
- * Test-only XMLs (linear track, minimal network, etc.) are defined here.
- * Consumed by [CommonTestFixtures] (test fixtures in :core, :desktop-ui, :fast-sim tests).
+ * Source of truth is the fixture files under
+ * `core-test/src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/`.
+ * No XML string literals live in this file — both JVM (classpath) and
+ * linuxX64 (filesystem) load the same content via [Resources.read].
  */
 object NetworkResources {
+	private fun fixture(name: String): String =
+		Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/$name")
 
-	/** Shunting loop — delegates to [BuiltinNetworks.VYHYBNA_XML] (single source of truth). */
-	val VYHYBNA_XML = BuiltinNetworks.VYHYBNA_XML
+	/** Shunting loop — delegates to [BuiltinNetworks.VYHYBNA_XML] (production asset). */
+	val VYHYBNA_XML: String get() = BuiltinNetworks.VYHYBNA_XML
 
 	/** Two-node linear track connecting InOut A and InOut B. */
-	val LINEAR_TRACK_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="100" Y="100">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-		|	<SimpleTrackBlock fromX="10" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-		|</net>
-	""".trimMargin()
+	val LINEAR_TRACK_XML: String by lazy { fixture("linear-track.xml") }
 
 	/** Minimal two-InOut network without any track blocks. */
-	val MINIMAL_NETWORK_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="100" Y="100">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-		|</net>
-	""".trimMargin()
+	val MINIMAL_NETWORK_XML: String by lazy { fixture("minimal-network.xml") }
 
 	/** Network with a single InOut element (used for InOut validation tests). */
-	val SINGLE_INOUT_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="10" Y="10">
-		|  <InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="false" name="OnlyOne"/>
-		|</net>
-	""".trimMargin()
+	val SINGLE_INOUT_XML: String by lazy { fixture("single-inout.xml") }
 
 	/** Empty network with no InOut elements (used for validation error tests). */
-	val ZERO_INOUTS_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="10" Y="10">
-		|</net>
-	""".trimMargin()
+	val ZERO_INOUTS_XML: String by lazy { fixture("zero-inouts.xml") }
 
 	/** Network with a simple right-diverging switch. */
-	val SWITCH_BASIC_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="100" Y="100">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="IN"/>
-		|	<RailSwitch X="15" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="OUT_PLUS"/>
-		|	<InOut X="20" Y="11" SpatialType="HORIZONTAL" orientation="true" name="OUT_MINUS"/>
-		|	<SimpleTrackBlock fromX="10" fromY="10" toX="15" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-		|	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-		|	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="11" fromSegment="G" toSegment="A" length="60.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-		|</net>
-	""".trimMargin()
+	val SWITCH_BASIC_XML: String by lazy { fixture("switch-basic.xml") }
 
 	/** Network with a horizontal semaphore. */
-	val SEMAPHORE_BASIC_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="100" Y="100">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="IN"/>
-		|	<RailSemaphore X="15" Y="10" SpatialType="HORIZONTAL" orientation="true"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="OUT"/>
-		|	<SimpleTrackBlock fromX="10" fromY="10" toX="15" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-		|	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="50.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-		|</net>
-	""".trimMargin()
+	val SEMAPHORE_BASIC_XML: String by lazy { fixture("semaphore-basic.xml") }
 
 	/** Two parallel tracks with independent InOut pairs. */
-	val TWO_TRACKS_PARALLEL_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="100" Y="100">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A1"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B1"/>
-		|	<InOut X="10" Y="12" SpatialType="HORIZONTAL" orientation="false" name="A2"/>
-		|	<InOut X="20" Y="12" SpatialType="HORIZONTAL" orientation="true" name="B2"/>
-		|	<SimpleTrackBlock fromX="10" fromY="10" toX="20" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-		|	<SimpleTrackBlock fromX="10" fromY="12" toX="20" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-		|</net>
-	""".trimMargin()
+	val TWO_TRACKS_PARALLEL_XML: String by lazy { fixture("two-tracks-parallel.xml") }
 
 	/** Small grid with two InOut elements (used for grid/cell tests). */
-	val EMPTY_GRID_XML = """
-		|<?xml version="1.0"?>
-		|<!DOCTYPE net>
-		|<net X="50" Y="50">
-		|	<InOut X="10" Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-		|	<InOut X="20" Y="10" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-		|</net>
-	""".trimMargin()
+	val EMPTY_GRID_XML: String by lazy { fixture("empty-grid.xml") }
 }

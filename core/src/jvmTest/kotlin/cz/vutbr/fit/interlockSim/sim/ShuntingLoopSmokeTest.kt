@@ -15,6 +15,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -95,8 +96,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	 * @return Configured simulation context with ShuntingLoop as main process
 	 */
 	private fun loadVyhybnaStream() =
-		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: error("Resource not found: vyhybna.xml")
+		TestFixtures.loadShuntingXml()
 
 	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
 		val factory = getKoin().get<SimulationContextFactory>()

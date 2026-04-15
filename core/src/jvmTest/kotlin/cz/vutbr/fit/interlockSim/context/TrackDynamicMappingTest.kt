@@ -18,6 +18,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
@@ -40,8 +41,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaStream() =
-		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: error("Resource not found: vyhybna.xml")
+		TestFixtures.loadShuntingXml()
 
 	@Nested
 	@DisplayName("Unit Tests - Track Mapping")

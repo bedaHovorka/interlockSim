@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -189,7 +190,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 		// Load a pre-built network
 		val context =
 			editingContextFactory.createContext(
-				javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/xml/fixtures/linear-track.xml")
+				TestFixtures.loadLinearTrackXml()
 			)
 
 		assertThat(context).isNotNull()

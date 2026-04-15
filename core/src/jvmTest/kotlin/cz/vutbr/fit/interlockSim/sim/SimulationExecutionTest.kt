@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -76,9 +77,7 @@ class SimulationExecutionTest : KoinTestBase() {
 	 */
 	private fun createVyhybnaContext(): DefaultSimulationContext {
 		val xml =
-			javaClass.getResourceAsStream(
-				"/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
-			)
+			TestFixtures.loadShuntingXml()
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 		return simulationContextFactory.createContext(xml) as DefaultSimulationContext
 	}

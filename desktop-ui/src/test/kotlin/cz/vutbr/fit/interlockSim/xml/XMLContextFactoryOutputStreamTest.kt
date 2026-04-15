@@ -17,6 +17,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -614,7 +615,7 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 	// Helper method to load fixture files from resources
 	private fun getFixtureStream(fileName: String): InputStream {
 		val resourcePath = "/cz/vutbr/fit/interlockSim/xml/fixtures/$fileName"
-		val stream = javaClass.getResourceAsStream(resourcePath)
+		val stream = Resources.read(resourcePath.trimStart('/')).byteInputStream()
 		assertThat(stream)
 			.withMessage("Fixture file should exist: $fileName")
 			.isNotNull()

@@ -13,6 +13,7 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
@@ -44,8 +45,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val stream = javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-			?: error("Resource not found: vyhybna.xml")
+		val stream = TestFixtures.loadShuntingXml()
 		return stream.use { s ->
 			Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
 		}.also { it.getInOuts() /* Initialize dynamic wrapper map (required side-effect) */ }
