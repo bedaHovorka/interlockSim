@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<net X="30" Y="30">
+	<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+	<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
+	<SimpleTrackBlock fromX="1" fromY="1" toX="5" toY="5"
+		fromSegment="F" toSegment="A"
+		length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
+</net>

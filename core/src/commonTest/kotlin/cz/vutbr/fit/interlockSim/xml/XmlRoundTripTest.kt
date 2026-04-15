@@ -12,6 +12,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Resources
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -76,12 +77,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesRailSemaphore() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSemaphore X="3" Y="3" SpatialType="VERTICAL" orientation="true" name="S1"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
+		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-semaphore.xml")
 
 		val ctx1 = reader.parse(xml)
 		val generatedXml = writer.generate(ctx1)
@@ -99,12 +95,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesRailSwitch() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<RailSwitch X="3" Y="3" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="W1"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-			</net>"""
+		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-switch.xml")
 
 		val ctx1 = reader.parse(xml)
 		val generatedXml = writer.generate(ctx1)
@@ -120,14 +111,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesTrackBlock() {
-		val xml = """<?xml version="1.0"?>
-			<net X="30" Y="30">
-				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-				<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-				<SimpleTrackBlock fromX="1" fromY="1" toX="5" toY="5"
-					fromSegment="F" toSegment="A"
-					length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
-			</net>"""
+		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-trackblock.xml")
 
 		val ctx1 = reader.parse(xml)
 		val generatedXml = writer.generate(ctx1)
@@ -162,9 +146,6 @@ class XmlRoundTripTest {
 
 	// --- Helper methods ---
 
-	private fun minimalNetworkXml(): String = """<?xml version="1.0"?>
-		<net X="30" Y="30">
-			<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>
-			<InOut X="5" Y="5" SpatialType="HORIZONTAL" orientation="true" name="B"/>
-		</net>"""
+	private fun minimalNetworkXml(): String =
+		Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-minimal.xml")
 }
