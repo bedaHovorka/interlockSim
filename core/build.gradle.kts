@@ -213,9 +213,9 @@ val generateNativeResourceRoot =
 					appendLine("package cz.vutbr.fit.interlockSim.util")
 					appendLine()
 					appendLine("internal val NATIVE_RESOURCE_ROOTS: List<String> = listOf(")
-					appendLine("    \"$main\",")
-					appendLine("    \"$test\",")
-					appendLine("    \"$proj\",")
+					appendLine("\t\"$main\",")
+					appendLine("\t\"$test\",")
+					appendLine("\t\"$proj\",")
 					appendLine(")")
 				},
 			)

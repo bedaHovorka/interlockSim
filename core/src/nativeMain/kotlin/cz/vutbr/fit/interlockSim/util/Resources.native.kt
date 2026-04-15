@@ -19,11 +19,15 @@ actual object Resources {
 		for (root in NATIVE_RESOURCE_ROOTS) {
 			val candidate = Path("$root/$path")
 			if (SystemFileSystem.exists(candidate)) {
-				return SystemFileSystem.source(candidate).buffered().readString()
+				return SystemFileSystem.source(candidate).use { raw ->
+					raw.buffered().readString()
+				}
 			}
 		}
+		// Avoid leaking absolute build-tree paths in the exception message;
+		// report only the number of roots searched (paths are visible in build logs for debugging).
 		throw IllegalArgumentException(
-			"Resource not found in any native root (${NATIVE_RESOURCE_ROOTS.joinToString()}): $path",
+			"Resource not found in ${NATIVE_RESOURCE_ROOTS.size} native resource root(s): $path",
 		)
 	}
 }
