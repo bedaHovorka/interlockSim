@@ -1,121 +1,17 @@
 package cz.vutbr.fit.interlockSim.xml
 
+import cz.vutbr.fit.interlockSim.util.Resources
+
 /**
- * Embedded XSD schema for railway network XML validation.
- * Source: core/src/jvmMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd
+ * Access to the XSD schema for railway network XML validation.
  *
- * Embedded as a string constant because commonMain has no file I/O on native targets.
- * A JVM test (XmlSchemaDriftTest) verifies this constant stays in sync with data.xsd.
+ * Single source of truth is the resource file at
+ * `core/src/commonMain/resources/cz/vutbr/fit/interlockSim/resource/data.xsd`.
+ * Loaded via multiplatform [Resources.read] so both JVM (classpath) and
+ * linuxX64 (filesystem) see identical content — no inline XSD, no drift test.
  */
 object XmlSchemaContent {
-	const val SCHEMA_XSD: String = """<?xml version="1.0" encoding="utf-8"?>
-<!--
- * Brno University of Technology
- * Faculty of Information Technology
- *
- * BSc Thesis	2006/2007
- *
- * Railway Interlocking Simulator
- *
- * Bedrich Hovorka
- *
--->
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-	<xs:complexType name="Node">
-    	<xs:attribute name="X" type="xs:int" use="required"></xs:attribute>
-    	<xs:attribute name="Y" type="xs:int" use="required"></xs:attribute>
-    	<xs:attribute name="SpatialType" type="xs:string" use="required"></xs:attribute>
-    </xs:complexType>
-
-    <xs:complexType name="OrientedNode">
-    	<xs:complexContent>
-    		<xs:extension base="Node">
-    			<xs:attribute name="orientation" type="xs:boolean" use="required"></xs:attribute>
-    		</xs:extension>
-    	</xs:complexContent>
-    </xs:complexType>
-
-         <xs:element name="net">
-           <xs:complexType>
-             <!-- xs:any processContents="lax" is used here to allow child elements such as
-                  RailSwitch, RailSemaphore, InOut and SimpleTrackBlock (declared as global
-                  xs:elements in this schema) to appear in arbitrary order and to keep the
-                  content model forward compatible with additional element types. Although these
-                  elements could be referenced explicitly via xs:element ref="...", this schema
-                  relies on application-level validation in XMLContextFactory.Handler.classification()
-                  to enforce the actual element name and semantic constraints at parse time. -->
-             <xs:sequence minOccurs="0" maxOccurs="unbounded">
-               <xs:any processContents="lax"/>
-             </xs:sequence>
-             <xs:attribute name="X" type="xs:int" use="required"/>
-             <xs:attribute name="Y" type="xs:int" use="required"/>
-             <xs:attribute name="currentMaxSpeed" type="xs:double" use="optional"/>
-             <xs:attribute name="currentTrackLength" type="xs:double" use="optional"/>
-             <xs:attribute name="currentNameString" type="xs:string" use="optional"/>
-           </xs:complexType>
-         </xs:element>
-
-         <xs:element name="RailSwitch">
-           <xs:complexType>
-    	     <xs:complexContent>
-    		   <xs:extension base="Node">
-    			<xs:attribute name="Type" type="xs:string" use="required"></xs:attribute>
-    			<xs:attribute name="name" use="optional">
-    				<xs:simpleType>
-    					<xs:restriction base="xs:string">
-    						<xs:pattern value="[a-zA-Z0-9_-]{1,50}"/>
-    					</xs:restriction>
-    				</xs:simpleType>
-    			</xs:attribute>
-    		   </xs:extension>
-    	     </xs:complexContent>
-           </xs:complexType>
-         </xs:element>
-
-         <xs:element name="RailSemaphore">
-           <xs:complexType>
-    	     <xs:complexContent>
-    		   <xs:extension base="OrientedNode">
-    			<xs:attribute name="name" use="optional">
-    				<xs:simpleType>
-    					<xs:restriction base="xs:string">
-    						<xs:pattern value="[a-zA-Z0-9_-]{1,50}"/>
-    					</xs:restriction>
-    				</xs:simpleType>
-    			</xs:attribute>
-    		   </xs:extension>
-    	     </xs:complexContent>
-           </xs:complexType>
-         </xs:element>
-
-         <xs:element name="InOut">
-           <xs:complexType>
-    	     <xs:complexContent>
-    		   <xs:extension base="OrientedNode">
-    			<xs:attribute name="name" use="required">
-    				<xs:simpleType>
-    					<xs:restriction base="xs:string">
-    						<xs:pattern value="[a-zA-Z0-9_-]{1,50}"/>
-    					</xs:restriction>
-    				</xs:simpleType>
-    			</xs:attribute>
-    		   </xs:extension>
-    	     </xs:complexContent>
-           </xs:complexType>
-         </xs:element>
-
-         <xs:element name="SimpleTrackBlock">
-           <xs:complexType>
-             <xs:attribute name="fromX" type="xs:nonNegativeInteger"></xs:attribute>
-             <xs:attribute name="fromY" type="xs:nonNegativeInteger"></xs:attribute>
-             <xs:attribute name="fromSegment" type="xs:string"></xs:attribute>
-             <xs:attribute name="toSegment" type="xs:string"></xs:attribute>
-             <xs:attribute name="toX" type="xs:nonNegativeInteger"></xs:attribute>
-             <xs:attribute name="toY" type="xs:nonNegativeInteger"></xs:attribute>
-             <xs:attribute name="length" type="xs:double"></xs:attribute>
-             <xs:attribute name="maxSpeedfrom" type="xs:double"></xs:attribute>
-             <xs:attribute name="maxSpeedto" type="xs:double"></xs:attribute>
-           </xs:complexType>
-         </xs:element>
-</xs:schema>"""
+	val SCHEMA_XSD: String by lazy {
+		Resources.read("cz/vutbr/fit/interlockSim/resource/data.xsd")
+	}
 }
