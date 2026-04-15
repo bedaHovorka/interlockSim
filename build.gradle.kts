@@ -94,9 +94,17 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (desktop-ui + :core KMP subproject)
-        property("sonar.sources",        "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin")
-        property("sonar.tests",          "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin")
+        // Source and test paths (desktop-ui + :core KMP subproject).
+        // Kept in sync with sonar-project.properties (used for local sonar-scanner runs).
+        property(
+            "sonar.sources",
+            "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
+                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin",
+        )
+        property(
+            "sonar.tests",
+            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin",
+        )
         property("sonar.java.binaries",  "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
         property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
 
@@ -118,7 +126,7 @@ sonar {
                 "core/build/reports/jacoco/jvmTest/jacocoTestReport.xml",
         )
 
-        property("sonar.sourceEncoding", "ISO-8859-1")
+        property("sonar.sourceEncoding", "UTF-8")
         property("sonar.qualitygate.wait", "false")
 
         // :fast-sim compiles to linuxX64 native — JaCoCo cannot instrument native code.
