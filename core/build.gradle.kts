@@ -2,32 +2,35 @@
  * core/build.gradle.kts
  *
  * Gradle build configuration for interlockSim :core module
- * Uses Kotlin Multiplatform (JVM-only target initially)
+ * Uses Kotlin Multiplatform (JVM primary runtime target, with linuxX64
+ * also configured for native compilation/testing)
  * Extracts domain, context, objects, sim, util, exceptions packages
  *
  * ## commonMain vs JVM target
  *
- * Only the JVM target is currently compiled, so `commonMain` code is
- * effectively JVM-only today. The Kotlin Multiplatform plugin was
- * chosen deliberately to keep the future path open:
+ * The JVM target is currently the primary runtime target, and linuxX64
+ * is also configured for native compilation/testing. `commonMain` is
+ * still effectively JVM-constrained today. The Kotlin Multiplatform
+ * plugin was chosen deliberately to keep the future path open:
  *
- *  1. Future non-JVM targets (JS for a web demo, linuxX64 for
- *     :fast-sim-style native CLIs) can be added by registering a new
- *     `kotlin { ... }` target; commonMain stays portable.
+ *  1. Additional non-JVM targets (for example JS for a web demo) can
+ *     be added by registering a new `kotlin { ... }` target;
+ *     commonMain stays portable.
  *  2. The long-term simulation engine target is Kalasim
  *     (Kotlin-coroutines-based, Phase 2 in docs/jdisco-research.md),
  *     which benefits from commonMain staying free of JVM-only APIs.
- *  3. The current blocker for enabling non-JVM targets is that the
- *     `cz.hovorka.kdisco:kdisco-core-jvm` artifact consumed here is
- *     JVM-only. kDisco native variants exist from 0.4.0, but this
- *     module pulls the `-jvm` variant. Until that dependency is
- *     replaced or produces multiplatform artifacts consumed here,
- *     commonMain is functionally JVM-only.
+ *  3. kDisco 0.4.0 ships multiplatform artifacts (jvm + linuxX64
+ *     klibs) and this module consumes the multiplatform coordinate
+ *     (`cz.hovorka.kdisco:kdisco-core`; see commonMain dependencies
+ *     below). Remaining blockers for fully portable common code are
+ *     test infrastructure (MockK/JUnit5 are JVM-only; commonTest is
+ *     restricted to kotlin.test) and a Koin/xmlutil native audit on
+ *     all intended targets.
  *
- * The `checkCoreCommonMainPurity` task (defined in the root
- * build.gradle.kts) enforces that commonMain stays free of `java.*` /
- * `javax.*` imports so the day a non-JVM target is enabled, nothing
- * in commonMain has to move.
+ * The `checkCoreCommonMainPurity` task (declared later in this file
+ * under "CommonMain Purity Gate") enforces that commonMain stays free
+ * of `java.*` / `javax.*` imports so the day a non-JVM target is
+ * enabled, nothing in commonMain has to move.
  */
 
 plugins {
