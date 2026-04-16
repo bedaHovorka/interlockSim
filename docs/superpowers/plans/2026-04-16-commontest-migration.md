@@ -169,6 +169,219 @@ moving to commonTest gives JVM the same coverage."
 
 ---
 
+## 2026-04-16 ADDENDUM: Bucket 0 — Test Infrastructure Portability (NEW, replaces the naive Bucket A attempt)
+
+**Reason for addendum:** The initial Bucket A run (commit `b8c7d79`) discovered that the migration's real blocker is not MockK / `@ParameterizedTest` / `java.io.File`, but the test-infrastructure architecture. `EditingContextFactory` is in `jvmMain`, and `KoinTestBase` / `TestContextBuilder` / `TestTopologies` / `MockSimulationContext` / `TrackTestMocks` all live in jvmTest. The vast majority of jvmTest files depend on these utilities. Only 1 file (`ContextExceptionsTest.kt`) was portable without this work.
+
+**User decisions captured 2026-04-16:**
+- Proceed with production-code change: `EditingContextFactory` interface moves to `commonMain` (approved).
+- `@Nested` flattening: per-file, only as needed for tests being migrated (not a codebase-wide sweep).
+
+**Impact on later tasks:** After Bucket 0 lands, Bucket A retry is expected to unlock ~30 test files that were previously demoted. Buckets B / C / D remain as originally planned with the same procedures.
+
+### Task 3a: Move `EditingContextFactory` interface to commonMain
+
+**Files:**
+- Read: `core/src/jvmMain/kotlin/cz/vutbr/fit/interlockSim/context/EditingContextFactory.kt` (current, jvmMain-only)
+- Create: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/context/EditingContextFactory.kt` (portable interface)
+- Possibly modify: `core/src/jvmMain/kotlin/cz/vutbr/fit/interlockSim/context/EditingContextFactory.kt` (keep JVM-only methods as extension functions or separate `JvmEditingContextFactory` interface)
+
+- [ ] **Step 3a.1:** Read current `EditingContextFactory` definition. Identify every method and whether it uses JVM-only APIs (reflection `createNew(Class<*>, vararg Any?)`, `java.io.File` / `InputStream` variants).
+
+- [ ] **Step 3a.2:** Draft the commonMain interface. It must include every method that has no JVM-only dependency. The survey report identified `createNew(clazz: Class<*>, vararg arguments)` as the one reflective method — that stays JVM-only.
+
+- [ ] **Step 3a.3:** Write the new commonMain file. Example shape:
+```kotlin
+// core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/context/EditingContextFactory.kt
+package cz.vutbr.fit.interlockSim.context
+
+interface EditingContextFactory {
+    fun createEmpty(): EditingContext
+    // ...any other portable methods identified in Step 3a.1
+}
+```
+
+- [ ] **Step 3a.4:** Remove the portable interface declaration from `jvmMain`. Keep any JVM-only methods as either (a) extension functions on `EditingContextFactory` in jvmMain, or (b) a `JvmEditingContextFactory` subtype. Choose whichever matches the smallest-diff surface.
+
+- [ ] **Step 3a.5:** Verify compile and test. Both commands must succeed:
+```bash
+./gradlew :core:compileKotlinJvm :core:compileKotlinLinuxX64
+./gradlew :core:jvmTest :core:linuxX64Test
+```
+Expected: JVM ≥ 1862 tests passing, linuxX64 ≥ 555 tests passing. If any jvmTest fails, the split didn't preserve the jvmMain surface correctly — fix before proceeding.
+
+- [ ] **Step 3a.6:** Verify the purity gate. `./gradlew :core:checkCoreCommonMainPurity` must pass.
+
+- [ ] **Step 3a.7:** Commit.
+```bash
+git commit -m "refactor(core): move EditingContextFactory interface to commonMain
+
+Splits the factory interface so commonTest can inject a mock/fake
+implementation. JVM-only reflective createNew(Class, vararg) method stays
+in jvmMain via extension function (or JvmEditingContextFactory subtype).
+
+Unblocks Bucket 0 test infrastructure portability — ~30 jvmTest files
+that currently depend on EditingContextFactory via Koin DI can now be
+migrated to commonTest with the same Koin module.
+
+No behavior change; no callers break."
+```
+
+### Task 3b: Move `TestContextBuilder` and `TestTopologies` to `core-test/commonMain`
+
+Survey confirmed both are pure Kotlin with no JVM-only imports.
+
+**Files:**
+- Move: `core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/testutil/TestContextBuilder.kt` → `core-test/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/testutil/TestContextBuilder.kt`
+- Move: `core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/testutil/TestTopologies.kt` → `core-test/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/testutil/TestTopologies.kt`
+
+- [ ] **Step 3b.1:** `git mv` each file to its new location. Apply any import adjustments required (e.g., if they import `EditingContextFactory` they still resolve because Task 3a moved the interface).
+
+- [ ] **Step 3b.2:** Verify `core-test` compiles on both targets:
+```bash
+./gradlew :core-test:compileKotlinJvm :core-test:compileKotlinLinuxX64
+```
+
+- [ ] **Step 3b.3:** Verify no jvmTest imports break. The old locations are gone; existing jvmTest files import these helpers by FQN and should resolve via the core-test dependency.
+```bash
+./gradlew :core:jvmTest
+```
+Must pass at 1862.
+
+- [ ] **Step 3b.4:** Commit:
+```bash
+git commit -m "test(core-test): move TestContextBuilder and TestTopologies to commonMain
+
+Both are pure-Kotlin programmatic context builders with no JVM-only
+imports. Moving them to core-test/commonMain lets commonTest consumers
+use the same fluent API that jvmTest has relied on.
+
+No behavior change — only file location."
+```
+
+### Task 3c: Create `CommonKoinTestBase` in `core-test/commonMain`
+
+Survey identified `KoinTestBase` uses JUnit5 `@BeforeEach`/`@AfterEach`. commonTest needs the same setup/teardown lifecycle but via `kotlin.test` `@BeforeTest`/`@AfterTest`.
+
+**Files:**
+- Read: `core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/testutil/KoinTestBase.kt` (JUnit5 version)
+- Create: `core-test/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/testutil/CommonKoinTestBase.kt` (kotlin.test version)
+
+- [ ] **Step 3c.1:** Read the JUnit5 base. Extract the setup/teardown logic (startKoin, stopKoin, module loading).
+
+- [ ] **Step 3c.2:** Write the kotlin.test equivalent:
+```kotlin
+// core-test/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/testutil/CommonKoinTestBase.kt
+package cz.vutbr.fit.interlockSim.testutil
+
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
+import org.koin.core.module.Module
+
+abstract class CommonKoinTestBase {
+    abstract val modules: List<Module>
+
+    @BeforeTest
+    fun setUpKoin() {
+        startKoin { modules(modules) }
+    }
+
+    @AfterTest
+    fun tearDownKoin() {
+        stopKoin()
+    }
+}
+```
+(Exact signature may differ; preserve what `KoinTestBase` offers today — scope management, per-context scopes, any helper extension functions. Keep the **same API surface** so tests can switch parent class with no other change.)
+
+- [ ] **Step 3c.3:** Compile and run a smoke test. Create a trivial test extending `CommonKoinTestBase` to verify lifecycle works on both targets.
+
+- [ ] **Step 3c.4:** Commit:
+```bash
+git commit -m "test(core-test): add CommonKoinTestBase for commonTest consumers
+
+kotlin.test-native version of KoinTestBase using @BeforeTest/@AfterTest
+instead of JUnit5 @BeforeEach/@AfterEach. Mirrors the JVM lifecycle
+semantics so commonTest files can adopt the same Koin module pattern
+jvmTest already uses."
+```
+
+### Task 3d: Move `MockSimulationContext` class to `core-test/commonMain`
+
+Survey identified the class itself is portable; only the `InputStream` factory method is JVM-only.
+
+**Files:**
+- Move: `core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/testutil/MockSimulationContext.kt` → split
+  - Portable class → `core-test/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/testutil/MockSimulationContext.kt`
+  - JVM-only `InputStream` factory method → `core-test/src/jvmMain/kotlin/cz/vutbr/fit/interlockSim/testutil/MockSimulationContextJvm.kt` (or extension fun in same package)
+
+- [ ] **Step 3d.1:** Read the current file. Identify the JVM-only seam (survey said line 151 — confirm).
+
+- [ ] **Step 3d.2:** Extract the portable class into `core-test/commonMain`. Convert `InputStream`-accepting factory method(s) to `String` overloads that use `CommonTestFixtures.parseEditingContext` internally.
+
+- [ ] **Step 3d.3:** Move `InputStream` factory methods to `core-test/jvmMain` as extension functions on the portable class (so existing jvmTest callers can keep calling `MockSimulationContext.fromStream(...)` unchanged).
+
+- [ ] **Step 3d.4:** Compile + test on both targets. Verify jvmTest passes (1862), linuxX64 passes (≥ 555).
+
+- [ ] **Step 3d.5:** Commit:
+```bash
+git commit -m "test(core-test): move MockSimulationContext class to commonMain
+
+Portable wrapper (time tracking, worker mocks, report filtering) moves
+to core-test/commonMain. InputStream-based factory methods stay in
+core-test/jvmMain as extension functions so JVM callers are unchanged.
+
+commonTest files can now use MockSimulationContext with string-based
+XML loading via CommonTestFixtures.parseEditingContext."
+```
+
+### Task 3e: Retry Bucket A discovery + migration
+
+With Tasks 3a-3d landed, Bucket A's pool of eligible files should grow substantially. Per user decision, flatten `@Nested` only in files being migrated.
+
+- [ ] **Step 3e.1:** Re-run the Bucket A discovery command from the original Task 3:
+```bash
+find core/src/jvmTest/kotlin -name "*.kt" -type f | while read f; do
+  if grep -qE "io\.mockk|java\.io\.File|java\.util\.concurrent|@ParameterizedTest|@TempDir|@MethodSource|@EnumSource|@CsvSource|@ValueSource|@ArgumentsSource|System\.getProperty|ClassLoader" "$f"; then continue; fi
+  echo "$f"
+done > /tmp/bucket_a_retry_candidates.txt
+wc -l /tmp/bucket_a_retry_candidates.txt
+```
+
+The count should be similar to the original 69. For each candidate, now check whether it still has blockers AFTER Tasks 3a-3d:
+- `KoinTestBase` usage → change to `CommonKoinTestBase` (superclass rename).
+- `EditingContextFactory` usage → now portable (interface is in commonMain).
+- `TestContextBuilder` / `TestTopologies` usage → now portable.
+- `MockSimulationContext` usage with `String` overloads → portable; with `InputStream` overloads → still blocked, demote.
+- `@Nested` usage → flatten (inner class → top-level class, repackaged as sibling files if needed).
+- `@Tag("integration-test")` → demote (as before).
+- `TrackTestMocks` usage → demote (Bucket D will handle it).
+
+- [ ] **Step 3e.2:** Convert files in the candidate list following the procedure in the original Task 3 (Step 3.2), with the additional step of changing `extends KoinTestBase` to `extends CommonKoinTestBase` where applicable, and flattening `@Nested` inner classes.
+
+- [ ] **Step 3e.3:** Final sweep:
+```bash
+./gradlew :core:jvmTest :core:linuxX64Test
+```
+Both green. JVM ≥ 1862. linuxX64 significantly higher (target: 555 + test-methods-in-moved-files, likely 800+).
+
+- [ ] **Step 3e.4:** Commit:
+```bash
+git commit -m "test(commonTest): migrate Bucket A after infrastructure port
+
+With EditingContextFactory interface, CommonKoinTestBase,
+TestContextBuilder, TestTopologies, and MockSimulationContext now
+available in commonMain, N jvmTest files are portable. Per-file
+@Nested flattening performed where needed.
+
+K files demoted (MockK usage → Bucket D, @Tag(integration-test), or
+additional JVM blockers surfaced during conversion)."
+```
+
+---
+
 ## Task 3: Bucket A — Trivial JUnit5→kotlin.test migration (~35 files)
 
 Files in this bucket use JUnit5 with no parameterized tests, no MockK, no File I/O, and no `java.util.concurrent`. The change is mechanical.
