@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
-import org.koin.java.KoinJavaComponent.getKoin
+import org.koin.mp.KoinPlatformTools
 
 /**
  * Common network topology fixtures for testing (core module version).
@@ -133,7 +133,7 @@ object TestTopologies {
 
 	fun yJunctionWithSwitchSimulation(): SimulationContext {
 		val editingContext = yJunctionWithSwitch()
-		val processFactory = getKoin().get<SimulationProcessFactory>()
+		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
@@ -142,7 +142,7 @@ object TestTopologies {
 		semaphoresAllowing: Boolean = false
 	): SimulationContext {
 		val editingContext = linearPathWithSemaphoreSequence(semaphoreCount, semaphoresAllowing)
-		val processFactory = getKoin().get<SimulationProcessFactory>()
+		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
