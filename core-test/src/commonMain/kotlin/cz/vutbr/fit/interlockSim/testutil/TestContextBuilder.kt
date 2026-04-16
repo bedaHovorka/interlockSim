@@ -24,10 +24,12 @@ import org.koin.mp.KoinPlatformTools
  * Test utility for building DefaultSimulationContext instances with fluent API.
  */
 class TestContextBuilder {
-	// Use DefaultEditingContext for building the network (supports putCell/joinCells)
+	// Use DefaultEditingContext for building the network (supports putCell/joinCells).
+	// Grid size matches XMLContextFactory.DEFAULT_GRID_SIZE (100×100) so that contexts
+	// built here are geometrically equivalent to contexts loaded from XML in JVM tests.
 	private val editingContext =
 		cz.vutbr.fit.interlockSim.context
-			.DefaultEditingContext(30, 30)
+			.DefaultEditingContext(100, 100)
 
 	fun withInOut(
 		name: String,
@@ -98,17 +100,35 @@ class TestContextBuilder {
 		return this
 	}
 
+	/**
+	 * Build a fully-constructed DefaultSimulationContext from the accumulated editing state.
+	 *
+	 * Note: this helper depends on [SimulationProcessFactory] via Koin. As of Bucket 0,
+	 * that factory is JVM-only, so this helper is practically usable only from JVM tests.
+	 * Native consumers must provide their own Koin binding for [SimulationProcessFactory].
+	 *
+	 * The dynamic-wrapper mapping (staticToDynamicMap) is established by
+	 * [DefaultSimulationContext.fromEditingContext] via GridTransformer, which is equivalent
+	 * to the ContextTransformer.createSimulationContext() path used in JVM production code.
+	 * [DefaultSimulationContext.run] also calls initializeDynamicMapping() internally.
+	 */
 	fun buildSimulationContext(): DefaultSimulationContext {
 		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
+	/**
+	 * Returns the editing context that has been built up through the fluent API.
+	 * This is the primary accessor for the underlying context under test.
+	 */
 	fun buildEditingContext(): DefaultEditingContext = editingContext
 }
 
 fun buildLinearTrack(): DefaultSimulationContext {
 	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-	val editingContext = DefaultEditingContext(30, 30)
+	// 100×100 matches XMLContextFactory.DEFAULT_GRID_SIZE — same as the original
+	// Koin-injected editingFactory.createEmptyContext() used before this helper moved to commonMain.
+	val editingContext = DefaultEditingContext(100, 100)
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -137,7 +157,9 @@ fun buildLinearTrack(): DefaultSimulationContext {
 
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
-	val editingContext = DefaultEditingContext(30, 30)
+	// 100×100 matches XMLContextFactory.DEFAULT_GRID_SIZE — same as the original
+	// Koin-injected editingFactory.createEmptyContext() used before this helper moved to commonMain.
+	val editingContext = DefaultEditingContext(100, 100)
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
