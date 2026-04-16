@@ -50,7 +50,16 @@ abstract class CommonKoinTestBase : KoinComponent {
 		startKoin {
 			modules(getTestModule())
 		}
+		afterKoinSetUp()
 	}
+
+	/**
+	 * Hook called after Koin is started. Subclasses that need to initialize
+	 * fields using injected dependencies should override this method instead
+	 * of annotating their own setUp with [@BeforeTest], since on Kotlin/Native
+	 * the ordering of [@BeforeTest] between superclass and subclass is undefined.
+	 */
+	protected open fun afterKoinSetUp() {}
 
 	@AfterTest
 	fun tearDownKoin() {
