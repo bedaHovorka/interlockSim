@@ -47,7 +47,7 @@ import org.koin.java.KoinJavaComponent.getKoin
  */
 @Tag("integration-test")
 class InOutIntegrationTest {
-	private lateinit var factory: EditingContextFactory
+	private lateinit var factory: JvmEditingContextFactory
 
 	@BeforeEach
 	fun setUp() {

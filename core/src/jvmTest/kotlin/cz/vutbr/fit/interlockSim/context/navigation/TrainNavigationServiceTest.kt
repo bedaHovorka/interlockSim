@@ -21,7 +21,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -137,7 +137,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns path with multiple blocks all owned`() {
 			// Arrange: Load vyhybna.xml (7 blocks, complex topology)
-			val editingContextFactory: EditingContextFactory by inject()
+			val editingContextFactory: JvmEditingContextFactory by inject()
 			TestFixtures.loadShuntingXml().use { xmlStream ->
 				editingContextFactory.createContext(xmlStream).use { editingCtx ->
 					val editingContext = editingCtx as DefaultEditingContext
@@ -187,7 +187,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Ownership Conflicts")
 	inner class OwnershipConflictTests {
-		private val editingContextFactory: EditingContextFactory by inject()
+		private val editingContextFactory: JvmEditingContextFactory by inject()
 		private val simulationContextFactory: SimulationContextFactory by inject()
 
 		private lateinit var context: DefaultSimulationContext
@@ -350,7 +350,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Edge Cases")
 	inner class EdgeCaseTests {
-		private val editingContextFactory: EditingContextFactory by inject()
+		private val editingContextFactory: JvmEditingContextFactory by inject()
 		private val simulationContextFactory: SimulationContextFactory by inject()
 
 		@Test
@@ -548,7 +548,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Block Extraction")
 	inner class BlockExtractionTests {
-		private val editingContextFactory: EditingContextFactory by inject()
+		private val editingContextFactory: JvmEditingContextFactory by inject()
 		private val simulationContextFactory: SimulationContextFactory by inject()
 
 		private lateinit var context: DefaultSimulationContext
@@ -661,7 +661,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Multi-Train Navigation Coordination")
 	inner class MultiTrainNavigationCoordination {
-		private val editingContextFactory: EditingContextFactory by inject()
+		private val editingContextFactory: JvmEditingContextFactory by inject()
 		private val simulationContextFactory: SimulationContextFactory by inject()
 
 		private lateinit var context: DefaultSimulationContext

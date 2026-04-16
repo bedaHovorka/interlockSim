@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.AutoNameGenerator
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
@@ -691,7 +692,7 @@ class RailwayNetGridCanvas :
 	}
 
 	// Helper to get editing context factory
-	private fun getEditingContextFactory(): EditingContextFactory = getKoin().get<EditingContextFactory>()
+	private fun getEditingContextFactory(): JvmEditingContextFactory = getKoin().get<JvmEditingContextFactory>()
 
 	companion object {
 		private val logger = KotlinLogging.logger {}

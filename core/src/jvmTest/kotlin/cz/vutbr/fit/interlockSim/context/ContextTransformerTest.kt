@@ -60,7 +60,7 @@ import org.koin.test.inject
  */
 @DisplayName("ContextTransformer")
 class ContextTransformerTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 	private val transformer: ContextTransformer by inject()
 	private val processFactory: SimulationProcessFactory by inject()

@@ -51,7 +51,7 @@ import org.koin.test.inject
  */
 @DisplayName("Context Initialization")
 class ContextInitializationTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Nested

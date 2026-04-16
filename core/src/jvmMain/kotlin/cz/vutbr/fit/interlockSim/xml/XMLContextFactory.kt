@@ -13,7 +13,7 @@ import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.util.ValidationResult
 import cz.vutbr.fit.interlockSim.util.ValidationUtils
 import cz.vutbr.fit.interlockSim.util.Util
@@ -37,7 +37,7 @@ import java.lang.reflect.InvocationTargetException
  * - [XmlContextReader] for XML parsing
  * - [XmlContextWriter] for XML serialization
  */
-class XMLContextFactory : EditingContextFactory {
+class XMLContextFactory : JvmEditingContextFactory {
 
 	// Issue #60: Track length validation implemented in Train constructor
 	// Validation occurs at train creation time when both train length and topology are available

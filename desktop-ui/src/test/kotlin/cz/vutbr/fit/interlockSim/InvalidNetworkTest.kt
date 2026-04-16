@@ -13,7 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isFailure
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import org.junit.jupiter.api.*
 import org.koin.test.inject
@@ -48,7 +48,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
 @DisplayName("Invalid Network Configuration Tests")
 @Timeout(value = 15, unit = TimeUnit.SECONDS)
 class InvalidNetworkTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 
 	@Nested
 	@DisplayName("Missing Required Elements")

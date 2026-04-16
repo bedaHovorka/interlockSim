@@ -16,7 +16,7 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -47,7 +47,7 @@ class ReservationResultTest : KoinTestBase() {
 		// so the per-test lifecycle remains unchanged.
 		val koinApp = startKoin { modules(coreTestModule) }
 		try {
-			val editingContextFactory = koinApp.koin.get<EditingContextFactory>()
+			val editingContextFactory = koinApp.koin.get<JvmEditingContextFactory>()
 			val simulationContextFactory = koinApp.koin.get<SimulationContextFactory>()
 			val xmlStream: InputStream =
 				TestFixtures.loadShuntingXml()

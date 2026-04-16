@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
@@ -41,7 +41,7 @@ private val logger = KotlinLogging.logger {}
  *
  */
 class Main {
-	private val editingContextFactory: EditingContextFactory by getKoin().inject()
+	private val editingContextFactory: JvmEditingContextFactory by getKoin().inject()
 	private val exampleRegistry: ExampleRegistry by getKoin().inject()
 	private val simulationContextFactory: SimulationContextFactory by getKoin().inject()
 	private val frame: Frame by lazy { getKoin().get<Frame>() }

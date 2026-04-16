@@ -21,7 +21,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -79,7 +79,7 @@ private val logger = KotlinLogging.logger {}
  */
 @DisplayName("TopologyNavigator - ShuntingLoop Path Discovery (Issue #296)")
 class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 
 	private lateinit var context: EditingContext
 	private lateinit var navigator: TopologyNavigator

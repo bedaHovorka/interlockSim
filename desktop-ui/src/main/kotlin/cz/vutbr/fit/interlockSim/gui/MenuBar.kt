@@ -11,7 +11,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.event.ActionEvent
@@ -188,7 +188,7 @@ class MenuBar : JMenuBar() {
 	 * @return true if save succeeded, false otherwise
 	 */
 	private fun performSave(file: File): Boolean {
-		val editingContextFactory = getKoin().get<EditingContextFactory>()
+		val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
 		val frame = getKoin().get<Frame>()
 		val editingContext = frame.railwayNetGridCanvas.getEditingContext()
 

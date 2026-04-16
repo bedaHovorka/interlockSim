@@ -9,7 +9,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -52,7 +52,7 @@ import org.koin.test.inject
 class SwitchConfigurationTest : KoinTestBase() {
 	private lateinit var context: SimulationContext
 	private val processFactory by inject<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
-	private val editingContextFactory by inject<EditingContextFactory>()
+	private val editingContextFactory by inject<JvmEditingContextFactory>()
 
 	// Grid elements (from vyhybna.xml)
 	private lateinit var vA: DynamicRailSwitch // at (15,8)

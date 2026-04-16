@@ -14,6 +14,7 @@ import cz.vutbr.fit.interlockSim.Main
 import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
@@ -65,7 +66,9 @@ val editingModule: Module =
 	module {
 		// XMLContextFactory is now defined in xmlModule as a singleton, but not in future
 		// Bind factory interfaces to the singleton XMLContextFactory instance
-		single<EditingContextFactory> { get<XMLContextFactory>() }
+		single<JvmEditingContextFactory> { get<XMLContextFactory>() }
+		// Also bind as the portable supertype so commonTest/JVM-agnostic code can inject EditingContextFactory
+		single<EditingContextFactory> { get<JvmEditingContextFactory>() }
 	}
 
 /**
@@ -94,7 +97,7 @@ val simulationDesktopModule: Module =
 		// Singleton as factory is stateless, receives both editing factory and process factory via DI
 		single<SimulationContextFactory> {
 			DefaultSimulationContextFactory(
-				get<EditingContextFactory>(),
+				get<JvmEditingContextFactory>(),
 				get<SimulationProcessFactory>()
 			)
 		}

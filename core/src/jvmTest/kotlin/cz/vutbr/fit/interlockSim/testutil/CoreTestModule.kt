@@ -6,6 +6,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
@@ -28,7 +29,7 @@ import java.io.OutputStream
 /**
  * EditingContextFactory for core tests — delegates to XMLContextFactory directly.
  */
-private class CoreTestEditingContextFactory : EditingContextFactory {
+private class CoreTestEditingContextFactory : JvmEditingContextFactory {
 	private val xmlFactory = XMLContextFactory()
 
 	override fun createEmptyContext(): EditingContext = xmlFactory.createEmptyContext()
@@ -67,10 +68,11 @@ val coreTestModule: Module =
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
 		single { GridTransformer }
 		single { ContextTransformer }
-		single<EditingContextFactory> { CoreTestEditingContextFactory() }
+		single<JvmEditingContextFactory> { CoreTestEditingContextFactory() }
+		single<EditingContextFactory> { get<JvmEditingContextFactory>() }
 		single<SimulationContextFactory> {
 			DefaultSimulationContextFactory(
-				get<EditingContextFactory>(),
+				get<JvmEditingContextFactory>(),
 				get<SimulationProcessFactory>()
 			)
 		}
