@@ -15,8 +15,12 @@ import assertk.assertions.*
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.providers.SwitchActiveSegmentsProvider
+import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -441,6 +445,149 @@ class DynamicRailSwitchTest {
 			// Listener was removed; further fires must not call it again
 			dynamicSwitch1.changeConf()
 			assertThat(callCount).isEqualTo(countAfterFirstFire)
+		}
+	}
+
+	// ========== lock / unlock listener notification tests ==========
+	// For SIMPLE_LEFT_FALSE HORIZONTAL:
+	//   merging=A, mainDir=F, branch=E
+	//   setUpPath(A,F,...) or setUpPath(F,A,...) → MAIN conf
+	//   setUpPath(A,E,...) or setUpPath(E,A,...) → BRANCH conf
+
+	@Nested
+	@DisplayName("Lock and Unlock listener notifications")
+	inner class LockUnlockListenerNotifications {
+
+		@Test
+		fun `lock fires locked property change event`() {
+			// Given: listener registered and switch is unlocked
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: lock() is called
+			dynamicSwitch1.lock()
+
+			// Then: exactly one "locked" event fired
+			val lockedEvents = capturedEvents.filter { it.propertyName == "locked" }
+			assertThat(lockedEvents).hasSize(1)
+			assertThat(lockedEvents[0].oldValue).isEqualTo(false)
+			assertThat(lockedEvents[0].newValue).isEqualTo(true)
+		}
+
+		@Test
+		fun `unlock fires locked property change event`() {
+			// Given: switch is locked
+			dynamicSwitch1.lock()
+
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: unlock() is called
+			dynamicSwitch1.unlock()
+
+			// Then: exactly one "locked" event fired
+			val lockedEvents = capturedEvents.filter { it.propertyName == "locked" }
+			assertThat(lockedEvents).hasSize(1)
+			assertThat(lockedEvents[0].oldValue).isEqualTo(true)
+			assertThat(lockedEvents[0].newValue).isEqualTo(false)
+		}
+
+		@Test
+		fun `lock is idempotent - no event fired on second call`() {
+			dynamicSwitch1.lock()
+
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// Second lock() call must be a no-op
+			dynamicSwitch1.lock()
+
+			assertThat(capturedEvents).isEmpty()
+		}
+
+		@Test
+		fun `unlock is idempotent - no event fired when already unlocked`() {
+			// switch is already unlocked (initial state)
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			dynamicSwitch1.unlock()
+
+			assertThat(capturedEvents).isEmpty()
+		}
+	}
+
+	@Nested
+	@DisplayName("setUpPath listener notifications")
+	inner class SetUpPathListenerNotifications {
+
+		private val mockOccupant: TrackOccupant = mockk(relaxed = true)
+
+		@Test
+		fun `setUpPath fires conf event when configuration changes`() {
+			// Given: switch starts in MAIN conf; listener registered
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: setUpPath is called with BRANCH segments (A,E) → changes conf to BRANCH
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.E, 8.0, mockOccupant)
+
+			// Then: exactly one "conf" event fired (MAIN → BRANCH)
+			val confEvents = capturedEvents.filter { it.propertyName == "conf" }
+			assertThat(confEvents).hasSize(1)
+			assertThat(confEvents[0].oldValue).isEqualTo(Conf.MAIN)
+			assertThat(confEvents[0].newValue).isEqualTo(Conf.BRANCH)
+		}
+
+		@Test
+		fun `setUpPath does not fire conf event when configuration stays same`() {
+			// Given: switch is in MAIN conf; listener registered
+			assertThat(dynamicSwitch1.conf).isEqualTo(Conf.MAIN)
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: setUpPath is called with MAIN segments (A,F) → conf stays MAIN
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+
+			// Then: no "conf" event (conf unchanged)
+			val confEvents = capturedEvents.filter { it.propertyName == "conf" }
+			assertThat(confEvents).isEmpty()
+		}
+
+		@Test
+		fun `setUpPath always fires locked event via lock()`() {
+			// Given: listener registered
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: setUpPath → internally calls lock() which fires locked event
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+
+			// Then: "locked" event fired (false → true)
+			val lockedEvents = capturedEvents.filter { it.propertyName == "locked" }
+			assertThat(lockedEvents).hasSize(1)
+			assertThat(lockedEvents[0].oldValue).isEqualTo(false)
+			assertThat(lockedEvents[0].newValue).isEqualTo(true)
+		}
+
+		@Test
+		fun `cancelPathSetup fires unlock event via unlock()`() {
+			// Given: switch is locked after setUpPath
+			dynamicSwitch1.setUpPath(Cell.Segment.A, Cell.Segment.F, 8.0, mockOccupant)
+			assertThat(dynamicSwitch1.locked).isTrue()
+
+			val capturedEvents = mutableListOf<ContextChangeEvent>()
+			dynamicSwitch1.addPropertyChangeListener { capturedEvents.add(it) }
+
+			// When: cancelPathSetup → internally calls unlock() which fires locked event
+			dynamicSwitch1.cancelPathSetup(Cell.Segment.A, Cell.Segment.F)
+
+			// Then: "locked" event fired (true → false)
+			val lockedEvents = capturedEvents.filter { it.propertyName == "locked" }
+			assertThat(lockedEvents).hasSize(1)
+			assertThat(lockedEvents[0].oldValue).isEqualTo(true)
+			assertThat(lockedEvents[0].newValue).isEqualTo(false)
 		}
 	}
 }

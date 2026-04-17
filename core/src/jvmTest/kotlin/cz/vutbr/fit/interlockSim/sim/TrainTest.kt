@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -172,6 +174,52 @@ class TrainTest : KoinTestBase() {
 
 			// Assert - Should return 0.0 when no path exists
 			assertThat(distance).isEqualTo(0.0)
+		}
+	}
+
+	@Nested
+	@DisplayName("Train counter increment")
+	inner class TrainCounterTests {
+
+		@Test
+		fun constructor_multipleCalls_namesIncrement() {
+			// Two consecutively created trains must have different names
+			val t1 = Train(mockContext, createTimetableWithLength(50.0))
+			val t2 = Train(mockContext, createTimetableWithLength(50.0))
+
+			// Both names must follow the "Train #N" format
+			assertThat(t1.name).contains("Train #")
+			assertThat(t2.name).contains("Train #")
+			// The names must differ (counter increments)
+			assertThat(t1.name).isNotEqualTo(t2.name)
+		}
+
+		@Test
+		fun constructor_trainName_containsNumber() {
+			val train = Train(mockContext, createTimetableWithLength(100.0))
+			// Name must be non-null and include the "Train #" prefix
+			assertThat(train.name).isNotNull()
+			assertThat(train.name).contains("Train #")
+		}
+	}
+
+	@Nested
+	@DisplayName("formatApprovalMessage")
+	inner class FormatApprovalMessageTests {
+
+		@Test
+		fun formatApprovalMessage_returnsExpectedFormat() {
+			val result = Train.formatApprovalMessage("Train #1", "IN_A", "OUT_B")
+			// Must match the format consumed by TextReporter regex
+			assertThat(result).contains("""train="Train #1"""")
+			assertThat(result).contains("route=IN_A->OUT_B")
+		}
+
+		@Test
+		fun formatApprovalMessage_differentArguments_differentResults() {
+			val msg1 = Train.formatApprovalMessage("Train #1", "IN", "OUT")
+			val msg2 = Train.formatApprovalMessage("Train #2", "IN", "OUT")
+			assertThat(msg1).isNotEqualTo(msg2)
 		}
 	}
 
