@@ -447,10 +447,6 @@ val checkCoreCommonMainPurity by tasks.registering {
 	val commonMainDir = file("src/commonMain/kotlin")
 	inputs.dir(commonMainDir)
 		.withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-	outputs.upToDateWhen { true }
-	inputs.dir(commonMainDir)
-		.withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-	outputs.upToDateWhen { true }
 
 	doLast {
 		if (!commonMainDir.exists()) {
