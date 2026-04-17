@@ -37,7 +37,11 @@ open class Generator(
 	}
 
 	protected var random = Random(0L)
-	private val shuffleRandom = random.asKotlinRandom()
+		set(value) {
+			field = value
+			shuffleRandom = value.asKotlinRandom()
+		}
+	private var shuffleRandom = random.asKotlinRandom()
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
