@@ -15,7 +15,8 @@
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
-import assertk.assertions.isNotNull
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
@@ -42,42 +43,10 @@ class TransformationValidationTest : CommonKoinTestBase() {
 			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
 			simulationContextFactory.createContext(editingContext).use { simulationContext ->
-				assertThat(simulationContext).isNotNull()
-				assertThat(simulationContext.getRailWayNetGrid()).isNotNull()
-				assertThat(simulationContext.getGraph()).isNotNull()
-				assertThat(simulationContext.getInOuts().size).isNotNull()
+				assertThat(simulationContext.getInOuts().size).isEqualTo(2)
+				assertThat(simulationContext.getGraph().size()).isEqualTo(1)
 			}
 		}
-	}
-
-	@Test
-	fun `validation would fail for grid dimension mismatch if possible`() {
-		// Not testable with current API — grid dimensions always copied correctly
-	}
-
-	@Test
-	fun `validation would fail for missing wrappers if transformation incomplete`() {
-		// Not testable without mocking GridTransformer
-	}
-
-	@Test
-	fun `validation would fail for graph size mismatch if copying incomplete`() {
-		// Not testable without mocking graph copying
-	}
-
-	@Test
-	fun `validation would fail for InOut list mismatch if copying incomplete`() {
-		// Not testable without mocking InOut copying
-	}
-
-	@Test
-	fun `validation would fail for configuration mismatch if copying incomplete`() {
-		// Not testable without mocking configuration copying
-	}
-
-	@Test
-	fun `validation error messages include specific details`() {
-		// Error message format verified in implementation
 	}
 
 	@Test
@@ -103,11 +72,12 @@ class TransformationValidationTest : CommonKoinTestBase() {
 			editingContext.currentNameString = "ComplexNetwork"
 
 			simulationContextFactory.createContext(editingContext).use { simulationContext ->
-				assertThat(simulationContext).isNotNull()
-				assertThat(simulationContext.getInOuts().size).isNotNull()
-				assertThat((simulationContext as? DefaultSimulationContext)?.currentMaxSpeed).isNotNull()
-				assertThat((simulationContext as? DefaultSimulationContext)?.currentTrackLength).isNotNull()
-				assertThat((simulationContext as? DefaultSimulationContext)?.currentNameString).isNotNull()
+				assertThat(simulationContext.getInOuts().size).isEqualTo(4)
+				assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
+				val simCtx = simulationContext as DefaultSimulationContext
+				assertThat(simCtx.currentMaxSpeed).isEqualTo(120.0)
+				assertThat(simCtx.currentTrackLength).isEqualTo(2200.0)
+				assertThat(simCtx.currentNameString).isEqualTo("ComplexNetwork")
 			}
 		}
 	}
