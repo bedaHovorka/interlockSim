@@ -15,7 +15,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isNotNull
 import assertk.assertions.isNotSameInstanceAs
-import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
@@ -279,24 +278,32 @@ class GeneratorTest : KoinTestBase() {
 		 * Test: successive random timetable generations vary when shuffleInOuts is enabled.
 		 *
 		 * This verifies the observable behavior that matters: repeated generations on the
-		 * same Generator instance should not keep producing the same shuffled result.
+		 * same Generator instance should not keep producing the same shuffled InOut result.
 		 * Reflection is used only to invoke the non-public generation method, not to
 		 * assert private field names or object identity details.
 		 */
 		@Test
 		fun `successive random timetable generations produce varied results when shuffling is enabled`() {
-			// Arrange
+			// Arrange: create generator with shuffleInOuts enabled
 			val generator = Generator(mockContext, shuffleInOuts = true)
+
+			// Inject a minimal kDisco SimulationContext so Process.time() returns 0.0
+			// instead of NPE-ing (context is null until a simulation is running).
+			val kdiscoContextClass = Class.forName("cz.hovorka.kdisco.SimulationContext")
+			val kdiscoContext = kdiscoContextClass.getConstructor().newInstance()
+			val setContextMethod = cz.hovorka.kdisco.Process::class.java
+				.getMethod("setContext\$kdisco_core", kdiscoContextClass)
+			setContextMethod.invoke(generator, kdiscoContext)
+
+			// Invoke generateRandomTimetable() via reflection 8 times and collect 'from' InOut names
 			val method = Generator::class.java.getDeclaredMethod("generateRandomTimetable")
 			method.isAccessible = true
+			val fromNames = (1..8).map {
+				(method.invoke(generator) as Timetable).getIn().name
+			}.toSet()
 
-			// Act
-			val generatedTimetables = (1..8)
-				.map { method.invoke(generator).toString() }
-				.toSet()
-
-			// Assert
-			assertThat(generatedTimetables.size).isGreaterThan(1)
+			// Assert: with shuffleInOuts=true on a 2-InOut context, orderings should vary
+			assertThat(fromNames.size).isGreaterThan(1)
 		}
 	}
 
