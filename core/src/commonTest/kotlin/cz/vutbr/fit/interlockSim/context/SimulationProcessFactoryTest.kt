@@ -14,11 +14,10 @@ import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import kotlin.test.Test
+import org.koin.core.component.inject
 
 /**
  * Tests for SimulationProcessFactory pattern implementation.
@@ -28,19 +27,16 @@ import org.koin.test.inject
  * - Factory is injectable from Koin
  * - Contexts use factory for process creation
  */
-@DisplayName("SimulationProcessFactory")
-class SimulationProcessFactoryTest : KoinTestBase() {
+class SimulationProcessFactoryTest : CommonKoinTestBase() {
 	private val processFactory: SimulationProcessFactory by inject()
 
 	@Test
-	@DisplayName("factory is injectable from Koin")
 	fun factoryIsInjectable() {
 		// Assert
 		assertThat(processFactory).isInstanceOf<DefaultSimulationProcessFactory>()
 	}
 
 	@Test
-	@DisplayName("createMainProcess returns Generator")
 	fun createMainProcessReturnsGenerator() {
 		// Arrange
 		val mockContext = createMockSimulationContext()
@@ -53,7 +49,6 @@ class SimulationProcessFactoryTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("createInOutWorker returns InOutWorker")
 	fun createInOutWorkerReturnsInOutWorker() {
 		// Arrange - Create a context with a properly connected InOut
 		val context =

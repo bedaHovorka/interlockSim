@@ -19,7 +19,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -66,7 +66,7 @@ import cz.vutbr.fit.interlockSim.testutil.assertThat as assertThatBlock
  */
 @DisplayName("Simulation Error Handling")
 class SimulationErrorHandlingTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 	private lateinit var validContext: SimulationContext
 

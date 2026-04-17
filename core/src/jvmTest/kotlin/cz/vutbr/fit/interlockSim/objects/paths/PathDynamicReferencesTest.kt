@@ -16,7 +16,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -58,7 +58,7 @@ import org.koin.test.inject
 @DisplayName("Path Dynamic References (Phase 7)")
 @Tag("integration-test")
 class PathDynamicReferencesTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	@Nested

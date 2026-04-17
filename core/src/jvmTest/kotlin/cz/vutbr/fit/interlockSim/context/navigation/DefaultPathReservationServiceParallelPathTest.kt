@@ -6,7 +6,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -39,7 +39,7 @@ import org.koin.test.inject
  * - **Result**: Trains can now discover parallel paths in multi-layer switch networks
  */
 class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private lateinit var context: DefaultSimulationContext

@@ -14,9 +14,9 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
+import kotlin.test.Test
+import org.koin.core.component.inject
 
 /**
  * Test suite for context inheritance structure.
@@ -46,9 +46,9 @@ import org.koin.test.inject
  *
  * @since 2026-01-20
  */
-class ContextInheritanceTest : KoinTestBase() {
+class ContextInheritanceTest : CommonKoinTestBase() {
 	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
+	private val simulationContextFactory: CommonSimulationContextFactory by inject()
 
 	/**
 	 * Test 1: DefaultEditingContext extends BaseContext (not DefaultSimulationContext)

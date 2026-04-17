@@ -17,7 +17,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
@@ -58,7 +58,7 @@ import java.io.InputStream
  */
 @DisplayName("Issue #316 Regression: Cycle Detection Abort Strategy")
 class Issue316RegressionTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private lateinit var simulationContext: DefaultSimulationContext

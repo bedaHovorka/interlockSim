@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.context.ContextTransformer
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -59,7 +59,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 @DisplayName("Edit to Simulation Workflow")
 @Tag("integration-test")
 class EditToSimulationWorkflowTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val transformer: ContextTransformer by inject()
 	private val processFactory: SimulationProcessFactory by inject()
 

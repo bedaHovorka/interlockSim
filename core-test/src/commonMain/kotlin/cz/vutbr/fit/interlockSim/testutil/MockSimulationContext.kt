@@ -5,7 +5,7 @@
 	BSc Thesis       2006/2007
 	Railway Interlocking Simulator
 
-	Test Utility: Mock Simulation Context (core module version)
+	Test Utility: Mock Simulation Context (commonMain — portable class)
 
 	Hovorka Bedrich <xhovor07@stud.fit.vutbr.cz>
 	Test infrastructure: 2025
@@ -14,10 +14,9 @@
 package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -27,12 +26,14 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
-import org.koin.java.KoinJavaComponent.getKoin
-import java.io.InputStream
+import org.koin.mp.KoinPlatformTools
 
 /**
  * Mock implementation of SimulationContext for testing simulation components
  * without requiring kDisco framework initialization.
+ *
+ * The class itself is cross-platform (commonMain). JVM-only factory helpers
+ * that accept InputStream live in core-test/jvmMain (MockSimulationContextJvm.kt).
  */
 class MockSimulationContext(
 	private val delegate: DefaultSimulationContext
@@ -86,7 +87,7 @@ class MockSimulationContext(
 		type: ReportType
 	) {
 		if (isReporting(type)) {
-			println(String.format("[%s] %.2f: %s", type, currentTime, report))
+			println("[$type] $currentTime: $report")
 		}
 	}
 
@@ -140,16 +141,27 @@ class MockSimulationContext(
 	}
 }
 
+/**
+ * Creates an empty [MockSimulationContext] via Koin-provided factories.
+ *
+ * Uses [KoinPlatformTools] (koin-core, cross-platform) instead of the JVM-only
+ * KoinJavaComponent.getKoin(). Requires Koin to be started with a module that
+ * provides [SimulationProcessFactory].
+ */
 fun createMockSimulationContext(): MockSimulationContext {
-	val editingFactory = getKoin().get<EditingContextFactory>()
-	val simulationFactory = getKoin().get<SimulationContextFactory>()
-	val editingContext = editingFactory.createEmptyContext()
-	val defaultContext = simulationFactory.createContext(editingContext) as DefaultSimulationContext
+	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
+	val defaultContext = CommonTestFixtures.createEmptySimulationContext(processFactory)
 	return MockSimulationContext(defaultContext)
 }
 
-fun createMockSimulationContext(xml: InputStream): MockSimulationContext {
-	val simulationFactory = getKoin().get<SimulationContextFactory>()
-	val defaultContext = simulationFactory.createContext(xml) as DefaultSimulationContext
+/**
+ * Creates a [MockSimulationContext] from a raw XML string.
+ *
+ * Uses [CommonTestFixtures.parseSimulationContext] so this overload is cross-platform
+ * (no InputStream). Requires Koin to be started with a module providing [SimulationProcessFactory].
+ */
+fun createMockSimulationContext(xml: String): MockSimulationContext {
+	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
+	val defaultContext = CommonTestFixtures.parseSimulationContext(xml, processFactory)
 	return MockSimulationContext(defaultContext)
 }

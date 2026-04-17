@@ -28,6 +28,9 @@ kotlin {
 		compilerOptions {
 			jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
 		}
+		testRuns["test"].executionTask.configure {
+			useJUnitPlatform()
+		}
 	}
 
 	linuxX64()
@@ -42,6 +45,19 @@ kotlin {
 				implementation("io.insert-koin:koin-core:$koinVersion")
 				// assertk: api so consumers (core, desktop-ui, fast-sim) get it transitively
 				api("com.willowtreeapps.assertk:assertk:$assertkVersion")
+				// kotlin.test: provides @BeforeTest/@AfterTest for CommonKoinTestBase;
+				// commonMain (not commonTest) because core-test is a test-support library
+				// consumed from test source sets of other modules.
+				implementation(kotlin("test"))
+			}
+		}
+		val jvmMain by getting {
+			dependencies {
+				// kotlin-test-junit5: resolves @BeforeTest/@AfterTest on the JVM target;
+				// the base kotlin-test JVM artifact alone does not export these typealiases
+				// when compiled outside a test source set — the junit5 variant makes them
+				// available for commonMain JVM compilation of CommonKoinTestBase.
+				implementation(kotlin("test-junit5"))
 			}
 		}
 	}

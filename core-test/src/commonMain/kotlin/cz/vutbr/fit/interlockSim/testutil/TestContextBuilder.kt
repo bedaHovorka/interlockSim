@@ -16,22 +16,20 @@ package cz.vutbr.fit.interlockSim.testutil
 
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
-import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.util.Point
-import org.koin.java.KoinJavaComponent.getKoin
+import org.koin.mp.KoinPlatformTools
 
 /**
  * Test utility for building DefaultSimulationContext instances with fluent API.
  */
 class TestContextBuilder {
-	private val factory: SimulationContextFactory by getKoin().inject()
-
-	// Use DefaultEditingContext for building the network (supports putCell/joinCells)
+	// Use DefaultEditingContext for building the network (supports putCell/joinCells).
+	// Grid size matches XMLContextFactory.DEFAULT_GRID_SIZE (100×100) so that contexts
+	// built here are geometrically equivalent to contexts loaded from XML in JVM tests.
 	private val editingContext =
 		cz.vutbr.fit.interlockSim.context
-			.DefaultEditingContext(30, 30)
+			.DefaultEditingContext(100, 100)
 
 	fun withInOut(
 		name: String,
@@ -102,18 +100,34 @@ class TestContextBuilder {
 		return this
 	}
 
+	/**
+	 * Build a fully-constructed DefaultSimulationContext from the accumulated editing state.
+	 *
+	 * Requires a [SimulationProcessFactory] Koin binding (provided by [commonCoreTestModule]
+	 * for all targets including linuxX64).
+	 *
+	 * The dynamic-wrapper mapping (staticToDynamicMap) is established by
+	 * [DefaultSimulationContext.fromEditingContext] via GridTransformer, which is equivalent
+	 * to the ContextTransformer.createSimulationContext() path used in JVM production code.
+	 * [DefaultSimulationContext.run] also calls initializeDynamicMapping() internally.
+	 */
 	fun buildSimulationContext(): DefaultSimulationContext {
-		val processFactory = getKoin().get<cz.vutbr.fit.interlockSim.context.SimulationProcessFactory>()
+		val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
 		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
+	/**
+	 * Returns the editing context that has been built up through the fluent API.
+	 * This is the primary accessor for the underlying context under test.
+	 */
 	fun buildEditingContext(): DefaultEditingContext = editingContext
 }
 
 fun buildLinearTrack(): DefaultSimulationContext {
-	val editingFactory = getKoin().get<EditingContextFactory>()
-	val simulationFactory = getKoin().get<SimulationContextFactory>()
-	val editingContext = editingFactory.createEmptyContext()
+	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
+	// 100×100 matches XMLContextFactory.DEFAULT_GRID_SIZE — same as the original
+	// Koin-injected editingFactory.createEmptyContext() used before this helper moved to commonMain.
+	val editingContext = DefaultEditingContext(100, 100)
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -137,13 +151,14 @@ fun buildLinearTrack(): DefaultSimulationContext {
 	editingContext.joinCells(pA, pB, trackBlock)
 
 	// Convert to simulation context
-	return simulationFactory.createContext(editingContext) as DefaultSimulationContext
+	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 }
 
 fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
-	val editingFactory = getKoin().get<EditingContextFactory>()
-	val simulationFactory = getKoin().get<SimulationContextFactory>()
-	val editingContext = editingFactory.createEmptyContext()
+	val processFactory = KoinPlatformTools.defaultContext().get().get<SimulationProcessFactory>()
+	// 100×100 matches XMLContextFactory.DEFAULT_GRID_SIZE — same as the original
+	// Koin-injected editingFactory.createEmptyContext() used before this helper moved to commonMain.
+	val editingContext = DefaultEditingContext(100, 100)
 	val inA =
 		cz.vutbr.fit.interlockSim.objects.cells.InOut(
 			"A",
@@ -175,18 +190,18 @@ fun buildLinearTrackWithSemaphore(): DefaultSimulationContext {
 	editingContext.joinCells(pA, r1, trackBlock)
 
 	// Convert to simulation context
-	return simulationFactory.createContext(editingContext) as DefaultSimulationContext
+	return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 }
 
 fun buildMinimalSimulation(): DefaultSimulationContext =
-	getKoin()
+	KoinPlatformTools.defaultContext().get()
 		.get<TestContextBuilder>()
 		.withInOut("A", 1, 1, true) // entry point
 		.withInOut("B", 2, 1, false) // exit point
 		.buildSimulationContext()
 
 fun buildMinimalEditing(): DefaultEditingContext =
-	getKoin()
+	KoinPlatformTools.defaultContext().get()
 		.get<TestContextBuilder>()
 		.withInOut("A", 1, 1, true) // entry point
 		.withInOut("B", 2, 1, false) // exit point
@@ -196,7 +211,7 @@ fun buildConnectedInOut(
 	inOutName: String = "TEST_INOUT",
 	isEntry: Boolean = false
 ): DefaultSimulationContext {
-	val builder = getKoin().get<TestContextBuilder>()
+	val builder = KoinPlatformTools.defaultContext().get().get<TestContextBuilder>()
 
 	return if (isEntry) {
 		builder

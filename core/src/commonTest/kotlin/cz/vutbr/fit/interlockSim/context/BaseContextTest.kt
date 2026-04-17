@@ -16,10 +16,10 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import kotlin.test.Test
+import org.koin.core.component.inject
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
@@ -40,9 +40,9 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
  *
  * @since 2026-01-20
  */
-class BaseContextTest : KoinTestBase() {
+class BaseContextTest : CommonKoinTestBase() {
 	private val editingContextFactory: cz.vutbr.fit.interlockSim.context.EditingContextFactory by inject()
-	private val simulationContextFactory: SimulationContextFactory by inject()
+	private val simulationContextFactory: CommonSimulationContextFactory by inject()
 
 	// Test cells
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)

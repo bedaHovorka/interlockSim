@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui.action
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.RailwayNetGridCanvas
 import cz.vutbr.fit.interlockSim.gui.gridcanvas.EditorCellRenderer
@@ -55,7 +55,7 @@ class NodeCellAction(
 		): Icon {
 			var cell: Cell? = null
 			try {
-				val f = getKoin().get<EditingContextFactory>()
+				val f = getKoin().get<JvmEditingContextFactory>()
 				cell = f.createNew(context, cellClass, *args) as Cell
 			} catch (e: Exception) {
 				error("Failed to create cell icon: $e")

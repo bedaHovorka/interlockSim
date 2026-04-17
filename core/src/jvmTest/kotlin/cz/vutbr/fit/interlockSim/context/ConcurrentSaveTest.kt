@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class ConcurrentSaveTest : KoinTestBase() {
-	private val editingContextFactory: EditingContextFactory by inject()
+	private val editingContextFactory: JvmEditingContextFactory by inject()
 
 	@TempDir
 	lateinit var tempDir: File

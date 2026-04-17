@@ -74,7 +74,7 @@ private val logger = KotlinLogging.logger {}
  * @since 2026-01-25
  */
 class DefaultSimulationContextFactory(
-	private val editingFactory: EditingContextFactory,
+	private val editingFactory: JvmEditingContextFactory,
 	private val processFactory: SimulationProcessFactory
 ) : SimulationContextFactory {
 	/**

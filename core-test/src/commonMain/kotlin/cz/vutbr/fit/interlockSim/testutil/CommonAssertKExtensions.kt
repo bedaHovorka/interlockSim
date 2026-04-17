@@ -120,3 +120,40 @@ fun <T> Assert<Set<T?>>.containsNull(): Assert<Set<T?>> =
 			expected("to contain null but was:${show(actual)}")
 		}
 	}
+
+/**
+ * Extension function to assert that a List contains a specific element.
+ */
+fun <T> Assert<List<T>>.containsElement(element: T): Assert<List<T>> =
+	apply {
+		given { actual ->
+			if (actual.contains(element)) return@given
+			expected("to contain:${show(element)} but was:${show(actual)}")
+		}
+	}
+
+/**
+ * Extension function to assert that a Collection contains at least one of the given elements.
+ *
+ * Usage: assertThat(collection).containsAnyOf(element1, element2)
+ */
+fun <T> Assert<Collection<T>>.containsAnyOf(vararg elements: T): Assert<Collection<T>> =
+	apply {
+		given { actual ->
+			if (elements.any { actual.contains(it) }) return@given
+			expected("to contain any of:${show(elements.toList())} but was:${show(actual)}")
+		}
+	}
+
+/**
+ * Extension function to assert that a Collection has size greater than or equal to the expected value.
+ *
+ * Usage: assertThat(collection).hasSizeGreaterThanOrEqualTo(1)
+ */
+fun <T> Assert<Collection<T>>.hasSizeGreaterThanOrEqualTo(expected: Int): Assert<Collection<T>> =
+	apply {
+		given { actual ->
+			if (actual.size >= expected) return@given
+			expected("to have size >= $expected but was:${actual.size}")
+		}
+	}

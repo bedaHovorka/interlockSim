@@ -1,7 +1,11 @@
 package cz.vutbr.fit.interlockSim.testutil
 
+import cz.vutbr.fit.interlockSim.context.CommonSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
@@ -27,9 +31,40 @@ import org.koin.dsl.module
  *
  * @since 2026-03-20 (KMP Step 4 — split commonTest for linuxX64)
  */
+/**
+ * Minimal EditingContextFactory for commonTest: only supports createEmptyContext().
+ */
+private class CommonTestEditingContextFactory : EditingContextFactory {
+	override fun createEmptyContext(): EditingContext = DefaultEditingContext(100, 100)
+}
+
+/**
+ * Minimal CommonSimulationContextFactory for commonTest: builds contexts programmatically.
+ */
+private class CommonTestSimulationContextFactory(
+	private val processFactory: SimulationProcessFactory,
+	private val editingContextFactory: EditingContextFactory,
+) : CommonSimulationContextFactory {
+	override fun createContext(editingContext: EditingContext): SimulationContext =
+		DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+
+	override fun createEmptyContext(): SimulationContext =
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+		}
+}
+
 val commonCoreTestModule: Module =
 	module {
 		single<SimulationProcessFactory> { DefaultSimulationProcessFactory() }
+
+		// Provide EditingContextFactory (common-only, no XML/file I/O)
+		single<EditingContextFactory> { CommonTestEditingContextFactory() }
+
+		// Provide CommonSimulationContextFactory (common-only, no XML/file I/O)
+		single<CommonSimulationContextFactory> { CommonTestSimulationContextFactory(get(), get()) }
+
+		factory { TestContextBuilder() }
 
 		// Default editing context factory: creates a minimal linear-track context
 		factory<DefaultEditingContext> {

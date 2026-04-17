@@ -18,13 +18,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import kotlin.test.Test
+import org.koin.core.component.inject
 
 /**
  * Tests for Bresenham line algorithm used in cell joining.
@@ -33,19 +31,16 @@ import org.koin.test.inject
  * points when connecting two cells that are far apart (distance > √2).
  * These tests verify correct behavior through the public joinCells API.
  */
-@DisplayName("Bresenham Line Algorithm (via joinCells)")
-class BresenhamJoinTest : KoinTestBase() {
+class BresenhamJoinTest : CommonKoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private lateinit var context: EditingContext
 
-	@BeforeEach
-	fun setUp() {
+	override fun afterKoinSetUp() {
 		context = editingContextFactory.createEmptyContext()
 		testContext = context // Track for cleanup
 	}
 
 	@Test
-	@DisplayName("Join horizontal cells creates straight horizontal line")
 	fun joinCells_horizontalLine_createsCorrectPath() {
 		// Arrange - Two InOut cells on same horizontal line, distance > √2
 		val start = Point(1, 5)
@@ -75,7 +70,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join vertical cells creates straight vertical line")
 	fun joinCells_verticalLine_createsCorrectPath() {
 		// Arrange - Two InOut cells on same vertical line
 		val start = Point(5, 1)
@@ -105,7 +99,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join diagonal cells creates diagonal line (45 degrees)")
 	fun joinCells_diagonalLine45_createsCorrectPath() {
 		// Arrange - Two cells on 45-degree diagonal
 		// Using positions farther from edges to avoid grid boundary issues
@@ -138,7 +131,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join cells with shallow slope creates correct line")
 	fun joinCells_shallowSlope_createsCorrectPath() {
 		// Arrange - Shallow slope: 8 units horizontal, 3 units vertical
 		val start = Point(1, 1)
@@ -168,7 +160,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join cells with steep slope creates correct line")
 	fun joinCells_steepSlope_createsCorrectPath() {
 		// Arrange - Steep slope: 3 units horizontal, 8 units vertical
 		val start = Point(1, 1)
@@ -197,7 +188,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join cells at short distance (≤ √2) does not use Bresenham")
 	fun joinCells_shortDistance_skipBresenham() {
 		// Arrange - Adjacent cells (distance = 1, which is ≤ √2 ≈ 1.414)
 		val start = Point(5, 5)
@@ -219,7 +209,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join cells at far positions handles correctly")
 	fun joinCells_farPositions_handlesCorrectly() {
 		// Arrange - Diagonal line using far positions (similar to negative coordinate test)
 		// Tests Bresenham with cells far from origin
@@ -249,7 +238,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join cells in reverse direction creates same line")
 	fun joinCells_reverseDirection_createsSameLine() {
 		// Arrange - Same two points but joined in reverse order
 		val p1 = Point(2, 2)
@@ -295,7 +283,6 @@ class BresenhamJoinTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("Join preserves immutability of Point parameters")
 	fun joinCells_immutablePoints_preservesOriginals() {
 		// Arrange
 		val start = Point(1, 1)

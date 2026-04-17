@@ -32,7 +32,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.*
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
 
 /**
  * Comprehensive test suite for TopologyNavigator.
@@ -51,7 +51,7 @@ import org.junit.jupiter.api.Test
  * Each test builds a specific network topology using TestContextBuilder,
  * then verifies TopologyNavigator navigates correctly based only on static structure.
  */
-class TopologyNavigatorTest : KoinTestBase() {
+class TopologyNavigatorTest : CommonKoinTestBase() {
 	// ========================================================================
 	// Linear Path Tests
 	// ========================================================================

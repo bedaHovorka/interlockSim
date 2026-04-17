@@ -17,14 +17,12 @@ import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.util.Point
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
-import org.koin.test.inject
+import kotlin.test.Test
+import org.koin.core.component.inject
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
@@ -34,14 +32,12 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
  *
  * @since 2026-01 (Java 21 migration)
  */
-@DisplayName("PropertyChange Notification Tests")
-class PropertyChangeTest : KoinTestBase() {
+class PropertyChangeTest : CommonKoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
 	private lateinit var context: EditingContext
 	private lateinit var listener: TestPropertyChangeListener
 
-	@BeforeEach
-	fun setUp() {
+	override fun afterKoinSetUp() {
 		context = editingContextFactory.createEmptyContext()
 		testContext = context // Track for cleanup
 		listener = TestPropertyChangeListener()
@@ -49,7 +45,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("putCell fires CELL_ADDED event")
 	fun putCell_firesPropertyChange() {
 		val position = Point(5, 5)
 		val inOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -63,7 +58,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("removeCell fires CELL_REMOVED event")
 	fun removeCell_firesPropertyChange() {
 		val position = Point(5, 5)
 		val inOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -79,7 +73,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("joinCells fires PropertyChange event (success or failure)")
 	fun joinCells_firesPropertyChangeEvent() {
 		// Setup two cells and attempt to join them
 		// The join may succeed or fail depending on railway logic, but should fire an event
@@ -101,7 +94,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("joinCells failure fires JOIN_FAILED event")
 	fun joinCells_failure_firesPropertyChange() {
 		// Setup two cells that cannot be joined (too close)
 		val key1 = Point(5, 5)
@@ -121,7 +113,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("multiple listeners all receive events")
 	fun multipleListeners_allReceiveEvents() {
 		val listener2 = TestPropertyChangeListener()
 		context.addPropertyChangeListener(listener2)
@@ -134,7 +125,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("removePropertyChangeListener stops receiving events")
 	fun removeListener_stopsReceivingEvents() {
 		context.removePropertyChangeListener(listener)
 
@@ -145,7 +135,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("currentMaxSpeed setter fires property change event")
 	fun currentMaxSpeed_setter_firesPropertyChange() {
 		val baseContext = context as BaseContext<*>
 		listener.events.clear()
@@ -162,7 +151,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("currentTrackLength setter fires property change event")
 	fun currentTrackLength_setter_firesPropertyChange() {
 		val baseContext = context as BaseContext<*>
 		listener.events.clear()
@@ -179,7 +167,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("currentNameString setter fires property change event")
 	fun currentNameString_setter_firesPropertyChange() {
 		val baseContext = context as BaseContext<*>
 		listener.events.clear()
@@ -196,7 +183,6 @@ class PropertyChangeTest : KoinTestBase() {
 	}
 
 	@Test
-	@DisplayName("setting property to same value does not fire event")
 	fun setPropertyToSameValue_doesNotFireEvent() {
 		val baseContext = context as BaseContext<*>
 		listener.events.clear()

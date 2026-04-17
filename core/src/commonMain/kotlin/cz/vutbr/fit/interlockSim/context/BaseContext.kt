@@ -336,8 +336,7 @@ abstract class BaseContext<T : TrackBlock>(
 		if (!frozen) {
 			frozen = true
 			logger.info { "Context frozen - network structure is now immutable" }
-			val snapshot = listeners
-			snapshot.forEach { it.propertyChange(ContextChangeEvent("frozen", false, true)) }
+			firePropertyChangeAlways("frozen", false, true)
 		}
 	}
 

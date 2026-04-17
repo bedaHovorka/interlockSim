@@ -14,10 +14,8 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
+import kotlin.test.Test
 
-@DisplayName("Context exception constructors (Issue #453)")
 class ContextExceptionsTest {
 	private val testMessage = "context test failure"
 	private val testCause = RuntimeException("root cause")
