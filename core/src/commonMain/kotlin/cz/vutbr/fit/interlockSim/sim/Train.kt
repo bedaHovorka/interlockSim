@@ -823,10 +823,10 @@ class Train :
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
 		trainNavService = env.getTrainNavigationService()
-		
+
 		// Issue #60: Validate train length against track distance between InOuts
 		validateTrainLength(env, validatedTimetable, this.length)
-		
+
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
 
