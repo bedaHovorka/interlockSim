@@ -29,8 +29,8 @@
  *
  * The `checkCoreCommonMainPurity` task (declared later in this file
  * under "CommonMain Purity Gate") enforces that commonMain stays free
- * of `java.*` / `javax.*` imports so the day a non-JVM target is
- * enabled, nothing in commonMain has to move.
+ * of `java.*` / `javax.*` / `android.*` imports so the day a non-JVM
+ * target is enabled, nothing in commonMain has to move.
  */
 
 plugins {
@@ -432,12 +432,16 @@ tasks.named("compileKotlinJvm") {
 // ===========================================
 // CommonMain Purity Gate
 // ===========================================
-// Ensures commonMain stays free of JVM-only imports (java.*, javax.*) and idioms.
-// This is required for adding non-JVM KMP targets in the future.
+// Ensures commonMain stays free of JVM-only imports (java.*, javax.*, android.*)
+// and JVM-only idioms (System.*). This is required for adding non-JVM KMP targets
+// in the future.
+//
+// Detection strategy: deny-list of known-bad patterns. Any match fails the build.
+// This is more robust than a whitelist: new JVM-only APIs are caught automatically.
 
 val checkCoreCommonMainPurity by tasks.registering {
 	group = "verification"
-	description = "Verify :core commonMain contains no java.* or javax.* imports"
+	description = "Verify :core commonMain contains no java.*, javax.*, android.* imports or System.* calls"
 
 	val commonMainDir = file("src/commonMain/kotlin")
 
@@ -447,15 +451,17 @@ val checkCoreCommonMainPurity by tasks.registering {
 			return@doLast
 		}
 
-		// Catch import-level java.*/javax.* references
-		val importRegex = Regex("^import\\s+(java|javax)\\..*")
+		// Catch import-level java.*/javax.*/android.* references
+		val importRegex = Regex("^import\\s+(java|javax|android)\\..*")
 		// Catch inline fully-qualified java.* references (e.g. java.util.TreeSet, java.lang.*)
 		val inlineJavaRegex = Regex("(?<![\\w])java\\.[a-z]")
+		// Catch inline fully-qualified android.* references (e.g. android.os.Bundle)
+		val inlineAndroidRegex = Regex("(?<![\\w])android\\.[a-z]")
 		// Catch System.* calls (java.lang.System is implicitly available on JVM only)
 		val systemRegex = Regex("(?<![\\w.])System\\.[a-zA-Z]")
 		val violations = mutableListOf<String>()
 
-		project.fileTree(commonMainDir).matching { include("**/*.kt") }.forEach { file ->
+		commonMainDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
 			val lines = file.readLines()
 			lines.forEachIndexed { index, line ->
 				val trimmed = line.trim()
@@ -463,6 +469,7 @@ val checkCoreCommonMainPurity by tasks.registering {
 				if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
 				val hasViolation = importRegex.containsMatchIn(line) ||
 					inlineJavaRegex.containsMatchIn(line) ||
+					inlineAndroidRegex.containsMatchIn(line) ||
 					systemRegex.containsMatchIn(line)
 				if (hasViolation) {
 					if (violations.isEmpty() || violations.last() != file.path) {
@@ -476,7 +483,7 @@ val checkCoreCommonMainPurity by tasks.registering {
 
 		if (violations.isNotEmpty()) {
 			throw org.gradle.api.GradleException(
-				"ERROR: commonMain contains JVM-only code. Move java.*/System.* usages to jvmMain."
+				"ERROR: commonMain contains JVM-only code. Move java.*/javax.*/android.*/System.* usages to jvmMain."
 			)
 		}
 
