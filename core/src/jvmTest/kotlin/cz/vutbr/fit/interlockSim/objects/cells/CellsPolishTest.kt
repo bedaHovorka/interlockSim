@@ -11,7 +11,18 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.*
+import assertk.assertions.contains
+import assertk.assertions.containsAll
+import assertk.assertions.containsExactlyInAnyOrder
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -198,7 +209,11 @@ class CellsPolishTest {
 			"VERTICAL, true, C",
 			"VERTICAL, false, H"
 		)
-		fun `direction returns correct segment`(spatialType: SpatialType, orientation: Boolean, expected: Segment) {
+		fun `direction returns correct segment`(
+			spatialType: SpatialType,
+			orientation: Boolean,
+			expected: Segment
+		) {
 			val cell = InOut("test", orientation, spatialType)
 			assertThat(cell.direction()).isEqualTo(expected)
 		}
@@ -263,7 +278,10 @@ class CellsPolishTest {
 
 		@ParameterizedTest(name = "anti({0}) = {1}")
 		@CsvSource("A, F", "B, G", "C, H", "D, E")
-		fun `anti returns opposite segment`(input: Segment, expected: Segment) {
+		fun `anti returns opposite segment`(
+			input: Segment,
+			expected: Segment
+		) {
 			assertThat(anti(input)).isEqualTo(expected)
 		}
 

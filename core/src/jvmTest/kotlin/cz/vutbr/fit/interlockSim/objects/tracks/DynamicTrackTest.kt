@@ -11,8 +11,22 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.*
+import assertk.assertions.contains
+import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEmpty
+import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -20,8 +34,6 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for DynamicTrack wrapper class
@@ -542,9 +554,10 @@ class DynamicTrackTest {
 		val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
 
 		// Listener that adds a second listener during its callback
-		val firstListener = ContextPropertyChangeListener {
-			dynamicTrack1.addPropertyChangeListener(secondListener)
-		}
+		val firstListener =
+			ContextPropertyChangeListener {
+				dynamicTrack1.addPropertyChangeListener(secondListener)
+			}
 		dynamicTrack1.addPropertyChangeListener(firstListener)
 
 		// When: state changes - should not throw ConcurrentModificationException
@@ -560,10 +573,11 @@ class DynamicTrackTest {
 		// Regression test: listener self-removal during event dispatch must be safe (snapshot).
 		var callCount = 0
 		lateinit var selfRemovingListener: ContextPropertyChangeListener
-		selfRemovingListener = ContextPropertyChangeListener {
-			callCount++
-			dynamicTrack1.removePropertyChangeListener(selfRemovingListener)
-		}
+		selfRemovingListener =
+			ContextPropertyChangeListener {
+				callCount++
+				dynamicTrack1.removePropertyChangeListener(selfRemovingListener)
+			}
 		dynamicTrack1.addPropertyChangeListener(selfRemovingListener)
 
 		// Should not throw; listener removes itself on first event

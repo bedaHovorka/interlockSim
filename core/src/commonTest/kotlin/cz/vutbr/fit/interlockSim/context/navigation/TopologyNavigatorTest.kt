@@ -29,8 +29,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
-import cz.vutbr.fit.interlockSim.testutil.*
+import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
+import cz.vutbr.fit.interlockSim.testutil.containsElement
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.Test
 
