@@ -276,71 +276,27 @@ class GeneratorTest : KoinTestBase() {
 		}
 
 		/**
-		 * Test: Generator has a dedicated shuffleRandom field for shuffle operations.
+		 * Test: successive random timetable generations vary when shuffleInOuts is enabled.
 		 *
-		 * The shuffleRandom is a single seeded kotlin.random.Random instance stored as
-		 * a class property. Reusing it across generateRandomTimetable() calls makes that
-		 * dedicated shuffle RNG explicit and avoids recreating wrapper instances, while
-		 * still allowing its state to advance deterministically and produce varied but
-		 * reproducible shuffle orders.
+		 * This verifies the observable behavior that matters: repeated generations on the
+		 * same Generator instance should not keep producing the same shuffled result.
+		 * Reflection is used only to invoke the non-public generation method, not to
+		 * assert private field names or object identity details.
 		 */
 		@Test
-		fun `generator has shuffleRandom field as stored instance`() {
-			// Arrange & Act
-			val generator = Generator(mockContext, shuffleInOuts = true)
-
-			// Assert
-			val shuffleRandomField = Generator::class.java.getDeclaredField("shuffleRandom")
-			shuffleRandomField.isAccessible = true
-			val shuffleRandomValue = shuffleRandomField.get(generator)
-			assertThat(shuffleRandomValue).isNotNull()
-		}
-
-		/**
-		 * Test: shuffleRandom is a stable reference — the same object is returned
-		 * across multiple accesses (not recreated on each access).
-		 *
-		 * This ensures the RNG state accumulates across calls so successive shuffles
-		 * produce varied orderings.
-		 */
-		@Test
-		fun `shuffleRandom is the same instance across accesses`() {
+		fun `successive random timetable generations produce varied results when shuffling is enabled`() {
 			// Arrange
 			val generator = Generator(mockContext, shuffleInOuts = true)
-			val field = Generator::class.java.getDeclaredField("shuffleRandom")
-			field.isAccessible = true
-
-			// Act - read the field twice
-			val first = field.get(generator)
-			val second = field.get(generator)
-
-			// Assert - same object reference (stored, not recreated)
-			assertThat(first).isNotNull()
-			assertThat(first).isSameInstanceAs(second)
-		}
-
-		/**
-		 * Test: Multiple generators have independent shuffleRandom instances.
-		 *
-		 * Each Generator instance should have its own shuffleRandom so that
-		 * shuffle sequences between generators do not interfere.
-		 */
-		@Test
-		fun `multiple generators have independent shuffleRandom instances`() {
-			// Arrange
-			val generator1 = Generator(mockContext, shuffleInOuts = true)
-			val generator2 = Generator(mockContext, shuffleInOuts = true)
+			val method = Generator::class.java.getDeclaredMethod("generateRandomTimetable")
+			method.isAccessible = true
 
 			// Act
-			val field = Generator::class.java.getDeclaredField("shuffleRandom")
-			field.isAccessible = true
-			val shuffleRandom1 = field.get(generator1)
-			val shuffleRandom2 = field.get(generator2)
+			val generatedTimetables = (1..8)
+				.map { method.invoke(generator).toString() }
+				.toSet()
 
 			// Assert
-			assertThat(shuffleRandom1).isNotNull()
-			assertThat(shuffleRandom2).isNotNull()
-			assertThat(shuffleRandom1).isNotSameInstanceAs(shuffleRandom2)
+			assertThat(generatedTimetables.size).isGreaterThan(1)
 		}
 	}
 
