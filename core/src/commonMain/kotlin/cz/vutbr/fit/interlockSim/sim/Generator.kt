@@ -37,7 +37,7 @@ open class Generator(
 	}
 
 	protected var random = Random(0L)
-	private val shuffleRandom = kotlin.random.Random(0)
+	private val shuffleRandom = random.asKotlinRandom()
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
