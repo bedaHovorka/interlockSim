@@ -230,7 +230,6 @@ class MainArgumentParsingTest {
 		}
 
 		@Test
-		@org.junit.jupiter.api.Disabled("Phase 1: Simulation hangs - requires DynamicTrack integration (Phase 2)")
 		fun `example mode accepts optional end time parameter`() {
 			// Arrange
 			// Use very short simulation time (1 second) to avoid test timeout
