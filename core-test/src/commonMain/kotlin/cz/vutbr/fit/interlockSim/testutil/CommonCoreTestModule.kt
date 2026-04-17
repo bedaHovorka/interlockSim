@@ -48,10 +48,10 @@ private class CommonTestSimulationContextFactory(
 	override fun createContext(editingContext: EditingContext): SimulationContext =
 		DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 
-	override fun createEmptyContext(): SimulationContext {
-		val editingContext = editingContextFactory.createEmptyContext()
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
-	}
+	override fun createEmptyContext(): SimulationContext =
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+		}
 }
 
 val commonCoreTestModule: Module =
