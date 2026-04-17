@@ -207,7 +207,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 				val releaseHelper = object : Process() {
 					override suspend fun actions() {
 						hold(10.0) // 10-second blocking window
-						// Train has been active for ~9 sim-seconds but Phantom still
+						// Train has been active for ~10 sim-seconds but Phantom still
 						// holds the path — it must not have completed its journey yet.
 						assertThat(train.terminated()).isEqualTo(false)
 						reservationService.releasePath("Phantom")

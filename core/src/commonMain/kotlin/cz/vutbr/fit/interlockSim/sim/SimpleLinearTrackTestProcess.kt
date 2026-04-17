@@ -190,10 +190,10 @@ class SimpleLinearTrackTestProcess(
 		// with ShuntingLoop which increments on each successful tryReservePathFrom.
 		for (t in approwedTrains) {
 			val current = t.totalDistance
-			val last = lastTotalDistanceByTrain[t.name] ?: 0.0
+			val last = lastTotalDistanceByTrain.getOrDefault(t.name, 0.0)
 			if (current > last) {
-				blockTransitionsByTrain[t.name] = (blockTransitionsByTrain[t.name] ?: 0) + 1
 				lastTotalDistanceByTrain[t.name] = current
+				blockTransitionsByTrain[t.name] = (blockTransitionsByTrain[t.name] ?: 0) + 1
 			}
 		}
 
