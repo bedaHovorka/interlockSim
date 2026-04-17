@@ -37,13 +37,14 @@ open class Generator(
 	}
 
 	protected var random = Random(0L)
+	private val shuffleRandom = kotlin.random.Random(0)
 	val trains = mutableListOf<Train>()
 	private var i = 0
 
 	private fun generateRandomTimetable(): Timetable {
 		val inOutsList = env.getInOuts().toMutableList()
 		if (shuffleInOuts) {
-			inOutsList.shuffle(random.asKotlinRandom())
+			inOutsList.shuffle(shuffleRandom)
 		}
 		val timeIn = time() + random.normal(15.0, 5.0)
 		val timeOut = timeIn + random.normal(15.0, 5.0)
