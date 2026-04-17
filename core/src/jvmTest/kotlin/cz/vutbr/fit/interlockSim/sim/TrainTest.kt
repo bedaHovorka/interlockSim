@@ -183,23 +183,30 @@ class TrainTest : KoinTestBase() {
 
 		@Test
 		fun constructor_multipleCalls_namesIncrement() {
-			// Two consecutively created trains must have different names
+			// Two consecutively created trains must receive sequential numbers
 			val t1 = Train(mockContext, createTimetableWithLength(50.0))
 			val t2 = Train(mockContext, createTimetableWithLength(50.0))
 
 			// Both names must follow the "Train #N" format
 			assertThat(t1.name).contains("Train #")
 			assertThat(t2.name).contains("Train #")
-			// The names must differ (counter increments)
-			assertThat(t1.name).isNotEqualTo(t2.name)
+
+			// Extract numbers and verify sequential increment (counter is shared static,
+			// so we verify relative ordering rather than absolute values)
+			val n1 = t1.name.substringAfter("Train #").toInt()
+			val n2 = t2.name.substringAfter("Train #").toInt()
+			assertThat(n2).isEqualTo(n1 + 1)
 		}
 
 		@Test
 		fun constructor_trainName_containsNumber() {
 			val train = Train(mockContext, createTimetableWithLength(100.0))
-			// Name must be non-null and include the "Train #" prefix
+			// Name must be non-null and include the "Train #" prefix followed by a number
 			assertThat(train.name).isNotNull()
 			assertThat(train.name).contains("Train #")
+			// Verify the suffix is a valid integer
+			val suffix = train.name.substringAfter("Train #")
+			assertThat(suffix.toIntOrNull()).isNotNull()
 		}
 	}
 

@@ -521,7 +521,12 @@ class DynamicRailSwitchTest {
 	@DisplayName("setUpPath listener notifications")
 	inner class SetUpPathListenerNotifications {
 
-		private val mockOccupant: TrackOccupant = mockk(relaxed = true)
+		private lateinit var mockOccupant: TrackOccupant
+
+		@BeforeEach
+		fun setUpOccupant() {
+			mockOccupant = mockk(relaxed = true)
+		}
 
 		@Test
 		fun `setUpPath fires conf event when configuration changes`() {
