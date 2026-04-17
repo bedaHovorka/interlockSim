@@ -103,9 +103,8 @@ class TestContextBuilder {
 	/**
 	 * Build a fully-constructed DefaultSimulationContext from the accumulated editing state.
 	 *
-	 * Note: this helper depends on [SimulationProcessFactory] via Koin. As of Bucket 0,
-	 * that factory is JVM-only, so this helper is practically usable only from JVM tests.
-	 * Native consumers must provide their own Koin binding for [SimulationProcessFactory].
+	 * Requires a [SimulationProcessFactory] Koin binding (provided by [commonCoreTestModule]
+	 * for all targets including linuxX64).
 	 *
 	 * The dynamic-wrapper mapping (staticToDynamicMap) is established by
 	 * [DefaultSimulationContext.fromEditingContext] via GridTransformer, which is equivalent

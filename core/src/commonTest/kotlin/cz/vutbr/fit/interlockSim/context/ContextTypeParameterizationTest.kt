@@ -31,75 +31,79 @@ class ContextTypeParameterizationTest : CommonKoinTestBase() {
 
 	@Test
 	fun `EditingContext returns grid parameterized with NodeCell`() {
-		val context = editingContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { context ->
+			val grid = context.getRailWayNetGrid()
 
-		val grid = context.getRailWayNetGrid()
+			assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
 
-		assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
-
-		context.putCell(Point(1, 1), inA)
-		val cell = grid.getCellAt(1, 1)
-		assertThat(cell!!).isInstanceOf<NodeCell>()
+			context.putCell(Point(1, 1), inA)
+			val cell = grid.getCellAt(1, 1)
+			assertThat(cell!!).isInstanceOf<NodeCell>()
+		}
 	}
 
 	@Test
 	fun `SimulationContext returns grid parameterized with Cell`() {
-		val editingContext = editingContextFactory.createEmptyContext()
-		editingContext.putCell(Point(1, 1), inA)
-		editingContext.putCell(Point(5, 5), outB)
-		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
-		val simulationContext = simulationContextFactory.createContext(editingContext)
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			editingContext.putCell(Point(1, 1), inA)
+			editingContext.putCell(Point(5, 5), outB)
+			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
+			simulationContextFactory.createContext(editingContext).use { simulationContext ->
+				val grid = simulationContext.getRailWayNetGrid()
 
-		val grid = simulationContext.getRailWayNetGrid()
+				assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
 
-		assertThat(grid).isInstanceOf<RailwayNetGrid<*>>()
-
-		val cell = grid.getCellAt(1, 1)
-		assertThat(cell!!).isInstanceOf<Cell>()
+				val cell = grid.getCellAt(1, 1)
+				assertThat(cell!!).isInstanceOf<Cell>()
+			}
+		}
 	}
 
 	@Test
 	fun `grid parameterization enforced by type system`() {
-		val editingContext = editingContextFactory.createEmptyContext()
-		val simulationContext = simulationContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			simulationContextFactory.createEmptyContext().use { simulationContext ->
+				val editingGrid = editingContext.getRailWayNetGrid()
+				val simulationGrid = simulationContext.getRailWayNetGrid()
 
-		val editingGrid = editingContext.getRailWayNetGrid()
-		val simulationGrid = simulationContext.getRailWayNetGrid()
-
-		assertThat(editingGrid).isNotNull()
-		assertThat(simulationGrid).isNotNull()
+				assertThat(editingGrid).isNotNull()
+				assertThat(simulationGrid).isNotNull()
+			}
+		}
 	}
 
 	@Test
 	fun `static dynamic separation maintained through transformation`() {
-		val editingContext = editingContextFactory.createEmptyContext()
-		editingContext.putCell(Point(1, 1), inA)
-		editingContext.putCell(Point(5, 5), outB)
-		val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
-		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			editingContext.putCell(Point(1, 1), inA)
+			editingContext.putCell(Point(5, 5), outB)
+			val trackBlock = SimpleTrackBlock(inA, outB, 1000.0, 80.0)
+			editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
-		val simulationContext = simulationContextFactory.createContext(editingContext)
-
-		val inOuts = simulationContext.getInOuts()
-		assertThat(inOuts).isNotNull()
-		for (dynInOut in inOuts) {
-			assertThat(dynInOut.staticRef).isInstanceOf(InOut::class)
+			simulationContextFactory.createContext(editingContext).use { simulationContext ->
+				val inOuts = simulationContext.getInOuts()
+				assertThat(inOuts).isNotNull()
+				for (dynInOut in inOuts) {
+					assertThat(dynInOut.staticRef).isInstanceOf(InOut::class)
+				}
+			}
 		}
 	}
 
 	@Test
 	fun `covariant return types work in context hierarchy`() {
-		val editingContext = editingContextFactory.createEmptyContext()
-		val simulationContext = simulationContextFactory.createEmptyContext()
+		editingContextFactory.createEmptyContext().use { editingContext ->
+			simulationContextFactory.createEmptyContext().use { simulationContext ->
+				val editingContextRef: EditingContext = editingContext
+				val simulationContextRef: SimulationContext = simulationContext
 
-		val editingContextRef: EditingContext = editingContext
-		val simulationContextRef: SimulationContext = simulationContext
+				val editingGrid = editingContextRef.getRailWayNetGrid()
+				assertThat(editingGrid).isInstanceOf(RailwayNetGrid::class)
 
-		val editingGrid = editingContextRef.getRailWayNetGrid()
-		assertThat(editingGrid).isInstanceOf(RailwayNetGrid::class)
-
-		val simulationGrid = simulationContextRef.getRailWayNetGrid()
-		assertThat(simulationGrid).isInstanceOf(RailwayNetGrid::class)
+				val simulationGrid = simulationContextRef.getRailWayNetGrid()
+				assertThat(simulationGrid).isInstanceOf(RailwayNetGrid::class)
+			}
+		}
 	}
 }
