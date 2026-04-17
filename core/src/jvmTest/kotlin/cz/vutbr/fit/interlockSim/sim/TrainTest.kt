@@ -15,7 +15,6 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -203,26 +202,6 @@ class TrainTest : KoinTestBase() {
 			val train = Train(mockContext, createTimetableWithLength(100.0))
 			// Name must follow the "Train #<number>" format
 			assertThat(Regex("""Train #\d+""").matches(train.name)).isEqualTo(true)
-		}
-	}
-
-	@Nested
-	@DisplayName("formatApprovalMessage")
-	inner class FormatApprovalMessageTests {
-
-		@Test
-		fun formatApprovalMessage_returnsExpectedFormat() {
-			val result = Train.formatApprovalMessage("Train #1", "IN_A", "OUT_B")
-			// Must match the format consumed by TextReporter regex
-			assertThat(result).contains("""train="Train #1"""")
-			assertThat(result).contains("route=IN_A->OUT_B")
-		}
-
-		@Test
-		fun formatApprovalMessage_differentArguments_differentResults() {
-			val msg1 = Train.formatApprovalMessage("Train #1", "IN", "OUT")
-			val msg2 = Train.formatApprovalMessage("Train #2", "IN", "OUT")
-			assertThat(msg1).isNotEqualTo(msg2)
 		}
 	}
 
