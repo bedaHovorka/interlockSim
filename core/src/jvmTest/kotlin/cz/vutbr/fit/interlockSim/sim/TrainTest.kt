@@ -201,12 +201,8 @@ class TrainTest : KoinTestBase() {
 		@Test
 		fun constructor_trainName_containsNumber() {
 			val train = Train(mockContext, createTimetableWithLength(100.0))
-			// Name must be non-null and include the "Train #" prefix followed by a number
-			assertThat(train.name).isNotNull()
-			assertThat(train.name).contains("Train #")
-			// Verify the suffix is a valid integer
-			val suffix = train.name.substringAfter("Train #")
-			assertThat(suffix.toIntOrNull()).isNotNull()
+			// Name must follow the "Train #<number>" format
+			assertThat(Regex("""Train #\d+""").matches(train.name)).isEqualTo(true)
 		}
 	}
 
