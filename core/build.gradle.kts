@@ -436,14 +436,18 @@ tasks.named("compileKotlinJvm") {
 // and JVM-only idioms (System.*). This is required for adding non-JVM KMP targets
 // in the future.
 //
-// Detection strategy: deny-list of known-bad patterns. Any match fails the build.
-// This is more robust than a whitelist: new JVM-only APIs are caught automatically.
+// Detection strategy: deny-list of common known-bad patterns. Any match fails the build.
+// This is simpler and less strict than a whitelist, but it is not comprehensive:
+// it only catches the specific JVM-only patterns matched below.
 
 val checkCoreCommonMainPurity by tasks.registering {
 	group = "verification"
 	description = "Verify :core commonMain contains no java.*, javax.*, android.* imports or System.* calls"
 
 	val commonMainDir = file("src/commonMain/kotlin")
+	inputs.dir(commonMainDir)
+		.withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+	outputs.upToDateWhen { true }
 
 	doLast {
 		if (!commonMainDir.exists()) {
