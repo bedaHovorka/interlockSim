@@ -335,7 +335,6 @@ class DynamicTrack(
 	 * from multiple threads, even though the simulation context itself is not thread-safe.
 	 *
 	 * @param listener The listener to add
-	 * @see PropertyChangeSupport.addPropertyChangeListener
 	 */
 	fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
 		listeners = listeners + listener
