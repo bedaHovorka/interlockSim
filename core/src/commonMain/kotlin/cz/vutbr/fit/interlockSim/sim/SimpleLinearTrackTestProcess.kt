@@ -153,7 +153,7 @@ class SimpleLinearTrackTestProcess(
 			unapprowedTrains.addLast(train)
 			trainsEnteredCount++
 			blockTransitionsByTrain[train.name] = 0
-			lastTotalDistanceByTrain[train.name] = 0.0
+			lastTotalDistanceByTrain[train.name] = train.totalDistance
 		}
 
 		override suspend fun interLoopSleep() {
