@@ -12,7 +12,6 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.AutoNameGenerator
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireEditor
