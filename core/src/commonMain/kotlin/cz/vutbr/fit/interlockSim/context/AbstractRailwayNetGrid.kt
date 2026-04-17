@@ -25,8 +25,10 @@ abstract class AbstractRailwayNetGrid<out T : Cell>(
 	override val cols: Int = cols
 	override val rows: Int = rows
 
-	// HashMap (not WeakHashMap): entries are explicitly removed in remove()/removeAll(),
-	// so GC-based collection is unnecessary. Strong references are safe here.
+	// HashMap (not WeakHashMap): reverseTable is kept in sync with cells by the
+	// mutation paths in DefaultRailWayNetGrid, including removals via keySet()
+	// iterator/removeAll. While an entry is present, the cell is already strongly
+	// referenced by cells, so GC-based collection would not help here.
 	private val reverseTable: MutableMap<@UnsafeVariance T, Point> = HashMap()
 	private val cells: Array2DMap<@UnsafeVariance T> = Array2DMap()
 
