@@ -279,10 +279,10 @@ class GeneratorTest : KoinTestBase() {
 		 * Test: Generator has a dedicated shuffleRandom field for shuffle operations.
 		 *
 		 * The shuffleRandom is a single seeded kotlin.random.Random instance stored as
-		 * a class property. Reusing it across generateRandomTimetable() calls means the
-		 * RNG state advances deterministically, producing varied but reproducible shuffle
-		 * orders — unlike recreating Random(0) on each call, which would always produce
-		 * the same shuffle.
+		 * a class property. Reusing it across generateRandomTimetable() calls makes that
+		 * dedicated shuffle RNG explicit and avoids recreating wrapper instances, while
+		 * still allowing its state to advance deterministically and produce varied but
+		 * reproducible shuffle orders.
 		 */
 		@Test
 		fun `generator has shuffleRandom field as stored instance`() {
