@@ -35,7 +35,7 @@ import org.koin.dsl.module
  * Minimal EditingContextFactory for commonTest: only supports createEmptyContext().
  */
 private class CommonTestEditingContextFactory : EditingContextFactory {
-	override fun createEmptyContext(): EditingContext = DefaultEditingContext(30, 30)
+	override fun createEmptyContext(): EditingContext = DefaultEditingContext(100, 100)
 }
 
 /**
@@ -63,6 +63,8 @@ val commonCoreTestModule: Module =
 
 		// Provide CommonSimulationContextFactory (common-only, no XML/file I/O)
 		single<CommonSimulationContextFactory> { CommonTestSimulationContextFactory(get(), get()) }
+
+		factory { TestContextBuilder() }
 
 		// Default editing context factory: creates a minimal linear-track context
 		factory<DefaultEditingContext> {

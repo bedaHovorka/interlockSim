@@ -23,7 +23,7 @@ import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import org.koin.test.inject
+import org.koin.core.component.inject
 
 class ContextImmutabilityTest : CommonKoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()

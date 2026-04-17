@@ -23,11 +23,11 @@ interface SimulationContextFactory : ContextFactory, CommonSimulationContextFact
 	 * @return Simulation context with transformed dynamic grid
 	 * @throws ContextCreationException if editing context is invalid
 	 */
-	fun createContext(editingContext: EditingContext): SimulationContext
+	override fun createContext(editingContext: EditingContext): SimulationContext
 
 	/**
 	 * Create an empty simulation context (for testing).
 	 * Converts an empty editing context to a simulation context.
 	 */
-	fun createEmptyContext(): SimulationContext
+	override fun createEmptyContext(): SimulationContext
 }
