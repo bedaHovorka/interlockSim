@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
 import kotlin.test.Test
+import kotlin.test.assertIs
 import org.koin.core.component.inject
 
 class TransformationValidationTest : CommonKoinTestBase() {
@@ -74,7 +75,7 @@ class TransformationValidationTest : CommonKoinTestBase() {
 			simulationContextFactory.createContext(editingContext).use { simulationContext ->
 				assertThat(simulationContext.getInOuts().size).isEqualTo(4)
 				assertThat(simulationContext.getGraph().size()).isGreaterThan(0)
-				val simCtx = simulationContext as DefaultSimulationContext
+				val simCtx = assertIs<DefaultSimulationContext>(simulationContext)
 				assertThat(simCtx.currentMaxSpeed).isEqualTo(120.0)
 				assertThat(simCtx.currentTrackLength).isEqualTo(2200.0)
 				assertThat(simCtx.currentNameString).isEqualTo("ComplexNetwork")
