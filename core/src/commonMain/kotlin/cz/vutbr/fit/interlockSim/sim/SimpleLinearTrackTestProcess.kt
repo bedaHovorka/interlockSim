@@ -49,8 +49,9 @@ import org.koin.core.component.KoinComponent
  *  - [getBlockTransitions]
  *  - [getAllBlockTransitions]
  *
- * Counters are incremented from existing lifecycle sites only (no extra
- * polling loop is introduced).
+ * Counters are incremented from existing lifecycle sites only; the
+ * block-transition counter is incremented only when a train makes genuine
+ * forward progress (totalDistance increases), matching ShuntingLoop semantics.
  *
  * @see ShuntingLoop pattern source for instrumentation
  * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/366">Issue #366</a>
@@ -106,6 +107,9 @@ class SimpleLinearTrackTestProcess(
 	private var maxConcurrentTrainsCount: Int = 0
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
+	// Last sampled totalDistance per train — used to detect genuine progress.
+	private val lastTotalDistanceByTrain: MutableMap<String, Double> = mutableMapOf()
+
 	/**
 	 * Generator that injects caller-supplied trains deterministically at their
 	 * timetable entry times rather than randomly.
@@ -149,6 +153,7 @@ class SimpleLinearTrackTestProcess(
 			unapprowedTrains.addLast(train)
 			trainsEnteredCount++
 			blockTransitionsByTrain[train.name] = 0
+			lastTotalDistanceByTrain[train.name] = 0.0
 		}
 
 		override suspend fun interLoopSleep() {
@@ -180,11 +185,16 @@ class SimpleLinearTrackTestProcess(
 			maxConcurrentTrainsCount = approwedTrains.size
 		}
 
-		// Record each active train as "progressing through a block" per tick.
-		// Cheap proxy so that tests can assert motion without log parsing.
-		// KMP-safe increment: Map.merge() is a JVM-only default method.
+		// Increment block-transition counter only when the train makes genuine
+		// forward progress (totalDistance grows), keeping metric semantics aligned
+		// with ShuntingLoop which increments on each successful tryReservePathFrom.
 		for (t in approwedTrains) {
-			blockTransitionsByTrain[t.name] = (blockTransitionsByTrain[t.name] ?: 0) + 1
+			val current = t.totalDistance
+			val last = lastTotalDistanceByTrain[t.name] ?: 0.0
+			if (current > last) {
+				blockTransitionsByTrain[t.name] = (blockTransitionsByTrain[t.name] ?: 0) + 1
+				lastTotalDistanceByTrain[t.name] = current
+			}
 		}
 
 		// Cadence aligned with ShuntingLoop.
