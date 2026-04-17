@@ -27,16 +27,24 @@ data class SimulationEvent(
 
 	companion object {
 		fun fromContextChangeEvent(event: ContextChangeEvent): SimulationEvent? {
-			val reportType = try {
-				ReportType.valueOf(event.propertyName)
-			} catch (_: IllegalArgumentException) {
-				return null
-			}
+			val reportType =
+				try {
+					ReportType.valueOf(event.propertyName)
+				} catch (_: IllegalArgumentException) {
+					return null
+				}
 			val fullMessage = event.newValue?.toString() ?: return null
 			val parts = fullMessage.trim().split(Regex("\\s+"), limit = 3)
 			val simulationTime = parts[0].toDoubleOrNull() ?: return null
 			val source = if (parts.size > 2) parts[1] else ""
-			val message = if (parts.size > 2) parts[2] else if (parts.size > 1) parts[1] else fullMessage
+			val message =
+				if (parts.size > 2) {
+					parts[2]
+				} else if (parts.size > 1) {
+					parts[1]
+				} else {
+					fullMessage
+				}
 			return SimulationEvent(simulationTime, reportType, source, message)
 		}
 

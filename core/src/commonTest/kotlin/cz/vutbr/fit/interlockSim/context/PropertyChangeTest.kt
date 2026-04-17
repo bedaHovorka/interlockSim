@@ -16,15 +16,15 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.containsAnyOf
 import cz.vutbr.fit.interlockSim.testutil.hasSizeGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.util.Point
-import kotlin.test.Test
 import org.koin.core.component.inject
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import kotlin.test.Test
 
 /**
  * PropertyChange Notification Tests for Java 21 migration.
@@ -171,14 +171,14 @@ class PropertyChangeTest : CommonKoinTestBase() {
 		val baseContext = context as BaseContext<*>
 		listener.events.clear()
 
-		val oldValue = baseContext.currentNameString  // empty string initially
+		val oldValue = baseContext.currentNameString // empty string initially
 		val newValue = "TestName"
 		baseContext.currentNameString = newValue
 
 		assertThat(listener.events).hasSize(1)
 		val event = listener.events[0]
 		assertThat(event.propertyName).isEqualTo("currentNameString")
-		assertThat(event.oldValue).isEqualTo(oldValue)  // Now we can assert old value too
+		assertThat(event.oldValue).isEqualTo(oldValue) // Now we can assert old value too
 		assertThat(event.newValue).isEqualTo(newValue)
 	}
 

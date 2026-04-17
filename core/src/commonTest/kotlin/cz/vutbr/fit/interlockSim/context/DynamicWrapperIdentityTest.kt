@@ -10,13 +10,13 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
 /**
  * Regression tests for wrapper identity preservation after PR #95.
@@ -32,7 +32,6 @@ import org.koin.core.context.stopKoin
  * Migrated to commonTest: 2026-03 (KMP Task 6)
  */
 class DynamicWrapperIdentityTest : KoinComponent {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin {
@@ -132,10 +131,11 @@ class DynamicWrapperIdentityTest : KoinComponent {
 	}
 
 	/** Extract the static reference from a dynamic wrapper, or null for non-wrapper cells. */
-	private fun staticRefOf(cell: Cell?): PathSeparator? = when (cell) {
-		is DynamicInOut -> cell.staticRef
-		is DynamicRailSwitch -> cell.staticRef
-		is DynamicRailSemaphore -> cell.staticRef
-		else -> null
-	}
+	private fun staticRefOf(cell: Cell?): PathSeparator? =
+		when (cell) {
+			is DynamicInOut -> cell.staticRef
+			is DynamicRailSwitch -> cell.staticRef
+			is DynamicRailSemaphore -> cell.staticRef
+			else -> null
+		}
 }

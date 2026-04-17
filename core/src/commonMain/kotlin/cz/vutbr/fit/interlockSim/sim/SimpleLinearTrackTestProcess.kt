@@ -72,11 +72,12 @@ class SimpleLinearTrackTestProcess(
 		internal const val MAX_TRAINS: Int = 2
 
 		/** Report types enabled by individual-train lifecycle scenarios. */
-		internal val ENABLED_REPORT_TYPES = arrayOf(
-			ReportType.TRAIN_APPROVED,
-			ReportType.TRAIN_EVENTS,
-			ReportType.TRAIN_CONTINUOUS
-		)
+		internal val ENABLED_REPORT_TYPES =
+			arrayOf(
+				ReportType.TRAIN_APPROVED,
+				ReportType.TRAIN_EVENTS,
+				ReportType.TRAIN_CONTINUOUS
+			)
 	}
 
 	/**
@@ -137,12 +138,14 @@ class SimpleLinearTrackTestProcess(
 			}
 			remaining.removeFirst()
 			val inOuts = env.getInOuts()
-			val inIo = requireSimulationNotNull(inOuts.find { it.name == spec.inName }) {
-				"No DynamicInOut named '${spec.inName}' in context"
-			}
-			val outIo = requireSimulationNotNull(inOuts.find { it.name == spec.outName }) {
-				"No DynamicInOut named '${spec.outName}' in context"
-			}
+			val inIo =
+				requireSimulationNotNull(inOuts.find { it.name == spec.inName }) {
+					"No DynamicInOut named '${spec.inName}' in context"
+				}
+			val outIo =
+				requireSimulationNotNull(inOuts.find { it.name == spec.outName }) {
+					"No DynamicInOut named '${spec.outName}' in context"
+				}
 			val timetable = Timetable(inIo, outIo, Time(spec.inTime), Time(spec.outTime), spec.length)
 			val train = Train(env, timetable)
 			logger.debug { "Injecting test train ${train.name}: ${spec.inName} -> ${spec.outName} at t=$now" }

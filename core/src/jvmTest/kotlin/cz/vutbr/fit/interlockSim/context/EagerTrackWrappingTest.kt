@@ -19,12 +19,12 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThan
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -44,8 +44,7 @@ import org.koin.test.inject
 class EagerTrackWrappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaStream() =
-		TestFixtures.loadShuntingXml()
+	private fun loadVyhybnaStream() = TestFixtures.loadShuntingXml()
 
 	@Nested
 	@DisplayName("Unit Tests - Eager Wrapping")
@@ -67,8 +66,7 @@ class EagerTrackWrappingTest : KoinTestBase() {
 			// Act & Assert - should throw because track not in context
 			assertFailure {
 				context.toDynamic(orphanTrack as TrackFacility)
-			}
-				.isInstanceOf<IllegalStateException>()
+			}.isInstanceOf<IllegalStateException>()
 				.transform { it.message ?: "" }
 				.contains(
 					"Dynamic wrapper not found for track" as CharSequence,

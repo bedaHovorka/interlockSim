@@ -8,13 +8,13 @@ import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Variable
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
 /**
  * Verifies that kDisco 0.3.0 KMP API is accessible on all targets including linuxX64.
@@ -26,7 +26,6 @@ import org.koin.core.context.stopKoin
  * @since 2026-03-21 (KMP Task 10 — kDisco native compatibility)
  */
 class KDiscoNativeCompatibilityTest : KoinComponent {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin { modules(commonCoreTestModule) }

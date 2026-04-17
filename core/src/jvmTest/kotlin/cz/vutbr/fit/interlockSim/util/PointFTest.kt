@@ -168,11 +168,12 @@ class PointFTest {
 				DistanceFTestCase(PointF(5.0f, 0.0f), PointF(5.0f, 4.0f), 4.0f, "vertical"),
 				DistanceFTestCase(PointF(0.0f, 0.0f), PointF(3.0f, 4.0f), 5.0f, "diagonal 3-4-5"),
 				DistanceFTestCase(
-					PointF(1.5f, 2.3f), PointF(4.2f, 5.7f),
+					PointF(1.5f, 2.3f),
+					PointF(4.2f, 5.7f),
 					sqrt((4.2f - 1.5f) * (4.2f - 1.5f) + (5.7f - 2.3f) * (5.7f - 2.3f)),
 					"fractional"
 				),
-				DistanceFTestCase(PointF(-2.0f, -3.0f), PointF(1.0f, 1.0f), 5.0f, "negative coords"),
+				DistanceFTestCase(PointF(-2.0f, -3.0f), PointF(1.0f, 1.0f), 5.0f, "negative coords")
 			)
 	}
 

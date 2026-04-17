@@ -6,6 +6,7 @@ data class XmlValidationResult(
 ) {
 	companion object {
 		fun success(): XmlValidationResult = XmlValidationResult(isValid = true)
+
 		fun failure(errors: List<String>): XmlValidationResult = XmlValidationResult(isValid = false, errors = errors)
 	}
 }

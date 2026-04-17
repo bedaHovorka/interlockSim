@@ -9,7 +9,6 @@ import assertk.assertions.isTrue
 import kotlin.test.Test
 
 class XmlSchemaValidatorTest {
-
 	private val validator = XmlSchemaValidator()
 
 	@Test

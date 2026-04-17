@@ -6,13 +6,13 @@ import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
 /**
  * Test that verifies InOut wrappers are created correctly without duplication.
@@ -25,7 +25,6 @@ import org.koin.core.context.stopKoin
  * Migrated to commonTest: 2026-03 (KMP Task 6)
  */
 class InOutWrapperCreationTest : KoinComponent {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin {

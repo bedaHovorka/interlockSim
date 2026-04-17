@@ -23,8 +23,8 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import kotlin.test.Test
 import org.koin.core.component.inject
+import kotlin.test.Test
 
 /**
  * Tests for BaseContext property change notification infrastructure.
@@ -39,7 +39,6 @@ import org.koin.core.component.inject
  * that are part of the new Kotlin-native event system (PR #375).
  */
 class BaseContextPropertyChangeTest : CommonKoinTestBase() {
-
 	private val editingContextFactory: EditingContextFactory by inject()
 
 	private val inA: InOut = InOut("A", false, SpatialType.HORIZONTAL)
@@ -163,9 +162,10 @@ class BaseContextPropertyChangeTest : CommonKoinTestBase() {
 
 			context.putCell(Point(1, 1), inA)
 
-			val cellAddedEvents = received.filter {
-				it.propertyName == ContextChangeListener.CELL_ADDED
-			}
+			val cellAddedEvents =
+				received.filter {
+					it.propertyName == ContextChangeListener.CELL_ADDED
+				}
 			assertThat(cellAddedEvents).hasSize(1)
 		}
 	}

@@ -100,11 +100,13 @@ class Array2DMapEntrySetModificationTest {
 	fun testSetRemoveNonExistentEntry() {
 		// Given
 		val entrySet = map.entries
-		val fakeEntry = object : MutableMap.MutableEntry<Point, String> {
-			override val key = Point(99, 99)
-			override val value = "Fake"
-			override fun setValue(newValue: String) = "Fake"
-		}
+		val fakeEntry =
+			object : MutableMap.MutableEntry<Point, String> {
+				override val key = Point(99, 99)
+				override val value = "Fake"
+
+				override fun setValue(newValue: String) = "Fake"
+			}
 
 		// When
 		val removed = entrySet.remove(fakeEntry)

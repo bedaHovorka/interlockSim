@@ -20,7 +20,6 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @since 2026-03 (KMP Task 2d)
  */
 class XmlContextWriter {
-
 	companion object {
 		private const val ROOT_ELEMENT_NAME = "net"
 		private const val ATR_ORIENT_NAME = "orientation"
@@ -51,7 +50,10 @@ class XmlContextWriter {
 		return builder.toString()
 	}
 
-	private fun writeHeader(builder: StringBuilder, context: DefaultEditingContext) {
+	private fun writeHeader(
+		builder: StringBuilder,
+		context: DefaultEditingContext
+	) {
 		val grid = context.getRailWayNetGrid()
 		builder.append("<?xml version=\"1.0\"?>\n<!DOCTYPE ")
 		builder.append(ROOT_ELEMENT_NAME).append(">\n")
@@ -104,7 +106,10 @@ class XmlContextWriter {
 		}
 	}
 
-	private fun writeEdges(builder: StringBuilder, context: DefaultEditingContext) {
+	private fun writeEdges(
+		builder: StringBuilder,
+		context: DefaultEditingContext
+	) {
 		for (entry in context.getGraph().entrySet()) {
 			val key = entry.key
 			val value = entry.value
@@ -128,7 +133,8 @@ class XmlContextWriter {
 		}
 		if (cell is OrientedPathSeparator) {
 			appendAttribute(
-				builder, ATR_ORIENT_NAME,
+				builder,
+				ATR_ORIENT_NAME,
 				cell.getOrientation().toString()
 			)
 		}
@@ -181,7 +187,11 @@ class XmlContextWriter {
 		name: String,
 		value: Int
 	) {
-		builder.append(name).append("=\"").append(value).append("\" ")
+		builder
+			.append(name)
+			.append("=\"")
+			.append(value)
+			.append("\" ")
 	}
 
 	private fun appendAttribute(
@@ -189,7 +199,11 @@ class XmlContextWriter {
 		name: String,
 		value: Double
 	) {
-		builder.append(name).append("=\"").append(value).append("\" ")
+		builder
+			.append(name)
+			.append("=\"")
+			.append(value)
+			.append("\" ")
 	}
 
 	private fun appendAttribute(
@@ -197,7 +211,11 @@ class XmlContextWriter {
 		name: String,
 		value: String
 	) {
-		builder.append(name).append("=\"").append(escapeXml(value)).append("\" ")
+		builder
+			.append(name)
+			.append("=\"")
+			.append(escapeXml(value))
+			.append("\" ")
 	}
 
 	private fun appendEnumAttribute(
@@ -205,13 +223,18 @@ class XmlContextWriter {
 		name: String,
 		value: Enum<*>
 	) {
-		builder.append(name).append("=\"").append(value.name).append("\" ")
+		builder
+			.append(name)
+			.append("=\"")
+			.append(value.name)
+			.append("\" ")
 	}
 
-	private fun escapeXml(value: String): String = value
-		.replace("&", "&amp;")
-		.replace("<", "&lt;")
-		.replace(">", "&gt;")
-		.replace("\"", "&quot;")
-		.replace("'", "&apos;")
+	private fun escapeXml(value: String): String =
+		value
+			.replace("&", "&amp;")
+			.replace("<", "&lt;")
+			.replace(">", "&gt;")
+			.replace("\"", "&quot;")
+			.replace("'", "&apos;")
 }

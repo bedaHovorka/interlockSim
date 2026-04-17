@@ -9,6 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Continuous
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Variable
+import cz.hovorka.kdisco.dtMin
+import cz.hovorka.kdisco.maxAbsError
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -26,12 +32,6 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Continuous
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Variable
-import cz.hovorka.kdisco.dtMin
-import cz.hovorka.kdisco.maxAbsError
 
 /**
  * Train Process
@@ -43,6 +43,7 @@ class Train :
 	companion object {
 		private val logger = KotlinLogging.logger {}
 		private var countValue = 0
+
 		private fun nextCount(): Int = ++countValue
 
 		/**
@@ -59,8 +60,11 @@ class Train :
 		 * Formats the structured TRAIN_APPROVED message payload.
 		 * The format is consumed by [TextReporter]'s regex: `train="([^"]+)"`.
 		 */
-		internal fun formatApprovalMessage(trainName: String, inName: String, outName: String): String =
-			"""train="$trainName" route=$inName->$outName"""
+		internal fun formatApprovalMessage(
+			trainName: String,
+			inName: String,
+			outName: String
+		): String = """train="$trainName" route=$inName->$outName"""
 	}
 
 	// GitHub #62: Support bidirectional train operation (reverse direction)
@@ -117,31 +121,32 @@ class Train :
 				 * @see docs/TRAIN_PASSIVATION_FIX.md
 				 */
 				val pathResult = trainNavService.findReservedPathForTrain(name, where)
-				val path = when (pathResult) {
-					is PathResult.Available -> pathResult.path
-					is PathResult.NoTopologicalPath -> {
-						// Permanent condition - no path exists in network topology
-						if (where is DynamicInOut) {
-							// At destination InOut, this is expected (train has arrived)
-							null
-						} else {
-							// Not at destination, this is an error
-							logger.error {
-								"Train $number: No topological path exists from $where. " +
-									"Network may be misconfigured or train reached dead-end."
+				val path =
+					when (pathResult) {
+						is PathResult.Available -> pathResult.path
+						is PathResult.NoTopologicalPath -> {
+							// Permanent condition - no path exists in network topology
+							if (where is DynamicInOut) {
+								// At destination InOut, this is expected (train has arrived)
+								null
+							} else {
+								// Not at destination, this is an error
+								logger.error {
+									"Train $number: No topological path exists from $where. " +
+										"Network may be misconfigured or train reached dead-end."
+								}
+								null
+							}
+						}
+						is PathResult.OwnershipConflict -> {
+							// Temporary condition - blocks reserved for different train
+							logger.debug {
+								"Train $number: Path blocked by ownership conflict at $where, " +
+									"halting and waiting for dispatcher (will retry after 5s)"
 							}
 							null
 						}
 					}
-					is PathResult.OwnershipConflict -> {
-						// Temporary condition - blocks reserved for different train
-						logger.debug {
-							"Train $number: Path blocked by ownership conflict at $where, " +
-								"halting and waiting for dispatcher (will retry after 5s)"
-						}
-						null
-					}
-				}
 				next = path?.getNext(current)
 
 				if (path == null || next == null) {
@@ -241,7 +246,10 @@ class Train :
 		 * several metres (one integration step ≈ dtMax × velocity), leaving tail at 0 while
 		 * front is already ahead by the overshoot amount, which violates `abs(front−tail−length) ≤ maxAbsError`.
 		 */
-		protected fun initPositionFromFrontOffset(frontTotalDistance: Double, trainLength: Double) {
+		protected fun initPositionFromFrontOffset(
+			frontTotalDistance: Double,
+			trainLength: Double
+		) {
 			val offset = frontTotalDistance - trainLength
 			if (offset > 0.0) position.state = offset
 		}
@@ -309,22 +317,23 @@ class Train :
 			 * @see docs/TRAIN_PASSIVATION_FIX.md
 			 */
 			val pathResult = trainNavService.findReservedPathForTrain(name, separator)
-			val path: Path? = when (pathResult) {
-				is PathResult.Available -> pathResult.path
-				is PathResult.NoTopologicalPath -> {
-					logger.error {
-						"Train $number at semaphore ${semaphore.name}: No topological path exists. " +
-							"Network may be misconfigured."
+			val path: Path? =
+				when (pathResult) {
+					is PathResult.Available -> pathResult.path
+					is PathResult.NoTopologicalPath -> {
+						logger.error {
+							"Train $number at semaphore ${semaphore.name}: No topological path exists. " +
+								"Network may be misconfigured."
+						}
+						null
 					}
-					null
-				}
-				is PathResult.OwnershipConflict -> {
-					logger.debug {
-						"Train $number at semaphore ${semaphore.name}: Path blocked by ownership conflict"
+					is PathResult.OwnershipConflict -> {
+						logger.debug {
+							"Train $number at semaphore ${semaphore.name}: Path blocked by ownership conflict"
+						}
+						null
 					}
-					null
 				}
-			}
 
 			// GOAL 15: Station stops for tutorial scenarios - see LONG_TERM_GOALS.md
 
@@ -365,23 +374,24 @@ class Train :
 				 * @see docs/TRAIN_PASSIVATION_FIX.md
 				 */
 				val resumeResult = trainNavService.findReservedPathForTrain(name, separator)
-				val resumePath: Path? = when (resumeResult) {
-					is PathResult.Available -> resumeResult.path
-					is PathResult.NoTopologicalPath -> {
-						logger.error {
-							"Train $number at semaphore ${semaphore.name}: Signal is allowing but no topological path exists. " +
-								"This indicates a logic error - signal should only allow when path exists."
+				val resumePath: Path? =
+					when (resumeResult) {
+						is PathResult.Available -> resumeResult.path
+						is PathResult.NoTopologicalPath -> {
+							logger.error {
+								"Train $number at semaphore ${semaphore.name}: Signal is allowing but no topological path exists. " +
+									"This indicates a logic error - signal should only allow when path exists."
+							}
+							null
 						}
-						null
-					}
-					is PathResult.OwnershipConflict -> {
-						logger.error {
-							"Train $number at semaphore ${semaphore.name}: Signal is allowing but path not reserved for this train. " +
-								"This indicates a logic error - signal should only allow when path is reserved."
+						is PathResult.OwnershipConflict -> {
+							logger.error {
+								"Train $number at semaphore ${semaphore.name}: Signal is allowing but path not reserved for this train. " +
+									"This indicates a logic error - signal should only allow when path is reserved."
+							}
+							null
 						}
-						null
 					}
-				}
 				requireSimulationNotNull(resumePath) {
 					"Train $number at semaphore ${semaphore.name}: Signal is allowing but no reserved path found. " +
 						"This indicates a logic error - signal should only allow when path is reserved."
@@ -770,6 +780,7 @@ class Train :
 			hold(1.0)
 		}
 	}
+
 	private val reporter: TrainReporter = TrainReporter()
 
 	private val acceleration: Variable = Variable(0.0)
@@ -818,7 +829,7 @@ class Train :
 		
 		logger.debug { "Train $number created: from $inName to $outName, length $length" }
 	}
-	
+
 	/**
 	 * Validates that train length does not exceed the shortest track distance between InOuts.
 	 *
@@ -858,11 +869,12 @@ class Train :
 			val topologyNavigator = env.getTopologyNavigator()
 			
 			// Find all topologically possible paths between InOuts
-			val paths = topologyNavigator.findAllTopologicalPaths(
-				start = inOut,
-				target = outOut,
-				maxDepth = 100
-			)
+			val paths =
+				topologyNavigator.findAllTopologicalPaths(
+					start = inOut,
+					target = outOut,
+					maxDepth = 100
+				)
 			
 			requireSimulation(paths.isNotEmpty()) {
 				"Train length validation failed: No route exists between " +
@@ -871,9 +883,10 @@ class Train :
 			}
 			
 			// Calculate distance for each path and find the shortest using idiomatic Kotlin
-			val shortestPathDistance = paths.minOf { path ->
-				path.sumOf { section -> section.length() }
-			}
+			val shortestPathDistance =
+				paths.minOf { path ->
+					path.sumOf { section -> section.length() }
+				}
 			
 			// Validate train length against shortest path
 			requireSimulation(trainLength <= shortestPathDistance) {
@@ -987,7 +1000,6 @@ class Train :
 	 */
 	val trainLength: Double
 		get() = getLength()
-
 
 	/**
 	 * Reverse the train's direction of travel.

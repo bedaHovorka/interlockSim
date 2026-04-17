@@ -243,7 +243,10 @@ internal object InlineXmlSnippets {
 			</net>"""
 
 	/** Net with a RailSwitch of the given type at row `y` (used for all-switch-types test). */
-	fun readerNetWithSwitchType(type: String, y: Int): String =
+	fun readerNetWithSwitchType(
+		type: String,
+		y: Int
+	): String =
 		"""<?xml version="1.0"?>
 			<net X="30" Y="30">
 				<InOut X="1" Y="1" SpatialType="HORIZONTAL" orientation="false" name="A"/>

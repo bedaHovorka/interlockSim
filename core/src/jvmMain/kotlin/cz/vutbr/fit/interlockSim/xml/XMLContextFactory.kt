@@ -14,9 +14,9 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.ValidationResult
 import cz.vutbr.fit.interlockSim.util.ValidationUtils
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
 import java.io.FileNotFoundException
@@ -38,7 +38,6 @@ import java.lang.reflect.InvocationTargetException
  * - [XmlContextWriter] for XML serialization
  */
 class XMLContextFactory : JvmEditingContextFactory {
-
 	// Issue #60: Track length validation implemented in Train constructor
 	// Validation occurs at train creation time when both train length and topology are available
 
@@ -89,8 +88,8 @@ class XMLContextFactory : JvmEditingContextFactory {
 		}
 
 	@Throws(ContextCreationException::class)
-	private fun createContext(reader: Reader): DefaultEditingContext {
-		return try {
+	private fun createContext(reader: Reader): DefaultEditingContext =
+		try {
 			val xmlContent = reader.readText()
 
 			// Validate against XSD schema
@@ -116,7 +115,6 @@ class XMLContextFactory : JvmEditingContextFactory {
 				}
 			throw ContextCreationException(enhancedMessage)
 		}
-	}
 
 	/**
 	 * Creates an EditingContext by parsing an XML stream conforming to data.xsd schema.
@@ -204,9 +202,10 @@ class XMLContextFactory : JvmEditingContextFactory {
 				// XSD validation errors but parsing succeeded
 				LenientParseResult(
 					context = context,
-					validationResult = ValidationUtils.fromException(
-						ContextCreationException(validationResult.errors.joinToString("; "))
-					),
+					validationResult =
+						ValidationUtils.fromException(
+							ContextCreationException(validationResult.errors.joinToString("; "))
+						),
 					isParseable = true
 				)
 			}
@@ -225,10 +224,14 @@ class XMLContextFactory : JvmEditingContextFactory {
 			} catch (parseException: Exception) {
 				LenientParseResult(
 					context = null,
-					validationResult = ValidationUtils.fromException(
-						if (parseException is ContextCreationException) parseException
-						else ContextCreationException(parseException)
-					),
+					validationResult =
+						ValidationUtils.fromException(
+							if (parseException is ContextCreationException) {
+								parseException
+							} else {
+								ContextCreationException(parseException)
+							}
+						),
 					isParseable = false
 				)
 			}

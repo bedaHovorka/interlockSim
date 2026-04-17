@@ -9,9 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.hovorka.kdisco.Continuous
 import cz.hovorka.kdisco.Process
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 
 /**
  * Base class for validating continuous variable invariants during simulation.

@@ -21,12 +21,12 @@ import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
 /**
  * Tests for navigation service bindings (TopologyNavigator, PathReservationService,
@@ -40,7 +40,6 @@ import org.koin.core.context.stopKoin
  * @since 2026-03-24 (Issue #410 — increase native test coverage)
  */
 class NavigationServiceBindingsTest : KoinComponent {
-
 	private val processFactory = DefaultSimulationProcessFactory()
 
 	@BeforeTest
@@ -96,47 +95,50 @@ class NavigationServiceBindingsTest : KoinComponent {
 
 	@Test
 	fun topologyNavigatorResolvesFromSimulationContext() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val navigator = simCtx.getTopologyNavigator()
-			assertThat(navigator).isNotNull()
-			assertThat(navigator).isInstanceOf<TopologyNavigator>()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val navigator = simCtx.getTopologyNavigator()
+				assertThat(navigator).isNotNull()
+				assertThat(navigator).isInstanceOf<TopologyNavigator>()
+			}
 	}
 
 	@Test
 	fun topologyNavigatorFromSimulationContextFindsVyhybnaPath() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.VYHYBNA_XML,
-			processFactory
-		).use { simCtx ->
-			val navigator = simCtx.getTopologyNavigator()
-			val inOuts = simCtx.getInOuts().toList()
-			assertThat(inOuts).hasSize(2)
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.VYHYBNA_XML,
+				processFactory
+			).use { simCtx ->
+				val navigator = simCtx.getTopologyNavigator()
+				val inOuts = simCtx.getInOuts().toList()
+				assertThat(inOuts).hasSize(2)
 
-			val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
-			assertThat(paths.size).isGreaterThan(0)
-		}
+				val paths = navigator.findAllTopologicalPaths(inOuts[0], inOuts[1])
+				assertThat(paths.size).isGreaterThan(0)
+			}
 	}
 
 	@Test
 	fun topologyNavigatorFromSwitchNetworkFindsMultiplePaths() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.SWITCH_BASIC_XML,
-			processFactory
-		).use { simCtx ->
-			val navigator = simCtx.getTopologyNavigator()
-			val inOuts = simCtx.getInOuts().toList()
-			assertThat(inOuts).hasSize(3)
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.SWITCH_BASIC_XML,
+				processFactory
+			).use { simCtx ->
+				val navigator = simCtx.getTopologyNavigator()
+				val inOuts = simCtx.getInOuts().toList()
+				assertThat(inOuts).hasSize(3)
 
-			// From IN to OUT_PLUS should find at least one path
-			val inOutIn = inOuts.first { it.name == "IN" }
-			val inOutPlus = inOuts.first { it.name == "OUT_PLUS" }
-			val paths = navigator.findAllTopologicalPaths(inOutIn, inOutPlus)
-			assertThat(paths.size).isGreaterThan(0)
-		}
+				// From IN to OUT_PLUS should find at least one path
+				val inOutIn = inOuts.first { it.name == "IN" }
+				val inOutPlus = inOuts.first { it.name == "OUT_PLUS" }
+				val paths = navigator.findAllTopologicalPaths(inOutIn, inOutPlus)
+				assertThat(paths.size).isGreaterThan(0)
+			}
 	}
 
 	// ========================================================================
@@ -145,81 +147,86 @@ class NavigationServiceBindingsTest : KoinComponent {
 
 	@Test
 	fun pathReservationServiceResolvesFromSimulationContext() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getPathReservationService()
-			assertThat(service).isNotNull()
-			assertThat(service).isInstanceOf<PathReservationService>()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getPathReservationService()
+				assertThat(service).isNotNull()
+				assertThat(service).isInstanceOf<PathReservationService>()
+			}
 	}
 
 	@Test
 	fun pathReservationServiceReportsPathAvailable() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getPathReservationService()
-			val inOuts = simCtx.getInOuts().toList()
-			assertThat(inOuts).hasSize(2)
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getPathReservationService()
+				val inOuts = simCtx.getInOuts().toList()
+				assertThat(inOuts).hasSize(2)
 
-			// All blocks should be FREE initially
-			val available = service.isPathAvailable(inOuts[0], inOuts[1])
-			assertThat(available).isTrue()
-		}
+				// All blocks should be FREE initially
+				val available = service.isPathAvailable(inOuts[0], inOuts[1])
+				assertThat(available).isTrue()
+			}
 	}
 
 	@Test
 	fun pathReservationServiceReservesLinearPath() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getPathReservationService()
-			val inOuts = simCtx.getInOuts().toList()
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getPathReservationService()
+				val inOuts = simCtx.getInOuts().toList()
 
-			val result = service.reservePath("testTrain", inOuts[0], inOuts[1])
-			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+				val result = service.reservePath("testTrain", inOuts[0], inOuts[1])
+				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-			val success = result as PathReservationService.ReservationResult.Success
-			assertThat(success.reservedBlocks.size).isGreaterThan(0)
-		}
+				val success = result as PathReservationService.ReservationResult.Success
+				assertThat(success.reservedBlocks.size).isGreaterThan(0)
+			}
 	}
 
 	@Test
 	fun pathReservationServiceReleasesReservedPath() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getPathReservationService()
-			val inOuts = simCtx.getInOuts().toList()
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getPathReservationService()
+				val inOuts = simCtx.getInOuts().toList()
 
-			// Reserve
-			service.reservePath("testTrain", inOuts[0], inOuts[1])
+				// Reserve
+				service.reservePath("testTrain", inOuts[0], inOuts[1])
 
-			// Release
-			val released = service.releasePath("testTrain")
-			assertThat(released.size).isGreaterThan(0)
+				// Release
+				val released = service.releasePath("testTrain")
+				assertThat(released.size).isGreaterThan(0)
 
-			// Should be available again
-			val available = service.isPathAvailable(inOuts[0], inOuts[1])
-			assertThat(available).isTrue()
-		}
+				// Should be available again
+				val available = service.isPathAvailable(inOuts[0], inOuts[1])
+				assertThat(available).isTrue()
+			}
 	}
 
 	@Test
 	fun pathReservationServiceGetReservedBlocksForUnknownTrainIsEmpty() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getPathReservationService()
-			val blocks = service.getReservedBlocks("nonexistentTrain")
-			assertThat(blocks).isEmpty()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getPathReservationService()
+				val blocks = service.getReservedBlocks("nonexistentTrain")
+				assertThat(blocks).isEmpty()
+			}
 	}
 
 	// ========================================================================
@@ -228,29 +235,31 @@ class NavigationServiceBindingsTest : KoinComponent {
 
 	@Test
 	fun trainNavigationServiceResolvesFromSimulationContext() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getTrainNavigationService()
-			assertThat(service).isNotNull()
-			assertThat(service).isInstanceOf<TrainNavigationService>()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getTrainNavigationService()
+				assertThat(service).isNotNull()
+				assertThat(service).isInstanceOf<TrainNavigationService>()
+			}
 	}
 
 	@Test
 	fun trainNavigationServiceReportsNoPathForUnreservedTrain() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			val service = simCtx.getTrainNavigationService()
-			val inOuts = simCtx.getInOuts().toList()
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				val service = simCtx.getTrainNavigationService()
+				val inOuts = simCtx.getInOuts().toList()
 
-			// No path reserved for this train, so navigation should not find reserved path
-			val reserved = service.isPathReservedForTrain("unknownTrain", inOuts[0])
-			assertThat(reserved).isFalse()
-		}
+				// No path reserved for this train, so navigation should not find reserved path
+				val reserved = service.isPathReservedForTrain("unknownTrain", inOuts[0])
+				assertThat(reserved).isFalse()
+			}
 	}
 
 	// ========================================================================
@@ -259,41 +268,44 @@ class NavigationServiceBindingsTest : KoinComponent {
 
 	@Test
 	fun allThreeServicesResolveFromSameContext() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.VYHYBNA_XML,
-			processFactory
-		).use { simCtx ->
-			val topoNav = simCtx.getTopologyNavigator()
-			val pathService = simCtx.getPathReservationService()
-			val trainNav = simCtx.getTrainNavigationService()
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.VYHYBNA_XML,
+				processFactory
+			).use { simCtx ->
+				val topoNav = simCtx.getTopologyNavigator()
+				val pathService = simCtx.getPathReservationService()
+				val trainNav = simCtx.getTrainNavigationService()
 
-			assertThat(topoNav).isNotNull()
-			assertThat(pathService).isNotNull()
-			assertThat(trainNav).isNotNull()
-		}
+				assertThat(topoNav).isNotNull()
+				assertThat(pathService).isNotNull()
+				assertThat(trainNav).isNotNull()
+			}
 	}
 
 	@Test
 	fun servicesFromDifferentNetworksAreIndependent() {
 		// Create first context and reserve a path
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx1 ->
-			val service1 = simCtx1.getPathReservationService()
-			val inOuts1 = simCtx1.getInOuts().toList()
-			service1.reservePath("train1", inOuts1[0], inOuts1[1])
-
-			// Create second context — should be independent
-			CommonTestFixtures.parseSimulationContext(
-				NetworkResources.SWITCH_BASIC_XML,
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
-			).use { simCtx2 ->
-				val service2 = simCtx2.getPathReservationService()
-				// Second context should have no reservations
-				val blocks = service2.getReservedBlocks("train1")
-				assertThat(blocks).isEmpty()
+			).use { simCtx1 ->
+				val service1 = simCtx1.getPathReservationService()
+				val inOuts1 = simCtx1.getInOuts().toList()
+				service1.reservePath("train1", inOuts1[0], inOuts1[1])
+
+				// Create second context — should be independent
+				CommonTestFixtures
+					.parseSimulationContext(
+						NetworkResources.SWITCH_BASIC_XML,
+						processFactory
+					).use { simCtx2 ->
+						val service2 = simCtx2.getPathReservationService()
+						// Second context should have no reservations
+						val blocks = service2.getReservedBlocks("train1")
+						assertThat(blocks).isEmpty()
+					}
 			}
-		}
 	}
 }

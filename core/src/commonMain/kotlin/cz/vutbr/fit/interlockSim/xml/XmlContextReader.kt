@@ -28,7 +28,6 @@ private val logger = KotlinLogging.logger {}
  * @since 2026-03 (KMP Task 2c)
  */
 class XmlContextReader {
-
 	companion object {
 		private const val ROOT_ELEMENT_NAME = "net"
 		private const val ATR_ORIENT_NAME = "orientation"
@@ -239,10 +238,12 @@ class XmlContextReader {
 		check(from != to) { "from and to points must be different" }
 
 		val grid = ctx.getRailWayNetGrid()
-		val fromCell = grid[from]
-			?: error("Cell at 'from' position $from not found")
-		val toCell = grid[to]
-			?: error("Cell at 'to' position $to not found")
+		val fromCell =
+			grid[from]
+				?: error("Cell at 'from' position $from not found")
+		val toCell =
+			grid[to]
+				?: error("Cell at 'to' position $to not found")
 		val fromNode = CellUtilities.assertNodeCell(fromCell)
 		val toNode = CellUtilities.assertNodeCell(toCell)
 

@@ -27,7 +27,7 @@ actual object Resources {
 		// Avoid leaking absolute build-tree paths in the exception message;
 		// report only the number of roots searched (paths are visible in build logs for debugging).
 		throw IllegalArgumentException(
-			"Resource not found in ${NATIVE_RESOURCE_ROOTS.size} native resource root(s): $path",
+			"Resource not found in ${NATIVE_RESOURCE_ROOTS.size} native resource root(s): $path"
 		)
 	}
 }

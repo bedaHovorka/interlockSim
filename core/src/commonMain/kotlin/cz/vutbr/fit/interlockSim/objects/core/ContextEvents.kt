@@ -13,7 +13,11 @@ package cz.vutbr.fit.interlockSim.objects.core
  * Kotlin-native replacement for java.beans.PropertyChangeEvent.
  * Used to notify listeners of property changes in Dynamic cell objects and contexts.
  */
-data class ContextChangeEvent(val propertyName: String, val oldValue: Any?, val newValue: Any?)
+data class ContextChangeEvent(
+	val propertyName: String,
+	val oldValue: Any?,
+	val newValue: Any?
+)
 
 /**
  * Kotlin-native replacement for java.beans.PropertyChangeListener.

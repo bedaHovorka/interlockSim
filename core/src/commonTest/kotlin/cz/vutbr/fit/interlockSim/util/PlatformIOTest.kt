@@ -12,7 +12,6 @@ import kotlin.test.assertFailsWith
  * These tests run on JVM (jvmTest) and linuxX64 (nativeTest) via commonTest.
  */
 class PlatformIOTest {
-
 	private val testFiles = mutableListOf<String>()
 
 	@AfterTest

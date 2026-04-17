@@ -24,12 +24,12 @@ import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * Test suite for InOut validation rules.
@@ -48,7 +48,6 @@ import org.koin.core.context.stopKoin
  * @see cz.vutbr.fit.interlockSim.xml.XmlContextReader
  */
 class InOutValidationTest {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin {
@@ -68,10 +67,12 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 0 InOuts throws IllegalStateException`() {
-		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
-		}
-		assertThat(exception.message ?: "").transform { it.contains("at least 1") }
+		val exception =
+			assertFailsWith<IllegalStateException> {
+				CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
+			}
+		assertThat(exception.message ?: "")
+			.transform { it.contains("at least 1") }
 			.isEqualTo(true)
 	}
 
@@ -161,10 +162,12 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Error message explains InOut requirement clearly`() {
-		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
-		}
-		assertThat(exception.message ?: "").transform { it.contains("entry") }
+		val exception =
+			assertFailsWith<IllegalStateException> {
+				CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
+			}
+		assertThat(exception.message ?: "")
+			.transform { it.contains("entry") }
 			.isEqualTo(true)
 	}
 
@@ -175,10 +178,12 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Error message reflects MIN_INOUT_ELEMENTS constant value`() {
-		val exception = assertFailsWith<IllegalStateException> {
-			CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
-		}
-		assertThat(exception.message ?: "").transform { it.contains("at least 1") }
+		val exception =
+			assertFailsWith<IllegalStateException> {
+				CommonTestFixtures.parseEditingContext(NetworkResources.ZERO_INOUTS_XML)
+			}
+		assertThat(exception.message ?: "")
+			.transform { it.contains("at least 1") }
 			.isEqualTo(true)
 	}
 }

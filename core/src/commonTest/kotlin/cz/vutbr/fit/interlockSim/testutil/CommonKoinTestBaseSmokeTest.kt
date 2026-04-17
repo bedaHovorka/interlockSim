@@ -12,10 +12,10 @@ package cz.vutbr.fit.interlockSim.testutil
 import assertk.assertThat
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-import kotlin.test.Test
 import org.koin.core.component.inject
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import kotlin.test.Test
 
 /**
  * Smoke test for [CommonKoinTestBase].
@@ -29,7 +29,6 @@ import org.koin.dsl.module
  * @since 2026 (commonTest migration — Task 3c)
  */
 class CommonKoinTestBaseSmokeTest : CommonKoinTestBase() {
-
 	// Inject a binding from commonCoreTestModule to prove Koin is running
 	private val editingContext: DefaultEditingContext by inject()
 
@@ -44,13 +43,13 @@ class CommonKoinTestBaseSmokeTest : CommonKoinTestBase() {
  * with a minimal custom module.
  */
 class CommonKoinTestBaseCustomModuleSmokeTest : CommonKoinTestBase() {
-
 	// Custom binding provided by [customModule] below
 	private val greeting: String by inject()
 
-	override fun getTestModule(): Module = module {
-		factory<String> { "hello-from-koin" }
-	}
+	override fun getTestModule(): Module =
+		module {
+			factory<String> { "hello-from-koin" }
+		}
 
 	@Test
 	fun customModuleBindingIsInjectable() {

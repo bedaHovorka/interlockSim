@@ -11,7 +11,6 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import kotlin.test.Test
 
 class NodeCellFactoryTest {
-
 	@Test
 	fun tagNameFor_returns_correct_tag_for_InOut() {
 		val inOut = InOut("A", false, Cell.SpatialType.HORIZONTAL)

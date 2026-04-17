@@ -22,7 +22,9 @@ package cz.vutbr.fit.interlockSim.context
  * - commonTest code can inject [EditingContextFactory] (portable mock)
  * - JVM GUI/simulation code can inject [JvmEditingContextFactory] (full API)
  */
-interface JvmEditingContextFactory : EditingContextFactory, ContextFactory {
+interface JvmEditingContextFactory :
+	EditingContextFactory,
+	ContextFactory {
 	/**
 	 * Create a new railway object in the given context using reflection.
 	 *

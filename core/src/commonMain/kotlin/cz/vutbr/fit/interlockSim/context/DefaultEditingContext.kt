@@ -88,13 +88,14 @@ open class DefaultEditingContext(
 	 * @see close
 	 */
 	override val scope =
-		org.koin.mp.KoinPlatformTools.defaultContext()
+		org.koin.mp.KoinPlatformTools
+			.defaultContext()
 			.get()
 			.createScope(
 				// DefaultEditingContext does not override hashCode(), so this.hashCode()
-			// returns the identity hash code (equivalent to System.identityHashCode(this)).
-			// Each context instance gets a unique scope ID.
-			scopeId = this.hashCode().toString(),
+				// returns the identity hash code (equivalent to System.identityHashCode(this)).
+				// Each context instance gets a unique scope ID.
+				scopeId = this.hashCode().toString(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultEditingContext>(),
@@ -425,12 +426,12 @@ open class DefaultEditingContext(
 			p2Mut = Point(temp.x, temp.y)
 		}
 
-		var P = 2 * dy - dx // prediktor
-		val P1 = 2 * dy
-		val P2 = P1 - 2 * dx
+		var predictor = 2 * dy - dx // prediktor
+		val p1Inc = 2 * dy
+		val p2Inc = p1Inc - 2 * dx
 		var y = p1Mut.y
 
-		val step_y = if (p1Mut.y > p2Mut.y) -1 else 1 // smer kresleni
+		val stepY = if (p1Mut.y > p2Mut.y) -1 else 1 // smer kresleni
 
 		for (x in p1Mut.x..p2Mut.x) {
 			val newPoint = if (!swapped) Point(x, y) else Point(y, x)
@@ -442,11 +443,11 @@ open class DefaultEditingContext(
 			points.add(newPoint)
 
 			// nastaveni prediktoru
-			if (P >= 0) {
-				P += P2
-				y += step_y
+			if (predictor >= 0) {
+				predictor += p2Inc
+				y += stepY
 			} else {
-				P += P1
+				predictor += p1Inc
 			}
 		}
 		return b

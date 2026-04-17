@@ -16,11 +16,11 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.prop
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.buildMinimalSimulation
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.BeforeEach
@@ -149,9 +149,11 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("valid XML file loads correctly")
 		fun xmlFile_valid_loadsContext() {
 			// Arrange & Act
-			val context = (TestFixtures.loadMinimalNetworkXml()
-				?: error("Test fixture not found: minimal-network.xml"))
-				.use { editingContextFactory.createContext(it) }
+			val context =
+				(
+					TestFixtures.loadMinimalNetworkXml()
+						?: error("Test fixture not found: minimal-network.xml")
+				).use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -172,9 +174,11 @@ class ContextInitializationTest : KoinTestBase() {
 		@DisplayName("linear track XML loads with two InOut endpoints")
 		fun linearTrackFile_loadsWithEndpoints() {
 			// Arrange & Act
-			val context = (TestFixtures.loadLinearTrackXml()
-				?: error("Test fixture not found: linear-track.xml"))
-				.use { editingContextFactory.createContext(it) }
+			val context =
+				(
+					TestFixtures.loadLinearTrackXml()
+						?: error("Test fixture not found: linear-track.xml")
+				).use { editingContextFactory.createContext(it) }
 
 			// Assert
 			assertThat(context)
@@ -231,9 +235,10 @@ class ContextInitializationTest : KoinTestBase() {
 			// Arrange & Act & Assert
 			assertk
 				.assertFailure {
-					(TestFixtures.loadInvalidMalformedXml()
-						?: error("Test fixture not found: invalid-malformed-xml.xml"))
-						.use { editingContextFactory.createContext(it) }
+					(
+						TestFixtures.loadInvalidMalformedXml()
+							?: error("Test fixture not found: invalid-malformed-xml.xml")
+					).use { editingContextFactory.createContext(it) }
 				}.isInstanceOf(Exception::class)
 		}
 	}
@@ -246,9 +251,11 @@ class ContextInitializationTest : KoinTestBase() {
 		@BeforeEach
 		fun setUp() {
 			// Load context from linear-track.xml for state validation tests
-			val editingContext = (TestFixtures.loadLinearTrackXml()
-				?: error("Test fixture not found: linear-track.xml"))
-				.use { editingContextFactory.createContext(it) } as EditingContext
+			val editingContext =
+				(
+					TestFixtures.loadLinearTrackXml()
+						?: error("Test fixture not found: linear-track.xml")
+				).use { editingContextFactory.createContext(it) } as EditingContext
 			linearTrackContext = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 

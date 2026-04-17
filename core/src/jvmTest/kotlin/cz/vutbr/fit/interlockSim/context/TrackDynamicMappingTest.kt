@@ -18,8 +18,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -40,8 +40,7 @@ import org.koin.test.inject
 class TrackDynamicMappingTest : KoinTestBase() {
 	private val factory: SimulationContextFactory by inject()
 
-	private fun loadVyhybnaStream() =
-		TestFixtures.loadShuntingXml()
+	private fun loadVyhybnaStream() = TestFixtures.loadShuntingXml()
 
 	@Nested
 	@DisplayName("Unit Tests - Track Mapping")

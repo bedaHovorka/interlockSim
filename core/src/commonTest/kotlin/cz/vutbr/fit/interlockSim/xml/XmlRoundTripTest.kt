@@ -13,14 +13,13 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Resources
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 class XmlRoundTripTest {
-
 	private val reader = XmlContextReader()
 	private val writer = XmlContextWriter()
 

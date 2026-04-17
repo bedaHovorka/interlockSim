@@ -20,7 +20,10 @@ expect fun readTextFile(path: String): String
  * @param content Content to write
  * @throws IllegalStateException if the file cannot be written
  */
-expect fun writeTextFile(path: String, content: String)
+expect fun writeTextFile(
+	path: String,
+	content: String
+)
 
 /**
  * Deletes the file at the given path.

@@ -615,10 +615,7 @@ class PathReservationRegistry(
 	 *         merge would create a third occurrence of any separator (cycle guard)
 	 * @since Issue #296 Phase 8
 	 */
-	/**
-	 * Adds [element] to [mergedPath] with cycle detection for path separators.
-	 * Returns [old] PathInfo if a cycle is detected (3+ occurrences), null otherwise.
-	 */
+
 	private fun addElementWithCycleDetection(
 		element: cz.vutbr.fit.interlockSim.objects.core.PathElement,
 		mergedPath: ArrayPath,
@@ -679,7 +676,6 @@ class PathReservationRegistry(
 
 		// Step 4: Add elements from new path (skip first separator if overlapping, detect cycles)
 		for (element in new.reservedPath) {
-
 			if (skipFirst && !skipped && element == new.start) {
 				skipped = true // Skip this occurrence (already in old path)
 				logger.trace {

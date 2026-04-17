@@ -11,7 +11,6 @@ import kotlin.test.assertTrue
  * without requiring a full simulation environment.
  */
 class TrainApprovalFormatTest {
-
 	@Test
 	fun formatApprovalMessageBasicFormat() {
 		val msg = Train.formatApprovalMessage("Train #1", "IO1", "IO2")

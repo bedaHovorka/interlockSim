@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-
 /**
  * for this program extended unoriented graph interface
  *

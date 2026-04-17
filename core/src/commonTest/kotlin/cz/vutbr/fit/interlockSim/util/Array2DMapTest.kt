@@ -22,11 +22,12 @@ import kotlin.test.Test
  */
 class Array2DMapTest {
 	private val array2DMap: Array2DMap<Int> = Array2DMap()
+
 	// Note: Original JVM test used TreeMap(POINT_COMPARATOR) for comparator-ordered reference.
 	// mutableMapOf (LinkedHashMap) is sufficient here because all assertions check containment
 	// semantics (equals, get, containsKey, entries Set.equals) — none rely on iteration order.
 	private val referenceMap = mutableMapOf<Point, Int>()
-	private val BOUND: Int = 1000
+	private val bound: Int = 1000
 
 	companion object {
 		private val RANDOM = Random(0)
@@ -37,11 +38,11 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testClear() {
-		EQ()
+		assertEquality()
 		array2DMap.clear()
 		referenceMap.clear()
 		assertThat(array2DMap.size).isEqualTo(0)
-		EQ()
+		assertEquality()
 	}
 
 	/**
@@ -57,9 +58,9 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testGetIntInt() {
-		EQ()
-		for (x in 0 until BOUND) {
-			for (y in 0 until BOUND) {
+		assertEquality()
+		for (x in 0 until bound) {
+			for (y in 0 until bound) {
 				val p = Point(x, y)
 				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
@@ -73,9 +74,9 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testGetObject() {
-		EQ()
-		for (x in 0 until BOUND) {
-			for (y in 0 until BOUND) {
+		assertEquality()
+		for (x in 0 until bound) {
+			for (y in 0 until bound) {
 				val p = Point(x, y)
 				val integer1 = referenceMap.get(p)
 				val integer2 = array2DMap.get(x, y)
@@ -89,9 +90,9 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testPutPointV() {
-		EQ()
-		for (x in 0 until BOUND) {
-			val y = RANDOM.nextInt(BOUND)
+		assertEquality()
+		for (x in 0 until bound) {
+			val y = RANDOM.nextInt(bound)
 			val newInt = RANDOM.nextInt()
 			val p = Point(x, y)
 			val integer1 = referenceMap.put(p, newInt)
@@ -99,7 +100,7 @@ class Array2DMapTest {
 			assertThat(integer2).isEqualTo(integer1)
 		}
 		testEntrySet()
-		EQ()
+		assertEquality()
 	}
 
 	/**
@@ -107,8 +108,8 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testRemoveObject() {
-		EQ()
-		EQ()
+		assertEquality()
+		assertEquality()
 	}
 
 	/**
@@ -116,9 +117,9 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testContainsKeyObject() {
-		EQ()
-		for (x in 0 until BOUND) {
-			for (y in 0 until BOUND) {
+		assertEquality()
+		for (x in 0 until bound) {
+			for (y in 0 until bound) {
 				val p = Point(x, y)
 				assertThat(array2DMap.containsKey(p)).isEqualTo(referenceMap.containsKey(p))
 			}
@@ -131,9 +132,9 @@ class Array2DMapTest {
 	@Test
 	fun testGetRow() {
 		testPutPointV()
-		for (y in 0 until BOUND) {
+		for (y in 0 until bound) {
 			val treeList = ArrayList<Int?>()
-			for (x in 0 until BOUND) {
+			for (x in 0 until bound) {
 				val p = Point(x, y)
 				val double1 = referenceMap.get(p)
 				treeList.add(double1)
@@ -142,10 +143,10 @@ class Array2DMapTest {
 			// filterNotNull() semantics: row contains only non-null values, in order
 			assertThat(row).isEqualTo(treeList.filterNotNull())
 		}
-		EQ()
+		assertEquality()
 	}
 
-	private fun EQ() {
+	private fun assertEquality() {
 		assertThat(array2DMap).isEqualTo(referenceMap)
 	}
 
@@ -155,7 +156,7 @@ class Array2DMapTest {
 	 */
 	@Test
 	fun testComparator() {
-		for (i in 0 until BOUND) {
+		for (i in 0 until bound) {
 			val p1 = randomPoint()
 			val p2 = randomPoint()
 			twoTest(p1, p2)
@@ -205,7 +206,7 @@ class Array2DMapTest {
 		assertThat(fc).isEqualTo(-c.compare(p2, p1).sign)
 	}
 
-	private fun randomPoint(): Point = Point(RANDOM.nextInt(BOUND), RANDOM.nextInt(BOUND))
+	private fun randomPoint(): Point = Point(RANDOM.nextInt(bound), RANDOM.nextInt(bound))
 
 	/**
 	 * Test getRow with a sparse row containing null gaps (non-contiguous x values).

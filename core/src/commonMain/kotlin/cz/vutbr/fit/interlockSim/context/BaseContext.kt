@@ -10,11 +10,11 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.domain.COMMON_MAX_SPEED
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
@@ -359,7 +359,11 @@ abstract class BaseContext<T : TrackBlock>(
 		}
 	}
 
-	private fun firePropertyChangeAlways(propertyName: String, oldValue: Any?, newValue: Any?) {
+	private fun firePropertyChangeAlways(
+		propertyName: String,
+		oldValue: Any?,
+		newValue: Any?
+	) {
 		if (oldValue == newValue) {
 			return
 		}

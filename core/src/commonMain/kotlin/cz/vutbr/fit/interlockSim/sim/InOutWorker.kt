@@ -9,6 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.Head
+import cz.hovorka.kdisco.Link
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
@@ -18,10 +22,6 @@ import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Head
-import cz.hovorka.kdisco.Link
-import cz.hovorka.kdisco.Process
 
 /**
  * Behaviour of InOut process

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
@@ -28,7 +29,6 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.tracks.AbstractTrack
 import cz.vutbr.fit.interlockSim.util.Util
-import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}

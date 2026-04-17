@@ -48,8 +48,12 @@ data class PointF(
 	 * @param t Interpolation parameter (0.0 = this point, 1.0 = other point)
 	 * @return Interpolated point at position t
 	 */
-	fun lerp(other: PointF, t: Float): PointF = PointF(
-		x + (other.x - x) * t,
-		y + (other.y - y) * t
-	)
+	fun lerp(
+		other: PointF,
+		t: Float
+	): PointF =
+		PointF(
+			x + (other.x - x) * t,
+			y + (other.y - y) * t
+		)
 }
