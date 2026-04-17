@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.providers.SwitchActiveSegmentsProvider
 import io.mockk.mockk
