@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.context
 /**
  * Factory for simulation context
  */
-interface SimulationContextFactory : ContextFactory {
+interface SimulationContextFactory : ContextFactory, CommonSimulationContextFactory {
 	/**
 	 * Convert editing to simulation context.
 	 *
