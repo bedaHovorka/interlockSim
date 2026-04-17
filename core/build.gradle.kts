@@ -459,7 +459,7 @@ val checkCoreCommonMainPurity by tasks.registering {
 		// Catch inline fully-qualified java.* references (e.g. java.util.TreeSet, java.lang.*)
 		val inlineJavaRegex = Regex("(?<![\\w])java\\.[a-z]")
 		// Catch inline fully-qualified android.* references (e.g. android.os.Bundle)
-		val inlineAndroidRegex = Regex("(?<![\\w])android\\.[a-z]")
+		val inlineAndroidRegex = Regex("(?<![\\w])android\\.[a-zA-Z]")
 		// Catch System.* calls (java.lang.System is implicitly available on JVM only)
 		val systemRegex = Regex("(?<![\\w.])System\\.[a-zA-Z]")
 		val violations = mutableListOf<String>()
