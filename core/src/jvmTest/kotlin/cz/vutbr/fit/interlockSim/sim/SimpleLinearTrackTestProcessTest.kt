@@ -67,10 +67,10 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 			length = 20.0
 		)
 
-	/** Scenario 1: train follows a pre-reserved path A→B and exits. */
+	/** Scenario 1: train follows a pre-reserved path A→B and makes genuine forward progress. */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
-	fun `train follows reserved path and exits`() {
+	fun `train follows reserved path and makes forward progress`() {
 		val ctx = loadLinearContext()
 		val inOuts = ctx.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
@@ -193,6 +193,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		assertThat(reserved).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
 		var capturedTrain: Train? = null
+		var distanceBeforeRelease = 0.0
 		val process = SimpleLinearTrackTestProcess(
 			ctx,
 			endTime = 60L,
@@ -210,6 +211,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 						// Train has been active for ~10 sim-seconds but Phantom still
 						// holds the path — it must not have completed its journey yet.
 						assertThat(train.terminated()).isEqualTo(false)
+						distanceBeforeRelease = train.totalDistance
 						reservationService.releasePath("Phantom")
 						val res = reservationService.reservePath(train.name, a, b)
 						assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
@@ -228,8 +230,8 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		}
 		val train = requireNotNull(capturedTrain) { "onTrainCreated was never called" }
 		assertThat(process.getTrainsEntered()).isEqualTo(1)
-		// Train must have moved after the path was released and reassigned.
-		assertThat(train.totalDistance).isGreaterThan(0.0)
+		// Train must have moved AFTER the path was released — not merely before blocking.
+		assertThat(train.totalDistance).isGreaterThan(distanceBeforeRelease)
 		assertThat(process.getBlockTransitions(train.name)).isGreaterThan(0)
 	}
 }

@@ -49,9 +49,11 @@ import org.koin.core.component.KoinComponent
  *  - [getBlockTransitions]
  *  - [getAllBlockTransitions]
  *
- * Counters are incremented from existing lifecycle sites only; the
- * block-transition counter is incremented only when a train makes genuine
- * forward progress (totalDistance increases), matching ShuntingLoop semantics.
+ * Counters are incremented from existing lifecycle sites only; in this test
+ * process, the block-transition counter acts as a forward-motion proxy and is
+ * incremented only when a train makes genuine progress (totalDistance
+ * increases). This is intentionally specific to this process and should not be
+ * read as identical to ShuntingLoop's path-reservation-based semantics.
  *
  * @see ShuntingLoop pattern source for instrumentation
  * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/366">Issue #366</a>
