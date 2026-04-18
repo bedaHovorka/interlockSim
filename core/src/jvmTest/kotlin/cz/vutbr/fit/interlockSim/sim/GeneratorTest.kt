@@ -273,6 +273,38 @@ class GeneratorTest : KoinTestBase() {
 			// Different instances (not same object reference)
 			assertThat(random1).isNotSameInstanceAs(random2)
 		}
+
+		/**
+		 * Test: the seeded shuffle RNG advances state across successive calls.
+		 *
+		 * Accesses the `random` field (same approach as sibling tests) and directly
+		 * exercises the shuffle step that generateRandomTimetable() performs internally,
+		 * without invoking Process.time() (which requires a live kDisco simulation context).
+		 * The exact expected first-element sequence is pre-computed for seed 0, making
+		 * the assertion fully deterministic rather than probabilistic.
+		 */
+		@Test
+		fun `successive random timetable generations produce varied results when shuffling is enabled`() {
+			// Arrange: access the seeded random field (same approach as RandomInstanceTests)
+			val generator = Generator(mockContext, shuffleInOuts = true)
+			val randomField = Generator::class.java.getDeclaredField("random")
+			randomField.isAccessible = true
+			val kdiscoRandom = randomField.get(generator) as cz.hovorka.kdisco.Random
+
+			// Act: shuffle a 3-element list 8 times, mirroring the shuffle step in
+			// generateRandomTimetable() without calling Process.time().
+			// Using 3 elements gives 6 permutations so all must appear across 8 draws.
+			val names = listOf("X", "Y", "Z")
+			val firstElements = (1..8).map {
+				val list = names.toMutableList()
+				list.shuffle(kdiscoRandom.asKotlinRandom())
+				list[0]
+			}
+
+			// Assert: exact expected first-element sequence for seed 0 (fully deterministic).
+			// Pre-computed using java.util.Random(0L) with Kotlin stdlib shuffle on 3 elements.
+			assertThat(firstElements).isEqualTo(listOf("Z", "X", "Y", "Y", "Z", "Y", "X", "X"))
+		}
 	}
 
 	@Nested
