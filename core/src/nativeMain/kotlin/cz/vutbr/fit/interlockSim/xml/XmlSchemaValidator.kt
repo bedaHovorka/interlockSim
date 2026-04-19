@@ -18,7 +18,6 @@ import libxml2.xmlSchemaParse
 import libxml2.xmlSchemaValidateDoc
 
 actual class XmlSchemaValidator actual constructor() {
-
 	// Unlike the JVM actual (which pre-compiles the Schema once at construction),
 	// the native actual re-parses XmlSchemaContent.SCHEMA_XSD on every call.
 	// libxml2's xmlSchemaPtr is not safely reusable across calls in K/N, so this
@@ -32,13 +31,14 @@ actual class XmlSchemaValidator actual constructor() {
 		// XML_PARSE_NONET blocks network access to prevent XXE via external entity URIs.
 		// Note: XML_PARSE_NOENT would *expand* entities (wrong direction for XXE prevention).
 		val xmlByteCount = xmlContent.encodeToByteArray().size
-		val doc = xmlReadMemory(xmlContent, xmlByteCount, null, null, XML_PARSE_NONET.toInt())
-			?: return XmlValidationResult.failure(
-			listOf(
-				extractLastError()
-					?: "Failed to parse XML document"
-			)
-		)
+		val doc =
+			xmlReadMemory(xmlContent, xmlByteCount, null, null, XML_PARSE_NONET.toInt())
+				?: return XmlValidationResult.failure(
+					listOf(
+						extractLastError()
+							?: "Failed to parse XML document"
+					)
+				)
 
 		return try {
 			validateWithSchema(doc)
@@ -47,9 +47,7 @@ actual class XmlSchemaValidator actual constructor() {
 		}
 	}
 
-	private fun validateWithSchema(
-		doc: libxml2.xmlDocPtr
-	): XmlValidationResult {
+	private fun validateWithSchema(doc: libxml2.xmlDocPtr): XmlValidationResult {
 		// Parse XSD as an XML document, then create schema from doc.
 		// This avoids the dangling-pointer issue with
 		// xmlSchemaNewMemParserCtxt (K/N String auto-conversion
@@ -57,13 +55,14 @@ actual class XmlSchemaValidator actual constructor() {
 		// xmlSchemaParse reads it).
 		val xsdContent = XmlSchemaContent.SCHEMA_XSD
 		val xsdByteCount = xsdContent.encodeToByteArray().size
-		val xsdDoc = xmlReadMemory(xsdContent, xsdByteCount, null, null, XML_PARSE_NONET.toInt())
-			?: return XmlValidationResult.failure(
-			listOf(
-				extractLastError()
-					?: "Failed to parse XSD as XML document"
-			)
-		)
+		val xsdDoc =
+			xmlReadMemory(xsdContent, xsdByteCount, null, null, XML_PARSE_NONET.toInt())
+				?: return XmlValidationResult.failure(
+					listOf(
+						extractLastError()
+							?: "Failed to parse XSD as XML document"
+					)
+				)
 
 		// Note: xmlSchemaNewDocParserCtxt takes ownership of the
 		// xsdDoc — do NOT call xmlFreeDoc on it separately.
@@ -78,13 +77,14 @@ actual class XmlSchemaValidator actual constructor() {
 			)
 		}
 
-		val schema = try {
-			xmlSchemaParse(parserCtxt)
-		} finally {
-			xmlSchemaFreeParserCtxt(parserCtxt)
-		} ?: return XmlValidationResult.failure(
-			listOf(extractLastError() ?: "Failed to parse XSD schema")
-		)
+		val schema =
+			try {
+				xmlSchemaParse(parserCtxt)
+			} finally {
+				xmlSchemaFreeParserCtxt(parserCtxt)
+			} ?: return XmlValidationResult.failure(
+				listOf(extractLastError() ?: "Failed to parse XSD schema")
+			)
 
 		val validCtxt = xmlSchemaNewValidCtxt(schema)
 		if (validCtxt == null) {
@@ -100,8 +100,9 @@ actual class XmlSchemaValidator actual constructor() {
 			if (result == 0) {
 				XmlValidationResult.success()
 			} else {
-				val errorMsg = extractLastError()
-					?: "Schema validation failed (code: $result)"
+				val errorMsg =
+					extractLastError()
+						?: "Schema validation failed (code: $result)"
 				XmlValidationResult.failure(listOf(errorMsg))
 			}
 		} finally {
@@ -112,6 +113,8 @@ actual class XmlSchemaValidator actual constructor() {
 
 	private fun extractLastError(): String? {
 		val error = xmlGetLastError() ?: return null
-		return error.pointed.message?.toKString()?.trim()
+		return error.pointed.message
+			?.toKString()
+			?.trim()
 	}
 }

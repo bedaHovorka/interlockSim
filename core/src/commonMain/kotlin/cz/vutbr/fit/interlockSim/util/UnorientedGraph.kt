@@ -9,7 +9,6 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-
 /**
  * ADT Graph interface
  *

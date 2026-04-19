@@ -2,8 +2,8 @@ package cz.vutbr.fit.interlockSim.xml
 
 import assertk.assertThat
 import assertk.assertions.contains
-import assertk.assertions.isNotEmpty
 import assertk.assertions.isFalse
+import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
 import assertk.assertions.startsWith
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
@@ -14,14 +14,13 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 class XmlContextWriterTest {
-
 	@BeforeTest
 	fun setUpKoin() {
 		startKoin { modules(commonCoreTestModule) }
@@ -196,8 +195,11 @@ class XmlContextWriterTest {
 		ctx.putCell(Point(5, 1), inOutB)
 		val trackBlock = SimpleTrackBlock(inOutA, inOutB, 100.0, 80.0, 80.0)
 		ctx.hardJoin(
-			Cell.Segment.F, Cell.Segment.A,
-			Point(1, 1), Point(5, 1), trackBlock
+			Cell.Segment.F,
+			Cell.Segment.A,
+			Point(1, 1),
+			Point(5, 1),
+			trackBlock
 		)
 		return ctx
 	}

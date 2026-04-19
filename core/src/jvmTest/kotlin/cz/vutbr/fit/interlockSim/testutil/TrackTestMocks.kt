@@ -221,9 +221,7 @@ class MockNodeCell(
 
 	override fun allowedSpeed(): Double = speed
 
-	override fun joins(): Set<Segment> {
-		return setOf(Segment.F, Segment.A)
-	}
+	override fun joins(): Set<Segment> = setOf(Segment.F, Segment.A)
 
 	init {
 		setName(name)

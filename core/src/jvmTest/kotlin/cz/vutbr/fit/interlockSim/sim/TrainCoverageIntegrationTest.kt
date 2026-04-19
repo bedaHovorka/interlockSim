@@ -65,9 +65,10 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 	}
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
-		val ctx = TestFixtures.loadShuntingXml().use { xml ->
-			Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(xml))
-		}
+		val ctx =
+			TestFixtures.loadShuntingXml().use { xml ->
+				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(xml))
+			}
 		ctx.getInOuts() // Initialize dynamic wrapper map (required side-effect)
 		context = ctx
 		return ctx
@@ -82,7 +83,6 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 	@DisplayName("Front -- semaphore and section transition coverage")
 	@Tag("integration-test")
 	inner class FrontCoverageTests {
-
 		/**
 		 * Extended ShuntingLoop run (endTime=200) exercises Front branches through
 		 * multiple train generations. Covers:
@@ -99,15 +99,17 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 
 			val endEvents = AtomicInteger(0)
 			val continuousEvents = AtomicInteger(0)
-			ctx.addPropertyChangeListener(ContextPropertyChangeListener { event ->
-				when (event.propertyName) {
-					ReportType.TRAIN_EVENTS.name -> {
-						val msg = event.newValue?.toString() ?: ""
-						if (msg.contains("ends")) endEvents.incrementAndGet()
+			ctx.addPropertyChangeListener(
+				ContextPropertyChangeListener { event ->
+					when (event.propertyName) {
+						ReportType.TRAIN_EVENTS.name -> {
+							val msg = event.newValue?.toString() ?: ""
+							if (msg.contains("ends")) endEvents.incrementAndGet()
+						}
+						ReportType.TRAIN_CONTINUOUS.name -> continuousEvents.incrementAndGet()
 					}
-					ReportType.TRAIN_CONTINUOUS.name -> continuousEvents.incrementAndGet()
 				}
-			})
+			)
 
 			ctx.setMainProcess(ShuntingLoop(ctx, 200L))
 			ctx.run()
@@ -128,11 +130,13 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val ctx = loadVyhybnaContext()
 
 			val trainApproved = AtomicInteger(0)
-			ctx.addPropertyChangeListener(ContextPropertyChangeListener { event ->
-				if (event.propertyName == ReportType.TRAIN_APPROVED.name) {
-					trainApproved.incrementAndGet()
+			ctx.addPropertyChangeListener(
+				ContextPropertyChangeListener { event ->
+					if (event.propertyName == ReportType.TRAIN_APPROVED.name) {
+						trainApproved.incrementAndGet()
+					}
 				}
-			})
+			)
 
 			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
 			ctx.run()
@@ -188,7 +192,6 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 	@DisplayName("LengthChecker -- report() and check() coverage")
 	@Tag("integration-test")
 	inner class LengthCheckerCoverageTests {
-
 		/**
 		 * Exercises LengthChecker.report() via reflection on a freshly created Train.
 		 *

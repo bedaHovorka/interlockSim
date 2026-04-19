@@ -19,8 +19,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import kotlin.test.Test
 import org.koin.core.component.inject
+import kotlin.test.Test
 
 class ContextTypeParameterizationTest : CommonKoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()

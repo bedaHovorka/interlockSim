@@ -44,5 +44,4 @@ fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.valuesMulti(): Collectio
  * @param key the key to look up
  * @return set of values for the key, or empty set if key not present
  */
-fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.getMulti(key: K): Set<V> =
-	get(key)?.toSet() ?: emptySet()
+fun <K : Comparable<K>, V> MutableMap<K, MutableSet<V>>.getMulti(key: K): Set<V> = get(key)?.toSet() ?: emptySet()

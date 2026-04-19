@@ -16,8 +16,8 @@ import cz.vutbr.fit.interlockSim.sim.Generator
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
-import kotlin.test.Test
 import org.koin.core.component.inject
+import kotlin.test.Test
 
 /**
  * Tests for SimulationProcessFactory pattern implementation.

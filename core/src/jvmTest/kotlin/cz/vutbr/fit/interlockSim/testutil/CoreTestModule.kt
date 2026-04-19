@@ -6,8 +6,8 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
@@ -46,15 +46,15 @@ private class CoreTestEditingContextFactory : JvmEditingContextFactory {
 	override fun createContext(stream: InputStream): cz.vutbr.fit.interlockSim.context.Context<*, *> =
 		xmlFactory.createContext(stream)
 
-	override fun saveContext(context: cz.vutbr.fit.interlockSim.context.Context<*, *>, file: File): Boolean =
-		xmlFactory.saveContext(context, file)
+	override fun saveContext(
+		context: cz.vutbr.fit.interlockSim.context.Context<*, *>,
+		file: File
+	): Boolean = xmlFactory.saveContext(context, file)
 
 	override fun saveContext(
 		context: cz.vutbr.fit.interlockSim.context.Context<*, *>,
 		stream: OutputStream
-	): Boolean =
-		xmlFactory.saveContext(context, stream)
-
+	): Boolean = xmlFactory.saveContext(context, stream)
 }
 
 /**

@@ -13,11 +13,11 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.TestTopologies
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
@@ -46,9 +46,12 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
 		val stream = TestFixtures.loadShuntingXml()
-		return stream.use { s ->
-			Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-		}.also { it.getInOuts() /* Initialize dynamic wrapper map (required side-effect) */ }
+		return stream
+			.use { s ->
+				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
+			}.also {
+				it.getInOuts() // Initialize dynamic wrapper map (required side-effect)
+			}
 	}
 
 	/**
@@ -60,9 +63,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	 */
 	private fun countTrainContinuousEvents(ctx: DefaultSimulationContext): AtomicInteger {
 		val count = AtomicInteger(0)
-		ctx.addPropertyChangeListener(ContextPropertyChangeListener { event ->
-			if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) count.incrementAndGet()
-		})
+		ctx.addPropertyChangeListener(
+			ContextPropertyChangeListener { event ->
+				if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) count.incrementAndGet()
+			}
+		)
 		return count
 	}
 
@@ -132,9 +137,11 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		val ctx = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 		val reportCount = AtomicInteger(0)
-		ctx.addPropertyChangeListener(ContextPropertyChangeListener { event ->
-			if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) reportCount.incrementAndGet()
-		})
+		ctx.addPropertyChangeListener(
+			ContextPropertyChangeListener { event ->
+				if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) reportCount.incrementAndGet()
+			}
+		)
 
 		val inOuts = ctx.getInOuts().toList()
 		require(inOuts.size >= 2) { "Test requires at least 2 InOuts" }

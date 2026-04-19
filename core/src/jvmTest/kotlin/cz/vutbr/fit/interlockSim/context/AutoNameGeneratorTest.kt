@@ -4,7 +4,6 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
-import kotlin.reflect.KClass
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -19,6 +18,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import org.koin.test.inject
+import kotlin.reflect.KClass
 
 @DisplayName("AutoNameGenerator")
 class AutoNameGeneratorTest : KoinTestBase() {
@@ -42,7 +42,7 @@ class AutoNameGeneratorTest : KoinTestBase() {
 			listOf(
 				Arguments.of(RailSemaphore::class, "S1"),
 				Arguments.of(RailSwitch::class, "SW1"),
-				Arguments.of(InOut::class, "IO1"),
+				Arguments.of(InOut::class, "IO1")
 			)
 	}
 
@@ -51,7 +51,10 @@ class AutoNameGeneratorTest : KoinTestBase() {
 	inner class NameGeneration {
 		@ParameterizedTest(name = "first name for {0} is {1}")
 		@MethodSource("cz.vutbr.fit.interlockSim.context.AutoNameGeneratorTest#cellTypePrefixes")
-		fun `generates correct first name for cell type`(cellClass: KClass<out NodeCell>, expectedName: String) {
+		fun `generates correct first name for cell type`(
+			cellClass: KClass<out NodeCell>,
+			expectedName: String
+		) {
 			val name = AutoNameGenerator.generateName(cellClass, context)
 			assertThat(name).isEqualTo(expectedName)
 		}

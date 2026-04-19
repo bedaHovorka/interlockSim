@@ -14,10 +14,10 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -47,7 +47,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("JVM Parity Reference Tests (Issue #417)")
 class JvmParityReferenceTest : KoinTestBase() {
-
 	companion object {
 		private const val END_TIME = 60L
 		private const val VYHYBNA_RESOURCE = "/cz/vutbr/fit/interlockSim/resource/vyhybna.xml"
@@ -61,11 +60,13 @@ class JvmParityReferenceTest : KoinTestBase() {
 	 */
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
 		val factory = getKoin().get<SimulationContextFactory>()
-		val stream = Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
-			?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
-		val context = Util.assertInstanceOf<DefaultSimulationContext>(
-			stream.use { factory.createContext(it) }
-		)
+		val stream =
+			Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
+				?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
+		val context =
+			Util.assertInstanceOf<DefaultSimulationContext>(
+				stream.use { factory.createContext(it) }
+			)
 		context.getInOuts()
 		context.setMainProcess(ShuntingLoop(context, END_TIME))
 
@@ -123,9 +124,14 @@ class JvmParityReferenceTest : KoinTestBase() {
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun `invariant 5 - events are in chronological order`() {
 		val (events, _) = runSimulationAndCollect()
-		val timestamps = events.mapNotNull { line ->
-			timestampRegex.find(line)?.groupValues?.get(1)?.toDouble()
-		}
+		val timestamps =
+			events.mapNotNull { line ->
+				timestampRegex
+					.find(line)
+					?.groupValues
+					?.get(1)
+					?.toDouble()
+			}
 		assertThat(timestamps.size == events.size, name = "All lines should have timestamps").isTrue()
 		for (i in 1 until timestamps.size) {
 			assertThat(

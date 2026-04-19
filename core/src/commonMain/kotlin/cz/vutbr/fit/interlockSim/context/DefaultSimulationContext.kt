@@ -9,6 +9,10 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.Random
+import cz.hovorka.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
@@ -43,10 +47,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Random
-import cz.hovorka.kdisco.Simulation
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -130,7 +130,8 @@ open class DefaultSimulationContext(
 	 * @see close
 	 */
 	override val scope =
-		org.koin.mp.KoinPlatformTools.defaultContext()
+		org.koin.mp.KoinPlatformTools
+			.defaultContext()
 			.get()
 			.createScope(
 				scopeId = platformIdentityCode(this),
@@ -543,6 +544,7 @@ open class DefaultSimulationContext(
 
 			// 2. Validate all NodeCells have wrappers
 			val nodeCells = mutableListOf<NodeCell>()
+
 			@Suppress("UNCHECKED_CAST")
 			val cellGrid = sourceGrid as RailwayNetGrid<cz.vutbr.fit.interlockSim.objects.core.Cell>
 			for ((_, cell) in cellGrid) {
@@ -621,7 +623,7 @@ open class DefaultSimulationContext(
 			logger.info {
 				"Context transformation validated successfully: " +
 					"${nodeCells.size} cells (${simulationContext.staticToDynamicMap.size} wrappers), " +
-					"${targetGraphSize} graph entries, " +
+					"$targetGraphSize graph entries, " +
 					"${targetInOuts.size} InOuts, " +
 					"grid ${targetGrid.cols}x${targetGrid.rows}"
 			}
@@ -854,7 +856,7 @@ open class DefaultSimulationContext(
 			// Ensure lookups by DynamicTrackBlock (graph values) still work by aliasing to the same wrapper
 			if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) {
 				staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]
-				?: error("Expected DynamicTrack for $staticTrack to be registered in the map")
+					?: error("Expected DynamicTrack for $staticTrack to be registered in the map")
 			}
 
 			// Recursively map any internal TrackSection objects
@@ -943,12 +945,13 @@ open class DefaultSimulationContext(
 				when {
 					cell !is PathSeparator -> continue
 					cell is DynamicPathSeparator -> {
-						val staticRef = when (cell) {
-							is DynamicInOut -> cell.staticRef
-							is DynamicRailSemaphore -> cell.staticRef
-							is DynamicRailSwitch -> cell.staticRef
-							else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
-						}
+						val staticRef =
+							when (cell) {
+								is DynamicInOut -> cell.staticRef
+								is DynamicRailSemaphore -> cell.staticRef
+								is DynamicRailSwitch -> cell.staticRef
+								else -> throw IllegalStateException("Unknown DynamicPathSeparator type: ${cell::class.simpleName ?: "unknown"}")
+							}
 						if (staticRef !in staticToDynamicMap) {
 							unmappedSeparators.add("${cell::class.simpleName ?: "unknown"} at ($x,$y) - staticRef not mapped")
 						}
@@ -1124,9 +1127,10 @@ open class DefaultSimulationContext(
 			workers[dynamicInOut] = processFactory.createInOutWorker(this, dynamicInOut)
 		}
 
-		val sim = Simulation.create {
-			Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
-		}
+		val sim =
+			Simulation.create {
+				Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
+			}
 		simulation = sim
 		try {
 			runBlocking { sim.run(Double.MAX_VALUE) }
@@ -1134,7 +1138,7 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
-			simulation = null  // Release reference once sim.run() returns (natural end or stop() called)
+			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
 		}
 	}
 
@@ -1154,7 +1158,7 @@ open class DefaultSimulationContext(
 	 * terminations fail. Collects all exceptions and throws them after cleanup is complete.
 	 */
 	override fun stop() {
-		simulation?.stop()  // Signal kdisco-engine event loop to exit
+		simulation?.stop() // Signal kdisco-engine event loop to exit
 		requireSimulationNotNull(mainProcess) { "Main process must be initialized before stopping simulation" }
 		logger.info { "Stopping simulation: terminating ${workers.size} workers and main process" }
 

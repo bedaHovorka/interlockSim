@@ -81,14 +81,16 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 		override val name: String
 	) : TrackOccupant {
 		override fun distanceToSemaphore(): Double = 0.0
+
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 
 	@Test
 	@DisplayName("setUpSemaphores uses ABSOLUTE_MAX_SPEED when no preceding switch exists")
 	fun setUpSemaphoresUsesAbsoluteMaxSpeedWhenNoPrecedingSwitch() {
-		val xmlStream = TestFixtures.loadShuntingXml()
-			?: throw IllegalStateException("vyhybna.xml not found in resources")
+		val xmlStream =
+			TestFixtures.loadShuntingXml()
+				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
 		val simulationContext =

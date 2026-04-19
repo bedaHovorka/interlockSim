@@ -42,11 +42,9 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("SimpleTrack — HashMap semantics regression (PR #375)")
 class SimpleTrackTest {
-
 	@Nested
 	@DisplayName("speeds map — IdentityHashMap → HashMap replacement")
 	inner class SpeedsMapRegressionTests {
-
 		@Test
 		@DisplayName("maxSpeed returns end1 speed when queried with end1 reference")
 		fun `maxSpeed returns correct speed for end1`() {

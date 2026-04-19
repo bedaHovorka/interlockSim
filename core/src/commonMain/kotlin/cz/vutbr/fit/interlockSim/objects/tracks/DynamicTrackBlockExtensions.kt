@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 
-/**
+/*
  * Kotlin extension functions for DynamicTrackBlock operations.
  *
  * These extensions provide idiomatic Kotlin APIs for common operations,

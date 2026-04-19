@@ -174,11 +174,12 @@ class SimpleTestProcess(
 	 *
 	 * @return TrainState snapshot containing velocity, position, and termination status
 	 */
-	fun getTrainState(): TrainState = TrainState(
-		velocity = train.getVelocity(),
-		position = train.frontPosition,
-		terminated = train.terminated()
-	)
+	fun getTrainState(): TrainState =
+		TrainState(
+			velocity = train.getVelocity(),
+			position = train.frontPosition,
+			terminated = train.terminated()
+		)
 
 	/**
 	 * Snapshot of train state at specific simulation time.

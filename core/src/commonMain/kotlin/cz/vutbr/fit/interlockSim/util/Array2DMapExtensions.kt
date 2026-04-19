@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-/**
+/*
  * Kotlin-idiomatic extension functions for Array2DMap to support pathfinding algorithms.
  *
  * These extensions provide ordered navigation and spatial queries without requiring

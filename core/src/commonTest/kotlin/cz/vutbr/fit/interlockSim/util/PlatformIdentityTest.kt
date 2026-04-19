@@ -7,7 +7,6 @@ import assertk.assertions.isNotEmpty
 import kotlin.test.Test
 
 class PlatformIdentityTest {
-
 	/**
 	 * Identity codes for equal-by-value instances should generally differ.
 	 * We create 100 instances and verify that not all collapse to the same code,
@@ -15,7 +14,10 @@ class PlatformIdentityTest {
 	 */
 	@Test
 	fun `equal data class instances generally get different identity codes`() {
-		data class TestPoint(val x: Int, val y: Int)
+		data class TestPoint(
+			val x: Int,
+			val y: Int
+		)
 
 		val instances = List(100) { TestPoint(1, 2) }
 

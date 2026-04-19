@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -17,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.hovorka.kdisco.Process
 
 private val logger = KotlinLogging.logger {}
 

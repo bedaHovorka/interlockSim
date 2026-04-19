@@ -80,7 +80,9 @@ sealed class PathResult {
 	 *
 	 * @param path Complete path from current position to next semaphore
 	 */
-	data class Available(val path: Path) : PathResult()
+	data class Available(
+		val path: Path
+	) : PathResult()
 
 	/**
 	 * No topological path exists from current position to target.

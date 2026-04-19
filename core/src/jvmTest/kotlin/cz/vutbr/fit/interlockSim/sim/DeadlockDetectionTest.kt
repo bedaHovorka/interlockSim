@@ -25,7 +25,6 @@ import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.createMockSwitch
 import cz.vutbr.fit.interlockSim.testutil.createMockTrack
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import io.mockk.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested

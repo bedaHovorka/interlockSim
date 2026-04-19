@@ -22,12 +22,12 @@ import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
 import org.koin.core.component.KoinComponent
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
 
 /**
  * Tests for SimulationContext creation, transformation, and Koin scope lifecycle.
@@ -41,7 +41,6 @@ import org.koin.core.context.stopKoin
  * @since 2026-03-24 (Issue #410 — increase native test coverage)
  */
 class SimulationContextCreationTest : KoinComponent {
-
 	private val processFactory = DefaultSimulationProcessFactory()
 
 	@BeforeTest
@@ -58,61 +57,66 @@ class SimulationContextCreationTest : KoinComponent {
 
 	@Test
 	fun simulationContextFromLinearTrackXml() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(2)
-			assertThat(simCtx.isFrozen()).isTrue()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(2)
+				assertThat(simCtx.isFrozen()).isTrue()
+			}
 	}
 
 	@Test
 	fun simulationContextFromVyhybnaXml() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.VYHYBNA_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(2)
-			assertThat(simCtx.isFrozen()).isTrue()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.VYHYBNA_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(2)
+				assertThat(simCtx.isFrozen()).isTrue()
+			}
 	}
 
 	@Test
 	fun simulationContextFromSwitchBasicXml() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.SWITCH_BASIC_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(3)
-			assertThat(simCtx.isFrozen()).isTrue()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.SWITCH_BASIC_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(3)
+				assertThat(simCtx.isFrozen()).isTrue()
+			}
 	}
 
 	@Test
 	fun simulationContextFromSemaphoreBasicXml() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.SEMAPHORE_BASIC_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(2)
-			assertThat(simCtx.isFrozen()).isTrue()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.SEMAPHORE_BASIC_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(2)
+				assertThat(simCtx.isFrozen()).isTrue()
+			}
 	}
 
 	@Test
 	fun simulationContextFromParallelTracksXml() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.TWO_TRACKS_PARALLEL_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx).isNotNull()
-			assertThat(simCtx.getInOuts()).hasSize(4)
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.TWO_TRACKS_PARALLEL_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx).isNotNull()
+				assertThat(simCtx.getInOuts()).hasSize(4)
+			}
 	}
 
 	// --- Context transformation preserves properties ---
@@ -143,24 +147,26 @@ class SimulationContextCreationTest : KoinComponent {
 
 	@Test
 	fun simulationContextIsFrozenAfterCreation() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx.isFrozen()).isTrue()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx.isFrozen()).isTrue()
+			}
 	}
 
 	// --- Koin scope lifecycle ---
 
 	@Test
 	fun simulationContextHasScope() {
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx ->
-			assertThat(simCtx.scope).isNotNull()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx ->
+				assertThat(simCtx.scope).isNotNull()
+			}
 	}
 
 	@Test
@@ -173,21 +179,23 @@ class SimulationContextCreationTest : KoinComponent {
 	@Test
 	fun multipleSimulationContextsCanBeCreatedSequentially() {
 		// First context
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.LINEAR_TRACK_XML,
-			processFactory
-		).use { simCtx1 ->
-			assertThat(simCtx1).isNotNull()
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				processFactory
+			).use { simCtx1 ->
+				assertThat(simCtx1).isNotNull()
+			}
 
 		// Second context (after first is closed)
-		CommonTestFixtures.parseSimulationContext(
-			NetworkResources.SWITCH_BASIC_XML,
-			processFactory
-		).use { simCtx2 ->
-			assertThat(simCtx2).isNotNull()
-			assertThat(simCtx2.getInOuts()).hasSize(3)
-		}
+		CommonTestFixtures
+			.parseSimulationContext(
+				NetworkResources.SWITCH_BASIC_XML,
+				processFactory
+			).use { simCtx2 ->
+				assertThat(simCtx2).isNotNull()
+				assertThat(simCtx2.getInOuts()).hasSize(3)
+			}
 	}
 
 	// --- Programmatic context creation ---

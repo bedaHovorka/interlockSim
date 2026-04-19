@@ -12,7 +12,7 @@ package cz.vutbr.fit.interlockSim.exceptions
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-/**
+/*
  * Utility functions for validation and requirement checking.
  * These functions replace assert() calls and if-throw boilerplate.
  * They throw appropriate exceptions with meaningful messages.

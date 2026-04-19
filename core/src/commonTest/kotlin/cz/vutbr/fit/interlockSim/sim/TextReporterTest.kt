@@ -7,7 +7,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class TextReporterTest {
-
 	private fun fireEvent(
 		reporter: TextReporter,
 		type: ReportType,
@@ -136,8 +135,11 @@ class TextReporterTest {
 		assertTrue(wallTimeMatch != null, "Summary wall time should match N.Ds format: $summary")
 		// Ensure no extra decimal digits (e.g. "3.1000000000000001")
 		val wallValue = wallTimeMatch!!.groupValues[1]
-		assertEquals(wallValue, wallValue.trimEnd('0').let { if (it.endsWith('.')) it + "0" else it },
-			"Wall time should have exactly one decimal digit: $wallValue")
+		assertEquals(
+			wallValue,
+			wallValue.trimEnd('0').let { if (it.endsWith('.')) it + "0" else it },
+			"Wall time should have exactly one decimal digit: $wallValue"
+		)
 	}
 
 	// --- formatWallTime edge-case tests (covers coerceAtLeast and integer formatting) ---
@@ -228,7 +230,6 @@ class TextReporterTest {
 		val summary = output.last()
 		assertTrue(summary.contains("0 trains"), "No train should be counted without regex match: $summary")
 	}
-
 
 	@Test
 	fun summaryWithZeroTrains() {

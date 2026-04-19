@@ -11,11 +11,11 @@ package cz.vutbr.fit.interlockSim.context
 
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.koin.core.scope.Scope
 
 private val logger = KotlinLogging.logger {}

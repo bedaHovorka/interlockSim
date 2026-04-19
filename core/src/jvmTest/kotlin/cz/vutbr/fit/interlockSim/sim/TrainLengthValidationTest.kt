@@ -14,11 +14,10 @@ import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.util.Resources
-import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -26,10 +25,11 @@ import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.hasMessageContaining
 import cz.vutbr.fit.interlockSim.util.Point
-import org.koin.test.inject
+import cz.vutbr.fit.interlockSim.util.Resources
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.koin.test.inject
 
 /**
  * Unit tests for train length validation (Issue #60).
@@ -60,7 +60,7 @@ import org.junit.jupiter.api.Test
 @DisplayName("Train Length Validation (Issue #60)")
 class TrainLengthValidationTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
-	
+
 	@Nested
 	@DisplayName("Valid train lengths")
 	inner class ValidTrainLengthTests {
@@ -163,10 +163,11 @@ class TrainLengthValidationTest : KoinTestBase() {
 		fun `train longer than shortest path but shorter than longest path - throws exception`() {
 			// Arrange - Vyhybna network has multiple paths between A and B
 			// The shortest path is approximately 220m
-			val context = createNetworkWithMultiplePaths(
-				shortPathLength = 100.0,  // Ignored - vyhybna has fixed lengths
-				longPathLength = 300.0     // Ignored - vyhybna has fixed lengths
-			)
+			val context =
+				createNetworkWithMultiplePaths(
+					shortPathLength = 100.0, // Ignored - vyhybna has fixed lengths
+					longPathLength = 300.0 // Ignored - vyhybna has fixed lengths
+				)
 			val inOut = getInOutByName(context, "A")
 			val outOut = getInOutByName(context, "B")
 			// Train is 500m: longer than any path in vyhybna (shortest ~220m)
@@ -181,10 +182,11 @@ class TrainLengthValidationTest : KoinTestBase() {
 		@Test
 		fun `train shorter than all paths - creates train successfully`() {
 			// Arrange - Vyhybna network has multiple paths between A and B
-			val context = createNetworkWithMultiplePaths(
-				shortPathLength = 100.0,  // Ignored - vyhybna has fixed lengths
-				longPathLength = 300.0     // Ignored - vyhybna has fixed lengths
-			)
+			val context =
+				createNetworkWithMultiplePaths(
+					shortPathLength = 100.0, // Ignored - vyhybna has fixed lengths
+					longPathLength = 300.0 // Ignored - vyhybna has fixed lengths
+				)
 			val inOut = getInOutByName(context, "A")
 			val outOut = getInOutByName(context, "B")
 			// Train is 40m: shorter than all paths in vyhybna
@@ -213,7 +215,9 @@ class TrainLengthValidationTest : KoinTestBase() {
 	 */
 	private fun createSimpleNetwork(trackLength: Double): SimulationContext {
 		// Create an editing context manually
-		val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(10, 10)
+		val editingContext =
+			cz.vutbr.fit.interlockSim.context
+				.DefaultEditingContext(10, 10)
 
 		// Create two InOuts at different positions
 		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
@@ -223,13 +227,14 @@ class TrainLengthValidationTest : KoinTestBase() {
 		editingContext.putCell(Point(8, 5), inOutB)
 
 		// Connect them with a track block
-		val trackBlock = SimpleTrackBlock(
-			inOutA,
-			inOutB,
-			trackLength,
-			24.0, // maxSpeed1
-			24.0  // maxSpeed2
-		)
+		val trackBlock =
+			SimpleTrackBlock(
+				inOutA,
+				inOutB,
+				trackLength,
+				24.0, // maxSpeed1
+				24.0 // maxSpeed2
+			)
 
 		editingContext.hardJoin(
 			Cell.Segment.F,
@@ -256,7 +261,9 @@ class TrainLengthValidationTest : KoinTestBase() {
 	 */
 	private fun createDisconnectedNetwork(): SimulationContext {
 		// Create an editing context manually
-		val editingContext = cz.vutbr.fit.interlockSim.context.DefaultEditingContext(10, 10)
+		val editingContext =
+			cz.vutbr.fit.interlockSim.context
+				.DefaultEditingContext(10, 10)
 
 		// Create two InOuts without connecting them
 		val inOutA = InOut("A", false, Cell.SpatialType.HORIZONTAL)

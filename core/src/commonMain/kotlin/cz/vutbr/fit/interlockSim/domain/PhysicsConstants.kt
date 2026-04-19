@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.domain
 
-/**
+/*
  * Railway physics and domain constants.
  *
  * These constants define physical constraints and typical values for railway

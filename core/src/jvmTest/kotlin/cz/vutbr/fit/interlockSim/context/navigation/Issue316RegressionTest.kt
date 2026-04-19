@@ -66,13 +66,13 @@ class Issue316RegressionTest : KoinTestBase() {
 	private lateinit var navigator: TopologyNavigator
 
 	// Separators from vyhybna.xml (circular shunting loop)
-	private lateinit var inOutB: DynamicPathSeparator  // InOut at (30,8)
-	private lateinit var semaphoreZB: DynamicPathSeparator  // Semaphore zB at (27,8)
-	private lateinit var switchVB: DynamicPathSeparator  // Switch vB at (26,8)
-	private lateinit var semaphoreDoB1: DynamicPathSeparator  // Semaphore doB1 at (25,8)
-	private lateinit var switchVA: DynamicPathSeparator  // Switch vA at (15,8)
-	private lateinit var semaphoreZA: DynamicPathSeparator  // Semaphore zA at (14,8)
-	private lateinit var inOutA: DynamicPathSeparator  // InOut at (11,8)
+	private lateinit var inOutB: DynamicPathSeparator // InOut at (30,8)
+	private lateinit var semaphoreZB: DynamicPathSeparator // Semaphore zB at (27,8)
+	private lateinit var switchVB: DynamicPathSeparator // Switch vB at (26,8)
+	private lateinit var semaphoreDoB1: DynamicPathSeparator // Semaphore doB1 at (25,8)
+	private lateinit var switchVA: DynamicPathSeparator // Switch vA at (15,8)
+	private lateinit var semaphoreZA: DynamicPathSeparator // Semaphore zA at (14,8)
+	private lateinit var inOutA: DynamicPathSeparator // InOut at (11,8)
 
 	// Track blocks between separators (extracted from paths)
 	private lateinit var trackBtoZB: DynamicTrackBlock
@@ -119,31 +119,51 @@ class Issue316RegressionTest : KoinTestBase() {
 			?: throw IllegalStateException("Semaphore 'zA' not found at (14,8)")
 
 		// Extract track blocks from paths between separators
-		val pathBtoZB = navigator.findAllTopologicalPaths(inOutB, semaphoreZB).firstOrNull()
-			?: throw IllegalStateException("No path from B to zB")
-		val pathZBtoVB = navigator.findAllTopologicalPaths(semaphoreZB, switchVB).firstOrNull()
-			?: throw IllegalStateException("No path from zB to vB")
-		val pathVBtoDoB1 = navigator.findAllTopologicalPaths(switchVB, semaphoreDoB1).firstOrNull()
-			?: throw IllegalStateException("No path from vB to doB1")
-		val pathVAtoZA = navigator.findAllTopologicalPaths(switchVA, semaphoreZA).firstOrNull()
-			?: throw IllegalStateException("No path from vA to zA")
-		val pathZAtoA = navigator.findAllTopologicalPaths(semaphoreZA, inOutA).firstOrNull()
-			?: throw IllegalStateException("No path from zA to A")
+		val pathBtoZB =
+			navigator.findAllTopologicalPaths(inOutB, semaphoreZB).firstOrNull()
+				?: throw IllegalStateException("No path from B to zB")
+		val pathZBtoVB =
+			navigator.findAllTopologicalPaths(semaphoreZB, switchVB).firstOrNull()
+				?: throw IllegalStateException("No path from zB to vB")
+		val pathVBtoDoB1 =
+			navigator.findAllTopologicalPaths(switchVB, semaphoreDoB1).firstOrNull()
+				?: throw IllegalStateException("No path from vB to doB1")
+		val pathVAtoZA =
+			navigator.findAllTopologicalPaths(switchVA, semaphoreZA).firstOrNull()
+				?: throw IllegalStateException("No path from vA to zA")
+		val pathZAtoA =
+			navigator.findAllTopologicalPaths(semaphoreZA, inOutA).firstOrNull()
+				?: throw IllegalStateException("No path from zA to A")
 
-		trackBtoZB = pathBtoZB.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().firstOrNull()
+		trackBtoZB = pathBtoZB
+			.filterIsInstance<TrackSection>()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull()
 			?: throw IllegalStateException("No track block B→zB")
-		trackZBtoVB = pathZBtoVB.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().firstOrNull()
+		trackZBtoVB = pathZBtoVB
+			.filterIsInstance<TrackSection>()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull()
 			?: throw IllegalStateException("No track block zB→vB")
-		trackVBtoDoB1 = pathVBtoDoB1.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().firstOrNull()
+		trackVBtoDoB1 = pathVBtoDoB1
+			.filterIsInstance<TrackSection>()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull()
 			?: throw IllegalStateException("No track block vB→doB1")
-		trackVAtoZA = pathVAtoZA.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().firstOrNull()
+		trackVAtoZA = pathVAtoZA
+			.filterIsInstance<TrackSection>()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull()
 			?: throw IllegalStateException("No track block vA→zA")
-		trackZAtoA = pathZAtoA.filterIsInstance<TrackSection>()
-			.map { it.getTrackBlock() }.filterIsInstance<DynamicTrackBlock>().firstOrNull()
+		trackZAtoA = pathZAtoA
+			.filterIsInstance<TrackSection>()
+			.map { it.getTrackBlock() }
+			.filterIsInstance<DynamicTrackBlock>()
+			.firstOrNull()
 			?: throw IllegalStateException("No track block zA→A")
 	}
 
@@ -179,42 +199,45 @@ class Issue316RegressionTest : KoinTestBase() {
 
 		// Define a circular sequence of path segments (enough for 9+ registrations)
 		// Segment layout: [start, track, end]
-		val segments = listOf(
-			// Loop 1 (forward B→A)
-			Triple(inOutB, trackBtoZB, semaphoreZB),           // 1: B → zB
-			Triple(semaphoreZB, trackZBtoVB, switchVB),        // 2: zB → vB
-			Triple(switchVB, trackVBtoDoB1, semaphoreDoB1),    // 3: vB → doB1
-			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 4: vA → zA  (discontinuous from 3 — see note above)
-			Triple(semaphoreZA, trackZAtoA, inOutA),           // 5: zA → A
-			// Loop 2 (forward A→B, re-using same track blocks in reverse is not possible
-			// without actual reverse paths, so we simulate by re-using B→A segments)
-			Triple(inOutB, trackBtoZB, semaphoreZB),           // 6: B → zB  (2nd occurrence of B — allowed)
-			Triple(semaphoreZB, trackZBtoVB, switchVB),        // 7: zB → vB (2nd occurrence of zB — allowed)
-			Triple(switchVB, trackVBtoDoB1, semaphoreDoB1),    // 8: vB → doB1 (2nd occurrence of vB — allowed)
-			Triple(switchVA, trackVAtoZA, semaphoreZA),        // 9: vA → zA  (discontinuous from 8 — see note above)
-			Triple(semaphoreZA, trackZAtoA, inOutA),           // 10: zA → A  (2nd occurrence of zA — allowed)
-			// Loop 3 attempt: re-introduce B → zB, which would create a 3rd occurrence of the separator
-			Triple(inOutB, trackBtoZB, semaphoreZB),           // 11: B → zB  (3rd occurrence of B — merge should be rejected)
-		)
+		val segments =
+			listOf(
+				// Loop 1 (forward B→A)
+				Triple(inOutB, trackBtoZB, semaphoreZB), // 1: B → zB
+				Triple(semaphoreZB, trackZBtoVB, switchVB), // 2: zB → vB
+				Triple(switchVB, trackVBtoDoB1, semaphoreDoB1), // 3: vB → doB1
+				Triple(switchVA, trackVAtoZA, semaphoreZA), // 4: vA → zA  (discontinuous from 3 — see note above)
+				Triple(semaphoreZA, trackZAtoA, inOutA), // 5: zA → A
+				// Loop 2 (forward A→B, re-using same track blocks in reverse is not possible
+				// without actual reverse paths, so we simulate by re-using B→A segments)
+				Triple(inOutB, trackBtoZB, semaphoreZB), // 6: B → zB  (2nd occurrence of B — allowed)
+				Triple(semaphoreZB, trackZBtoVB, switchVB), // 7: zB → vB (2nd occurrence of zB — allowed)
+				Triple(switchVB, trackVBtoDoB1, semaphoreDoB1), // 8: vB → doB1 (2nd occurrence of vB — allowed)
+				Triple(switchVA, trackVAtoZA, semaphoreZA), // 9: vA → zA  (discontinuous from 8 — see note above)
+				Triple(semaphoreZA, trackZAtoA, inOutA), // 10: zA → A  (2nd occurrence of zA — allowed)
+				// Loop 3 attempt: re-introduce B → zB, which would create a 3rd occurrence of the separator
+				Triple(inOutB, trackBtoZB, semaphoreZB) // 11: B → zB  (3rd occurrence of B — merge should be rejected)
+			)
 
 		// Register first segment to initialise PathInfo
 		val firstSegment = segments[0]
-		val firstPathInfo = createPathInfo(
-			start = firstSegment.first,
-			target = firstSegment.third,
-			path = listOf(firstSegment.first, firstSegment.second, firstSegment.third)
-		)
+		val firstPathInfo =
+			createPathInfo(
+				start = firstSegment.first,
+				target = firstSegment.third,
+				path = listOf(firstSegment.first, firstSegment.second, firstSegment.third)
+			)
 		registry.registerPathInfo(trainId, firstPathInfo)
 
 		// Iteratively merge remaining segments
 		var lastValidSize = 3 // size after first registration
 		for (index in 1 until segments.size) {
 			val (start, track, end) = segments[index]
-			val pathInfo = createPathInfo(
-				start = start,
-				target = end,
-				path = listOf(start, track, end)
-			)
+			val pathInfo =
+				createPathInfo(
+					start = start,
+					target = end,
+					path = listOf(start, track, end)
+				)
 			registry.registerPathInfo(trainId, pathInfo)
 
 			// After each merge, verify PathInfo is valid (not malformed)
@@ -272,20 +295,22 @@ class Issue316RegressionTest : KoinTestBase() {
 		val trainId = "train_cycle_guard"
 
 		// Step 1: register first segment B → zB
-		val seg1 = createPathInfo(
-			start = inOutB,
-			target = semaphoreZB,
-			path = listOf(inOutB, trackBtoZB, semaphoreZB)
-		)
+		val seg1 =
+			createPathInfo(
+				start = inOutB,
+				target = semaphoreZB,
+				path = listOf(inOutB, trackBtoZB, semaphoreZB)
+			)
 		registry.registerPathInfo(trainId, seg1)
 
 		// Step 2: register segment that brings inOutB back (2nd occurrence — allowed)
 		// We re-use the same track to simulate "circular route" without reverse paths
-		val seg2 = createPathInfo(
-			start = inOutB,
-			target = semaphoreZB,
-			path = listOf(inOutB, trackBtoZB, semaphoreZB)
-		)
+		val seg2 =
+			createPathInfo(
+				start = inOutB,
+				target = semaphoreZB,
+				path = listOf(inOutB, trackBtoZB, semaphoreZB)
+			)
 		registry.registerPathInfo(trainId, seg2)
 
 		// Capture PathInfo after the 2nd merge — this should be preserved after the guard fires
@@ -295,11 +320,12 @@ class Issue316RegressionTest : KoinTestBase() {
 
 		// Step 3: attempt a 3rd merge with inOutB — this would make inOutB appear 3+ times
 		// The cycle guard MUST fire and return the old PathInfo unchanged
-		val seg3 = createPathInfo(
-			start = inOutB,
-			target = semaphoreZB,
-			path = listOf(inOutB, trackBtoZB, semaphoreZB)
-		)
+		val seg3 =
+			createPathInfo(
+				start = inOutB,
+				target = semaphoreZB,
+				path = listOf(inOutB, trackBtoZB, semaphoreZB)
+			)
 		registry.registerPathInfo(trainId, seg3)
 
 		// Verify: PathInfo is still non-null and has the SAME size as after the 2nd merge

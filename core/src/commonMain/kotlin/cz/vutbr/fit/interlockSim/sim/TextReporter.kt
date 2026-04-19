@@ -15,24 +15,25 @@ class TextReporter(
 	private val verbosity: Verbosity = Verbosity.DEFAULT,
 	private val output: (String) -> Unit = ::println
 ) : ContextPropertyChangeListener {
-
-	private val allowedTypes: Set<ReportType> = when (verbosity) {
-		Verbosity.QUIET -> emptySet()
-		Verbosity.DEFAULT ->
-			setOf(
-				ReportType.TRAIN_EVENTS,
-				ReportType.TRAIN_APPROVED,
-				ReportType.NODE_EVENTS,
-				ReportType.PATH_SETTING
-			)
-		Verbosity.VERBOSE -> setOf(
-			ReportType.TRAIN_EVENTS,
-			ReportType.TRAIN_APPROVED,
-			ReportType.NODE_EVENTS,
-			ReportType.PATH_SETTING,
-			ReportType.TRAIN_CONTINUOUS
-		)
-	}
+	private val allowedTypes: Set<ReportType> =
+		when (verbosity) {
+			Verbosity.QUIET -> emptySet()
+			Verbosity.DEFAULT ->
+				setOf(
+					ReportType.TRAIN_EVENTS,
+					ReportType.TRAIN_APPROVED,
+					ReportType.NODE_EVENTS,
+					ReportType.PATH_SETTING
+				)
+			Verbosity.VERBOSE ->
+				setOf(
+					ReportType.TRAIN_EVENTS,
+					ReportType.TRAIN_APPROVED,
+					ReportType.NODE_EVENTS,
+					ReportType.PATH_SETTING,
+					ReportType.TRAIN_CONTINUOUS
+				)
+		}
 
 	private val trainNames = mutableSetOf<String>()
 	private var lastSimTime = 0.0
@@ -81,7 +82,10 @@ class TextReporter(
 
 	private fun formatEvent(event: SimulationEvent): String {
 		val prefix = "t=${event.simulationTime}  [${event.eventType.name}]"
-		return if (event.source.isEmpty()) "$prefix  ${event.message}"
-		else "$prefix  ${event.source} ${event.message}"
+		return if (event.source.isEmpty()) {
+			"$prefix  ${event.message}"
+		} else {
+			"$prefix  ${event.source} ${event.message}"
+		}
 	}
 }

@@ -11,7 +11,19 @@ package cz.vutbr.fit.interlockSim.objects.cells
 
 import assertk.assertFailure
 import assertk.assertThat
-import assertk.assertions.*
+import assertk.assertions.contains
+import assertk.assertions.containsAll
+import assertk.assertions.hasSize
+import assertk.assertions.isEqualTo
+import assertk.assertions.isEmpty
+import assertk.assertions.isFalse
+import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotEqualTo
+import assertk.assertions.isNotNull
+import assertk.assertions.isSameAs
+import assertk.assertions.isTrue
+import assertk.assertions.message
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -414,9 +426,10 @@ class DynamicRailSwitchTest {
 			val secondListenerCallCount = intArrayOf(0)
 			val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
 
-			val firstListener = ContextPropertyChangeListener {
-				dynamicSwitch1.addPropertyChangeListener(secondListener)
-			}
+			val firstListener =
+				ContextPropertyChangeListener {
+					dynamicSwitch1.addPropertyChangeListener(secondListener)
+				}
 			dynamicSwitch1.addPropertyChangeListener(firstListener)
 
 			// Should not throw ConcurrentModificationException (snapshot prevents it)
@@ -432,10 +445,11 @@ class DynamicRailSwitchTest {
 			// Regression test: listener self-removal during dispatch must be safe (snapshot).
 			var callCount = 0
 			lateinit var selfRemovingListener: ContextPropertyChangeListener
-			selfRemovingListener = ContextPropertyChangeListener {
-				callCount++
-				dynamicSwitch1.removePropertyChangeListener(selfRemovingListener)
-			}
+			selfRemovingListener =
+				ContextPropertyChangeListener {
+					callCount++
+					dynamicSwitch1.removePropertyChangeListener(selfRemovingListener)
+				}
 			dynamicSwitch1.addPropertyChangeListener(selfRemovingListener)
 
 			dynamicSwitch1.changeConf()

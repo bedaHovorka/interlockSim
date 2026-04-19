@@ -14,7 +14,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
@@ -23,6 +22,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import io.mockk.every
 import io.mockk.mockk
@@ -67,12 +67,16 @@ class PathTrackIntegrationTest : KoinTestBase() {
 	@BeforeEach
 	fun setUp() {
 		// Load XML fixtures for testing via classpath resources
-		linearContext = (TestFixtures.loadLinearTrackXml()
-			?: error("Test fixture not found: linear-track.xml"))
-			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
-		switchContext = (TestFixtures.loadSwitchBasicXml()
-			?: error("Test fixture not found: switch-basic.xml"))
-			.use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+		linearContext =
+			(
+				TestFixtures.loadLinearTrackXml()
+					?: error("Test fixture not found: linear-track.xml")
+			).use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
+		switchContext =
+			(
+				TestFixtures.loadSwitchBasicXml()
+					?: error("Test fixture not found: switch-basic.xml")
+			).use { simulationContextFactory.createContext(it) as DefaultSimulationContext }
 
 		// Initialize dynamic mappings for both contexts
 		// This is required because tests use toDynamic() without calling run()

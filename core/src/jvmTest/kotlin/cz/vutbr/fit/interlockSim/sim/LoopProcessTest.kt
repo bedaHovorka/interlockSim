@@ -11,13 +11,13 @@ import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Util
-import cz.hovorka.kdisco.Process
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -44,14 +44,14 @@ import java.util.concurrent.atomic.AtomicInteger
 @DisplayName("LoopProcess Lifecycle Integration Tests")
 @Tag("integration-test")
 class LoopProcessTest : KoinTestBase() {
-
 	private val simulationContextFactory: SimulationContextFactory by inject()
 
 	private fun loadVyhybnaContext(): DefaultSimulationContext {
 		val stream = TestFixtures.loadShuntingXml()
-		return stream.use { s ->
-			Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
-		}.also { it.getInOuts() }
+		return stream
+			.use { s ->
+				Util.assertInstanceOf<DefaultSimulationContext>(simulationContextFactory.createContext(s))
+			}.also { it.getInOuts() }
 	}
 
 	// ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ class LoopProcessTest : KoinTestBase() {
 	private open class CountingLoopProcess(
 		val iterationCount: AtomicInteger = AtomicInteger(0),
 		val startCount: AtomicInteger = AtomicInteger(0),
-		val terminateCount: AtomicInteger = AtomicInteger(0),
+		val terminateCount: AtomicInteger = AtomicInteger(0)
 	) : LoopProcess() {
 		override suspend fun startAction() {
 			startCount.incrementAndGet()
@@ -94,9 +94,8 @@ class LoopProcessTest : KoinTestBase() {
 		env: cz.vutbr.fit.interlockSim.context.SimulationEnvironment,
 		private val target: CountingLoopProcess,
 		private val endTime: Double,
-		private val terminateExtra: Int = 0,
+		private val terminateExtra: Int = 0
 	) : Interlocking(env) {
-
 		private var terminating = false
 
 		override suspend fun startAction() {

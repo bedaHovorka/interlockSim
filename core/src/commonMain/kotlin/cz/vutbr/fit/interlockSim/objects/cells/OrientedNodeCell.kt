@@ -27,8 +27,7 @@ abstract class OrientedNodeCell protected constructor(
 	 */
 	abstract fun getFollowingSegment(from: Cell.Segment?): Cell.Segment?
 
-	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> =
-		setOfNotNull(getFollowingSegment(from))
+	override fun possibleFollowers(from: Cell.Segment): Set<Cell.Segment> = setOfNotNull(getFollowingSegment(from))
 
 	override fun getOrientation(): Boolean = orientation
 

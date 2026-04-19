@@ -450,14 +450,14 @@ class PathIteratorTest : KoinTestBase() {
 			val iterator1 = path.iterator()
 			val iterator2 = path.iterator()
 
-			val elem1_1 = iterator1.next()
-			val elem2_1 = iterator2.next()
-			val elem1_2 = iterator1.next()
+			val elem11 = iterator1.next()
+			val elem21 = iterator2.next()
+			val elem12 = iterator1.next()
 
 			// Assert
-			assertThat(elem1_1).isEqualTo(end1)
-			assertThat(elem2_1).isEqualTo(end1)
-			assertThat(elem1_2).isEqualTo(track)
+			assertThat(elem11).isEqualTo(end1)
+			assertThat(elem21).isEqualTo(end1)
+			assertThat(elem12).isEqualTo(track)
 			assertThat(iterator2.hasNext()).isTrue()
 		}
 

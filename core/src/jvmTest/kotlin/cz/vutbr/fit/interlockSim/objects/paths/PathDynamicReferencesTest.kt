@@ -72,35 +72,35 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			// Get InOut elements (entry/exit points)
-			val inOuts = context.getInOuts()
-			assertThat(inOuts.size).isNotNull()
-			val inOutsList = inOuts.toList()
-			val inOut1 = context.toDynamic(inOutsList[0])
-			val inOut2 = context.toDynamic(inOutsList[1])
+				// Get InOut elements (entry/exit points)
+				val inOuts = context.getInOuts()
+				assertThat(inOuts.size).isNotNull()
+				val inOutsList = inOuts.toList()
+				val inOut1 = context.toDynamic(inOutsList[0])
+				val inOut2 = context.toDynamic(inOutsList[1])
 
-			// Get TopologyNavigator from context scope
-			val navigator = context.getTopologyNavigator()
+				// Get TopologyNavigator from context scope
+				val navigator = context.getTopologyNavigator()
 
-			// Act - Find all topological paths from InOut1 to InOut2
-			val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
+				// Act - Find all topological paths from InOut1 to InOut2
+				val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
 
-			// Assert - Paths should exist
-			assertThat(paths).isNotNull()
-			assertThat(paths.isNotEmpty()).isTrue()
+				// Assert - Paths should exist
+				assertThat(paths).isNotNull()
+				assertThat(paths.isNotEmpty()).isTrue()
 
-			// Verify all PathSeparators in paths are dynamic (if any exist)
-			var totalSeparators = 0
-			for (path in paths) {
-				for (element in path) {
-					if (element is PathSeparator) {
-						totalSeparators++
-						// All separators must be DynamicPathSeparator
-						assertThat(element)
-							.isInstanceOf(DynamicPathSeparator::class)
+				// Verify all PathSeparators in paths are dynamic (if any exist)
+				var totalSeparators = 0
+				for (path in paths) {
+					for (element in path) {
+						if (element is PathSeparator) {
+							totalSeparators++
+							// All separators must be DynamicPathSeparator
+							assertThat(element)
+								.isInstanceOf(DynamicPathSeparator::class)
+						}
 					}
 				}
-			}
 				// Note: vyhybna.xml may have paths without intermediate separators
 				// The important thing is that IF separators exist, they are dynamic
 				// This test passes if paths exist (even without separators)
@@ -115,15 +115,15 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val inOut1 = context.toDynamic(inOuts[0])
-			val inOut2 = context.toDynamic(inOuts[1])
+				val inOuts = context.getInOuts().toList()
+				val inOut1 = context.toDynamic(inOuts[0])
+				val inOut2 = context.toDynamic(inOuts[1])
 
-			val navigator = context.getTopologyNavigator()
+				val navigator = context.getTopologyNavigator()
 
-			// Act - Get paths and iterate
-			val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
-			assertThat(paths).isNotNull()
+				// Act - Get paths and iterate
+				val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
+				assertThat(paths).isNotNull()
 
 				// Assert - All iterations yield dynamic separators
 				for (path in paths) {
@@ -148,22 +148,22 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val inOut1 = context.toDynamic(inOuts[0])
-			val inOut2 = context.toDynamic(inOuts[1])
+				val inOuts = context.getInOuts().toList()
+				val inOut1 = context.toDynamic(inOuts[0])
+				val inOut2 = context.toDynamic(inOuts[1])
 
-			val service = context.getPathReservationService()
+				val service = context.getPathReservationService()
 
-			// Act - Reserve path
-			val result = service.reservePath("train1", inOut1, inOut2)
+				// Act - Reserve path
+				val result = service.reservePath("train1", inOut1, inOut2)
 
-			// Assert - Reservation should succeed
-			assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+				// Assert - Reservation should succeed
+				assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
-			val reservedBlocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
+				val reservedBlocks = (result as PathReservationService.ReservationResult.Success).reservedBlocks
 
-			// All reserved blocks should be DynamicTrackBlock (which are dynamic types)
-			assertThat(reservedBlocks.isNotEmpty()).isTrue()
+				// All reserved blocks should be DynamicTrackBlock (which are dynamic types)
+				assertThat(reservedBlocks.isNotEmpty()).isTrue()
 
 				// Verify blocks are dynamic (have trainName property for ownership tracking)
 				for (block in reservedBlocks) {
@@ -181,22 +181,22 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val staticInOut1 = inOuts[0] // Static reference
-			val staticInOut2 = inOuts[1] // Static reference
+				val inOuts = context.getInOuts().toList()
+				val staticInOut1 = inOuts[0] // Static reference
+				val staticInOut2 = inOuts[1] // Static reference
 
-			// Convert to dynamic
-			val dynamicInOut1 = context.toDynamic(staticInOut1)
-			val dynamicInOut2 = context.toDynamic(staticInOut2)
+				// Convert to dynamic
+				val dynamicInOut1 = context.toDynamic(staticInOut1)
+				val dynamicInOut2 = context.toDynamic(staticInOut2)
 
-			// Verify conversion worked
-			assertThat(dynamicInOut1).isInstanceOf(DynamicPathSeparator::class)
-			assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)
+				// Verify conversion worked
+				assertThat(dynamicInOut1).isInstanceOf(DynamicPathSeparator::class)
+				assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)
 
-			val service = context.getPathReservationService()
+				val service = context.getPathReservationService()
 
-			// Act - Reserve path using dynamic separators
-			val result = service.reservePath("train1", dynamicInOut1, dynamicInOut2)
+				// Act - Reserve path using dynamic separators
+				val result = service.reservePath("train1", dynamicInOut1, dynamicInOut2)
 
 				// Assert - Reservation should succeed
 				assertThat(result).isInstanceOf(PathReservationService.ReservationResult.Success::class)
@@ -215,35 +215,35 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val inOut1 = context.toDynamic(inOuts[0])
-			val inOut2 = context.toDynamic(inOuts[1])
+				val inOuts = context.getInOuts().toList()
+				val inOut1 = context.toDynamic(inOuts[0])
+				val inOut2 = context.toDynamic(inOuts[1])
 
-			// Reserve path first
-			val reservationService = context.getPathReservationService()
-			val reservationResult = reservationService.reservePath("train1", inOut1, inOut2)
-			assertThat(reservationResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+				// Reserve path first
+				val reservationService = context.getPathReservationService()
+				val reservationResult = reservationService.reservePath("train1", inOut1, inOut2)
+				assertThat(reservationResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
-			// Get TrainNavigationService
-			val trainService = context.getTrainNavigationService()
+				// Get TrainNavigationService
+				val trainService = context.getTrainNavigationService()
 
-			// Act - Find reserved path for train
-			val path = trainService.findReservedPathForTrain("train1", inOut1)
+				// Act - Find reserved path for train
+				val path = trainService.findReservedPathForTrain("train1", inOut1)
 
-			// Assert - Path should exist and contain dynamic separators
-			assertThat(path).isInstanceOf(PathResult.Available::class)
+				// Assert - Path should exist and contain dynamic separators
+				assertThat(path).isInstanceOf(PathResult.Available::class)
 
-			val pathElements = (path as PathResult.Available).path
+				val pathElements = (path as PathResult.Available).path
 
-			var separatorCount = 0
-			for (element in pathElements) {
-				if (element is PathSeparator) {
-					separatorCount++
-					// All separators must be DynamicPathSeparator
-					assertThat(element)
-						.isInstanceOf(DynamicPathSeparator::class)
+				var separatorCount = 0
+				for (element in pathElements) {
+					if (element is PathSeparator) {
+						separatorCount++
+						// All separators must be DynamicPathSeparator
+						assertThat(element)
+							.isInstanceOf(DynamicPathSeparator::class)
+					}
 				}
-			}
 
 				// Verify path contains separators
 				assertThat(separatorCount > 0).isTrue()
@@ -258,22 +258,22 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val inOut1 = context.toDynamic(inOuts[0])
-			val inOut2 = context.toDynamic(inOuts[1])
+				val inOuts = context.getInOuts().toList()
+				val inOut1 = context.toDynamic(inOuts[0])
+				val inOut2 = context.toDynamic(inOuts[1])
 
-			// Reserve path for train1
-			val reservationService = context.getPathReservationService()
-			reservationService.reservePath("train1", inOut1, inOut2)
+				// Reserve path for train1
+				val reservationService = context.getPathReservationService()
+				reservationService.reservePath("train1", inOut1, inOut2)
 
-			// Get TrainNavigationService
-			val trainService = context.getTrainNavigationService()
+				// Get TrainNavigationService
+				val trainService = context.getTrainNavigationService()
 
-			// Act - Check if path is reserved for train1 (should be true)
-			val isReservedForTrain1 = trainService.isPathReservedForTrain("train1", inOut1)
+				// Act - Check if path is reserved for train1 (should be true)
+				val isReservedForTrain1 = trainService.isPathReservedForTrain("train1", inOut1)
 
-			// Check if path is reserved for train2 (should be false - different train)
-			val isReservedForTrain2 = trainService.isPathReservedForTrain("train2", inOut1)
+				// Check if path is reserved for train2 (should be false - different train)
+				val isReservedForTrain2 = trainService.isPathReservedForTrain("train2", inOut1)
 
 				// Assert
 				assertThat(isReservedForTrain1).isTrue()
@@ -293,20 +293,20 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			// Get STATIC reference (before conversion) using getInOutsList()
-			val staticInOuts = context.getInOutsList()
-			val staticInOut = staticInOuts[0]
+				// Get STATIC reference (before conversion) using getInOutsList()
+				val staticInOuts = context.getInOutsList()
+				val staticInOut = staticInOuts[0]
 
-			// Act - Convert to dynamic
-			val dynamicInOut = context.toDynamic(staticInOut)
+				// Act - Convert to dynamic
+				val dynamicInOut = context.toDynamic(staticInOut)
 
-			// Assert - Result should be DynamicPathSeparator
-			assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
+				// Assert - Result should be DynamicPathSeparator
+				assertThat(dynamicInOut).isInstanceOf(DynamicPathSeparator::class)
 
-			// Verify conversion created a wrapper (dynamicInOut wraps staticInOut)
-			// DynamicInOut is a wrapper type, not the same type as InOut
-			assertThat(dynamicInOut.javaClass.simpleName).isNotNull()
-			assertThat(staticInOut.javaClass.simpleName).isNotNull()
+				// Verify conversion created a wrapper (dynamicInOut wraps staticInOut)
+				// DynamicInOut is a wrapper type, not the same type as InOut
+				assertThat(dynamicInOut.javaClass.simpleName).isNotNull()
+				assertThat(staticInOut.javaClass.simpleName).isNotNull()
 				// The types should be different (Dynamic vs Static)
 				assertThat(dynamicInOut.javaClass != staticInOut.javaClass).isTrue()
 			}
@@ -320,14 +320,14 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val editingContext = editingContextFactory.createContext(stream) as EditingContext
 				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
-			val inOuts = context.getInOuts().toList()
-			val staticInOut = inOuts[0]
+				val inOuts = context.getInOuts().toList()
+				val staticInOut = inOuts[0]
 
-			// Convert to dynamic
-			val dynamicInOut1 = context.toDynamic(staticInOut)
+				// Convert to dynamic
+				val dynamicInOut1 = context.toDynamic(staticInOut)
 
-			// Act - Convert again (should be idempotent)
-			val dynamicInOut2 = context.toDynamic(dynamicInOut1)
+				// Act - Convert again (should be idempotent)
+				val dynamicInOut2 = context.toDynamic(dynamicInOut1)
 
 				// Assert - Should return same dynamic wrapper
 				assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)

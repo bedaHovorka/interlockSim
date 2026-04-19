@@ -13,15 +13,14 @@ import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.deleteFile
 import cz.vutbr.fit.interlockSim.util.writeTextFile
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 class XmlContextReaderTest {
-
 	@BeforeTest
 	fun setUpKoin() {
 		startKoin { modules(commonCoreTestModule) }
@@ -201,12 +200,13 @@ class XmlContextReaderTest {
 
 	@Test
 	fun parseAllSwitchTypes() {
-		val types = listOf(
-			"SIMPLE_LEFT_FALSE",
-			"SIMPLE_LEFT_TRUE",
-			"SIMPLE_RIGHT_FALSE",
-			"SIMPLE_RIGHT_TRUE"
-		)
+		val types =
+			listOf(
+				"SIMPLE_LEFT_FALSE",
+				"SIMPLE_LEFT_TRUE",
+				"SIMPLE_RIGHT_FALSE",
+				"SIMPLE_RIGHT_TRUE"
+			)
 		for ((index, type) in types.withIndex()) {
 			val y = 1 + index * 2
 			XmlContextReader().parse(InlineXmlSnippets.readerNetWithSwitchType(type, y)).use { ctx ->

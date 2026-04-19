@@ -20,20 +20,19 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertFailsWith
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Error message quality: includes diagnostic information.
  */
 class CacheValidationErrorMessageQualityTest : KoinComponent {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin {
@@ -54,9 +53,10 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 		createEmptyContext().use { context ->
 			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmapped)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmapped)
+				}
 			assertThat(exception.message).isNotNull().contains("RailSemaphore")
 		}
 	}
@@ -66,9 +66,10 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 		createEmptyContext().use { context ->
 			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmapped)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmapped)
+				}
 			val message = exception.message!!
 			assertThat(message).contains("Map contains")
 			assertThat(message).contains("entries")
@@ -81,9 +82,10 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 			unmapped.setName("test-semaphore")
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmapped)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmapped)
+				}
 			assertThat(exception.message).isNotNull().contains("test-semaphore")
 		}
 	}
@@ -93,9 +95,10 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 		createEmptyContext().use { context ->
 			val unmapped = InOut("test-inout", true, Cell.SpatialType.HORIZONTAL)
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmapped)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmapped)
+				}
 			assertThat(exception.message).isNotNull().contains("initializeDynamicMapping()")
 		}
 	}

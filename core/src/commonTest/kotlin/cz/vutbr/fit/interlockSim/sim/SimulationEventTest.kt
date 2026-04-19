@@ -8,7 +8,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class SimulationEventTest {
-
 	@Test
 	fun formatTimeZero() {
 		val event = SimulationEvent(0.0, ReportType.TRAIN_EVENTS, "src", "msg")

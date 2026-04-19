@@ -92,6 +92,7 @@ interface SimulationContext :
 	 */
 	enum class ReportType {
 		// higest to lowest priority
+
 		/**
 		 * control commands
 		 */
@@ -120,6 +121,7 @@ interface SimulationContext :
 		/**
 		 * not standard
 		 */
+		@Suppress("ktlint:standard:enum-entry-name-case")
 		_DEBUG;
 
 		companion object {

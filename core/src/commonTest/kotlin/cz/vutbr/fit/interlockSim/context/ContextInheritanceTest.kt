@@ -15,8 +15,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotInstanceOf
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
-import kotlin.test.Test
 import org.koin.core.component.inject
+import kotlin.test.Test
 
 /**
  * Test suite for context inheritance structure.

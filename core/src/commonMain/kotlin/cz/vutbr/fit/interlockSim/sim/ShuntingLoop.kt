@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
@@ -27,7 +28,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
-import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.component.KoinComponent
 
@@ -89,12 +89,13 @@ class ShuntingLoop(
 		private const val MAX_TRAINS: Int = 2
 
 		/** Report types enabled by the shunting-loop simulation scenario. */
-		internal val ENABLED_REPORT_TYPES = arrayOf(
-			ReportType.TRAIN_APPROVED,
-			ReportType.TRAIN_EVENTS,
-			ReportType.TRAIN_CONTINUOUS,
-			ReportType.NODE_EVENTS
-		)
+		internal val ENABLED_REPORT_TYPES =
+			arrayOf(
+				ReportType.TRAIN_APPROVED,
+				ReportType.TRAIN_EVENTS,
+				ReportType.TRAIN_CONTINUOUS,
+				ReportType.NODE_EVENTS
+			)
 
 		// Vyhybna network coordinate contract.
 		// Single source of truth: ShuntingLoop.init uses these and

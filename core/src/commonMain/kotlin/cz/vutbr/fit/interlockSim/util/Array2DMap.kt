@@ -9,13 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.util
 
-
 /**
  * ADT for grid
  * @param <V> type of values
  *
  */
-class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements NavigableMap<Point, V> - see issue #57 */ {
+class Array2DMap<V> : AbstractMutableMap<Point, V>() { // Future: implements NavigableMap<Point, V> - see issue #57
 	private inner class Entry(
 		override val key: Point
 	) : MutableMap.MutableEntry<Point, V> {
@@ -94,9 +93,10 @@ class Array2DMap<V> : AbstractMutableMap<Point, V>() /* Future: implements Navig
 			if (elements.isEmpty()) return false
 
 			// Collect keys to remove for efficient batch processing
-			val keysToRemove = elements.mapNotNull { entry ->
-				if (contains(entry)) entry.key else null
-			}
+			val keysToRemove =
+				elements.mapNotNull { entry ->
+					if (contains(entry)) entry.key else null
+				}
 
 			if (keysToRemove.isEmpty()) return false
 
@@ -290,5 +290,7 @@ private class SortedMutableSet<T>(
 		return true
 	}
 
-	override fun clear() { list.clear() }
+	override fun clear() {
+		list.clear()
+	}
 }

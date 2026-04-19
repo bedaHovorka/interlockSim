@@ -311,9 +311,10 @@ class GridTransformerTest : CommonKoinTestBase() {
 		}
 
 		// Act - Transform and measure time
-		val elapsed = measureTime {
-			GridTransformer.transformGrid(staticGrid)
-		}
+		val elapsed =
+			measureTime {
+				GridTransformer.transformGrid(staticGrid)
+			}
 
 		// Assert - Transformation completes in < 1ms
 		// Note: Using assertion of non-null just to verify it completes - performance can vary on CI
@@ -342,9 +343,10 @@ class GridTransformerTest : CommonKoinTestBase() {
 		}
 
 		// Act - Transform and measure time
-		val elapsed = measureTime {
-			GridTransformer.transformGrid(staticGrid)
-		}
+		val elapsed =
+			measureTime {
+				GridTransformer.transformGrid(staticGrid)
+			}
 
 		// Assert - Transformation completes in reasonable time
 		assertThat(elapsed).isNotNull()

@@ -21,20 +21,19 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
-import kotlin.test.Test
-import kotlin.test.assertFailsWith
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Cache miss behavior: helpful error messages for unmapped separators.
  */
 class CacheValidationCacheMissBehaviorTest : KoinComponent {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin {
@@ -55,9 +54,10 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 		createEmptyContext().use { context ->
 			val unmappedInOut = InOut("unmapped-inout", true, Cell.SpatialType.HORIZONTAL)
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmappedInOut)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmappedInOut)
+				}
 			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
 	}
@@ -68,9 +68,10 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 			val unmappedSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
 			unmappedSemaphore.setName("unmapped-semaphore")
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmappedSemaphore)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmappedSemaphore)
+				}
 			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
 	}
@@ -81,9 +82,10 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 			val unmappedSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			unmappedSwitch.setName("unmapped-switch")
 
-			val exception = assertFailsWith<IllegalStateException> {
-				context.toDynamic(unmappedSwitch)
-			}
+			val exception =
+				assertFailsWith<IllegalStateException> {
+					context.toDynamic(unmappedSwitch)
+				}
 			assertThat(exception.message).isNotNull().contains("Dynamic wrapper not found for separator")
 		}
 	}

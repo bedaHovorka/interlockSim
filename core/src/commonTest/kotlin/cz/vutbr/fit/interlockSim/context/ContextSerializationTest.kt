@@ -20,8 +20,8 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.testutil.CommonKoinTestBase
 import cz.vutbr.fit.interlockSim.util.Point
-import kotlin.test.Test
 import org.koin.core.component.inject
+import kotlin.test.Test
 
 class ContextSerializationTest : CommonKoinTestBase() {
 	private val editingContextFactory: EditingContextFactory by inject()
@@ -158,10 +158,18 @@ class ContextSerializationTest : CommonKoinTestBase() {
 			context.putCell(Point(1, 1), inA)
 			context.putCell(Point(5, 5), outB)
 			val cellCountBefore =
-				context.getRailWayNetGrid().iterator().asSequence().count()
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			context.freeze()
 			val cellCountAfter =
-				context.getRailWayNetGrid().iterator().asSequence().count()
+				context
+					.getRailWayNetGrid()
+					.iterator()
+					.asSequence()
+					.count()
 			assertThat(cellCountAfter).isEqualTo(cellCountBefore)
 			assertThat(cellCountAfter).isEqualTo(2)
 		}

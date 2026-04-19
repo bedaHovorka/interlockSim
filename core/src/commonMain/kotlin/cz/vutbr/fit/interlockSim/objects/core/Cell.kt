@@ -95,6 +95,7 @@ interface Cell {
 		val segments: Array<Segment>
 	) {
 		// !!! prvni segment pro false orientaci !!!
+
 		/**
 		 *
 		 */

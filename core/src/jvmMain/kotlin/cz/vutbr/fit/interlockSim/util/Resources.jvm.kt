@@ -11,8 +11,9 @@ package cz.vutbr.fit.interlockSim.util
 
 actual object Resources {
 	actual fun read(path: String): String {
-		val stream = Resources::class.java.getResourceAsStream("/$path")
-			?: throw IllegalArgumentException("Resource not found on classpath: $path")
+		val stream =
+			Resources::class.java.getResourceAsStream("/$path")
+				?: throw IllegalArgumentException("Resource not found on classpath: $path")
 		return stream.use { it.readBytes().toString(Charsets.UTF_8) }
 	}
 }

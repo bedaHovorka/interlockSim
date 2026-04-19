@@ -1,6 +1,5 @@
 package cz.vutbr.fit.interlockSim.util
 
-
 /**
  * Validates railway element names according to XML schema pattern.
  *

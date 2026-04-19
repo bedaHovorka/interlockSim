@@ -22,11 +22,11 @@ import cz.vutbr.fit.interlockSim.testutil.CommonTestFixtures
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import cz.vutbr.fit.interlockSim.util.Point
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import org.koin.core.context.startKoin
-import org.koin.core.context.stopKoin
 
 /**
  * XML round-trip tests using canonical NetworkResources definitions.
@@ -38,7 +38,6 @@ import org.koin.core.context.stopKoin
  * @since 2026-03-24 (Issue #410 — increase native test coverage)
  */
 class XmlRoundTripNetworkResourcesTest {
-
 	private val reader = XmlContextReader()
 	private val writer = XmlContextWriter()
 
@@ -125,7 +124,12 @@ class XmlRoundTripNetworkResourcesTest {
 		ctx1.close()
 
 		reader.parse(xml).use { ctx2 ->
-			val trackBlock = ctx2.getGraph().entrySet().first().value
+			val trackBlock =
+				ctx2
+					.getGraph()
+					.entrySet()
+					.first()
+					.value
 			assertThat(trackBlock.length()).isEqualTo(100.0)
 		}
 	}
@@ -257,5 +261,4 @@ class XmlRoundTripNetworkResourcesTest {
 			assertThat((inOut as InOut).getName()).isEqualTo("OnlyOne")
 		}
 	}
-
 }

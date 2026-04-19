@@ -16,8 +16,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
  * @param <N> node
  * @param <E> edge
  */
-class EnumUnorientedGraph<N, E> :
-	AbstractUnorientedGraph<N, E>() where N : Enum<N> {
+class EnumUnorientedGraph<N, E> : AbstractUnorientedGraph<N, E>() where N : Enum<N> {
 	private val map: MutableMap<N, MutableMap<N, E>> = HashMap()
 
 	override fun implementationContainer(): Any = map
@@ -105,12 +104,13 @@ class EnumUnorientedGraph<N, E> :
 
 	override fun values(): Collection<E> = throw NotImplementedException()
 
-	private fun nodesInOrder(n1: N, n2: N): Pair<N, N> {
+	private fun nodesInOrder(
+		n1: N,
+		n2: N
+	): Pair<N, N> {
 		requireValidState(n1 != n2) { "Cannot create edge between same node: $n1" }
 		return if (n1 <= n2) Pair(n1, n2) else Pair(n2, n1)
 	}
 
-	private fun getSubmapWithCreation(key: N): MutableMap<N, E> {
-		return map.getOrPut(key) { HashMap() }
-	}
+	private fun getSubmapWithCreation(key: N): MutableMap<N, E> = map.getOrPut(key) { HashMap() }
 }

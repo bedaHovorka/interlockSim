@@ -37,7 +37,10 @@ import cz.vutbr.fit.interlockSim.exceptions.requireValidState
  * @param T type of elements (the two nodes)
  * @param V type of additional information associated with each element
  */
-class Doubleton<T, V>(first: T, second: T) : AbstractMutableSet<T>() {
+class Doubleton<T, V>(
+	first: T,
+	second: T
+) : AbstractMutableSet<T>() {
 	enum class IteratorState {
 		INIT,
 		FIRST,

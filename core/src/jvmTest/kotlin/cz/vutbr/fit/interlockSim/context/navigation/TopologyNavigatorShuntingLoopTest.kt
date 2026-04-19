@@ -287,14 +287,22 @@ class TopologyNavigatorShuntingLoopTest : KoinTestBase() {
 	 * Holds all separator coordinates from vyhybna.xml network.
 	 */
 	private data class NetworkCoordinates(
-		val zA: Point, // Entry semaphore
-		val vA: Point, // Entry switch
-		val doA1: Point, // Upper entry route semaphore
-		val doA2: Point, // Lower entry route semaphore
-		val doB2: Point, // Lower exit route semaphore
-		val doB1: Point, // Upper exit route semaphore
-		val vB: Point, // Exit switch
-		val zB: Point // Exit semaphore
+		// Entry semaphore
+		val zA: Point,
+		// Entry switch
+		val vA: Point,
+		// Upper entry route semaphore
+		val doA1: Point,
+		// Lower entry route semaphore
+		val doA2: Point,
+		// Lower exit route semaphore
+		val doB2: Point,
+		// Upper exit route semaphore
+		val doB1: Point,
+		// Exit switch
+		val vB: Point,
+		// Exit semaphore
+		val zB: Point
 	)
 
 	@Nested

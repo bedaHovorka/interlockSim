@@ -11,7 +11,6 @@ import kotlin.test.assertTrue
  * without a full simulation environment.
  */
 class ShuntingLoopConfigTest {
-
 	@Test
 	fun enabledReportTypesContainsTrainApproved() {
 		assertContains(ShuntingLoop.ENABLED_REPORT_TYPES, ReportType.TRAIN_APPROVED)

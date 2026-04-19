@@ -146,10 +146,11 @@ class CellConnectionDisconnectionTest {
 	fun `disconnect non-connected cells is no-op`() {
 		val cellPosition1 = Point(0, 0)
 		val cellPosition2 = Point(5, 5)
-		val distance = max(
-			abs(cellPosition2.x - cellPosition1.x),
-			abs(cellPosition2.y - cellPosition1.y)
-		)
+		val distance =
+			max(
+				abs(cellPosition2.x - cellPosition1.x),
+				abs(cellPosition2.y - cellPosition1.y)
+			)
 		val areConnected = (distance <= 1)
 		assertThat(areConnected)
 			.withMessage("Cells at distance 5 are not connected")
