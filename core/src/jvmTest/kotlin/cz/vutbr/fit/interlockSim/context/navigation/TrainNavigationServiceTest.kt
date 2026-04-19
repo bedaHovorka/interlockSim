@@ -510,7 +510,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `isPathReservedForTrain matches findReservedPathForTrain when path unavailable`() {
-			// Arrange: Use a disconnected network (local context, separate from shared context)
+			// Arrange: Disconnected network (InOut A and B have no connecting track)
 			TestContextBuilder()
 				.withInOut("A", 1, 1, true)
 				.withInOut("B", 10, 10, false)

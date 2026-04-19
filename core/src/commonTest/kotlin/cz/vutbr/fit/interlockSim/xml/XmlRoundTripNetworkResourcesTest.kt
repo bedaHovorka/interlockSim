@@ -222,9 +222,9 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun doubleRoundTripParallelTracksIsStable() {
-		data class CtxData(val inOutCount: Int, val edgeCount: Int, val cols: Int, val rows: Int, val xml: String)
+		data class NetworkStructureData(val inOutCount: Int, val edgeCount: Int, val cols: Int, val rows: Int, val xml: String)
 		val data1 = CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
-			CtxData(
+			NetworkStructureData(
 				ctx1.getInOuts().size,
 				ctx1.getGraph().entrySet().size,
 				ctx1.getRailWayNetGrid().cols,
