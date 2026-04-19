@@ -1,14 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <SmellBaseline>
   <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>CyclomaticComplexMethod:DefaultSimulationContext.kt$DefaultSimulationContext$private fun validateDynamicMapping()</ID>
-    <ID>MaxLineLength:DefaultSimulationContext.kt$DefaultSimulationContext$if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) staticToDynamicMap[cell.getInSemaphore()] = dynamic.inSemaphore</ID>
-    <ID>MaxLineLength:DefaultSimulationContext.kt$DefaultSimulationContext$if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) staticToDynamicMap[cell.getOutSemaphore()] = dynamic.outSemaphore</ID>
-    <ID>MaxLineLength:DefaultSimulationContext.kt$DefaultSimulationContext$if (!staticTrackToDynamicMap.containsKey(dynamicBlock)) staticTrackToDynamicMap[dynamicBlock] = staticTrackToDynamicMap[staticTrack]!!</ID>
-    <ID>MaxLineLength:GridTransformer.kt$GridTransformer$if (!staticToDynamicMap.containsKey(cell.getInSemaphore())) staticToDynamicMap[cell.getInSemaphore()] = dynamicCell.inSemaphore</ID>
-    <ID>MaxLineLength:GridTransformer.kt$GridTransformer$if (!staticToDynamicMap.containsKey(cell.getOutSemaphore())) staticToDynamicMap[cell.getOutSemaphore()] = dynamicCell.outSemaphore</ID>
-    <ID>MaximumLineLength:DefaultSimulationContext.kt$DefaultSimulationContext$ </ID>
-    <ID>MaximumLineLength:GridTransformer.kt$GridTransformer$ </ID>
-  </CurrentIssues>
+  <CurrentIssues/>
 </SmellBaseline>
