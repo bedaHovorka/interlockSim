@@ -35,9 +35,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesGridDimensions() {
-		val ctx1 = reader.parse(minimalNetworkXml())
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(minimalNetworkXml()).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			assertThat(ctx2.getRailWayNetGrid().cols).isEqualTo(30)
@@ -47,9 +45,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesInOutCount() {
-		val ctx1 = reader.parse(minimalNetworkXml())
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(minimalNetworkXml()).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(2)
@@ -58,9 +54,7 @@ class XmlRoundTripTest {
 
 	@Test
 	fun roundTripPreservesInOutPositionsAndNames() {
-		val ctx1 = reader.parse(minimalNetworkXml())
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(minimalNetworkXml()).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			val grid = ctx2.getRailWayNetGrid()
@@ -77,10 +71,7 @@ class XmlRoundTripTest {
 	@Test
 	fun roundTripPreservesRailSemaphore() {
 		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-semaphore.xml")
-
-		val ctx1 = reader.parse(xml)
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(xml).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			val cell = ctx2.getRailWayNetGrid()[Point(3, 3)]
@@ -95,10 +86,7 @@ class XmlRoundTripTest {
 	@Test
 	fun roundTripPreservesRailSwitch() {
 		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-switch.xml")
-
-		val ctx1 = reader.parse(xml)
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(xml).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			val cell = ctx2.getRailWayNetGrid()[Point(3, 3)]
@@ -111,10 +99,7 @@ class XmlRoundTripTest {
 	@Test
 	fun roundTripPreservesTrackBlock() {
 		val xml = Resources.read("cz/vutbr/fit/interlockSim/xml/fixtures/roundtrip-with-trackblock.xml")
-
-		val ctx1 = reader.parse(xml)
-		val generatedXml = writer.generate(ctx1)
-		ctx1.close()
+		val generatedXml = reader.parse(xml).use { ctx1 -> writer.generate(ctx1) }
 
 		reader.parse(generatedXml).use { ctx2 ->
 			val graph = ctx2.getGraph()
@@ -129,15 +114,8 @@ class XmlRoundTripTest {
 
 	@Test
 	fun doubleRoundTripProducesStableXml() {
-		// First round trip
-		val ctx1 = reader.parse(minimalNetworkXml())
-		val xml1 = writer.generate(ctx1)
-		ctx1.close()
-
-		// Second round trip
-		val ctx2 = reader.parse(xml1)
-		val xml2 = writer.generate(ctx2)
-		ctx2.close()
+		val xml1 = reader.parse(minimalNetworkXml()).use { ctx1 -> writer.generate(ctx1) }
+		val xml2 = reader.parse(xml1).use { ctx2 -> writer.generate(ctx2) }
 
 		// The XML from second round trip should be identical to first
 		assertThat(xml2).isEqualTo(xml1)

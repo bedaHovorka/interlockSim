@@ -137,14 +137,10 @@ class LoopProcessTest : KoinTestBase() {
 	@DisplayName("Iteration count matches simulated time at ~1 Hz (hold(1.0))")
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun loopProcessIterationCountMatchesSimTime() {
-		val ctx = loadVyhybnaContext()
 		val lp = CountingLoopProcess()
-		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 10.0))
-
-		try {
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 10.0))
 			ctx.run()
-		} finally {
-			ctx.close()
 		}
 
 		// At 1 Hz over 10 simulated seconds we expect roughly 10 iterations.
@@ -157,14 +153,10 @@ class LoopProcessTest : KoinTestBase() {
 	@DisplayName("Loop process terminates cleanly and iteration count > 0")
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun loopProcessTerminatesCleanly() {
-		val ctx = loadVyhybnaContext()
 		val lp = CountingLoopProcess()
-		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-
-		try {
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run() // must not hang
-		} finally {
-			ctx.close()
 		}
 
 		assertThat(lp.iterationCount.get(), name = "iterations after termination").isGreaterThan(0)
@@ -174,15 +166,11 @@ class LoopProcessTest : KoinTestBase() {
 	@DisplayName("Calling terminate() multiple times is idempotent — no exception, simulation completes")
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun loopProcessTerminateIdempotent() {
-		val ctx = loadVyhybnaContext()
 		val lp = CountingLoopProcess()
 		// terminateExtra = 2 → driver calls terminate() 3 times total (2 extra + 1 real)
-		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0, terminateExtra = 2))
-
-		try {
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0, terminateExtra = 2))
 			ctx.run() // must complete without exception or hang
-		} finally {
-			ctx.close()
 		}
 
 		// byTerminateAction must fire exactly once regardless of extra terminate() calls
@@ -194,14 +182,10 @@ class LoopProcessTest : KoinTestBase() {
 	@DisplayName("startAction() is called exactly once per process lifetime")
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun loopProcessStartActionCalledOnce() {
-		val ctx = loadVyhybnaContext()
 		val lp = CountingLoopProcess()
-		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-
-		try {
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run()
-		} finally {
-			ctx.close()
 		}
 
 		assertThat(lp.startCount.get(), name = "startAction call count").isLessThanOrEqualTo(1)
@@ -212,14 +196,10 @@ class LoopProcessTest : KoinTestBase() {
 	@DisplayName("byTerminateAction() is called exactly once after termination")
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	fun loopProcessByTerminateActionCalledOnce() {
-		val ctx = loadVyhybnaContext()
 		val lp = CountingLoopProcess()
-		ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-
-		try {
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
 			ctx.run()
-		} finally {
-			ctx.close()
 		}
 
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction call count").isLessThanOrEqualTo(1)

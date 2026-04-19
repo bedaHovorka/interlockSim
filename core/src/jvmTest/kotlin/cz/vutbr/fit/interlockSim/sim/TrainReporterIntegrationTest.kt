@@ -76,25 +76,22 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	fun trainReporterEnabledPathCoverage() {
 		// ShuntingLoop.ENABLED_REPORT_TYPES includes TRAIN_CONTINUOUS — no extra setup needed
-		val ctx = loadVyhybnaContext()
-		ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
 
-		val reportCount = countTrainContinuousEvents(ctx)
+			val reportCount = countTrainContinuousEvents(ctx)
 
-		try {
 			ctx.run() // covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
-		} finally {
-			ctx.close()
-		}
 
-		// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
-		// is registered (which is always true after ShuntingLoop.actions() runs).
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS report events fired by TrainReporter")
-			.isGreaterThan(0)
-		// Upper bound: at ~1 Hz and endTime=30, max 2 concurrent trains → at most 60 reports.
-		// 300 = 5× slack. Would fail if throttle were hold(0.001) → ~6000 reports.
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS throttle upper bound (endTime=30)")
-			.isLessThan(300)
+			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
+			// is registered (which is always true after ShuntingLoop.actions() runs).
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS report events fired by TrainReporter")
+				.isGreaterThan(0)
+			// Upper bound: at ~1 Hz and endTime=30, max 2 concurrent trains → at most 60 reports.
+			// 300 = 5× slack. Would fail if throttle were hold(0.001) → ~6000 reports.
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS throttle upper bound (endTime=30)")
+				.isLessThan(300)
+		}
 	}
 
 	@Test
@@ -103,25 +100,22 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	fun trainReporterTerminatesCleanly() {
 		// `ShuntingLoop(ctx, 10L)` runs until simulation time 10 (`endTime`),
 		// with at most 2 concurrent trains active at once.
-		val ctx = loadVyhybnaContext()
-		ctx.setMainProcess(ShuntingLoop(ctx, 10L))
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(ShuntingLoop(ctx, 10L))
 
-		val reportCount = countTrainContinuousEvents(ctx)
+			val reportCount = countTrainContinuousEvents(ctx)
 
-		try {
 			ctx.run() // covers: TrainReporter terminate() path when simulation ends
-		} finally {
-			ctx.close()
-		}
 
-		// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
-		// is registered (which is always true after ShuntingLoop.actions() runs).
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS report events fired by TrainReporter")
-			.isGreaterThan(0)
-		// Upper bound: at ~1 Hz and endTime=10, max 2 concurrent trains → at most 20 reports.
-		// 100 = 5× slack. Would fail if throttle were hold(0.001) → ~2000 reports.
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS throttle upper bound (endTime=10)")
-			.isLessThan(100)
+			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
+			// is registered (which is always true after ShuntingLoop.actions() runs).
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS report events fired by TrainReporter")
+				.isGreaterThan(0)
+			// Upper bound: at ~1 Hz and endTime=10, max 2 concurrent trains → at most 20 reports.
+			// 100 = 5× slack. Would fail if throttle were hold(0.001) → ~2000 reports.
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS throttle upper bound (endTime=10)")
+				.isLessThan(100)
+		}
 	}
 
 	@Test
@@ -134,39 +128,35 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// allowedReportTypes stays empty throughout the simulation.
 		// TrainReporter.iteration() checks isReporting(TRAIN_CONTINUOUS) — which returns
 		// false — so env.report() is never called and no TRAIN_CONTINUOUS events fire.
-		val ctx = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
+		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { ctx ->
+			val reportCount = AtomicInteger(0)
+			ctx.addPropertyChangeListener(
+				ContextPropertyChangeListener { event ->
+					if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) reportCount.incrementAndGet()
+				}
+			)
 
-		val reportCount = AtomicInteger(0)
-		ctx.addPropertyChangeListener(
-			ContextPropertyChangeListener { event ->
-				if (event.propertyName == ReportType.TRAIN_CONTINUOUS.name) reportCount.incrementAndGet()
-			}
-		)
+			val inOuts = ctx.getInOuts().toList()
+			require(inOuts.size >= 2) { "Test requires at least 2 InOuts" }
+			val startInOut = inOuts[0]
+			val targetInOut = inOuts[1]
 
-		val inOuts = ctx.getInOuts().toList()
-		require(inOuts.size >= 2) { "Test requires at least 2 InOuts" }
-		val startInOut = inOuts[0]
-		val targetInOut = inOuts[1]
+			// Reserve path so train can actually move (exercises TrainReporter.iteration() repeatedly)
+			ctx.getPathReservationService().reservePath("Test#1", startInOut, targetInOut)
 
-		// Reserve path so train can actually move (exercises TrainReporter.iteration() repeatedly)
-		ctx.getPathReservationService().reservePath("Test#1", startInOut, targetInOut)
+			val timetable = Timetable(startInOut, targetInOut, Time(0.0), Time(60.0), 100.0)
+			val train = Train(ctx, timetable)
 
-		val timetable = Timetable(startInOut, targetInOut, Time(0.0), Time(60.0), 100.0)
-		val train = Train(ctx, timetable)
-
-		// SimpleTestProcess does not enable TRAIN_CONTINUOUS — the key condition under test
-		val testProcess = SimpleTestProcess(train, endTime = 10.0)
-		ctx.setMainProcess(testProcess)
-		try {
+			// SimpleTestProcess does not enable TRAIN_CONTINUOUS — the key condition under test
+			val testProcess = SimpleTestProcess(train, endTime = 10.0)
+			ctx.setMainProcess(testProcess)
 			ctx.run()
-		} finally {
-			ctx.close()
-		}
 
-		// TrainReporter ran (train moved) but isReporting(TRAIN_CONTINUOUS) was always false,
-		// so env.report() was never reached and no property change events fired.
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS events when reporting disabled")
-			.isEqualTo(0)
+			// TrainReporter ran (train moved) but isReporting(TRAIN_CONTINUOUS) was always false,
+			// so env.report() was never reached and no property change events fired.
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS events when reporting disabled")
+				.isEqualTo(0)
+		}
 	}
 
 	@Test
@@ -177,20 +167,17 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// Same setup as trainReporterEnabledPathCoverage but with tighter bounds:
 		// - Lower bound: >= 25 proves ~1 Hz cadence (not spurious single event)
 		// - Upper bound: < 100 (tighter than 300) — would catch hold(0.01) throttle bug
-		val ctx = loadVyhybnaContext()
-		ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+		loadVyhybnaContext().use { ctx ->
+			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
 
-		val reportCount = countTrainContinuousEvents(ctx)
+			val reportCount = countTrainContinuousEvents(ctx)
 
-		try {
 			ctx.run()
-		} finally {
-			ctx.close()
-		}
 
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate lower bound (endTime=30, ~1 Hz)")
-			.isGreaterThanOrEqualTo(20)
-		assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate upper bound (endTime=30)")
-			.isLessThan(100)
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate lower bound (endTime=30, ~1 Hz)")
+				.isGreaterThanOrEqualTo(20)
+			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate upper bound (endTime=30)")
+				.isLessThan(100)
+		}
 	}
 }

@@ -93,10 +93,7 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		val simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-
-		try {
+		(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { simulationContext ->
 			// Step 1: Get topology navigator
 			val navigator: TopologyNavigator = simulationContext.scope.get()
 
@@ -164,8 +161,6 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 			// isSetUpPath returns true when all tracks are reserved
 			val isSetUp = path.isSetUpPath(inOut1)
 			assertThat(isSetUp).isTrue()
-		} finally {
-			simulationContext.close()
 		}
 	}
 
@@ -175,10 +170,7 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 		val xmlStream = TestFixtures.loadSwitchBetweenSemaphoresXml()
 
 		val editingContext = editingContextFactory.createContext(xmlStream) as EditingContext
-		val simulationContext =
-			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-
-		try {
+		(simulationContextFactory.createContext(editingContext) as DefaultSimulationContext).use { simulationContext ->
 			// Step 1: Get topology navigator
 			val navigator: TopologyNavigator = simulationContext.scope.get()
 
@@ -243,8 +235,6 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 			// Step 7: Verify the path was successfully set up
 			val isSetUp = path.isSetUpPath(inOutA)
 			assertThat(isSetUp).isTrue()
-		} finally {
-			simulationContext.close()
 		}
 	}
 }
