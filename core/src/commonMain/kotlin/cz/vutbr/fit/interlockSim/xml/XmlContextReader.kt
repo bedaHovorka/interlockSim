@@ -100,6 +100,9 @@ class XmlContextReader {
 					}
 				}
 			}
+		} catch (e: Exception) {
+			editingContext?.close()
+			throw e
 		} finally {
 			reader.close()
 		}
