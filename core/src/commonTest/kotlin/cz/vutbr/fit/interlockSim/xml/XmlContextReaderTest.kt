@@ -149,7 +149,8 @@ class XmlContextReaderTest {
 	}
 
 	@Test
-	fun rejectMissingNetElement() {
+	fun rejectUnknownRootElement() {
+		// ROOT_IS_OTHER = <other .../> — hits the else-branch throw in processStartElement
 		assertFailsWith<IllegalStateException> {
 			XmlContextReader().parse(InlineXmlSnippets.ROOT_IS_OTHER)
 		}
@@ -219,9 +220,9 @@ class XmlContextReaderTest {
 	}
 
 	@Test
-	fun unknownElementsAreIgnored() {
-		XmlContextReader().parse(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD_INOUT).use { ctx ->
-			assertThat(ctx.getInOuts().size).isEqualTo(1)
+	fun unknownElementsThrow() {
+		assertFailsWith<IllegalStateException> {
+			XmlContextReader().parse(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD_INOUT)
 		}
 	}
 

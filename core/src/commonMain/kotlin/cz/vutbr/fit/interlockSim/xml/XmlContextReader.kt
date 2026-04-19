@@ -11,12 +11,9 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.readTextFile
-import io.github.oshai.kotlinlogging.KotlinLogging
 import nl.adaptivity.xmlutil.EventType
 import nl.adaptivity.xmlutil.XmlReader
 import nl.adaptivity.xmlutil.xmlStreaming
-
-private val logger = KotlinLogging.logger {}
 
 /**
  * KMP XML parser that replicates [XMLContextFactory] SAX handler logic using
@@ -103,6 +100,9 @@ class XmlContextReader {
 					}
 				}
 			}
+		} catch (e: Exception) {
+			editingContext?.close()
+			throw e
 		} finally {
 			reader.close()
 		}
@@ -167,21 +167,7 @@ class XmlContextReader {
 			}
 
 			else -> {
-				// Behavioral note: the old JVM SAX handler threw SAXException on
-				// unknown elements. This KMP reader intentionally warns and skips.
-				// Rationale:
-				//   1. data.xsd declares <net> with no content model, so XSD
-				//      validation cannot restrict which child elements appear —
-				//      unknown tags cannot be caught at the schema layer.
-				//   2. Warn-and-skip is consistent with lenient KMP XML parsing;
-				//      the WARN log is the diagnostic signal for typos.
-				// A typo in a tag name produces an empty network + a WARN log.
-				if (!NodeCellFactory.isKnownTag(localName)) {
-					logger.warn {
-						"Unrecognized XML element <$localName> — " +
-							"skipping (possible typo?)"
-					}
-				}
+				error("Unrecognized XML element <$localName> — possible typo in the XML file")
 			}
 		}
 		return Pair(editingContext1, netElementDepth1)
