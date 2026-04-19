@@ -7,7 +7,7 @@
 #      Railway Interlocking Simulator
 #
 #      fast-sim: native linuxX64 CLI binary
-#      Multi-stage build: Debian Bookworm builder → bookworm-slim runtime
+#      Multi-stage build: Debian Bookworm builder → Alpine runtime
 #
 #      Usage:
 #        docker compose build fast-sim
@@ -85,14 +85,22 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # ============================================
 # Stage 2: Minimal runtime image
 # ============================================
-FROM debian:bookworm-slim
+# Alpine Linux (~8MB) instead of debian:bookworm-slim (~85MB).
+# Fixes #421: image exceeded 120MB target (174MB) because Debian's libxml2
+# depends on libicu72 (~30MB). Alpine's libxml2 has no ICU dependency.
+#
+# gcompat provides glibc ABI compatibility for the Kotlin/Native binary,
+# which is compiled against glibc on linuxX64. This is a well-established
+# pattern used by Go (CGO), Rust, and other native binaries on Alpine.
+FROM alpine:3.21
 
-# Install only the runtime library the native binary links against.
-# libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2)
-# Note: libxml2 depends on libicu72 transitively; apt installs it automatically.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libxml2 \
-    && rm -rf /var/lib/apt/lists/*
+# gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
+#          Provides /lib64/ld-linux-x86-64.so.2 and glibc symbol wrappers.
+# libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2 at build time).
+#          Alpine's libxml2 does NOT pull libicu, unlike Debian's (~30MB saved).
+RUN apk add --no-cache \
+    gcompat \
+    libxml2
 
 # Copy native binary from builder
 COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \

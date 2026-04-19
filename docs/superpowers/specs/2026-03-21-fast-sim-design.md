@@ -170,26 +170,28 @@ kotlin-logging uses `println` as the backend on Kotlin/Native (no SLF4J). Since 
 
 **Dockerfile.fast-sim:**
 ```dockerfile
-# Build stage
-FROM debian:bookworm AS builder
+# Build stage (Debian Bookworm — JDK 21 + libxml2-dev for cinterop)
+FROM eclipse-temurin:21-jdk AS builder
 RUN apt-get update && apt-get install -y openjdk-21-jdk git libxml2-dev libicu-dev
 COPY . /build
 WORKDIR /build
 RUN ./gradlew :fast-sim:linkReleaseExecutableLinuxX64
 
-# Runtime stage
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends libxml2 && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe /app/fast-sim
-WORKDIR /app
-ENTRYPOINT ["./fast-sim"]
+# Runtime stage (Alpine — no ICU dependency, ~20MB total)
+FROM alpine:3.21
+RUN apk add --no-cache gcompat libxml2
+COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe /usr/local/bin/fast-sim
+ENTRYPOINT ["fast-sim"]
 ```
 
 **Notes:**
-- Runtime base is `debian:bookworm-slim` (not `ubuntu:24.04-minimal` which doesn't exist as a Docker tag)
+- Runtime base is `alpine:3.21` (~8MB) with `gcompat` for glibc ABI compatibility
+- Alpine's `libxml2` does NOT depend on `libicu` (unlike Debian's ~30MB transitive dependency)
+- `gcompat` provides `/lib64/ld-linux-x86-64.so.2` and glibc symbol wrappers for K/N binary
 - No XML files copied to image — built-in examples use embedded XML; `sim` mode requires bind-mounting files
-- Image size target: 20-50MB
+- Image size target: < 30MB (Alpine ~8MB + gcompat ~2MB + libxml2 ~5MB + binary ~4.4MB)
 - Build artifact path (`fast-sim.kexe`) must be verified against actual Kotlin/Native output
+- **Previous approach (Debian bookworm-slim)** resulted in 174MB due to libicu72 transitive dependency (Issue #421)
 
 **docker-compose.yml addition:**
 ```yaml
@@ -239,7 +241,7 @@ Contains sub-issues #414-#420 for subproject setup, context factory, TextReporte
 3. TextReporter — human-readable simulation output
 4. Smoke test: native vs JVM semantic parity
 5. Performance benchmark: native vs JVM
-6. Docker image (Dockerfile.fast-sim, debian:bookworm-slim)
+6. Docker image (Dockerfile.fast-sim, Alpine 3.21 + gcompat)
 7. CI/CD: build & test fast-sim in GitHub Actions
 
 ### New Issue (kdisco)
