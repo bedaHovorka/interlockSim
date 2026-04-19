@@ -177,7 +177,7 @@ internal object InlineXmlSnippets {
 					length="100.0" maxSpeedfrom="80.0" maxSpeedto="80.0"/>
 			</net>"""
 
-	/** Network with an element the reader should silently ignore. */
+	/** Network with an unknown element — reader must throw on this. */
 	const val NET_WITH_UNKNOWN_CHILD_INOUT: String =
 		"""<?xml version="1.0"?>
 			<net X="10" Y="10">

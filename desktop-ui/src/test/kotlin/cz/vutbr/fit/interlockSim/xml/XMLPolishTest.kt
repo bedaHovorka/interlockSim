@@ -365,7 +365,7 @@ class XMLPolishTest : KoinTestBase() {
 	@DisplayName("Unknown Element Types - Behavior")
 	inner class UnknownElementTests {
 		@Test
-		fun `unknown element type is silently ignored`() {
+		fun `unknown element type throws exception`() {
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -375,13 +375,13 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			// KMP XmlContextReader ignores unknown elements (XSD schema doesn't restrict them)
-			val context = editingContextFactory.createContext(stream)
-			assertThat(context).isNotNull()
+			assertThatBlock {
+				editingContextFactory.createContext(stream)
+			}.isFailure()
 		}
 
 		@Test
-		fun `arbitrary element in net is silently ignored`() {
+		fun `arbitrary element in net throws exception`() {
 			val xml = """<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="100" Y="100">
@@ -391,9 +391,9 @@ class XMLPolishTest : KoinTestBase() {
 				</net>"""
 			val stream = ByteArrayInputStream(xml.toByteArray())
 
-			// KMP XmlContextReader ignores unknown elements (XSD schema doesn't restrict them)
-			val context = editingContextFactory.createContext(stream)
-			assertThat(context).isNotNull()
+			assertThatBlock {
+				editingContextFactory.createContext(stream)
+			}.isFailure()
 		}
 	}
 

@@ -219,9 +219,9 @@ class XmlContextReaderTest {
 	}
 
 	@Test
-	fun unknownElementsAreIgnored() {
-		XmlContextReader().parse(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD_INOUT).use { ctx ->
-			assertThat(ctx.getInOuts().size).isEqualTo(1)
+	fun unknownElementsThrow() {
+		assertFailsWith<IllegalStateException> {
+			XmlContextReader().parse(InlineXmlSnippets.NET_WITH_UNKNOWN_CHILD_INOUT)
 		}
 	}
 
