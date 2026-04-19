@@ -21,7 +21,7 @@
 # ============================================
 # Eclipse Temurin provides JDK 21 on Debian Bookworm base.
 # Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
-FROM eclipse-temurin:21-jdk AS builder
+FROM --platform=linux/amd64 eclipse-temurin:21-jdk AS builder
 
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
@@ -92,7 +92,7 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # gcompat provides glibc ABI compatibility for the Kotlin/Native binary,
 # which is compiled against glibc on linuxX64. This is a well-established
 # pattern used by Go (CGO), Rust, and other native binaries on Alpine.
-FROM alpine:3.21
+FROM --platform=linux/amd64 alpine:3.21
 
 # gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
 #          Provides /lib64/ld-linux-x86-64.so.2 and glibc symbol wrappers.

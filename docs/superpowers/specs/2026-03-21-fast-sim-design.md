@@ -171,14 +171,14 @@ kotlin-logging uses `println` as the backend on Kotlin/Native (no SLF4J). Since 
 **Dockerfile.fast-sim:**
 ```dockerfile
 # Build stage (Eclipse Temurin JDK 21 on Debian Bookworm + libxml2-dev for cinterop)
-FROM eclipse-temurin:21-jdk AS builder
+FROM --platform=linux/amd64 eclipse-temurin:21-jdk AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev
 COPY . /build
 WORKDIR /build
 RUN ./gradlew :fast-sim:linkReleaseExecutableLinuxX64
 
 # Runtime stage (Alpine — no ICU dependency, ~20MB total)
-FROM alpine:3.21
+FROM --platform=linux/amd64 alpine:3.21
 RUN apk add --no-cache gcompat libxml2
 COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe /usr/local/bin/fast-sim
 ENTRYPOINT ["fast-sim"]
@@ -199,7 +199,7 @@ fast-sim:
   build:
     context: .
     dockerfile: Dockerfile.fast-sim
-  entrypoint: ["./fast-sim"]
+  entrypoint: ["fast-sim"]
   # For sim mode with external XML:
   # volumes:
   #   - ./networks:/data:ro
