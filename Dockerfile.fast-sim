@@ -85,8 +85,8 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # ============================================
 # Stage 2: Minimal runtime image
 # ============================================
-# Alpine Linux (~8MB) instead of debian:bookworm-slim (~85MB).
-# Fixes #421: image exceeded 120MB target (174MB) because Debian's libxml2
+# Alpine Linux base (~8MB) instead of debian:bookworm-slim (base ~85MB, total 174MB with libxml2+libicu).
+# Fixes #421: image exceeded 120MB target because Debian's libxml2
 # depends on libicu72 (~30MB). Alpine's libxml2 has no ICU dependency.
 #
 # gcompat provides glibc ABI compatibility for the Kotlin/Native binary,

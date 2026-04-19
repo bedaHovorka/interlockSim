@@ -170,9 +170,9 @@ kotlin-logging uses `println` as the backend on Kotlin/Native (no SLF4J). Since 
 
 **Dockerfile.fast-sim:**
 ```dockerfile
-# Build stage (Debian Bookworm — JDK 21 + libxml2-dev for cinterop)
+# Build stage (Eclipse Temurin JDK 21 on Debian Bookworm + libxml2-dev for cinterop)
 FROM eclipse-temurin:21-jdk AS builder
-RUN apt-get update && apt-get install -y openjdk-21-jdk git libxml2-dev libicu-dev
+RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev
 COPY . /build
 WORKDIR /build
 RUN ./gradlew :fast-sim:linkReleaseExecutableLinuxX64
