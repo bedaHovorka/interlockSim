@@ -13,6 +13,8 @@ import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
+import io.github.oshai.kotlinlogging.FormattingAppender
+import io.github.oshai.kotlinlogging.KLoggingEvent
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.github.oshai.kotlinlogging.Level
 import kotlinx.cinterop.staticCFunction
@@ -74,7 +76,35 @@ private const val CMD_EXAMPLE = "example"
 private const val CMD_SIM = "sim"
 private const val CMD_VERBOSE = "--verbose"
 private const val CMD_QUIET = "--quiet"
+internal const val CMD_DEBUG = "--debug"
 private const val VERSION_STRING = "fast-sim 1.0"
+
+/**
+ * Custom [FormattingAppender] that writes formatted log messages to stderr.
+ * Used when [CMD_DEBUG] is active so that debug output does not pollute
+ * the simulation results written to stdout.
+ */
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+private object StderrAppender : FormattingAppender() {
+	override fun logFormattedMessage(loggingEvent: KLoggingEvent, formattedMessage: Any?) {
+		fprintf(stderr, "%s\n", formattedMessage?.toString() ?: "null")
+	}
+}
+
+/**
+ * Configures the kotlin-logging global log level.
+ *
+ * - [debug] = `true`: enables [Level.DEBUG] output routed to stderr via [StderrAppender].
+ * - [debug] = `false`: suppresses all log output ([Level.OFF]).
+ */
+internal fun configureLogging(debug: Boolean) {
+	if (debug) {
+		KotlinLoggingConfiguration.appender = StderrAppender
+		KotlinLoggingConfiguration.logLevel = Level.DEBUG
+	} else {
+		KotlinLoggingConfiguration.logLevel = Level.OFF
+	}
+}
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
@@ -125,6 +155,7 @@ private fun parseVerbosity(args: Array<String>): Verbosity = when {
  * - `fast-sim sim <path> <endTime>` — run simulation from XML file
  * - `fast-sim --version` — print version and exit (no Koin started)
  * - `fast-sim --help` / `fast-sim -h` — print usage and exit 0 (no Koin started)
+ * - `fast-sim --debug ...` — enable DEBUG logging to stderr
  * - No args or unknown command → print usage to stderr, exit 2
  *
  * Exit codes: 0 = success, 1 = simulation/runtime error, 2 = invalid arguments, 130 = interrupted (SIGINT)
@@ -136,11 +167,12 @@ fun main(args: Array<String>) {
 	handleEarlyExitArgs(args)
 
 	installSignalHandler()
-	KotlinLoggingConfiguration.logLevel = Level.OFF
+	val debug = CMD_DEBUG in args
+	configureLogging(debug)
 	startKoin { modules(coreModule) }
 
 	val verbosity = parseVerbosity(args)
-	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET }.toTypedArray()
+	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET && it != CMD_DEBUG }.toTypedArray()
 
 	val factory = NativeContextFactory()
 	val exitCode = try {
@@ -250,6 +282,9 @@ private fun printUsage() {
 		  fast-sim [$CMD_VERBOSE|$CMD_QUIET] $CMD_SIM <path> <endTime>       Run simulation from XML file (ShuntingLoop process; vyhybna.xml-compatible network required)
 		  fast-sim $CMD_VERSION                                Print version
 		  fast-sim $CMD_HELP / $CMD_HELP_SHORT                          Print this help
+
+		Flags (combinable with any mode):
+		  $CMD_DEBUG                                          Enable DEBUG-level logging output to stderr
 		""".trimIndent()
 	)
 }
