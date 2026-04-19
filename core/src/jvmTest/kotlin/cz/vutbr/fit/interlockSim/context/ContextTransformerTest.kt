@@ -176,8 +176,7 @@ class ContextTransformerTest : KoinTestBase() {
 			DefaultEditingContext(20, 20).use { editingContext ->
 				// Arrange
 				val inOut = InOut("A", true, Cell.SpatialType.HORIZONTAL)
-				val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-				railSwitch.setName("SW1")
+				val railSwitch = RailSwitch("SW1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 				editingContext.putCell(Point(1, 1), inOut)
 				editingContext.putCell(Point(5, 5), railSwitch)
 
@@ -227,8 +226,7 @@ class ContextTransformerTest : KoinTestBase() {
 		fun transformContext_withSemaphore_wrapsDynamically() {
 			DefaultEditingContext(20, 20).use { editingContext ->
 				// Arrange
-				val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-				semaphore.setName("sem1")
+				val semaphore = RailSemaphore("sem1", true, Cell.SpatialType.HORIZONTAL)
 				editingContext.putCell(Point(5, 5), semaphore)
 
 				// Act

@@ -65,8 +65,7 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 	@Test
 	fun `unmapped RailSemaphore throws IllegalStateException`() {
 		createEmptyContext().use { context ->
-			val unmappedSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			unmappedSemaphore.setName("unmapped-semaphore")
+			val unmappedSemaphore = RailSemaphore("unmapped-semaphore", true, Cell.SpatialType.HORIZONTAL)
 
 			val exception =
 				assertFailsWith<IllegalStateException> {
@@ -79,8 +78,7 @@ class CacheValidationCacheMissBehaviorTest : KoinComponent {
 	@Test
 	fun `unmapped RailSwitch throws IllegalStateException`() {
 		createEmptyContext().use { context ->
-			val unmappedSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-			unmappedSwitch.setName("unmapped-switch")
+			val unmappedSwitch = RailSwitch("unmapped-switch", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 			val exception =
 				assertFailsWith<IllegalStateException> {

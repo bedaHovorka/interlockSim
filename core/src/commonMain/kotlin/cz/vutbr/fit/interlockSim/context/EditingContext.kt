@@ -245,7 +245,8 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 *
 	 * ```kotlin
 	 * val cell = grid[Point(1, 1)] as RailSemaphore
-	 * cell.setName("S1")
+	 * val updated = cell.withName("S1")
+	 * context.putCell(Point(1, 1), updated)
 	 * context.fireCellModified(Point(1, 1))  // Notify listeners
 	 * ```
 	 *

@@ -52,8 +52,7 @@ object TestTopologies {
 		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
 		val exitMain = InOut("ExitMain", true, Cell.SpatialType.HORIZONTAL)
 		val exitBranch = InOut("ExitBranch", true, Cell.SpatialType.HORIZONTAL)
-		val switch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		switch.setName("Junction")
+		val switch = RailSwitch("Junction", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 		context.putCell(Point(5, 30), entry)
 		context.putCell(Point(30, 30), switch)
@@ -87,8 +86,7 @@ object TestTopologies {
 		var previousElement: NodeCell = inA
 
 		for (i in 1..semaphoreCount) {
-			val semaphore = RailSemaphore(semaphoresAllowing, Cell.SpatialType.HORIZONTAL)
-			semaphore.setName("Sem$i")
+			val semaphore = RailSemaphore("Sem$i", semaphoresAllowing, Cell.SpatialType.HORIZONTAL)
 
 			val currentX = 1 + (i * 5)
 			context.putCell(Point(currentX, 5), semaphore)

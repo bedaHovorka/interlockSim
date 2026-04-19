@@ -21,19 +21,16 @@ class InOut(
 	name: String,
 	orientation: Boolean,
 	spatialType: Cell.SpatialType
-) : OrientedNodeCell(orientation, spatialType) {
-	private var name: String
+) : OrientedNodeCell(orientation, spatialType, name) {
 	private val inSemaphore: RailSemaphore
 	private val outSemaphore: RailSemaphore
 
 	init {
-		this.name = name
 		this.inSemaphore = RailSemaphore(!orientation, spatialType)
 		requireSimulation(inSemaphore.direction() == anti(direction())) {
 			"In semaphore direction must be anti-parallel to InOut direction"
 		}
 		this.outSemaphore = RailSemaphore(orientation, spatialType)
-		setName(name)
 	}
 
 	override fun joins(): Set<Cell.Segment> = setOf(direction())
@@ -50,22 +47,6 @@ class InOut(
 	fun getInSemaphore(): RailSemaphore = inSemaphore
 
 	/**
-	 * @return name of place
-	 */
-	override fun getName(): String = name
-
-	/**
-	 * Set the name of this InOut.
-	 * Overrides parent to update the local name field (which shadows parent's name).
-	 *
-	 * @param name The new name for this InOut
-	 */
-	override fun setName(name: String) {
-		this.name = name
-		super.setName(name) // Also update parent's name for consistency
-	}
-
-	/**
 	 * @return semaphore on output
 	 */
 	fun getOutSemaphore(): RailSemaphore = outSemaphore
@@ -75,6 +56,14 @@ class InOut(
 	 * Returns the output semaphore since InOut acts as an exit point.
 	 */
 	override fun asRailSemaphore(): RailSemaphore = outSemaphore
+
+	/**
+	 * Create a copy of this InOut with the given name.
+	 *
+	 * @param newName The new name for the copy
+	 * @return A new InOut with the updated name
+	 */
+	override fun withName(newName: String): InOut = InOut(newName, getOrientation(), getSpatialType())
 
 	/**
 	 * Get the track connection direction for InOut.

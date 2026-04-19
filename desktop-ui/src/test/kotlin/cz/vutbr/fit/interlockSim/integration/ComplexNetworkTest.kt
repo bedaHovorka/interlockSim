@@ -79,8 +79,7 @@ class ComplexNetworkTest : KoinTestBase() {
 		val exitD = InOut("Exit_Platform_2", true, Cell.SpatialType.HORIZONTAL)
 
 		// Create central junction with switches
-		val switchMain = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		switchMain.setName("Main_Junction")
+		val switchMain = RailSwitch("Main_Junction", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 		// Place elements on grid
 		editingContext.putCell(Point(5, 20), entryA)
@@ -175,10 +174,8 @@ class ComplexNetworkTest : KoinTestBase() {
 		val editingContext = DefaultEditingContext(60, 30)
 
 		val entry = InOut("Entry", false, Cell.SpatialType.HORIZONTAL)
-		val junction1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		junction1.setName("Junction_1")
-		val junction2 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		junction2.setName("Junction_2")
+		val junction1 = RailSemaphore("Junction_1", true, Cell.SpatialType.HORIZONTAL)
+		val junction2 = RailSemaphore("Junction_2", true, Cell.SpatialType.HORIZONTAL)
 		val exit = InOut("Exit", true, Cell.SpatialType.HORIZONTAL)
 
 		editingContext.putCell(Point(5, 15), entry)
@@ -224,10 +221,8 @@ class ComplexNetworkTest : KoinTestBase() {
 		// Create a loop with 4 junctions
 		val entryExit1 = InOut("Platform_1", false, Cell.SpatialType.HORIZONTAL)
 		val entryExit2 = InOut("Platform_2", true, Cell.SpatialType.HORIZONTAL)
-		val junction1 = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		junction1.setName("Junction_1")
-		val junction2 = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
-		junction2.setName("Junction_2")
+		val junction1 = RailSwitch("Junction_1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
+		val junction2 = RailSwitch("Junction_2", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_LEFT_TRUE)
 
 		editingContext.putCell(Point(10, 25), entryExit1)
 		editingContext.putCell(Point(40, 25), entryExit2)

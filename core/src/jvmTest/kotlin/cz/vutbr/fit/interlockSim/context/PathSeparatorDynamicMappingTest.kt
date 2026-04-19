@@ -85,8 +85,7 @@ class PathSeparatorDynamicMappingTest : KoinTestBase() {
 			val context = factory.createEmptyContext()
 
 			// Create a RailSemaphore that's not registered
-			val unregisteredSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			unregisteredSemaphore.setName("unregistered")
+			val unregisteredSemaphore = RailSemaphore("unregistered", true, Cell.SpatialType.HORIZONTAL)
 
 			// Act & Assert - should throw IllegalStateException
 			assertThatBlock {

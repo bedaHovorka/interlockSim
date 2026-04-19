@@ -133,8 +133,7 @@ class EditToSimulationWorkflowTest : KoinTestBase() {
 
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
-		val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		semaphore.setName("Signal_1")
+		val semaphore = RailSemaphore("Signal_1", true, Cell.SpatialType.HORIZONTAL)
 
 		val pointA = Point(5, 5)
 		val pointSem = Point(15, 5)

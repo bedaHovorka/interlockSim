@@ -79,8 +79,7 @@ class CacheValidationErrorMessageQualityTest : KoinComponent {
 	@Test
 	fun `error includes separator name if available`() {
 		createEmptyContext().use { context ->
-			val unmapped = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			unmapped.setName("test-semaphore")
+			val unmapped = RailSemaphore("test-semaphore", true, Cell.SpatialType.HORIZONTAL)
 
 			val exception =
 				assertFailsWith<IllegalStateException> {

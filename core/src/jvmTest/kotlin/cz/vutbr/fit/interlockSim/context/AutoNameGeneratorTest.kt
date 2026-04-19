@@ -247,8 +247,7 @@ class AutoNameGeneratorTest : KoinTestBase() {
 		y: Int,
 		name: String
 	) {
-		val semaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
-		semaphore.setName(name)
+		val semaphore = RailSemaphore(name, false, Cell.SpatialType.HORIZONTAL)
 		ctx.putCell(Point(x, y), semaphore)
 	}
 }

@@ -347,18 +347,22 @@ class NodeCellTest : KoinTestBase() {
 		}
 
 		@Test
-		fun `node name can be changed`() {
+		fun `node name can be changed via withName wither`() {
 			// Arrange
 			val node = createMockNodeCell(name = "OriginalName")
 
 			// Act
-			node.setName("NewName")
-			val updatedName = node.getName()
+			val updated = node.withName("NewName")
 
-			// Assert
-			assertThat(updatedName)
-				.withMessage("Node name should be updated to new value")
+			// Assert - new instance has new name
+			assertThat(updated.getName())
+				.withMessage("New instance should have updated name")
 				.isEqualTo("NewName")
+
+			// Assert - original is unchanged (immutability)
+			assertThat(node.getName())
+				.withMessage("Original node name should be unchanged")
+				.isEqualTo("OriginalName")
 		}
 	}
 
