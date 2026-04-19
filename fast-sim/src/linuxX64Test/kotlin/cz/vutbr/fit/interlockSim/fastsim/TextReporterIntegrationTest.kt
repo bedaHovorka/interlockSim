@@ -36,13 +36,10 @@ class TextReporterIntegrationTest {
 	fun shuntingLoopProducesEventsViaTextReporter() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-		} finally {
-			ctx.close()
 		}
 		assertTrue(output.size > 1, "Expected events, got ${output.size} lines")
 		assertTrue(output.last().startsWith("---"), "Last line should be summary")
@@ -52,13 +49,10 @@ class TextReporterIntegrationTest {
 	fun quietModeProducesOnlySummary() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.QUIET) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-		} finally {
-			ctx.close()
 		}
 		assertEquals(1, output.size, "QUIET should produce only summary")
 		assertTrue(output[0].startsWith("---"))
@@ -68,13 +62,10 @@ class TextReporterIntegrationTest {
 	fun verboseModeIncludesTrainContinuous() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.VERBOSE) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-		} finally {
-			ctx.close()
 		}
 		assertTrue(output.any { "[TRAIN_CONTINUOUS]" in it }, "VERBOSE should include TRAIN_CONTINUOUS")
 	}
@@ -83,12 +74,9 @@ class TextReporterIntegrationTest {
 	fun outputMatchesParseableRegex() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
-		} finally {
-			ctx.close()
 		}
 		val regex = Regex("t=[\\d.]+\\s+\\[\\w+]\\s+.+")
 		val eventLines = output.filter { !it.startsWith("---") }
@@ -102,13 +90,10 @@ class TextReporterIntegrationTest {
 	fun summaryIncludesTrainCountGreaterThanZero() {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 60, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 60, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-		} finally {
-			ctx.close()
 		}
 		val summary = output.last()
 		assertTrue(summary.startsWith("---"), "Summary should start with ---: $summary")

@@ -510,25 +510,23 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `isPathReservedForTrain matches findReservedPathForTrain when path unavailable`() {
-			// Arrange: Disconnected network
-			context.close()
-			context =
-				TestContextBuilder()
-					.withInOut("A", 1, 1, true)
-					.withInOut("B", 10, 10, false)
-					.buildSimulationContext()
+			// Arrange: Use a disconnected network (local context, separate from shared context)
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withInOut("B", 10, 10, false)
+				.buildSimulationContext().use { disconnectedCtx ->
+					val disconnectedService = disconnectedCtx.getTrainNavigationService()
+					val grid = disconnectedCtx.getRailWayNetGrid()
+					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
-			service = context.getTrainNavigationService()
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
+					// Act
+					val foundPathResult = disconnectedService.findReservedPathForTrain("train1", inOutA)
+					val isAvailable = disconnectedService.isPathReservedForTrain("train1", inOutA)
 
-			// Act
-			val foundPathResult = service.findReservedPathForTrain("train1", inOutA)
-			val isAvailable = service.isPathReservedForTrain("train1", inOutA)
-
-			// Assert
-			assertThat(foundPathResult).isInstanceOf(PathResult.NoTopologicalPath::class)
-			assertThat(isAvailable).isFalse()
+					// Assert
+					assertThat(foundPathResult).isInstanceOf(PathResult.NoTopologicalPath::class)
+					assertThat(isAvailable).isFalse()
+				}
 		}
 
 		@Test

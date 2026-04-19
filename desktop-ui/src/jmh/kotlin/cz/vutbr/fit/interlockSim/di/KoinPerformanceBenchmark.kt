@@ -64,12 +64,11 @@ open class KoinPerformanceBenchmark {
 	@Benchmark
 	fun railwayNetworkLoading_WithoutDI(blackhole: Blackhole) {
 		val xmlFactory = XMLContextFactory()
-		val networkStream = railwayNetworkXml()
-		val railwayNetwork = xmlFactory.createContext(networkStream)
-		networkStream.close()
-		
-		blackhole.consume(railwayNetwork)
-		railwayNetwork.close()
+		railwayNetworkXml().use { networkStream ->
+			xmlFactory.createContext(networkStream).use { railwayNetwork ->
+				blackhole.consume(railwayNetwork)
+			}
+		}
 	}
 
 	/**
@@ -88,12 +87,11 @@ open class KoinPerformanceBenchmark {
 		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
 			SimulationContextFactory::class.java
 		)
-		val networkStream = railwayNetworkXml()
-		val railwayNetwork = factoryFromDI.createContext(networkStream)
-		networkStream.close()
-		
-		blackhole.consume(railwayNetwork)
-		railwayNetwork.close()
+		railwayNetworkXml().use { networkStream ->
+			factoryFromDI.createContext(networkStream).use { railwayNetwork ->
+				blackhole.consume(railwayNetwork)
+			}
+		}
 	}
 
 	/**
@@ -107,15 +105,13 @@ open class KoinPerformanceBenchmark {
 	@Benchmark
 	fun trainSimulationSetup_WithoutDI(blackhole: Blackhole) {
 		val xmlFactory = XMLContextFactory()
-		val networkStream = railwayNetworkXml()
-		val railwayNetwork = xmlFactory.createContext(networkStream) as DefaultSimulationContext
-		networkStream.close()
-		
-		val mockContext = MockSimulationContext(railwayNetwork)
-		val simulationScenario = ShuntingLoop(mockContext, 60L)
-		
-		blackhole.consume(simulationScenario)
-		railwayNetwork.close()
+		railwayNetworkXml().use { networkStream ->
+			(xmlFactory.createContext(networkStream) as DefaultSimulationContext).use { railwayNetwork ->
+				val mockContext = MockSimulationContext(railwayNetwork)
+				val simulationScenario = ShuntingLoop(mockContext, 60L)
+				blackhole.consume(simulationScenario)
+			}
+		}
 	}
 
 	/**
@@ -134,15 +130,13 @@ open class KoinPerformanceBenchmark {
 		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
 			SimulationContextFactory::class.java
 		)
-		val networkStream = railwayNetworkXml()
-		val railwayNetwork = factoryFromDI.createContext(networkStream) as DefaultSimulationContext
-		networkStream.close()
-		
-		val mockContext = MockSimulationContext(railwayNetwork)
-		val simulationScenario = ShuntingLoop(mockContext, 60L)
-		
-		blackhole.consume(simulationScenario)
-		railwayNetwork.close()
+		railwayNetworkXml().use { networkStream ->
+			(factoryFromDI.createContext(networkStream) as DefaultSimulationContext).use { railwayNetwork ->
+				val mockContext = MockSimulationContext(railwayNetwork)
+				val simulationScenario = ShuntingLoop(mockContext, 60L)
+				blackhole.consume(simulationScenario)
+			}
+		}
 	}
 
 	/**
