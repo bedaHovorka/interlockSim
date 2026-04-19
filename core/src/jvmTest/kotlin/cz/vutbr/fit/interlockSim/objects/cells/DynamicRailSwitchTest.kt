@@ -15,6 +15,7 @@ import assertk.assertions.contains
 import assertk.assertions.containsAll
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isEmpty
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
