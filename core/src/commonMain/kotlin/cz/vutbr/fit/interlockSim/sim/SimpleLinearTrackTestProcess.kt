@@ -188,8 +188,7 @@ class SimpleLinearTrackTestProcess(
 		}
 
 		// Increment block-transition counter only when the train makes genuine
-		// forward progress (totalDistance grows), keeping metric semantics aligned
-		// with ShuntingLoop which increments on each successful tryReservePathFrom.
+		// forward progress in this test process, i.e. when totalDistance grows.
 		for (t in approwedTrains) {
 			val current = t.totalDistance
 			val last = lastTotalDistanceByTrain[t.name] ?: 0.0
