@@ -378,6 +378,7 @@ class XMLPolishTest : KoinTestBase() {
 			assertThatBlock {
 				editingContextFactory.createContext(stream)
 			}.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 
 		@Test
@@ -394,6 +395,7 @@ class XMLPolishTest : KoinTestBase() {
 			assertThatBlock {
 				editingContextFactory.createContext(stream)
 			}.isFailure()
+				.isInstanceOf(ContextCreationException::class)
 		}
 	}
 

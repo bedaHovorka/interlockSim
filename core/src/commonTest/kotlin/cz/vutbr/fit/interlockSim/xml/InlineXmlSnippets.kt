@@ -34,7 +34,12 @@ internal object InlineXmlSnippets {
 		"""<?xml version="1.0"?>
 			<unknown X="10" Y="10"/>"""
 
-	/** Valid `<net>` containing an element the XSD does not define (XSD is permissive). */
+	/**
+	 * Valid `<net>` per XSD schema (permissive XSD accepts unknown children).
+	 * Used by [cz.vutbr.fit.interlockSim.xml.XmlSchemaValidatorTest] only —
+	 * XmlContextReader now throws on unknown elements, so this snippet must NOT
+	 * be used in reader tests (use [NET_WITH_UNKNOWN_CHILD_INOUT] instead).
+	 */
 	const val NET_WITH_UNKNOWN_CHILD: String =
 		"""<?xml version="1.0"?>
 			<net X="10" Y="10">
