@@ -122,8 +122,10 @@ sonar {
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
-            "desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml," +
-                "core/build/reports/jacoco/jvmTest/jacocoTestReport.xml",
+            listOf(
+                file("desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml"),
+                file("core/build/reports/jacoco/jvmTest/jacocoTestReport.xml"),
+            ).joinToString(",") { it.absolutePath },
         )
 
         property("sonar.sourceEncoding", "UTF-8")

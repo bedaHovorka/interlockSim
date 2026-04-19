@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -172,6 +173,35 @@ class TrainTest : KoinTestBase() {
 
 			// Assert - Should return 0.0 when no path exists
 			assertThat(distance).isEqualTo(0.0)
+		}
+	}
+
+	@Nested
+	@DisplayName("Train counter increment")
+	inner class TrainCounterTests {
+
+		@Test
+		fun constructor_multipleCalls_namesIncrement() {
+			// Two consecutively created trains must receive sequential numbers
+			val t1 = Train(mockContext, createTimetableWithLength(50.0))
+			val t2 = Train(mockContext, createTimetableWithLength(50.0))
+
+			// Both names must follow the "Train #N" format
+			assertThat(t1.name).contains("Train #")
+			assertThat(t2.name).contains("Train #")
+
+			// Extract numbers and verify sequential increment (counter is shared static,
+			// so we verify relative ordering rather than absolute values)
+			val n1 = t1.name.substringAfter("Train #").toInt()
+			val n2 = t2.name.substringAfter("Train #").toInt()
+			assertThat(n2).isEqualTo(n1 + 1)
+		}
+
+		@Test
+		fun constructor_trainName_containsNumber() {
+			val train = Train(mockContext, createTimetableWithLength(100.0))
+			// Name must follow the "Train #<number>" format
+			assertThat(Regex("""Train #\d+""").matches(train.name)).isEqualTo(true)
 		}
 	}
 

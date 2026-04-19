@@ -9,11 +9,15 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.*
+import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 
@@ -242,7 +246,115 @@ class DynamicRailSemaphoreTest {
 		assertThat(constantSemaphore.signal).isEqualTo(Signal.FREE)
 		assertThat(capturedEvents).isEmpty()
 	}
+
+	// ========== setUpPath / cancelPathSetup / setUpSpeed Tests ==========
+
+	// For staticSemaphore1: orientation=true, HORIZONTAL
+	//   direction() = Cell.Segment.A  (HORIZONTAL.segments=[F,A], index 1 for orientation=true)
+	//   anti(A) = F
+	//   Forward: from=F, to=A  → checkPathSegments returns true (valid direction, fires)
+	//   Reverse: from=A, to=F  → checkPathSegments returns false (no signal change)
+
+	@Test
+	fun `setUpPath fires signal change event for forward direction`() {
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
+
+		dynamicSemaphore1.setUpPath(
+			Cell.Segment.F, Cell.Segment.A,
+			20.0,
+			stubTrackOccupant()
+		)
+
+		// Signal should have changed from STOP to something non-STOP
+		assertThat(dynamicSemaphore1.signal).isNotEqualTo(Signal.STOP)
+		// Listener should have received the "signal" event
+		val signalEvents = capturedEvents.filter { it.propertyName == "signal" }
+		assertThat(signalEvents).hasSize(1)
+		assertThat(signalEvents[0].oldValue).isEqualTo(Signal.STOP)
+	}
+
+	@Test
+	fun `cancelPathSetup resets signal to STOP and fires event`() {
+		// Given: signal is set to non-STOP
+		dynamicSemaphore1.signal = Signal.S60
+
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
+
+		// When: cancelPathSetup is called
+		dynamicSemaphore1.cancelPathSetup(Cell.Segment.F, Cell.Segment.A)
+
+		// Then: signal is reset to STOP and listener fired
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+		val signalEvents = capturedEvents.filter { it.propertyName == "signal" }
+		assertThat(signalEvents).hasSize(1)
+		assertThat(signalEvents[0].oldValue).isEqualTo(Signal.S60)
+		assertThat(signalEvents[0].newValue).isEqualTo(Signal.STOP)
+	}
+
+	@Test
+	fun `cancelPathSetup with already STOP signal does not fire event`() {
+		// Signal is already STOP (initial state)
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
+
+		// When: cancelPathSetup is called (signal already STOP)
+		dynamicSemaphore1.cancelPathSetup(Cell.Segment.F, Cell.Segment.A)
+
+		// Then: signal unchanged and no event fired (same value)
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `setUpSpeed with reverse direction does not change signal`() {
+		// Signal initially STOP
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
+
+		// Reverse direction: from=A (direction), to=F (anti-direction)
+		dynamicSemaphore1.setUpSpeed(Cell.Segment.A, Cell.Segment.F, 20.0)
+
+		// Signal must remain STOP (reverse direction has no effect)
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `setUpPath with reverse direction does not fire event`() {
+		val capturedEvents = mutableListOf<ContextChangeEvent>()
+		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
+
+		// Reverse direction for setUpPath
+		dynamicSemaphore1.setUpPath(
+			Cell.Segment.A, Cell.Segment.F,
+			20.0,
+			stubTrackOccupant()
+		)
+
+		// No event should be fired; signal unchanged
+		assertThat(dynamicSemaphore1.signal).isEqualTo(Signal.STOP)
+		assertThat(capturedEvents).isEmpty()
+	}
+
+	@Test
+	fun `cancelPathSetup with invalid segments throws PathSeparatorChangeException`() {
+		assertFailure {
+			// E and F are not joined by a straight line for HORIZONTAL orientation
+			dynamicSemaphore1.cancelPathSetup(Cell.Segment.E, Cell.Segment.F)
+		}.isInstanceOf(PathSeparatorChangeException::class)
+	}
 }
+
+private fun stubTrackOccupant(): TrackOccupant =
+	object : TrackOccupant {
+		override val name = "StubTrain"
+		override fun distanceToSemaphore() = 0.0
+		override fun nextSemaphore(): OrientedPathSeparator? = null
+	}
 
 /**
  * Equals contract tests extracted from DynamicRailSemaphoreTest @Nested inner class.
