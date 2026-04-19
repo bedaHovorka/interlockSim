@@ -43,38 +43,42 @@ class InOutSaveValidationTest : KoinTestBase() {
 	@Test
 	@DisplayName("context with 0 InOuts cannot be saved")
 	fun contextWith0InOutsCannotBeSaved() {
-		val context = TestContextBuilder().buildEditingContext()
-		assertThat(MenuBar.validateForSave(context)).isFalse()
+		TestContextBuilder().buildEditingContext().use { context ->
+			assertThat(MenuBar.validateForSave(context)).isFalse()
+		}
 	}
 
 	@Test
 	@DisplayName("context with 1 InOut can be saved")
 	fun contextWith1InOutCanBeSaved() {
-		val context = TestContextBuilder()
+		TestContextBuilder()
 			.withInOut("OnlyEntry", 1, 1, true)
-			.buildEditingContext()
-		assertThat(MenuBar.validateForSave(context)).isTrue()
+			.buildEditingContext().use { context ->
+				assertThat(MenuBar.validateForSave(context)).isTrue()
+			}
 	}
 
 	@Test
 	@DisplayName("context with 2 InOuts can be saved")
 	fun contextWith2InOutsCanBeSaved() {
-		val context = TestContextBuilder()
+		TestContextBuilder()
 			.withInOut("Entry", 1, 1, true)
 			.withInOut("Exit", 10, 10, false)
-			.buildEditingContext()
-		assertThat(MenuBar.validateForSave(context)).isTrue()
+			.buildEditingContext().use { context ->
+				assertThat(MenuBar.validateForSave(context)).isTrue()
+			}
 	}
 
 	@Test
 	@DisplayName("context with 3 InOuts can be saved")
 	fun contextWith3InOutsCanBeSaved() {
-		val context = TestContextBuilder()
+		TestContextBuilder()
 			.withInOut("Entry1", 1, 1, true)
 			.withInOut("Exit1", 10, 10, false)
 			.withInOut("Entry2", 5, 5, true)
-			.buildEditingContext()
-		assertThat(MenuBar.validateForSave(context)).isTrue()
+			.buildEditingContext().use { context ->
+				assertThat(MenuBar.validateForSave(context)).isTrue()
+			}
 	}
 
 	@Test
@@ -86,15 +90,16 @@ class InOutSaveValidationTest : KoinTestBase() {
 	@Test
 	@DisplayName("validateForSave is idempotent — repeated calls return same result")
 	fun validateForSave_isIdempotent() {
-		val context = TestContextBuilder()
+		TestContextBuilder()
 			.withInOut("OnlyEntry", 1, 1, true)
-			.buildEditingContext()
-		val first = MenuBar.validateForSave(context)
-		val second = MenuBar.validateForSave(context)
-		val third = MenuBar.validateForSave(context)
-		assertThat(first).isTrue()
-		assertThat(second).isTrue()
-		assertThat(third).isTrue()
+			.buildEditingContext().use { context ->
+				val first = MenuBar.validateForSave(context)
+				val second = MenuBar.validateForSave(context)
+				val third = MenuBar.validateForSave(context)
+				assertThat(first).isTrue()
+				assertThat(second).isTrue()
+				assertThat(third).isTrue()
+			}
 	}
 
 	@Test
@@ -104,7 +109,8 @@ class InOutSaveValidationTest : KoinTestBase() {
 		for (i in 1..10) {
 			builder = builder.withInOut("InOut$i", i, i, true)
 		}
-		val context = builder.buildEditingContext()
-		assertThat(MenuBar.validateForSave(context)).isTrue()
+		builder.buildEditingContext().use { context ->
+			assertThat(MenuBar.validateForSave(context)).isTrue()
+		}
 	}
 }

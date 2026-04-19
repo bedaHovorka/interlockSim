@@ -18,6 +18,7 @@ import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -74,6 +75,11 @@ class GeneratorTest : KoinTestBase() {
 				.withConnection(0, 0, 5, 0, 200.0, 80.0)
 		val delegateContext = contextBuilder.buildSimulationContext()
 		mockContext = MockSimulationContext(delegateContext)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		mockContext.close()
 	}
 
 	@Nested

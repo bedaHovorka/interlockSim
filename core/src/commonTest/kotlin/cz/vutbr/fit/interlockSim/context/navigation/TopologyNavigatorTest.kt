@@ -69,25 +69,25 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackSection - linear path - returns single section`() {
 		// Arrange: Build linear track A -> B
-		val context = TestTopologies.simpleLinearPath()
+		TestTopologies.simpleLinearPath().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
+			// Act: Navigate from A
+			val nextSection = navigator.getNextTrackSection(inOutA, null)
 
-		// Act: Navigate from A
-		val nextSection = navigator.getNextTrackSection(inOutA, null)
+			// Assert: Found next section with correct properties
+			assertThat(nextSection).isNotNull()
 
-		// Assert: Found next section with correct properties
-		assertThat(nextSection).isNotNull()
+			val block = nextSection!!.getTrackBlock()
+			assertThat(block).isNotNull()
+			assertThat(block).isInstanceOf(SimpleTrackBlock::class)
 
-		val block = nextSection!!.getTrackBlock()
-		assertThat(block).isNotNull()
-		assertThat(block).isInstanceOf(SimpleTrackBlock::class)
-
-		// Verify block connects to InOut A
-		val (end1, end2) = block.ends()
-		assertThat(listOf(end1, end2)).containsElement(inOutA)
+			// Verify block connects to InOut A
+			val (end1, end2) = block.ends()
+			assertThat(listOf(end1, end2)).containsElement(inOutA)
+		}
 	}
 
 	/**
@@ -101,24 +101,24 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackSection - through semaphore - ignores semaphore state`() {
 		// Arrange: Build A -> Semaphore -> B
-		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false)
+		TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false).use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
+			// Act: Navigate through semaphore (should work despite RED state)
+			val firstBlock =
+				context
+					.getGraph()
+					.assignedEdges(Point(1, 1))
+					.values
+					.first()
+			val firstSection = firstBlock.getNextTrackSection(semaphore, null)
+			val nextSection = navigator.getNextTrackSection(semaphore, firstSection)
 
-		// Act: Navigate through semaphore (should work despite RED state)
-		val firstBlock =
-			context
-				.getGraph()
-				.assignedEdges(Point(1, 1))
-				.values
-				.first()
-		val firstSection = firstBlock.getNextTrackSection(semaphore, null)
-		val nextSection = navigator.getNextTrackSection(semaphore, firstSection)
-
-		// Assert: Topology navigator ignores semaphore state, returns next section
-		assertThat(nextSection).isNotNull()
+			// Assert: Topology navigator ignores semaphore state, returns next section
+			assertThat(nextSection).isNotNull()
+		}
 	}
 
 	/**
@@ -132,17 +132,17 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackSection - dead end - returns null`() {
 		// Arrange: Build A -> dead-end (single InOut, no exit)
-		val context = TestTopologies.deadEndSingleInOut()
+		TestTopologies.deadEndSingleInOut().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
+			// Act: Try to navigate from dead-end InOut
+			val nextSection = navigator.getNextTrackSection(inOutA, null)
 
-		// Act: Try to navigate from dead-end InOut
-		val nextSection = navigator.getNextTrackSection(inOutA, null)
-
-		// Assert: No continuation, returns null
-		assertThat(nextSection).isNull()
+			// Assert: No continuation, returns null
+			assertThat(nextSection).isNull()
+		}
 	}
 
 	// ========================================================================
@@ -185,14 +185,16 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator: TopologyNavigator = editingContext.scope.get()
+		editingContext.use {
+			val navigator: TopologyNavigator = editingContext.scope.get()
 
-		// Act: Navigate through switch
-		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
-		val nextSection = navigator.getNextTrackSection(switchCell, firstSection)
+			// Act: Navigate through switch
+			val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
+			val nextSection = navigator.getNextTrackSection(switchCell, firstSection)
 
-		// Assert: Switch returns one of the branches
-		assertThat(nextSection).isNotNull()
+			// Assert: Switch returns one of the branches
+			assertThat(nextSection).isNotNull()
+		}
 	}
 
 	// ========================================================================
@@ -209,25 +211,25 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackBlock - returns next block in sequence`() {
 		// Arrange: Build A -> B -> C
-		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true)
+		TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true).use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val semaphore = grid.getCellAt(3, 3) as RailSemaphore
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val semaphore = grid.getCellAt(3, 3) as RailSemaphore
+			// Get block1 (A -> Semaphore)
+			val block1 =
+				context
+					.getGraph()
+					.assignedEdges(Point(1, 1))
+					.values
+					.first()
 
-		// Get block1 (A -> Semaphore)
-		val block1 =
-			context
-				.getGraph()
-				.assignedEdges(Point(1, 1))
-				.values
-				.first()
+			// Act: Get next block from semaphore
+			val nextBlock = navigator.getNextTrackBlock(semaphore, block1)
 
-		// Act: Get next block from semaphore
-		val nextBlock = navigator.getNextTrackBlock(semaphore, block1)
-
-		// Assert: Returns block2 (Semaphore -> B)
-		assertThat(nextBlock).isNotNull()
+			// Assert: Returns block2 (Semaphore -> B)
+			assertThat(nextBlock).isNotNull()
+		}
 	}
 
 	/**
@@ -236,17 +238,17 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackBlock - dead end - returns null`() {
 		// Arrange: Build A (single InOut, no connections)
-		val context = TestTopologies.deadEndSingleInOut()
+		TestTopologies.deadEndSingleInOut().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
+			// Act: Try to get next block from dead-end
+			val nextBlock = navigator.getNextTrackBlock(inOutA, null)
 
-		// Act: Try to get next block from dead-end
-		val nextBlock = navigator.getNextTrackBlock(inOutA, null)
-
-		// Assert: No following block
-		assertThat(nextBlock).isNull()
+			// Assert: No following block
+			assertThat(nextBlock).isNull()
+		}
 	}
 
 	// ========================================================================
@@ -263,19 +265,19 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - linear path - returns single path`() {
 		// Arrange: Build linear A -> B
-		val context = TestTopologies.simpleLinearPath()
+		TestTopologies.simpleLinearPath().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
+			val inOutB = grid.getCellAt(5, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(5, 5) as InOut
+			// Act: Find all paths from A to B
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
 
-		// Act: Find all paths from A to B
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
-
-		// Assert: One path found
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).hasSize(1) // One section
+			// Assert: One path found
+			assertThat(paths).hasSize(1)
+			assertThat(paths[0]).hasSize(1) // One section
+		}
 	}
 
 	/**
@@ -288,22 +290,21 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - no connection - returns empty list`() {
 		// Arrange: Build disconnected A and B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withInOut("B", 5, 5, false)
-				.buildEditingContext()
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.withInOut("B", 5, 5, false)
+			.buildEditingContext().use { context ->
+				val navigator: TopologyNavigator = context.scope.get()
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(1, 1) as InOut
+				val inOutB = grid.getCellAt(5, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(5, 5) as InOut
+				// Act: Try to find path between disconnected points
+				val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
 
-		// Act: Try to find path between disconnected points
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
-
-		// Assert: No paths found
-		assertThat(paths).isEmpty()
+				// Assert: No paths found
+				assertThat(paths).isEmpty()
+			}
 	}
 
 	/**
@@ -316,19 +317,19 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - through semaphore - finds path`() {
 		// Arrange: Build A -> Semaphore(RED) -> B
-		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false)
+		TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false).use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
+			val inOutB = grid.getCellAt(5, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(5, 5) as InOut
+			// Act: Find path through RED semaphore
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
 
-		// Act: Find path through RED semaphore
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
-
-		// Assert: Path found (topology ignores semaphore state)
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).hasSize(2) // Two sections (A->S, S->B)
+			// Assert: Path found (topology ignores semaphore state)
+			assertThat(paths).hasSize(1)
+			assertThat(paths[0]).hasSize(2) // Two sections (A->S, S->B)
+		}
 	}
 
 	/**
@@ -342,18 +343,18 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	fun `findAllTopologicalPaths - loop detection - does not hang`() {
 		// Arrange: Build simple linear path (loop not implemented in this test)
 		// Testing that maxDepth prevents infinite exploration
-		val context = TestTopologies.simpleLinearPath()
+		TestTopologies.simpleLinearPath().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
+			val inOutB = grid.getCellAt(5, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(5, 5) as InOut
+			// Act: Find path with very small maxDepth
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 5)
 
-		// Act: Find path with very small maxDepth
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 5)
-
-		// Assert: Algorithm completes without hanging
-		assertThat(paths).hasSize(1)
+			// Assert: Algorithm completes without hanging
+			assertThat(paths).hasSize(1)
+		}
 	}
 
 	/**
@@ -364,27 +365,26 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - maxDepth limit - prevents runaway`() {
 		// Arrange: Build long chain A -> S1 -> S2 -> B
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(2, 2, true)
-				.withSemaphore(3, 3, true)
-				.withInOut("B", 5, 5, false)
-				.withConnection(1, 1, 2, 2, 100.0, 80.0)
-				.withConnection(2, 2, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.buildEditingContext()
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.withSemaphore(2, 2, true)
+			.withSemaphore(3, 3, true)
+			.withInOut("B", 5, 5, false)
+			.withConnection(1, 1, 2, 2, 100.0, 80.0)
+			.withConnection(2, 2, 3, 3, 100.0, 80.0)
+			.withConnection(3, 3, 5, 5, 100.0, 80.0)
+			.buildEditingContext().use { context ->
+				val navigator: TopologyNavigator = context.scope.get()
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(1, 1) as InOut
+				val inOutB = grid.getCellAt(5, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(5, 5) as InOut
+				// Act: Find path with maxDepth=1 (too small)
+				val paths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 1)
 
-		// Act: Find path with maxDepth=1 (too small)
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB, maxDepth = 1)
-
-		// Assert: No paths found (depth limit too restrictive)
-		assertThat(paths).isEmpty()
+				// Assert: No paths found (depth limit too restrictive)
+				assertThat(paths).isEmpty()
+			}
 	}
 
 	// ========================================================================
@@ -408,12 +408,14 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 		editingContext.putCell(Point(5, 5), inOutB)
 		editingContext.joinCells(Point(1, 1), Point(5, 5), trackBlock)
 
-		// Act: Create navigator with EditingContext (proves no simulation dependency)
-		val navigator: TopologyNavigator = editingContext.scope.get()
-		val nextSection = navigator.getNextTrackSection(inOutA, null)
+		editingContext.use {
+			// Act: Create navigator with EditingContext (proves no simulation dependency)
+			val navigator: TopologyNavigator = editingContext.scope.get()
+			val nextSection = navigator.getNextTrackSection(inOutA, null)
 
-		// Assert: Navigator works in editing context
-		assertThat(nextSection).isNotNull()
+			// Assert: Navigator works in editing context
+			assertThat(nextSection).isNotNull()
+		}
 	}
 
 	/**
@@ -422,18 +424,18 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - same start and target - returns empty path`() {
 		// Arrange: Build simple A -> B
-		val context = TestTopologies.simpleLinearPath()
+		TestTopologies.simpleLinearPath().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
+			// Act: Try to find path from A to A (same separator)
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutA)
 
-		// Act: Try to find path from A to A (same separator)
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutA)
-
-		// Assert: Immediately finds target (depth 0), returns empty path
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).isEmpty() // No sections needed, already at target
+			// Assert: Immediately finds target (depth 0), returns empty path
+			assertThat(paths).hasSize(1)
+			assertThat(paths[0]).isEmpty() // No sections needed, already at target
+		}
 	}
 
 	/**
@@ -442,27 +444,27 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackSection - within same block - returns next section`() {
 		// Arrange: Build simple A -> B
-		val context = TestTopologies.simpleLinearPath()
+		TestTopologies.simpleLinearPath().use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val inOutA = grid.getCellAt(1, 1) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
+			// Get first section
+			val block =
+				context
+					.getGraph()
+					.assignedEdges(Point(1, 1))
+					.values
+					.first()
+			val firstSection = block.getNextTrackSection(inOutA, null)!!
 
-		// Get first section
-		val block =
-			context
-				.getGraph()
-				.assignedEdges(Point(1, 1))
-				.values
-				.first()
-		val firstSection = block.getNextTrackSection(inOutA, null)!!
+			// Act: Try to get next section within same block
+			val nextSection = navigator.getNextTrackSection(inOutA, firstSection)
 
-		// Act: Try to get next section within same block
-		val nextSection = navigator.getNextTrackSection(inOutA, firstSection)
-
-		// Assert: For SimpleTrackBlock, this should return null (only one section)
-		// but the code path for "within block" navigation is tested
-		assertThat(nextSection).isNull()
+			// Assert: For SimpleTrackBlock, this should return null (only one section)
+			// but the code path for "within block" navigation is tested
+			assertThat(nextSection).isNull()
+		}
 	}
 
 	// ========================================================================
@@ -505,22 +507,24 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 		val trackSwitchToC = SimpleTrackBlock(switchCell, inOutC, 100.0, 80.0)
 		editingContext.joinCells(Point(3, 3), Point(5, 1), trackSwitchToC)
 
-		val navigator: TopologyNavigator = editingContext.scope.get()
+		editingContext.use {
+			val navigator: TopologyNavigator = editingContext.scope.get()
 
-		// Act: Navigate through switch from A
-		val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
-		val nextSection = navigator.getNextTrackSection(switchCell, firstSection)
+			// Act: Navigate through switch from A
+			val firstSection = trackAtoSwitch.getNextTrackSection(switchCell, null)
+			val nextSection = navigator.getNextTrackSection(switchCell, firstSection)
 
-		// Assert: Verify we got a valid section and that it leads to either B or C
-		assertThat(nextSection).isNotNull()
-		val endSeparator = nextSection!!.getSecondEnd(switchCell)
-		val isValidBranch = endSeparator == inOutB || endSeparator == inOutC
-		assertThat(isValidBranch).isEqualTo(true)
+			// Assert: Verify we got a valid section and that it leads to either B or C
+			assertThat(nextSection).isNotNull()
+			val endSeparator = nextSection!!.getSecondEnd(switchCell)
+			val isValidBranch = endSeparator == inOutB || endSeparator == inOutC
+			assertThat(isValidBranch).isEqualTo(true)
 
-		// Additional verification: The track block should be one of the two branches
-		val nextBlock = nextSection.getTrackBlock()
-		val isExpectedBlock = nextBlock == trackSwitchToB || nextBlock == trackSwitchToC
-		assertThat(isExpectedBlock).isEqualTo(true)
+			// Additional verification: The track block should be one of the two branches
+			val nextBlock = nextSection.getTrackBlock()
+			val isExpectedBlock = nextBlock == trackSwitchToB || nextBlock == trackSwitchToC
+			assertThat(isExpectedBlock).isEqualTo(true)
+		}
 	}
 
 	// ========================================================================
@@ -540,32 +544,32 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `getNextTrackSection - with Dynamic wrapper - unwraps correctly`() {
 		// Arrange: Build A -> Semaphore -> B
-		val context = TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true)
+		TestTopologies.linearPathWithSemaphore(semaphoreAllowing = true).use { context ->
+			val navigator: TopologyNavigator = context.scope.get()
+			val grid = context.getRailWayNetGrid()
+			val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val staticSemaphore = grid.getCellAt(3, 3) as RailSemaphore
+			// Create a Dynamic wrapper manually (simulating simulation context behavior)
+			val dynamicSemaphore = createDynamicInstance(staticSemaphore)
 
-		// Create a Dynamic wrapper manually (simulating simulation context behavior)
-		val dynamicSemaphore = createDynamicInstance(staticSemaphore)
+			// Get first section from block 1
+			val block1 =
+				context
+					.getGraph()
+					.assignedEdges(Point(1, 1))
+					.values
+					.first()
+			val firstSection = block1.getNextTrackSection(staticSemaphore, null)
 
-		// Get first section from block 1
-		val block1 =
-			context
-				.getGraph()
-				.assignedEdges(Point(1, 1))
-				.values
-				.first()
-		val firstSection = block1.getNextTrackSection(staticSemaphore, null)
+			// Act: Navigate using Dynamic wrapper (should unwrap to static)
+			val nextSection = navigator.getNextTrackSection(dynamicSemaphore, firstSection)
 
-		// Act: Navigate using Dynamic wrapper (should unwrap to static)
-		val nextSection = navigator.getNextTrackSection(dynamicSemaphore, firstSection)
-
-		// Assert: Navigator handles Dynamic wrapper correctly, returns next section
-		assertThat(nextSection).isNotNull()
-		val endSeparator = nextSection!!.getSecondEnd(staticSemaphore)
-		val inOutB = grid.getCellAt(5, 5) as InOut
-		assertThat(endSeparator).isEqualTo(inOutB)
+			// Assert: Navigator handles Dynamic wrapper correctly, returns next section
+			assertThat(nextSection).isNotNull()
+			val endSeparator = nextSection!!.getSecondEnd(staticSemaphore)
+			val inOutB = grid.getCellAt(5, 5) as InOut
+			assertThat(endSeparator).isEqualTo(inOutB)
+		}
 	}
 
 	// ========================================================================
@@ -607,23 +611,25 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 		val trackSwitchToExit2 = SimpleTrackBlock(switch, exit2, 150.0, 80.0)
 		editingContext.joinCells(Point(10, 10), Point(15, 5), trackSwitchToExit2)
 
-		// Act: Create navigator with EDITING context (no simulation)
-		val navigator: TopologyNavigator = editingContext.scope.get()
+		editingContext.use {
+			// Act: Create navigator with EDITING context (no simulation)
+			val navigator: TopologyNavigator = editingContext.scope.get()
 
-		// Navigate from entry
-		val firstSection = navigator.getNextTrackSection(entry, null)
-		assertThat(firstSection).isNotNull()
+			// Navigate from entry
+			val firstSection = navigator.getNextTrackSection(entry, null)
+			assertThat(firstSection).isNotNull()
 
-		// Navigate through switch
-		val secondSection = navigator.getNextTrackSection(switch, firstSection)
-		assertThat(secondSection).isNotNull()
+			// Navigate through switch
+			val secondSection = navigator.getNextTrackSection(switch, firstSection)
+			assertThat(secondSection).isNotNull()
 
-		// Find all possible paths
-		val pathsToExit1 = navigator.findAllTopologicalPaths(entry, exit1)
-		val pathsToExit2 = navigator.findAllTopologicalPaths(entry, exit2)
+			// Find all possible paths
+			val pathsToExit1 = navigator.findAllTopologicalPaths(entry, exit1)
+			val pathsToExit2 = navigator.findAllTopologicalPaths(entry, exit2)
 
-		// Assert: Topology navigation works in editing context
-		assertThat(pathsToExit1.size + pathsToExit2.size).isEqualTo(2) // Both exits reachable
+			// Assert: Topology navigation works in editing context
+			assertThat(pathsToExit1.size + pathsToExit2.size).isEqualTo(2) // Both exits reachable
+		}
 	}
 
 	/**
@@ -635,57 +641,55 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `proof test - consistency - same results in static and dynamic contexts`() {
 		// Arrange: Build identical network in both contexts
-		val editingContext =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(5, 5, false) // RED semaphore
-				.withInOut("B", 9, 9, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.withConnection(5, 5, 9, 9, 100.0, 80.0)
-				.buildEditingContext()
+		TestContextBuilder()
+			.withInOut("A", 1, 1, true)
+			.withSemaphore(5, 5, false) // RED semaphore
+			.withInOut("B", 9, 9, false)
+			.withConnection(1, 1, 5, 5, 100.0, 80.0)
+			.withConnection(5, 5, 9, 9, 100.0, 80.0)
+			.buildEditingContext().use { editingContext ->
+				TestContextBuilder()
+					.withInOut("A", 1, 1, true)
+					.withSemaphore(5, 5, false) // RED semaphore
+					.withInOut("B", 9, 9, false)
+					.withConnection(1, 1, 5, 5, 100.0, 80.0)
+					.withConnection(5, 5, 9, 9, 100.0, 80.0)
+					.buildSimulationContext().use { simulationContext ->
+						// Create navigators for both contexts
+						val staticNavigator = DefaultTopologyNavigator(editingContext)
+						val dynamicNavigator = DefaultTopologyNavigator(simulationContext)
 
-		val simulationContext =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, true)
-				.withSemaphore(5, 5, false) // RED semaphore
-				.withInOut("B", 9, 9, false)
-				.withConnection(1, 1, 5, 5, 100.0, 80.0)
-				.withConnection(5, 5, 9, 9, 100.0, 80.0)
-				.buildSimulationContext()
+						// Get separators from both grids
+						val staticInOutA = editingContext.getRailWayNetGrid().getCellAt(1, 1) as InOut
+						val staticInOutB = editingContext.getRailWayNetGrid().getCellAt(9, 9) as InOut
+						val staticSemaphore = editingContext.getRailWayNetGrid().getCellAt(5, 5) as RailSemaphore
 
-		// Create navigators for both contexts
-		val staticNavigator = DefaultTopologyNavigator(editingContext)
-		val dynamicNavigator = DefaultTopologyNavigator(simulationContext)
+						val dynamicInOutA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as PathSeparator
+						val dynamicInOutB = simulationContext.getRailWayNetGrid().getCellAt(9, 9) as PathSeparator
+						val dynamicSemaphore = simulationContext.getRailWayNetGrid().getCellAt(5, 5) as PathSeparator
 
-		// Get separators from both grids
-		val staticInOutA = editingContext.getRailWayNetGrid().getCellAt(1, 1) as InOut
-		val staticInOutB = editingContext.getRailWayNetGrid().getCellAt(9, 9) as InOut
-		val staticSemaphore = editingContext.getRailWayNetGrid().getCellAt(5, 5) as RailSemaphore
+						// Act: Navigate in both contexts
+						val staticResult1 = staticNavigator.getNextTrackSection(staticInOutA, null)
+						val dynamicResult1 = dynamicNavigator.getNextTrackSection(dynamicInOutA, null)
 
-		val dynamicInOutA = simulationContext.getRailWayNetGrid().getCellAt(1, 1) as PathSeparator
-		val dynamicInOutB = simulationContext.getRailWayNetGrid().getCellAt(9, 9) as PathSeparator
-		val dynamicSemaphore = simulationContext.getRailWayNetGrid().getCellAt(5, 5) as PathSeparator
+						val staticPaths = staticNavigator.findAllTopologicalPaths(staticInOutA, staticInOutB)
+						val dynamicPaths = dynamicNavigator.findAllTopologicalPaths(dynamicInOutA, dynamicInOutB)
 
-		// Act: Navigate in both contexts
-		val staticResult1 = staticNavigator.getNextTrackSection(staticInOutA, null)
-		val dynamicResult1 = dynamicNavigator.getNextTrackSection(dynamicInOutA, null)
+						// Assert: Results are consistent regardless of context type
+						assertThat(staticResult1).isNotNull()
+						assertThat(dynamicResult1).isNotNull()
+						assertThat(staticPaths).hasSize(1)
+						assertThat(dynamicPaths).hasSize(1)
+						assertThat(staticPaths[0]).hasSize(2) // Two sections (A->S, S->B)
+						assertThat(dynamicPaths[0]).hasSize(2)
 
-		val staticPaths = staticNavigator.findAllTopologicalPaths(staticInOutA, staticInOutB)
-		val dynamicPaths = dynamicNavigator.findAllTopologicalPaths(dynamicInOutA, dynamicInOutB)
-
-		// Assert: Results are consistent regardless of context type
-		assertThat(staticResult1).isNotNull()
-		assertThat(dynamicResult1).isNotNull()
-		assertThat(staticPaths).hasSize(1)
-		assertThat(dynamicPaths).hasSize(1)
-		assertThat(staticPaths[0]).hasSize(2) // Two sections (A->S, S->B)
-		assertThat(dynamicPaths[0]).hasSize(2)
-
-		// Verify topology navigation ignores semaphore RED state in both contexts
-		val staticThroughRed = staticNavigator.getNextTrackSection(staticSemaphore, staticResult1)
-		val dynamicThroughRed = dynamicNavigator.getNextTrackSection(dynamicSemaphore, dynamicResult1)
-		assertThat(staticThroughRed).isNotNull()
-		assertThat(dynamicThroughRed).isNotNull()
+						// Verify topology navigation ignores semaphore RED state in both contexts
+						val staticThroughRed = staticNavigator.getNextTrackSection(staticSemaphore, staticResult1)
+						val dynamicThroughRed = dynamicNavigator.getNextTrackSection(dynamicSemaphore, dynamicResult1)
+						assertThat(staticThroughRed).isNotNull()
+						assertThat(dynamicThroughRed).isNotNull()
+					}
+			}
 	}
 
 	// ========================================================================
@@ -704,30 +708,29 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - long chain - completes without hanging`() {
 		// Arrange: Build A → S1 → S2 → S3 → B using TestContextBuilder
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 1, isEntry = true)
-				.withSemaphore(3, 3, isAllowing = true)
-				.withSemaphore(5, 5, isAllowing = true)
-				.withSemaphore(7, 7, isAllowing = true)
-				.withInOut("B", 9, 9, isEntry = false)
-				.withConnection(1, 1, 3, 3, 100.0, 80.0)
-				.withConnection(3, 3, 5, 5, 100.0, 80.0)
-				.withConnection(5, 5, 7, 7, 100.0, 80.0)
-				.withConnection(7, 7, 9, 9, 100.0, 80.0)
-				.buildEditingContext()
+		TestContextBuilder()
+			.withInOut("A", 1, 1, isEntry = true)
+			.withSemaphore(3, 3, isAllowing = true)
+			.withSemaphore(5, 5, isAllowing = true)
+			.withSemaphore(7, 7, isAllowing = true)
+			.withInOut("B", 9, 9, isEntry = false)
+			.withConnection(1, 1, 3, 3, 100.0, 80.0)
+			.withConnection(3, 3, 5, 5, 100.0, 80.0)
+			.withConnection(5, 5, 7, 7, 100.0, 80.0)
+			.withConnection(7, 7, 9, 9, 100.0, 80.0)
+			.buildEditingContext().use { context ->
+				val navigator: TopologyNavigator = context.scope.get()
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(1, 1) as InOut
+				val inOutB = grid.getCellAt(9, 9) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 1) as InOut
-		val inOutB = grid.getCellAt(9, 9) as InOut
+				// Act: Find path A → B through long chain
+				val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
 
-		// Act: Find path A → B through long chain
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
-
-		// Assert: Algorithm completes without hanging, finds correct path
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).hasSize(4) // Four sections (A→S1, S1→S2, S2→S3, S3→B)
+				// Assert: Algorithm completes without hanging, finds correct path
+				assertThat(paths).hasSize(1)
+				assertThat(paths[0]).hasSize(4) // Four sections (A→S1, S1→S2, S2→S3, S3→B)
+			}
 	}
 
 	/**
@@ -767,14 +770,16 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 			SimpleTrackBlock(semaphoreC, inOutD, 100.0, 80.0)
 		)
 
-		val navigator: TopologyNavigator = editingContext.scope.get()
+		editingContext.use {
+			val navigator: TopologyNavigator = editingContext.scope.get()
 
-		// Act: Find path A → D
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutD)
+			// Act: Find path A → D
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutD)
 
-		// Assert: Path found (no false cycle detection)
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).hasSize(3) // Three sections (A→B, B→C, C→D)
+			// Assert: Path found (no false cycle detection)
+			assertThat(paths).hasSize(1)
+			assertThat(paths[0]).hasSize(3) // Three sections (A→B, B→C, C→D)
+		}
 	}
 
 	/**
@@ -792,14 +797,16 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 
 		editingContext.putCell(Point(1, 1), inOutA)
 
-		val navigator: TopologyNavigator = editingContext.scope.get()
+		editingContext.use {
+			val navigator: TopologyNavigator = editingContext.scope.get()
 
-		// Act: Find path A → A (self-loop)
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutA)
+			// Act: Find path A → A (self-loop)
+			val paths = navigator.findAllTopologicalPaths(inOutA, inOutA)
 
-		// Assert: Returns empty path (already at target)
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).isEmpty()
+			// Assert: Returns empty path (already at target)
+			assertThat(paths).hasSize(1)
+			assertThat(paths[0]).isEmpty()
+		}
 	}
 
 	/**
@@ -813,33 +820,32 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 	@Test
 	fun `findAllTopologicalPaths - moderate chain - validates ancestor depth`() {
 		// Arrange: Build A → S1 → S2 → S3 → S4 → S5 → B (horizontal layout)
-		val context =
-			TestContextBuilder()
-				.withInOut("A", 1, 5, isEntry = true)
-				.withSemaphore(2, 5, isAllowing = true)
-				.withSemaphore(3, 5, isAllowing = true)
-				.withSemaphore(4, 5, isAllowing = true)
-				.withSemaphore(5, 5, isAllowing = true)
-				.withSemaphore(6, 5, isAllowing = true)
-				.withInOut("B", 7, 5, isEntry = false)
-				.withConnection(1, 5, 2, 5, 100.0, 80.0)
-				.withConnection(2, 5, 3, 5, 100.0, 80.0)
-				.withConnection(3, 5, 4, 5, 100.0, 80.0)
-				.withConnection(4, 5, 5, 5, 100.0, 80.0)
-				.withConnection(5, 5, 6, 5, 100.0, 80.0)
-				.withConnection(6, 5, 7, 5, 100.0, 80.0)
-				.buildEditingContext()
+		TestContextBuilder()
+			.withInOut("A", 1, 5, isEntry = true)
+			.withSemaphore(2, 5, isAllowing = true)
+			.withSemaphore(3, 5, isAllowing = true)
+			.withSemaphore(4, 5, isAllowing = true)
+			.withSemaphore(5, 5, isAllowing = true)
+			.withSemaphore(6, 5, isAllowing = true)
+			.withInOut("B", 7, 5, isEntry = false)
+			.withConnection(1, 5, 2, 5, 100.0, 80.0)
+			.withConnection(2, 5, 3, 5, 100.0, 80.0)
+			.withConnection(3, 5, 4, 5, 100.0, 80.0)
+			.withConnection(4, 5, 5, 5, 100.0, 80.0)
+			.withConnection(5, 5, 6, 5, 100.0, 80.0)
+			.withConnection(6, 5, 7, 5, 100.0, 80.0)
+			.buildEditingContext().use { context ->
+				val navigator: TopologyNavigator = context.scope.get()
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(1, 5) as InOut
+				val inOutB = grid.getCellAt(7, 5) as InOut
 
-		val navigator: TopologyNavigator = context.scope.get()
-		val grid = context.getRailWayNetGrid()
-		val inOutA = grid.getCellAt(1, 5) as InOut
-		val inOutB = grid.getCellAt(7, 5) as InOut
+				// Act: Find path through moderate chain
+				val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
 
-		// Act: Find path through moderate chain
-		val paths = navigator.findAllTopologicalPaths(inOutA, inOutB)
-
-		// Assert: Algorithm completes, finds correct path
-		assertThat(paths).hasSize(1)
-		assertThat(paths[0]).hasSize(6) // Six sections
+				// Assert: Algorithm completes, finds correct path
+				assertThat(paths).hasSize(1)
+				assertThat(paths[0]).hasSize(6) // Six sections
+			}
 	}
 }

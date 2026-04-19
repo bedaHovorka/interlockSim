@@ -84,9 +84,9 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 1 InOut passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(NetworkResources.SINGLE_INOUT_XML)
-		assertThat(context.getInOuts()).hasSize(1)
-		context.close()
+		CommonTestFixtures.parseEditingContext(NetworkResources.SINGLE_INOUT_XML).use { context ->
+			assertThat(context.getInOuts()).hasSize(1)
+		}
 	}
 
 	/**
@@ -96,9 +96,9 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 2 InOuts passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
-		assertThat(context.getInOuts()).hasSize(2)
-		context.close()
+		CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { context ->
+			assertThat(context.getInOuts()).hasSize(2)
+		}
 	}
 
 	/**
@@ -108,10 +108,10 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `XML with 2 or more InOuts passes validation`() {
-		val context = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML)
-		val inOutCount = context.getInOuts().size
-		assertThat(inOutCount).isEqualTo(2)
-		context.close()
+		CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { context ->
+			val inOutCount = context.getInOuts().size
+			assertThat(inOutCount).isEqualTo(2)
+		}
 	}
 
 	/**
@@ -122,9 +122,9 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Programmatic context with 0 InOuts can be created but not transformed`() {
-		val editingContext = DefaultEditingContext(30, 30)
-		assertThat(editingContext.getInOuts()).hasSize(0)
-		editingContext.close()
+		DefaultEditingContext(30, 30).use { editingContext ->
+			assertThat(editingContext.getInOuts()).hasSize(0)
+		}
 	}
 
 	/**
@@ -132,12 +132,12 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Programmatic context with 1 InOut can be created`() {
-		val editingContext = DefaultEditingContext(30, 30)
-		val inOut = InOut("OnlyEntry", true, Cell.SpatialType.HORIZONTAL)
-		editingContext.putCell(Point(1, 1), inOut)
+		DefaultEditingContext(30, 30).use { editingContext ->
+			val inOut = InOut("OnlyEntry", true, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(1, 1), inOut)
 
-		assertThat(editingContext.getInOuts()).hasSize(1)
-		editingContext.close()
+			assertThat(editingContext.getInOuts()).hasSize(1)
+		}
 	}
 
 	/**
@@ -145,14 +145,14 @@ class InOutValidationTest {
 	 */
 	@Test
 	fun `Programmatic context with 2 InOuts is valid`() {
-		val editingContext = DefaultEditingContext(30, 30)
-		val entry = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
-		val exit = InOut("Exit", false, Cell.SpatialType.HORIZONTAL)
-		editingContext.putCell(Point(1, 1), entry)
-		editingContext.putCell(Point(10, 10), exit)
+		DefaultEditingContext(30, 30).use { editingContext ->
+			val entry = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
+			val exit = InOut("Exit", false, Cell.SpatialType.HORIZONTAL)
+			editingContext.putCell(Point(1, 1), entry)
+			editingContext.putCell(Point(10, 10), exit)
 
-		assertThat(editingContext.getInOuts()).hasSize(2)
-		editingContext.close()
+			assertThat(editingContext.getInOuts()).hasSize(2)
+		}
 	}
 
 	/**

@@ -63,21 +63,16 @@ class JvmParityReferenceTest : KoinTestBase() {
 		val stream =
 			Resources.read(VYHYBNA_RESOURCE.trimStart('/')).byteInputStream()
 				?: throw IllegalStateException("Classpath resource not found: $VYHYBNA_RESOURCE")
-		val context =
-			Util.assertInstanceOf<DefaultSimulationContext>(
-				stream.use { factory.createContext(it) }
-			)
-		context.getInOuts()
-		context.setMainProcess(ShuntingLoop(context, END_TIME))
-
 		val output = mutableListOf<String>()
-		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		context.addPropertyChangeListener(reporter)
-		try {
+		Util.assertInstanceOf<DefaultSimulationContext>(
+			stream.use { factory.createContext(it) }
+		).use { context ->
+			context.getInOuts()
+			context.setMainProcess(ShuntingLoop(context, END_TIME))
+			val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+			context.addPropertyChangeListener(reporter)
 			context.run()
 			reporter.printSummary()
-		} finally {
-			context.close()
 		}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }
