@@ -11,27 +11,30 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertions.isInstanceOf
+import cz.hovorka.kdisco.DiscoException
 import kotlin.test.Test
 
 /**
  * Unit tests for [ContinuousInvariantChecker].
  *
  * Tests the `derivatives()` contract: no exception when invariant holds,
- * exception + report() call when invariant is violated.
+ * exception when invariant is violated.
+ *
+ * When the invariant fails, `derivatives()` tries to build the error message via
+ * `Process.time()`, which throws [DiscoException] outside an active simulation — so
+ * [DiscoException] is the actual exception observed here, not [cz.vutbr.fit.interlockSim.exceptions.SimulationException].
+ * `report()` is therefore never reached in this test context.
  *
  * Note: `start()` is not tested — it requires an active kDisco simulation context.
  */
 class ContinuousInvariantCheckerTest {
 
 	private var shouldPass = true
-	private var reportCalled = false
 
 	private val checker = object : ContinuousInvariantChecker() {
 		override fun check() = shouldPass
-		override fun report(reportObj: StringBuilder): StringBuilder {
-			reportCalled = true
-			return reportObj.append("invariant violated")
-		}
+		override fun report(reportObj: StringBuilder): StringBuilder =
+			reportObj.append("invariant violated")
 	}
 
 	@Test
@@ -43,16 +46,16 @@ class ContinuousInvariantCheckerTest {
 	@Test
 	fun derivatives_invariantViolated_throwsException() {
 		shouldPass = false
-		assertFailure { checker.derivatives() }.isInstanceOf<Exception>()
+		assertFailure { checker.derivatives() }.isInstanceOf<DiscoException>()
 	}
 
 	@Test
 	fun derivatives_stateChangeFromHoldToViolate_throwsOnSecondCall() {
-		// Verify re-entrant behaviour: first call holds, second call after state flip throws.
+		// First call holds, second call after state flip throws.
 		shouldPass = true
-		checker.derivatives() // must not throw
+		checker.derivatives()
 
 		shouldPass = false
-		assertFailure { checker.derivatives() }.isInstanceOf<Exception>()
+		assertFailure { checker.derivatives() }.isInstanceOf<DiscoException>()
 	}
 }

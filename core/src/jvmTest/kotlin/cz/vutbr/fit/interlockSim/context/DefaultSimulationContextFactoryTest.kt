@@ -43,7 +43,7 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@BeforeEach
 	fun writeTempXml() {
 		shuntingFile = tmpDir.resolve("vyhybna.xml").toFile()
-		shuntingFile.outputStream().use { TestFixtures.loadShuntingXml().copyTo(it) }
+		TestFixtures.loadShuntingXml().use { it.copyTo(shuntingFile.outputStream()) }
 	}
 
 	@Nested
@@ -52,9 +52,10 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createContext_file_returnsSimulationContext() {
-			val result = factory.createContext(shuntingFile)
-			assertThat(result).isNotNull()
-			assertThat(result).isInstanceOf<SimulationContext>()
+			factory.createContext(shuntingFile).use { result ->
+				assertThat(result).isNotNull()
+				assertThat(result).isInstanceOf<SimulationContext>()
+			}
 		}
 	}
 
@@ -64,9 +65,12 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createContext_inputStream_returnsSimulationContext() {
-			val result = factory.createContext(TestFixtures.loadShuntingXml())
-			assertThat(result).isNotNull()
-			assertThat(result).isInstanceOf<SimulationContext>()
+			TestFixtures.loadShuntingXml().use { stream ->
+				factory.createContext(stream).use { result ->
+					assertThat(result).isNotNull()
+					assertThat(result).isInstanceOf<SimulationContext>()
+				}
+			}
 		}
 	}
 
@@ -76,17 +80,25 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createContext_editingContext_returnsSimulationContext() {
-			val editingContext = editingFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-			val result = factory.createContext(editingContext)
-			assertThat(result).isNotNull()
-			assertThat(result).isInstanceOf<SimulationContext>()
+			TestFixtures.loadShuntingXml().use { stream ->
+				(editingFactory.createContext(stream) as EditingContext).use { editingContext ->
+					factory.createContext(editingContext).use { result ->
+						assertThat(result).isNotNull()
+						assertThat(result).isInstanceOf<SimulationContext>()
+					}
+				}
+			}
 		}
 
 		@Test
 		fun createContext_editingContext_resultIsFrozen() {
-			val editingContext = editingFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-			val result = factory.createContext(editingContext) as BaseContext<*>
-			assertThat(result.isFrozen()).isTrue()
+			TestFixtures.loadShuntingXml().use { stream ->
+				(editingFactory.createContext(stream) as EditingContext).use { editingContext ->
+					factory.createContext(editingContext).use { result ->
+						assertThat((result as BaseContext<*>).isFrozen()).isTrue()
+					}
+				}
+			}
 		}
 	}
 
@@ -96,20 +108,25 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun saveContext_toFile_returnsTrueAndWritesFile() {
-			// saveContext delegates to editingFactory which requires EditingContext
-			val editingCtx = editingFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-			val outFile = tmpDir.resolve("saved.xml").toFile()
-			val result = factory.saveContext(editingCtx, outFile)
-			assertThat(result).isTrue()
-			assertThat(outFile.exists()).isTrue()
+			TestFixtures.loadShuntingXml().use { stream ->
+				(editingFactory.createContext(stream) as EditingContext).use { editingCtx ->
+					val outFile = tmpDir.resolve("saved.xml").toFile()
+					val result = factory.saveContext(editingCtx, outFile)
+					assertThat(result).isTrue()
+					assertThat(outFile.exists()).isTrue()
+				}
+			}
 		}
 
 		@Test
 		fun saveContext_toStream_returnsTrue() {
-			val editingCtx = editingFactory.createContext(TestFixtures.loadShuntingXml()) as EditingContext
-			val outStream = tmpDir.resolve("saved-stream.xml").toFile().outputStream()
-			val result = outStream.use { factory.saveContext(editingCtx, it) }
-			assertThat(result).isTrue()
+			TestFixtures.loadShuntingXml().use { stream ->
+				(editingFactory.createContext(stream) as EditingContext).use { editingCtx ->
+					val result = tmpDir.resolve("saved-stream.xml").toFile().outputStream()
+						.use { factory.saveContext(editingCtx, it) }
+					assertThat(result).isTrue()
+				}
+			}
 		}
 	}
 
@@ -119,15 +136,17 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 
 		@Test
 		fun createEmptyContext_returnsSimulationContext() {
-			val result = factory.createEmptyContext()
-			assertThat(result).isNotNull()
-			assertThat(result).isInstanceOf<SimulationContext>()
+			factory.createEmptyContext().use { result ->
+				assertThat(result).isNotNull()
+				assertThat(result).isInstanceOf<SimulationContext>()
+			}
 		}
 
 		@Test
 		fun createEmptyContext_hasNoInOuts() {
-			val result = factory.createEmptyContext()
-			assertThat(result.getInOuts().isEmpty()).isTrue()
+			factory.createEmptyContext().use { result ->
+				assertThat(result.getInOuts().isEmpty()).isTrue()
+			}
 		}
 	}
 }
