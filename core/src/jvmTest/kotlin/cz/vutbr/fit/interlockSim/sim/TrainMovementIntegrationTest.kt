@@ -24,7 +24,6 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -79,19 +78,10 @@ private val logger = KotlinLogging.logger {}
 @DisplayName("Train Movement - ShuntingLoop Integration with Path Reservation")
 class TrainMovementIntegrationTest : KoinTestBase() {
 	private val simulationContextFactory: SimulationContextFactory by inject()
-	private lateinit var context: DefaultSimulationContext
-	private lateinit var reservationService: PathReservationService
 
 	@BeforeEach
 	fun setUp() {
 		logger.info { "Train movement integration test setup" }
-	}
-
-	@AfterEach
-	fun tearDown() {
-		if (::context.isInitialized) {
-			context.close()
-		}
 	}
 
 	/**
@@ -106,36 +96,38 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	fun `simulation completes with pre-reserved path`() {
 		// Arrange: Load vyhybna.xml (shunting loop configuration)
 		TestFixtures.loadShuntingXml().use { xml ->
-			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
-		}
-		reservationService = context.getPathReservationService()
+			simulationContextFactory.createContext(xml).use { ctx ->
+				val context = ctx as DefaultSimulationContext
+				val reservationService = context.getPathReservationService()
 
-		val inOuts = context.getInOuts().toList()
-		require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
+				val inOuts = context.getInOuts().toList()
+				require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
 
-		val startInOut = inOuts[0]
-		val targetInOut = inOuts[1]
+				val startInOut = inOuts[0]
+				val targetInOut = inOuts[1]
 
-		// Reserve path with non-conflicting ID (avoids collision with ShuntingLoop's "Train #N")
-		val preTestTrainId = "PreTest-1"
-		val result = reservationService.reservePath(preTestTrainId, startInOut, targetInOut)
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+				// Reserve path with non-conflicting ID (avoids collision with ShuntingLoop's "Train #N")
+				val preTestTrainId = "PreTest-1"
+				val result = reservationService.reservePath(preTestTrainId, startInOut, targetInOut)
+				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		val registry = context.scope.get<PathReservationRegistry>()
-		val preReservationBlockCount = registry.blockCount()
-		assertThat(preReservationBlockCount).isGreaterThan(0)
-		logger.info { "Pre-reserved $preReservationBlockCount blocks for $preTestTrainId" }
+				val registry = context.scope.get<PathReservationRegistry>()
+				val preReservationBlockCount = registry.blockCount()
+				assertThat(preReservationBlockCount).isGreaterThan(0)
+				logger.info { "Pre-reserved $preReservationBlockCount blocks for $preTestTrainId" }
 
-		// Act: Run ShuntingLoop (30 seconds simulation time)
-		val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-		context.setMainProcess(shuntingLoop)
-		context.run()
+				// Act: Run ShuntingLoop (30 seconds simulation time)
+				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
+				context.setMainProcess(shuntingLoop)
+				context.run()
 
-		// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
-		val preTestBlocks = registry.getBlocks(preTestTrainId)
-		assertThat(preTestBlocks.size).isGreaterThan(0)
-		logger.info {
-			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
+				val preTestBlocks = registry.getBlocks(preTestTrainId)
+				assertThat(preTestBlocks.size).isGreaterThan(0)
+				logger.info {
+					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				}
+			}
 		}
 	}
 
@@ -148,34 +140,34 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	fun `simulation handles train lifecycle without pre-reservations`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->
-			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
-		}
-		reservationService = context.getPathReservationService()
+			simulationContextFactory.createContext(xml).use { ctx ->
+				val context = ctx as DefaultSimulationContext
+				val inOuts = context.getInOuts().toList()
+				require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
 
-		val inOuts = context.getInOuts().toList()
-		require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
+				val registry = context.scope.get<PathReservationRegistry>()
+				assertThat(registry.trainCount()).isEqualTo(0)
+				assertThat(registry.blockCount()).isEqualTo(0)
 
-		val registry = context.scope.get<PathReservationRegistry>()
-		assertThat(registry.trainCount()).isEqualTo(0)
-		assertThat(registry.blockCount()).isEqualTo(0)
+				// Act: Run ShuntingLoop (10 seconds - short run)
+				val shuntingLoop = ShuntingLoop(context, endTime = 10L)
+				context.setMainProcess(shuntingLoop)
+				context.run()
 
-		// Act: Run ShuntingLoop (10 seconds - short run)
-		val shuntingLoop = ShuntingLoop(context, endTime = 10L)
-		context.setMainProcess(shuntingLoop)
-		context.run()
+				// Assert: Simulation completed (no hang/deadlock)
+				assertThat(context.getGraph()).isNotNull()
 
-		// Assert: Simulation completed (no hang/deadlock)
-		assertThat(context.getGraph()).isNotNull()
+				// Verify workers exist for all InOuts
+				for (inOut in inOuts) {
+					val worker = context.getWorkerFor(inOut)
+					assertThat(worker).isNotNull()
+					assertThat(worker.getQueqe()).isNotNull()
+				}
 
-		// Verify workers exist for all InOuts
-		for (inOut in inOuts) {
-			val worker = context.getWorkerFor(inOut)
-			assertThat(worker).isNotNull()
-			assertThat(worker.getQueqe()).isNotNull()
-		}
-
-		logger.info {
-			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				logger.info {
+					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				}
+			}
 		}
 	}
 
@@ -191,38 +183,40 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	fun `simulation manages path contention with pre-reservation`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->
-			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
-		}
-		reservationService = context.getPathReservationService()
+			simulationContextFactory.createContext(xml).use { ctx ->
+				val context = ctx as DefaultSimulationContext
+				val reservationService = context.getPathReservationService()
 
-		val inOuts = context.getInOuts().toList()
-		require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
+				val inOuts = context.getInOuts().toList()
+				require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
 
-		// Pre-reserve with non-conflicting ID
-		val preTestTrainId = "PreTest-1"
-		val result = reservationService.reservePath(preTestTrainId, inOuts[0], inOuts[1])
-		assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+				// Pre-reserve with non-conflicting ID
+				val preTestTrainId = "PreTest-1"
+				val result = reservationService.reservePath(preTestTrainId, inOuts[0], inOuts[1])
+				assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
 
-		// Act: Run ShuntingLoop (30 seconds - enough for multiple trains)
-		val shuntingLoop = ShuntingLoop(context, endTime = 30L)
-		context.setMainProcess(shuntingLoop)
-		context.run()
+				// Act: Run ShuntingLoop (30 seconds - enough for multiple trains)
+				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
+				context.setMainProcess(shuntingLoop)
+				context.run()
 
-		// Assert: Simulation completed without deadlock
-		val registry = context.scope.get<PathReservationRegistry>()
-		assertThat(context.getGraph()).isNotNull()
+				// Assert: Simulation completed without deadlock
+				val registry = context.scope.get<PathReservationRegistry>()
+				assertThat(context.getGraph()).isNotNull()
 
-		// Verify all InOuts have workers
-		val inOutCount = inOuts.size
-		assertThat(inOutCount).isGreaterThan(0)
-		for (inOut in inOuts) {
-			val worker = context.getWorkerFor(inOut)
-			assertThat(worker).isNotNull()
-			assertThat(worker.getQueqe()).isNotNull()
-		}
+				// Verify all InOuts have workers
+				val inOutCount = inOuts.size
+				assertThat(inOutCount).isGreaterThan(0)
+				for (inOut in inOuts) {
+					val worker = context.getWorkerFor(inOut)
+					assertThat(worker).isNotNull()
+					assertThat(worker.getQueqe()).isNotNull()
+				}
 
-		logger.info {
-			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				logger.info {
+					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				}
+			}
 		}
 	}
 
@@ -238,36 +232,38 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 	fun `full simulation lifecycle releases all resources`() {
 		// Arrange: Load vyhybna.xml
 		TestFixtures.loadShuntingXml().use { xml ->
-			context = simulationContextFactory.createContext(xml) as DefaultSimulationContext
+			simulationContextFactory.createContext(xml).use { ctx ->
+				val context = ctx as DefaultSimulationContext
+
+				val registry = context.scope.get<PathReservationRegistry>()
+				assertThat(registry.trainCount()).isEqualTo(0)
+
+				// Act: Run ShuntingLoop for full lifecycle (60 time units)
+				val shuntingLoop = ShuntingLoop(context, endTime = 60L)
+				context.setMainProcess(shuntingLoop)
+				context.run()
+
+				// Assert: Simulation completed
+				assertThat(context.getGraph()).isNotNull()
+				assertThat(context.getRailWayNetGrid()).isNotNull()
+
+				// Verify all InOuts have workers that processed trains
+				val inOuts = context.getInOuts().toList()
+				for (inOut in inOuts) {
+					val worker = context.getWorkerFor(inOut)
+					assertThat(worker).isNotNull()
+					assertThat(worker.getQueqe()).isNotNull()
+				}
+
+				// Verify post-simulation registry state
+				// Note: ShuntingLoop at endTime=60 may not complete all train journeys —
+				// trains could be mid-path when simulation ends, so registry may not be empty.
+				logger.info {
+					"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
+				}
+				// At minimum, verify the registry is in a consistent state (blocks >= trains)
+				assertThat(registry.blockCount()).isGreaterThanOrEqualTo(registry.trainCount())
+			}
 		}
-
-		val registry = context.scope.get<PathReservationRegistry>()
-		assertThat(registry.trainCount()).isEqualTo(0)
-
-		// Act: Run ShuntingLoop for full lifecycle (60 time units)
-		val shuntingLoop = ShuntingLoop(context, endTime = 60L)
-		context.setMainProcess(shuntingLoop)
-		context.run()
-
-		// Assert: Simulation completed
-		assertThat(context.getGraph()).isNotNull()
-		assertThat(context.getRailWayNetGrid()).isNotNull()
-
-		// Verify all InOuts have workers that processed trains
-		val inOuts = context.getInOuts().toList()
-		for (inOut in inOuts) {
-			val worker = context.getWorkerFor(inOut)
-			assertThat(worker).isNotNull()
-			assertThat(worker.getQueqe()).isNotNull()
-		}
-
-		// Verify post-simulation registry state
-		// Note: ShuntingLoop at endTime=60 may not complete all train journeys —
-		// trains could be mid-path when simulation ends, so registry may not be empty.
-		logger.info {
-			"Post-simulation: ${registry.trainCount()} trains, ${registry.blockCount()} blocks in registry"
-		}
-		// At minimum, verify the registry is in a consistent state (blocks >= trains)
-		assertThat(registry.blockCount()).isGreaterThanOrEqualTo(registry.trainCount())
 	}
 }

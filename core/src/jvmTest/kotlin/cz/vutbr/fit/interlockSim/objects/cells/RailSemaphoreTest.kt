@@ -158,33 +158,32 @@ class RailSemaphoreTest : KoinTestBase() {
 					capturedEvent = event
 				}
 
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("IN", 0, 0, true)
-					.withSemaphore(1, 0, false)
-					.withInOut("OUT", 2, 0, false)
-					.withConnection(0, 0, 1, 0, 100.0, 20.0)
-					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("IN", 0, 0, true)
+				.withSemaphore(1, 0, false)
+				.withInOut("OUT", 2, 0, false)
+				.withConnection(0, 0, 1, 0, 100.0, 20.0)
+				.withConnection(1, 0, 2, 0, 100.0, 20.0)
+				.buildSimulationContext().use { context ->
+					// Get the semaphore from context
+					val dynSemaphore =
+						context
+							.getRailWayNetGrid()
+							.getCellAt(1, 0) as DynamicRailSemaphore
 
-			// Get the semaphore from context
-			val dynSemaphore =
-				context
-					.getRailWayNetGrid()
-					.getCellAt(1, 0) as DynamicRailSemaphore
+					context.addPropertyChangeListener(listener)
 
-			context.addPropertyChangeListener(listener)
+					// Act
+					dynSemaphore.signal = Signal.FREE
 
-			// Act
-			dynSemaphore.signal = Signal.FREE
-
-			// Assert - Note: Direct signal assignment doesn't fire context events
-			// This test documents the current behavior where PropertyChangeListener
-			// would fire if called through context API rather than directly on semaphore
-			// For now we verify that signal changed
-			assertThat(dynSemaphore.signal)
-				.withMessage("signal should have changed to FREE")
-				.isEqualTo(Signal.FREE)
+					// Assert - Note: Direct signal assignment doesn't fire context events
+					// This test documents the current behavior where PropertyChangeListener
+					// would fire if called through context API rather than directly on semaphore
+					// For now we verify that signal changed
+					assertThat(dynSemaphore.signal)
+						.withMessage("signal should have changed to FREE")
+						.isEqualTo(Signal.FREE)
+				}
 		}
 
 		@Test
@@ -210,63 +209,61 @@ class RailSemaphoreTest : KoinTestBase() {
 		@Test
 		fun `semaphore associated with track`() {
 			// Arrange
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("IN", 0, 0, true)
-					.withSemaphore(1, 0, false)
-					.withInOut("OUT", 2, 0, false)
-					.withConnection(0, 0, 1, 0, 100.0, 20.0)
-					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("IN", 0, 0, true)
+				.withSemaphore(1, 0, false)
+				.withInOut("OUT", 2, 0, false)
+				.withConnection(0, 0, 1, 0, 100.0, 20.0)
+				.withConnection(1, 0, 2, 0, 100.0, 20.0)
+				.buildSimulationContext().use { context ->
+					// Act
+					val dynSemaphore =
+						context
+							.getRailWayNetGrid()
+							.getCellAt(1, 0) as DynamicRailSemaphore
 
-			// Act
-			val dynSemaphore =
-				context
-					.getRailWayNetGrid()
-					.getCellAt(1, 0) as DynamicRailSemaphore
-
-			// Assert - semaphore should exist at the specified location
-			assertThat(dynSemaphore::signal)
-				.withMessage("semaphore should have initial STOP signal")
-				.isEqualTo(Signal.STOP)
+					// Assert - semaphore should exist at the specified location
+					assertThat(dynSemaphore::signal)
+						.withMessage("semaphore should have initial STOP signal")
+						.isEqualTo(Signal.STOP)
+				}
 		}
 
 		@Test
 		fun `semaphore controls traffic in direction`() {
 			// Arrange
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("IN", 0, 0, true)
-					.withSemaphore(1, 0, false)
-					.withInOut("OUT", 2, 0, false)
-					.withConnection(0, 0, 1, 0, 100.0, 20.0)
-					.withConnection(1, 0, 2, 0, 100.0, 20.0)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("IN", 0, 0, true)
+				.withSemaphore(1, 0, false)
+				.withInOut("OUT", 2, 0, false)
+				.withConnection(0, 0, 1, 0, 100.0, 20.0)
+				.withConnection(1, 0, 2, 0, 100.0, 20.0)
+				.buildSimulationContext().use { context ->
+					val dynSemaphore =
+						context
+							.getRailWayNetGrid()
+							.getCellAt(1, 0) as DynamicRailSemaphore
 
-			val dynSemaphore =
-				context
-					.getRailWayNetGrid()
-					.getCellAt(1, 0) as DynamicRailSemaphore
+					// Arrange - set semaphore to STOP (red light)
+					dynSemaphore.signal = Signal.STOP
 
-			// Arrange - set semaphore to STOP (red light)
-			dynSemaphore.signal = Signal.STOP
+					// Assert - signal at STOP means train should not proceed
+					assertThat(dynSemaphore.signal.isAllowing())
+						.withMessage("STOP signal should not allow trains to proceed")
+						.isFalse()
 
-			// Assert - signal at STOP means train should not proceed
-			assertThat(dynSemaphore.signal.isAllowing())
-				.withMessage("STOP signal should not allow trains to proceed")
-				.isFalse()
+					// Act - change to permissive signal
+					dynSemaphore.signal = Signal.FREE
 
-			// Act - change to permissive signal
-			dynSemaphore.signal = Signal.FREE
+					// Assert - FREE signal allows maximum speed
+					assertThat(dynSemaphore.signal.isAllowing())
+						.withMessage("FREE signal should allow trains to proceed")
+						.isTrue()
 
-			// Assert - FREE signal allows maximum speed
-			assertThat(dynSemaphore.signal.isAllowing())
-				.withMessage("FREE signal should allow trains to proceed")
-				.isTrue()
-
-			assertThat(dynSemaphore.allowedSpeed() > 0)
-				.withMessage("allowed speed for FREE signal should be positive")
-				.isTrue()
+					assertThat(dynSemaphore.allowedSpeed() > 0)
+						.withMessage("allowed speed for FREE signal should be positive")
+						.isTrue()
+				}
 		}
 	}
 }

@@ -18,6 +18,7 @@ import assertk.assertions.isNotSameInstanceAs
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -67,13 +68,20 @@ class GeneratorTest : KoinTestBase() {
 	fun setUp() {
 		// Create a context with at least 2 InOuts for Generator to use
 		// Track is 200m to accommodate trains up to 150m used in collection management tests
-		val contextBuilder =
+		mockContext = MockSimulationContext(
 			get<TestContextBuilder>()
 				.withInOut("IN1", 0, 0, isEntry = true)
 				.withInOut("OUT1", 5, 0, isEntry = false)
 				.withConnection(0, 0, 5, 0, 200.0, 80.0)
-		val delegateContext = contextBuilder.buildSimulationContext()
-		mockContext = MockSimulationContext(delegateContext)
+				.buildSimulationContext()
+		)
+	}
+
+	@AfterEach
+	fun tearDown() {
+		if (::mockContext.isInitialized) {
+			mockContext.close()
+		}
 	}
 
 	@Nested

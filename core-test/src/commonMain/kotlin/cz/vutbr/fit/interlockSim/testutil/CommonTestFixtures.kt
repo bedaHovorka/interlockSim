@@ -37,22 +37,16 @@ object CommonTestFixtures {
 		xml: String,
 		processFactory: SimulationProcessFactory,
 	): DefaultSimulationContext {
-		val editingCtx = reader.parse(xml)
-		try {
-			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
-		} finally {
-			editingCtx.close()
+		return reader.parse(xml).use { editingCtx ->
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 		}
 	}
 
 	fun createEmptySimulationContext(
 		processFactory: SimulationProcessFactory,
 	): DefaultSimulationContext {
-		val editingCtx = DefaultEditingContext(100, 100)
-		try {
-			return DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
-		} finally {
-			editingCtx.close()
+		return DefaultEditingContext(100, 100).use { editingCtx ->
+			DefaultSimulationContext.fromEditingContext(editingCtx, processFactory)
 		}
 	}
 }

@@ -42,19 +42,15 @@ class ShuntingLoopNetworkValidatorTest {
 
 	@Test
 	fun `validateVyhybnaCompatible returns empty list for canonical vyhybna network`() {
-		val ctx = factory.createFromXml(NetworkResources.VYHYBNA_XML)
-		try {
+		factory.createFromXml(NetworkResources.VYHYBNA_XML).use { ctx ->
 			val issues = ShuntingLoopNetworkValidator.validateVyhybnaCompatible(ctx)
 			assertEquals(emptyList(), issues, "vyhybna.xml must be vyhybna-compatible")
-		} finally {
-			ctx.close()
 		}
 	}
 
 	@Test
 	fun `validateVyhybnaCompatible reports actionable issues for linear track network`() {
-		val ctx = factory.createFromXml(NetworkResources.LINEAR_TRACK_XML)
-		try {
+		factory.createFromXml(NetworkResources.LINEAR_TRACK_XML).use { ctx ->
 			val issues = ShuntingLoopNetworkValidator.validateVyhybnaCompatible(ctx)
 			assertTrue(issues.isNotEmpty(), "LINEAR_TRACK_XML must not be vyhybna-compatible")
 			// Must include the specific coordinate that's missing (30, 8) — an InOut.
@@ -62,8 +58,6 @@ class ShuntingLoopNetworkValidatorTest {
 				issues.any { it.contains("(30, 8)") && it.contains("InOut") },
 				"expected issue mentioning missing InOut at (30, 8); got: $issues",
 			)
-		} finally {
-			ctx.close()
 		}
 	}
 }

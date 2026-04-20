@@ -46,11 +46,8 @@ class NativeSmokeTest {
 	@Test
 	fun `EmbeddedResources VYHYBNA_XML parses to context with 2 InOuts`() {
 		val factory = NativeContextFactory()
-		val ctx = factory.createFromXml(EmbeddedResources.VYHYBNA_XML)
-		try {
+		factory.createFromXml(EmbeddedResources.VYHYBNA_XML).use { ctx ->
 			assertEquals(2, ctx.getInOutsList().size)
-		} finally {
-			ctx.close()
 		}
 	}
 
@@ -71,11 +68,8 @@ class NativeSmokeTest {
 	@Test
 	fun `NativeContextFactory createFromXml returns context with 2 InOuts for LINEAR_TRACK_XML`() {
 		val factory = NativeContextFactory()
-		val ctx = factory.createFromXml(NetworkResources.LINEAR_TRACK_XML)
-		try {
+		factory.createFromXml(NetworkResources.LINEAR_TRACK_XML).use { ctx ->
 			assertEquals(2, ctx.getInOutsList().size)
-		} finally {
-			ctx.close()
 		}
 	}
 
@@ -89,11 +83,8 @@ class NativeSmokeTest {
 	@Test
 	fun `NativeExampleRegistry shuntingLoop runs to completion with short endTime`() {
 		val factory = NativeContextFactory()
-		val ctx = NativeExampleRegistry.create("shuntingLoop", 5, factory)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", 5, factory).use { ctx ->
 			ctx.run()
-		} finally {
-			ctx.close()
 		}
 	}
 
@@ -102,15 +93,12 @@ class NativeSmokeTest {
 		val path = "/tmp/fast-sim-test-vyhybna-${currentTimeMillisKMP()}.xml"
 		writeTextFile(path, NetworkResources.VYHYBNA_XML)
 		val factory = NativeContextFactory()
-		val ctx = try {
-			factory.createFromFile(path)
+		try {
+			factory.createFromFile(path).use { ctx ->
+				assertEquals(2, ctx.getInOutsList().size)
+			}
 		} finally {
 			deleteFile(path)
-		}
-		try {
-			assertEquals(2, ctx.getInOutsList().size)
-		} finally {
-			ctx.close()
 		}
 	}
 

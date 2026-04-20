@@ -66,13 +66,10 @@ class NativeJvmParityTest {
 	private fun runSimulationAndCollect(): Pair<List<String>, String> {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
-		val ctx = NativeExampleRegistry.create("shuntingLoop", END_TIME, NativeContextFactory())
-		ctx.addPropertyChangeListener(reporter)
-		try {
+		NativeExampleRegistry.create("shuntingLoop", END_TIME, NativeContextFactory()).use { ctx ->
+			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
-		} finally {
-			ctx.close()
 		}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }

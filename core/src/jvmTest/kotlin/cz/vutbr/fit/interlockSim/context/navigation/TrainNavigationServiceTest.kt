@@ -363,66 +363,63 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns OwnershipConflict when no reserved path exists`() {
 			// Arrange: Disconnected InOuts (no track connection)
-			val context =
-				TestContextBuilder()
-					.withInOut("A", 1, 1, true)
-					.withInOut("B", 10, 10, false)
-					// No connection!
-					.buildSimulationContext()
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withInOut("B", 10, 10, false)
+				// No connection!
+				.buildSimulationContext().use { context ->
+					val service = context.getTrainNavigationService()
+					val grid = context.getRailWayNetGrid()
+					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
-			val service = context.getTrainNavigationService()
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
+					// Act
+					val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
-
-			// Assert: Without PathInfo the train must wait for dispatcher (OwnershipConflict semantics)
-			assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
-
-			context.close()
+					// Assert: Without PathInfo the train must wait for dispatcher (OwnershipConflict semantics)
+					assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
+				}
 		}
 
 		@Test
 		fun `findReservedPathForTrain returns OwnershipConflict when single InOut has no connections`() {
 			// Arrange: Single InOut (no connections = no path topologically)
-			val context = TestTopologies.deadEndSingleInOutSimulation()
+			TestTopologies.deadEndSingleInOutSimulation().use { context ->
+				val service = context.getTrainNavigationService()
+				val grid = context.getRailWayNetGrid()
+				val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
-			val service = context.getTrainNavigationService()
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
+				// Act
+				val result = service.findReservedPathForTrain("train1", inOutA)
 
-			// Act
-			val result = service.findReservedPathForTrain("train1", inOutA)
-
-			// Assert: Dispatcher never registered a path, so navigation reports OwnershipConflict
-			assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
-
-			context.close()
+				// Assert: Dispatcher never registered a path, so navigation reports OwnershipConflict
+				assertThat(result).isInstanceOf(PathResult.NoTopologicalPath::class)
+			}
 		}
 
 		@Test
 		fun `findReservedPathForTrain filters out non-DynamicTrackBlocks`() {
 			// Arrange: Use vyhybna.xml (has TrackSections with blocks)
 			TestFixtures.loadShuntingXml().use { xmlStream ->
-				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
-				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-				val service = context.getTrainNavigationService()
-				val pathService = context.getPathReservationService()
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getTrainNavigationService()
+						val pathService = context.getPathReservationService()
 
-				val grid = context.getRailWayNetGrid()
-				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-				// Reserve path
-				pathService.reservePath("train1", inOutA, inOutB)
+						// Reserve path
+						pathService.reservePath("train1", inOutA, inOutB)
 
-				// Act
-				val result = service.findReservedPathForTrain("train1", inOutA)
+						// Act
+						val result = service.findReservedPathForTrain("train1", inOutA)
 
-				// Assert: Path is available
-				assertThat(result).isInstanceOf(PathResult.Available::class)
-				context.close()
+						// Assert: Path is available
+						assertThat(result).isInstanceOf(PathResult.Available::class)
+					}
+				}
 			}
 		}
 
@@ -430,47 +427,46 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain deduplicates blocks in path`() {
 			// Arrange: vyhybna.xml has switches that may create duplicate block references
 			TestFixtures.loadShuntingXml().use { xmlStream ->
-				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
-				val context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-				val service = context.getTrainNavigationService()
-				val pathService = context.getPathReservationService()
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getTrainNavigationService()
+						val pathService = context.getPathReservationService()
 
-				val grid = context.getRailWayNetGrid()
-				val inOutA = grid.getCellAt(11, 8) as DynamicInOut
-				val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
 
-				// Reserve path
-				pathService.reservePath("train1", inOutA, inOutB)
+						// Reserve path
+						pathService.reservePath("train1", inOutA, inOutB)
 
-				// Act
-				val result = service.findReservedPathForTrain("train1", inOutA)
+						// Act
+						val result = service.findReservedPathForTrain("train1", inOutA)
 
-				// Assert: Path is available
-				assertThat(result).isInstanceOf(PathResult.Available::class)
-				context.close()
+						// Assert: Path is available
+						assertThat(result).isInstanceOf(PathResult.Available::class)
+					}
+				}
 			}
 		}
 
 		@Test
 		fun `isPathReservedForTrain returns false when no path exists`() {
 			// Arrange: Disconnected InOuts
-			val context =
-				TestContextBuilder()
-					.withInOut("A", 1, 1, true)
-					.withInOut("B", 10, 10, false)
-					.buildSimulationContext()
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withInOut("B", 10, 10, false)
+				.buildSimulationContext().use { context ->
+					val service = context.getTrainNavigationService()
+					val grid = context.getRailWayNetGrid()
+					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
-			val service = context.getTrainNavigationService()
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
+					// Act
+					val result = service.isPathReservedForTrain("train1", inOutA)
 
-			// Act
-			val result = service.isPathReservedForTrain("train1", inOutA)
-
-			// Assert
-			assertThat(result).isFalse()
-
-			context.close()
+					// Assert
+					assertThat(result).isFalse()
+				}
 		}
 	}
 
@@ -514,25 +510,23 @@ class TrainNavigationServiceTest : KoinTestBase() {
 
 		@Test
 		fun `isPathReservedForTrain matches findReservedPathForTrain when path unavailable`() {
-			// Arrange: Disconnected network
-			context.close()
-			context =
-				TestContextBuilder()
-					.withInOut("A", 1, 1, true)
-					.withInOut("B", 10, 10, false)
-					.buildSimulationContext()
+			// Arrange: Disconnected network (InOut A and B have no connecting track)
+			TestContextBuilder()
+				.withInOut("A", 1, 1, true)
+				.withInOut("B", 10, 10, false)
+				.buildSimulationContext().use { disconnectedCtx ->
+					val disconnectedService = disconnectedCtx.getTrainNavigationService()
+					val grid = disconnectedCtx.getRailWayNetGrid()
+					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
-			service = context.getTrainNavigationService()
-			val grid = context.getRailWayNetGrid()
-			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
+					// Act
+					val foundPathResult = disconnectedService.findReservedPathForTrain("train1", inOutA)
+					val isAvailable = disconnectedService.isPathReservedForTrain("train1", inOutA)
 
-			// Act
-			val foundPathResult = service.findReservedPathForTrain("train1", inOutA)
-			val isAvailable = service.isPathReservedForTrain("train1", inOutA)
-
-			// Assert
-			assertThat(foundPathResult).isInstanceOf(PathResult.NoTopologicalPath::class)
-			assertThat(isAvailable).isFalse()
+					// Assert
+					assertThat(foundPathResult).isInstanceOf(PathResult.NoTopologicalPath::class)
+					assertThat(isAvailable).isFalse()
+				}
 		}
 
 		@Test

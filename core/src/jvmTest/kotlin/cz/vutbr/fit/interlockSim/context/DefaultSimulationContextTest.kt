@@ -469,18 +469,17 @@ class DefaultSimulationContextTest : KoinTestBase() {
 		@DisplayName("fluent API creates custom context")
 		fun fluentAPI_customContext_works() {
 			// Act
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("Entry", 2, 2, false)
-					.withSemaphore(5, 5, true)
-					.withInOut("Exit", 8, 8, true)
-					.buildSimulationContext()
-
-			// Assert
-			assertThat(context).isNotNull()
-			assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(DynamicInOut::class)
-			assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(DynamicRailSemaphore::class)
-			assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(DynamicInOut::class)
+			get<TestContextBuilder>()
+				.withInOut("Entry", 2, 2, false)
+				.withSemaphore(5, 5, true)
+				.withInOut("Exit", 8, 8, true)
+				.buildSimulationContext().use { context ->
+					// Assert
+					assertThat(context).isNotNull()
+					assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(DynamicInOut::class)
+					assertThat(context.getRailWayNetGrid().getCellAt(5, 5)).isNotNull().isInstanceOf(DynamicRailSemaphore::class)
+					assertThat(context.getRailWayNetGrid().getCellAt(8, 8)).isNotNull().isInstanceOf(DynamicInOut::class)
+				}
 		}
 	}
 

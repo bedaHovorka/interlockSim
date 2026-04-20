@@ -21,7 +21,7 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
 import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -72,6 +72,13 @@ class NodeCellTest : KoinTestBase() {
 		nodeB = cellB as? NodeCell ?: createMockNodeCell(name = "TestNodeB")
 	}
 
+	@AfterEach
+	fun tearDown() {
+		if (::context.isInitialized) {
+			context.close()
+		}
+	}
+
 	/**
 	 * Nested test group: Connection Management
 	 * Tests cell connection and disconnection logic with validation of Cell.Segment directions.
@@ -83,24 +90,23 @@ class NodeCellTest : KoinTestBase() {
 		fun `node connects to adjacent cells`() {
 			// Arrange & Act
 			// Create two adjacent nodes horizontally (one unit apart)
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("Left", 0, 0, true)
-					.withInOut("Right", 1, 0, false)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("Left", 0, 0, true)
+				.withInOut("Right", 1, 0, false)
+				.buildSimulationContext().use { context ->
+					// Assert
+					// Both nodes should exist in the grid at adjacent positions
+					val cellLeft = context.getRailWayNetGrid().getCellAt(0, 0)
+					val cellRight = context.getRailWayNetGrid().getCellAt(1, 0)
 
-			// Assert
-			// Both nodes should exist in the grid at adjacent positions
-			val cellLeft = context.getRailWayNetGrid().getCellAt(0, 0)
-			val cellRight = context.getRailWayNetGrid().getCellAt(1, 0)
+					assertThat(cellLeft)
+						.withMessage("Left node should exist at position (0, 0)")
+						.isNotNull()
 
-			assertThat(cellLeft)
-				.withMessage("Left node should exist at position (0, 0)")
-				.isNotNull()
-
-			assertThat(cellRight)
-				.withMessage("Right node should exist at position (1, 0)")
-				.isNotNull()
+					assertThat(cellRight)
+						.withMessage("Right node should exist at position (1, 0)")
+						.isNotNull()
+				}
 		}
 
 		@Test
@@ -142,32 +148,31 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node disconnects cells correctly`() {
 			// Arrange
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("A", 0, 0, true)
-					.withInOut("B", 1, 0, false)
-					.withInOut("C", 2, 0, true)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("A", 0, 0, true)
+				.withInOut("B", 1, 0, false)
+				.withInOut("C", 2, 0, true)
+				.buildSimulationContext().use { context ->
+					// Act
+					// Get cells from grid
+					val cellA = context.getRailWayNetGrid().getCellAt(0, 0)
+					val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
+					val cellC = context.getRailWayNetGrid().getCellAt(2, 0)
 
-			// Act
-			// Get cells from grid
-			val cellA = context.getRailWayNetGrid().getCellAt(0, 0)
-			val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
-			val cellC = context.getRailWayNetGrid().getCellAt(2, 0)
+					// Assert
+					// All three cells should exist independently
+					assertThat(cellA)
+						.withMessage("Cell A should exist")
+						.isNotNull()
 
-			// Assert
-			// All three cells should exist independently
-			assertThat(cellA)
-				.withMessage("Cell A should exist")
-				.isNotNull()
+					assertThat(cellB)
+						.withMessage("Cell B should exist")
+						.isNotNull()
 
-			assertThat(cellB)
-				.withMessage("Cell B should exist")
-				.isNotNull()
-
-			assertThat(cellC)
-				.withMessage("Cell C should exist")
-				.isNotNull()
+					assertThat(cellC)
+						.withMessage("Cell C should exist")
+						.isNotNull()
+				}
 		}
 	}
 
@@ -182,24 +187,23 @@ class NodeCellTest : KoinTestBase() {
 		fun `getNeighbor returns connected cell`() {
 			// Arrange
 			// Create a simple grid context with connected nodes
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("Start", 0, 0, true)
-					.withInOut("Next", 1, 0, false)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("Start", 0, 0, true)
+				.withInOut("Next", 1, 0, false)
+				.buildSimulationContext().use { context ->
+					// Act
+					val cellStart = context.getRailWayNetGrid().getCellAt(0, 0)
 
-			// Act
-			val cellStart = context.getRailWayNetGrid().getCellAt(0, 0)
+					// Assert
+					// Cell at (0, 0) should exist and be a NodeCell
+					assertThat(cellStart)
+						.withMessage("Start cell should exist at grid position (0, 0)")
+						.isNotNull()
 
-			// Assert
-			// Cell at (0, 0) should exist and be a NodeCell
-			assertThat(cellStart)
-				.withMessage("Start cell should exist at grid position (0, 0)")
-				.isNotNull()
-
-			// Verify it's a NodeCell
-			assertThat(cellStart is cz.vutbr.fit.interlockSim.objects.cells.NodeCell)
-				.withMessage("Cell should be instance of NodeCell")
+					// Verify it's a NodeCell
+					assertThat(cellStart is cz.vutbr.fit.interlockSim.objects.cells.NodeCell)
+						.withMessage("Cell should be instance of NodeCell")
+				}
 		}
 
 		@Test
@@ -225,24 +229,23 @@ class NodeCellTest : KoinTestBase() {
 		fun `getNeighbors returns all connected cells`() {
 			// Arrange
 			// Create a grid with one central node and multiple neighbors
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("A", 0, 1, true) // Top
-					.withInOut("B", 1, 0, true) // Right
-					.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
-					.withInOut("D", 1, 1, false) // Bottom-right
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("A", 0, 1, true) // Top
+				.withInOut("B", 1, 0, true) // Right
+				.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
+				.withInOut("D", 1, 1, false) // Bottom-right
+				.buildSimulationContext().use { context ->
+					// Act
+					val cellA = context.getRailWayNetGrid().getCellAt(0, 1)
+					val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
+					val cellC = context.getRailWayNetGrid().getCellAt(0, 0)
+					val cellD = context.getRailWayNetGrid().getCellAt(1, 1)
 
-			// Act
-			val cellA = context.getRailWayNetGrid().getCellAt(0, 1)
-			val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
-			val cellC = context.getRailWayNetGrid().getCellAt(0, 0)
-			val cellD = context.getRailWayNetGrid().getCellAt(1, 1)
-
-			// Assert
-			// All cells should exist in the context
-			assertThat(listOfNotNull(cellA, cellB, cellC, cellD))
-				.withMessage("Grid should contain all four InOut cells")
+					// Assert
+					// All cells should exist in the context
+					assertThat(listOfNotNull(cellA, cellB, cellC, cellD))
+						.withMessage("Grid should contain all four InOut cells")
+				}
 		}
 	}
 
@@ -257,53 +260,50 @@ class NodeCellTest : KoinTestBase() {
 		@Test
 		fun `node has correct grid coordinates`() {
 			// Arrange
-			val testPoint = Point(5, 10)
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("TestNode", 5, 10, true)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("TestNode", 5, 10, true)
+				.buildSimulationContext().use { context ->
+					// Act
+					val cell = context.getRailWayNetGrid().getCellAt(5, 10)
 
-			// Act
-			val cell = context.getRailWayNetGrid().getCellAt(5, 10)
+					// Assert
+					assertThat(cell)
+						.withMessage("Node should exist at specified grid position (5, 10)")
+						.isNotNull()
 
-			// Assert
-			assertThat(cell)
-				.withMessage("Node should exist at specified grid position (5, 10)")
-				.isNotNull()
-
-			// Verify it's a NodeCell with the name we assigned
-			if (cell is cz.vutbr.fit.interlockSim.objects.cells.InOut) {
-				assertThat(cell.getName())
-					.withMessage("InOut node should have the correct name")
-					.isEqualTo("TestNode")
-			}
+					// Verify it's a NodeCell with the name we assigned
+					if (cell is cz.vutbr.fit.interlockSim.objects.cells.InOut) {
+						assertThat(cell.getName())
+							.withMessage("InOut node should have the correct name")
+							.isEqualTo("TestNode")
+					}
+				}
 		}
 
 		@Test
 		fun `node coordinates are immutable`() {
 			// Arrange
-			val context =
-				get<TestContextBuilder>()
-					.withInOut("FixedNode", 3, 7, true)
-					.buildSimulationContext()
+			get<TestContextBuilder>()
+				.withInOut("FixedNode", 3, 7, true)
+				.buildSimulationContext().use { context ->
+					// Act
+					val cell = context.getRailWayNetGrid().getCellAt(3, 7)
+					val cellAtOtherLocation = context.getRailWayNetGrid().getCellAt(4, 7)
 
-			// Act
-			val cell = context.getRailWayNetGrid().getCellAt(3, 7)
-			val cellAtOtherLocation = context.getRailWayNetGrid().getCellAt(4, 7)
+					// Assert
+					// Cell at (3, 7) should exist
+					assertThat(cell)
+						.withMessage("Node should exist at original position (3, 7)")
+						.isNotNull()
 
-			// Assert
-			// Cell at (3, 7) should exist
-			assertThat(cell)
-				.withMessage("Node should exist at original position (3, 7)")
-				.isNotNull()
-
-			// Cell at different location (4, 7) should be null or different
-			// This validates that the node hasn't moved
-			if (cellAtOtherLocation != null) {
-				assertThat(cell === cellAtOtherLocation)
-					.withMessage("Cell at (3, 7) should not be the same object as cell at (4, 7)")
-				// This assertion should fail (not same object), proving coordinates are fixed
-			}
+					// Cell at different location (4, 7) should be null or different
+					// This validates that the node hasn't moved
+					if (cellAtOtherLocation != null) {
+						assertThat(cell === cellAtOtherLocation)
+							.withMessage("Cell at (3, 7) should not be the same object as cell at (4, 7)")
+						// This assertion should fail (not same object), proving coordinates are fixed
+					}
+				}
 		}
 	}
 

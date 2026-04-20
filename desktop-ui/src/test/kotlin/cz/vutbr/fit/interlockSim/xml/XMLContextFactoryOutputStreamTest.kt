@@ -552,15 +552,16 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			tempFile.delete() // Delete so we can verify save doesn't create it
 
 			try {
-				val success = editingContextFactory.saveContext(context, tempFile)
+				context.use {
+					val success = editingContextFactory.saveContext(it, tempFile)
 
-				// Should reject save
-				assertThat(success).isFalse()
-				// File should not be created by save operation
-				assertThat(tempFile.exists()).isFalse()
+					// Should reject save
+					assertThat(success).isFalse()
+					// File should not be created by save operation
+					assertThat(tempFile.exists()).isFalse()
+				}
 			} finally {
-				tempFile.delete() // Clean up in case test failed
-				context.close()
+				tempFile.delete()
 			}
 		}
 
@@ -575,20 +576,21 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			// Attempt to save to file
 			val tempFile = kotlin.io.path.createTempFile("test", ".xml").toFile()
 			try {
-				val success = editingContextFactory.saveContext(context, tempFile)
+				context.use {
+					val success = editingContextFactory.saveContext(it, tempFile)
 
-				// Should succeed
-				assertThat(success).isTrue()
-				assertThat(tempFile.exists()).isTrue()
+					// Should succeed
+					assertThat(success).isTrue()
+					assertThat(tempFile.exists()).isTrue()
 
-				// Verify round-trip
-				val reloaded = editingContextFactory.createContext(tempFile)
-				val editContext = reloaded as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
-				assertThat(editContext.getInOuts().size).isEqualTo(1)
-				editContext.close()
+					// Verify round-trip
+					editingContextFactory.createContext(tempFile).use { reloaded ->
+						val editContext = reloaded as cz.vutbr.fit.interlockSim.context.DefaultEditingContext
+						assertThat(editContext.getInOuts().size).isEqualTo(1)
+					}
+				}
 			} finally {
 				tempFile.delete()
-				context.close()
 			}
 		}
 
@@ -599,15 +601,13 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val context = editingContextFactory.createEmptyContext()
 			val outputStream = ByteArrayOutputStream()
 
-			try {
-				val success = editingContextFactory.saveContext(context, outputStream)
+			context.use {
+				val success = editingContextFactory.saveContext(it, outputStream)
 
 				// Should reject save
 				assertThat(success).isFalse()
 				// Stream should be empty
 				assertThat(outputStream.size()).isEqualTo(0)
-			} finally {
-				context.close()
 			}
 		}
 	}
