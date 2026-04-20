@@ -153,6 +153,21 @@ class MainArgumentParsingTest {
 			assertThat(usageNotPrinted).isTrue()
 		}
 
+		@Test
+		fun `simgui mode selected with simgui argument`() {
+			// Arrange
+			val args = arrayOf("simgui")
+
+			// Act
+			main(args)
+			val afterErr = getCapturedError()
+
+			// simgui mode without file should NOT print usage message
+			// (it attempts to create an empty context / load, which may fail gracefully)
+			val usageNotPrinted = !afterErr.contains("usage:")
+			assertThat(usageNotPrinted).isTrue()
+		}
+
 		// NOTE: edit mode test moved to MainEditModeTest.kt to ensure proper Frame disposal
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
@@ -451,6 +466,7 @@ class MainArgumentParsingTest {
 			val output = getCapturedError()
 			assertThat(output).contains("usage:")
 			assertThat(output).contains("sim")
+			assertThat(output).contains("simgui")
 			assertThat(output).contains("edit")
 			assertThat(output).contains("example")
 		}

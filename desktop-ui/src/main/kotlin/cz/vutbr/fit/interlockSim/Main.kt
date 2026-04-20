@@ -144,6 +144,60 @@ class Main {
 	}
 
 	/**
+	 * Run a simulation from an XML file with the animated GUI (Issue #189).
+	 *
+	 * Loads the railway network from [args][1], converts it to a [SimulationContext],
+	 * displays it in the animated [Frame], and starts the simulation via [SimulationRunner].
+	 *
+	 * **Threading Model:**
+	 * - Main thread: Creates context, launches EDT for GUI setup
+	 * - EDT: Configures Frame, shows window, calls [Frame.startSimulation]
+	 * - Simulation thread: kDisco simulation runs as a daemon thread inside SimulationRunner
+	 *
+	 * **Command Usage:**
+	 * ```
+	 * java -jar interlockSim.jar simgui [xmlFile]
+	 * ./gradlew runSimGui -PxmlFile=vyhybna.xml
+	 * ```
+	 *
+	 * @param args Command line arguments (expects optional XML file path as args[1])
+	 */
+	fun loadSimWithGui(args: Array<String>) {
+		try {
+			val rawContext = createContext(args)
+			val context: SimulationContext =
+				when (rawContext) {
+					is SimulationContext -> rawContext
+					is EditingContext -> rawContext.use { editCtx ->
+						simulationContextFactory.createContext(editCtx)
+					}
+					else -> {
+						rawContext.close()
+						throw ContextCreationException(
+							"Unexpected context type: ${rawContext::class.java.name}"
+						)
+					}
+				}
+
+			// Add all report types for event timeline visibility
+			context.addReportTypes(*ReportType.values())
+
+			// Launch GUI on EDT, then start simulation
+			javax.swing.SwingUtilities.invokeLater {
+				frame.setContext(context)
+				frame.isVisible = true
+				frame.startSimulation()
+			}
+		} catch (e: ContextCreationException) {
+			logger.error(e) { "Context creation failed" }
+		} catch (e: EmptyContextException) {
+			logger.error(e) { "Simulation with GUI could not be started - empty context" }
+		} catch (e: Exception) {
+			logger.error(e) { "Simulation with GUI initialization failed" }
+		}
+	}
+
+	/**
 	 * Run a GUI-based animated example (Issue #206).
 	 *
 	 * This method creates a simulation example and displays it in the animated Frame
@@ -243,13 +297,15 @@ fun main(args: Array<String>) {
 	val main = getKoin().get<Main>()
 	when {
 		args.isNotEmpty() && args[0] == "sim" -> main.loadSim(args)
+		args.isNotEmpty() && args[0] == "simgui" -> main.loadSimWithGui(args)
 		args.isNotEmpty() && args[0] == "example" -> main.runExample(args)
 		args.isNotEmpty() && args[0] == "exampleGui" -> main.runExampleGui(args)
 		args.isNotEmpty() && args[0] == "edit" -> main.loadGui(args)
 		else ->
 			logger.error {
-				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|edit|example|exampleGui) [file]\n" +
+				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|simgui|edit|example|exampleGui) [file]\n" +
 					"\tsim [file]        - Run simulation from XML file\n" +
+					"\tsimgui [file]     - Run simulation from XML file with animated GUI\n" +
 					"\tedit [file]       - Launch graphical editor\n" +
 					"\texample <name> <endTime> - Run console-based example\n" +
 					"\texampleGui <name> <endTime> - Run GUI-based animated example"

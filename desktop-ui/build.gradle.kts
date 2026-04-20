@@ -327,6 +327,19 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
     }
 }
 
+val runSimGui by tasks.registering(JavaExec::class) {
+    group = "application"
+    description = "Run simulation from XML file with animated GUI (use -PxmlFile=path/to/file.xml)"
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set(application.mainClass.get())
+    doFirst {
+        val xmlFile =
+            project.findProperty("xmlFile") as String?
+                ?: throw GradleException("Please specify XML file with -PxmlFile=path/to/file.xml")
+        args = listOf("simgui", xmlFile)
+    }
+}
+
 // ===========================================
 // JaCoCo Code Coverage
 // ===========================================

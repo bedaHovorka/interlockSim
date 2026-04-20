@@ -2,6 +2,7 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
+import javax.swing.JButton
 import javax.swing.JLabel
 import javax.swing.JPanel
 
@@ -47,6 +48,18 @@ class ControlPanel : JPanel() {
 	 */
 	private val statusLabel: JLabel
 
+	/**
+	 * Button that requests simulation termination.
+	 * Enabled only while a simulation is running.
+	 */
+	private val stopButton: JButton
+
+	/**
+	 * Callback invoked when the Stop button is clicked.
+	 * Set by [cz.vutbr.fit.interlockSim.gui.Frame] before starting a simulation.
+	 */
+	var onStop: (() -> Unit)? = null
+
 	init {
 		layout = FlowLayout(FlowLayout.LEFT, 10, 5)
 		border = BorderFactory.createEtchedBorder()
@@ -58,6 +71,26 @@ class ControlPanel : JPanel() {
 		// Create status label with initial state
 		statusLabel = JLabel("Status: Ready")
 		add(statusLabel)
+
+		// Create stop button (disabled until simulation starts)
+		stopButton = JButton("Stop")
+		stopButton.isEnabled = false
+		stopButton.addActionListener { onStop?.invoke() }
+		add(stopButton)
+	}
+
+	/**
+	 * Enable or disable the Stop button.
+	 *
+	 * Should be `true` while simulation is running, `false` otherwise.
+	 *
+	 * **Thread Safety:**
+	 * Must be called from the Event Dispatch Thread (EDT).
+	 *
+	 * @param enabled Whether the Stop button should respond to clicks
+	 */
+	fun setStopEnabled(enabled: Boolean) {
+		stopButton.isEnabled = enabled
 	}
 
 	/**
