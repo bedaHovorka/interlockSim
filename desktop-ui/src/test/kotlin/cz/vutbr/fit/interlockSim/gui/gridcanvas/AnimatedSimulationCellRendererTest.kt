@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
@@ -381,9 +382,9 @@ class AnimatedSimulationCellRendererTest {
 		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
 		val frontPixelX = (movedTrain.frontGridLocation!!.x * cellWidth + cellWidth / 2).toInt()
 
-		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_B) > 0).isEqualTo(true)
-		assertThat(bodyBounds.maxX >= frontPixelX - 1).isEqualTo(true)
-		assertThat(frontPixelX - bodyBounds.minX >= 10).isEqualTo(true)
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_B) > 0).isTrue()
+		assertThat(bodyBounds.maxX >= frontPixelX - 1).isTrue()
+		assertThat(frontPixelX - bodyBounds.minX >= 10).isTrue()
 	}
 
 	@Test
@@ -415,9 +416,9 @@ class AnimatedSimulationCellRendererTest {
 		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
 		val frontPixelY = (movedTrain.frontGridLocation!!.y * cellHeight + cellHeight / 2).toInt()
 
-		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isEqualTo(true)
-		assertThat(bodyBounds.maxY >= frontPixelY - 1).isEqualTo(true)
-		assertThat(frontPixelY - bodyBounds.minY >= 10).isEqualTo(true)
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isTrue()
+		assertThat(bodyBounds.maxY >= frontPixelY - 1).isTrue()
+		assertThat(frontPixelY - bodyBounds.minY >= 10).isTrue()
 	}
 
 	// ========== Helper Methods ==========

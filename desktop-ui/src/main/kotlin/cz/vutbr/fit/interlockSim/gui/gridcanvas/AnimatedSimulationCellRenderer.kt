@@ -107,6 +107,8 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
+	private val cellWidthHalf = cellWidth / 2
+	private val cellHeightHalf = cellHeight / 2
 	private val previousTrainLocations = mutableMapOf<Int, PointF>()
 	private val previousTrainHeadings = mutableMapOf<Int, Double>()
 	private val baseTrainShapeCache = mutableMapOf<TrainShapeKey, Shape>()
@@ -335,8 +337,8 @@ class AnimatedSimulationCellRenderer(
 
 		// Convert grid coordinates to pixel coordinates (center of cell).
 		// PointF provides continuous coordinates, round to nearest pixel for rendering.
-		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).roundToInt()
-		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).roundToInt()
+		val pixelX = (gridLocation.x * cellWidth + cellWidthHalf).roundToInt()
+		val pixelY = (gridLocation.y * cellHeight + cellHeightHalf).roundToInt()
 		val minCellSize = minOf(cellWidth, cellHeight).coerceAtLeast(1)
 		val trainHeight = maxOf(8, (minCellSize * 0.55).roundToInt())
 		val bodyLength = maxOf(trainHeight + 6, (minCellSize * 0.9).roundToInt())
@@ -373,7 +375,7 @@ class AnimatedSimulationCellRenderer(
 		val fontMetrics = g.fontMetrics
 		val textWidth = fontMetrics.stringWidth(idText)
 		val textHeight = fontMetrics.ascent
-		val textOffset = bodyLength * 0.55 + noseLength * 0.2
+		val textOffset = bodyLength * BODY_TEXT_OFFSET_RATIO + noseLength * NOSE_TEXT_OFFSET_RATIO
 		val textCenterX = pixelX - cos(heading) * textOffset
 		val textCenterY = pixelY - sin(heading) * textOffset
 
@@ -490,8 +492,8 @@ class AnimatedSimulationCellRenderer(
 					-halfHeight,
 					shapeKey.bodyLength.toDouble(),
 					shapeKey.trainHeight.toDouble(),
-					shapeKey.trainHeight * 0.65,
-					shapeKey.trainHeight * 0.65
+					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO,
+					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO
 				)
 
 			val nose =
@@ -520,5 +522,8 @@ class AnimatedSimulationCellRenderer(
 		const val HEADING_EPSILON = 0.001
 		const val DEFAULT_TRAIN_HEADING = 0.0
 		const val SEGMENT_ANGLE_STEP = PI / 4.0
+		const val BODY_TEXT_OFFSET_RATIO = 0.55
+		const val NOSE_TEXT_OFFSET_RATIO = 0.2
+		const val BODY_CORNER_RADIUS_RATIO = 0.65
 	}
 }
