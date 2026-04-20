@@ -79,7 +79,9 @@ class GeneratorTest : KoinTestBase() {
 
 	@AfterEach
 	fun tearDown() {
-		mockContext.close()
+		if (::mockContext.isInitialized) {
+			mockContext.close()
+		}
 	}
 
 	@Nested

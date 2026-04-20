@@ -21,7 +21,6 @@ import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
 import cz.vutbr.fit.interlockSim.testutil.containsElement
 import cz.vutbr.fit.interlockSim.testutil.createMockNodeCell
 import cz.vutbr.fit.interlockSim.testutil.withMessage
-import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -75,7 +74,9 @@ class NodeCellTest : KoinTestBase() {
 
 	@AfterEach
 	fun tearDown() {
-		context.close()
+		if (::context.isInitialized) {
+			context.close()
+		}
 	}
 
 	/**
