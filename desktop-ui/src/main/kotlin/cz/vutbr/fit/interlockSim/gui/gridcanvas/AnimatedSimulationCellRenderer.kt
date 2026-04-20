@@ -19,8 +19,23 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.util.PointF
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.awt.BasicStroke
 import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.Shape
+import java.awt.geom.AffineTransform
+import java.awt.geom.Area
+import java.awt.geom.Path2D
+import java.awt.geom.RoundRectangle2D
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.round
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private val logger = KotlinLogging.logger {}
 
@@ -92,6 +107,12 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
+	private val previousTrainLocations = mutableMapOf<Int, PointF>()
+	private val previousTrainHeadings = mutableMapOf<Int, Double>()
+	private val baseTrainShapeCache = mutableMapOf<TrainShapeKey, Shape>()
+	private val rotatedTrainShapeCache = mutableMapOf<TrainRotationKey, Shape>()
+	private val trainTranslationTransform = AffineTransform()
+
 	/**
 	 * Render track block part with occupancy state coloring.
 	 *
@@ -279,16 +300,16 @@ class AnimatedSimulationCellRenderer(
 	/**
 	 * Draw a train overlay on the canvas.
 	 *
-	 * Trains are rendered as colored circles with white ID numbers and black borders
-	 * overlaid on top of the grid cells. This method should be called after all grid
-	 * cells have been rendered.
+	 * Trains are rendered as directional locomotive-like markers with white ID numbers
+	 * and black borders overlaid on top of the grid cells. This method should be called
+	 * after all grid cells have been rendered.
 	 *
 	 * ## Visual Design
 	 *
-	 * - **Train body:** Colored circle (12x12 pixels) at interpolated grid position
+	 * - **Train body:** Pointed rounded rectangle aligned to train movement
 	 * - **Origin-based colors:** Blue for trains from InOut B, orange for trains from InOut A
-	 * - **Border:** Black 2px stroke for visibility on all backgrounds
-	 * - **Train ID:** White text centered in the circle
+	 * - **Border:** Black stroke with width derived from train height and clamped for visibility
+	 * - **Train ID:** White text centered in the locomotive body
 	 * - **Multiple trains:** Positioned at different grid locations (no overlap if on different sections)
 	 * - **Color persistence:** Trains maintain their origin color throughout their entire journey
 	 *
@@ -312,14 +333,17 @@ class AnimatedSimulationCellRenderer(
 	) {
 		val gridLocation = trainState.frontGridLocation ?: return
 
-		// Convert grid coordinates to pixel coordinates (center of cell)
-		// PointF provides continuous coordinates, round to nearest pixel for rendering
-		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).toInt()
-		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).toInt()
-
-		// Train size: 12x12 pixel circle (doubled from 6x6)
-		val trainSize = 12
-		val borderWidth = 2
+		// Convert grid coordinates to pixel coordinates (center of cell).
+		// PointF provides continuous coordinates, round to nearest pixel for rendering.
+		val pixelX = (gridLocation.x * cellWidth + cellWidth / 2).roundToInt()
+		val pixelY = (gridLocation.y * cellHeight + cellHeight / 2).roundToInt()
+		val minCellSize = minOf(cellWidth, cellHeight).coerceAtLeast(1)
+		val trainHeight = maxOf(8, (minCellSize * 0.55).roundToInt())
+		val bodyLength = maxOf(trainHeight + 6, (minCellSize * 0.9).roundToInt())
+		val noseLength = maxOf(4, trainHeight / 2)
+		val borderWidth = maxOf(1, trainHeight / 5)
+		val heading = resolveTrainHeading(trainState.trainNumber, gridLocation)
+		val trainShape = createTrainShape(pixelX, pixelY, bodyLength, trainHeight, noseLength, heading)
 
 		// Select body color based on origin InOut
 		val bodyColor =
@@ -329,38 +353,39 @@ class AnimatedSimulationCellRenderer(
 				AnimationColors.TRAIN_FROM_A // Orange (InOut A)
 			}
 
-		// Draw train body (filled circle)
+		// Draw train body.
+		val oldStroke = g.stroke
+		val oldFont = g.font
+		val oldAntialiasing = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING)
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 		g.color = bodyColor
-		g.fillOval(
-			pixelX - trainSize / 2,
-			pixelY - trainSize / 2,
-			trainSize,
-			trainSize
-		)
+		g.fill(trainShape)
 
-		// Draw black border (stroke)
+		// Draw black border.
 		g.color = AnimationColors.TRAIN_BORDER
-		g.stroke = java.awt.BasicStroke(borderWidth.toFloat())
-		g.drawOval(
-			pixelX - trainSize / 2,
-			pixelY - trainSize / 2,
-			trainSize,
-			trainSize
-		)
+		g.stroke = BasicStroke(borderWidth.toFloat())
+		g.draw(trainShape)
 
-		// Draw train ID (white text centered)
+		// Draw train ID centered in the body while keeping text horizontal for readability.
 		g.color = AnimationColors.TRAIN_ID
+		g.font = g.font.deriveFont(maxOf(8f, trainHeight * 0.8f))
 		val idText = trainState.trainNumber.toString()
 		val fontMetrics = g.fontMetrics
 		val textWidth = fontMetrics.stringWidth(idText)
 		val textHeight = fontMetrics.ascent
+		val textOffset = bodyLength * 0.55 + noseLength * 0.2
+		val textCenterX = pixelX - cos(heading) * textOffset
+		val textCenterY = pixelY - sin(heading) * textOffset
 
-		// Center text in the circle
 		g.drawString(
 			idText,
-			pixelX - textWidth / 2,
-			pixelY + textHeight / 2 - 1 // Adjust for baseline
+			(textCenterX - textWidth / 2).roundToInt(),
+			(textCenterY + textHeight / 2 - 1).roundToInt()
 		)
+
+		g.stroke = oldStroke
+		g.font = oldFont
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing)
 	}
 
 	/**
@@ -385,10 +410,115 @@ class AnimatedSimulationCellRenderer(
 		cellHeight: Int
 	) {
 		val state = animationController.getCurrentState()
+		previousTrainLocations.keys.retainAll(state.trainStates.keys)
+		previousTrainHeadings.keys.retainAll(state.trainStates.keys)
 
 		// Render each train
 		for ((_, trainState) in state.trainStates) {
 			drawTrain(g, trainState, cellWidth, cellHeight)
 		}
+	}
+
+	private fun resolveTrainHeading(
+		trainNumber: Int,
+		currentLocation: PointF
+	): Double {
+		val previousLocation = previousTrainLocations[trainNumber]
+		val heading =
+			previousLocation?.let { inferHeading(it, currentLocation) }
+				?: previousTrainHeadings[trainNumber]
+				?: DEFAULT_TRAIN_HEADING
+
+		previousTrainLocations[trainNumber] = currentLocation
+		previousTrainHeadings[trainNumber] = heading
+
+		return heading
+	}
+
+	private fun inferHeading(
+		previousLocation: PointF,
+		currentLocation: PointF
+	): Double? {
+		val dx = (currentLocation.x - previousLocation.x).toDouble()
+		val dy = (currentLocation.y - previousLocation.y).toDouble()
+		if (abs(dx) < HEADING_EPSILON && abs(dy) < HEADING_EPSILON) {
+			return null
+		}
+
+		return snapHeadingToNearestSegment(atan2(dy, dx))
+	}
+
+	private fun snapHeadingToNearestSegment(angle: Double): Double = round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
+
+	private fun createTrainShape(
+		pixelX: Int,
+		pixelY: Int,
+		bodyLength: Int,
+		trainHeight: Int,
+		noseLength: Int,
+		heading: Double
+	): Shape {
+		val rotatedShape = getRotatedTrainShape(bodyLength, trainHeight, noseLength, heading)
+		trainTranslationTransform.setToIdentity()
+		trainTranslationTransform.translate(pixelX.toDouble(), pixelY.toDouble())
+		return trainTranslationTransform.createTransformedShape(rotatedShape)
+	}
+
+	private fun getRotatedTrainShape(
+		bodyLength: Int,
+		trainHeight: Int,
+		noseLength: Int,
+		heading: Double
+	): Shape {
+		val shapeKey = TrainShapeKey(bodyLength, trainHeight, noseLength)
+		val rotationKey = TrainRotationKey(shapeKey, heading)
+		return rotatedTrainShapeCache.getOrPut(rotationKey) {
+			val baseShape = getBaseTrainShape(shapeKey)
+			AffineTransform.getRotateInstance(heading).createTransformedShape(baseShape)
+		}
+	}
+
+	private fun getBaseTrainShape(shapeKey: TrainShapeKey): Shape =
+		baseTrainShapeCache.getOrPut(shapeKey) {
+			val halfHeight = shapeKey.trainHeight / 2.0
+			val rearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble()
+			val noseBaseX = -shapeKey.noseLength.toDouble()
+
+			val body =
+				RoundRectangle2D.Double(
+					rearX,
+					-halfHeight,
+					shapeKey.bodyLength.toDouble(),
+					shapeKey.trainHeight.toDouble(),
+					shapeKey.trainHeight * 0.65,
+					shapeKey.trainHeight * 0.65
+				)
+
+			val nose =
+				Path2D.Double().apply {
+					moveTo(noseBaseX, -halfHeight)
+					lineTo(0.0, 0.0)
+					lineTo(noseBaseX, halfHeight)
+					closePath()
+				}
+
+			Area(body).apply { add(Area(nose)) }
+		}
+
+	private data class TrainShapeKey(
+		val bodyLength: Int,
+		val trainHeight: Int,
+		val noseLength: Int
+	)
+
+	private data class TrainRotationKey(
+		val shapeKey: TrainShapeKey,
+		val heading: Double
+	)
+
+	private companion object {
+		const val HEADING_EPSILON = 0.001
+		const val DEFAULT_TRAIN_HEADING = 0.0
+		const val SEGMENT_ANGLE_STEP = PI / 4.0
 	}
 }

@@ -16,12 +16,14 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
+import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.testutil.createMockDynamicSemaphore
 import cz.vutbr.fit.interlockSim.testutil.createMockRailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlockPart
+import cz.vutbr.fit.interlockSim.util.PointF
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -30,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.awt.Color
 import java.awt.Graphics2D
+import java.awt.image.BufferedImage
 
 /**
  * Tests for [AnimatedSimulationCellRenderer].
@@ -349,6 +352,133 @@ class AnimatedSimulationCellRendererTest {
 		assertThat(colorSlot.captured).isEqualTo(Color(0xC0, 0xC0, 0xC0))
 	}
 
+	@Test
+	fun `drawTrain renders blue train body trailing behind eastbound front`() {
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 12,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 12,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val frontPixelX = (movedTrain.frontGridLocation!!.x * cellWidth + cellWidth / 2).toInt()
+
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_B) > 0).isEqualTo(true)
+		assertThat(bodyBounds.maxX >= frontPixelX - 1).isEqualTo(true)
+		assertThat(frontPixelX - bodyBounds.minX >= 10).isEqualTo(true)
+	}
+
+	@Test
+	fun `drawTrain renders orange train body trailing behind southbound front`() {
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 21,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(2.0f, 1.0f),
+				length = 20.0,
+				travelingRight = false
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 21,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(2.0f, 1.3f),
+				length = 20.0,
+				travelingRight = false
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val frontPixelY = (movedTrain.frontGridLocation!!.y * cellHeight + cellHeight / 2).toInt()
+
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isEqualTo(true)
+		assertThat(bodyBounds.maxY >= frontPixelY - 1).isEqualTo(true)
+		assertThat(frontPixelY - bodyBounds.minY >= 10).isEqualTo(true)
+	}
+
 	// ========== Helper Methods ==========
 	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
+
+	private fun renderTrainToImage(trainState: TrainState): BufferedImage {
+		val image = BufferedImage(80, 80, BufferedImage.TYPE_INT_ARGB)
+		val graphics2D = image.createGraphics()
+		try {
+			renderer.drawTrain(graphics2D, trainState, cellWidth, cellHeight)
+		} finally {
+			graphics2D.dispose()
+		}
+		return image
+	}
+
+	private fun findOpaqueBounds(image: BufferedImage): ColorBounds? {
+		var minX = Int.MAX_VALUE
+		var minY = Int.MAX_VALUE
+		var maxX = Int.MIN_VALUE
+		var maxY = Int.MIN_VALUE
+		var found = false
+
+		for (y in 0 until image.height) {
+			for (x in 0 until image.width) {
+				if ((image.getRGB(x, y) ushr 24) != 0) {
+					found = true
+					minX = minOf(minX, x)
+					minY = minOf(minY, y)
+					maxX = maxOf(maxX, x)
+					maxY = maxOf(maxY, y)
+				}
+			}
+		}
+
+		if (!found) {
+			return null
+		}
+
+		return ColorBounds(minX, minY, maxX, maxY)
+	}
+
+	private fun countExactColorPixels(
+		image: BufferedImage,
+		color: Color
+	): Int {
+		var matches = 0
+		for (y in 0 until image.height) {
+			for (x in 0 until image.width) {
+				if (image.getRGB(x, y) == color.rgb) {
+					matches++
+				}
+			}
+		}
+		return matches
+	}
+
+	private data class ColorBounds(
+		val minX: Int,
+		val minY: Int,
+		val maxX: Int,
+		val maxY: Int
+	)
 }
