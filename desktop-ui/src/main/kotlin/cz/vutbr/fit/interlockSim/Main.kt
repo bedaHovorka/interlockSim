@@ -182,6 +182,9 @@ class Main {
 			// Add all report types for event timeline visibility
 			context.addReportTypes(*ReportType.values())
 
+			// The SimulationContext is intentionally not closed here:
+			// its lifetime is bound to the GUI window; System.exit(0) in
+			// Frame.exitWithoutSaving() terminates the JVM on window close.
 			// Launch GUI on EDT, then start simulation
 			javax.swing.SwingUtilities.invokeLater {
 				frame.setContext(context)

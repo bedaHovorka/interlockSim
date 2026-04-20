@@ -105,6 +105,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var animationUpdateTimer: Timer? = null
 
 	// Simulation lifecycle (Issue #189)
+	// @Volatile: written exclusively from EDT; @Volatile ensures the monitor thread's
+	// completion callback (dispatched via invokeLater back to EDT) sees a fresh value.
+	@Volatile
 	private var simulationRunner: SimulationRunner? = null
 	private var currentSimulationContext: SimulationContext? = null
 
