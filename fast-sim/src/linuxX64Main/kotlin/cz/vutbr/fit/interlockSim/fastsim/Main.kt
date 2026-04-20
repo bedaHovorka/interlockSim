@@ -92,19 +92,36 @@ private object StderrAppender : FormattingAppender() {
 }
 
 /**
+ * The process-wide default appender captured before any call to [configureLogging].
+ * Restored when debug mode is disabled so that repeated calls to [configureLogging]
+ * do not permanently leak [StderrAppender] into the global configuration.
+ */
+internal val DEFAULT_APPENDER = KotlinLoggingConfiguration.appender
+
+/**
  * Configures the kotlin-logging global log level.
  *
  * - [debug] = `true`: enables [Level.DEBUG] output routed to stderr via [StderrAppender].
- * - [debug] = `false`: suppresses all log output ([Level.OFF]).
+ * - [debug] = `false`: suppresses all log output ([Level.OFF]) and restores the [DEFAULT_APPENDER].
  */
 internal fun configureLogging(debug: Boolean) {
 	if (debug) {
 		KotlinLoggingConfiguration.appender = StderrAppender
 		KotlinLoggingConfiguration.logLevel = Level.DEBUG
 	} else {
+		KotlinLoggingConfiguration.appender = DEFAULT_APPENDER
 		KotlinLoggingConfiguration.logLevel = Level.OFF
 	}
 }
+
+/**
+ * Filters out all non-positional flag arguments (`--verbose`, `--quiet`, `--debug`)
+ * from [args], returning the remaining positional arguments in order.
+ *
+ * Extracted as an [internal] function so it can be unit-tested independently of [main].
+ */
+internal fun filterPositionalArgs(args: Array<String>): Array<String> =
+	args.filter { it != CMD_VERBOSE && it != CMD_QUIET && it != CMD_DEBUG }.toTypedArray()
 
 /** Writes [message] followed by a newline to stderr using POSIX [fprintf] (not Kotlin stdlib). */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
@@ -172,7 +189,7 @@ fun main(args: Array<String>) {
 	startKoin { modules(coreModule) }
 
 	val verbosity = parseVerbosity(args)
-	val positionalArgs = args.filter { it != CMD_VERBOSE && it != CMD_QUIET && it != CMD_DEBUG }.toTypedArray()
+	val positionalArgs = filterPositionalArgs(args)
 
 	val factory = NativeContextFactory()
 	val exitCode = try {
