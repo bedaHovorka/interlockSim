@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
@@ -16,7 +17,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.core.segmentFor
@@ -471,7 +471,7 @@ open class DefaultEditingContext(
 	) {
 		checkNotFrozen("replace cell")
 		val grid = getGrid()
-		val old = grid.get(key)
+		val old = grid[key]
 		require(old is NodeCell) { "No NodeCell at $key to replace" }
 		require(old !is InOut || newCell is InOut) {
 			"Cannot replace InOut at $key with ${newCell::class.simpleName}"
@@ -527,7 +527,7 @@ open class DefaultEditingContext(
 					s1,
 					p,
 					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, StaticTrack.MIN_LENGTH, currentMaxSpeed)
+					SimpleTrackBlock(nodeCell, nodeCell2, MIN_TRACK_LENGTH, currentMaxSpeed)
 				)
 			}
 		}

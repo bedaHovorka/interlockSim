@@ -435,7 +435,7 @@ class RailwayNetGridCanvas :
 	// Painting methods
 	override fun paintComponent(g: Graphics) {
 		requireEditor(g is Graphics2D) { "Graphics context must be Graphics2D" }
-		paint(g as Graphics2D)
+		paint(g)
 	}
 
 	/**
