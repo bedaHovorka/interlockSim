@@ -162,7 +162,7 @@ For complete navigation services architecture, Koin DI integration patterns, and
 
 **Simulation engine:**
 - Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-jvm:0.3.0`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-04)
-- kDisco repo: https://github.com/bedavs/kdisco
+- kDisco repo: https://github.com/bedaHovorka/kdisco
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 
 **GUI:**
@@ -265,7 +265,7 @@ See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** for complete co
 - **Koin injection allowed** - The Koin restriction was lifted 2026-03-20 (kDisco Phase 1 complete)
 
 **kDisco Library:**
-- **Do not modify** - Maintained as separate project at https://github.com/bedavs/kdisco
+- **Do not modify** - Maintained as separate project at https://github.com/bedaHovorka/kdisco
 
 ### Flexible Development (Other Components)
 

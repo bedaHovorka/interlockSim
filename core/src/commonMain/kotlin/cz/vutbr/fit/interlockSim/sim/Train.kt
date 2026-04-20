@@ -620,13 +620,17 @@ class Train :
 		): Boolean = if (isDecelarate()) targetSpeed >= velocity else targetSpeed <= velocity
 	}
 
-	// Motor extends Continuous (not LoopProcess) because it requires ODE-based physics integration
-	// via derivatives(). LoopProcess extends Process (discrete-only) and cannot provide continuous
-	// integration. Motor uses Continuous.start()/stop() to activate/deactivate the ODE integrator
-	// per acceleration phase, while the terminate flag provides graceful shutdown (safe to reimplement
-	// here because Motor cannot inherit from LoopProcess). The "continuous simulation not required"
-	// determination in the decision docs refers to the framework choice (DSOL vs kDisco), not to
-	// Motor's kinematics, which have always been ODE-based. See: #373
+	/**
+	 * Extends [Continuous] (not [LoopProcess]/`Process`) because train kinematics require
+	 * ODE integration via [derivatives]; [start]/[stop] gate integration per acceleration
+	 * phase. The project-level "continuous simulation not required" finding concerns
+	 * framework choice (DSOL vs kDisco), not Motor's internal physics.
+	 *
+	 * The private `terminate` flag mirrors the [LoopProcess] shutdown pattern — necessary
+	 * duplication, because Motor cannot inherit it (LoopProcess is Process-based, discrete).
+	 *
+	 * See `docs/MOTOR_CONTINUOUS_RATIONALE.md` (issue #373).
+	 */
 	private inner class Motor : Continuous() {
 		private var currentCondition: AccelerationStopCondition? = null
 		private var targetSpeed: Double = 0.0
