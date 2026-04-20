@@ -459,6 +459,32 @@ open class DefaultEditingContext(
 	private fun used(newPoint: Point): Boolean = getGrid().containsKey(newPoint)
 
 	/**
+	 * Replace an existing node cell at the given location with a new instance.
+	 *
+	 * Only updates the grid entry and InOut list (if applicable); does not touch
+	 * graph edges or track blocks, since those are still valid for the same
+	 * topology. Fires CELL_MODIFIED instead of CELL_ADDED.
+	 */
+	override fun replaceCell(
+		key: Point,
+		newCell: NodeCell
+	) {
+		checkNotFrozen("replace cell")
+		val grid = getGrid()
+		val old = grid.get(key)
+		require(old is NodeCell) { "No NodeCell at $key to replace" }
+		grid.put(key, newCell)
+		if (old is InOut) {
+			val idx = inouts.indexOf(old)
+			if (idx >= 0 && newCell is InOut) {
+				inouts[idx] = newCell
+			}
+		}
+		firePropertyChange(ContextChangeListener.CELL_MODIFIED, null, key)
+		logger.trace { "Replaced ${old::class.simpleName} with ${newCell::class.simpleName} at (${key.x},${key.y})" }
+	}
+
+	/**
 	 * Add a node cell to the railway network grid
 	 */
 	override fun putCell(

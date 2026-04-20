@@ -32,14 +32,12 @@ class GridCanvasEditingPopupMenu : GridCanvasPopupMenu() {
 			val (result, newName) = dialog.showDialog()
 
 			if (result == RenameDialog.DialogResult.OK && newName != nodeCell!!.getName()) {
-				// Create updated cell via wither pattern (NodeCell.name is immutable)
+				// Create updated cell via wither pattern and replace in grid without
+				// triggering CELL_ADDED or corrupting graph/inouts bookkeeping
 				val editingContext = canvas!!.getEditingContext()
 				val updated = nodeCell!!.withName(newName)
-				editingContext.putCell(key!!, updated)
+				editingContext.replaceCell(key!!, updated)
 				nodeCell = updated
-
-				// Fire property change event for modification tracking
-				editingContext.fireCellModified(key!!)
 
 				// Repaint canvas to reflect changes
 				canvas!!.repaint()
