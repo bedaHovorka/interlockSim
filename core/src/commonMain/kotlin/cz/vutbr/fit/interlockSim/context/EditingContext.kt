@@ -48,6 +48,29 @@ import cz.vutbr.fit.interlockSim.util.Point
  */
 interface EditingContext : Context<AbstractCell, TrackBlock> {
 	/**
+	 * Replace an existing node cell at the given location with a new instance.
+	 *
+	 * Unlike [putCell], this operation is intended for in-place logical updates
+	 * (such as renaming) where the grid structure, graph topology, and track
+	 * connections remain unchanged. It:
+	 * - Updates the grid entry at [key] to the new cell
+	 * - Replaces the old instance in the InOut list if the cell is an [InOut]
+	 * - Fires a [ContextChangeListener.CELL_MODIFIED] event (not CELL_ADDED)
+	 *
+	 * The new cell must be of the same type and have the same connectivity
+	 * (same [NodeCell.joins] result) as the existing cell to preserve graph
+	 * consistency.
+	 *
+	 * @param key The grid position of the existing cell to replace
+	 * @param newCell The new cell instance to place at [key]
+	 * @throws IllegalArgumentException if no cell exists at [key]
+	 */
+	fun replaceCell(
+		key: Point,
+		newCell: NodeCell
+	)
+
+	/**
 	 * put the cell into context, the cell must be {@link NodeCell}
 	 * @param key
 	 * @param cell
@@ -238,15 +261,17 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 *
 	 * ## Usage
 	 *
-	 * Use this method when modifying cell properties in-place without going through
-	 * putCell() (which would trigger CELL_ADDED event instead).
+	 * Use this method after [replaceCell] if you need to explicitly notify listeners
+	 * of a logical cell modification. Note that [replaceCell] already fires
+	 * [ContextChangeListener.CELL_MODIFIED] internally, so calling both is only
+	 * needed for custom update flows that bypass [replaceCell].
 	 *
 	 * ## Example
 	 *
 	 * ```kotlin
+	 * // Preferred: rename via replaceCell (fires CELL_MODIFIED automatically)
 	 * val cell = grid[Point(1, 1)] as RailSemaphore
-	 * cell.setName("S1")
-	 * context.fireCellModified(Point(1, 1))  // Notify listeners
+	 * context.replaceCell(Point(1, 1), cell.withName("S1"))
 	 * ```
 	 *
 	 * @param key The grid position of the modified cell

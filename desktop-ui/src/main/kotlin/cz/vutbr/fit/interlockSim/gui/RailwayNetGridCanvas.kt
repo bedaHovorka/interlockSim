@@ -164,39 +164,43 @@ class RailwayNetGridCanvas :
 							"Creating cell: ${newCell.javaClass.simpleName}, " +
 								"currentNameString: '${editingContext.currentNameString}'"
 						}
-						when (newCell) {
-							is InOut -> {
-								// Auto-generate sequential names for InOuts (IO1, IO2, ...)
-								// Users can customize via toolbar nameString or rename dialog afterward
-								val name =
-									if (editingContext.currentNameString.isNotEmpty()) {
-										logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
-										editingContext.currentNameString
-									} else {
-										val autoName = AutoNameGenerator.generateName(newCell::class, editingContext)
-										logger.debug { "InOut: Auto-generated name: '$autoName'" }
-										autoName
-									}
-								newCell.setName(name)
-								logger.debug { "InOut: After setName(), getName() returns: '${newCell.getName()}'" }
-							}
-							is RailSemaphore, is RailSwitch -> {
-								// Auto-generate sequential names for semaphores and switches
-								val autoName =
-									AutoNameGenerator.generateName(
-										newCell::class,
-										editingContext
-									)
-								newCell.setName(autoName)
-								logger.debug {
-									"${newCell::class.simpleName}: Auto-named as '$autoName', " +
-										"getName() returns: '${newCell.getName()}'"
+						val namedCell: NodeCell =
+							when (newCell) {
+								is InOut -> {
+									// Auto-generate sequential names for InOuts (IO1, IO2, ...)
+									// Users can customize via toolbar nameString or rename dialog afterward
+									val name =
+										if (editingContext.currentNameString.isNotEmpty()) {
+											logger.debug { "InOut: Using toolbar name: '${editingContext.currentNameString}'" }
+											editingContext.currentNameString
+										} else {
+											val autoName = AutoNameGenerator.generateName(newCell::class, editingContext)
+											logger.debug { "InOut: Auto-generated name: '$autoName'" }
+											autoName
+										}
+									val result = newCell.withName(name)
+									logger.debug { "InOut: After withName(), getName() returns: '${result.getName()}'" }
+									result
 								}
+								is RailSemaphore, is RailSwitch -> {
+									// Auto-generate sequential names for semaphores and switches
+									val autoName =
+										AutoNameGenerator.generateName(
+											newCell::class,
+											editingContext
+										)
+									val result = newCell.withName(autoName)
+									logger.debug {
+										"${newCell::class.simpleName}: Auto-named as '$autoName', " +
+											"getName() returns: '${result.getName()}'"
+									}
+									result
+								}
+								// Other NodeCell types could be added here in the future
+								else -> newCell
 							}
-							// Other NodeCell types could be added here in the future
-						}
 
-						editingContext.putCell(clickKey, newCell)
+						editingContext.putCell(clickKey, namedCell)
 						// Clear selection after creating a cell to prevent auto-joining
 						selectedKey = null
 					} catch (e1: Exception) {
@@ -431,7 +435,7 @@ class RailwayNetGridCanvas :
 	// Painting methods
 	override fun paintComponent(g: Graphics) {
 		requireEditor(g is Graphics2D) { "Graphics context must be Graphics2D" }
-		paint(g as Graphics2D)
+		paint(g)
 	}
 
 	/**

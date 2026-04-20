@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.vutbr.fit.interlockSim.domain.MIN_TRACK_LENGTH
 import cz.vutbr.fit.interlockSim.exceptions.requireValidArgument
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
@@ -16,7 +17,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
-import cz.vutbr.fit.interlockSim.objects.core.StaticTrack
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.objects.core.conflict
 import cz.vutbr.fit.interlockSim.objects.core.segmentFor
@@ -459,6 +459,35 @@ open class DefaultEditingContext(
 	private fun used(newPoint: Point): Boolean = getGrid().containsKey(newPoint)
 
 	/**
+	 * Replace an existing node cell at the given location with a new instance.
+	 *
+	 * Only updates the grid entry and InOut list (if applicable); does not touch
+	 * graph edges or track blocks, since those are still valid for the same
+	 * topology. Fires CELL_MODIFIED instead of CELL_ADDED.
+	 */
+	override fun replaceCell(
+		key: Point,
+		newCell: NodeCell
+	) {
+		checkNotFrozen("replace cell")
+		val grid = getGrid()
+		val old = grid[key]
+		require(old is NodeCell) { "No NodeCell at $key to replace" }
+		require(old !is InOut || newCell is InOut) {
+			"Cannot replace InOut at $key with ${newCell::class.simpleName}"
+		}
+		grid.put(key, newCell)
+		if (old is InOut) {
+			val idx = inouts.indexOf(old)
+			if (idx >= 0) {
+				inouts[idx] = newCell as InOut
+			}
+		}
+		firePropertyChange(ContextChangeListener.CELL_MODIFIED, null, key)
+		logger.trace { "Replaced ${old::class.simpleName} with ${newCell::class.simpleName} at (${key.x},${key.y})" }
+	}
+
+	/**
 	 * Add a node cell to the railway network grid
 	 */
 	override fun putCell(
@@ -498,7 +527,7 @@ open class DefaultEditingContext(
 					s1,
 					p,
 					s2,
-					SimpleTrackBlock(nodeCell, nodeCell2, StaticTrack.MIN_LENGTH, currentMaxSpeed)
+					SimpleTrackBlock(nodeCell, nodeCell2, MIN_TRACK_LENGTH, currentMaxSpeed)
 				)
 			}
 		}

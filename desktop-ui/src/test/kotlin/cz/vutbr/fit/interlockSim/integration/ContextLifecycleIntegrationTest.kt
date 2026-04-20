@@ -94,8 +94,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		assertThat(editingContext.getGraph().size()).isGreaterThan(0)
 
 		// Phase 5: Add semaphore (after track is connected)
-		val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		semaphore.setName("Signal_1")
+		val semaphore = RailSemaphore("Signal_1", true, Cell.SpatialType.HORIZONTAL)
 		editingContext.putCell(Point(20, 5), semaphore)
 		assertThat(editingContext.getRailWayNetGrid().getCellAt(20, 5)).isNotNull()
 
@@ -112,8 +111,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		editingContext.removeCell(Point(20, 5))
 		assertThat(editingContext.getRailWayNetGrid().getCellAt(20, 5)).isEqualTo(null)
 
-		val newSemaphore = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
-		newSemaphore.setName("Signal_2")
+		val newSemaphore = RailSemaphore("Signal_2", false, Cell.SpatialType.HORIZONTAL)
 		editingContext.putCell(Point(20, 5), newSemaphore)
 		assertThat(editingContext.getRailWayNetGrid().getCellAt(20, 5)).isNotNull()
 
@@ -254,8 +252,7 @@ class ContextLifecycleIntegrationTest : KoinTestBase() {
 		val editingContext = DefaultEditingContext(45, 45)
 
 		val inA = InOut("Station_A", false, Cell.SpatialType.HORIZONTAL)
-		val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		semaphore.setName("Signal_Main")
+		val semaphore = RailSemaphore("Signal_Main", true, Cell.SpatialType.HORIZONTAL)
 		val inB = InOut("Station_B", true, Cell.SpatialType.HORIZONTAL)
 
 		editingContext.putCell(Point(5, 20), inA)

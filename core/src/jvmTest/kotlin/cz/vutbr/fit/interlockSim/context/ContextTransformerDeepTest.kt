@@ -63,10 +63,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 			val outC = InOut("C", false, Cell.SpatialType.HORIZONTAL)
 
-			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-			railSwitch.setName("SW1")
-
-			// Y-shaped layout:
+			val railSwitch = RailSwitch("SW1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 			// inA(1,5) -> SW1(5,5)
 			// inB(1,10) -> SW1(5,5)
 			// SW1(5,5) -> outC(10,5)
@@ -180,8 +177,7 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val editingContext = DefaultEditingContext(30, 30)
 
 			val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
-			val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-			railSwitch.setName("SW1")
+			val railSwitch = RailSwitch("SW1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 
 			editingContext.putCell(Point(5, 5), inA)
 			editingContext.putCell(Point(10, 5), railSwitch)
@@ -209,10 +205,8 @@ class ContextTransformerDeepTest : KoinTestBase() {
 			val editingContext = DefaultEditingContext(30, 30)
 
 			val inA = InOut("A", true, Cell.SpatialType.HORIZONTAL)
-			val sem1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			sem1.setName("Sem1")
-			val sem2 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			sem2.setName("Sem2")
+			val sem1 = RailSemaphore("Sem1", true, Cell.SpatialType.HORIZONTAL)
+			val sem2 = RailSemaphore("Sem2", true, Cell.SpatialType.HORIZONTAL)
 			val outB = InOut("B", false, Cell.SpatialType.HORIZONTAL)
 
 			editingContext.putCell(Point(1, 5), inA)

@@ -1156,8 +1156,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 		@DisplayName("empty string names are omitted in serialization")
 		fun saveContext_withEmptyNames_omitsNameAttribute() {
 			val context = editingContextFactory.createEmptyContext()
-			val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-			semaphore.setName("") // Explicitly set empty name
+			val semaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL) // name defaults to empty
 			context.putCell(Point(10, 10), semaphore)
 			val inOut1 = InOut("entry", true, Cell.SpatialType.HORIZONTAL)
 			val inOut2 = InOut("exit", false, Cell.SpatialType.HORIZONTAL)

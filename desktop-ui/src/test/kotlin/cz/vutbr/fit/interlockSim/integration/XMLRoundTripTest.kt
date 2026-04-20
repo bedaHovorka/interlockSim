@@ -108,8 +108,7 @@ class XMLRoundTripTest : KoinTestBase() {
 		val editingContext = DefaultEditingContext(40, 40)
 
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		railSwitch.setName("Switch_001")
+		val railSwitch = RailSwitch("Switch_001", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 		val inC = InOut("C", true, Cell.SpatialType.HORIZONTAL)
 
@@ -158,10 +157,8 @@ class XMLRoundTripTest : KoinTestBase() {
 		val editingContext = DefaultEditingContext(40, 40)
 
 		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
-		val semaphore1 = RailSemaphore(true, Cell.SpatialType.HORIZONTAL) // orientation: true
-		semaphore1.setName("Signal_Oriented")
-		val semaphore2 = RailSemaphore(false, Cell.SpatialType.HORIZONTAL) // orientation: false
-		semaphore2.setName("Signal_NotOriented")
+		val semaphore1 = RailSemaphore("Signal_Oriented", true, Cell.SpatialType.HORIZONTAL) // orientation: true
+		val semaphore2 = RailSemaphore("Signal_NotOriented", false, Cell.SpatialType.HORIZONTAL) // orientation: false
 		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
 
 		editingContext.putCell(Point(5, 5), inA)

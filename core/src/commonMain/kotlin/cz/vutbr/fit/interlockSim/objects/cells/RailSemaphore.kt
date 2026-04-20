@@ -10,9 +10,6 @@
 package cz.vutbr.fit.interlockSim.objects.cells
 
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import io.github.oshai.kotlinlogging.KotlinLogging
-
-private val logger = KotlinLogging.logger {}
 
 /**
  * "Navestidlo"
@@ -46,15 +43,19 @@ open class RailSemaphore : OrientedNodeCell {
 		name: String?,
 		orientation: Boolean,
 		spatialType: Cell.SpatialType
-	) : super(orientation, spatialType) {
-		if (name != null && name.isNotEmpty()) {
-			setName(name)
-		}
-	}
+	) : super(orientation, spatialType, name ?: "")
 
 	override fun joins(): Set<Cell.Segment> = joinsOnLine()
 
 	override fun getFollowingSegment(from: Cell.Segment?): Cell.Segment? = secondOnLine(from)
+
+	/**
+	 * Create a copy of this semaphore with the given name.
+	 *
+	 * @param newName The new name for the copy
+	 * @return A new RailSemaphore with the updated name
+	 */
+	override fun withName(newName: String): RailSemaphore = RailSemaphore(newName, getOrientation(), getSpatialType())
 
 	/**
 	 * Implementation of asRailSemaphore() for RailSemaphore.

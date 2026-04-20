@@ -66,8 +66,7 @@ class GridTransformerTest : CommonKoinTestBase() {
 	fun transformGrid_singleRailSwitch_wrapsCorrectly() {
 		// Arrange - Create grid with single RailSwitch
 		val staticGrid = DefaultRailWayNetGrid(10, 10)
-		val railSwitch = RailSwitch(Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
-		railSwitch.setName("switch1")
+		val railSwitch = RailSwitch("switch1", Cell.SpatialType.HORIZONTAL, RailSwitch.Type.SIMPLE_RIGHT_FALSE)
 		staticGrid.put(Point(5, 5), railSwitch)
 
 		// Act - Transform
@@ -89,8 +88,7 @@ class GridTransformerTest : CommonKoinTestBase() {
 	fun transformGrid_singleRailSemaphore_wrapsCorrectly() {
 		// Arrange - Create grid with single RailSemaphore
 		val staticGrid = DefaultRailWayNetGrid(10, 10)
-		val railSemaphore = RailSemaphore(true, Cell.SpatialType.HORIZONTAL)
-		railSemaphore.setName("sem1")
+		val railSemaphore = RailSemaphore("sem1", true, Cell.SpatialType.HORIZONTAL)
 		staticGrid.put(Point(3, 3), railSemaphore)
 
 		// Act - Transform

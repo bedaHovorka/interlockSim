@@ -436,10 +436,10 @@ fun createMockSwitch(name: String): RailSwitch {
  * @param spatialType Spatial orientation (default: HORIZONTAL)
  */
 class MockNodeCell(
-	private val name: String,
+	name: String,
 	private val speed: Double = 80.0,
 	spatialType: SpatialType = SpatialType.HORIZONTAL
-) : NodeCell(spatialType),
+) : NodeCell(spatialType, name),
 	DynamicPathSeparator {
 	override fun cancelPathSetup(
 		from: Segment?,
@@ -468,7 +468,5 @@ class MockNodeCell(
 		return setOf(Segment.F, Segment.A)
 	}
 
-	init {
-		setName(name)
-	}
+	override fun withName(newName: String): MockNodeCell = MockNodeCell(newName, speed, getSpatialType())
 }

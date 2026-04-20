@@ -17,28 +17,28 @@ import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
  *
  */
 abstract class NodeCell(
-	private val spatialType: Cell.SpatialType
+	private val spatialType: Cell.SpatialType,
+	name: String = ""
 ) : AbstractCell(),
 	PathSeparator {
-	private var toStringValue: String = ""
-	private var name: String = ""
+	/** Immutable name of this node. */
+	private val nodeName: String = name
 
 	override fun getSpatialType(): Cell.SpatialType = spatialType
 
 	/**
-	 * setter
-	 * @param name
+	 * @return name of this node
 	 */
-	open fun setName(name: String) {
-		this.name = name
-		toStringValue = this::class.simpleName + ':' + name
-	}
+	open fun getName(): String = nodeName
 
 	/**
+	 * Create a copy of this node cell with the given name.
+	 * Implements the wither pattern for immutable name updates.
 	 *
-	 * @return
+	 * @param newName The new name for the copy
+	 * @return A new instance with the updated name
 	 */
-	open fun getName(): String = name
+	abstract fun withName(newName: String): NodeCell
 
-	override fun toString(): String = toStringValue
+	override fun toString(): String = this::class.simpleName + ':' + nodeName
 }

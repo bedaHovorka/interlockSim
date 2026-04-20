@@ -18,8 +18,9 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
  */
 abstract class OrientedNodeCell protected constructor(
 	private val orientation: Boolean,
-	spatialType: Cell.SpatialType
-) : NodeCell(spatialType),
+	spatialType: Cell.SpatialType,
+	name: String = ""
+) : NodeCell(spatialType, name),
 	OrientedPathSeparator {
 	/**
 	 * Get the following segment from a given segment (static configuration).
