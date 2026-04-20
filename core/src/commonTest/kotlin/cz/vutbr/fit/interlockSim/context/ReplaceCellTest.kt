@@ -119,4 +119,19 @@ class ReplaceCellTest : CommonKoinTestBase() {
 			}
 		}
 	}
+
+	@Test
+	fun `replaceCell throws when replacing InOut with non-InOut`() {
+		factory.createEmptyContext().use { ctx ->
+			val pos = Point(1, 1)
+			val original = InOut("io", false, SpatialType.HORIZONTAL)
+			ctx.putCell(pos, original)
+
+			val sem = RailSemaphore("s", false, SpatialType.HORIZONTAL)
+
+			assertFailsWith<IllegalArgumentException> {
+				ctx.replaceCell(pos, sem)
+			}
+		}
+	}
 }

@@ -473,11 +473,14 @@ open class DefaultEditingContext(
 		val grid = getGrid()
 		val old = grid.get(key)
 		require(old is NodeCell) { "No NodeCell at $key to replace" }
+		require(old !is InOut || newCell is InOut) {
+			"Cannot replace InOut at $key with ${newCell::class.simpleName}"
+		}
 		grid.put(key, newCell)
 		if (old is InOut) {
 			val idx = inouts.indexOf(old)
-			if (idx >= 0 && newCell is InOut) {
-				inouts[idx] = newCell
+			if (idx >= 0) {
+				inouts[idx] = newCell as InOut
 			}
 		}
 		firePropertyChange(ContextChangeListener.CELL_MODIFIED, null, key)
