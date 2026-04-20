@@ -17,19 +17,20 @@ This document records the traffic-simulation-expert's (TSE) arbitration of
 that concern. The code keeps `Motor : Continuous()` and a short KDoc at the
 class site; the full argument lives here.
 
-## kDisco type hierarchy
+## Type hierarchy (relevant classes)
 
 ```
-Link
-└── Process          (discrete-event entity)
-    ├── Continuous   (adds ODE integration: derivatives(), start(), stop())
-    └── LoopProcess  (discrete-only cooperative loop)
+Link                        ← kDisco
+└── Process                 ← kDisco        (discrete-event entity)
+    ├── Continuous          ← kDisco        (adds ODE integration: derivatives(), start(), stop())
+    └── LoopProcess         ← interlockSim  (discrete-only cooperative loop)
 ```
 
-- `LoopProcess : Process()` — no `derivatives()`, no integrator, no
-  `start()`/`stop()`.
-- `Continuous : Process()` — the only kDisco base class that provides an
-  ODE integrator and per-phase activation/deactivation of that integrator.
+- `Continuous : Process()` — kDisco class; the only base that provides an ODE
+  integrator and per-phase activation/deactivation of that integrator.
+- `LoopProcess : Process()` — project-local class in
+  `cz.vutbr.fit.interlockSim.sim`; discrete-only, no `derivatives()`,
+  no `start()`/`stop()`.
 
 ## Why `Continuous` is required
 
@@ -90,8 +91,9 @@ trait/mixin for two classes.
 ## References
 
 - Code: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/Train.kt`
-  — `Motor` class header at line 623, `Motor.derivatives()` at line 735
+  — search for `private inner class Motor : Continuous()` and
+  `override fun derivatives()`
 - Code: `core/src/commonMain/kotlin/cz/vutbr/fit/interlockSim/sim/LoopProcess.kt`
-- kDisco: <https://github.com/bedavs/kdisco>
+- kDisco: <https://github.com/bedaHovorka/kdisco/>
 - Issue: [#373](https://github.com/bedaHovorka/interlockSim/issues/373)
 - PR: [#372](https://github.com/bedaHovorka/interlockSim/pull/372)
