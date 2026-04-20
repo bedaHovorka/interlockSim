@@ -340,9 +340,13 @@ class AnimatedSimulationCellRenderer(
 		val pixelX = (gridLocation.x * cellWidth + cellWidthHalf).roundToInt()
 		val pixelY = (gridLocation.y * cellHeight + cellHeightHalf).roundToInt()
 		val minCellSize = minOf(cellWidth, cellHeight).coerceAtLeast(1)
-		val trainHeight = maxOf(8, (minCellSize * 0.55).roundToInt())
-		val bodyLength = maxOf(trainHeight + 6, (minCellSize * 0.9).roundToInt())
-		val noseLength = maxOf(4, trainHeight / 2)
+		val trainHeight = maxOf(MIN_TRAIN_HEIGHT_PIXELS, (minCellSize * TRAIN_HEIGHT_CELL_RATIO).roundToInt())
+		val bodyLength =
+			maxOf(
+				trainHeight + MIN_BODY_LENGTH_EXTRA_PIXELS,
+				(minCellSize * BODY_LENGTH_CELL_RATIO).roundToInt()
+			)
+		val noseLength = maxOf(MIN_NOSE_LENGTH_PIXELS, trainHeight / 2)
 		val borderWidth = maxOf(1, trainHeight / 5)
 		val heading = resolveTrainHeading(trainState.trainNumber, gridLocation)
 		val trainShape = createTrainShape(pixelX, pixelY, bodyLength, trainHeight, noseLength, heading)
@@ -447,10 +451,11 @@ class AnimatedSimulationCellRenderer(
 			return null
 		}
 
-		return snapHeadingToNearestSegment(atan2(dy, dx))
+		return snapHeadingToNearestCompassDirection(atan2(dy, dx))
 	}
 
-	private fun snapHeadingToNearestSegment(angle: Double): Double = round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
+	private fun snapHeadingToNearestCompassDirection(angle: Double): Double =
+		round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
 
 	private fun createTrainShape(
 		pixelX: Int,
@@ -522,6 +527,11 @@ class AnimatedSimulationCellRenderer(
 		const val HEADING_EPSILON = 0.001
 		const val DEFAULT_TRAIN_HEADING = 0.0
 		const val SEGMENT_ANGLE_STEP = PI / 4.0
+		const val TRAIN_HEIGHT_CELL_RATIO = 0.55
+		const val BODY_LENGTH_CELL_RATIO = 0.9
+		const val MIN_TRAIN_HEIGHT_PIXELS = 8
+		const val MIN_BODY_LENGTH_EXTRA_PIXELS = 6
+		const val MIN_NOSE_LENGTH_PIXELS = 4
 		const val BODY_TEXT_OFFSET_RATIO = 0.55
 		const val NOSE_TEXT_OFFSET_RATIO = 0.2
 		const val BODY_CORNER_RADIUS_RATIO = 0.65

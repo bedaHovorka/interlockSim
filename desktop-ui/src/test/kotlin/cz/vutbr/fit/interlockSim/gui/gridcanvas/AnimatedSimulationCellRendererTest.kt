@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.image.BufferedImage
+import kotlin.math.roundToInt
 
 /**
  * Tests for [AnimatedSimulationCellRenderer].
@@ -44,6 +45,10 @@ import java.awt.image.BufferedImage
  * @since 2026-01-22 (Issue #202)
  */
 class AnimatedSimulationCellRendererTest {
+	private companion object {
+		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
+	}
+
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
 	private lateinit var graphics: Graphics2D
@@ -380,11 +385,11 @@ class AnimatedSimulationCellRendererTest {
 
 		val image = renderTrainToImage(movedTrain)
 		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
-		val frontPixelX = (movedTrain.frontGridLocation!!.x * cellWidth + cellWidth / 2).toInt()
+		val frontPixelX = trainCenterPixelX(movedTrain)
 
 		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_B) > 0).isTrue()
 		assertThat(bodyBounds.maxX >= frontPixelX - 1).isTrue()
-		assertThat(frontPixelX - bodyBounds.minX >= 10).isTrue()
+		assertThat(frontPixelX - bodyBounds.minX >= MIN_EXPECTED_BODY_EXTENT_PIXELS).isTrue()
 	}
 
 	@Test
@@ -414,11 +419,11 @@ class AnimatedSimulationCellRendererTest {
 
 		val image = renderTrainToImage(movedTrain)
 		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
-		val frontPixelY = (movedTrain.frontGridLocation!!.y * cellHeight + cellHeight / 2).toInt()
+		val frontPixelY = trainCenterPixelY(movedTrain)
 
 		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isTrue()
 		assertThat(bodyBounds.maxY >= frontPixelY - 1).isTrue()
-		assertThat(frontPixelY - bodyBounds.minY >= 10).isTrue()
+		assertThat(frontPixelY - bodyBounds.minY >= MIN_EXPECTED_BODY_EXTENT_PIXELS).isTrue()
 	}
 
 	// ========== Helper Methods ==========
@@ -434,6 +439,12 @@ class AnimatedSimulationCellRendererTest {
 		}
 		return image
 	}
+
+	private fun trainCenterPixelX(trainState: TrainState): Int =
+		((trainState.frontGridLocation ?: error("Missing front grid location")).x * cellWidth + cellWidth / 2).roundToInt()
+
+	private fun trainCenterPixelY(trainState: TrainState): Int =
+		((trainState.frontGridLocation ?: error("Missing front grid location")).y * cellHeight + cellHeight / 2).roundToInt()
 
 	private fun findOpaqueBounds(image: BufferedImage): ColorBounds? {
 		var minX = Int.MAX_VALUE
