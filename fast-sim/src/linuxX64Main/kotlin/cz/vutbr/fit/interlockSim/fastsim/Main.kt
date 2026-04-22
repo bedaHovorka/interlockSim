@@ -85,7 +85,7 @@ private const val VERSION_STRING = "fast-sim 1.0"
  * the simulation results written to stdout.
  */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
-private object StderrAppender : FormattingAppender() {
+internal object StderrAppender : FormattingAppender() {
 	override fun logFormattedMessage(loggingEvent: KLoggingEvent, formattedMessage: Any?) {
 		fprintf(stderr, "%s\n", formattedMessage?.toString() ?: "null")
 	}

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### fast-sim: `--debug` flag for runtime log output (Issue #449)
+#### fast-sim: `--debug` flag for runtime log output (Issue #437)
 
 Adds a `--debug` flag to the `:fast-sim` native CLI so developers can enable `DEBUG`-level
 kotlin-logging output when diagnosing native-specific issues, while keeping simulation

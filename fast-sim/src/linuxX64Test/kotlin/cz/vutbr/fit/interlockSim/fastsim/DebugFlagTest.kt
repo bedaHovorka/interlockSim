@@ -27,7 +27,7 @@ import kotlin.test.Test
  * stderr appender, that disabling it restores [Level.OFF] and the default appender, and
  * that [filterPositionalArgs] correctly strips flag arguments from positional arg lists.
  *
- * @since Issue #449 (add --debug flag for runtime log output)
+ * @since Issue #437 (add --debug flag for runtime log output)
  */
 class DebugFlagTest {
 
@@ -71,6 +71,12 @@ class DebugFlagTest {
 	fun `configureLogging with debug true sets log level to DEBUG`() {
 		configureLogging(true)
 		assertThat(KotlinLoggingConfiguration.logLevel).isEqualTo(Level.DEBUG)
+	}
+
+	@Test
+	fun `configureLogging with debug true installs StderrAppender`() {
+		configureLogging(true)
+		assertThat(KotlinLoggingConfiguration.appender).isSameInstanceAs(StderrAppender)
 	}
 
 	@Test
