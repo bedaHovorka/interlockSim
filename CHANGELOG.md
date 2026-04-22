@@ -24,8 +24,8 @@ results on stdout.
   `Level.OFF` when `false`
 - **`filterPositionalArgs(args)`** — extracted internal helper that strips `--debug`,
   `--verbose`, and `--quiet` from the raw args list; tested independently
-- **`DebugFlagTest`** — 12 unit tests covering the constant, `configureLogging` level and
-  appender behaviour (including round-trip), and all `filterPositionalArgs` combinations
+- **`DebugFlagTest`** — 14 unit tests covering the constant, `configureLogging` level and
+  appender behaviour (including round-trip and appender identity), and all `filterPositionalArgs` combinations
 
 **Usage:**
 
