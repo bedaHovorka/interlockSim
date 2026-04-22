@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### fast-sim: `--debug` flag for runtime log output (Issue #437)
+
+Adds a `--debug` flag to the `:fast-sim` native CLI so developers can enable `DEBUG`-level
+kotlin-logging output when diagnosing native-specific issues, while keeping simulation
+results on stdout.
+
+- **`StderrAppender`** — new `FormattingAppender` that routes log messages via POSIX
+  `fprintf(stderr, ...)`, keeping stdout clean for simulation output
+- **`configureLogging(debug: Boolean)`** — replaces the hard-coded `Level.OFF`; enables
+  `Level.DEBUG` + `StderrAppender` when `true`, restores the default appender and sets
+  `Level.OFF` when `false`
+- **`filterPositionalArgs(args)`** — extracted internal helper that strips `--debug`,
+  `--verbose`, and `--quiet` from the raw args list; tested independently
+- **`DebugFlagTest`** — 14 unit tests covering the constant, `configureLogging` level and
+  appender behaviour (including round-trip and appender identity), and all `filterPositionalArgs` combinations
+
+**Usage:**
+
+```bash
+# Default: all logging suppressed (unchanged)
+fast-sim example shuntingLoop 60
+
+# With --debug: DEBUG-level output on stderr, simulation results on stdout
+fast-sim --debug example shuntingLoop 60
+fast-sim --debug --verbose sim network.xml 300 2>debug.log
+```
+
+**Documentation:** `docs/superpowers/specs/2026-03-21-fast-sim-design.md` updated — CLI
+interface table and Logging on Native section reflect the implemented strategy.
+
+---
+
 #### AnimatedSim Milestone (Issues #201-#208, #273, 2026-01-22 to 2026-02-04) ⭐ NEW
 
 Complete animated GUI visualization system for real-time railway simulation.

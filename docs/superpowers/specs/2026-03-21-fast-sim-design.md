@@ -43,14 +43,38 @@ fast-sim/
 # Run built-in example scenario (uses embedded XML)
 ./fast-sim example shuntingLoop 60
 
-# Run simulation from XML file (requires #403 file I/O)
+# Run simulation from XML file
 ./fast-sim sim /path/to/vyhybna.xml 60
 
 # Version info
 ./fast-sim --version
+
+# Help
+./fast-sim --help
 ```
 
-**Exit codes:** 0 = success, 1 = simulation error, 2 = invalid arguments.
+**Output verbosity flags** (combinable with any mode):
+
+| Flag | Effect |
+|------|--------|
+| _(none)_ | Normal output — one summary line per event |
+| `--verbose` | Full detail per event (timestamp, all fields) |
+| `--quiet` | Suppress per-event lines; print only the final summary |
+| `--debug` | Enable `DEBUG`-level kotlin-logging output to **stderr** (simulation results stay on **stdout**) |
+
+```bash
+# Verbose output
+./fast-sim --verbose example shuntingLoop 60
+
+# Quiet mode — final summary only
+./fast-sim --quiet sim /path/to/vyhybna.xml 60
+
+# Debug logging to stderr, simulation output to stdout
+./fast-sim --debug example shuntingLoop 60
+./fast-sim --debug --verbose sim network.xml 300 2>debug.log
+```
+
+**Exit codes:** 0 = success, 1 = simulation/runtime error, 2 = invalid arguments, 130 = interrupted (SIGINT).
 
 ### Components
 
@@ -98,12 +122,11 @@ All core transformation logic (`DefaultSimulationContext.fromEditingContext()`, 
 
 kotlin-logging uses `println` as the backend on Kotlin/Native (no SLF4J). Since stdout is the primary output channel for `TextReporter`, simulation logging must not pollute it.
 
-**Strategy:**
-- Configure kotlin-logging to write to stderr on native (custom `KLogger` output or redirect)
-- Alternatively, suppress simulation logging entirely in fast-sim (set log level to WARN/ERROR)
-- `TextReporter` output goes to stdout; all logging goes to stderr
-
-**Prerequisite check:** Verify that `kotlin-logging` has a working `linuxX64` artifact. The dependency is declared in `:core` commonMain but has only been tested at compile time, not runtime.
+**Implemented strategy:**
+- By default, logging is suppressed (`Level.OFF`) — simulation output on stdout is clean.
+- Pass `--debug` to enable `DEBUG`-level output routed to **stderr** via a custom `StderrAppender` (POSIX `fprintf(stderr, ...)`).
+- `TextReporter` output goes to stdout; all logging (when enabled) goes to stderr.
+- Redirect with `2>debug.log` to capture debug output separately from simulation results.
 
 ### Error Handling
 
