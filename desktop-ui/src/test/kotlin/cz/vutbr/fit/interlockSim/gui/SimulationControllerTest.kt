@@ -57,6 +57,8 @@ class SimulationControllerTest {
 
 	@BeforeEach
 	fun setUp() {
+		// ControlPanel is a JPanel subclass; creating it requires the EDT in strict Swing
+		// environments. mockk does not require EDT.
 		SwingUtilities.invokeAndWait {
 			controlPanel = ControlPanel()
 		}
@@ -367,7 +369,12 @@ class SimulationControllerTest {
 		val controller = SimulationController(controlPanel)
 		controller.start(context)
 
-		// Wait for simulation to actually start running
+		// Wait for simulation to actually start running.
+		// Race condition being tested: in the old design, runner.start() was called
+		// inside the monitor thread. If stop() was invoked before the monitor thread
+		// ran, stop() would interrupt nothing and the simulation would still start
+		// afterwards. The fix: runner.start() is called synchronously in start()
+		// before the monitor thread is launched, so stop() always finds a live thread.
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
 		// stop() must always see a running thread (runner.start() was called synchronously)

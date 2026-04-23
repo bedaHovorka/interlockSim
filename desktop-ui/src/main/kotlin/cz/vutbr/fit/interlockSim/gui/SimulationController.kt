@@ -38,6 +38,7 @@ import javax.swing.SwingUtilities
  *
  * @param controlPanel ControlPanel whose Stop button and status label are managed here.
  * @param onCompleted Callback invoked on EDT when the simulation finishes naturally.
+ *   Defaults to a no-op if not provided.
  * @since 2026-04-20 (extracted from Frame for testability)
  * @see Frame
  */
