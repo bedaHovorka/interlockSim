@@ -391,8 +391,8 @@ class AnimatedSimulationCellRenderer(
 
 		g.stroke = oldStroke
 		g.font = oldFont
-		val restoredAntialiasing = oldAntialiasing ?: RenderingHints.VALUE_ANTIALIAS_DEFAULT
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, restoredAntialiasing)
+		val antialiasingToRestore = oldAntialiasing ?: RenderingHints.VALUE_ANTIALIAS_DEFAULT
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, antialiasingToRestore)
 	}
 
 	/**
