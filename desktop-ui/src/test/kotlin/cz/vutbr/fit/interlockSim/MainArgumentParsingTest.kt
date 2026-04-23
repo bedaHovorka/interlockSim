@@ -153,6 +153,7 @@ class MainArgumentParsingTest {
 			assertThat(usageNotPrinted).isTrue()
 		}
 
+		@Disabled("simgui schedules Swing GUI creation on the EDT; keep GUI mode out of unit-level argument parsing tests")
 		@Test
 		fun `simgui mode selected with simgui argument`() {
 			// Arrange

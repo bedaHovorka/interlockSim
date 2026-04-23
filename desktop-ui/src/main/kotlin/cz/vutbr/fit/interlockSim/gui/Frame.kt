@@ -104,11 +104,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
-	// Simulation lifecycle (Issue #189)
-	// @Volatile: written exclusively from EDT; @Volatile ensures the monitor thread's
-	// completion callback (dispatched via invokeLater back to EDT) sees a fresh value.
-	@Volatile
-	private var simulationRunner: SimulationRunner? = null
+	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
+	private val simulationController: SimulationController = SimulationController(controlPanel)
 	private var currentSimulationContext: SimulationContext? = null
 
 	/**
@@ -181,7 +178,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Show ControlPanel
 		controlPanel.isVisible = true
-		controlPanel.updateStatus("Running")
+		controlPanel.updateStatus("Ready")
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -320,14 +317,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
-	 * Launch the simulation on a background thread via [SimulationRunner] (Issue #189).
+	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
 	 *
-	 * - Creates a [SimulationRunner] wrapping the current [SimulationContext].
-	 * - Starts the simulation on a dedicated daemon thread.
-	 * - Enables the Stop button in [ControlPanel].
-	 * - A monitor thread polls for completion and updates [ControlPanel] when done.
-	 *
-	 * Idempotent: if a simulation is already running this call is a no-op.
+	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
+	 * running this call is a no-op.
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -341,75 +334,26 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			return
 		}
 
-		// Guard against double-start
-		val existing = simulationRunner
-		if (existing != null && existing.isRunning()) {
-			logger.debug { "startSimulation ignored — simulation already running" }
-			return
-		}
-
-		val runner = SimulationRunner(context)
-		simulationRunner = runner
-
-		controlPanel.updateStatus("Running")
-		controlPanel.setStopEnabled(true)
-
-		// Launch runner, then monitor completion on a daemon thread
-		val monitorThread =
-			Thread(
-				{
-					try {
-						runner.start()
-						// Poll until the simulation thread finishes
-						while (runner.isRunning()) {
-							Thread.sleep(SIMULATION_POLL_INTERVAL_MS)
-						}
-					} catch (e: InterruptedException) {
-						Thread.currentThread().interrupt()
-					} finally {
-						javax.swing.SwingUtilities.invokeLater { onSimulationCompleted() }
-					}
-				},
-				"SimulationMonitor"
-			)
-		monitorThread.isDaemon = true
-		monitorThread.start()
+		simulationController.start(context)
 	}
 
 	/**
 	 * Request immediate simulation shutdown (Issue #189).
 	 *
-	 * Interrupts the simulation thread via [SimulationRunner.stop] and updates
-	 * [ControlPanel] to reflect the stopped state.
-	 *
-	 * Safe to call when no simulation is running (no-op in that case).
+	 * Delegates to [SimulationController.stop]. Safe to call when no simulation is
+	 * running (no-op in that case).
 	 *
 	 * **Must be called from EDT.**
 	 */
 	fun stopSimulation() {
-		val runner = simulationRunner ?: return
-		runner.stop()
-		simulationRunner = null
-		controlPanel.setStopEnabled(false)
-		controlPanel.updateStatus("Stopped")
-	}
-
-	/**
-	 * Called on EDT when the simulation thread finishes (naturally or after stop).
-	 *
-	 * Updates [ControlPanel] to show the stopped state. Idempotent — safe to
-	 * call even if [stopSimulation] already updated the panel.
-	 */
-	private fun onSimulationCompleted() {
-		controlPanel.updateStatus("Stopped")
-		controlPanel.setStopEnabled(false)
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"stopSimulation must be called from EDT"
+		}
+		simulationController.stop()
 	}
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		/** Poll interval (ms) used by the monitor thread to detect simulation completion. */
-		private const val SIMULATION_POLL_INTERVAL_MS: Long = 500L
 	}
 
 	/**

@@ -10,15 +10,14 @@ import javax.swing.JPanel
  * Control panel for displaying simulation time and status during animated simulation.
  *
  * This component appears at the top of the frame during simulation mode and is hidden
- * during editing mode. It provides real-time feedback on simulation progress without
- * simulation control buttons (due to kDisco framework limitations - simulations cannot
- * be paused, only started and stopped).
+ * during editing mode. It provides real-time feedback on simulation progress and a
+ * Stop button to terminate the running simulation.
  *
  * **Layout Structure:**
  * ```
- * ┌─────────────────────────────────────────────┐
- * │ Time: 00:12:34.567   Status: Running        │
- * └─────────────────────────────────────────────┘
+ * ┌────────────────────────────────────────────────────────┐
+ * │ Time: 00:12:34.567   Status: Running   [Stop]          │
+ * └────────────────────────────────────────────────────────┘
  * ```
  *
  * **Update Frequency:**
@@ -29,7 +28,8 @@ import javax.swing.JPanel
  * All methods must be called from the Event Dispatch Thread (EDT).
  *
  * **Design Constraints:**
- * - No pause/resume buttons: kDisco simulations cannot be paused once started
+ * - No pause/resume button: kDisco simulations cannot be paused once started
+ * - Stop button: enabled while a simulation is running; calls [onStop] callback
  * - Time formatting: HH:MM:SS.mmm (hours:minutes:seconds.milliseconds)
  * - Status values: "Ready", "Running", "Stopped"
  *

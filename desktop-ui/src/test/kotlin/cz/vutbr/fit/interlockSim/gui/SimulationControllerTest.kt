@@ -1,0 +1,391 @@
+/*
+	Brno University of Technology
+	Faculty of Information Technology
+
+	BSc Thesis       2006/2007
+	Railway Interlocking Simulator
+
+	Unit tests for SimulationController (Issue #189)
+*/
+
+package cz.vutbr.fit.interlockSim.gui
+
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isNotNull
+import assertk.assertions.isNull
+import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import javax.swing.JButton
+import javax.swing.JLabel
+import javax.swing.SwingUtilities
+
+/**
+ * Unit tests for [SimulationController].
+ *
+ * [SimulationController] encapsulates all simulation lifecycle logic extracted from
+ * [Frame], enabling it to be tested headlessly (no X11 display required). [ControlPanel]
+ * is a [javax.swing.JPanel] that can be created in headless mode.
+ *
+ * Covers:
+ * - [SimulationController.start] creates and starts a [SimulationRunner]
+ * - [SimulationController.start] enables the Stop button and updates status to "Running"
+ * - [SimulationController.start] is idempotent while runner is alive
+ * - [SimulationController.stop] interrupts the runner and disables the Stop button
+ * - [SimulationController.stop] is a no-op when nothing is running
+ * - Monitor thread invokes [onCompleted] callback when simulation finishes naturally
+ * - Monitor thread updates ControlPanel to "Stopped" after natural completion
+ * - [SimulationController.isRunning] reflects the runner state correctly
+ * - [SimulationController.runner] field is null before start and after stop
+ * - Race condition fix: [SimulationRunner.start] is called before the monitor thread
+ */
+@DisplayName("SimulationController")
+class SimulationControllerTest {
+	private lateinit var controlPanel: ControlPanel
+	private lateinit var context: SimulationContext
+
+	@BeforeEach
+	fun setUp() {
+		SwingUtilities.invokeAndWait {
+			controlPanel = ControlPanel()
+		}
+		context = mockk(relaxed = true)
+	}
+
+	// ── start: Stop button ────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start enables stop button while simulation is running")
+	fun startEnablesStopButton() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findStopButton()!!.isEnabled).isTrue()
+		}
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop disables stop button")
+	fun stopDisablesStopButton() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		controller.stop()
+		blockSim.countDown()
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findStopButton()!!.isEnabled).isFalse()
+		}
+	}
+
+	// ── start: status label ───────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start sets status label to Running")
+	fun startSetsStatusRunning() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Running")
+		}
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop sets status label to Stopped")
+	fun stopSetsStatusStopped() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		controller.stop()
+		blockSim.countDown()
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Stopped")
+		}
+	}
+
+	// ── isRunning ─────────────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("isRunning returns true while simulation thread is alive")
+	fun isRunningTrueWhileSimRunning() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		assertThat(controller.isRunning()).isTrue()
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("isRunning returns false before start is called")
+	fun isRunningFalseBeforeStart() {
+		val controller = SimulationController(controlPanel)
+		assertThat(controller.isRunning()).isFalse()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("isRunning returns false after stop")
+	fun isRunningFalseAfterStop() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+		controller.stop()
+		blockSim.countDown()
+
+		assertThat(controller.isRunning()).isFalse()
+	}
+
+	// ── stop no-op ────────────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("stop is a no-op when nothing is running")
+	fun stopNoOpWhenNotRunning() {
+		val controller = SimulationController(controlPanel)
+		controller.stop() // must not throw
+		controller.stop()
+		assertThat(controller.isRunning()).isFalse()
+	}
+
+	// ── idempotent start ──────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start is idempotent — second call while running is a no-op")
+	fun startIdempotent() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		var runCount = 0
+		every { context.run() } answers {
+			runCount++
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		controller.start(context)
+		controller.start(context)
+
+		blockSim.countDown()
+		controller.stop()
+
+		assertThat(runCount).isEqualTo(1)
+	}
+
+	// ── runner field ──────────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("runner is null before start")
+	fun runnerNullBeforeStart() {
+		val controller = SimulationController(controlPanel)
+		assertThat(controller.runner).isNull()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("runner is non-null while running")
+	fun runnerNonNullWhileRunning() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(controller.runner).isNotNull()
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("runner is null after stop")
+	fun runnerNullAfterStop() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+		controller.stop()
+		blockSim.countDown()
+
+		assertThat(controller.runner).isNull()
+	}
+
+	// ── onCompleted callback ──────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("onCompleted is invoked when simulation finishes naturally")
+	fun onCompletedInvokedOnNaturalFinish() {
+		val completedLatch = CountDownLatch(1)
+		every { context.run() } answers { /* returns immediately */ }
+
+		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		controller.start(context)
+
+		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("onCompleted resets ControlPanel status to Stopped after natural finish")
+	fun onCompletedResetsPanelOnNaturalFinish() {
+		val completedLatch = CountDownLatch(1)
+		every { context.run() } answers { /* returns immediately */ }
+
+		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		controller.start(context)
+
+		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
+		SwingUtilities.invokeAndWait { /* flush EDT */ }
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findStopButton()!!.isEnabled).isFalse()
+			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Stopped")
+		}
+	}
+
+	// ── context.run() is called ───────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start invokes context.run()")
+	fun startInvokesContextRun() {
+		every { context.run() } answers { /* returns immediately */ }
+
+		val completedLatch = CountDownLatch(1)
+		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		controller.start(context)
+
+		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
+		verify { context.run() }
+	}
+
+	// ── race condition fix: runner.start() called before monitor thread ────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop after start always interrupts the simulation (no race condition)")
+	fun stopAlwaysInterruptsAfterStart() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+
+		// Wait for simulation to actually start running
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// stop() must always see a running thread (runner.start() was called synchronously)
+		controller.stop()
+		blockSim.countDown()
+
+		assertThat(controller.isRunning()).isFalse()
+	}
+
+	// ── helpers ───────────────────────────────────────────────────────────────
+
+	private fun findStopButton(): JButton? =
+		(0 until controlPanel.componentCount)
+			.mapNotNull { controlPanel.getComponent(it) as? JButton }
+			.firstOrNull { it.text == "Stop" }
+
+	private fun findStatusLabel(): JLabel? =
+		(0 until controlPanel.componentCount)
+			.mapNotNull { controlPanel.getComponent(it) as? JLabel }
+			.firstOrNull { it.text.startsWith("Status:") }
+}
