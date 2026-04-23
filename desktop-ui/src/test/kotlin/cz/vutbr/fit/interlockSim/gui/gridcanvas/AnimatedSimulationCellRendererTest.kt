@@ -32,7 +32,9 @@ import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.awt.Color
+import java.awt.Font
 import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import kotlin.math.roundToInt
 
@@ -424,6 +426,39 @@ class AnimatedSimulationCellRendererTest {
 		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isTrue()
 		assertThat(bodyBounds.maxY >= frontPixelY - 1).isTrue()
 		assertThat(frontPixelY - bodyBounds.minY >= MIN_EXPECTED_BODY_EXTENT_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain restores default antialiasing when no hint was previously set`() {
+		val helperGraphics = BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB).createGraphics()
+		val font = Font(Font.SANS_SERIF, Font.PLAIN, 12)
+		every { graphics.getRenderingHint(RenderingHints.KEY_ANTIALIASING) } returns null
+		every { graphics.font } returns font
+		every { graphics.fontMetrics } returns helperGraphics.getFontMetrics(font)
+
+		try {
+			renderer.drawTrain(
+				graphics,
+				TrainState(
+					trainNumber = 99,
+					position = 0.0,
+					velocity = 0.0,
+					acceleration = 0.0,
+					frontGridLocation = PointF(1.0f, 1.0f),
+					length = 20.0,
+					travelingRight = true
+				),
+				cellWidth,
+				cellHeight
+			)
+		} finally {
+			helperGraphics.dispose()
+		}
+
+		verify {
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_DEFAULT)
+		}
 	}
 
 	// ========== Helper Methods ==========

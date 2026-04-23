@@ -107,8 +107,6 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
-	private val cellWidthHalf = cellWidth / 2
-	private val cellHeightHalf = cellHeight / 2
 	private val previousTrainLocations = mutableMapOf<Int, PointF>()
 	private val previousTrainHeadings = mutableMapOf<Int, Double>()
 	private val baseTrainShapeCache = mutableMapOf<TrainShapeKey, Shape>()
@@ -337,6 +335,8 @@ class AnimatedSimulationCellRenderer(
 
 		// Convert grid coordinates to pixel coordinates (center of cell).
 		// PointF provides continuous coordinates, round to nearest pixel for rendering.
+		val cellWidthHalf = cellWidth / 2.0
+		val cellHeightHalf = cellHeight / 2.0
 		val pixelX = (gridLocation.x * cellWidth + cellWidthHalf).roundToInt()
 		val pixelY = (gridLocation.y * cellHeight + cellHeightHalf).roundToInt()
 		val minCellSize = minOf(cellWidth, cellHeight).coerceAtLeast(1)
@@ -391,7 +391,8 @@ class AnimatedSimulationCellRenderer(
 
 		g.stroke = oldStroke
 		g.font = oldFont
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing)
+		val restoredAntialiasing = oldAntialiasing ?: RenderingHints.VALUE_ANTIALIAS_DEFAULT
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, restoredAntialiasing)
 	}
 
 	/**
