@@ -54,7 +54,7 @@ class Main {
 				frame.setVisible(true)
 			}
 		} catch (e: ContextCreationException) {
-			logger.error(e) { "Context creation failed" }
+			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		}
 	}
 
@@ -100,7 +100,7 @@ class Main {
 				}
 			} // rawContext closed
 		} catch (e: ContextCreationException) {
-			logger.error(e) { "Context creation failed" }
+			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		} catch (e: EmptyContextException) {
 			logger.error(e) { "User hasn't specified valid file" }
 		} catch (e: SimulationException) {
@@ -198,7 +198,7 @@ class Main {
 				frame.startSimulation()
 			}
 		} catch (e: ContextCreationException) {
-			logger.error(e) { "Context creation failed" }
+			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		} catch (e: EmptyContextException) {
 			logger.error(e) { "Simulation with GUI could not be started - empty context" }
 		} catch (e: Exception) {
@@ -277,6 +277,8 @@ class Main {
 
 // Application metadata constants moved to AppMetadata.kt
 // PROGRAM_NAME, PROGRAM_VERSION, and PROGRAM_FULL_NAME are now defined in AppMetadata.kt
+
+private const val MSG_CONTEXT_CREATION_FAILED = "Context creation failed"
 
 /**
  * Parses the command mode from the argument list.
