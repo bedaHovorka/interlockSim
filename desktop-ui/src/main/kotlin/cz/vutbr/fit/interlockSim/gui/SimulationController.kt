@@ -30,8 +30,10 @@ import javax.swing.SwingUtilities
  * - Dispatching [onCompleted] back to EDT when the simulation finishes naturally
  *
  * ## Thread Safety
- * - [start] and [stop] are intended to be called from the Event Dispatch Thread (EDT).
- *   [Frame] enforces this via its own EDT guards.
+ * - [start] and [stop] are designed to be called from the same thread (typically EDT
+ *   in production, but also from test threads in unit tests). They are NOT thread-safe
+ *   for concurrent calls from different threads; external callers are responsible for
+ *   serialization. [Frame] enforces EDT-only access via its own `require()` guards.
  * - [runner] is `@Volatile` so the monitor thread reads a fresh value when [stop]
  *   nulls it.
  * - [onCompleted] is always dispatched to EDT via [SwingUtilities.invokeLater].
@@ -99,9 +101,16 @@ internal class SimulationController(
 						Thread.currentThread().interrupt()
 					} finally {
 						SwingUtilities.invokeLater {
-							controlPanel.updateStatus("Stopped")
-							controlPanel.setStopEnabled(false)
-							onCompleted()
+							// Guard against stale-monitor: if stop() + start(ctxB) ran on EDT
+							// before this callback fired, runner has been replaced with a new
+							// instance. Skip the reset to avoid clobbering the new run's panel
+							// state (and avoid firing onCompleted for the old run).
+							if (runner === newRunner) {
+								runner = null
+								controlPanel.updateStatus("Stopped")
+								controlPanel.setStopEnabled(false)
+								onCompleted()
+							}
 						}
 					}
 				},

@@ -167,6 +167,9 @@ class Main {
 			val rawContext = createContext(args)
 			val context: SimulationContext =
 				when (rawContext) {
+					// Defensive: createContext() currently always returns EditingContext via
+					// JvmEditingContextFactory, but if a future factory returns SimulationContext
+					// directly (mirroring the defensiveness in loadSim()), handle it gracefully.
 					is SimulationContext -> rawContext
 					is EditingContext -> rawContext.use { editCtx ->
 						simulationContextFactory.createContext(editCtx)
@@ -186,8 +189,11 @@ class Main {
 			// its lifetime is bound to the GUI window; System.exit(0) in
 			// Frame.exitWithoutSaving() terminates the JVM on window close.
 			// Launch GUI on EDT, then start simulation
+			val sourceFile = if (args.size > 1) File(args[1]).canonicalFile else null
 			javax.swing.SwingUtilities.invokeLater {
 				frame.setContext(context)
+				// Mirror edit-mode title behavior: show source filename in window title
+				sourceFile?.let { frame.modificationTracker.setCurrentFile(it) }
 				frame.isVisible = true
 				frame.startSimulation()
 			}
@@ -271,6 +277,23 @@ class Main {
 
 // Application metadata constants moved to AppMetadata.kt
 // PROGRAM_NAME, PROGRAM_VERSION, and PROGRAM_FULL_NAME are now defined in AppMetadata.kt
+
+/**
+ * Parses the command mode from the argument list.
+ *
+ * Returns the first argument if it is a recognized mode string, or `null` if the
+ * argument list is empty or the first argument is unrecognized. This pure function
+ * can be tested without triggering any DI, context creation, or GUI code.
+ *
+ * @param args Command line arguments
+ * @return One of "sim", "simgui", "edit", "example", "exampleGui", or `null`
+ */
+internal fun parseMode(args: Array<String>): String? {
+	if (args.isEmpty()) return null
+	return args[0].takeIf { it in VALID_MODES }
+}
+
+private val VALID_MODES = setOf("sim", "simgui", "edit", "example", "exampleGui")
 
 /**
  * @param args

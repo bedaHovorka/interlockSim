@@ -105,7 +105,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var animationUpdateTimer: Timer? = null
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
-	private val simulationController: SimulationController = SimulationController(controlPanel)
+	internal val simulationController: SimulationController = SimulationController(controlPanel)
 	private var currentSimulationContext: SimulationContext? = null
 
 	/**
@@ -439,6 +439,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 */
 	private fun exitWithoutSaving() {
 		stopSimulation() // Stop any running simulation before exit
+		currentSimulationContext?.close() // Release simulation resources before JVM exit
 		stopAnimationUpdates() // Stop Frame's 10 Hz timer
 		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 		dispose()

@@ -49,11 +49,13 @@ import javax.swing.SwingUtilities
  * - [SimulationController.isRunning] reflects the runner state correctly
  * - [SimulationController.runner] field is null before start and after stop
  * - Race condition fix: [SimulationRunner.start] is called before the monitor thread
+ * - Stale-monitor fix: stop+start does not let old monitor clobber new run's panel state
  */
 @DisplayName("SimulationController")
 class SimulationControllerTest {
 	private lateinit var controlPanel: ControlPanel
 	private lateinit var context: SimulationContext
+	private lateinit var context2: SimulationContext
 
 	@BeforeEach
 	fun setUp() {
@@ -63,6 +65,7 @@ class SimulationControllerTest {
 			controlPanel = ControlPanel()
 		}
 		context = mockk(relaxed = true)
+		context2 = mockk(relaxed = true)
 	}
 
 	// ── start: Stop button ────────────────────────────────────────────────────
@@ -382,6 +385,62 @@ class SimulationControllerTest {
 		blockSim.countDown()
 
 		assertThat(controller.isRunning()).isFalse()
+	}
+
+	// ── stale-monitor fix: stop+start doesn't let old monitor clobber new run ──
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start-stop-start: old monitor does not clobber new run panel state")
+	fun startStopStartStalemonitorSafe() {
+		// First run: blocks until explicitly released
+		val run1Started = CountDownLatch(1)
+		val run1Block = CountDownLatch(1)
+		every { context.run() } answers {
+			run1Started.countDown()
+			run1Block.await(10, TimeUnit.SECONDS)
+		}
+
+		// Second run: also blocks so we can assert on panel state while it is still running
+		val run2Started = CountDownLatch(1)
+		val run2Block = CountDownLatch(1)
+		every { context2.run() } answers {
+			run2Started.countDown()
+			run2Block.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+
+		// Phase 1: start first simulation
+		controller.start(context)
+		assertThat(run1Started.await(5, TimeUnit.SECONDS)).isTrue()
+		SwingUtilities.invokeAndWait {
+			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Running")
+		}
+
+		// Phase 2: stop first simulation, then immediately start second simulation.
+		// The old monitor is still alive (run1Block not yet released).
+		controller.stop()
+		controller.start(context2)
+		assertThat(run2Started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// Phase 3: release first run's block — old monitor wakes up and fires invokeLater
+		run1Block.countDown()
+
+		// Give old monitor's invokeLater time to land on EDT (if it fires at all)
+		SwingUtilities.invokeAndWait { /* flush EDT */ }
+		Thread.sleep(100) // extra buffer for late-arriving invokeLater
+		SwingUtilities.invokeAndWait { /* flush EDT again */ }
+
+		// Panel must still show Running for the new run — old monitor must not clobber it
+		SwingUtilities.invokeAndWait {
+			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Running")
+			assertThat(findStopButton()!!.isEnabled).isTrue()
+		}
+
+		// Cleanup
+		run2Block.countDown()
+		controller.stop()
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
