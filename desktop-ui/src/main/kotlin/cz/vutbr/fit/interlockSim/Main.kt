@@ -147,17 +147,14 @@ class Main {
 	 * Run a simulation from an XML file with the animated GUI (Issue #189).
 	 *
 	 * Loads the railway network from [args][1], converts it to a [SimulationContext],
-	 * displays it in the animated [Frame], and starts the simulation via [SimulationRunner].
-	 *
-	 * **Threading Model:**
-	 * - Main thread: Creates context, launches EDT for GUI setup
-	 * - EDT: Configures Frame, shows window, calls [Frame.startSimulation]
-	 * - Simulation thread: kDisco simulation runs as a daemon thread inside SimulationRunner
+	 * then delegates to [showContextInGui] — the same entry point used by [runExampleGui].
+	 * This ensures both XML-based and example-based animated simulations share identical
+	 * GUI lifecycle handling (SimulationController, Stop button, EventTimelinePanel).
 	 *
 	 * **Command Usage:**
 	 * ```
 	 * java -jar interlockSim.jar simgui [xmlFile]
-	 * ./gradlew runSimGui -PxmlFile=vyhybna.xml
+	 * ./gradlew runExampleGui -PxmlFile=vyhybna.xml
 	 * ```
 	 *
 	 * @param args Command line arguments (expects optional XML file path as args[1])
@@ -182,21 +179,10 @@ class Main {
 					}
 				}
 
-			// Add all report types for event timeline visibility
 			context.addReportTypes(*ReportType.values())
 
-			// The SimulationContext is intentionally not closed here:
-			// its lifetime is bound to the GUI window; System.exit(0) in
-			// Frame.exitWithoutSaving() terminates the JVM on window close.
-			// Launch GUI on EDT, then start simulation
 			val sourceFile = if (args.size > 1) File(args[1]).canonicalFile else null
-			javax.swing.SwingUtilities.invokeLater {
-				frame.setContext(context)
-				// Mirror edit-mode title behavior: show source filename in window title
-				sourceFile?.let { frame.modificationTracker.setCurrentFile(it) }
-				frame.isVisible = true
-				frame.startSimulation()
-			}
+			showContextInGui(context, sourceFile)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { MSG_CONTEXT_CREATION_FAILED }
 		} catch (e: EmptyContextException) {
@@ -211,16 +197,14 @@ class Main {
 	 *
 	 * This method creates a simulation example and displays it in the animated Frame
 	 * with AnimationController, EventTimelinePanel, and ControlPanel.
-	 *
-	 * **Threading Model:**
-	 * - Main thread: Creates Frame and SimulationContext on EDT via SwingUtilities.invokeLater
-	 * - Simulation thread: kDisco simulation runs on background thread
-	 * - EDT: GUI updates occur on EDT, marshaled by AnimationController
+	 * Delegates to [showContextInGui] — the same entry point used by [loadSimWithGui] —
+	 * so both paths share identical GUI lifecycle handling via [SimulationController].
 	 *
 	 * **Command Usage:**
 	 * ```
 	 * java -jar interlockSim.jar exampleGui <name> <endTime>
 	 * ./gradlew runExampleGui -PexampleName=shuntingLoop -PendTime=60
+	 * ./gradlew runExampleGui -PxmlFile=vyhybna.xml
 	 * ```
 	 *
 	 * @param args Command line arguments (expects example name as args[1], endTime as args[2])
@@ -247,30 +231,40 @@ class Main {
 			val simulationContextFactory = getKoin().get<SimulationContextFactory>()
 			val context = exampleFactory(simulationContextFactory, args)
 
-			// Add all report types for event timeline visibility
 			context.addReportTypes(*ReportType.values())
 
-			// Launch GUI on EDT
-			javax.swing.SwingUtilities.invokeLater {
-				frame.setContext(context)
-				frame.isVisible = true
-
-				// Run simulation on background thread (kDisco simulation thread)
-				Thread {
-					try {
-						context.run()
-						logger.info { "GUI example simulation completed: $name" }
-					} catch (e: SimulationException) {
-						logger.error(e) { "GUI example simulation failed: $name" }
-					}
-				}.start()
-			}
+			// Reuse the same GUI launch path as loadSimWithGui (no sourceFile for examples)
+			showContextInGui(context)
 		} catch (e: ContextCreationException) {
 			logger.error(e) { "GUI example context creation failed" }
 		} catch (e: EmptyContextException) {
 			logger.error(e) { "GUI example simulation could not be started - empty context" }
 		} catch (e: Exception) {
 			logger.error(e) { "GUI example initialization failed" }
+		}
+	}
+
+	/**
+	 * Common GUI launch path shared by [loadSimWithGui] and [runExampleGui].
+	 *
+	 * Schedules on EDT: sets [context] on [Frame], optionally sets the window title from
+	 * [sourceFile], shows the frame, and starts the simulation via [Frame.startSimulation]
+	 * (which uses [SimulationController] — giving both paths a Stop button and lifecycle
+	 * management without a raw background thread).
+	 *
+	 * The [SimulationContext] is intentionally not closed here; its lifetime is bound to
+	 * the GUI window — [Frame.exitWithoutSaving] calls `System.exit(0)` on window close.
+	 *
+	 * @param context Simulation context to display; must already have report types added.
+	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
+	 */
+	private fun showContextInGui(context: SimulationContext, sourceFile: File? = null) {
+		javax.swing.SwingUtilities.invokeLater {
+			frame.setContext(context)
+			// Mirror edit-mode title behavior: show source filename in window title
+			sourceFile?.let { frame.modificationTracker.setCurrentFile(it) }
+			frame.isVisible = true
+			frame.startSimulation()
 		}
 	}
 }

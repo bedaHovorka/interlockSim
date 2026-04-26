@@ -87,9 +87,21 @@ internal class SimulationController(
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
 		newRunner.start()
 
-		controlPanel.updateStatus("Running")
+		controlPanel.updateStatus(ControlPanel.STATUS_RUNNING)
 		controlPanel.setStopEnabled(true)
 
+		launchMonitorThread(newRunner)
+	}
+
+	/**
+	 * Launch a daemon "SimulationMonitor" thread that polls [newRunner] for completion
+	 * and dispatches panel reset and [onCompleted] to EDT when done.
+	 *
+	 * Guards against stale-monitor: the [SwingUtilities.invokeLater] callback checks
+	 * `runner === newRunner` before mutating state so that a stop+start cycle started
+	 * before the lambda fires cannot clobber the new run's panel state.
+	 */
+	private fun launchMonitorThread(newRunner: SimulationRunner) {
 		val monitorThread =
 			Thread(
 				{
@@ -107,7 +119,7 @@ internal class SimulationController(
 							// state (and avoid firing onCompleted for the old run).
 							if (runner === newRunner) {
 								runner = null
-								controlPanel.updateStatus("Stopped")
+								controlPanel.updateStatus(ControlPanel.STATUS_STOPPED)
 								controlPanel.setStopEnabled(false)
 								onCompleted()
 							}
@@ -130,7 +142,7 @@ internal class SimulationController(
 		r.stop()
 		runner = null
 		controlPanel.setStopEnabled(false)
-		controlPanel.updateStatus("Stopped")
+		controlPanel.updateStatus(ControlPanel.STATUS_STOPPED)
 	}
 
 	/** Returns `true` while the underlying [SimulationRunner] reports running. */

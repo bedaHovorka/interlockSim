@@ -168,4 +168,15 @@ class ControlPanel : JPanel() {
 
 		return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
 	}
+
+	companion object {
+		/** Status value: context set but [startSimulation][cz.vutbr.fit.interlockSim.gui.Frame.startSimulation] not yet called. */
+		const val STATUS_READY = "Ready"
+
+		/** Status value: simulation is actively executing. */
+		const val STATUS_RUNNING = "Running"
+
+		/** Status value: simulation has finished or was stopped. */
+		const val STATUS_STOPPED = "Stopped"
+	}
 }

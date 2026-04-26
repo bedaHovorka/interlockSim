@@ -178,7 +178,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Show ControlPanel
 		controlPanel.isVisible = true
-		controlPanel.updateStatus("Ready")
+		controlPanel.updateStatus(ControlPanel.STATUS_READY)
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
