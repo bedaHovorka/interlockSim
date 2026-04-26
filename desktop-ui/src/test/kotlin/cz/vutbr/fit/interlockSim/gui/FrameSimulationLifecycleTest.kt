@@ -65,9 +65,12 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 
 	@AfterEach
 	override fun tearDown() {
-		// Stop any lingering simulation before frame disposal
-		runOnEDT {
-			frame.stopSimulation()
+		// Guard against setUp() being aborted by the headless assumption check
+		// (frame would not be initialized in that case)
+		if (this::frame.isInitialized) {
+			runOnEDT {
+				frame.stopSimulation()
+			}
 		}
 		super.tearDown()
 	}

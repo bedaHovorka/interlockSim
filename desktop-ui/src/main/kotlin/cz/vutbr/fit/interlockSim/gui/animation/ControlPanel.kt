@@ -31,7 +31,7 @@ import javax.swing.JPanel
  * - No pause/resume button: kDisco simulations cannot be paused once started
  * - Stop button: enabled while a simulation is running; calls [onStop] callback
  * - Time formatting: HH:MM:SS.mmm (hours:minutes:seconds.milliseconds)
- * - Status values: "Ready", "Running", "Stopped"
+ * - Status values: [SimulationStatus.READY], [SimulationStatus.RUNNING], [SimulationStatus.STOPPED]
  *
  * @since 2026-01-22
  * @see cz.vutbr.fit.interlockSim.gui.Frame
@@ -69,7 +69,7 @@ class ControlPanel : JPanel() {
 		add(timeLabel)
 
 		// Create status label with initial state
-		statusLabel = JLabel("Status: Ready")
+		statusLabel = JLabel("Status: ${SimulationStatus.READY.displayName}")
 		add(statusLabel)
 
 		// Create stop button (disabled until simulation starts)
@@ -124,18 +124,13 @@ class ControlPanel : JPanel() {
 	/**
 	 * Updates the displayed simulation status.
 	 *
-	 * **Valid Status Values:**
-	 * - "Ready" - Simulation initialized but not started
-	 * - "Running" - Simulation actively executing
-	 * - "Stopped" - Simulation terminated
-	 *
 	 * **Thread Safety:**
 	 * Must be called from the Event Dispatch Thread (EDT).
 	 *
-	 * @param status The new status to display (typically "Ready", "Running", or "Stopped")
+	 * @param status The new status to display
 	 */
-	fun updateStatus(status: String) {
-		statusLabel.text = "Status: $status"
+	fun updateStatus(status: SimulationStatus) {
+		statusLabel.text = "Status: ${status.displayName}"
 	}
 
 	/**
@@ -169,14 +164,19 @@ class ControlPanel : JPanel() {
 		return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
 	}
 
-	companion object {
-		/** Status value: context set but [startSimulation][cz.vutbr.fit.interlockSim.gui.Frame.startSimulation] not yet called. */
-		const val STATUS_READY = "Ready"
+	/**
+	 * Simulation status values used to control the [statusLabel] display.
+	 *
+	 * @property displayName Human-readable label text shown in the UI.
+	 */
+	enum class SimulationStatus(val displayName: String) {
+		/** Context set but simulation not yet started. */
+		READY("Ready"),
 
-		/** Status value: simulation is actively executing. */
-		const val STATUS_RUNNING = "Running"
+		/** Simulation is actively executing. */
+		RUNNING("Running"),
 
-		/** Status value: simulation has finished or was stopped. */
-		const val STATUS_STOPPED = "Stopped"
+		/** Simulation has finished or was stopped. */
+		STOPPED("Stopped"),
 	}
 }

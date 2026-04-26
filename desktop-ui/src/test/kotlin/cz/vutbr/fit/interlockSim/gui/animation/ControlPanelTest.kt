@@ -94,7 +94,7 @@ class ControlPanelTest {
 	@DisplayName("updateStatus changes the status label")
 	fun updateStatusChangesLabel() {
 		SwingUtilities.invokeAndWait {
-			panel.updateStatus("Running")
+			panel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Running")
 		}
 	}
@@ -103,7 +103,7 @@ class ControlPanelTest {
 	@DisplayName("updateStatus to Stopped reflects in label")
 	fun updateStatusToStopped() {
 		SwingUtilities.invokeAndWait {
-			panel.updateStatus("Stopped")
+			panel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 			assertThat(findStatusLabel()!!.text).isEqualTo("Status: Stopped")
 		}
 	}

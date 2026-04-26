@@ -87,7 +87,7 @@ internal class SimulationController(
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
 		newRunner.start()
 
-		controlPanel.updateStatus(ControlPanel.STATUS_RUNNING)
+		controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 		controlPanel.setStopEnabled(true)
 
 		launchMonitorThread(newRunner)
@@ -119,7 +119,7 @@ internal class SimulationController(
 							// state (and avoid firing onCompleted for the old run).
 							if (runner === newRunner) {
 								runner = null
-								controlPanel.updateStatus(ControlPanel.STATUS_STOPPED)
+								controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 								controlPanel.setStopEnabled(false)
 								onCompleted()
 							}
@@ -142,7 +142,7 @@ internal class SimulationController(
 		r.stop()
 		runner = null
 		controlPanel.setStopEnabled(false)
-		controlPanel.updateStatus(ControlPanel.STATUS_STOPPED)
+		controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 	}
 
 	/** Returns `true` while the underlying [SimulationRunner] reports running. */
