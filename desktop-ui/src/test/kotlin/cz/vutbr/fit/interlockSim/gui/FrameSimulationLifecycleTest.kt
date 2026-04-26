@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isFalse
 import assertk.assertions.isNotEqualTo
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext
@@ -108,7 +109,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 		}
 
 		// Wait for simulation runner to spin up via property-change notification
-		runStarted.await(5, TimeUnit.SECONDS)
+		assertThat(runStarted.await(5, TimeUnit.SECONDS)).isTrue()
 
 		// Key assertion: startSimulation() must not throw; simulation either running
 		// or completed naturally — both are valid for a quick mock context
@@ -136,7 +137,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 		}
 
 		// Simulation may start quickly; either way proceed to stop
-		started.await(5, TimeUnit.SECONDS)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
 		runOnEDT {
 			frame.stopSimulation()
@@ -151,7 +152,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 	@Test
 	@Timeout(value = 15, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext while simulation is running stops the previous simulation")
-	fun setContextWhileRunningStopesPreviousSimulation() {
+	fun setContextWhileRunningStopsPreviousSimulation() {
 		val context1 = createMockSimulationContext(TestFixtures.loadShuntingXml())
 		val context2 = createMockSimulationContext(TestFixtures.loadShuntingXml())
 
@@ -164,7 +165,7 @@ class FrameSimulationLifecycleTest : AbstractFrameTestBase() {
 		}
 
 		// Wait for first simulation to actually start before switching context
-		run1Started.await(5, TimeUnit.SECONDS)
+		assertThat(run1Started.await(5, TimeUnit.SECONDS)).isTrue()
 
 		runOnEDT {
 			// setContext calls stopSimulation() internally before switching

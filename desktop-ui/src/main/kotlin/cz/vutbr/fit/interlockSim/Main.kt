@@ -317,12 +317,12 @@ fun main(args: Array<String>) {
 	)
 
 	val main = getKoin().get<Main>()
-	when {
-		args.isNotEmpty() && args[0] == "sim" -> main.loadSim(args)
-		args.isNotEmpty() && args[0] == "simgui" -> main.loadSimWithGui(args)
-		args.isNotEmpty() && args[0] == "example" -> main.runExample(args)
-		args.isNotEmpty() && args[0] == "exampleGui" -> main.runExampleGui(args)
-		args.isNotEmpty() && args[0] == "edit" -> main.loadGui(args)
+	when (parseMode(args)) {
+		"sim" -> main.loadSim(args)
+		"simgui" -> main.loadSimWithGui(args)
+		"example" -> main.runExample(args)
+		"exampleGui" -> main.runExampleGui(args)
+		"edit" -> main.loadGui(args)
 		else ->
 			logger.error {
 				"usage: <java> cz.vutbr.fit.interlockSim.Main (sim|simgui|edit|example|exampleGui) [file]\n" +

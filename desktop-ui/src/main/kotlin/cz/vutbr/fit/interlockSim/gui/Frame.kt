@@ -234,6 +234,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * **Must be called from EDT.**
 	 */
 	fun setContext(context: Context<*, *>) {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"setContext must be called from EDT"
+		}
 		stopSimulation() // Stop any running simulation before switching context
 		stopAnimationUpdates() // Cleanup existing timer
 
