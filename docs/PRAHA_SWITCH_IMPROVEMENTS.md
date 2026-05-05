@@ -66,8 +66,8 @@ N-Bypass (2,20) → Signal (4,20) → Switch (6,20) → Bypass track → S-Bypas
 | Element Type | Before | After | Change |
 |--------------|--------|-------|--------|
 | InOut        | 10     | 11    | +1     |
-| Switches     | 40     | 41    | +1     |
-| Signals      | 54     | 55    | +1     |
+| Switches     | 49     | 50    | +1     |
+| Signals      | 36     | 37    | +1     |
 | Track Blocks | 106    | 117   | +11    |
 | Grid         | 70x25  | 70x25  | -      |
 
