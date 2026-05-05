@@ -18,8 +18,8 @@ import java.awt.Dimension
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionListener
 import javax.swing.JLabel
-import kotlin.math.abs
 import javax.swing.SwingUtilities
+import kotlin.math.abs
 
 /**
  * Status bar for displaying context information and mouse motion status

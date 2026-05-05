@@ -543,8 +543,7 @@ class SimulationControllerTest {
 		controller.runner!!.speedMultiplier = 2.0
 
 		// Flush EDT twice (listener calls invokeLater, so two flushes are needed)
-		SwingUtilities.invokeAndWait { /* flush 1 */ }
-		SwingUtilities.invokeAndWait { /* flush 2 */ }
+		flushEDT()
 
 		SwingUtilities.invokeAndWait {
 			assertThat(findSpeedText(statusBar)).isEqualTo("Speed: 2.0x")
@@ -574,15 +573,13 @@ class SimulationControllerTest {
 
 		// Set non-default speed, then stop
 		controller.runner!!.speedMultiplier = 3.0
-		SwingUtilities.invokeAndWait { /* flush */ }
-		SwingUtilities.invokeAndWait { /* flush invokeLater */ }
+		flushEDT()
 
 		controller.stop()
 		blockSim.countDown()
 
 		// Stop calls updateSpeedIndicator(DEFAULT_SPEED) via invokeLater
-		SwingUtilities.invokeAndWait { /* flush stop's invokeLater */ }
-		SwingUtilities.invokeAndWait { /* flush nested */ }
+		flushEDT()
 
 		SwingUtilities.invokeAndWait {
 			assertThat(statusBar.isVisible).isFalse()
@@ -590,6 +587,17 @@ class SimulationControllerTest {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Flushes the EDT queue by calling [SwingUtilities.invokeAndWait] the given number of times.
+	 *
+	 * Two flushes are typically needed when a background thread fires an event handled by
+	 * [SwingUtilities.invokeLater]: the first flush dispatches the invokeLater task, and the
+	 * second flush ensures any nested EDT work queued by the task is also completed.
+	 */
+	private fun flushEDT(times: Int = 2) {
+		repeat(times) { SwingUtilities.invokeAndWait { /* flush */ } }
+	}
 
 	private fun findSpeedText(statusBar: StatusBar): String? =
 		statusBar.text.takeIf { it.startsWith("Speed:") }

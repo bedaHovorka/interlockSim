@@ -17,6 +17,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import io.mockk.mockk
@@ -27,7 +28,7 @@ import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import java.awt.Component
 import java.awt.event.MouseEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import javax.swing.SwingUtilities
 
 /**
  * Tests for StatusBar GUI component.
@@ -165,11 +166,9 @@ class StatusBarTest : KoinTestBase() {
 	@Test
 	@DisplayName("updateSpeedIndicator shows speed text when multiplier is not 1.0x")
 	fun updateSpeedIndicatorShowsSpeedText() {
-		// updateSpeedIndicator uses invokeLater; use invokeAndWait to flush
-		javax.swing.SwingUtilities.invokeAndWait {
-			statusBar.updateSpeedIndicator(2.0)
-		}
-		javax.swing.SwingUtilities.invokeAndWait { /* flush invokeLater */ }
+		// updateSpeedIndicator uses invokeLater; call from non-EDT and flush twice
+		statusBar.updateSpeedIndicator(2.0)
+		flushEDT()
 
 		assertThat(statusBar.text).isEqualTo("Speed: 2.0x")
 		assertThat(statusBar.isVisible).isTrue()
@@ -179,15 +178,11 @@ class StatusBarTest : KoinTestBase() {
 	@DisplayName("updateSpeedIndicator hides status bar at default speed (1.0x)")
 	fun updateSpeedIndicatorHidesAtDefaultSpeed() {
 		// First show at non-default speed, then reset
-		javax.swing.SwingUtilities.invokeAndWait {
-			statusBar.updateSpeedIndicator(3.0)
-		}
-		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+		statusBar.updateSpeedIndicator(3.0)
+		flushEDT()
 
-		javax.swing.SwingUtilities.invokeAndWait {
-			statusBar.updateSpeedIndicator(1.0)
-		}
-		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+		statusBar.updateSpeedIndicator(1.0)
+		flushEDT()
 
 		assertThat(statusBar.isVisible).isFalse()
 	}
@@ -195,12 +190,22 @@ class StatusBarTest : KoinTestBase() {
 	@Test
 	@DisplayName("updateSpeedIndicator formats multiplier to one decimal place")
 	fun updateSpeedIndicatorFormatsMultiplier() {
-		javax.swing.SwingUtilities.invokeAndWait {
-			statusBar.updateSpeedIndicator(0.5)
-		}
-		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+		statusBar.updateSpeedIndicator(0.5)
+		flushEDT()
 
 		assertThat(statusBar.text).isEqualTo("Speed: 0.5x")
+	}
+
+	/**
+	 * Flushes the EDT queue by calling [SwingUtilities.invokeAndWait] twice.
+	 *
+	 * Two flushes are needed when code under test uses [SwingUtilities.invokeLater]:
+	 * the first flush lets the invokeLater task land on EDT, and the second flush
+	 * runs it.
+	 */
+	private fun flushEDT() {
+		SwingUtilities.invokeAndWait { /* flush 1 */ }
+		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 
 	/**

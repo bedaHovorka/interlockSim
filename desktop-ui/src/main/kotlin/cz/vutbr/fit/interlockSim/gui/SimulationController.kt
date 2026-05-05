@@ -106,7 +106,11 @@ internal class SimulationController(
 		// Wire speed indicator: notify StatusBar whenever SimulationRunner speed changes.
 		// The listener is removed when the simulation stops (in stop() or monitor finally).
 		val listener = PropertyChangeListener { evt ->
-			val multiplier = evt.newValue as? Double ?: return@PropertyChangeListener
+			val multiplier = evt.newValue as? Double
+			if (multiplier == null) {
+				logger.debug { "Ignoring unexpected ${SimulationRunner.PROP_SPEED_MULTIPLIER} value: ${evt.newValue}" }
+				return@PropertyChangeListener
+			}
 			statusBar?.updateSpeedIndicator(multiplier)
 		}
 		speedListener = listener
