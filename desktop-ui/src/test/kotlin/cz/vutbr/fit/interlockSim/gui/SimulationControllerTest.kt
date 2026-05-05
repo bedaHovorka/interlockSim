@@ -631,6 +631,7 @@ class SimulationControllerTest {
 
 		controller.stop()
 		blockSim.countDown()
+		flushEDT()
 
 		SwingUtilities.invokeAndWait {
 			verify(exactly = 1) { toolBar.hideSimulationControls() }
