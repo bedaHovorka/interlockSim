@@ -66,6 +66,8 @@ import javax.swing.Timer
  * ├─────────────────────────────────┤
  * │ EventTimelinePanel (NEW)        │
  * │ [Filters] [Event log...]        │
+ * ├─────────────────────────────────┤
+ * │ StatusBar (speed indicator)     │
  * └─────────────────────────────────┘
  * ```
  *
