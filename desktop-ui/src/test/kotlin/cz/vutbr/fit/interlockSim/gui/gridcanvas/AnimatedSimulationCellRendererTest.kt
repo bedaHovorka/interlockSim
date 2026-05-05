@@ -429,10 +429,10 @@ class AnimatedSimulationCellRendererTest {
 		val totalWidth = bodyBounds.maxX - bodyBounds.minX
 		val cabSpan =
 			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / CAB_SAMPLE_POSITION_DIVISOR)
-				?: error("Cab span missing")
+				?: error("No opaque pixels found at cab sample position (25% width)")
 		val bodySpan =
 			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / BODY_SAMPLE_POSITION_DIVISOR)
-				?: error("Body span missing")
+				?: error("No opaque pixels found at body sample position (50% width)")
 
 		assertThat(bodySpan - cabSpan >= MIN_CAB_NARROWNESS_PIXELS).isTrue()
 	}

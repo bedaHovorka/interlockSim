@@ -492,7 +492,7 @@ class AnimatedSimulationCellRenderer(
 			val cabHeight = shapeKey.trainHeight * CAB_HEIGHT_RATIO
 			val cabHalfHeight = cabHeight / 2.0
 			// bodyLength represents the full rectangular locomotive body behind the nose.
-			// Split that length into a narrower rear cab and a wider main body section.
+			// Split that footprint into a shorter, lower rear cab and a longer, taller main body section.
 			val cabLength = shapeKey.bodyLength * CAB_LENGTH_RATIO
 			val mainBodyLength = shapeKey.bodyLength - cabLength
 			val mainBodyRearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble() + cabLength
