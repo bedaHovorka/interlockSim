@@ -101,6 +101,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	// Animation UI components (Issue #205)
 	private val controlPanel: ControlPanel = ControlPanel()
+	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
@@ -129,6 +130,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(toolBar)
 		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(controlPanel)
+		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
+		northContainer.add(simulationControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
 		statusBar.registerProducer(railwayNetGridCanvas)
@@ -176,9 +179,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			contentPane.add(it, BorderLayout.SOUTH)
 		}
 
-		// Show ControlPanel
+		// Show ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
+		simulationControlPanel.isVisible = true
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -209,8 +213,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		contentPane.add(statusBar, BorderLayout.SOUTH)
 		statusBar.isVisible = true
 
-		// Hide ControlPanel
+		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
+		simulationControlPanel.isVisible = false
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
@@ -338,6 +343,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 		simulationController.start(context)
+		// Wire SimulationControlPanel to the new runner for speed control
+		simulationControlPanel.runner = simulationController.runner
 	}
 
 	/**
@@ -353,6 +360,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"stopSimulation must be called from EDT"
 		}
 		simulationController.stop()
+		// Detach SimulationControlPanel from runner when simulation stops
+		simulationControlPanel.runner = null
 	}
 
 	companion object {
