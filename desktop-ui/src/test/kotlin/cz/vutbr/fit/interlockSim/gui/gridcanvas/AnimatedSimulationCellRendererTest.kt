@@ -53,9 +53,10 @@ class AnimatedSimulationCellRendererTest {
 	private companion object {
 		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
 		const val MIN_CAB_NARROWNESS_PIXELS = 2
-		// These divisors intentionally sample the current silhouette in the rear-cab quarter and main-body midpoint.
+		const val MIN_NOSE_TAPER_PIXELS = 3
+		// These divisors intentionally sample the current silhouette in the rear cab and main-body midpoint.
 		// If the production cab/body ratios change substantially, these probe positions should be revisited too.
-		const val CAB_SAMPLE_POSITION_DIVISOR = 4 // 25% of total width samples inside the narrower rear cab.
+		const val CAB_SAMPLE_POSITION_DIVISOR = 6 // ~16% of total width samples inside the narrower rear cab.
 		const val BODY_SAMPLE_POSITION_DIVISOR = 2 // 50% of total width samples inside the wider main body.
 	}
 
@@ -449,12 +450,49 @@ class AnimatedSimulationCellRendererTest {
 		val totalWidth = bodyBounds.maxX - bodyBounds.minX
 		val cabSpan =
 			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / CAB_SAMPLE_POSITION_DIVISOR)
-				?: error("No opaque pixels found at cab sample position (25% width)")
+				?: error("No opaque pixels found at cab sample position (~16% width)")
 		val bodySpan =
 			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / BODY_SAMPLE_POSITION_DIVISOR)
 				?: error("No opaque pixels found at body sample position (50% width)")
 
 		assertThat(bodySpan - cabSpan >= MIN_CAB_NARROWNESS_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain renders pointed eastbound nose instead of circular front`() {
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 41,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 41,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val tipSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.maxX)
+				?: error("No opaque pixels found at locomotive tip")
+		val noseBaseSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.maxX - 3)
+				?: error("No opaque pixels found near locomotive nose base")
+
+		assertThat(noseBaseSpan - tipSpan >= MIN_NOSE_TAPER_PIXELS).isTrue()
 	}
 
 	@Test

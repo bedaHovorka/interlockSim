@@ -26,9 +26,7 @@ import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.Shape
 import java.awt.geom.AffineTransform
-import java.awt.geom.Area
 import java.awt.geom.Path2D
-import java.awt.geom.RoundRectangle2D
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -496,42 +494,21 @@ class AnimatedSimulationCellRenderer(
 			// bodyLength represents the full rectangular locomotive body behind the nose.
 			// Split that footprint into a shorter, lower rear cab and a longer, taller main body section.
 			val cabLength = shapeKey.bodyLength * CAB_LENGTH_RATIO
-			val mainBodyLength = shapeKey.bodyLength - cabLength
-			val mainBodyRearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble() + cabLength
 			val rearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble()
+			val cabFrontX = rearX + cabLength
 			val noseBaseX = -shapeKey.noseLength.toDouble()
 
-			val mainBody =
-				RoundRectangle2D.Double(
-					mainBodyRearX,
-					-halfHeight,
-					mainBodyLength.toDouble(),
-					shapeKey.trainHeight.toDouble(),
-					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO,
-					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO
-				)
-
-			val cab =
-				RoundRectangle2D.Double(
-					rearX,
-					-cabHalfHeight,
-					cabLength,
-					cabHeight,
-					shapeKey.trainHeight * CAB_CORNER_RADIUS_RATIO,
-					shapeKey.trainHeight * CAB_CORNER_RADIUS_RATIO
-				)
-
-			val nose =
-				Path2D.Double().apply {
-					moveTo(noseBaseX, -halfHeight)
-					lineTo(0.0, 0.0)
-					lineTo(noseBaseX, halfHeight)
-					closePath()
-				}
-
-			Area(mainBody).apply {
-				add(Area(cab))
-				add(Area(nose))
+			Path2D.Double().apply {
+				moveTo(rearX, -cabHalfHeight)
+				lineTo(cabFrontX, -cabHalfHeight)
+				lineTo(cabFrontX, -halfHeight)
+				lineTo(noseBaseX, -halfHeight)
+				lineTo(0.0, 0.0)
+				lineTo(noseBaseX, halfHeight)
+				lineTo(cabFrontX, halfHeight)
+				lineTo(cabFrontX, cabHalfHeight)
+				lineTo(rearX, cabHalfHeight)
+				closePath()
 			}
 		}
 
@@ -558,9 +535,7 @@ class AnimatedSimulationCellRenderer(
 		const val BODY_TEXT_OFFSET_RATIO = 0.55
 		const val NOSE_TEXT_OFFSET_RATIO = 0.2
 		// Geometry ratios chosen by visual tuning so the marker reads as a locomotive at 16-20 px cell sizes.
-		const val BODY_CORNER_RADIUS_RATIO = 0.35 // Subtle rounding keeps the body rectangular instead of pill-shaped.
 		const val CAB_LENGTH_RATIO = 0.32 // Rear cab takes roughly one third of the rectangular body length.
-		const val CAB_HEIGHT_RATIO = 0.72 // Narrower cab profile creates a visible step from cab to main body.
-		const val CAB_CORNER_RADIUS_RATIO = 0.25 // Smaller cab rounding preserves the locomotive silhouette at small sizes.
+		const val CAB_HEIGHT_RATIO = 0.6 // Narrower cab profile creates a visible step from cab to main body.
 	}
 }
