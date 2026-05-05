@@ -24,6 +24,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import org.koin.mp.KoinPlatformTools
@@ -42,6 +44,17 @@ class MockSimulationContext(
 	private val workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
 	private var stopped: Boolean = false
+
+	/**
+	 * On-demand cache for [DynamicTrack] wrappers.
+	 *
+	 * [DefaultSimulationContext.toDynamic] requires [initializeDynamicMapping] to have
+	 * been called first (normally inside [DefaultSimulationContext.run]). Tests that call
+	 * [Frame.setContext] without actually running the simulation trigger the animation
+	 * system which calls [toDynamic] before [run]. This cache creates wrappers on demand
+	 * so tests do not need to call [run] first.
+	 */
+	private val dynamicTrackCache: MutableMap<TrackFacility, DynamicTrack> = mutableMapOf()
 
 	init {
 		// Enable all standard reports by default
@@ -70,6 +83,10 @@ class MockSimulationContext(
 
 	override fun run() {
 		stopped = false
+		// Freeze the delegate to fire the "frozen" PropertyChangeEvent so callers
+		// waiting on addPropertyChangeListener (e.g. FrameSimulationLifecycleTest)
+		// get notified that the simulation has "started". freeze() is idempotent.
+		delegate.freeze()
 	}
 
 	override fun stop() {
@@ -138,6 +155,26 @@ class MockSimulationContext(
 		previous: Track?
 	): Boolean {
 		return true
+	}
+
+	/**
+	 * Returns a [DynamicTrack] wrapper for [track], creating one on demand if needed.
+	 *
+	 * Delegate's map is only populated after [DefaultSimulationContext.run] calls
+	 * [initializeDynamicMapping]. Tests that call [Frame.setContext] without starting
+	 * the simulation trigger the animation system before [run], so the map is empty.
+	 * This override falls back to an on-demand cache so tests remain independent of
+	 * simulation startup order.
+	 */
+	override fun toDynamic(track: TrackFacility): DynamicTrack {
+		return try {
+			delegate.toDynamic(track)
+		} catch (_: IllegalStateException) {
+			// Expected: delegate map is empty before initializeDynamicMapping() runs (i.e.,
+			// before DefaultSimulationContext.run()). Create a wrapper on demand for test use.
+			val staticKey = (track as? DynamicTrackBlock)?.staticRef as? TrackFacility ?: track
+			dynamicTrackCache.getOrPut(staticKey) { DynamicTrack(staticKey) }
+		}
 	}
 }
 
