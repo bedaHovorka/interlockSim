@@ -306,12 +306,19 @@ val runExample by tasks.registering(JavaExec::class) {
 
 val runExampleGui by tasks.registering(JavaExec::class) {
     group = "application"
-    description = "Run animated GUI example (use -PexampleName and -PendTime)"
+    description = "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
-    val exampleName = project.findProperty("exampleName") as String? ?: "shuntingLoop"
-    val endTime = project.findProperty("endTime") as String? ?: "60"
-    args = listOf("exampleGui", exampleName, endTime)
+    doFirst {
+        val xmlFile = project.findProperty("xmlFile") as String?
+        if (xmlFile != null) {
+            args = listOf("simgui", xmlFile)
+        } else {
+            val exampleName = project.findProperty("exampleName") as String? ?: "shuntingLoop"
+            val endTime = project.findProperty("endTime") as String? ?: "60"
+            args = listOf("exampleGui", exampleName, endTime)
+        }
+    }
 }
 
 val runSimFromXml by tasks.registering(JavaExec::class) {

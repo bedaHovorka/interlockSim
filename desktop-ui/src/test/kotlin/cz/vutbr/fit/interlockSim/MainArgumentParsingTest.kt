@@ -153,6 +153,47 @@ class MainArgumentParsingTest {
 			assertThat(usageNotPrinted).isTrue()
 		}
 
+		@Test
+		@DisplayName("parseMode returns simgui for simgui argument (no GUI launched)")
+		fun `parseMode returns simgui for simgui argument`() {
+			// parseMode is a pure function — safe to call without DI or Swing UI
+			assertThat(parseMode(arrayOf("simgui"))).isEqualTo("simgui")
+		}
+
+		@Test
+		@DisplayName("parseMode returns null for unknown argument")
+		fun `parseMode returns null for unknown argument`() {
+			assertThat(parseMode(arrayOf("unknown"))).isEqualTo(null)
+		}
+
+		@Test
+		@DisplayName("parseMode returns null for empty argument list")
+		fun `parseMode returns null for empty argument list`() {
+			assertThat(parseMode(emptyArray())).isEqualTo(null)
+		}
+
+		@Test
+		@DisplayName("parseMode recognises all supported modes")
+		fun `parseMode recognises all supported modes`() {
+			for (mode in listOf("sim", "simgui", "edit", "example", "exampleGui")) {
+				assertThat(parseMode(arrayOf(mode))).isEqualTo(mode)
+			}
+		}
+
+		@Disabled(
+			"simgui schedules Swing GUI creation on the EDT; calling main(\"simgui\") can " +
+				"create Swing UI and fail asynchronously in headless environments. " +
+				"Argument parsing for GUI modes is covered by dedicated " +
+				"integration tests (see MainEditModeTest for the edit-mode equivalent pattern)."
+		)
+		@Test
+		fun `simgui mode selected with simgui argument`() {
+			// GUI mode invocation is intentionally not exercised here because calling
+			// main(arrayOf("simgui")) can create Swing UI and fail asynchronously in
+			// headless environments. Argument parsing for GUI modes should be covered
+			// by dedicated GUI/integration tests or by the pure parseMode() function above.
+		}
+
 		// NOTE: edit mode test moved to MainEditModeTest.kt to ensure proper Frame disposal
 		// See GitHub Issue #111 - Frame tests must extend AbstractFrameTestBase
 
@@ -451,6 +492,7 @@ class MainArgumentParsingTest {
 			val output = getCapturedError()
 			assertThat(output).contains("usage:")
 			assertThat(output).contains("sim")
+			assertThat(output).contains("simgui")
 			assertThat(output).contains("edit")
 			assertThat(output).contains("example")
 		}

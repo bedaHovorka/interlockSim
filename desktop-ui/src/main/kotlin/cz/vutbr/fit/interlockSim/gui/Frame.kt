@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
@@ -88,6 +89,8 @@ import javax.swing.Timer
  *
  * @since 2006-2007
  * @see setContext
+ * @see startSimulation
+ * @see stopSimulation
  * @see switchToEditingMode
  * @see switchToSimulationMode
  */
@@ -100,6 +103,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private val controlPanel: ControlPanel = ControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
+
+	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
+	internal val simulationController: SimulationController = SimulationController(controlPanel)
+	private var currentSimulationContext: SimulationContext? = null
 
 	/**
 	 * Tracks modification state for unsaved changes warning.
@@ -171,7 +178,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Show ControlPanel
 		controlPanel.isVisible = true
-		controlPanel.updateStatus("Running")
+		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
@@ -227,10 +234,16 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * **Must be called from EDT.**
 	 */
 	fun setContext(context: Context<*, *>) {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"setContext must be called from EDT"
+		}
+		stopSimulation() // Stop any running simulation before switching context
 		stopAnimationUpdates() // Cleanup existing timer
 
 		when (context) {
 			is SimulationContext -> {
+				currentSimulationContext = context
+
 				// Lazy-create event timeline panel (reused across simulations)
 				if (eventTimelinePanel == null) {
 					eventTimelinePanel = EventTimelinePanel()
@@ -240,13 +253,21 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
 				startAnimationUpdates()
+
+				// Wire stop button to stopSimulation()
+				controlPanel.onStop = { stopSimulation() }
+				controlPanel.setStopEnabled(false) // enabled only after startSimulation()
 			}
 			is EditingContext -> {
+				currentSimulationContext = null
+				controlPanel.onStop = null
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
 			}
 			else -> {
+				currentSimulationContext = null
+				controlPanel.onStop = null
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
 				railwayNetGridCanvas.setContext(context)
@@ -296,6 +317,46 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private fun stopAnimationUpdates() {
 		animationUpdateTimer?.stop()
 		animationUpdateTimer = null
+	}
+
+	/**
+	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
+	 *
+	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
+	 * running this call is a no-op.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun startSimulation() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"startSimulation must be called from EDT"
+		}
+
+		val context = currentSimulationContext ?: run {
+			logger.warn { "startSimulation called without a SimulationContext — ignoring" }
+			return
+		}
+
+		simulationController.start(context)
+	}
+
+	/**
+	 * Request immediate simulation shutdown (Issue #189).
+	 *
+	 * Delegates to [SimulationController.stop]. Safe to call when no simulation is
+	 * running (no-op in that case).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun stopSimulation() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"stopSimulation must be called from EDT"
+		}
+		simulationController.stop()
+	}
+
+	companion object {
+		private val logger = KotlinLogging.logger {}
 	}
 
 	/**
@@ -380,6 +441,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
+		stopSimulation() // Stop any running simulation before exit
+		currentSimulationContext?.close() // Release simulation resources before JVM exit
 		stopAnimationUpdates() // Stop Frame's 10 Hz timer
 		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 		dispose()
