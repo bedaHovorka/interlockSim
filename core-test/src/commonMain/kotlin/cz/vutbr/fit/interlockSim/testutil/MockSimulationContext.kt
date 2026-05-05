@@ -23,6 +23,8 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
@@ -44,6 +46,7 @@ class MockSimulationContext(
 	private val workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
 	private var stopped: Boolean = false
+	private var runListeners: List<ContextPropertyChangeListener> = emptyList()
 
 	/**
 	 * On-demand cache for [DynamicTrack] wrappers.
@@ -81,12 +84,24 @@ class MockSimulationContext(
 		return delegate.getInOuts()
 	}
 
+	override fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		runListeners = runListeners + listener
+		delegate.addPropertyChangeListener(listener)
+	}
+
+	override fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		runListeners = runListeners - listener
+		delegate.removePropertyChangeListener(listener)
+	}
+
 	override fun run() {
 		stopped = false
-		// Freeze the delegate to fire the "frozen" PropertyChangeEvent so callers
-		// waiting on addPropertyChangeListener (e.g. FrameSimulationLifecycleTest)
-		// get notified that the simulation has "started". freeze() is idempotent.
-		delegate.freeze()
+		// Fire directly from runListeners so callers waiting on addPropertyChangeListener
+		// (e.g. FrameSimulationLifecycleTest) are notified when simulation starts.
+		// Cannot rely on delegate.freeze() because ContextTransformer already freezes the
+		// delegate at creation time, making freeze() a no-op here.
+		val event = ContextChangeEvent("frozen", false, true)
+		runListeners.forEach { it.propertyChange(event) }
 	}
 
 	override fun stop() {
