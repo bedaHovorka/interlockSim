@@ -49,6 +49,7 @@ import kotlin.math.roundToInt
 class AnimatedSimulationCellRendererTest {
 	private companion object {
 		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
+		const val MIN_CAB_NARROWNESS_PIXELS = 2
 	}
 
 	private lateinit var animationController: AnimationController
@@ -425,7 +426,7 @@ class AnimatedSimulationCellRendererTest {
 		val cabSpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 4) ?: error("Cab span missing")
 		val bodySpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 2) ?: error("Body span missing")
 
-		assertThat(bodySpan - cabSpan >= 2).isTrue()
+		assertThat(bodySpan - cabSpan >= MIN_CAB_NARROWNESS_PIXELS).isTrue()
 	}
 
 	@Test
