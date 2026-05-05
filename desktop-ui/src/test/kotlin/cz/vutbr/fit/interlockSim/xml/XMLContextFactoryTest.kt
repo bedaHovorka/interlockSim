@@ -1251,7 +1251,7 @@ class XMLContextFactoryTest : KoinTestBase() {
 			assertThat((switchAt6x20 as RailSwitch).type)
 				.withMessage("Bypass entry switch at (6,20) must be SIMPLE_LEFT_TRUE for correct bypass diverge")
 				.isEqualTo(RailSwitch.Type.SIMPLE_LEFT_TRUE)
-// DEFERRED: 
+// DEFERRED:
 // DEFERRED: 			val switchAt52x20 = context.getRailWayNetGrid().getCellAt(52, 20)
 // DEFERRED: 			assertThat(switchAt52x20).isNotNull().isInstanceOf(RailSwitch::class)
 // DEFERRED: 			assertThat((switchAt52x20 as RailSwitch).type)
