@@ -12,15 +12,20 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.event.ActionEvent
+import java.awt.event.KeyEvent
 import java.io.File
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
+import javax.swing.JMenuItem
 import javax.swing.JOptionPane
+import javax.swing.KeyStroke
 
 /**
  * Application menu bar with File and Help menus
@@ -265,6 +270,90 @@ class MenuBar : JMenuBar() {
 		}
 	}
 
+	/**
+	 * Shows a file chooser, loads the selected XML as a [SimulationContext], sets it on the
+	 * [Frame] and immediately starts the simulation.
+	 *
+	 * **Resource management:** The intermediate [EditingContext] created by
+	 * [JvmEditingContextFactory.createContext] is wrapped in `use {}` to ensure its Koin
+	 * scope is closed after the [SimulationContext] transformation, preventing a resource
+	 * leak of the temporary editing context.
+	 *
+	 * **Report types:** All report types are enabled on the [SimulationContext] before
+	 * passing it to [Frame.setContext] so that [AnimationController] and
+	 * [cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel] receive property-change
+	 * events and the animation is not visually frozen.
+	 *
+	 * **Modification tracker:** The tracker is cleared before switching to simulation mode
+	 * so that the "unsaved changes" path in [Frame.handleWindowClosing] does not attempt to
+	 * save a [SimulationContext] through the editor's save logic.
+	 */
+	private inner class StartSimulationAction : AbstractAction("Start...") {
+		override fun actionPerformed(e: ActionEvent) {
+			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			fileChooser.dialogTitle = "Start Simulation"
+
+			val returnValue = fileChooser.showOpenDialog(this@MenuBar)
+			if (returnValue != JFileChooser.APPROVE_OPTION) return
+
+			val selectedFile: File = fileChooser.selectedFile
+
+			try {
+				val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
+				val simulationContextFactory = getKoin().get<SimulationContextFactory>()
+
+				// Wrap intermediate EditingContext in use{} to close its Koin scope after
+				// transformation, avoiding a resource leak.
+				val simContext =
+					editingContextFactory.createContext(selectedFile).use { editCtx ->
+						simulationContextFactory.createContext(editCtx as EditingContext)
+					}
+
+				// Enable all report types so AnimationController and EventTimelinePanel receive
+				// property-change events (without this the animation stays visually frozen).
+				simContext.addReportTypes(*SimulationContext.ReportType.values())
+
+				val frame = getKoin().get<Frame>()
+
+				// Clear dirty flag before switching to simulation mode. If the user had unsaved
+				// edits, continuing in simulation mode implicitly discards them; the window-close
+				// handler must not try to save a non-existent EditingContext afterwards.
+				frame.modificationTracker.markClean()
+				frame.modificationTracker.setCurrentFile(null)
+
+				frame.setContext(simContext)
+				frame.startSimulation()
+			} catch (exception: Exception) {
+				JOptionPane.showMessageDialog(
+					this@MenuBar,
+					"Failed to start simulation: ${exception.message}\n\n" +
+						"Ensure the file is a valid railway network XML.",
+					"Cannot Start Simulation",
+					JOptionPane.ERROR_MESSAGE
+				)
+			}
+		}
+	}
+
+	/** Terminates the currently running simulation via [Frame.stopSimulation]. */
+	private inner class StopSimulationAction : AbstractAction("Stop") {
+		override fun actionPerformed(e: ActionEvent) {
+			val frame = getKoin().get<Frame>()
+			frame.stopSimulation()
+		}
+	}
+
+	/** Sets the simulation speed multiplier via [SimulationController.setSpeed]. */
+	private inner class SetSpeedAction(
+		private val label: String,
+		private val multiplier: Double,
+	) : AbstractAction(label) {
+		override fun actionPerformed(e: ActionEvent) {
+			val frame = getKoin().get<Frame>()
+			frame.simulationController.setSpeed(multiplier)
+		}
+	}
+
 	private inner class InfoAction(
 		private val infoName: String,
 		private val text: String
@@ -276,6 +365,7 @@ class MenuBar : JMenuBar() {
 
 	init {
 		add(fileMenu())
+		add(simulationMenu())
 		add(helpMenu())
 	}
 
@@ -286,6 +376,37 @@ class MenuBar : JMenuBar() {
 		menu.add(saveAsAction)
 		menu.addSeparator()
 		menu.add(ExitAction())
+		return menu
+	}
+
+	/**
+	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
+	 *
+	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) have keyboard accelerators (keys 1–5)
+	 * so that the user can change the speed without reaching for the mouse during a run.
+	 */
+	private fun simulationMenu(): JMenu {
+		val menu = JMenu("Simulation")
+		menu.add(StartSimulationAction())
+		menu.add(StopSimulationAction())
+		menu.addSeparator()
+
+		val speedMenu = JMenu("Speed")
+		val speedPresets =
+			listOf(
+				Triple("0.1x", 0.1, KeyEvent.VK_1),
+				Triple("0.5x", 0.5, KeyEvent.VK_2),
+				Triple("1x", 1.0, KeyEvent.VK_3),
+				Triple("2x", 2.0, KeyEvent.VK_4),
+				Triple("10x", 10.0, KeyEvent.VK_5),
+			)
+		for ((label, multiplier, keyCode) in speedPresets) {
+			val item = JMenuItem(SetSpeedAction(label, multiplier))
+			item.accelerator = KeyStroke.getKeyStroke(keyCode, 0)
+			speedMenu.add(item)
+		}
+		menu.add(speedMenu)
+
 		return menu
 	}
 
@@ -300,7 +421,16 @@ class MenuBar : JMenuBar() {
 					"<br><b>Editing:</b><br>" +
 					"- Left mouse: Insert nodes and join them<br>" +
 					"- Middle mouse: Delete nodes<br>" +
-					"- Right mouse: Popup menu</html>"
+					"- Right mouse: Popup menu<br>" +
+					"<br><b>Simulation:</b><br>" +
+					"- Simulation &gt; Start...: Load XML and start simulation<br>" +
+					"- Simulation &gt; Stop: Terminate running simulation<br>" +
+					"<br><b>Simulation Speed (keyboard shortcuts):</b><br>" +
+					"- Key 1: 0.1x speed<br>" +
+					"- Key 2: 0.5x speed<br>" +
+					"- Key 3: 1x speed (real-time)<br>" +
+					"- Key 4: 2x speed<br>" +
+					"- Key 5: 10x speed</html>"
 			)
 		)
 		menu.add(

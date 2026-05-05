@@ -443,6 +443,81 @@ class SimulationControllerTest {
 		controller.stop()
 	}
 
+	// ── setSpeed ──────────────────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setSpeed rejects value below MIN_SPEED")
+	fun setSpeedBelowMinThrows() {
+		val controller = SimulationController(controlPanel)
+		org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+			controller.setSpeed(SimulationRunner.MIN_SPEED - 0.001)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setSpeed rejects value above MAX_SPEED")
+	fun setSpeedAboveMaxThrows() {
+		val controller = SimulationController(controlPanel)
+		org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+			controller.setSpeed(SimulationRunner.MAX_SPEED + 0.001)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setSpeed accepts boundary values MIN_SPEED and MAX_SPEED")
+	fun setSpeedAcceptsBoundaryValues() {
+		val controller = SimulationController(controlPanel)
+		controller.setSpeed(SimulationRunner.MIN_SPEED)
+		controller.setSpeed(SimulationRunner.MAX_SPEED)
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("setSpeed applies immediately to an active runner")
+	fun setSpeedAppliedImmediatelyToActiveRunner() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		controller.setSpeed(2.0)
+		assertThat(controller.runner!!.speedMultiplier).isEqualTo(2.0)
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("setSpeed before start is carried into the next start()")
+	fun setSpeedCarriedIntoNextStart() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val controller = SimulationController(controlPanel)
+		controller.setSpeed(0.5) // pre-select before start
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		assertThat(controller.runner!!.speedMultiplier).isEqualTo(0.5)
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	private fun findStopButton(): JButton? =
