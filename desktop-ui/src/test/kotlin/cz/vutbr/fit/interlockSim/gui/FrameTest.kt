@@ -133,14 +133,14 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has toolbar container at north")
 	fun frameHasToolbarContainerAtNorth() {
 		runOnEDT {
-			// North component is now a JPanel containing ToolBar + ControlPanel (Issue #205)
+			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel (Issues #205, #190)
 			val northComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
 			assertThat(northComponent).isNotNull()
 			assertThat(northComponent).isInstanceOf(javax.swing.JPanel::class)
 
-			// Verify the container has components (ToolBar and ControlPanel)
+			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel)
 			val panel = northComponent as javax.swing.JPanel
-			assertThat(panel.componentCount).isEqualTo(2)
+			assertThat(panel.componentCount).isEqualTo(3)
 		}
 	}
 
