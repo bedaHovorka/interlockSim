@@ -494,14 +494,14 @@ class AnimatedSimulationCellRenderer(
 			// bodyLength represents the full rectangular locomotive body behind the nose.
 			// Split that length into a narrower rear cab and a wider main body section.
 			val cabLength = shapeKey.bodyLength * CAB_LENGTH_RATIO
-			val mainBodyLeftX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble() + cabLength
+			val mainBodyRearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble() + cabLength
 			val mainBodyLength = shapeKey.bodyLength - cabLength
 			val rearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble()
 			val noseBaseX = -shapeKey.noseLength.toDouble()
 
 			val mainBody =
 				RoundRectangle2D.Double(
-					mainBodyLeftX,
+					mainBodyRearX,
 					-halfHeight,
 					mainBodyLength,
 					shapeKey.trainHeight.toDouble(),
@@ -555,9 +555,9 @@ class AnimatedSimulationCellRenderer(
 		const val MIN_NOSE_LENGTH_PIXELS = 4
 		const val BODY_TEXT_OFFSET_RATIO = 0.55
 		const val NOSE_TEXT_OFFSET_RATIO = 0.2
-		const val BODY_CORNER_RADIUS_RATIO = 0.35
-		const val CAB_LENGTH_RATIO = 0.32
-		const val CAB_HEIGHT_RATIO = 0.72
-		const val CAB_CORNER_RADIUS_RATIO = 0.25
+		const val BODY_CORNER_RADIUS_RATIO = 0.35 // Subtle rounding keeps the body rectangular instead of pill-shaped.
+		const val CAB_LENGTH_RATIO = 0.32 // Rear cab takes roughly one third of the rectangular body length.
+		const val CAB_HEIGHT_RATIO = 0.72 // Narrower cab profile creates a visible step from cab to main body.
+		const val CAB_CORNER_RADIUS_RATIO = 0.25 // Smaller cab rounding preserves the locomotive silhouette at small sizes.
 	}
 }

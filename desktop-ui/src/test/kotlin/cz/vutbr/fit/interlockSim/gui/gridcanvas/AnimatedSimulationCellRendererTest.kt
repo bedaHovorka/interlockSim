@@ -50,6 +50,8 @@ class AnimatedSimulationCellRendererTest {
 	private companion object {
 		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
 		const val MIN_CAB_NARROWNESS_PIXELS = 2
+		const val CAB_SAMPLE_POSITION_DIVISOR = 4
+		const val BODY_SAMPLE_POSITION_DIVISOR = 2
 	}
 
 	private lateinit var animationController: AnimationController
@@ -423,8 +425,12 @@ class AnimatedSimulationCellRendererTest {
 		val image = renderTrainToImage(movedTrain)
 		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
 		val totalWidth = bodyBounds.maxX - bodyBounds.minX
-		val cabSpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 4) ?: error("Cab span missing")
-		val bodySpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 2) ?: error("Body span missing")
+		val cabSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / CAB_SAMPLE_POSITION_DIVISOR)
+				?: error("Cab span missing")
+		val bodySpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / BODY_SAMPLE_POSITION_DIVISOR)
+				?: error("Body span missing")
 
 		assertThat(bodySpan - cabSpan >= MIN_CAB_NARROWNESS_PIXELS).isTrue()
 	}
