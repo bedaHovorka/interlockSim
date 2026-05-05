@@ -11,17 +11,24 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
+import cz.vutbr.fit.interlockSim.gui.animation.TrainState
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.testutil.createMockDynamicSemaphore
 import cz.vutbr.fit.interlockSim.testutil.createMockRailSemaphore
 import cz.vutbr.fit.interlockSim.testutil.createMockTrackBlockPart
+import cz.vutbr.fit.interlockSim.util.PointF
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -29,7 +36,11 @@ import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.awt.Color
+import java.awt.Font
 import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import kotlin.math.roundToInt
 
 /**
  * Tests for [AnimatedSimulationCellRenderer].
@@ -40,6 +51,17 @@ import java.awt.Graphics2D
  * @since 2026-01-22 (Issue #202)
  */
 class AnimatedSimulationCellRendererTest {
+	private companion object {
+		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
+		const val MIN_CAB_NARROWNESS_PIXELS = 2
+		const val MIN_NOSE_TAPER_PIXELS = 3
+		const val NOSE_BASE_OFFSET_PIXELS = MIN_NOSE_TAPER_PIXELS
+		// These divisors intentionally sample the current silhouette in the rear cab and main-body midpoint.
+		// If the production cab/body ratios change substantially, these probe positions should be revisited too.
+		const val CAB_SAMPLE_POSITION_DIVISOR = 6 // ~17% of total width samples inside the narrower rear cab.
+		const val BODY_SAMPLE_POSITION_DIVISOR = 2 // 50% of total width samples inside the wider main body.
+	}
+
 	private lateinit var animationController: AnimationController
 	private lateinit var renderer: AnimatedSimulationCellRenderer
 	private lateinit var graphics: Graphics2D
@@ -349,6 +371,287 @@ class AnimatedSimulationCellRendererTest {
 		assertThat(colorSlot.captured).isEqualTo(Color(0xC0, 0xC0, 0xC0))
 	}
 
+	@Test
+	fun `draw DynamicInOut in animated mode renders connector without fillOval calls`() {
+		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut =
+			DynamicInOut(
+				staticInOut,
+				createDynamicInstance(staticInOut.getInSemaphore()),
+				createDynamicInstance(staticInOut.getOutSemaphore())
+			)
+
+		renderer.draw(graphics, dynamicInOut)
+
+		verify { graphics.color = AnimationColors.DEFAULT_TRACK }
+		verify(atLeast = 1) { graphics.drawLine(any(), any(), any(), any()) }
+		verify(exactly = 0) { graphics.fillOval(any(), any(), any(), any()) }
+	}
+
+	@Test
+	fun `drawTrain renders blue train body trailing behind eastbound front`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 12,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 12,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val frontPixelX = trainCenterPixelX(movedTrain)
+
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_B) > 0).isTrue()
+		assertThat(bodyBounds.maxX >= frontPixelX - 1).isTrue()
+		assertThat(frontPixelX - bodyBounds.minX >= MIN_EXPECTED_BODY_EXTENT_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain renders narrower rear cab than main body for eastbound train`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 31,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 31,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val totalWidth = bodyBounds.maxX - bodyBounds.minX
+		val cabSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / CAB_SAMPLE_POSITION_DIVISOR)
+				?: error("No opaque pixels found at cab sample position (~16% width)")
+		val bodySpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / BODY_SAMPLE_POSITION_DIVISOR)
+				?: error("No opaque pixels found at body sample position (50% width)")
+
+		assertThat(bodySpan - cabSpan >= MIN_CAB_NARROWNESS_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain renders pointed eastbound nose instead of circular front`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 41,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 41,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val tipSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.maxX)
+				?: error("No opaque pixels found at locomotive tip")
+		val noseBaseSpan =
+			opaqueVerticalSpanAtX(image, bodyBounds.maxX - NOSE_BASE_OFFSET_PIXELS)
+				?: error("No opaque pixels found near locomotive nose base")
+
+		assertThat(noseBaseSpan - tipSpan >= MIN_NOSE_TAPER_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain renders orange train body trailing behind southbound front`() {
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 21,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(2.0f, 1.0f),
+				length = 20.0,
+				travelingRight = false
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 21,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(2.0f, 1.3f),
+				length = 20.0,
+				travelingRight = false
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val frontPixelY = trainCenterPixelY(movedTrain)
+
+		assertThat(countExactColorPixels(image, AnimationColors.TRAIN_FROM_A) > 0).isTrue()
+		assertThat(bodyBounds.maxY >= frontPixelY - 1).isTrue()
+		assertThat(frontPixelY - bodyBounds.minY >= MIN_EXPECTED_BODY_EXTENT_PIXELS).isTrue()
+	}
+
+	@Test
+	fun `drawTrain restores default antialiasing when no hint was previously set`() {
+		val helperGraphics = BufferedImage(20, 20, BufferedImage.TYPE_INT_ARGB).createGraphics()
+		val font = Font(Font.SANS_SERIF, Font.PLAIN, 12)
+		every { graphics.getRenderingHint(RenderingHints.KEY_ANTIALIASING) } returns null
+		every { graphics.font } returns font
+		every { graphics.fontMetrics } returns helperGraphics.getFontMetrics(font)
+
+		try {
+			renderer.drawTrain(
+				graphics,
+				TrainState(
+					trainNumber = 99,
+					position = 0.0,
+					velocity = 0.0,
+					acceleration = 0.0,
+					frontGridLocation = PointF(1.0f, 1.0f),
+					length = 20.0,
+					travelingRight = true
+				),
+				cellWidth,
+				cellHeight
+			)
+		} finally {
+			helperGraphics.dispose()
+		}
+
+		verify {
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_DEFAULT)
+		}
+	}
+
 	// ========== Helper Methods ==========
 	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
+
+	private fun renderTrainToImage(trainState: TrainState): BufferedImage {
+		val image = BufferedImage(80, 80, BufferedImage.TYPE_INT_ARGB)
+		val graphics2D = image.createGraphics()
+		try {
+			renderer.drawTrain(graphics2D, trainState, cellWidth, cellHeight)
+		} finally {
+			graphics2D.dispose()
+		}
+		return image
+	}
+
+	private fun trainCenterPixelX(trainState: TrainState): Int =
+		((trainState.frontGridLocation ?: error("Missing front grid location")).x * cellWidth + cellWidth / 2).roundToInt()
+
+	private fun trainCenterPixelY(trainState: TrainState): Int =
+		((trainState.frontGridLocation ?: error("Missing front grid location")).y * cellHeight + cellHeight / 2).roundToInt()
+
+	private fun findOpaqueBounds(image: BufferedImage): ColorBounds? {
+		var minX = Int.MAX_VALUE
+		var minY = Int.MAX_VALUE
+		var maxX = Int.MIN_VALUE
+		var maxY = Int.MIN_VALUE
+		var found = false
+
+		for (y in 0 until image.height) {
+			for (x in 0 until image.width) {
+				if ((image.getRGB(x, y) ushr 24) != 0) {
+					found = true
+					minX = minOf(minX, x)
+					minY = minOf(minY, y)
+					maxX = maxOf(maxX, x)
+					maxY = maxOf(maxY, y)
+				}
+			}
+		}
+
+		if (!found) {
+			return null
+		}
+
+		return ColorBounds(minX, minY, maxX, maxY)
+	}
+
+	private fun countExactColorPixels(
+		image: BufferedImage,
+		color: Color
+	): Int {
+		var matches = 0
+		for (y in 0 until image.height) {
+			for (x in 0 until image.width) {
+				if (image.getRGB(x, y) == color.rgb) {
+					matches++
+				}
+			}
+		}
+		return matches
+	}
+
+	private fun opaqueVerticalSpanAtX(
+		image: BufferedImage,
+		x: Int
+	): Int? {
+		var minY = Int.MAX_VALUE
+		var maxY = Int.MIN_VALUE
+		for (y in 0 until image.height) {
+			if ((image.getRGB(x, y) ushr 24) != 0) {
+				minY = minOf(minY, y)
+				maxY = maxOf(maxY, y)
+			}
+		}
+
+		return if (maxY >= minY) {
+			maxY - minY + 1
+		} else {
+			null
+		}
+	}
+
+	private data class ColorBounds(
+		val minX: Int,
+		val minY: Int,
+		val maxX: Int,
+		val maxY: Int
+	)
 }
