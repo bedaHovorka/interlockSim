@@ -229,4 +229,60 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(layout.getLayoutComponent(BorderLayout.SOUTH)).isNotNull()
 		}
 	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel has one component (StatusBar) in editing mode")
+	fun southPanelHasOneComponentInEditingMode() {
+		runOnEDT {
+			// Default state after Frame construction is editing mode — only StatusBar in south panel
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(1)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(StatusBar::class)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel gains EventTimelinePanel when switching to simulation mode")
+	fun southPanelGainsTimelinePanelInSimulationMode() {
+		val context = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		runOnEDT {
+			frame.setContext(context)
+			// Simulation mode: EventTimelinePanel is added above StatusBar
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(2)
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel returns to one component when switching back to editing mode")
+	fun southPanelRestoresOneComponentAfterSwitchingToEditingMode() {
+		val simContext = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		val editContext = editingContextFactory.createEmptyContext()
+		runOnEDT {
+			frame.setContext(simContext)
+			// switch back to editing — EventTimelinePanel removed, only StatusBar remains
+			frame.setContext(editContext)
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(1)
+			// StatusBar must still be visible after returning to editing mode
+			assertThat(frame.statusBar.isVisible).isTrue()
+		}
+		simContext.close()
+		editContext.close()
+	}
 }

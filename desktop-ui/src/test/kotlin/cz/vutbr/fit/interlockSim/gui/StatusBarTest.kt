@@ -166,16 +166,18 @@ class StatusBarTest : KoinTestBase() {
 	@Test
 	@DisplayName("updateSpeedIndicator shows speed text when multiplier is not 1.0x")
 	fun updateSpeedIndicatorShowsSpeedText() {
-		// updateSpeedIndicator uses invokeLater; call from non-EDT and flush twice
+		// updateSpeedIndicator uses invokeIfNeeded; flush is still needed when not on EDT
 		statusBar.updateSpeedIndicator(2.0)
 		flushEDT()
 
-		assertThat(statusBar.text).isEqualTo("Speed: 2.0x")
-		assertThat(statusBar.isVisible).isTrue()
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 2.0x")
+		assertThat(statusBar.isSpeedIndicatorVisible()).isTrue()
+		// Main status text must NOT be affected
+		assertThat(statusBar.text).contains(PROGRAM_NAME)
 	}
 
 	@Test
-	@DisplayName("updateSpeedIndicator hides status bar at default speed (1.0x)")
+	@DisplayName("updateSpeedIndicator hides speed indicator at default speed (1.0x)")
 	fun updateSpeedIndicatorHidesAtDefaultSpeed() {
 		// First show at non-default speed, then reset
 		statusBar.updateSpeedIndicator(3.0)
@@ -184,16 +186,19 @@ class StatusBarTest : KoinTestBase() {
 		statusBar.updateSpeedIndicator(1.0)
 		flushEDT()
 
-		assertThat(statusBar.isVisible).isFalse()
+		assertThat(statusBar.isSpeedIndicatorVisible()).isFalse()
+		// Stale text must be cleared so it cannot reappear later
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("")
 	}
 
 	@Test
-	@DisplayName("updateSpeedIndicator formats multiplier to one decimal place")
+	@DisplayName("updateSpeedIndicator formats multiplier with Locale.ROOT (dot separator)")
 	fun updateSpeedIndicatorFormatsMultiplier() {
 		statusBar.updateSpeedIndicator(0.5)
 		flushEDT()
 
-		assertThat(statusBar.text).isEqualTo("Speed: 0.5x")
+		// Must use '.' decimal separator regardless of JVM default locale
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 0.5x")
 	}
 
 	/**

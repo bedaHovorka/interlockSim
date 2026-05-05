@@ -167,8 +167,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to simulation mode (Issue #205).
 	 *
-	 * - Hides StatusBar (shown by speed indicator when speed != 1.0x)
-	 * - Shows EventTimelinePanel in south panel (if created)
+	 * - StatusBar remains visible (its speed indicator [StatusBar.updateSpeedIndicator] shows
+	 *   non-default speeds; [StatusBar.statusLabel] continues to display simulation events)
+	 * - Adds EventTimelinePanel to south panel (if created)
 	 * - Shows ControlPanel
 	 * - Disables editing ToolBar
 	 *
@@ -179,8 +180,6 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToSimulationMode must be called from EDT"
 		}
 
-		// Hide StatusBar; speed indicator (updateSpeedIndicator) will show it when speed != 1.0x
-		statusBar.isVisible = false
 		// Add EventTimelinePanel before StatusBar (index 0 = top of south panel, above StatusBar)
 		eventTimelinePanel?.let { panel ->
 			if (panel.parent == null) {
@@ -205,8 +204,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to editing mode (Issue #205).
 	 *
-	 * - Shows StatusBar
-	 * - Hides EventTimelinePanel
+	 * - Removes EventTimelinePanel from south panel (StatusBar remains visible throughout)
 	 * - Hides ControlPanel
 	 * - Enables editing ToolBar
 	 *
@@ -217,11 +215,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToEditingMode must be called from EDT"
 		}
 
-		// Remove EventTimelinePanel from south panel; show StatusBar
+		// Remove EventTimelinePanel from south panel (StatusBar stays visible always)
 		eventTimelinePanel?.let { panel ->
 			southPanel.remove(panel)
 		}
-		statusBar.isVisible = true
 
 		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false

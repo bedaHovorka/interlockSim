@@ -11,6 +11,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
+import assertk.assertions.doesNotContain
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
@@ -524,7 +525,7 @@ class SimulationControllerTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("speed change on runner propagates to StatusBar indicator")
+	@DisplayName("speed change on runner propagates to StatusBar speed indicator")
 	fun speedChangePropagatesToStatusBar() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
@@ -542,12 +543,14 @@ class SimulationControllerTest {
 		// Change speed via runner — this fires PROP_SPEED_MULTIPLIER
 		controller.runner!!.speedMultiplier = 2.0
 
-		// Flush EDT twice (listener calls invokeLater, so two flushes are needed)
+		// Flush EDT twice (listener calls invokeLater when not on EDT)
 		flushEDT()
 
 		SwingUtilities.invokeAndWait {
-			assertThat(findSpeedText(statusBar)).isEqualTo("Speed: 2.0x")
-			assertThat(statusBar.isVisible).isTrue()
+			assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 2.0x")
+			assertThat(statusBar.isSpeedIndicatorVisible()).isTrue()
+			// Status message text must NOT be overwritten by the speed indicator
+			assertThat(statusBar.text).doesNotContain("Speed:")
 		}
 
 		blockSim.countDown()
@@ -575,14 +578,62 @@ class SimulationControllerTest {
 		controller.runner!!.speedMultiplier = 3.0
 		flushEDT()
 
+		// stop() is called from test thread (not EDT), so invokeLater is used
 		controller.stop()
 		blockSim.countDown()
-
-		// Stop calls updateSpeedIndicator(DEFAULT_SPEED) via invokeLater
 		flushEDT()
 
 		SwingUtilities.invokeAndWait {
-			assertThat(statusBar.isVisible).isFalse()
+			assertThat(statusBar.isSpeedIndicatorVisible()).isFalse()
+			assertThat(statusBar.speedIndicatorText()).isEqualTo("")
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("start shows simulation controls in ToolBar")
+	fun startShowsToolBarSimulationControls() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val toolBar = mockk<ToolBar>(relaxed = true)
+		val controller = SimulationController(controlPanel, toolBar = toolBar)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		SwingUtilities.invokeAndWait {
+			verify(exactly = 1) { toolBar.showSimulationControls() }
+		}
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop hides simulation controls in ToolBar")
+	fun stopHidesToolBarSimulationControls() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val toolBar = mockk<ToolBar>(relaxed = true)
+		val controller = SimulationController(controlPanel, toolBar = toolBar)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		controller.stop()
+		blockSim.countDown()
+
+		SwingUtilities.invokeAndWait {
+			verify(exactly = 1) { toolBar.hideSimulationControls() }
 		}
 	}
 
@@ -598,9 +649,6 @@ class SimulationControllerTest {
 	private fun flushEDT(times: Int = 2) {
 		repeat(times) { SwingUtilities.invokeAndWait { /* flush */ } }
 	}
-
-	private fun findSpeedText(statusBar: StatusBar): String? =
-		statusBar.text.takeIf { it.startsWith("Speed:") }
 
 	private fun findStopButton(): JButton? =
 		(0 until controlPanel.componentCount)
