@@ -58,6 +58,13 @@ internal class SimulationController(
 		private set
 
 	/**
+	 * Desired speed multiplier applied to new and currently running simulations.
+	 *
+	 * Stored so that a speed selection before [start] is honoured once the runner is created.
+	 */
+	private var desiredSpeed: Double = SimulationRunner.DEFAULT_SPEED
+
+	/**
 	 * Start the simulation for [context].
 	 *
 	 * Idempotent: if a simulation is already running this is a no-op.
@@ -81,6 +88,7 @@ internal class SimulationController(
 		}
 
 		val newRunner = SimulationRunner(context)
+		newRunner.speedMultiplier = desiredSpeed
 		runner = newRunner
 
 		// Start synchronously BEFORE enabling the Stop button or launching the monitor
@@ -147,6 +155,23 @@ internal class SimulationController(
 
 	/** Returns `true` while the underlying [SimulationRunner] reports running. */
 	fun isRunning(): Boolean = runner?.isRunning() ?: false
+
+	/**
+	 * Set the simulation speed multiplier.
+	 *
+	 * Applied immediately to the currently running simulation (if any) and stored
+	 * so it is also honoured by the next [start] call.
+	 *
+	 * @param multiplier Speed factor in [SimulationRunner.MIN_SPEED]..[SimulationRunner.MAX_SPEED].
+	 * @throws IllegalArgumentException if [multiplier] is outside the valid range.
+	 */
+	fun setSpeed(multiplier: Double) {
+		require(multiplier in SimulationRunner.MIN_SPEED..SimulationRunner.MAX_SPEED) {
+			"speedMultiplier must be in [${SimulationRunner.MIN_SPEED}..${SimulationRunner.MAX_SPEED}], got: $multiplier"
+		}
+		desiredSpeed = multiplier
+		runner?.speedMultiplier = multiplier
+	}
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
