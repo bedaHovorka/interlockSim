@@ -395,6 +395,40 @@ class AnimatedSimulationCellRendererTest {
 	}
 
 	@Test
+	fun `drawTrain renders narrower rear cab than main body for eastbound train`() {
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 31,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		val movedTrain =
+			TrainState(
+				trainNumber = 31,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.3f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+		val totalWidth = bodyBounds.maxX - bodyBounds.minX
+		val cabSpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 4) ?: error("Cab span missing")
+		val bodySpan = opaqueVerticalSpanAtX(image, bodyBounds.minX + totalWidth / 2) ?: error("Body span missing")
+
+		assertThat(bodySpan - cabSpan >= 2).isTrue()
+	}
+
+	@Test
 	fun `drawTrain renders orange train body trailing behind southbound front`() {
 		renderTrainToImage(
 			TrainState(
@@ -520,6 +554,26 @@ class AnimatedSimulationCellRendererTest {
 			}
 		}
 		return matches
+	}
+
+	private fun opaqueVerticalSpanAtX(
+		image: BufferedImage,
+		x: Int
+	): Int? {
+		var minY = Int.MAX_VALUE
+		var maxY = Int.MIN_VALUE
+		for (y in 0 until image.height) {
+			if ((image.getRGB(x, y) ushr 24) != 0) {
+				minY = minOf(minY, y)
+				maxY = maxOf(maxY, y)
+			}
+		}
+
+		return if (maxY >= minY) {
+			maxY - minY + 1
+		} else {
+			null
+		}
 	}
 
 	private data class ColorBounds(

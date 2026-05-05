@@ -306,7 +306,7 @@ class AnimatedSimulationCellRenderer(
 	 *
 	 * ## Visual Design
 	 *
-	 * - **Train body:** Pointed rounded rectangle aligned to train movement
+	 * - **Train body:** Locomotive silhouette with cab, body, and pointed nose aligned to train movement
 	 * - **Origin-based colors:** Blue for trains from InOut B, orange for trains from InOut A
 	 * - **Border:** Black stroke with width derived from train height and clamped for visibility
 	 * - **Train ID:** White text centered in the locomotive body
@@ -489,17 +489,32 @@ class AnimatedSimulationCellRenderer(
 	private fun getBaseTrainShape(shapeKey: TrainShapeKey): Shape =
 		baseTrainShapeCache.getOrPut(shapeKey) {
 			val halfHeight = shapeKey.trainHeight / 2.0
+			val cabHeight = shapeKey.trainHeight * CAB_HEIGHT_RATIO
+			val cabHalfHeight = cabHeight / 2.0
+			val cabLength = shapeKey.bodyLength * CAB_LENGTH_RATIO
+			val mainBodyX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble() + cabLength
+			val mainBodyLength = shapeKey.bodyLength - cabLength
 			val rearX = -(shapeKey.bodyLength + shapeKey.noseLength).toDouble()
 			val noseBaseX = -shapeKey.noseLength.toDouble()
 
-			val body =
+			val mainBody =
 				RoundRectangle2D.Double(
-					rearX,
+					mainBodyX,
 					-halfHeight,
-					shapeKey.bodyLength.toDouble(),
+					mainBodyLength,
 					shapeKey.trainHeight.toDouble(),
 					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO,
 					shapeKey.trainHeight * BODY_CORNER_RADIUS_RATIO
+				)
+
+			val cab =
+				RoundRectangle2D.Double(
+					rearX,
+					-cabHalfHeight,
+					cabLength,
+					cabHeight,
+					shapeKey.trainHeight * CAB_CORNER_RADIUS_RATIO,
+					shapeKey.trainHeight * CAB_CORNER_RADIUS_RATIO
 				)
 
 			val nose =
@@ -510,7 +525,10 @@ class AnimatedSimulationCellRenderer(
 					closePath()
 				}
 
-			Area(body).apply { add(Area(nose)) }
+			Area(mainBody).apply {
+				add(Area(cab))
+				add(Area(nose))
+			}
 		}
 
 	private data class TrainShapeKey(
@@ -535,6 +553,9 @@ class AnimatedSimulationCellRenderer(
 		const val MIN_NOSE_LENGTH_PIXELS = 4
 		const val BODY_TEXT_OFFSET_RATIO = 0.55
 		const val NOSE_TEXT_OFFSET_RATIO = 0.2
-		const val BODY_CORNER_RADIUS_RATIO = 0.65
+		const val BODY_CORNER_RADIUS_RATIO = 0.35
+		const val CAB_LENGTH_RATIO = 0.32
+		const val CAB_HEIGHT_RATIO = 0.72
+		const val CAB_CORNER_RADIUS_RATIO = 0.25
 	}
 }
