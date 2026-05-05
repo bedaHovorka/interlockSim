@@ -520,6 +520,80 @@ class SimulationControllerTest {
 
 	// ── helpers ───────────────────────────────────────────────────────────────
 
+	// ── toolBar / statusBar wiring ────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("speed change on runner propagates to StatusBar indicator")
+	fun speedChangePropagatestoStatusBar() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val statusBar = StatusBar()
+
+		val controller = SimulationController(controlPanel, statusBar = statusBar)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// Change speed via runner — this fires PROP_SPEED_MULTIPLIER
+		controller.runner!!.speedMultiplier = 2.0
+
+		// Flush EDT twice (listener calls invokeLater, so two flushes are needed)
+		SwingUtilities.invokeAndWait { /* flush 1 */ }
+		SwingUtilities.invokeAndWait { /* flush 2 */ }
+
+		SwingUtilities.invokeAndWait {
+			assertThat(findSpeedText(statusBar)).isEqualTo("Speed: 2.0x")
+			assertThat(statusBar.isVisible).isTrue()
+		}
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("stop resets StatusBar speed indicator to hidden")
+	fun stopResetsStatusBarSpeedIndicator() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val statusBar = StatusBar()
+
+		val controller = SimulationController(controlPanel, statusBar = statusBar)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// Set non-default speed, then stop
+		controller.runner!!.speedMultiplier = 3.0
+		SwingUtilities.invokeAndWait { /* flush */ }
+		SwingUtilities.invokeAndWait { /* flush invokeLater */ }
+
+		controller.stop()
+		blockSim.countDown()
+
+		// Stop calls updateSpeedIndicator(DEFAULT_SPEED) via invokeLater
+		SwingUtilities.invokeAndWait { /* flush stop's invokeLater */ }
+		SwingUtilities.invokeAndWait { /* flush nested */ }
+
+		SwingUtilities.invokeAndWait {
+			assertThat(statusBar.isVisible).isFalse()
+		}
+	}
+
+	// ── helpers ───────────────────────────────────────────────────────────────
+
+	private fun findSpeedText(statusBar: StatusBar): String? =
+		statusBar.text.takeIf { it.startsWith("Speed:") }
+
 	private fun findStopButton(): JButton? =
 		(0 until controlPanel.componentCount)
 			.mapNotNull { controlPanel.getComponent(it) as? JButton }

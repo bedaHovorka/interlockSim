@@ -18,6 +18,7 @@ import java.awt.Dimension
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionListener
 import javax.swing.JLabel
+import javax.swing.SwingUtilities
 
 /**
  * Status bar for displaying context information and mouse motion status
@@ -88,5 +89,31 @@ class StatusBar :
 			}
 		timer.isRepeats = false
 		timer.start()
+	}
+
+	/**
+	 * Updates the speed indicator display.
+	 *
+	 * Shows speed information in the status bar when the multiplier differs from
+	 * real-time (1.0x). Hides the status bar when running at default speed.
+	 *
+	 * EDT-safe: uses [SwingUtilities.invokeLater] if called from a background thread.
+	 *
+	 * @param multiplier Current speed multiplier from [cz.vutbr.fit.interlockSim.gui.SimulationRunner]
+	 */
+	fun updateSpeedIndicator(multiplier: Double) {
+		SwingUtilities.invokeLater {
+			if (kotlin.math.abs(multiplier - DEFAULT_SPEED) > SPEED_EPSILON) {
+				text = "Speed: ${"%.1f".format(multiplier)}x"
+				isVisible = true
+			} else {
+				isVisible = false
+			}
+		}
+	}
+
+	companion object {
+		private const val DEFAULT_SPEED = 1.0
+		private const val SPEED_EPSILON = 0.001
 	}
 }

@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -146,12 +147,16 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("frame has status bar at south")
+	@DisplayName("frame has status bar in south panel")
 	fun frameHasStatusBarAtSouth() {
 		runOnEDT {
+			// SOUTH now contains a southPanel (JPanel) that wraps StatusBar and EventTimelinePanel
 			val southComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.SOUTH)
 			assertThat(southComponent).isNotNull()
-			assertThat(southComponent).isInstanceOf(StatusBar::class)
+			assertThat(southComponent).isInstanceOf(javax.swing.JPanel::class)
+			// StatusBar must be accessible and correctly initialised
+			assertThat(frame.statusBar).isInstanceOf(StatusBar::class)
+			assertThat(frame.statusBar.isVisible).isTrue()
 		}
 	}
 

@@ -105,8 +105,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
+	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
+	private val southPanel: JPanel = JPanel().apply {
+		layout = BoxLayout(this, BoxLayout.Y_AXIS)
+	}
+
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
-	internal val simulationController: SimulationController = SimulationController(controlPanel)
+	internal val simulationController: SimulationController = SimulationController(controlPanel, toolBar, statusBar)
 	private var currentSimulationContext: SimulationContext? = null
 
 	/**
@@ -134,8 +139,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(simulationControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
+		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
 		statusBar.registerProducer(railwayNetGridCanvas)
-		contentPane.add(statusBar, BorderLayout.SOUTH)
+		southPanel.add(statusBar)
+		contentPane.add(southPanel, BorderLayout.SOUTH)
 
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
@@ -160,8 +167,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to simulation mode (Issue #205).
 	 *
-	 * - Hides StatusBar
-	 * - Shows EventTimelinePanel (if created)
+	 * - Hides StatusBar (shown by speed indicator when speed != 1.0x)
+	 * - Shows EventTimelinePanel in south panel (if created)
 	 * - Shows ControlPanel
 	 * - Disables editing ToolBar
 	 *
@@ -172,11 +179,13 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToSimulationMode must be called from EDT"
 		}
 
-		// Hide StatusBar, show EventTimelinePanel
+		// Hide StatusBar; speed indicator (updateSpeedIndicator) will show it when speed != 1.0x
 		statusBar.isVisible = false
-		contentPane.remove(statusBar)
-		eventTimelinePanel?.let {
-			contentPane.add(it, BorderLayout.SOUTH)
+		// Add EventTimelinePanel to south panel
+		eventTimelinePanel?.let { panel ->
+			if (panel.parent == null) {
+				southPanel.add(panel, 0)
+			}
 		}
 
 		// Show ControlPanel and SimulationControlPanel
@@ -187,6 +196,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
 
+		southPanel.revalidate()
+		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -206,11 +217,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToEditingMode must be called from EDT"
 		}
 
-		// Show StatusBar, hide EventTimelinePanel
-		eventTimelinePanel?.let {
-			contentPane.remove(it)
+		// Remove EventTimelinePanel from south panel; show StatusBar
+		eventTimelinePanel?.let { panel ->
+			southPanel.remove(panel)
 		}
-		contentPane.add(statusBar, BorderLayout.SOUTH)
 		statusBar.isVisible = true
 
 		// Hide ControlPanel and SimulationControlPanel
@@ -220,6 +230,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
 
+		southPanel.revalidate()
+		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}

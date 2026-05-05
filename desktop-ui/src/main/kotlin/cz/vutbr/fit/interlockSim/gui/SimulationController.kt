@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.beans.PropertyChangeListener
 import javax.swing.SwingUtilities
 
 /**
@@ -39,6 +40,8 @@ import javax.swing.SwingUtilities
  * - [onCompleted] is always dispatched to EDT via [SwingUtilities.invokeLater].
  *
  * @param controlPanel ControlPanel whose Stop button and status label are managed here.
+ * @param toolBar Optional [ToolBar] to show/hide simulation controls on lifecycle changes.
+ * @param statusBar Optional [StatusBar] to display speed indicator when speed != 1.0x.
  * @param onCompleted Callback invoked on EDT when the simulation finishes naturally.
  *   Defaults to a no-op if not provided.
  * @since 2026-04-20 (extracted from Frame for testability)
@@ -46,6 +49,8 @@ import javax.swing.SwingUtilities
  */
 internal class SimulationController(
 	private val controlPanel: ControlPanel,
+	private val toolBar: ToolBar? = null,
+	private val statusBar: StatusBar? = null,
 	private val onCompleted: () -> Unit = {},
 ) {
 	/**
@@ -56,6 +61,9 @@ internal class SimulationController(
 	@Volatile
 	var runner: SimulationRunner? = null
 		private set
+
+	/** Listener registered on the active runner for speed changes; removed on stop. */
+	private var speedListener: PropertyChangeListener? = null
 
 	/**
 	 * Desired speed multiplier applied to new and currently running simulations.
@@ -95,6 +103,17 @@ internal class SimulationController(
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
 		newRunner.start()
 
+		// Wire speed indicator: notify StatusBar whenever SimulationRunner speed changes.
+		// The listener is removed when the simulation stops (in stop() or monitor finally).
+		val listener = PropertyChangeListener { evt ->
+			statusBar?.updateSpeedIndicator(evt.newValue as Double)
+		}
+		speedListener = listener
+		newRunner.addPropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, listener)
+
+		// Show simulation controls in ToolBar (EDT-safe: start() is called from EDT).
+		toolBar?.showSimulationControls()
+
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
 		controlPanel.setStopEnabled(true)
 
@@ -126,7 +145,10 @@ internal class SimulationController(
 							// instance. Skip the reset to avoid clobbering the new run's panel
 							// state (and avoid firing onCompleted for the old run).
 							if (runner === newRunner) {
+								cleanupSpeedListener(newRunner)
 								runner = null
+								toolBar?.hideSimulationControls()
+								statusBar?.updateSpeedIndicator(SimulationRunner.DEFAULT_SPEED)
 								controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 								controlPanel.setStopEnabled(false)
 								onCompleted()
@@ -147,10 +169,19 @@ internal class SimulationController(
 	 */
 	fun stop() {
 		val r = runner ?: return
+		cleanupSpeedListener(r)
 		r.stop()
 		runner = null
+		toolBar?.hideSimulationControls()
+		statusBar?.updateSpeedIndicator(SimulationRunner.DEFAULT_SPEED)
 		controlPanel.setStopEnabled(false)
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+	}
+
+	/** Removes the speed [PropertyChangeListener] from [r] and clears the reference. */
+	private fun cleanupSpeedListener(r: SimulationRunner) {
+		speedListener?.let { r.removePropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, it) }
+		speedListener = null
 	}
 
 	/** Returns `true` while the underlying [SimulationRunner] reports running. */

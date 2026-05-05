@@ -14,6 +14,8 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
@@ -158,6 +160,47 @@ class StatusBarTest : KoinTestBase() {
 
 		// Verify text remains unchanged when new value is null
 		assertThat(statusBar.text).isEqualTo("Initial text")
+	}
+
+	@Test
+	@DisplayName("updateSpeedIndicator shows speed text when multiplier is not 1.0x")
+	fun updateSpeedIndicatorShowsSpeedText() {
+		// updateSpeedIndicator uses invokeLater; use invokeAndWait to flush
+		javax.swing.SwingUtilities.invokeAndWait {
+			statusBar.updateSpeedIndicator(2.0)
+		}
+		javax.swing.SwingUtilities.invokeAndWait { /* flush invokeLater */ }
+
+		assertThat(statusBar.text).isEqualTo("Speed: 2.0x")
+		assertThat(statusBar.isVisible).isTrue()
+	}
+
+	@Test
+	@DisplayName("updateSpeedIndicator hides status bar at default speed (1.0x)")
+	fun updateSpeedIndicatorHidesAtDefaultSpeed() {
+		// First show at non-default speed, then reset
+		javax.swing.SwingUtilities.invokeAndWait {
+			statusBar.updateSpeedIndicator(3.0)
+		}
+		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+
+		javax.swing.SwingUtilities.invokeAndWait {
+			statusBar.updateSpeedIndicator(1.0)
+		}
+		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+
+		assertThat(statusBar.isVisible).isFalse()
+	}
+
+	@Test
+	@DisplayName("updateSpeedIndicator formats multiplier to one decimal place")
+	fun updateSpeedIndicatorFormatsMultiplier() {
+		javax.swing.SwingUtilities.invokeAndWait {
+			statusBar.updateSpeedIndicator(0.5)
+		}
+		javax.swing.SwingUtilities.invokeAndWait { /* flush */ }
+
+		assertThat(statusBar.text).isEqualTo("Speed: 0.5x")
 	}
 
 	/**
