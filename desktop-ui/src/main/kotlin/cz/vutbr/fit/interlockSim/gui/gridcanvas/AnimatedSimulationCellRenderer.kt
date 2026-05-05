@@ -337,8 +337,6 @@ class AnimatedSimulationCellRenderer(
 		// PointF provides continuous coordinates, round to nearest pixel for rendering.
 		val cellWidthHalf = cellWidth / 2.0
 		val cellHeightHalf = cellHeight / 2.0
-		val cellWidthHalf = cellWidth / 2.0
-		val cellHeightHalf = cellHeight / 2.0
 		val pixelX = (gridLocation.x * cellWidth + cellWidthHalf).roundToInt()
 		val pixelY = (gridLocation.y * cellHeight + cellHeightHalf).roundToInt()
 		val minCellSize = minOf(cellWidth, cellHeight).coerceAtLeast(1)
