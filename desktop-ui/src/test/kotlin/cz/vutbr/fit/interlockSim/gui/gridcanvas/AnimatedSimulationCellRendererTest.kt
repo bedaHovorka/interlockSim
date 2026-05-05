@@ -18,7 +18,10 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
+import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
+import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.testutil.createMockDynamicSemaphore
@@ -363,6 +366,23 @@ class AnimatedSimulationCellRendererTest {
 		verify { graphics.color = any() }
 		assertThat(colorSlot.captured).isEqualTo(AnimationColors.DEFAULT_SIGNAL)
 		assertThat(colorSlot.captured).isEqualTo(Color(0xC0, 0xC0, 0xC0))
+	}
+
+	@Test
+	fun `draw DynamicInOut in animated mode keeps connector without legacy center circle`() {
+		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
+		val dynamicInOut =
+			cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut(
+				staticInOut,
+				createDynamicInstance(staticInOut.getInSemaphore()),
+				createDynamicInstance(staticInOut.getOutSemaphore())
+			)
+
+		renderer.draw(graphics, dynamicInOut)
+
+		verify { graphics.color = AnimationColors.DEFAULT_TRACK }
+		verify(atLeast = 1) { graphics.drawLine(any(), any(), any(), any()) }
+		verify(exactly = 0) { graphics.fillOval(any(), any(), any(), any()) }
 	}
 
 	@Test

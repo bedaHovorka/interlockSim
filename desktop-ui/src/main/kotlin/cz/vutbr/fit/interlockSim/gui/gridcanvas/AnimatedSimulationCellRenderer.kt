@@ -188,11 +188,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: InOut
 	) {
-		// Set color to light gray for InOut cells
-		g.color = AnimationColors.DEFAULT_TRACK
-
-		// Delegate to parent for geometry rendering
-		super.draw(g, cell)
+		drawAnimatedInOut(g, cell.direction())
 	}
 
 	/**
@@ -209,11 +205,7 @@ class AnimatedSimulationCellRenderer(
 		g: Graphics2D,
 		cell: DynamicInOut
 	) {
-		// Set color to light gray for InOut cells
-		g.color = AnimationColors.DEFAULT_TRACK
-
-		// Delegate to parent for geometry rendering
-		super.draw(g, cell)
+		drawAnimatedInOut(g, cell.staticRef.direction())
 	}
 
 	/**
@@ -295,6 +287,16 @@ class AnimatedSimulationCellRenderer(
 			"No segments found for configuration $conf in switch ${railSwitch.getName()}. " +
 				"This indicates a corrupted switch topology."
 		)
+	}
+
+	private fun drawAnimatedInOut(
+		g: Graphics2D,
+		direction: Cell.Segment
+	) {
+		// Keep the entry/exit connection visible without reusing the legacy center circle
+		// that looked like the previous train marker in animated mode.
+		g.color = AnimationColors.DEFAULT_TRACK
+		drawSegments(g, direction)
 	}
 
 	/**
