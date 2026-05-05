@@ -18,6 +18,7 @@ import java.awt.Dimension
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionListener
 import javax.swing.JLabel
+import kotlin.math.abs
 import javax.swing.SwingUtilities
 
 /**
@@ -103,7 +104,7 @@ class StatusBar :
 	 */
 	fun updateSpeedIndicator(multiplier: Double) {
 		SwingUtilities.invokeLater {
-			if (kotlin.math.abs(multiplier - DEFAULT_SPEED) > SPEED_EPSILON) {
+			if (abs(multiplier - DEFAULT_SPEED) > SPEED_EPSILON) {
 				text = "Speed: ${"%.1f".format(multiplier)}x"
 				isVisible = true
 			} else {

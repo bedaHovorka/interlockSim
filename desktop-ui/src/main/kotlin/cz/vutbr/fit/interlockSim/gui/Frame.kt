@@ -181,10 +181,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Hide StatusBar; speed indicator (updateSpeedIndicator) will show it when speed != 1.0x
 		statusBar.isVisible = false
-		// Add EventTimelinePanel to south panel
+		// Add EventTimelinePanel before StatusBar (index 0 = top of south panel, above StatusBar)
 		eventTimelinePanel?.let { panel ->
 			if (panel.parent == null) {
-				southPanel.add(panel, 0)
+				southPanel.add(panel, TIMELINE_PANEL_SOUTH_INDEX)
 			}
 		}
 
@@ -378,6 +378,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/** Index at which EventTimelinePanel is inserted in [southPanel] (above StatusBar). */
+		private const val TIMELINE_PANEL_SOUTH_INDEX = 0
 	}
 
 	/**

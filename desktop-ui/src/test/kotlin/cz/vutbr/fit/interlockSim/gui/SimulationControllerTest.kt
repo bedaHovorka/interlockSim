@@ -525,7 +525,7 @@ class SimulationControllerTest {
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("speed change on runner propagates to StatusBar indicator")
-	fun speedChangePropagatestoStatusBar() {
+	fun speedChangePropagatesToStatusBar() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
 		every { context.run() } answers {
