@@ -2,298 +2,273 @@
 <!DOCTYPE net>
 <!-- Praha Hlavní Nádraží - Prague Main Station
 
-     Configuration for test XMLContextFactoryTest with:
-     - 4 north entry points (Libeň, Vysočany lines)
-     - 6 south exit points (Vinohrady, Vršovice)
-     - 3-layer switching in north and south throats
-     - 9 platform tracks through central zone
+     Hand-tuned topology used by XMLContextFactoryTest:
+     - 5 north entry points (Libeň, Vysočany lines + bypass)
+     - 6 south exit points (Vinohrady, Vršovice, bypass)
+     - North throat with entry/intermediate switches and platform-entry signals
+     - 8 platform tracks (Y=4, 6, 8, 10, 12, 14, 16, 18)
+     - South throat with merge/diverge switches to exit lines
+     - Bypass siding (Y=20)
 
      Grid: 70x25
-     Total elements: 40+ switches, 40+ signals, 90+ track blocks
+     Total elements: 50 switches, 37 signals, 11 InOuts, 117 track blocks
+     
+     Note: Car-train terminal (Y=22) is DEFERRED for future implementation
 -->
-<net X="70" Y="25">
-  <!-- North entry points -->
-  <InOut X="2" Y="4" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-1"/>
-  <InOut X="2" Y="8" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-2"/>
-  <InOut X="2" Y="12" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-1"/>
-  <InOut X="2" Y="16" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-2"/>
-
-  <!-- North signals -->
-  <RailSemaphore X="4" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="4" Y="8" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="4" Y="12" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="4" Y="16" SpatialType="HORIZONTAL" orientation="false"/>
-
-  <!-- North Layer 1 switches -->
-  <RailSwitch X="6" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="6" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="6" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="6" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-
-  <!-- North L1 signals -->
-  <RailSemaphore X="8" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="6" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="8" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="10" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="12" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="14" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="16" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="8" Y="18" SpatialType="HORIZONTAL" orientation="false"/>
-
-  <!-- North Layer 2 switches -->
-  <RailSwitch X="10" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="10" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-
-  <!-- North L2 signals -->
-  <RailSemaphore X="12" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="6" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="8" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="10" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="12" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="14" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="16" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="12" Y="18" SpatialType="HORIZONTAL" orientation="false"/>
-
-  <!-- North Layer 3 switches -->
-  <RailSwitch X="14" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="14" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-
-  <!-- Platform zone entry signals -->
-  <RailSemaphore X="16" Y="4" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="6" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="10" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="12" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="14" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="16" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="18" SpatialType="HORIZONTAL" orientation="false"/>
-  <RailSemaphore X="16" Y="20" SpatialType="HORIZONTAL" orientation="false"/>
-
-  <!-- Platform zone exit signals -->
-  <RailSemaphore X="42" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="6" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="8" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="10" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="12" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="14" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="16" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="18" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="42" Y="20" SpatialType="HORIZONTAL" orientation="true"/>
-
-  <!-- South Layer 1 switches -->
-  <RailSwitch X="44" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="44" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-
-  <!-- South L1 signals -->
-  <RailSemaphore X="46" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="6" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="8" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="10" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="12" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="14" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="16" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="18" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="46" Y="20" SpatialType="HORIZONTAL" orientation="true"/>
-
-  <!-- South Layer 2 switches -->
-  <RailSwitch X="48" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="48" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="48" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="48" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="48" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-
-  <!-- South L2 signals -->
-  <RailSemaphore X="50" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="50" Y="8" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="50" Y="12" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="50" Y="16" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="50" Y="20" SpatialType="HORIZONTAL" orientation="true"/>
-
-  <!-- South Layer 3 switches - MERGE switches (tracks converge here) -->
-  <RailSwitch X="52" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="52" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-  <RailSwitch X="52" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE"/>
-
-  <!-- South Layer 4 signals (between merge and diverge switches) -->
-  <RailSemaphore X="54" Y="4" SpatialType="HORIZONTAL" orientation="true"/>
-  <RailSemaphore X="54" Y="12" SpatialType="HORIZONTAL" orientation="true"/>
-
-  <!-- South Layer 5 switches - DIVERGE switches (tracks split here) -->
-  <RailSwitch X="56" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-  <RailSwitch X="56" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-
-  <!-- Additional switch for Y=14/16 branching from diverge switch at 56,12 -->
-  <RailSwitch X="58" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE"/>
-
-  <!-- South exit points -->
-  <InOut X="60" Y="4" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-1"/>
-  <InOut X="60" Y="8" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-2"/>
-  <InOut X="60" Y="12" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-1"/>
-  <InOut X="60" Y="14" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-2"/>
-  <InOut X="60" Y="16" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-3"/>
-  <InOut X="60" Y="20" SpatialType="HORIZONTAL" orientation="true" name="S-Bypass"/>
-
-  <!-- Track blocks: North approach -->
-  <SimpleTrackBlock fromX="2" fromY="4" toX="4" toY="4" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="2" fromY="8" toX="4" toY="8" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="2" fromY="12" toX="4" toY="12" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="2" fromY="16" toX="4" toY="16" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-
-  <!-- North signals to L1 switches -->
-  <SimpleTrackBlock fromX="4" fromY="4" toX="6" toY="4" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="4" fromY="8" toX="6" toY="8" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="4" fromY="12" toX="6" toY="12" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="4" fromY="16" toX="6" toY="16" fromSegment="F" toSegment="A" length="30.0" maxSpeedfrom="40.0" maxSpeedto="35.0"/>
-
-  <!-- L1 switches straight -->
-  <SimpleTrackBlock fromX="6" fromY="4" toX="8" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="6" fromY="8" toX="8" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="6" fromY="12" toX="8" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
-  <SimpleTrackBlock fromX="6" fromY="16" toX="8" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
-
-  <!-- L1 switches diverge -->
-  <SimpleTrackBlock fromX="6" fromY="4" toX="8" toY="6" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="6" fromY="8" toX="8" toY="10" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="6" fromY="12" toX="8" toY="14" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="6" fromY="16" toX="8" toY="18" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- L1 signals to L2 switches -->
-  <SimpleTrackBlock fromX="8" fromY="4" toX="10" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="6" toX="10" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="8" toX="10" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="10" toX="10" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="12" toX="10" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="14" toX="10" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="16" toX="10" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="8" fromY="18" toX="10" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- L2 switches straight -->
-  <SimpleTrackBlock fromX="10" fromY="4" toX="12" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="6" toX="12" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="8" toX="12" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="10" toX="12" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="12" toX="12" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="14" toX="12" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="16" toX="12" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="10" fromY="18" toX="12" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- L2 signals to L3 switches -->
-  <SimpleTrackBlock fromX="12" fromY="4" toX="14" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="6" toX="14" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="8" toX="14" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="10" toX="14" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="12" toX="14" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="14" toX="14" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="16" toX="14" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="12" fromY="18" toX="14" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="25.0"/>
-
-  <!-- L3 switches to platform entry signals -->
-  <SimpleTrackBlock fromX="14" fromY="4" toX="16" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="6" toX="16" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="8" toX="16" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="10" toX="16" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="12" toX="16" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="14" toX="16" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="16" toX="16" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="18" toX="16" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="14" fromY="18" toX="16" toY="20" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="25.0" maxSpeedto="20.0"/>
-
-  <!-- Platform zone (main tracks) -->
-  <SimpleTrackBlock fromX="16" fromY="4" toX="42" toY="4" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="6" toX="42" toY="6" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="8" toX="42" toY="8" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="10" toX="42" toY="10" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="12" toX="42" toY="12" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="14" toX="42" toY="14" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="16" toX="42" toY="16" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="18" toX="42" toY="18" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
-  <SimpleTrackBlock fromX="16" fromY="20" toX="42" toY="20" fromSegment="F" toSegment="A" length="260.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- Platform exit signals to S L3 switches -->
-  <SimpleTrackBlock fromX="42" fromY="4" toX="44" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="6" toX="44" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="8" toX="44" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="10" toX="44" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="12" toX="44" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="14" toX="44" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="16" toX="44" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="18" toX="44" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="20.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="42" fromY="20" toX="44" toY="20" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- S L3 switches to L2 signals -->
-  <SimpleTrackBlock fromX="44" fromY="4" toX="46" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="6" toX="46" toY="6" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="8" toX="46" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="10" toX="46" toY="10" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="12" toX="46" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="14" toX="46" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="16" toX="46" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="18" toX="46" toY="18" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="44" fromY="20" toX="46" toY="20" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- S L2 signals to L1 switches (converge) -->
-  <SimpleTrackBlock fromX="46" fromY="4" toX="48" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="6" toX="48" toY="4" fromSegment="F" toSegment="G" length="28.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="8" toX="48" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="10" toX="48" toY="8" fromSegment="F" toSegment="G" length="28.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="12" toX="48" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="14" toX="48" toY="12" fromSegment="F" toSegment="G" length="28.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="16" toX="48" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="18" toX="48" toY="16" fromSegment="F" toSegment="G" length="28.0" maxSpeedfrom="25.0" maxSpeedto="25.0"/>
-  <SimpleTrackBlock fromX="46" fromY="20" toX="48" toY="20" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- S L1 switches to L0 signals (final converge) -->
-  <SimpleTrackBlock fromX="48" fromY="4" toX="50" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="48" fromY="8" toX="50" toY="8" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="48" fromY="12" toX="50" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="48" fromY="16" toX="50" toY="16" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="25.0" maxSpeedto="30.0"/>
-  <SimpleTrackBlock fromX="48" fromY="20" toX="50" toY="20" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- S L2 signals to L3 MERGE switches -->
-  <SimpleTrackBlock fromX="50" fromY="4" toX="52" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="50" fromY="8" toX="52" toY="4" fromSegment="F" toSegment="G" length="45.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="50" fromY="12" toX="52" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="50" fromY="16" toX="52" toY="12" fromSegment="F" toSegment="G" length="45.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="50" fromY="20" toX="52" toY="20" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- L3 MERGE switches to L4 signals -->
-  <SimpleTrackBlock fromX="52" fromY="4" toX="54" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="52" fromY="12" toX="54" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="52" fromY="20" toX="60" toY="20" fromSegment="F" toSegment="A" length="80.0" maxSpeedfrom="30.0" maxSpeedto="30.0"/>
-
-  <!-- L4 signals to L5 DIVERGE switches -->
-  <SimpleTrackBlock fromX="54" fromY="4" toX="56" toY="4" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="54" fromY="12" toX="56" toY="12" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-
-  <!-- L5 DIVERGE switches to exits (Y=4 diverge switch) -->
-  <SimpleTrackBlock fromX="56" fromY="4" toX="60" toY="4" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="56" fromY="4" toX="60" toY="8" fromSegment="D" toSegment="A" length="50.0" maxSpeedfrom="35.0" maxSpeedto="40.0"/>
-
-  <!-- L5 DIVERGE switches to exits (Y=12 diverge switch) -->
-  <SimpleTrackBlock fromX="56" fromY="12" toX="60" toY="12" fromSegment="F" toSegment="A" length="40.0" maxSpeedfrom="40.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="56" fromY="12" toX="58" toY="14" fromSegment="D" toSegment="A" length="30.0" maxSpeedfrom="35.0" maxSpeedto="35.0"/>
-
-  <!-- Y=14/16 branching from switch at 58,14 -->
-  <SimpleTrackBlock fromX="58" fromY="14" toX="60" toY="14" fromSegment="F" toSegment="A" length="20.0" maxSpeedfrom="35.0" maxSpeedto="40.0"/>
-  <SimpleTrackBlock fromX="58" fromY="14" toX="60" toY="16" fromSegment="D" toSegment="A" length="28.0" maxSpeedfrom="30.0" maxSpeedto="40.0"/>
-
+<net X="70" Y="25" currentMaxSpeed="24.0" currentTrackLength="100.0" >
+	<!-- North entry points and entry signals -->
+	<InOut X="2" Y="4" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-1" />
+	<RailSemaphore X="4" Y="4" SpatialType="HORIZONTAL" orientation="false" />
+	<InOut X="2" Y="8" SpatialType="HORIZONTAL" orientation="false" name="N-Lib-2" />
+	<RailSemaphore X="4" Y="8" SpatialType="HORIZONTAL" orientation="false" />
+	<InOut X="2" Y="12" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-1" />
+	<RailSemaphore X="4" Y="12" SpatialType="HORIZONTAL" orientation="false" />
+	<InOut X="2" Y="16" SpatialType="HORIZONTAL" orientation="false" name="N-Vys-2" />
+	<RailSemaphore X="4" Y="16" SpatialType="HORIZONTAL" orientation="false" />
+	<InOut X="2" Y="20" SpatialType="HORIZONTAL" orientation="false" name="N-Bypass" />
+	<RailSemaphore X="4" Y="20" SpatialType="HORIZONTAL" orientation="false" />
+	<!-- North throat — top track (Y=4): entry switch and intermediate signals -->
+	<RailSwitch X="5" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW1" />
+	<RailSemaphore X="8" Y="6" SpatialType="HORIZONTAL" orientation="false" />
+	<RailSemaphore X="8" Y="4" SpatialType="HORIZONTAL" orientation="false" />
+	<!-- Platform-zone entry/exit signals: top tracks (Y=4, 6) -->
+	<RailSemaphore X="42" Y="4" SpatialType="HORIZONTAL" orientation="false" name="S5" />
+	<RailSemaphore X="16" Y="4" SpatialType="HORIZONTAL" orientation="true" name="S2" />
+	<RailSemaphore X="42" Y="6" SpatialType="HORIZONTAL" orientation="false" name="S4" />
+	<RailSemaphore X="16" Y="6" SpatialType="HORIZONTAL" orientation="true" name="S3" />
+	<!-- North throat switches: top tracks (Y=4, 6) -->
+	<RailSwitch X="9" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW5" />
+	<RailSwitch X="12" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW8" />
+	<RailSwitch X="11" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW7" />
+	<RailSwitch X="14" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW9" />
+	<!-- Platform-zone entry/exit signals: remaining tracks (Y=8 through Y=20) -->
+	<RailSemaphore X="16" Y="20" SpatialType="HORIZONTAL" orientation="true" name="S19" />
+	<RailSemaphore X="42" Y="20" SpatialType="HORIZONTAL" orientation="false" name="S18" />
+	<RailSemaphore X="42" Y="18" SpatialType="HORIZONTAL" orientation="false" name="S17" />
+	<RailSemaphore X="16" Y="18" SpatialType="HORIZONTAL" orientation="true" name="S11" />
+	<RailSemaphore X="16" Y="16" SpatialType="HORIZONTAL" orientation="true" name="S20" />
+	<RailSemaphore X="42" Y="16" SpatialType="HORIZONTAL" orientation="false" name="S16" />
+	<RailSemaphore X="16" Y="14" SpatialType="HORIZONTAL" orientation="true" name="S9" />
+	<RailSemaphore X="42" Y="14" SpatialType="HORIZONTAL" orientation="false" name="S15" />
+	<RailSemaphore X="16" Y="12" SpatialType="HORIZONTAL" orientation="true" name="S8" />
+	<RailSemaphore X="42" Y="12" SpatialType="HORIZONTAL" orientation="false" name="S14" />
+	<RailSemaphore X="16" Y="10" SpatialType="HORIZONTAL" orientation="true" name="S7" />
+	<RailSemaphore X="42" Y="10" SpatialType="HORIZONTAL" orientation="false" name="S13" />
+	<RailSemaphore X="16" Y="8" SpatialType="HORIZONTAL" orientation="true" name="S6" />
+	<RailSemaphore X="42" Y="8" SpatialType="HORIZONTAL" orientation="false" name="S12" />
+	<!-- North throat — entry switches and connection signals (Y=8, 12, 16) -->
+	<RailSwitch X="9" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW10" />
+	<RailSemaphore X="8" Y="8" SpatialType="HORIZONTAL" orientation="false" />
+	<RailSwitch X="9" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW11" />
+	<RailSemaphore X="8" Y="12" SpatialType="HORIZONTAL" orientation="false" />
+	<RailSwitch X="9" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW12" />
+	<RailSemaphore X="8" Y="16" SpatialType="HORIZONTAL" orientation="false" />
+	<!-- North throat — first-column switches at X=5 (Y=8, 12, 16) -->
+	<RailSwitch X="5" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW13" />
+	<RailSwitch X="5" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW14" />
+	<RailSwitch X="5" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW15" />
+	<!-- North throat — diagonal connection signals (Y=10, 14, 18) -->
+	<RailSemaphore X="8" Y="10" SpatialType="HORIZONTAL" orientation="false" />
+	<RailSemaphore X="8" Y="14" SpatialType="HORIZONTAL" orientation="false" />
+	<RailSemaphore X="8" Y="18" SpatialType="HORIZONTAL" orientation="false" />
+	<!-- North throat — bypass row and Y=18 row switches -->
+	<RailSwitch X="15" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW16" />
+	<RailSwitch X="9" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW18" />
+	<RailSwitch X="12" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW21" />
+	<RailSwitch X="13" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW19" />
+	<RailSwitch X="14" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="11" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW22" />
+	<RailSwitch X="11" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW20" />
+	<RailSemaphore X="8" Y="20" SpatialType="HORIZONTAL" orientation="false" name="S22" />
+	<!-- North throat — Y=14 row switches -->
+	<RailSwitch X="14" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="11" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW25" />
+	<RailSwitch X="12" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW24" />
+	<!-- North throat — Y=8 and Y=10 row switches -->
+	<RailSwitch X="14" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" />
+	<RailSwitch X="12" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW28" />
+	<RailSwitch X="11" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW27" />
+	<!-- South throat — L1 entry switches at X=44 (Y=12, 16) -->
+	<RailSwitch X="44" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+	<RailSwitch X="44" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+	<!-- South throat — Y=4 row: exit switches and signals -->
+	<RailSwitch X="59" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW36" />
+	<InOut X="60" Y="4" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-1" />
+	<RailSwitch X="51" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW37" />
+	<RailSemaphore X="50" Y="4" SpatialType="HORIZONTAL" orientation="true" />
+	<!-- South throat — Y=8 row: exit switches and signals -->
+	<RailSwitch X="59" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW38" />
+	<InOut X="60" Y="8" SpatialType="HORIZONTAL" orientation="true" name="S-Vin-2" />
+	<RailSwitch X="51" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW46" />
+	<RailSemaphore X="50" Y="8" SpatialType="HORIZONTAL" orientation="true" />
+	<!-- South throat — Y=6 row diagonal switches -->
+	<RailSwitch X="54" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW45" />
+	<RailSwitch X="56" Y="6" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW44" />
+	<!-- South throat — L2/L3 switches around Y=4–10 -->
+	<RailSwitch X="46" Y="4" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW57" />
+	<RailSwitch X="46" Y="8" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW62" />
+	<RailSwitch X="44" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW60" />
+	<!-- South throat — Y=12 to Y=16 area switches and signals -->
+	<RailSwitch X="47" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW63" />
+	<RailSemaphore X="50" Y="12" SpatialType="HORIZONTAL" orientation="true" />
+	<RailSwitch X="46" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW67" />
+	<RailSwitch X="49" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW68" />
+	<RailSemaphore X="50" Y="16" SpatialType="HORIZONTAL" orientation="true" />
+	<!-- South throat — Y=18, 20 area switches and signals -->
+	<RailSwitch X="46" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW70" />
+	<RailSwitch X="44" Y="18" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" />
+	<RailSwitch X="46" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW71" />
+	<RailSwitch X="48" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW73" />
+	<RailSemaphore X="50" Y="20" SpatialType="HORIZONTAL" orientation="true" />
+	<!-- South throat — middle area, Vršovice/bypass exit switches and InOuts -->
+	<RailSwitch X="51" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW75" />
+	<RailSwitch X="59" Y="16" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_TRUE" name="SW81" />
+	<InOut X="60" Y="16" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-3" />
+	<RailSwitch X="57" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW82" />
+	<InOut X="60" Y="14" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-2" />
+	<RailSwitch X="56" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_FALSE" name="SW84" />
+	<RailSwitch X="58" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW85" />
+	<InOut X="60" Y="12" SpatialType="HORIZONTAL" orientation="true" name="S-Vrs-1" />
+	<RailSwitch X="54" Y="14" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="SW87" />
+	<RailSwitch X="51" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW88" />
+	<RailSwitch X="51" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW90" />
+	<InOut X="60" Y="20" SpatialType="HORIZONTAL" orientation="true" name="S-Bypass" />
+	<!-- Car-train terminal InOut (S-CarTrain at Y=22) is DEFERRED -->
+	<!-- Track blocks -->
+	<!-- North approach: entry InOuts to entry signals -->
+	<SimpleTrackBlock fromX="2" fromY="4" toX="4" toY="4" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
+	<SimpleTrackBlock fromX="2" fromY="8" toX="4" toY="8" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
+	<SimpleTrackBlock fromX="2" fromY="12" toX="4" toY="12" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
+	<SimpleTrackBlock fromX="2" fromY="16" toX="4" toY="16" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
+	<SimpleTrackBlock fromX="2" fromY="20" toX="4" toY="20" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
+	<!-- North throat — entry signal to switch SW1 and onward connections -->
+	<SimpleTrackBlock fromX="5" fromY="4" toX="4" toY="4" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="4" toX="8" toY="6" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="4" toX="8" toY="4" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- Platform main tracks: Y=4 and Y=6 (X=16 → X=42) -->
+	<SimpleTrackBlock fromX="42" fromY="4" toX="16" toY="4" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="42" fromY="6" toX="16" toY="6" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — short connections around switches SW5–SW9 -->
+	<SimpleTrackBlock fromX="9" fromY="4" toX="8" toY="4" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="6" toX="11" toY="6" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="14" fromY="4" toX="9" toY="4" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="4" toX="14" toY="4" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="14" fromY="4" toX="12" toY="6" fromSegment="D" toSegment="E" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="6" toX="9" toY="4" fromSegment="B" toSegment="G" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="8" fromY="6" toX="11" toY="6" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="6" toX="12" toY="6" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- Platform main tracks: bypass and Y=18 -->
+	<SimpleTrackBlock fromX="16" fromY="20" toX="42" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="42" fromY="18" toX="16" toY="18" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- Platform main tracks: Y=8 through Y=16 -->
+	<SimpleTrackBlock fromX="16" fromY="16" toX="42" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="14" toX="42" toY="14" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="12" toX="42" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="10" toX="42" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="16" fromY="8" toX="42" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — entry signal to switches SW10–SW15 -->
+	<SimpleTrackBlock fromX="9" fromY="8" toX="8" toY="8" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="12" toX="8" toY="12" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="16" toX="8" toY="16" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="8" toX="4" toY="8" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="12" toX="4" toY="12" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="16" toX="4" toY="16" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — diagonal connections around X=5 column -->
+	<SimpleTrackBlock fromX="5" fromY="8" toX="8" toY="10" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="8" fromY="8" toX="5" toY="8" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="12" toX="8" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="12" toX="8" toY="14" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="16" toX="8" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="5" fromY="16" toX="8" toY="18" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — bypass row connections -->
+	<SimpleTrackBlock fromX="15" fromY="20" toX="16" toY="20" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="18" toX="8" toY="18" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="18" toX="13" toY="18" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="18" toX="14" toY="16" fromSegment="E" toSegment="D" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="13" fromY="18" toX="15" toY="20" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="14" fromY="16" toX="16" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="13" fromY="18" toX="16" toY="18" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="18" toX="12" toY="18" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="16" toX="11" toY="18" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="18" toX="9" toY="18" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="18" toX="11" toY="20" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="20" toX="15" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="8" fromY="20" toX="4" toY="20" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="8" fromY="20" toX="11" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="16" toX="14" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — middle Y=12 / Y=14 connections -->
+	<SimpleTrackBlock fromX="16" fromY="12" toX="14" toY="12" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="14" toX="12" toY="14" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="14" toX="9" toY="12" fromSegment="B" toSegment="G" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="12" toX="14" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="14" fromY="12" toX="12" toY="14" fromSegment="D" toSegment="E" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="14" toX="16" toY="14" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="8" fromY="14" toX="11" toY="14" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- North throat — Y=8 / Y=10 connections -->
+	<SimpleTrackBlock fromX="9" fromY="8" toX="14" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="14" fromY="8" toX="16" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="10" toX="11" toY="10" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="10" toX="14" toY="8" fromSegment="E" toSegment="D" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="12" fromY="10" toX="16" toY="10" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="9" fromY="8" toX="11" toY="10" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="11" fromY="10" toX="8" toY="10" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — L1 switches connecting to platform exits -->
+	<SimpleTrackBlock fromX="44" fromY="12" toX="42" toY="12" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="44" fromY="16" toX="42" toY="16" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — Y=4 / Y=8 row exits to S-Vin-1, S-Vin-2 -->
+	<SimpleTrackBlock fromX="59" fromY="4" toX="60" toY="4" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="4" toX="50" toY="4" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="59" fromY="8" toX="60" toY="8" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="8" toX="50" toY="8" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="8" toX="54" toY="6" fromSegment="E" toSegment="D" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="54" fromY="6" toX="56" toY="6" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="56" fromY="6" toX="59" toY="8" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="8" toX="59" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="4" toX="59" toY="4" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="59" fromY="4" toX="56" toY="6" fromSegment="D" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="4" toX="54" toY="6" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — L2/L3 connections around Y=4–10 -->
+	<SimpleTrackBlock fromX="46" fromY="4" toX="42" toY="6" fromSegment="D" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="42" fromY="4" toX="46" toY="4" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="4" toX="50" toY="4" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="8" toX="44" toY="10" fromSegment="D" toSegment="E" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="44" fromY="10" toX="42" toY="10" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="42" fromY="8" toX="46" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="8" toX="50" toY="8" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="44" fromY="10" toX="47" toY="12" fromSegment="F" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="47" fromY="12" toX="50" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="47" fromY="12" toX="44" toY="12" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="14" toX="44" toY="12" fromSegment="B" toSegment="G" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — Y=14 / Y=16 area connections -->
+	<SimpleTrackBlock fromX="49" fromY="16" toX="50" toY="16" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="49" fromY="16" toX="46" toY="14" fromSegment="B" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="14" toX="42" toY="14" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="18" toX="44" toY="16" fromSegment="B" toSegment="G" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — Y=18 / Y=20 area connections -->
+	<SimpleTrackBlock fromX="42" fromY="18" toX="44" toY="18" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="44" fromY="18" toX="46" toY="18" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="20" toX="44" toY="18" fromSegment="B" toSegment="G" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="48" fromY="16" toX="49" toY="16" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="44" fromY="16" toX="48" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — Vršovice and bypass exit connections -->
+	<SimpleTrackBlock fromX="48" fromY="16" toX="46" toY="18" fromSegment="D" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="42" fromY="20" toX="46" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="46" fromY="20" toX="50" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="16" toX="50" toY="16" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="59" fromY="16" toX="60" toY="16" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="57" fromY="14" toX="59" toY="16" fromSegment="G" toSegment="B" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="60" fromY="14" toX="57" toY="14" fromSegment="A" toSegment="F" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="56" fromY="14" toX="57" toY="14" fromSegment="F" toSegment="A" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="58" fromY="12" toX="56" toY="14" fromSegment="D" toSegment="E" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="58" fromY="12" toX="60" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="16" toX="59" toY="16" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="54" fromY="14" toX="51" toY="16" fromSegment="D" toSegment="E" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="12" toX="50" toY="12" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="12" toX="54" toY="14" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="54" fromY="14" toX="56" toY="14" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="12" toX="58" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- South throat — bypass exit -->
+	<SimpleTrackBlock fromX="51" fromY="20" toX="50" toY="20" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<SimpleTrackBlock fromX="51" fromY="20" toX="60" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- Car-train terminal track (Y=22) is DEFERRED -->
 </net>
