@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.gui.animation.AnimationState
 import cz.vutbr.fit.interlockSim.gui.animation.SignalState
 import cz.vutbr.fit.interlockSim.gui.animation.TrackState
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
@@ -370,10 +371,10 @@ class AnimatedSimulationCellRendererTest {
 	}
 
 	@Test
-	fun `draw DynamicInOut in animated mode keeps connector without legacy center circle`() {
+	fun `draw DynamicInOut in animated mode renders connector without fillOval calls`() {
 		val staticInOut = InOut("Entry", true, Cell.SpatialType.HORIZONTAL)
 		val dynamicInOut =
-			cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut(
+			DynamicInOut(
 				staticInOut,
 				createDynamicInstance(staticInOut.getInSemaphore()),
 				createDynamicInstance(staticInOut.getOutSemaphore())
