@@ -50,8 +50,8 @@ class AnimatedSimulationCellRendererTest {
 	private companion object {
 		const val MIN_EXPECTED_BODY_EXTENT_PIXELS = 10
 		const val MIN_CAB_NARROWNESS_PIXELS = 2
-		const val CAB_SAMPLE_POSITION_DIVISOR = 4
-		const val BODY_SAMPLE_POSITION_DIVISOR = 2
+		const val CAB_SAMPLE_POSITION_DIVISOR = 4 // 25% of total width samples inside the narrower rear cab.
+		const val BODY_SAMPLE_POSITION_DIVISOR = 2 // 50% of total width samples inside the wider main body.
 	}
 
 	private lateinit var animationController: AnimationController
