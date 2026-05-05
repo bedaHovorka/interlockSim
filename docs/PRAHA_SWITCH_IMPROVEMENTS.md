@@ -44,26 +44,20 @@ N-Bypass (2,20) → Signal (4,20) → Switch (6,20) → Bypass track → S-Bypas
 - Route length: ~420m total
 - Travel time: ~50 seconds @ 30 km/h average
 
-### 2. Car Train Terminal (Y=22)
+### 2. Car Train Terminal (Y=22) — **DEFERRED**
 
-Added dedicated peripheral siding for car-carrying train operations.
+**Status:** Implementation deferred to future work.
 
-**New Elements:**
-- **S-CarTrain InOut** at (60,22) - Car train terminal exit
-- **Switch** at (52,22) Type=SIMPLE_LEFT_TRUE - Terminal diverge switch
-- **Diverge track** (52,20)→(52,22) [20m, 25 km/h]
-- **Terminal siding** (52,22)→(60,22) [80m, 25 km/h]
+**Planned Design:**
+- Dedicated peripheral siding for car-carrying train operations
+- S-CarTrain InOut at (60,22) - Car train terminal exit
+- Terminal diverge switch connecting from bypass
+- Siding tracks with appropriate speed limits
 
-**Route:**
-```
-Bypass (52,20) → Switch (52,22) → Terminal track → S-CarTrain (60,22)
-```
-
-**Benefits:**
-- Dedicated terminal for car-carrying trains (autovlaky)
-- Peripheral location (realistic placement)
-- Connected to bypass, not main platform tracks
-- Matches real Prague Main Station operations
+**Rationale for Deferral:**
+- Bypass route (Y=20) provides core functionality for through trains
+- Car train terminal is a specialized feature for future enhancement
+- Current focus is on bypass routing improvements
 
 ## Technical Specifications
 
@@ -71,22 +65,22 @@ Bypass (52,20) → Switch (52,22) → Terminal track → S-CarTrain (60,22)
 
 | Element Type | Before | After | Change |
 |--------------|--------|-------|--------|
-| InOut        | 10     | 12    | +2     |
-| Switches     | 40     | 42    | +2     |
+| InOut        | 10     | 11    | +1     |
+| Switches     | 40     | 41    | +1     |
 | Signals      | 54     | 55    | +1     |
-| Track Blocks | 106    | 111   | +5     |
+| Track Blocks | 106    | 117   | +11    |
 | Grid         | 70x25  | 70x25  | -      |
 
 ### New Track Infrastructure
 
-Total distance added: **380 meters**
+Total distance added: **280 meters** (bypass route only; car train terminal deferred)
 
 **Track Blocks:**
 1. (2,20)→(4,20): 150m, 40→40 km/h (North bypass approach)
 2. (4,20)→(6,20): 30m, 40→35 km/h (Signal to switch)
 3. (6,20)→(16,20): 100m, 35→30 km/h (Switch to platform zone)
-4. (52,20)→(52,22): 20m, 25→25 km/h (Terminal diverge)
-5. (52,22)→(60,22): 80m, 25→25 km/h (Terminal track)
+
+**Note:** Car train terminal tracks (Y=22) are deferred to future implementation.
 
 ## Layout Visualization
 
@@ -101,8 +95,7 @@ Y=22:   (no track)
 ```
 Y=4-16: North Entries → Switch Layers → Platform Zone (9 tracks) → Switch Layers → South Exits
 Y=20:   N-Bypass ═════════════════════════════════════════════════════════════► S-Bypass
-                                                                                      │
-Y=22:   (Car train terminal siding) ═════════════════════════════════════════►S-CarTrain
+Y=22:   (Car train terminal DEFERRED for future implementation)
 ```
 
 ## Operational Scenarios
@@ -119,22 +112,20 @@ Y=22:   (Car train terminal siding) ══════════════�
 - **Time:** ~2-3 minutes with stop
 - **Unchanged from original**
 
-### Scenario 3: Car Train Terminal
-- **Route:** N-Bypass (2,20) → Bypass → Switch (52,20) → Terminal → S-CarTrain (60,22)
-- **Distance:** ~520m total (420m bypass + 100m terminal)
-- **Time:** ~60 seconds @ 25 km/h in terminal
-- **Benefit:** Dedicated handling for car-carrying trains
+### Scenario 3: Car Train Terminal — **DEFERRED**
+Car train terminal operations are deferred to future implementation. When implemented, car trains will be able to use a dedicated terminal siding at Y=22.
 
 ## Validation Results
 
 ✅ **XML Structure:** Well-formed and parses successfully  
 ✅ **Grid Dimensions:** 70x25 (unchanged)  
-✅ **InOut Count:** 12 (exceeds minimum of 2)  
+✅ **InOut Count:** 11 (exceeds minimum of 1)  
 ✅ **N-Bypass Connectivity:** Verified route to S-Bypass (11-node path)  
-✅ **Terminal Connectivity:** Verified route from bypass to S-CarTrain (3-node path)  
 ✅ **Switch Configurations:** All switches have valid types and segments  
 ✅ **Signal Placements:** All signals correctly oriented  
 ✅ **Track Speeds:** Realistic limits (25-40 km/h in throat areas)
+
+**Note:** Car train terminal (Y=22) deferred - removed from current implementation.
 
 ## Operational Benefits
 
@@ -146,21 +137,20 @@ Y=22:   (Car train terminal siding) ══════════════�
 2. **Realistic Operations**
    - Matches real Prague Main Station topology
    - Bypass routes common in major stations
-   - Car train terminals typically on periphery
 
 3. **Operational Flexibility**
    - Dispatchers have more routing options
    - Can handle mixed traffic (platform + through trains)
-   - Terminal supports specialized car train operations
 
 4. **Network Reliability**
    - Bypass provides alternative route during platform congestion
-   - Terminal allows long-term parking of car trains
    - Multiple routing options increase resilience
+
+**Future Enhancement:** Car train terminal (Y=22) deferred for specialized operations.
 
 ## File Location
 
-**XML Configuration:** `src/test/resources/cz/vutbr/fit/interlockSim/xml/fixtures/praha-hlavni-nadrazi.xml`
+**XML Configuration:** `core-test/src/commonMain/resources/cz/vutbr/fit/interlockSim/xml/fixtures/praha-hlavni-nadrazi.xml`
 
 ## Testing
 
@@ -176,11 +166,17 @@ The improved configuration is used in:
 
 ## History
 
-- **2026-02-06:** Improvements implemented and validated
+- **2026-02-06:** Initial implementation
   - Added N-Bypass InOut and bypass route infrastructure
-  - Added S-CarTrain terminal and siding tracks
   - Validated XML structure and connectivity
   - Documented improvements
+- **2026-04-17:** Rebase onto develop
+  - Migrated to core-test/src/commonMain/resources/
+  - Updated after multiplatform Resources API migration
+- **2026-05-05:** Car train terminal deferred
+  - Removed S-CarTrain InOut and terminal track
+  - Updated element counts: 11 InOuts, 50 switches, 37 signals, 117 track blocks
+  - Marked car train terminal as deferred for future implementation
 
 ---
 

@@ -4,14 +4,16 @@
 
      Hand-tuned topology used by XMLContextFactoryTest:
      - 5 north entry points (Libeň, Vysočany lines + bypass)
-     - 7 south exit points (Vinohrady, Vršovice, bypass, car-train terminal)
+     - 6 south exit points (Vinohrady, Vršovice, bypass)
      - North throat with entry/intermediate switches and platform-entry signals
      - 9 platform tracks (Y=4, 6, 8, 10, 12, 14, 16, 18, 20)
      - South throat with merge/diverge switches to exit lines
-     - Bypass and car-train terminal sidings (Y=20, Y=22)
+     - Bypass siding (Y=20)
 
      Grid: 70x25
-     Total elements: 50 switches, 37 signals, 12 InOuts, 118 track blocks
+     Total elements: 50 switches, 37 signals, 11 InOuts, 117 track blocks
+     
+     Note: Car-train terminal (Y=22) is DEFERRED for future implementation
 -->
 <net X="70" Y="25" currentMaxSpeed="24.0" currentTrackLength="100.0" >
 	<!-- North entry points and entry signals -->
@@ -131,7 +133,7 @@
 	<RailSwitch X="51" Y="12" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW88" />
 	<RailSwitch X="51" Y="20" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="SW90" />
 	<InOut X="60" Y="20" SpatialType="HORIZONTAL" orientation="true" name="S-Bypass" />
-	<InOut X="60" Y="22" SpatialType="HORIZONTAL" orientation="true" name="S-CarTrain" />
+	<!-- Car-train terminal InOut (S-CarTrain at Y=22) is DEFERRED -->
 	<!-- Track blocks -->
 	<!-- North approach: entry InOuts to entry signals -->
 	<SimpleTrackBlock fromX="2" fromY="4" toX="4" toY="4" fromSegment="F" toSegment="A" length="150.0" maxSpeedfrom="40.0" maxSpeedto="40.0" />
@@ -265,8 +267,8 @@
 	<SimpleTrackBlock fromX="51" fromY="12" toX="54" toY="14" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="54" fromY="14" toX="56" toY="14" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="51" fromY="12" toX="58" toY="12" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
-	<!-- South throat — bypass and car-train terminal exits -->
+	<!-- South throat — bypass exit -->
 	<SimpleTrackBlock fromX="51" fromY="20" toX="50" toY="20" fromSegment="A" toSegment="F" length="5.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
 	<SimpleTrackBlock fromX="51" fromY="20" toX="60" toY="20" fromSegment="F" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
-	<SimpleTrackBlock fromX="51" fromY="20" toX="60" toY="22" fromSegment="G" toSegment="A" length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0" />
+	<!-- Car-train terminal track (Y=22) is DEFERRED -->
 </net>
