@@ -52,7 +52,7 @@ class SimulationControlPanel : JPanel() {
 	/** Scale factor: slider int value → speed double (1 → 0.1, 100 → 10.0). */
 	private val slider: JSlider
 
-	/** Label showing the current speed multiplier (e.g. "Speed: 1.0x"). */
+	/** Label showing the current speed multiplier (e.g. "1.0x"). */
 	private val speedLabel: JLabel
 
 	/**
@@ -60,7 +60,8 @@ class SimulationControlPanel : JPanel() {
 	 * simulation is running.  Setting this property:
 	 * - Removes the listener from the old runner (if any)
 	 * - Installs a listener on the new runner (if non-null) for [SimulationRunner.PROP_SPEED_MULTIPLIER]
-	 * - Synchronises the slider and label to the new runner's current speed
+	 * - Synchronises the slider and label to the new runner's current speed (when non-null);
+	 *   setting to `null` retains the last displayed speed so the panel is not visually reset.
 	 *
 	 * Must be set from the EDT.
 	 */
@@ -69,14 +70,20 @@ class SimulationControlPanel : JPanel() {
 			field?.removePropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, runnerListener)
 			field = value
 			value?.addPropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, runnerListener)
-			val speed = value?.speedMultiplier ?: DEFAULT_SPEED
-			syncUiToSpeed(speed)
+			if (value != null) {
+				syncUiToSpeed(value.speedMultiplier)
+			}
+			// When value is null, keep the current UI state so the speed display is not reset.
 		}
 
 	/** Listener that keeps the UI in sync when the runner's speed changes externally. */
 	private val runnerListener = PropertyChangeListener { evt: PropertyChangeEvent ->
 		val speed = evt.newValue as? Double ?: return@PropertyChangeListener
-		SwingUtilities.invokeLater { syncUiToSpeed(speed) }
+		if (SwingUtilities.isEventDispatchThread()) {
+			syncUiToSpeed(speed)
+		} else {
+			SwingUtilities.invokeLater { syncUiToSpeed(speed) }
+		}
 	}
 
 	/** Flag to suppress recursive slider → runner → slider feedback loops. */
@@ -130,9 +137,9 @@ class SimulationControlPanel : JPanel() {
 	/** Convert a slider int value to a speed double. */
 	private fun sliderToSpeed(value: Int): Double = value / SLIDER_SCALE
 
-	/** Convert a speed double to a slider int (clamped to [SLIDER_MIN]..[SLIDER_MAX]). */
+	/** Convert a speed double to a slider int (rounded to nearest tick, clamped to [SLIDER_MIN]..[SLIDER_MAX]). */
 	private fun speedToSlider(speed: Double): Int =
-		(speed * SLIDER_SCALE).toInt().coerceIn(SLIDER_MIN, SLIDER_MAX)
+		Math.round(speed * SLIDER_SCALE).toInt().coerceIn(SLIDER_MIN, SLIDER_MAX)
 
 	/** Apply a preset speed: update runner, slider, and label. */
 	private fun applyPreset(speed: Double) {
