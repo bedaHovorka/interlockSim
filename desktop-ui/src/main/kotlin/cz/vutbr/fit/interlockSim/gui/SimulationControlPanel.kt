@@ -137,9 +137,7 @@ class SimulationControlPanel : JPanel() {
 	/** Apply a preset speed: update runner, slider, and label. */
 	private fun applyPreset(speed: Double) {
 		syncUiToSpeed(speed)
-		// Update runner. If speed > MAX slider, clamp to MAX before writing runner.
-		val clampedSpeed = speed.coerceIn(SimulationRunner.MIN_SPEED, SimulationRunner.MAX_SPEED)
-		runner?.speedMultiplier = clampedSpeed
+		runner?.speedMultiplier = speed
 	}
 
 	/**
