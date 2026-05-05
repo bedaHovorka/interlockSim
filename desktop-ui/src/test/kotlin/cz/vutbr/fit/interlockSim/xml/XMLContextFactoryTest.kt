@@ -38,7 +38,6 @@ import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -1159,21 +1158,20 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		@Disabled("Car train terminal deferred - S-CarTrain InOut removed from XML")
-		@DisplayName("S-CarTrain InOut is present at grid (60,22) with exit orientation")
-		fun testPragueCarTrainTerminalInOutPresent() {
+		@DisplayName("S-Bypass InOut is present at grid (60,20) with exit orientation")
+		fun testPragueSouthBypassInOutPresent() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
 			val context = editingContextFactory.createContext(xml)
 
-			val cell = context.getRailWayNetGrid().getCellAt(60, 22)
+			val cell = context.getRailWayNetGrid().getCellAt(60, 20)
 			assertThat(cell).isNotNull().isInstanceOf(InOut::class)
 
 			val inOut = cell as InOut
 			assertThat(inOut.getName())
-				.withMessage("S-CarTrain InOut should have correct name")
-				.isEqualTo("S-CarTrain")
+				.withMessage("S-Bypass InOut should have correct name")
+				.isEqualTo("S-Bypass")
 			assertThat(inOut.getOrientation())
-				.withMessage("S-CarTrain InOut should be an exit point (orientation=true)")
+				.withMessage("S-Bypass InOut should be an exit point (orientation=true)")
 				.isTrue()
 		}
 
@@ -1208,49 +1206,32 @@ class XMLContextFactoryTest : KoinTestBase() {
 		}
 
 		@Test
-		@Disabled("Car train terminal deferred - S-CarTrain InOut removed from XML")
-		@DisplayName("S-CarTrain terminal is reachable from the N-Bypass entry")
-		fun testPragueCarTrainTerminalAccessible() {
-			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
-			val context = editingContextFactory.createContext(xml) as EditingContext
-
-			// S-CarTrain is accessible from N-Bypass via the Y=20/Y=22 bypass corridor
-			var nBypass: InOut? = null
-			var sCarTrain: InOut? = null
-			for (entry in context.getRailWayNetGrid()) {
-				val cell = entry.value
-				if (cell is InOut) {
-					when (cell.getName()) {
-						"N-Bypass" -> nBypass = cell
-						"S-CarTrain" -> sCarTrain = cell
-					}
-				}
-			}
-
-			assertThat(nBypass)
-				.withMessage("N-Bypass InOut should exist in Praha XML")
-				.isNotNull()
-			assertThat(sCarTrain)
-				.withMessage("S-CarTrain InOut should exist in Praha XML")
-				.isNotNull()
-
-			assertThat(existPath(nBypass!!, sCarTrain!!, context as DefaultEditingContext))
-				.withMessage("Path should exist from N-Bypass to S-CarTrain via bypass corridor (Y=20→Y=22)")
-				.isTrue()
-		}
-
-		@Test
-		@Disabled("Bypass switch at (6,20) not present in current XML - infrastructure differs from PR #347")
-		@DisplayName("Switch orientations at new bypass infrastructure are railway-domain correct")
-		fun testPragueSwitchOrientationsAtNewInfrastructure() {
+		@DisplayName("Bypass corridor switches at Y=20 have the orientations the bypass route requires")
+		fun testPragueBypassSwitchOrientations() {
 			val xml = getFixtureStream("praha-hlavni-nadrazi.xml")
 			val context = editingContextFactory.createContext(xml)
+			val grid = context.getRailWayNetGrid()
 
-			val switchAt6x20 = context.getRailWayNetGrid().getCellAt(6, 20)
-			assertThat(switchAt6x20).isNotNull().isInstanceOf(RailSwitch::class)
-			assertThat((switchAt6x20 as RailSwitch).type)
-				.withMessage("Bypass entry switch at (6,20) must be SIMPLE_LEFT_TRUE for correct bypass diverge")
-				.isEqualTo(RailSwitch.Type.SIMPLE_LEFT_TRUE)
+			// Four switches sit on the bypass corridor (Y=20). Their types are the
+			// physical orientation of the diverge — assert each one to lock the
+			// bypass topology against regression.
+			val expectedTypes = mapOf(
+				(11 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+				(15 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+				(46 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+				(51 to 20) to RailSwitch.Type.SIMPLE_RIGHT_FALSE,
+			)
+			for ((coords, expectedType) in expectedTypes) {
+				val (x, y) = coords
+				val cell = grid.getCellAt(x, y)
+				assertThat(cell)
+					.withMessage("Cell at ($x,$y) should be a RailSwitch on the bypass corridor")
+					.isNotNull()
+					.isInstanceOf(RailSwitch::class)
+				assertThat((cell as RailSwitch).type)
+					.withMessage("Switch at ($x,$y) must be $expectedType to keep the bypass route diverging correctly")
+					.isEqualTo(expectedType)
+			}
 		}
 
 		/**

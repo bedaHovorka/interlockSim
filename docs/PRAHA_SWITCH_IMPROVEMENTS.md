@@ -22,27 +22,30 @@ This document describes the switch layout improvements implemented for the Praha
 
 ## Implemented Solutions
 
-### 1. North Bypass Connection (Y=20)
+### 1. North Bypass Connection (Y=20) — AS BUILT
 
-Added direct north-south bypass route that allows through trains to avoid the main platform zone.
+Direct north-south bypass route that lets through trains avoid the main platform zone.
 
-**New Elements:**
-- **N-Bypass InOut** at (2,20) - North bypass entry point
-- **Signal** at (4,20) - Bypass entry signal
-- **Switch** at (6,20) Type=SIMPLE_LEFT_TRUE - Bypass connection switch
-- **Track blocks** connecting to existing Y=20 bypass track
+**Elements (verified against XML):**
+- **N-Bypass InOut** at (2,20), `orientation=false` — north bypass entry point
+- **Signal** at (4,20) — bypass entry signal
+- **Bypass corridor switches** at Y=20:
+  - (11,20) `SIMPLE_RIGHT_TRUE` (SW20)
+  - (15,20) `SIMPLE_RIGHT_TRUE` (SW16)
+  - (46,20) `SIMPLE_RIGHT_TRUE` (SW71)
+  - (51,20) `SIMPLE_RIGHT_FALSE` (SW90)
+- **S-Bypass InOut** at (60,20), `orientation=true` — south bypass exit point
+- **Track blocks** along the Y=20 corridor and the diverges into adjacent Y rows
 
 **Route:**
 ```
-N-Bypass (2,20) → Signal (4,20) → Switch (6,20) → Bypass track → S-Bypass (60,20)
+N-Bypass (2,20) → Signal (4,20) → Y=20 corridor (4 switches) → S-Bypass (60,20)
 ```
 
 **Benefits:**
 - Through trains no longer occupy main platform tracks
 - Reduced congestion in platform area
 - More realistic station operations
-- Route length: ~420m total
-- Travel time: ~50 seconds @ 30 km/h average
 
 ### 2. Car Train Terminal (Y=22) — **DEFERRED**
 
@@ -66,10 +69,14 @@ N-Bypass (2,20) → Signal (4,20) → Switch (6,20) → Bypass track → S-Bypas
 | Element Type | Before | After | Change |
 |--------------|--------|-------|--------|
 | InOut        | 10     | 11    | +1     |
-| Switches     | 49     | 50    | +1     |
-| Signals      | 36     | 37    | +1     |
+| Switches     | 40     | 50    | +10    |
+| Signals      | 54     | 37    | -17    |
 | Track Blocks | 106    | 117   | +11    |
-| Grid         | 70x25  | 70x25  | -      |
+| Grid         | 70x25  | 70x25 | -      |
+
+*Before values reflect `develop` at the time this PR branched. The signal count
+decreased because the hand-tuned bypass topology consolidated several adjacent
+signals into the new corridor; switch count grew accordingly.*
 
 ### New Track Infrastructure
 
@@ -104,14 +111,10 @@ Y=22:   (Car train terminal DEFERRED for future implementation)
 
 ### Scenario 1: Through Train (No Platform Stop)
 - **Route:** N-Bypass (2,20) → S-Bypass (60,20)
-- **Distance:** ~420m
-- **Time:** ~50 seconds @ 30 km/h average
-- **Benefit:** Does not occupy platform tracks
+- **Benefit:** Does not occupy platform tracks; verified navigable by `testPragueBypassRouteNavigable`
 
 ### Scenario 2: Platform Train (Station Stop)
 - **Route:** N-Lib-1 (2,4) → Platform track → S-Vin-1 (60,4)
-- **Distance:** ~500m total
-- **Time:** ~2-3 minutes with stop
 - **Unchanged from original**
 
 ### Scenario 3: Car Train Terminal — **DEFERRED**
