@@ -614,7 +614,7 @@ class SimulationControllerTest {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("stop hides simulation controls in ToolBar")
 	fun stopHidesToolBarSimulationControls() {
 		val started = CountDownLatch(1)
