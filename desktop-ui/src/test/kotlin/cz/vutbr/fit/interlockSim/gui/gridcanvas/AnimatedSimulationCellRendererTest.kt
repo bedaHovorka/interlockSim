@@ -389,6 +389,7 @@ class AnimatedSimulationCellRendererTest {
 
 	@Test
 	fun `drawTrain renders blue train body trailing behind eastbound front`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
 		renderTrainToImage(
 			TrainState(
 				trainNumber = 12,
@@ -423,6 +424,7 @@ class AnimatedSimulationCellRendererTest {
 
 	@Test
 	fun `drawTrain renders narrower rear cab than main body for eastbound train`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
 		renderTrainToImage(
 			TrainState(
 				trainNumber = 31,
@@ -461,6 +463,7 @@ class AnimatedSimulationCellRendererTest {
 
 	@Test
 	fun `drawTrain renders pointed eastbound nose instead of circular front`() {
+		// Seed the renderer's previous-position cache so the next frame resolves an eastbound heading.
 		renderTrainToImage(
 			TrainState(
 				trainNumber = 41,
