@@ -73,12 +73,14 @@ N-Bypass (2,20) → Signal (4,20) → Switch (6,20) → Bypass track → S-Bypas
 
 ### New Track Infrastructure
 
-Total distance added: **280 meters** (bypass route only; car train terminal deferred)
+The bypass improvement adds new track infrastructure along the Y=20 corridor to connect the new north-side entry with the existing bypass route.
 
-**Track Blocks:**
-1. (2,20)→(4,20): 150m, 40→40 km/h (North bypass approach)
-2. (4,20)→(6,20): 30m, 40→35 km/h (Signal to switch)
-3. (6,20)→(16,20): 100m, 35→30 km/h (Switch to platform zone)
+**Implementation note:** Exact track-block segmentation, lengths, and speed profiles are defined by the current XML configuration and should be treated as the source of truth.
+
+**Summary:**
+- New approach infrastructure for the N-Bypass InOut at (2,20)
+- New signal and switch connection at the bypass entrance
+- Additional track blocks integrating the new entry into the existing Y=20 bypass route
 
 **Note:** Car train terminal tracks (Y=22) are deferred to future implementation.
 
