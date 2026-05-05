@@ -536,6 +536,6 @@ class AnimatedSimulationCellRenderer(
 		const val NOSE_TEXT_OFFSET_RATIO = 0.2
 		// Geometry ratios chosen by visual tuning so the marker reads as a locomotive at 16-20 px cell sizes.
 		const val CAB_LENGTH_RATIO = 0.32 // Rear cab takes roughly one third of the rectangular body length.
-		const val CAB_HEIGHT_RATIO = 0.6 // Narrower cab profile creates a visible step from cab to main body.
+		const val CAB_HEIGHT_RATIO = 0.6 // Reduced cab height keeps a stronger visible step from cab to main body.
 	}
 }
