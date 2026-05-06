@@ -7,7 +7,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
@@ -39,7 +38,6 @@ import kotlin.math.abs
  */
 class SimulationKeyBindingsTest {
 	private lateinit var simulationContext: SimulationContext
-	private lateinit var controlPanel: ControlPanel
 	private lateinit var simulationController: SimulationController
 	private lateinit var keyBindings: SimulationKeyBindings
 	private lateinit var rootPane: JPanel
@@ -59,8 +57,7 @@ class SimulationKeyBindingsTest {
 
 		// Create controller and key bindings on EDT (Swing components require EDT)
 		SwingUtilities.invokeAndWait {
-			controlPanel = ControlPanel()
-			simulationController = SimulationController(controlPanel)
+			simulationController = SimulationController()
 			keyBindings = SimulationKeyBindings(simulationController)
 			rootPane = JPanel()
 		}

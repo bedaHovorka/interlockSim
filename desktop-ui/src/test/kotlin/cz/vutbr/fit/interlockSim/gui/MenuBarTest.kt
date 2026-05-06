@@ -204,29 +204,6 @@ class MenuBarTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("Speed submenu items have keyboard accelerators")
-	fun speedSubmenuItemsHaveAccelerators() {
-		runOnEDT {
-			val simMenu = menuBar.getMenu(1) as JMenu
-			val speedMenu =
-				(0 until simMenu.itemCount)
-					.mapNotNull { simMenu.getItem(it) }
-					.filterIsInstance<JMenu>()
-					.first { it.text == "Speed" }
-
-			val items =
-				(0 until speedMenu.itemCount)
-					.mapNotNull { speedMenu.getItem(it) }
-					.filterIsInstance<JMenuItem>()
-
-			items.forEach { item ->
-				assertThat(item.accelerator).isNotNull()
-			}
-		}
-	}
-
-	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("File menu has Save action")
 	fun fileMenuHasSaveAction() {
 		runOnEDT {
