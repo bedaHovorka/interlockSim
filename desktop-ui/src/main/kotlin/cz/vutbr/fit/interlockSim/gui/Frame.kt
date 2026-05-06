@@ -333,7 +333,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		context.addPropertyChangeListener(statusBar)
 
-		previousSimulationContext?.close()
+		// Only close the previous context when it is a different instance.
+		// Closing the same context that was just set would invalidate the Koin scope we just wired.
+		if (previousSimulationContext !== null && previousSimulationContext !== context) {
+			previousSimulationContext.close()
+		}
 	}
 
 	/**
@@ -396,9 +400,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			return
 		}
 
-		simulationController.start(context)
-		// Wire SimulationControlPanel to the new runner for speed control
-		simulationControlPanel.runner = simulationController.runner
+		try {
+			simulationController.start(context)
+			simulationControlPanel.runner = simulationController.runner?.takeIf { it.isRunning() }
+		} catch (e: Exception) {
+			logger.error(e) { "Failed to start simulation" }
+		}
 	}
 
 	/**

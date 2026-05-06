@@ -15,10 +15,13 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.swing.JMenu
 import javax.swing.JMenuItem
@@ -161,8 +164,8 @@ class MenuBarTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("Speed submenu has 5 preset items")
-	fun speedSubmenuHas5Items() {
+	@DisplayName("Speed submenu has 7 preset items")
+	fun speedSubmenuHas7Items() {
 		runOnEDT {
 			val simMenu = menuBar.getMenu(1) as JMenu
 			val speedMenu =
@@ -176,7 +179,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 					.mapNotNull { speedMenu.getItem(it) }
 					.filterIsInstance<JMenuItem>()
 
-			assertThat(speedItems).hasSize(5)
+			assertThat(speedItems).hasSize(7)
 		}
 	}
 
@@ -198,7 +201,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 					.filterIsInstance<JMenuItem>()
 					.map { it.text }
 
-			assertThat(labels).isEqualTo(listOf("0.1x", "0.5x", "1x", "2x", "10x"))
+			assertThat(labels).isEqualTo(listOf("0.1x", "0.5x", "1x", "2x", "5x", "10x", "50x"))
 		}
 	}
 
@@ -347,6 +350,31 @@ class MenuBarTest : AbstractFrameTestBase() {
 			val exitItem = menuItems.last()
 
 			assertThat(exitItem.text).isEqualTo("Exit")
+		}
+	}
+
+	// ── loadSimulationContext ─────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("loadSimulationContext returns a SimulationContext for a valid XML file")
+	fun loadSimulationContextWithValidFileReturnsContext() {
+		val tempFile = File.createTempFile("vyhybna", ".xml").apply {
+			outputStream().use { out -> TestFixtures.loadShuntingXml().copyTo(out) }
+			deleteOnExit()
+		}
+		// Must be called off-EDT (SwingWorker's doInBackground thread)
+		val context = menuBar.loadSimulationContext(tempFile)
+		assertThat(context).isNotNull()
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("loadSimulationContext throws for a non-existent file")
+	fun loadSimulationContextWithMissingFileThrows() {
+		assertThrows<Exception> {
+			menuBar.loadSimulationContext(File("this-file-does-not-exist-9x3f.xml"))
 		}
 	}
 
