@@ -35,10 +35,13 @@ import java.beans.PropertyChangeListener
  *   nulls it.
  * - Callbacks are invoked on whichever thread performs the lifecycle change.
  *
- * @param onStateChanged Callback for lifecycle state updates.
- * @param onSpeedChanged Callback for speed indicator updates.
- * @param onCompleted Callback invoked when the simulation finishes naturally.
- *   Defaults to a no-op.
+ * @param onStateChanged Callback for lifecycle state updates. Invoked on the same
+ *   thread that performs the state change (caller thread for [start]/[stop], monitor
+ *   thread for natural completion).
+ * @param onSpeedChanged Callback for speed indicator updates. Invoked on the thread
+ *   that emits the speed change; callers are responsible for EDT marshalling as needed.
+ * @param onCompleted Callback invoked when the simulation finishes naturally on the
+ *   monitor thread. Defaults to a no-op.
  * @since 2026-04-20 (extracted from Frame for testability)
  * @see Frame
  */

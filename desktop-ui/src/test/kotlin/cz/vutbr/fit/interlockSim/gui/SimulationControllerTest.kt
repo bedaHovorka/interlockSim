@@ -680,6 +680,13 @@ class SimulationControllerTest {
 			onCompleted = onCompleted
 		)
 
+	/**
+	 * Execute [action] on EDT synchronously for deterministic assertions in unit tests.
+	 *
+	 * Unlike the production callback wiring pattern (which dispatches asynchronously),
+	 * this helper blocks until EDT work completes. That makes follow-up assertions
+	 * observe final state without timing races.
+	 */
 	private fun runOnEdtSync(action: () -> Unit) {
 		if (SwingUtilities.isEventDispatchThread()) {
 			action()

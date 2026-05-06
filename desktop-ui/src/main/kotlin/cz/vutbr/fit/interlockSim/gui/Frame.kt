@@ -26,6 +26,7 @@ import javax.swing.JFrame
 import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
@@ -419,11 +420,17 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 	}
 
+	/**
+	 * Execute [action] on EDT.
+	 *
+	 * Runs immediately if already on EDT; otherwise schedules asynchronously via
+	 * [javax.swing.SwingUtilities.invokeLater] to avoid blocking monitor/background threads.
+	 */
 	private fun runOnEdt(action: () -> Unit) {
-		if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+		if (SwingUtilities.isEventDispatchThread()) {
 			action()
 		} else {
-			javax.swing.SwingUtilities.invokeLater(action)
+			SwingUtilities.invokeLater(action)
 		}
 	}
 
