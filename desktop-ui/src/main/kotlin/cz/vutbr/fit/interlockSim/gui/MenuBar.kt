@@ -15,15 +15,19 @@ import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
+import java.awt.Cursor
 import java.awt.event.ActionEvent
 import java.io.File
+import java.util.concurrent.ExecutionException
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
 import javax.swing.JMenuItem
 import javax.swing.JOptionPane
+import javax.swing.SwingWorker
 
 /**
  * Application menu bar with File and Help menus
@@ -33,6 +37,8 @@ class MenuBar : JMenuBar() {
 	private val saveAsAction = SaveAsAction()
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
+
 		/**
 		 * Pure validation: returns true if [context] has enough InOut elements to be saved.
 		 * Does not show any dialog — callers handle error presentation.
@@ -295,41 +301,35 @@ class MenuBar : JMenuBar() {
 			if (returnValue != JFileChooser.APPROVE_OPTION) return
 
 			val selectedFile: File = fileChooser.selectedFile
+			val savedCursor = this@MenuBar.cursor
+			this@MenuBar.cursor = Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR)
 
-			try {
-				val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
-				val simulationContextFactory = getKoin().get<SimulationContextFactory>()
+			object : SwingWorker<SimulationContext, Void>() {
+				override fun doInBackground(): SimulationContext = loadSimulationContext(selectedFile)
 
-				// Wrap intermediate EditingContext in use{} to close its Koin scope after
-				// transformation, avoiding a resource leak.
-				val simContext =
-					editingContextFactory.createContext(selectedFile).use { editCtx ->
-						simulationContextFactory.createContext(editCtx as EditingContext)
+				override fun done() {
+					this@MenuBar.cursor = savedCursor
+					val simContext = try {
+						get()
+					} catch (ex: ExecutionException) {
+						logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
+						JOptionPane.showMessageDialog(
+							this@MenuBar,
+							"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
+								"Ensure the file is a valid railway network XML.",
+							"Cannot Start Simulation",
+							JOptionPane.ERROR_MESSAGE
+						)
+						return
 					}
 
-				// Enable all report types so AnimationController and EventTimelinePanel receive
-				// property-change events (without this the animation stays visually frozen).
-				simContext.addReportTypes(*SimulationContext.ReportType.values())
-
-				val frame = getKoin().get<Frame>()
-
-				// Clear dirty flag before switching to simulation mode. If the user had unsaved
-				// edits, continuing in simulation mode implicitly discards them; the window-close
-				// handler must not try to save a non-existent EditingContext afterwards.
-				frame.modificationTracker.markClean()
-				frame.modificationTracker.setCurrentFile(null)
-
-				frame.setContext(simContext)
-				frame.startSimulation()
-			} catch (exception: Exception) {
-				JOptionPane.showMessageDialog(
-					this@MenuBar,
-					"Failed to start simulation: ${exception.message}\n\n" +
-						"Ensure the file is a valid railway network XML.",
-					"Cannot Start Simulation",
-					JOptionPane.ERROR_MESSAGE
-				)
-			}
+					val frame = getKoin().get<Frame>()
+					frame.modificationTracker.markClean()
+					frame.modificationTracker.setCurrentFile(null)
+					frame.setContext(simContext)
+					frame.startSimulation()
+				}
+			}.execute()
 		}
 	}
 
@@ -361,6 +361,22 @@ class MenuBar : JMenuBar() {
 		}
 	}
 
+	/**
+	 * Parses [file] as a railway XML, transforms it to a [SimulationContext], and enables
+	 * all report types. Must be called off the Event Dispatch Thread.
+	 *
+	 * @throws Exception if the file is unreadable or the XML is invalid.
+	 */
+	internal fun loadSimulationContext(file: File): SimulationContext {
+		val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
+		val simulationContextFactory = getKoin().get<SimulationContextFactory>()
+		return editingContextFactory.createContext(file).use { editCtx ->
+			simulationContextFactory.createContext(editCtx as EditingContext)
+		}.also { simCtx ->
+			simCtx.addReportTypes(*SimulationContext.ReportType.values())
+		}
+	}
+
 	init {
 		add(fileMenu())
 		add(simulationMenu())
@@ -380,7 +396,7 @@ class MenuBar : JMenuBar() {
 	/**
 	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
 	 *
-	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) are available via menu items.
+	 * Speed presets (0.1x, 0.5x, 1x, 2x, 5x, 10x, 50x) are available via menu items.
 	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
 	 * during simulation mode (Phase 3.1, Issue #193).
 	 */
@@ -397,7 +413,9 @@ class MenuBar : JMenuBar() {
 				Pair("0.5x", 0.5),
 				Pair("1x", 1.0),
 				Pair("2x", 2.0),
+				Pair("5x", 5.0),
 				Pair("10x", 10.0),
+				Pair("50x", 50.0),
 			)
 		for ((label, multiplier) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))

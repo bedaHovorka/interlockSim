@@ -400,9 +400,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			return
 		}
 
-		simulationController.start(context)
-		// Wire SimulationControlPanel to the new runner for speed control
-		simulationControlPanel.runner = simulationController.runner
+		try {
+			simulationController.start(context)
+			simulationControlPanel.runner = simulationController.runner?.takeIf { it.isRunning() }
+		} catch (e: Exception) {
+			logger.error(e) { "Failed to start simulation" }
+		}
 	}
 
 	/**

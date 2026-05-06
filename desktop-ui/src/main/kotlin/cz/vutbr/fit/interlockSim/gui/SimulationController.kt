@@ -205,7 +205,7 @@ internal class SimulationController(
 		private val logger = KotlinLogging.logger {}
 
 		/** Poll interval (ms) for the monitor thread to detect simulation completion. */
-		internal const val SIMULATION_POLL_INTERVAL_MS: Long = 500L
+		internal const val SIMULATION_POLL_INTERVAL_MS: Long = 100L
 	}
 
 	/** Simulation lifecycle states emitted via [onStateChanged]. */
