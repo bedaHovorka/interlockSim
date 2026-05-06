@@ -519,6 +519,36 @@ class SimulationControllerTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("speed selection survives natural completion and is applied to the next start()")
+	fun speedSelectionPersistsThroughNaturalCompletion() {
+		val firstCompleted = CountDownLatch(1)
+		every { context.run() } answers { /* returns immediately — natural completion */ }
+
+		val controller = createController(onCompleted = { firstCompleted.countDown() })
+		controller.setSpeed(2.0)
+		controller.start(context)
+
+		// Wait for the first simulation to complete naturally
+		assertThat(firstCompleted.await(5, TimeUnit.SECONDS)).isTrue()
+
+		// Now start a second simulation (blocking so we can inspect runner speed)
+		val started = CountDownLatch(1)
+		val blockSecondSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSecondSim.await(10, TimeUnit.SECONDS)
+		}
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+
+		assertThat(controller.runner!!.speedMultiplier).isEqualTo(2.0)
+
+		blockSecondSim.countDown()
+		controller.stop()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("preselected speed is propagated to StatusBar when start() begins")
 	fun preselectedSpeedPropagatesOnStart() {
 		val started = CountDownLatch(1)

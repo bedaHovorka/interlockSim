@@ -80,21 +80,21 @@ class SimulationKeyBindingsTest {
 			val inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
 			val actionMap = rootPane.actionMap
 
-			// Verify preset bindings (keys 1-5)
-			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_1, 0)]).isEqualTo("speed_preset_1.0")
+			// Verify preset bindings (keys 1-5 → 0.5×, 1×, 2×, 5×, 10×)
+			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_1, 0)]).isEqualTo("speed_preset_0.5")
+			assertThat(actionMap["speed_preset_0.5"]).isNotNull()
+
+			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_2, 0)]).isEqualTo("speed_preset_1.0")
 			assertThat(actionMap["speed_preset_1.0"]).isNotNull()
 
-			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_2, 0)]).isEqualTo("speed_preset_2.0")
+			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_3, 0)]).isEqualTo("speed_preset_2.0")
 			assertThat(actionMap["speed_preset_2.0"]).isNotNull()
 
-			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_3, 0)]).isEqualTo("speed_preset_5.0")
+			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_4, 0)]).isEqualTo("speed_preset_5.0")
 			assertThat(actionMap["speed_preset_5.0"]).isNotNull()
 
-			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_4, 0)]).isEqualTo("speed_preset_10.0")
+			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_5, 0)]).isEqualTo("speed_preset_10.0")
 			assertThat(actionMap["speed_preset_10.0"]).isNotNull()
-
-			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_5, 0)]).isEqualTo("speed_preset_50.0")
-			assertThat(actionMap["speed_preset_50.0"]).isNotNull()
 
 			// Verify incremental speed bindings (+/- with Shift and numpad)
 			val shiftEqualsStroke = KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.SHIFT_DOWN_MASK)
@@ -133,11 +133,11 @@ class SimulationKeyBindingsTest {
 			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, 0)]).isNull()
 			assertThat(inputMap[KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0)]).isNull()
 
+			assertThat(actionMap["speed_preset_0.5"]).isNull()
 			assertThat(actionMap["speed_preset_1.0"]).isNull()
 			assertThat(actionMap["speed_preset_2.0"]).isNull()
 			assertThat(actionMap["speed_preset_5.0"]).isNull()
 			assertThat(actionMap["speed_preset_10.0"]).isNull()
-			assertThat(actionMap["speed_preset_50.0"]).isNull()
 			assertThat(actionMap["simulation_speed_up"]).isNull()
 			assertThat(actionMap["simulation_speed_down"]).isNull()
 			assertThat(actionMap["simulation_pause_toggle"]).isNull()
@@ -156,7 +156,22 @@ class SimulationKeyBindingsTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `key 1 sets speed to 1x`() {
+	fun `key 1 sets speed to 0_5x`() {
+		SwingUtilities.invokeAndWait {
+			keyBindings.install(rootPane)
+		}
+		simulationController.start(simulationContext)
+
+		triggerAction("speed_preset_0.5")
+
+		SwingUtilities.invokeAndWait {
+			assertThat(abs(simulationController.runner!!.speedMultiplier - 0.5) < 0.01).isTrue()
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `key 2 sets speed to 1x`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
@@ -171,7 +186,7 @@ class SimulationKeyBindingsTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `key 2 sets speed to 2x`() {
+	fun `key 3 sets speed to 2x`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
@@ -186,7 +201,7 @@ class SimulationKeyBindingsTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `key 3 sets speed to 5x`() {
+	fun `key 4 sets speed to 5x`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
@@ -201,7 +216,7 @@ class SimulationKeyBindingsTest {
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `key 4 sets speed to 10x`() {
+	fun `key 5 sets speed to 10x`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
@@ -215,29 +230,14 @@ class SimulationKeyBindingsTest {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	fun `key 5 sets speed to 50x`() {
-		SwingUtilities.invokeAndWait {
-			keyBindings.install(rootPane)
-		}
-		simulationController.start(simulationContext)
-
-		triggerAction("speed_preset_50.0")
-
-		SwingUtilities.invokeAndWait {
-			assertThat(abs(simulationController.runner!!.speedMultiplier - 50.0) < 0.01).isTrue()
-		}
-	}
-
-	@Test
-	fun `preset key is ignored when no simulation is running`() {
+	fun `preset key updates desiredSpeed even when no simulation is running`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
 		// Do NOT start simulation
 
-		// Should not throw
-		triggerAction("speed_preset_5.0")
+		// Should not throw; updates desiredSpeed for next start
+		triggerAction("speed_preset_1.0")
 
 		SwingUtilities.invokeAndWait {
 			assertThat(simulationController.runner).isNull()
@@ -315,7 +315,7 @@ class SimulationKeyBindingsTest {
 	}
 
 	@Test
-	fun `incremental adjustment is ignored when no simulation is running`() {
+	fun `incremental adjustment is safe when no simulation is running`() {
 		SwingUtilities.invokeAndWait {
 			keyBindings.install(rootPane)
 		}
@@ -326,6 +326,25 @@ class SimulationKeyBindingsTest {
 
 		SwingUtilities.invokeAndWait {
 			assertThat(simulationController.runner).isNull()
+		}
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	fun `increment action updates desiredSpeed when no simulation is running`() {
+		SwingUtilities.invokeAndWait {
+			keyBindings.install(rootPane)
+		}
+		// No simulation running — default desiredSpeed is DEFAULT_SPEED (1.0)
+		// Speed-up multiplier is 1.5, so desiredSpeed should become 1.5
+
+		triggerAction("simulation_speed_up")
+
+		// Now start a simulation and verify the runner adopts the incremented speed
+		simulationController.start(simulationContext)
+
+		SwingUtilities.invokeAndWait {
+			assertThat(abs(simulationController.runner!!.speedMultiplier - 1.5) < 0.01).isTrue()
 		}
 	}
 

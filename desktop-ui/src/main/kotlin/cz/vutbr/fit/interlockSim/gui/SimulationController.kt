@@ -70,6 +70,12 @@ internal class SimulationController(
 	private var desiredSpeed: Double = SimulationRunner.DEFAULT_SPEED
 
 	/**
+	 * Current effective speed: the live runner's speed when a simulation is running,
+	 * otherwise the stored [desiredSpeed] that will be applied on the next [start].
+	 */
+	val speed: Double get() = runner?.speedMultiplier ?: desiredSpeed
+
+	/**
 	 * Start the simulation for [context].
 	 *
 	 * Idempotent: if a simulation is already running this is a no-op.
