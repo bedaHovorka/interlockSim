@@ -2,9 +2,9 @@ name: SonarQube Analysis
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
