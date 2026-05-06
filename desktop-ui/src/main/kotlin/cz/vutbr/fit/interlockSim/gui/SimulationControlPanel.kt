@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import java.awt.FlowLayout
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
+import java.util.Locale
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JButton
@@ -178,10 +179,10 @@ class SimulationControlPanel : JPanel() {
 		}
 	}
 
-	private fun formatSpeedLabel(speed: Double): String = "%.1fx".format(speed)
+	private fun formatSpeedLabel(speed: Double): String = "%.1fx".format(Locale.ROOT, speed)
 
 	private fun formatPresetLabel(speed: Double): String =
-		if (speed >= 1.0) "%.0fx".format(speed) else "%.1fx".format(speed)
+		if (speed >= 1.0) "%.0fx".format(Locale.ROOT, speed) else "%.1fx".format(Locale.ROOT, speed)
 
 	companion object {
 		/** Slider integer range: [1..100] maps to speed [0.1..10.0]. */

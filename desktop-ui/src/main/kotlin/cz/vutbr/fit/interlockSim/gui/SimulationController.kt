@@ -92,6 +92,12 @@ internal class SimulationController(
 			return
 		}
 
+		// Clean up any stale speed listener from a previous run that finished naturally
+		// (monitor thread may still be in its finally block when we get here).
+		if (existing != null && !existing.isRunning()) {
+			cleanupSpeedListener(existing)
+		}
+
 		val newRunner = SimulationRunner(context)
 		newRunner.speedMultiplier = desiredSpeed
 		runner = newRunner
@@ -199,7 +205,7 @@ internal class SimulationController(
 		private val logger = KotlinLogging.logger {}
 
 		/** Poll interval (ms) for the monitor thread to detect simulation completion. */
-		internal const val SIMULATION_POLL_INTERVAL_MS: Long = 500L
+		internal const val SIMULATION_POLL_INTERVAL_MS: Long = 100L
 	}
 
 	/** Simulation lifecycle states emitted via [onStateChanged]. */

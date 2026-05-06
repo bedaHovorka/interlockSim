@@ -663,6 +663,12 @@ class SimulationControllerTest {
 		}
 	}
 
+	@Test
+	@DisplayName("poll interval is responsive (≤ 200 ms)")
+	fun pollIntervalIsResponsive() {
+		assertThat(SimulationController.SIMULATION_POLL_INTERVAL_MS <= 200L).isTrue()
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**
