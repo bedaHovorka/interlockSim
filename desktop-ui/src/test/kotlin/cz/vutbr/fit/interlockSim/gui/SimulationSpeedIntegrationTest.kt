@@ -78,6 +78,8 @@ class SimulationSpeedIntegrationTest {
 		// Unpause first so the simulation thread can receive the interrupt cleanly.
 		runner.isPaused = false
 		runner.stop()
+		// Bounded wait so a failing test does not leak its thread into the next one.
+		waitForStop(5_000)
 	}
 
 	// ── 1. Rapid speed changes ────────────────────────────────────────────────
@@ -91,7 +93,8 @@ class SimulationSpeedIntegrationTest {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.01)
+					// throttle(0.1) at 100x → sleepMs = round(0.1/100*1000) = 1ms: no busy spin.
+					runner.throttle(0.1)
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -115,7 +118,10 @@ class SimulationSpeedIntegrationTest {
 			} finally {
 				changesDone.countDown()
 			}
-		}.also { it.isDaemon = true; it.start() }
+		}.also {
+			it.isDaemon = true
+			it.start()
+		}
 
 		assertThat(changesDone.await(10, TimeUnit.SECONDS)).isTrue()
 		assertThat(runner.isRunning()).isTrue()
@@ -158,7 +164,8 @@ class SimulationSpeedIntegrationTest {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.01)
+					// throttle(0.1) at 100x → sleepMs = 1ms: avoids busy spin.
+					runner.throttle(0.1)
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -206,10 +213,10 @@ class SimulationSpeedIntegrationTest {
 		runner.start()
 		assertThat(simRunning.await(5, TimeUnit.SECONDS)).isTrue()
 
-		val stopStart = System.currentTimeMillis()
+		// waitForStop(5_000) + @Timeout(10s) together enforce the 5-second bound
+		// without a flaky wall-clock comparison that can fail on busy CI runners.
 		runner.stop()
 		assertThat(waitForStop(5_000)).isTrue()
-		assertThat(System.currentTimeMillis() - stopStart < 5_000L).isTrue()
 	}
 
 	// ── 5. Stop while paused ──────────────────────────────────────────────────
@@ -219,11 +226,20 @@ class SimulationSpeedIntegrationTest {
 	@DisplayName("stop while paused completes within 5 seconds")
 	fun stopWhilePausedCompletesWithinFiveSeconds() {
 		val simRunning = CountDownLatch(1)
+		// Fires once the sim thread has observed isPaused=true and is about to block.
+		val enteringPauseWait = CountDownLatch(1)
+
 		every { context.run() } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.1)
+					if (runner.isPaused) {
+						// Signal before blocking so the test knows the thread is paused.
+						enteringPauseWait.countDown()
+						runner.awaitIfPaused()
+					} else {
+						Thread.sleep(10)
+					}
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -233,14 +249,13 @@ class SimulationSpeedIntegrationTest {
 		runner.start()
 		assertThat(simRunning.await(5, TimeUnit.SECONDS)).isTrue()
 
-		// Pause and give the simulation thread time to enter awaitIfPaused().
 		runner.isPaused = true
-		Thread.sleep(100)
+		// Wait until the sim thread has actually entered the paused-wait state.
+		assertThat(enteringPauseWait.await(5, TimeUnit.SECONDS)).isTrue()
 
-		val stopStart = System.currentTimeMillis()
+		// waitForStop(5_000) + @Timeout(10s) enforce the bound without a flaky comparison.
 		runner.stop()
 		assertThat(waitForStop(5_000)).isTrue()
-		assertThat(System.currentTimeMillis() - stopStart < 5_000L).isTrue()
 	}
 
 	// ── 6. Concurrent speed changes ───────────────────────────────────────────
@@ -256,7 +271,8 @@ class SimulationSpeedIntegrationTest {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.001)
+					// throttle(0.1) at 100x → sleepMs = 1ms: no busy spin.
+					runner.throttle(0.1)
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -279,7 +295,8 @@ class SimulationSpeedIntegrationTest {
 		speedSets.forEach { speeds ->
 			Thread {
 				allReady.countDown()
-				allReady.await(5, TimeUnit.SECONDS)
+				// Assert the await so a slow start is caught rather than silently skipped.
+				assertThat(allReady.await(5, TimeUnit.SECONDS)).isTrue()
 				try {
 					repeat(20) { i ->
 						runner.speedMultiplier = speeds[i % speeds.size]
@@ -290,7 +307,10 @@ class SimulationSpeedIntegrationTest {
 				} finally {
 					allDone.countDown()
 				}
-			}.also { it.isDaemon = true; it.start() }
+			}.also {
+				it.isDaemon = true
+				it.start()
+			}
 		}
 
 		assertThat(allDone.await(10, TimeUnit.SECONDS)).isTrue()
@@ -337,7 +357,8 @@ class SimulationSpeedIntegrationTest {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.001)
+					// throttle(0.1) at 100x → sleepMs = 1ms: no busy spin.
+					runner.throttle(0.1)
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -373,16 +394,25 @@ class SimulationSpeedIntegrationTest {
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	/**
-	 * Start a simulation throttling at [speed], pause it briefly, resume it,
-	 * and verify the runner is still alive throughout. No deadlock or crash.
+	 * Start a simulation at [speed], pause it, wait until the sim thread has
+	 * actually entered [SimulationRunner.awaitIfPaused], resume it, and verify the
+	 * runner is still alive throughout. No deadlock or crash.
 	 */
 	private fun verifyPauseResumeAtSpeed(speed: Double) {
 		val simRunning = CountDownLatch(1)
+		// Fires once the sim thread has seen isPaused=true and is about to block.
+		val enteringPauseWait = CountDownLatch(1)
 		every { context.run() } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.01)
+					if (runner.isPaused) {
+						// Signal before blocking so the test can observe it reliably.
+						enteringPauseWait.countDown()
+						runner.awaitIfPaused()
+					} else {
+						runner.throttle(0.01)
+					}
 				}
 			} catch (_: InterruptedException) {
 				Thread.currentThread().interrupt()
@@ -394,12 +424,11 @@ class SimulationSpeedIntegrationTest {
 		assertThat(simRunning.await(5, TimeUnit.SECONDS)).isTrue()
 
 		runner.isPaused = true
-		assertThat(runner.isPaused).isTrue()
-		// Give the simulation thread time to enter awaitIfPaused() inside throttle().
-		Thread.sleep(100)
+		// Wait until the sim thread has actually entered the paused-wait state.
+		assertThat(enteringPauseWait.await(5, TimeUnit.SECONDS)).isTrue()
 
 		runner.isPaused = false
-		assertThat(runner.isPaused).isFalse()
+		// Give the sim thread a moment to resume before asserting isRunning().
 		Thread.sleep(50)
 
 		assertThat(runner.isRunning()).isTrue()
@@ -419,7 +448,8 @@ class SimulationSpeedIntegrationTest {
 		every { context.run() } answers {
 			try {
 				while (!Thread.currentThread().isInterrupted) {
-					runner.throttle(0.001)
+					// throttle(0.1) at 100x → sleepMs = 1ms: no busy spin.
+					runner.throttle(0.1)
 					if (latch.count > 0L) latch.countDown()
 				}
 			} catch (_: InterruptedException) {
