@@ -519,6 +519,33 @@ class SimulationControllerTest {
 		controller.stop()
 	}
 
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("preselected speed is propagated to StatusBar when start() begins")
+	fun preselectedSpeedPropagatesOnStart() {
+		val started = CountDownLatch(1)
+		val blockSim = CountDownLatch(1)
+		every { context.run() } answers {
+			started.countDown()
+			blockSim.await(10, TimeUnit.SECONDS)
+		}
+
+		val statusBar = StatusBar()
+		val controller = createController(statusBar = statusBar)
+		controller.setSpeed(2.5)
+		controller.start(context)
+		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
+		flushEDT()
+
+		SwingUtilities.invokeAndWait {
+			assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 2.5x")
+			assertThat(statusBar.isSpeedIndicatorVisible()).isTrue()
+		}
+
+		blockSim.countDown()
+		controller.stop()
+	}
+
 	// ── helpers ───────────────────────────────────────────────────────────────
 
 	// ── toolBar / statusBar wiring ────────────────────────────────────────────

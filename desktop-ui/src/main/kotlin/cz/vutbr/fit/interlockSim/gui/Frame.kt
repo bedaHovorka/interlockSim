@@ -127,6 +127,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 						SimulationController.SimulationStatus.STOPPED -> {
 							toolBar.hideSimulationControls()
+							simulationControlPanel.runner = null
 							controlPanel.setStopEnabled(false)
 							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
 						}

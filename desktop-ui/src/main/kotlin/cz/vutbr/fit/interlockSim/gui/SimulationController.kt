@@ -112,6 +112,7 @@ internal class SimulationController(
 		}
 		speedListener = listener
 		newRunner.addPropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, listener)
+		onSpeedChanged(newRunner.speedMultiplier)
 
 		onStateChanged(SimulationStatus.RUNNING)
 
