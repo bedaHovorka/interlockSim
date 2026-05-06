@@ -110,6 +110,7 @@ class MockSimulationContext(
 
 	override fun close() {
 		closeCount++
+		delegate.close()
 	}
 
 	override fun stop() {

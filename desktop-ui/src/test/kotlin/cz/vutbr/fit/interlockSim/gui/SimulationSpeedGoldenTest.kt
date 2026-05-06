@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEmpty
@@ -213,7 +214,16 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 			while (runner.isRunning() && System.currentTimeMillis() < deadlineMs) {
 				Thread.sleep(50)
 			}
-			runner.stop() // no-op if already finished; ensures thread is terminated
+
+			val timedOut = runner.isRunning()
+			runner.stop() // interrupt thread if still alive
+			// Wait for the thread to truly terminate so reads below are safe
+			val joinDeadlineMs = System.currentTimeMillis() + 5_000L
+			while (runner.isRunning() && System.currentTimeMillis() < joinDeadlineMs) {
+				Thread.sleep(10)
+			}
+			assertThat(timedOut)
+				.isFalse() // fail loudly if the simulation hung past the 20 s deadline
 
 			context.removePropertyChangeListener(listener)
 
@@ -378,9 +388,14 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 
 		for (msg in snapshot.continuousMessages) {
 			val parts = msg.trim().split(Regex("\\s+"))
-			if (parts.size < 2) continue
-			val acceleration = parts[0].toDoubleOrNull() ?: continue
-			val velocity = parts[1].toDoubleOrNull() ?: continue
+			assertThat(parts.size)
+				.isGreaterThanOrEqualTo(2) // message format must have at least: acceleration velocity
+			val acceleration = requireNotNull(parts[0].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS acceleration token must be numeric, got: '${parts[0]}' in: '$msg'"
+			}
+			val velocity = requireNotNull(parts[1].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS velocity token must be numeric, got: '${parts[1]}' in: '$msg'"
+			}
 
 			// Velocity must be non-negative (trains only move forward)
 			assertThat(velocity)
@@ -504,9 +519,14 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	 * (train names / source differ between runs due to static counter).
 	 */
 	private fun extractFrontDistances(messages: List<String>): List<Double> =
-		messages.mapNotNull { msg ->
+		messages.map { msg ->
 			val parts = msg.trim().split(Regex("\\s+"))
-			if (parts.size >= 3) parts[2].toDoubleOrNull() else null
+			require(parts.size >= 3) {
+				"TRAIN_CONTINUOUS message must have at least 3 tokens, got ${parts.size}: '$msg'"
+			}
+			requireNotNull(parts[2].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS front-distance token must be numeric, got: '${parts[2]}' in: '$msg'"
+			}
 		}.sorted()
 
 	// ---- Constants ---------------------------------------------------------

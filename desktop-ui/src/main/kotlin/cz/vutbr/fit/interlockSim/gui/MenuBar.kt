@@ -17,7 +17,6 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.event.ActionEvent
-import java.awt.event.KeyEvent
 import java.io.File
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
@@ -394,13 +393,13 @@ class MenuBar : JMenuBar() {
 		val speedMenu = JMenu("Speed")
 		val speedPresets =
 			listOf(
-				Triple("0.1x", 0.1, KeyEvent.VK_1),
-				Triple("0.5x", 0.5, KeyEvent.VK_2),
-				Triple("1x", 1.0, KeyEvent.VK_3),
-				Triple("2x", 2.0, KeyEvent.VK_4),
-				Triple("10x", 10.0, KeyEvent.VK_5),
+				Pair("0.1x", 0.1),
+				Pair("0.5x", 0.5),
+				Pair("1x", 1.0),
+				Pair("2x", 2.0),
+				Pair("10x", 10.0),
 			)
-		for ((label, multiplier, _) in speedPresets) {
+		for ((label, multiplier) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))
 			speedMenu.add(item)
 		}
