@@ -381,8 +381,9 @@ class MenuBar : JMenuBar() {
 	/**
 	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
 	 *
-	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) have keyboard accelerators (keys 1–5)
-	 * so that the user can change the speed without reaching for the mouse during a run.
+	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) are available via menu items.
+	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
+	 * during simulation mode (Phase 3.1, Issue #193).
 	 */
 	private fun simulationMenu(): JMenu {
 		val menu = JMenu("Simulation")
@@ -399,11 +400,8 @@ class MenuBar : JMenuBar() {
 				Triple("2x", 2.0, KeyEvent.VK_4),
 				Triple("10x", 10.0, KeyEvent.VK_5),
 			)
-		for ((label, multiplier, keyCode) in speedPresets) {
+		for ((label, multiplier, _) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))
-			// Note: Keyboard accelerators removed in Phase 3.1 (Issue #193).
-			// Global keyboard shortcuts are now handled by SimulationKeyBindings.
-			// item.accelerator = KeyStroke.getKeyStroke(keyCode, 0)
 			speedMenu.add(item)
 		}
 		menu.add(speedMenu)

@@ -70,9 +70,11 @@ internal class SimulationKeyBindings(
 		}
 
 		// Incremental speed adjustment: + increases by ×1.5, - decreases by ÷1.5
-		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, 0), ACTION_KEY_SPEED_UP)
-		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, 0), ACTION_KEY_SPEED_UP)
+		// '+' is typically Shift+'=' on most keyboards, so bind both Shift+VK_EQUALS and numpad plus
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.SHIFT_DOWN_MASK), ACTION_KEY_SPEED_UP)
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ADD, 0), ACTION_KEY_SPEED_UP) // Numpad +
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, 0), ACTION_KEY_SPEED_DOWN)
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, 0), ACTION_KEY_SPEED_DOWN) // Numpad -
 		actionMap.put(ACTION_KEY_SPEED_UP, IncrementalSpeedAction(multiplier = SPEED_INCREMENT))
 		actionMap.put(ACTION_KEY_SPEED_DOWN, IncrementalSpeedAction(multiplier = 1.0 / SPEED_INCREMENT))
 
@@ -103,9 +105,10 @@ internal class SimulationKeyBindings(
 		}
 
 		// Remove incremental speed bindings
-		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, 0))
-		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, 0))
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, KeyEvent.SHIFT_DOWN_MASK))
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_ADD, 0))
 		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, 0))
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, 0))
 		actionMap.remove(ACTION_KEY_SPEED_UP)
 		actionMap.remove(ACTION_KEY_SPEED_DOWN)
 
@@ -121,7 +124,8 @@ internal class SimulationKeyBindings(
 	/**
 	 * Action that sets the simulation speed to a fixed preset value.
 	 *
-	 * If no simulation is running, the action is a no-op (graceful degradation).
+	 * If no simulation is running, [SimulationController.setSpeed] updates [SimulationController.desiredSpeed]
+	 * which will be applied when the next simulation starts.
 	 */
 	private inner class SpeedPresetAction(private val speed: Double) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
@@ -130,9 +134,6 @@ internal class SimulationKeyBindings(
 				logger.debug { "Speed preset applied: ${speed}×" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed preset: $speed — ${ex.message}" }
-			} catch (ex: IllegalStateException) {
-				// No runner active — ignore gracefully
-				logger.debug { "Speed preset ignored (no simulation running): $speed" }
 			}
 		}
 	}
@@ -194,8 +195,6 @@ internal class SimulationKeyBindings(
 	}
 
 	companion object {
-		private val logger = KotlinLogging.logger {}
-
 		/** Action key for speed-up shortcut. */
 		private const val ACTION_KEY_SPEED_UP = "simulation_speed_up"
 

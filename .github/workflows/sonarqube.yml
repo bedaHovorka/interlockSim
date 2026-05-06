@@ -98,7 +98,7 @@ jobs:
     # Requires SONAR_TOKEN and SONAR_ORGANIZATION secrets configured in GitHub
     # If secrets are not configured, this step will skip gracefully
     - name: SonarCloud Scan
-      if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+      if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
