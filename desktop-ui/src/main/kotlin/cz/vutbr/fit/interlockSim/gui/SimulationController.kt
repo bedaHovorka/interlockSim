@@ -11,10 +11,8 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
-import javax.swing.SwingUtilities
 
 /**
  * Manages the simulation lifecycle on behalf of [Frame] (Issue #189).
@@ -27,30 +25,26 @@ import javax.swing.SwingUtilities
  * - Starting the runner synchronously (before the monitor thread) to prevent the
  *   race condition where [stop] is called before the monitor thread starts the runner
  * - Polling for completion on a daemon "SimulationMonitor" thread
- * - Enabling/disabling the Stop button in [ControlPanel] as the lifecycle changes
- * - Dispatching [onCompleted] back to EDT when the simulation finishes naturally
+ * - Reporting lifecycle and speed changes via callbacks
  *
  * ## Thread Safety
- * - [start] and [stop] are designed to be called from the same thread (typically EDT
- *   in production, but also from test threads in unit tests). They are NOT thread-safe
- *   for concurrent calls from different threads; external callers are responsible for
- *   serialization. [Frame] enforces EDT-only access via its own `require()` guards.
+ * - [start] and [stop] are designed to be called from the same thread. They are NOT
+ *   thread-safe for concurrent calls from different threads; external callers are
+ *   responsible for serialization.
  * - [runner] is `@Volatile` so the monitor thread reads a fresh value when [stop]
  *   nulls it.
- * - [onCompleted] is always dispatched to EDT via [SwingUtilities.invokeLater].
+ * - Callbacks are invoked on whichever thread performs the lifecycle change.
  *
- * @param controlPanel ControlPanel whose Stop button and status label are managed here.
- * @param toolBar Optional [ToolBar] to show/hide simulation controls on lifecycle changes.
- * @param statusBar Optional [StatusBar] to display speed indicator when speed != 1.0x.
- * @param onCompleted Callback invoked on EDT when the simulation finishes naturally.
- *   Defaults to a no-op if not provided.
+ * @param onStateChanged Callback for lifecycle state updates.
+ * @param onSpeedChanged Callback for speed indicator updates.
+ * @param onCompleted Callback invoked when the simulation finishes naturally.
+ *   Defaults to a no-op.
  * @since 2026-04-20 (extracted from Frame for testability)
  * @see Frame
  */
 internal class SimulationController(
-	private val controlPanel: ControlPanel,
-	private val toolBar: ToolBar? = null,
-	private val statusBar: StatusBar? = null,
+	private val onStateChanged: (SimulationStatus) -> Unit = {},
+	private val onSpeedChanged: (Double) -> Unit = {},
 	private val onCompleted: () -> Unit = {},
 ) {
 	/**
@@ -82,9 +76,9 @@ internal class SimulationController(
 	 * 2. Calls [SimulationRunner.start] **synchronously** (before the monitor thread) to
 	 *    eliminate the race condition where [stop] could be invoked before the monitor
 	 *    thread has a chance to start the runner.
-	 * 3. Updates [ControlPanel] status to "Running" and enables the Stop button.
+	 * 3. Emits [SimulationStatus.RUNNING] via [onStateChanged].
 	 * 4. Launches a daemon "SimulationMonitor" thread that polls [SimulationRunner.isRunning]
-	 *    and on completion dispatches [onCompleted] and resets the panel via EDT.
+	 *    and on completion emits [SimulationStatus.STOPPED] and invokes [onCompleted].
 	 *
 	 * @param context The simulation context to run.
 	 */
@@ -103,7 +97,7 @@ internal class SimulationController(
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
 		newRunner.start()
 
-		// Wire speed indicator: notify StatusBar whenever SimulationRunner speed changes.
+		// Wire speed callback for SimulationRunner speed changes.
 		// The listener is removed when the simulation stops (in stop() or monitor finally).
 		val listener = PropertyChangeListener { evt ->
 			val multiplier = evt.newValue as? Double
@@ -111,27 +105,22 @@ internal class SimulationController(
 				logger.debug { "Ignoring unexpected ${SimulationRunner.PROP_SPEED_MULTIPLIER} value: ${evt.newValue}" }
 				return@PropertyChangeListener
 			}
-			statusBar?.updateSpeedIndicator(multiplier)
+			onSpeedChanged(multiplier)
 		}
 		speedListener = listener
 		newRunner.addPropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, listener)
 
-		// Show simulation controls in ToolBar (EDT-safe: start() is called from EDT).
-		toolBar?.showSimulationControls()
-
-		controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
-		controlPanel.setStopEnabled(true)
+		onStateChanged(SimulationStatus.RUNNING)
 
 		launchMonitorThread(newRunner)
 	}
 
 	/**
 	 * Launch a daemon "SimulationMonitor" thread that polls [newRunner] for completion
-	 * and dispatches panel reset and [onCompleted] to EDT when done.
+	 * and dispatches callback notifications when done.
 	 *
-	 * Guards against stale-monitor: the [SwingUtilities.invokeLater] callback checks
-	 * `runner === newRunner` before mutating state so that a stop+start cycle started
-	 * before the lambda fires cannot clobber the new run's panel state.
+	 * Guards against stale-monitor by checking `runner === newRunner` before mutating
+	 * state so that a stop+start cycle cannot clobber the new run's state.
 	 */
 	private fun launchMonitorThread(newRunner: SimulationRunner) {
 		val monitorThread =
@@ -144,20 +133,15 @@ internal class SimulationController(
 					} catch (e: InterruptedException) {
 						Thread.currentThread().interrupt()
 					} finally {
-						SwingUtilities.invokeLater {
-							// Guard against stale-monitor: if stop() + start(ctxB) ran on EDT
-							// before this callback fired, runner has been replaced with a new
-							// instance. Skip the reset to avoid clobbering the new run's panel
-							// state (and avoid firing onCompleted for the old run).
-							if (runner === newRunner) {
-								cleanupSpeedListener(newRunner)
-								runner = null
-								toolBar?.hideSimulationControls()
-								statusBar?.updateSpeedIndicator(SimulationRunner.DEFAULT_SPEED)
-								controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
-								controlPanel.setStopEnabled(false)
-								onCompleted()
-							}
+						// Guard against stale-monitor: if stop() + start(ctxB) ran before
+						// this callback executes, runner has been replaced with a new instance.
+						// Skip reset to avoid clobbering the new run's state.
+						if (runner === newRunner) {
+							cleanupSpeedListener(newRunner)
+							runner = null
+							onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+							onStateChanged(SimulationStatus.STOPPED)
+							onCompleted()
 						}
 					}
 				},
@@ -168,7 +152,7 @@ internal class SimulationController(
 	}
 
 	/**
-	 * Stop a running simulation and reset the [ControlPanel].
+	 * Stop a running simulation and emit [SimulationStatus.STOPPED].
 	 *
 	 * Safe to call when no simulation is running (no-op in that case).
 	 */
@@ -177,10 +161,8 @@ internal class SimulationController(
 		cleanupSpeedListener(r)
 		r.stop()
 		runner = null
-		toolBar?.hideSimulationControls()
-		statusBar?.updateSpeedIndicator(SimulationRunner.DEFAULT_SPEED)
-		controlPanel.setStopEnabled(false)
-		controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+		onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
+		onStateChanged(SimulationStatus.STOPPED)
 	}
 
 	/** Removes the speed [PropertyChangeListener] from [r] and clears the reference. */
@@ -214,5 +196,11 @@ internal class SimulationController(
 
 		/** Poll interval (ms) for the monitor thread to detect simulation completion. */
 		internal const val SIMULATION_POLL_INTERVAL_MS: Long = 500L
+	}
+
+	/** Simulation lifecycle states emitted via [onStateChanged]. */
+	enum class SimulationStatus {
+		RUNNING,
+		STOPPED,
 	}
 }

@@ -82,7 +82,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
@@ -106,7 +106,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -131,7 +131,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -154,7 +154,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -179,7 +179,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -193,7 +193,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("isRunning returns false before start is called")
 	fun isRunningFalseBeforeStart() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		assertThat(controller.isRunning()).isFalse()
 	}
 
@@ -208,7 +208,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 		controller.stop()
@@ -223,7 +223,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("stop is a no-op when nothing is running")
 	fun stopNoOpWhenNotRunning() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.stop() // must not throw
 		controller.stop()
 		assertThat(controller.isRunning()).isFalse()
@@ -244,7 +244,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -263,7 +263,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("runner is null before start")
 	fun runnerNullBeforeStart() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		assertThat(controller.runner).isNull()
 	}
 
@@ -278,7 +278,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 		assertThat(controller.runner).isNotNull()
@@ -298,7 +298,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 		controller.stop()
@@ -316,7 +316,7 @@ class SimulationControllerTest {
 		val completedLatch = CountDownLatch(1)
 		every { context.run() } answers { /* returns immediately */ }
 
-		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
 
 		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
@@ -329,7 +329,7 @@ class SimulationControllerTest {
 		val completedLatch = CountDownLatch(1)
 		every { context.run() } answers { /* returns immediately */ }
 
-		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
 
 		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
@@ -350,7 +350,7 @@ class SimulationControllerTest {
 		every { context.run() } answers { /* returns immediately */ }
 
 		val completedLatch = CountDownLatch(1)
-		val controller = SimulationController(controlPanel) { completedLatch.countDown() }
+		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
 
 		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
@@ -370,7 +370,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 
 		// Wait for simulation to actually start running.
@@ -410,7 +410,7 @@ class SimulationControllerTest {
 			run2Block.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 
 		// Phase 1: start first simulation
 		controller.start(context)
@@ -450,7 +450,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed rejects value below MIN_SPEED")
 	fun setSpeedBelowMinThrows() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
 			controller.setSpeed(SimulationRunner.MIN_SPEED - 0.001)
 		}
@@ -460,7 +460,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed rejects value above MAX_SPEED")
 	fun setSpeedAboveMaxThrows() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
 			controller.setSpeed(SimulationRunner.MAX_SPEED + 0.001)
 		}
@@ -470,7 +470,7 @@ class SimulationControllerTest {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed accepts boundary values MIN_SPEED and MAX_SPEED")
 	fun setSpeedAcceptsBoundaryValues() {
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.setSpeed(SimulationRunner.MIN_SPEED)
 		controller.setSpeed(SimulationRunner.MAX_SPEED)
 	}
@@ -486,7 +486,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -508,7 +508,7 @@ class SimulationControllerTest {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
-		val controller = SimulationController(controlPanel)
+		val controller = createController()
 		controller.setSpeed(0.5) // pre-select before start
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
@@ -536,7 +536,7 @@ class SimulationControllerTest {
 
 		val statusBar = StatusBar()
 
-		val controller = SimulationController(controlPanel, statusBar = statusBar)
+		val controller = createController(statusBar = statusBar)
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -570,7 +570,7 @@ class SimulationControllerTest {
 
 		val statusBar = StatusBar()
 
-		val controller = SimulationController(controlPanel, statusBar = statusBar)
+		val controller = createController(statusBar = statusBar)
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -601,7 +601,7 @@ class SimulationControllerTest {
 		}
 
 		val toolBar = mockk<ToolBar>(relaxed = true)
-		val controller = SimulationController(controlPanel, toolBar = toolBar)
+		val controller = createController(toolBar = toolBar)
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -625,7 +625,7 @@ class SimulationControllerTest {
 		}
 
 		val toolBar = mockk<ToolBar>(relaxed = true)
-		val controller = SimulationController(controlPanel, toolBar = toolBar)
+		val controller = createController(toolBar = toolBar)
 		controller.start(context)
 		assertThat(started.await(5, TimeUnit.SECONDS)).isTrue()
 
@@ -649,6 +649,43 @@ class SimulationControllerTest {
 	 */
 	private fun flushEDT(times: Int = 2) {
 		repeat(times) { SwingUtilities.invokeAndWait { /* flush */ } }
+	}
+
+	private fun createController(
+		toolBar: ToolBar? = null,
+		statusBar: StatusBar? = null,
+		onCompleted: () -> Unit = {},
+	): SimulationController =
+		SimulationController(
+			onStateChanged = { state ->
+				runOnEdtSync {
+					when (state) {
+						SimulationController.SimulationStatus.RUNNING -> {
+							toolBar?.showSimulationControls()
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
+							controlPanel.setStopEnabled(true)
+						}
+
+						SimulationController.SimulationStatus.STOPPED -> {
+							toolBar?.hideSimulationControls()
+							controlPanel.setStopEnabled(false)
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+						}
+					}
+				}
+			},
+			onSpeedChanged = { speed ->
+				runOnEdtSync { statusBar?.updateSpeedIndicator(speed) }
+			},
+			onCompleted = onCompleted
+		)
+
+	private fun runOnEdtSync(action: () -> Unit) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			action()
+		} else {
+			SwingUtilities.invokeAndWait(action)
+		}
 	}
 
 	private fun findStopButton(): JButton? =

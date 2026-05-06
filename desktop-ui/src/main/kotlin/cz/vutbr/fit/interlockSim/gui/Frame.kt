@@ -113,7 +113,29 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
-	internal val simulationController: SimulationController = SimulationController(controlPanel, toolBar, statusBar)
+	internal val simulationController: SimulationController =
+		SimulationController(
+			onStateChanged = { state ->
+				runOnEdt {
+					when (state) {
+						SimulationController.SimulationStatus.RUNNING -> {
+							toolBar.showSimulationControls()
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
+							controlPanel.setStopEnabled(true)
+						}
+
+						SimulationController.SimulationStatus.STOPPED -> {
+							toolBar.hideSimulationControls()
+							controlPanel.setStopEnabled(false)
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+						}
+					}
+				}
+			},
+			onSpeedChanged = { speed ->
+				runOnEdt { statusBar.updateSpeedIndicator(speed) }
+			}
+		)
 	private var currentSimulationContext: SimulationContext? = null
 
 	/**
@@ -395,6 +417,14 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			} else {
 				PROGRAM_FULL_NAME
 			}
+	}
+
+	private fun runOnEdt(action: () -> Unit) {
+		if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+			action()
+		} else {
+			javax.swing.SwingUtilities.invokeLater(action)
+		}
 	}
 
 	/**
