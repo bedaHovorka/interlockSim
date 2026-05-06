@@ -48,6 +48,10 @@ class MockSimulationContext(
 	private var stopped: Boolean = false
 	private var runListeners: List<ContextPropertyChangeListener> = emptyList()
 
+	/** Number of times [close] has been called. Used by tests to verify scope cleanup. */
+	var closeCount: Int = 0
+		private set
+
 	/**
 	 * On-demand cache for [DynamicTrack] wrappers.
 	 *
@@ -102,6 +106,10 @@ class MockSimulationContext(
 		// delegate at creation time, making freeze() a no-op here.
 		val event = ContextChangeEvent("frozen", false, true)
 		runListeners.forEach { it.propertyChange(event) }
+	}
+
+	override fun close() {
+		closeCount++
 	}
 
 	override fun stop() {

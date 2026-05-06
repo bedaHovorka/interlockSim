@@ -26,6 +26,7 @@ import javax.swing.JFrame
 import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
@@ -113,7 +114,30 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
-	internal val simulationController: SimulationController = SimulationController(controlPanel, toolBar, statusBar)
+	internal val simulationController: SimulationController =
+		SimulationController(
+			onStateChanged = { state ->
+				runOnEdt {
+					when (state) {
+						SimulationController.SimulationStatus.RUNNING -> {
+							toolBar.showSimulationControls()
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
+							controlPanel.setStopEnabled(true)
+						}
+
+						SimulationController.SimulationStatus.STOPPED -> {
+							toolBar.hideSimulationControls()
+							simulationControlPanel.runner = null
+							controlPanel.setStopEnabled(false)
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+						}
+					}
+				}
+			},
+			onSpeedChanged = { speed ->
+				runOnEdt { statusBar.updateSpeedIndicator(speed) }
+			}
+		)
 	private var currentSimulationContext: SimulationContext? = null
 
 	/**
@@ -140,6 +164,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(simulationControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
+
+		// Route speed changes from SimulationControlPanel through SimulationController so
+		// desiredSpeed stays in sync and is applied to the next simulation start.
+		simulationControlPanel.onSpeedChanged = { speed -> simulationController.setSpeed(speed) }
 
 		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
 		statusBar.registerProducer(railwayNetGridCanvas)
@@ -256,6 +284,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		stopSimulation() // Stop any running simulation before switching context
 		stopAnimationUpdates() // Cleanup existing timer
 
+		val previousSimulationContext = currentSimulationContext
+
 		when (context) {
 			is SimulationContext -> {
 				currentSimulationContext = context
@@ -291,6 +321,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 		context.addPropertyChangeListener(statusBar)
+
+		previousSimulationContext?.close()
 	}
 
 	/**
@@ -395,6 +427,20 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			} else {
 				PROGRAM_FULL_NAME
 			}
+	}
+
+	/**
+	 * Execute [action] on EDT.
+	 *
+	 * Runs immediately if already on EDT; otherwise schedules asynchronously via
+	 * [javax.swing.SwingUtilities.invokeLater] to avoid blocking monitor/background threads.
+	 */
+	private fun runOnEdt(action: () -> Unit) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			action()
+		} else {
+			SwingUtilities.invokeLater(action)
+		}
 	}
 
 	/**

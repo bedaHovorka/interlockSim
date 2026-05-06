@@ -285,4 +285,23 @@ class FrameTest : AbstractFrameTestBase() {
 		simContext.close()
 		editContext.close()
 	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setContext closes previous SimulationContext when switching to a new one")
+	fun setContextClosesPreviousSimulationContext() {
+		val context1 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		val context2 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		runOnEDT {
+			frame.setContext(context1)
+			frame.setContext(context2)
+		}
+		assertThat(context1.closeCount).isEqualTo(1)
+		runOnEDT { frame.stopSimulation() }
+		context2.close()
+	}
 }
