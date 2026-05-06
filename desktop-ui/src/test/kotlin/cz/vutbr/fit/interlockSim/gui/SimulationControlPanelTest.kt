@@ -273,6 +273,19 @@ class SimulationControlPanelTest {
 		}
 	}
 
+	@Test
+	@DisplayName("clicking preset routes through onSpeedChanged callback when wired")
+	fun presetRoutesViaCallbackWhenWired() {
+		val runner = SimulationRunner(context)
+		SwingUtilities.invokeAndWait {
+			panel.runner = runner
+			// Simulate SimulationController.setSpeed: callback updates runner
+			panel.onSpeedChanged = { speed -> runner.speedMultiplier = speed }
+			findPresetButtons().first { it.text == "2x" }.doClick()
+		}
+		assertThat(runner.speedMultiplier).isEqualTo(2.0)
+	}
+
 	// ── Runner wiring ─────────────────────────────────────────────────────────
 
 	@Test

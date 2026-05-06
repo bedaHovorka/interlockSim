@@ -425,11 +425,11 @@ class MenuBar : JMenuBar() {
 					"- Simulation &gt; Start...: Load XML and start simulation<br>" +
 					"- Simulation &gt; Stop: Terminate running simulation<br>" +
 					"<br><b>Simulation Speed (Phase 3.1 global keyboard shortcuts):</b><br>" +
-					"- Key 1: 1x speed (real-time)<br>" +
-					"- Key 2: 2x speed<br>" +
-					"- Key 3: 5x speed<br>" +
-					"- Key 4: 10x speed<br>" +
-					"- Key 5: 50x speed<br>" +
+					"- Key 1: 0.5x speed (half-time)<br>" +
+					"- Key 2: 1x speed (real-time)<br>" +
+					"- Key 3: 2x speed<br>" +
+					"- Key 4: 5x speed<br>" +
+					"- Key 5: 10x speed<br>" +
 					"- Plus (+): Increase speed by 1.5x<br>" +
 					"- Minus (-): Decrease speed by 1.5x<br>" +
 					"- Space: Pause/resume simulation</html>"

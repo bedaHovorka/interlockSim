@@ -20,7 +20,7 @@ import javax.swing.KeyStroke
  * Global keyboard shortcuts for simulation speed control (Phase 3.1 of Goal 7, Issue #193).
  *
  * Provides:
- * - Number keys 1-5 → Speed presets (1×, 2×, 5×, 10×, 50×)
+ * - Number keys 1-5 → Speed presets (0.5×, 1×, 2×, 5×, 10×)
  * - Plus/minus keys → Incremental speed adjustment (×1.5 or ÷1.5)
  * - Space bar → Pause/resume toggle (Goal 8 preparation)
  *
@@ -62,7 +62,7 @@ internal class SimulationKeyBindings(
 		val inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
 		val actionMap = rootPane.actionMap
 
-		// Speed presets: keys 1-5 map to 1×, 2×, 5×, 10×, 50×
+		// Speed presets: keys 1-5 map to 0.5×, 1×, 2×, 5×, 10×
 		PRESET_BINDINGS.forEach { (keyCode, speed) ->
 			val actionKey = "speed_preset_$speed"
 			inputMap.put(KeyStroke.getKeyStroke(keyCode, 0), actionKey)
@@ -139,23 +139,19 @@ internal class SimulationKeyBindings(
 	}
 
 	/**
-	 * Action that adjusts the current simulation speed by a multiplicative factor.
+	 * Action that adjusts the simulation speed by a multiplicative factor.
 	 *
-	 * Reads the current speed from the active runner, multiplies by [multiplier],
-	 * coerces to the valid range [SimulationRunner.MIN_SPEED]..[SimulationRunner.MAX_SPEED],
-	 * and applies the new speed.
+	 * Reads the current effective speed via [SimulationController.speed] (live runner value
+	 * when running, stored desired speed otherwise), multiplies by [multiplier], coerces to
+	 * the valid range [SimulationRunner.MIN_SPEED]..[SimulationRunner.MAX_SPEED], and applies
+	 * the new speed via [SimulationController.setSpeed].
 	 *
-	 * If no simulation is running, the action is a no-op.
+	 * When no simulation is running, this updates [SimulationController.desiredSpeed] so the
+	 * adjusted speed is honoured when the next simulation starts.
 	 */
 	private inner class IncrementalSpeedAction(private val multiplier: Double) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
-			val runner = simulationController.runner
-			if (runner == null) {
-				logger.debug { "Incremental speed adjustment ignored (no simulation running)" }
-				return
-			}
-
-			val currentSpeed = runner.speedMultiplier
+			val currentSpeed = simulationController.speed
 			val newSpeed = (currentSpeed * multiplier).coerceIn(
 				SimulationRunner.MIN_SPEED,
 				SimulationRunner.MAX_SPEED
@@ -209,14 +205,15 @@ internal class SimulationKeyBindings(
 
 		/**
 		 * Mapping of key codes to speed preset values.
-		 * Keys 1-5 → 1×, 2×, 5×, 10×, 50×.
+		 * Keys 1-5 → 0.5×, 1×, 2×, 5×, 10× (matches the five standard presets in the UI panel and menu).
+		 * Note: 0.5× is accessible only via keyboard (key 1), panel, or menu — not via incremental shortcuts.
 		 */
 		private val PRESET_BINDINGS: Map<Int, Double> = mapOf(
-			KeyEvent.VK_1 to 1.0,
-			KeyEvent.VK_2 to 2.0,
-			KeyEvent.VK_3 to 5.0,
-			KeyEvent.VK_4 to 10.0,
-			KeyEvent.VK_5 to 50.0
+			KeyEvent.VK_1 to 0.5,
+			KeyEvent.VK_2 to 1.0,
+			KeyEvent.VK_3 to 2.0,
+			KeyEvent.VK_4 to 5.0,
+			KeyEvent.VK_5 to 10.0
 		)
 	}
 }

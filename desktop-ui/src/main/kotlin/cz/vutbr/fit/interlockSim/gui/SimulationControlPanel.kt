@@ -154,11 +154,21 @@ class SimulationControlPanel : JPanel() {
 	private fun speedToSlider(speed: Double): Int =
 		Math.round(speed * SLIDER_SCALE).toInt().coerceIn(SLIDER_MIN, SLIDER_MAX)
 
-	/** Apply a preset speed: update runner, slider, label, and notify controller. */
+	/**
+	 * Apply a preset speed: update UI and propagate to the runner.
+	 *
+	 * When [onSpeedChanged] is wired (normal production use via [SimulationController]), the
+	 * speed update is routed exclusively through the callback to avoid a double-write to the
+	 * runner. When [onSpeedChanged] is null (standalone panel usage without a controller),
+	 * the runner is updated directly so the panel remains functional.
+	 */
 	private fun applyPreset(speed: Double) {
 		syncUiToSpeed(speed)
-		runner?.speedMultiplier = speed
-		onSpeedChanged?.invoke(speed)
+		if (onSpeedChanged != null) {
+			onSpeedChanged!!.invoke(speed)
+		} else {
+			runner?.speedMultiplier = speed
+		}
 	}
 
 	/**
