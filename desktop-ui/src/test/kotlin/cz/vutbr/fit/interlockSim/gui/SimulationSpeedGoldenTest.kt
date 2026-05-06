@@ -387,14 +387,15 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 		assertThat(snapshot.continuousMessages).isNotEmpty()
 
 		for (msg in snapshot.continuousMessages) {
+			// se.message = "#N {acceleration} {velocity} ..." (parts[0] is the train-id fragment)
 			val parts = msg.trim().split(Regex("\\s+"))
 			assertThat(parts.size)
-				.isGreaterThanOrEqualTo(2) // message format must have at least: acceleration velocity
-			val acceleration = requireNotNull(parts[0].toDoubleOrNull()) {
-				"TRAIN_CONTINUOUS acceleration token must be numeric, got: '${parts[0]}' in: '$msg'"
+				.isGreaterThanOrEqualTo(3) // message format: #N acceleration velocity ...
+			val acceleration = requireNotNull(parts[1].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS acceleration token must be numeric, got: '${parts[1]}' in: '$msg'"
 			}
-			val velocity = requireNotNull(parts[1].toDoubleOrNull()) {
-				"TRAIN_CONTINUOUS velocity token must be numeric, got: '${parts[1]}' in: '$msg'"
+			val velocity = requireNotNull(parts[2].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS velocity token must be numeric, got: '${parts[2]}' in: '$msg'"
 			}
 
 			// Velocity must be non-negative (trains only move forward)
@@ -513,7 +514,8 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	 * Parses TRAIN_CONTINUOUS message bodies and returns sorted front-distances.
 	 *
 	 * Message format (from [TrainReporter]):
-	 * `{acceleration} {velocity} {frontTotalDistance} {frontSection} {tailSection} {distToSem}`
+	 * `#N {acceleration} {velocity} {frontTotalDistance} {frontSection} {tailSection} {distToSem}`
+	 * (parts[0] is the train-id fragment from SimulationEvent.fromContextChangeEvent's limit-3 split)
 	 *
 	 * Returns sorted values for key-independent structural comparison across runs
 	 * (train names / source differ between runs due to static counter).
@@ -521,11 +523,11 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	private fun extractFrontDistances(messages: List<String>): List<Double> =
 		messages.map { msg ->
 			val parts = msg.trim().split(Regex("\\s+"))
-			require(parts.size >= 3) {
-				"TRAIN_CONTINUOUS message must have at least 3 tokens, got ${parts.size}: '$msg'"
+			require(parts.size >= 4) {
+				"TRAIN_CONTINUOUS message must have at least 4 tokens, got ${parts.size}: '$msg'"
 			}
-			requireNotNull(parts[2].toDoubleOrNull()) {
-				"TRAIN_CONTINUOUS front-distance token must be numeric, got: '${parts[2]}' in: '$msg'"
+			requireNotNull(parts[3].toDoubleOrNull()) {
+				"TRAIN_CONTINUOUS front-distance token must be numeric, got: '${parts[3]}' in: '$msg'"
 			}
 		}.sorted()
 
