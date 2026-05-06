@@ -44,15 +44,19 @@ import javax.swing.SwingUtilities
  * - Stop always completes within 5 seconds
  * - No race conditions between EDT and simulation thread
  *
- * Test scenarios:
- * 1. Rapid speed changes (50 changes every 10ms) do not crash or deadlock
- * 2. Pause and resume at 0.1×, 1×, and 10× speed do not deadlock
- * 3. Ten consecutive pause/resume cycles complete cleanly
- * 4. Stop at 0.1× (slow) speed completes within 5 seconds
- * 5. Stop while paused completes within 5 seconds
- * 6. Concurrent speed changes from 4 threads cause no data races
- * 7. Stop at simulated 25%, 50%, 75% completion terminates cleanly
- * 8. Speed changes posted from EDT do not race with the simulation thread
+ * Test scenarios (12 tests total):
+ *  1. Rapid speed changes (50 changes every 10ms) do not crash or deadlock
+ *  2. Pause and resume at 0.1× speed do not deadlock
+ *  3. Pause and resume at 1× speed do not deadlock
+ *  4. Pause and resume at 10× speed do not deadlock
+ *  5. Ten consecutive pause/resume cycles complete cleanly
+ *  6. Stop at 0.1× (slow) speed completes within 5 seconds
+ *  7. Stop while paused completes within 5 seconds
+ *  8. Concurrent speed changes from 4 threads cause no data races
+ *  9. Stop at simulated 25% completion terminates cleanly
+ * 10. Stop at simulated 50% completion terminates cleanly
+ * 11. Stop at simulated 75% completion terminates cleanly
+ * 12. Speed changes posted from EDT do not race with the simulation thread
  *
  * @see SimulationRunner
  * @see SimulationRunnerTest for unit-level tests
