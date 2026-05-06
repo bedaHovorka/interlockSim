@@ -395,13 +395,16 @@ class SimulationSpeedIntegrationTest {
 
 	/**
 	 * Start a simulation at [speed], pause it, wait until the sim thread has
-	 * actually entered [SimulationRunner.awaitIfPaused], resume it, and verify the
-	 * runner is still alive throughout. No deadlock or crash.
+	 * actually entered [SimulationRunner.awaitIfPaused], resume it, wait for the
+	 * thread to exit the pause wait, and verify the runner is still alive throughout.
+	 * No deadlock or crash.
 	 */
 	private fun verifyPauseResumeAtSpeed(speed: Double) {
 		val simRunning = CountDownLatch(1)
 		// Fires once the sim thread has seen isPaused=true and is about to block.
 		val enteringPauseWait = CountDownLatch(1)
+		// Fires once the sim thread has exited awaitIfPaused() after resuming.
+		val resumedFromPause = CountDownLatch(1)
 		every { context.run() } answers {
 			simRunning.countDown()
 			try {
@@ -410,6 +413,8 @@ class SimulationSpeedIntegrationTest {
 						// Signal before blocking so the test can observe it reliably.
 						enteringPauseWait.countDown()
 						runner.awaitIfPaused()
+						// Signal after unblocking so the test knows the thread resumed.
+						if (resumedFromPause.count > 0L) resumedFromPause.countDown()
 					} else {
 						runner.throttle(0.01)
 					}
@@ -428,8 +433,8 @@ class SimulationSpeedIntegrationTest {
 		assertThat(enteringPauseWait.await(5, TimeUnit.SECONDS)).isTrue()
 
 		runner.isPaused = false
-		// Give the sim thread a moment to resume before asserting isRunning().
-		Thread.sleep(50)
+		// Wait until the sim thread has actually exited awaitIfPaused() and resumed.
+		assertThat(resumedFromPause.await(5, TimeUnit.SECONDS)).isTrue()
 
 		assertThat(runner.isRunning()).isTrue()
 		runner.stop()
