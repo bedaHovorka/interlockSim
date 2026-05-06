@@ -86,6 +86,18 @@ class SimulationControlPanel : JPanel() {
 		}
 	}
 
+	/**
+	 * Optional callback invoked whenever the user changes the speed (slider or preset button).
+	 *
+	 * Wire this in [cz.vutbr.fit.interlockSim.gui.Frame] to route speed changes through
+	 * [SimulationController.setSpeed] so that [SimulationController.desiredSpeed] stays in sync
+	 * and is honoured on the next [SimulationController.start] call.
+	 *
+	 * Not called when the runner fires a [SimulationRunner.PROP_SPEED_MULTIPLIER] event (i.e.
+	 * when the UI is updated from the runner rather than by the user).
+	 */
+	var onSpeedChanged: ((Double) -> Unit)? = null
+
 	/** Flag to suppress recursive slider → runner → slider feedback loops. */
 	private var updatingFromRunner = false
 
@@ -110,6 +122,7 @@ class SimulationControlPanel : JPanel() {
 				val speed = sliderToSpeed(slider.value)
 				speedLabel.text = formatSpeedLabel(speed)
 				runner?.speedMultiplier = speed
+				onSpeedChanged?.invoke(speed)
 			}
 		}
 		sliderRow.add(slider)
@@ -141,10 +154,11 @@ class SimulationControlPanel : JPanel() {
 	private fun speedToSlider(speed: Double): Int =
 		Math.round(speed * SLIDER_SCALE).toInt().coerceIn(SLIDER_MIN, SLIDER_MAX)
 
-	/** Apply a preset speed: update runner, slider, and label. */
+	/** Apply a preset speed: update runner, slider, label, and notify controller. */
 	private fun applyPreset(speed: Double) {
 		syncUiToSpeed(speed)
 		runner?.speedMultiplier = speed
+		onSpeedChanged?.invoke(speed)
 	}
 
 	/**

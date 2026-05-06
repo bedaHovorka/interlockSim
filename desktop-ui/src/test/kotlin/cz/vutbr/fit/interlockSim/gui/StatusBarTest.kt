@@ -124,42 +124,28 @@ class StatusBarTest : KoinTestBase() {
 	@Test
 	@DisplayName("handles property change with CharSequence value")
 	fun handlesPropertyChangeWithCharSequenceValue() {
-		// Create property change event with CharSequence
 		val event = ContextChangeEvent("status", "old", "New status message")
-
-		// Trigger property change
 		statusBar.propertyChange(event)
-
-		// Verify text was updated
+		flushEDT()
 		assertThat(statusBar.text).isEqualTo("New status message")
 	}
 
 	@Test
 	@DisplayName("handles property change with non-CharSequence value")
 	fun handlesPropertyChangeWithNonCharSequenceValue() {
-		// Create property change event with Integer
 		val event = ContextChangeEvent("status", null, 12345)
-
-		// Trigger property change
 		statusBar.propertyChange(event)
-
-		// Verify text was updated with toString()
+		flushEDT()
 		assertThat(statusBar.text).isEqualTo("12345")
 	}
 
 	@Test
 	@DisplayName("handles property change with null value")
 	fun handlesPropertyChangeWithNullValue() {
-		// Set initial text
 		statusBar.text = "Initial text"
-
-		// Create property change event with null new value
 		val event = ContextChangeEvent("status", "old", null)
-
-		// Trigger property change
 		statusBar.propertyChange(event)
-
-		// Verify text remains unchanged when new value is null
+		flushEDT()
 		assertThat(statusBar.text).isEqualTo("Initial text")
 	}
 
@@ -189,6 +175,23 @@ class StatusBarTest : KoinTestBase() {
 		assertThat(statusBar.isSpeedIndicatorVisible()).isFalse()
 		// Stale text must be cleared so it cannot reappear later
 		assertThat(statusBar.speedIndicatorText()).isEqualTo("")
+	}
+
+	@Test
+	@DisplayName("propertyChange from non-EDT thread defers label update via invokeLater")
+	fun propertyChangeFromNonEdtDefersUpdate() {
+		assertThat(SwingUtilities.isEventDispatchThread()).isFalse()
+		val initialText = statusBar.text
+		val event = ContextChangeEvent("status", null, "background update")
+
+		statusBar.propertyChange(event)
+
+		// Before EDT flush: invokeLater queued but not executed → label still holds old text
+		assertThat(statusBar.text).isEqualTo(initialText)
+
+		// After flush: EDT has processed the invokeLater → label updated
+		flushEDT()
+		assertThat(statusBar.text).isEqualTo("background update")
 	}
 
 	@Test

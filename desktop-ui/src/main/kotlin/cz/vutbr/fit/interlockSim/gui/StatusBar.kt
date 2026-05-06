@@ -86,10 +86,12 @@ class StatusBar :
 	}
 
 	override fun propertyChange(event: ContextChangeEvent) {
-		val newValue = event.newValue
-		when {
-			newValue is CharSequence -> text = newValue.toString()
-			newValue != null -> text = newValue.toString()
+		val newValue = event.newValue ?: return
+		val newText = newValue.toString()
+		if (SwingUtilities.isEventDispatchThread()) {
+			text = newText
+		} else {
+			SwingUtilities.invokeLater { text = newText }
 		}
 	}
 

@@ -428,10 +428,8 @@ class SimulationControllerTest {
 		// Phase 3: release first run's block — old monitor wakes up and fires invokeLater
 		run1Block.countDown()
 
-		// Give old monitor's invokeLater time to land on EDT (if it fires at all)
-		SwingUtilities.invokeAndWait { /* flush EDT */ }
-		Thread.sleep(100) // extra buffer for late-arriving invokeLater
-		SwingUtilities.invokeAndWait { /* flush EDT again */ }
+		// Give old monitor's invokeLater time to land on EDT (three flushes for safety)
+		flushEDT(times = 3)
 
 		// Panel must still show Running for the new run — old monitor must not clobber it
 		SwingUtilities.invokeAndWait {

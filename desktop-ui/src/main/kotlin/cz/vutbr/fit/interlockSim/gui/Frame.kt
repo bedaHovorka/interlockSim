@@ -165,6 +165,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(simulationControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
+		// Route speed changes from SimulationControlPanel through SimulationController so
+		// desiredSpeed stays in sync and is applied to the next simulation start.
+		simulationControlPanel.onSpeedChanged = { speed -> simulationController.setSpeed(speed) }
+
 		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
 		statusBar.registerProducer(railwayNetGridCanvas)
 		southPanel.add(statusBar)
@@ -280,6 +284,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		stopSimulation() // Stop any running simulation before switching context
 		stopAnimationUpdates() // Cleanup existing timer
 
+		val previousSimulationContext = currentSimulationContext
+
 		when (context) {
 			is SimulationContext -> {
 				currentSimulationContext = context
@@ -315,6 +321,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 		context.addPropertyChangeListener(statusBar)
+
+		previousSimulationContext?.close()
 	}
 
 	/**

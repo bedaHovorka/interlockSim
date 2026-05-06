@@ -367,4 +367,42 @@ class SimulationControlPanelTest {
 			assertThat(labels).isEqualTo(listOf("0.1x", "0.5x", "1x", "2x", "5x", "10x", "50x"))
 		}
 	}
+
+	// ── onSpeedChanged callback ───────────────────────────────────────────────
+
+	@Test
+	@DisplayName("moving slider invokes onSpeedChanged callback with correct speed")
+	fun sliderInvokesOnSpeedChangedCallback() {
+		var capturedSpeed: Double? = null
+		SwingUtilities.invokeAndWait {
+			panel.onSpeedChanged = { speed -> capturedSpeed = speed }
+			findSlider().value = 30 // 30 / 10.0 = 3.0x
+		}
+		assertThat(capturedSpeed).isEqualTo(3.0)
+	}
+
+	@Test
+	@DisplayName("clicking preset button invokes onSpeedChanged callback with correct speed")
+	fun presetClickInvokesOnSpeedChangedCallback() {
+		var capturedSpeed: Double? = null
+		SwingUtilities.invokeAndWait {
+			panel.onSpeedChanged = { speed -> capturedSpeed = speed }
+			findPresetButtons().first { it.text == "2x" }.doClick()
+		}
+		assertThat(capturedSpeed).isEqualTo(2.0)
+	}
+
+	@Test
+	@DisplayName("runner speed change does not invoke onSpeedChanged callback (no feedback loop)")
+	fun runnerSpeedChangeDoesNotInvokeCallback() {
+		val runner = SimulationRunner(context)
+		var callbackCount = 0
+		SwingUtilities.invokeAndWait {
+			panel.runner = runner
+			panel.onSpeedChanged = { callbackCount++ }
+		}
+		runner.speedMultiplier = 3.0
+		SwingUtilities.invokeAndWait { /* flush invokeLater from runnerListener */ }
+		assertThat(callbackCount).isEqualTo(0)
+	}
 }
