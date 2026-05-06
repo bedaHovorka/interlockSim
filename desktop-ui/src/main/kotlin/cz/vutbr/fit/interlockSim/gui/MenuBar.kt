@@ -402,7 +402,9 @@ class MenuBar : JMenuBar() {
 			)
 		for ((label, multiplier, keyCode) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))
-			item.accelerator = KeyStroke.getKeyStroke(keyCode, 0)
+			// Note: Keyboard accelerators removed in Phase 3.1 (Issue #193).
+			// Global keyboard shortcuts are now handled by SimulationKeyBindings.
+			// item.accelerator = KeyStroke.getKeyStroke(keyCode, 0)
 			speedMenu.add(item)
 		}
 		menu.add(speedMenu)
@@ -425,12 +427,15 @@ class MenuBar : JMenuBar() {
 					"<br><b>Simulation:</b><br>" +
 					"- Simulation &gt; Start...: Load XML and start simulation<br>" +
 					"- Simulation &gt; Stop: Terminate running simulation<br>" +
-					"<br><b>Simulation Speed (keyboard shortcuts):</b><br>" +
-					"- Key 1: 0.1x speed<br>" +
-					"- Key 2: 0.5x speed<br>" +
-					"- Key 3: 1x speed (real-time)<br>" +
-					"- Key 4: 2x speed<br>" +
-					"- Key 5: 10x speed</html>"
+					"<br><b>Simulation Speed (Phase 3.1 global keyboard shortcuts):</b><br>" +
+					"- Key 1: 1x speed (real-time)<br>" +
+					"- Key 2: 2x speed<br>" +
+					"- Key 3: 5x speed<br>" +
+					"- Key 4: 10x speed<br>" +
+					"- Key 5: 50x speed<br>" +
+					"- Plus (+): Increase speed by 1.5x<br>" +
+					"- Minus (-): Decrease speed by 1.5x<br>" +
+					"- Space: Pause/resume simulation</html>"
 			)
 		)
 		menu.add(
