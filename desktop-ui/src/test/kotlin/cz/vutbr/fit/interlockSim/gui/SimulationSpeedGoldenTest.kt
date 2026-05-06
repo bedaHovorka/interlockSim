@@ -521,13 +521,6 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 		 */
 		const val POSITION_TOLERANCE_M = 1e-6
 
-		/**
-		 * Time tolerance from issue acceptance criteria (not used in assertions because
-		 * discrete-event timestamps are exact Doubles — kept as documentation).
-		 */
-		@Suppress("unused")
-		const val TIME_TOLERANCE_S = 1e-9
-
 		/** Physical acceleration upper bound from Train.Motor (m/s²). */
 		const val MAXIMAL_ACCELERATION_MS2 = 4.0
 
