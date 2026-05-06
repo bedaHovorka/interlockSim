@@ -25,7 +25,6 @@ import javax.swing.JMenu
 import javax.swing.JMenuBar
 import javax.swing.JMenuItem
 import javax.swing.JOptionPane
-import javax.swing.KeyStroke
 
 /**
  * Application menu bar with File and Help menus
@@ -382,8 +381,9 @@ class MenuBar : JMenuBar() {
 	/**
 	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
 	 *
-	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) have keyboard accelerators (keys 1–5)
-	 * so that the user can change the speed without reaching for the mouse during a run.
+	 * Speed presets (0.1x, 0.5x, 1x, 2x, 10x) are available via menu items.
+	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
+	 * during simulation mode (Phase 3.1, Issue #193).
 	 */
 	private fun simulationMenu(): JMenu {
 		val menu = JMenu("Simulation")
@@ -400,9 +400,8 @@ class MenuBar : JMenuBar() {
 				Triple("2x", 2.0, KeyEvent.VK_4),
 				Triple("10x", 10.0, KeyEvent.VK_5),
 			)
-		for ((label, multiplier, keyCode) in speedPresets) {
+		for ((label, multiplier, _) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))
-			item.accelerator = KeyStroke.getKeyStroke(keyCode, 0)
 			speedMenu.add(item)
 		}
 		menu.add(speedMenu)
@@ -425,12 +424,15 @@ class MenuBar : JMenuBar() {
 					"<br><b>Simulation:</b><br>" +
 					"- Simulation &gt; Start...: Load XML and start simulation<br>" +
 					"- Simulation &gt; Stop: Terminate running simulation<br>" +
-					"<br><b>Simulation Speed (keyboard shortcuts):</b><br>" +
-					"- Key 1: 0.1x speed<br>" +
-					"- Key 2: 0.5x speed<br>" +
-					"- Key 3: 1x speed (real-time)<br>" +
-					"- Key 4: 2x speed<br>" +
-					"- Key 5: 10x speed</html>"
+					"<br><b>Simulation Speed (Phase 3.1 global keyboard shortcuts):</b><br>" +
+					"- Key 1: 1x speed (real-time)<br>" +
+					"- Key 2: 2x speed<br>" +
+					"- Key 3: 5x speed<br>" +
+					"- Key 4: 10x speed<br>" +
+					"- Key 5: 50x speed<br>" +
+					"- Plus (+): Increase speed by 1.5x<br>" +
+					"- Minus (-): Decrease speed by 1.5x<br>" +
+					"- Space: Pause/resume simulation</html>"
 			)
 		)
 		menu.add(

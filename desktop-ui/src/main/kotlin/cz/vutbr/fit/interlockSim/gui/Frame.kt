@@ -140,6 +140,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		)
 	private var currentSimulationContext: SimulationContext? = null
 
+	// Global keyboard shortcuts for simulation speed control (Phase 3.1, Issue #193)
+	private val simulationKeyBindings: SimulationKeyBindings = SimulationKeyBindings(simulationController)
+
 	/**
 	 * Tracks modification state for unsaved changes warning.
 	 */
@@ -202,6 +205,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Adds EventTimelinePanel to south panel (if created)
 	 * - Shows ControlPanel
 	 * - Disables editing ToolBar
+	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -225,6 +229,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
 
+		// Install keyboard shortcuts for simulation control (Phase 3.1, Issue #193)
+		simulationKeyBindings.install(rootPane)
+
 		southPanel.revalidate()
 		southPanel.repaint()
 		contentPane.revalidate()
@@ -237,6 +244,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Removes EventTimelinePanel from south panel (StatusBar remains visible throughout)
 	 * - Hides ControlPanel
 	 * - Enables editing ToolBar
+	 * - Uninstalls global keyboard shortcuts (Phase 3.1, Issue #193)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -256,6 +264,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
+
+		// Uninstall keyboard shortcuts (Phase 3.1, Issue #193)
+		simulationKeyBindings.uninstall(rootPane)
 
 		southPanel.revalidate()
 		southPanel.repaint()

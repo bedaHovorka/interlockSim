@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import java.awt.Component
 import java.awt.event.MouseEvent
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.swing.SwingUtilities
 
 /**
@@ -182,14 +184,19 @@ class StatusBarTest : KoinTestBase() {
 	fun propertyChangeFromNonEdtDefersUpdate() {
 		assertThat(SwingUtilities.isEventDispatchThread()).isFalse()
 		val initialText = statusBar.text
-		val event = ContextChangeEvent("status", null, "background update")
 
+		// Block the EDT so the invokeLater posted by propertyChange cannot execute yet.
+		val edtBlocker = CountDownLatch(1)
+		SwingUtilities.invokeLater { edtBlocker.await(5, TimeUnit.SECONDS) }
+
+		val event = ContextChangeEvent("status", null, "background update")
 		statusBar.propertyChange(event)
 
-		// Before EDT flush: invokeLater queued but not executed → label still holds old text
+		// EDT is blocked → invokeLater is queued but cannot execute → label holds old text.
 		assertThat(statusBar.text).isEqualTo(initialText)
 
-		// After flush: EDT has processed the invokeLater → label updated
+		// Release EDT, then flush so the queued update runs.
+		edtBlocker.countDown()
 		flushEDT()
 		assertThat(statusBar.text).isEqualTo("background update")
 	}
