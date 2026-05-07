@@ -178,14 +178,12 @@ class SimulationSpeedIntegrationTest {
 
 		repeat(10) {
 			runner.isPaused = true
-			assertThat(runner.isPaused).isTrue()
-			Thread.sleep(50)
+			Thread.sleep(10)
 			runner.isPaused = false
-			assertThat(runner.isPaused).isFalse()
-			Thread.sleep(50)
+			// Verify the sim thread is still alive after each cycle — catches early death.
+			assertThat(runner.isRunning()).isTrue()
+			Thread.sleep(10)
 		}
-
-		assertThat(runner.isRunning()).isTrue()
 		runner.stop()
 		assertThat(waitForStop(5_000)).isTrue()
 	}
@@ -465,7 +463,8 @@ class SimulationSpeedIntegrationTest {
 		runner.speedMultiplier = 100.0
 		runner.start()
 		assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue()
-		// The infinite loop guarantees the runner is still alive at this point.
+		// The while-loop exits only on interrupt; stop() has not been called yet,
+		// so context.run() is guaranteed still executing here.
 		assertThat(runner.isRunning()).isTrue()
 
 		runner.stop()
