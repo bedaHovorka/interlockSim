@@ -135,7 +135,7 @@ class ExampleRegistry {
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, speedMultiplier = 1.0))
+				context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0))
 				context
 			}
 	}

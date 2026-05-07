@@ -15,6 +15,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
@@ -133,25 +134,29 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has toolbar container at north")
 	fun frameHasToolbarContainerAtNorth() {
 		runOnEDT {
-			// North component is now a JPanel containing ToolBar + ControlPanel (Issue #205)
+			// North component is now a JPanel containing ToolBar + ControlPanel + SimulationControlPanel (Issues #205, #190)
 			val northComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.NORTH)
 			assertThat(northComponent).isNotNull()
 			assertThat(northComponent).isInstanceOf(javax.swing.JPanel::class)
 
-			// Verify the container has components (ToolBar and ControlPanel)
+			// Verify the container has components (ToolBar, ControlPanel, SimulationControlPanel)
 			val panel = northComponent as javax.swing.JPanel
-			assertThat(panel.componentCount).isEqualTo(2)
+			assertThat(panel.componentCount).isEqualTo(3)
 		}
 	}
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("frame has status bar at south")
+	@DisplayName("frame has status bar in south panel")
 	fun frameHasStatusBarAtSouth() {
 		runOnEDT {
+			// SOUTH now contains a southPanel (JPanel) that wraps StatusBar and EventTimelinePanel
 			val southComponent = (frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.SOUTH)
 			assertThat(southComponent).isNotNull()
-			assertThat(southComponent).isInstanceOf(StatusBar::class)
+			assertThat(southComponent).isInstanceOf(javax.swing.JPanel::class)
+			// StatusBar must be accessible and correctly initialised
+			assertThat(frame.statusBar).isInstanceOf(StatusBar::class)
+			assertThat(frame.statusBar.isVisible).isTrue()
 		}
 	}
 
@@ -223,5 +228,80 @@ class FrameTest : AbstractFrameTestBase() {
 			assertThat(layout.getLayoutComponent(BorderLayout.NORTH)).isNotNull()
 			assertThat(layout.getLayoutComponent(BorderLayout.SOUTH)).isNotNull()
 		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel has one component (StatusBar) in editing mode")
+	fun southPanelHasOneComponentInEditingMode() {
+		runOnEDT {
+			// Default state after Frame construction is editing mode — only StatusBar in south panel
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(1)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(StatusBar::class)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel gains EventTimelinePanel when switching to simulation mode")
+	fun southPanelGainsTimelinePanelInSimulationMode() {
+		val context = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		runOnEDT {
+			frame.setContext(context)
+			// Simulation mode: EventTimelinePanel is added above StatusBar
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(2)
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("south panel returns to one component when switching back to editing mode")
+	fun southPanelRestoresOneComponentAfterSwitchingToEditingMode() {
+		val simContext = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		val editContext = editingContextFactory.createEmptyContext()
+		runOnEDT {
+			frame.setContext(simContext)
+			// switch back to editing — EventTimelinePanel removed, only StatusBar remains
+			frame.setContext(editContext)
+			val southPanel =
+				(frame.contentPane.layout as BorderLayout)
+					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
+			assertThat(southPanel.componentCount).isEqualTo(1)
+			// StatusBar must still be visible after returning to editing mode
+			assertThat(frame.statusBar.isVisible).isTrue()
+		}
+		simContext.close()
+		editContext.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("setContext closes previous SimulationContext when switching to a new one")
+	fun setContextClosesPreviousSimulationContext() {
+		val context1 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		val context2 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+		)
+		runOnEDT {
+			frame.setContext(context1)
+			frame.setContext(context2)
+		}
+		assertThat(context1.closeCount).isEqualTo(1)
+		runOnEDT { frame.stopSimulation() }
+		context2.close()
 	}
 }

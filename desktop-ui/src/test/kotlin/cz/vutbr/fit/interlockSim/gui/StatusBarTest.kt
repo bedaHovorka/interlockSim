@@ -14,7 +14,10 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.testModuleFull
 import io.mockk.mockk
@@ -25,7 +28,9 @@ import org.junit.jupiter.api.Test
 import org.koin.core.module.Module
 import java.awt.Component
 import java.awt.event.MouseEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import javax.swing.SwingUtilities
 
 /**
  * Tests for StatusBar GUI component.
@@ -121,43 +126,101 @@ class StatusBarTest : KoinTestBase() {
 	@Test
 	@DisplayName("handles property change with CharSequence value")
 	fun handlesPropertyChangeWithCharSequenceValue() {
-		// Create property change event with CharSequence
 		val event = ContextChangeEvent("status", "old", "New status message")
-
-		// Trigger property change
 		statusBar.propertyChange(event)
-
-		// Verify text was updated
+		flushEDT()
 		assertThat(statusBar.text).isEqualTo("New status message")
 	}
 
 	@Test
 	@DisplayName("handles property change with non-CharSequence value")
 	fun handlesPropertyChangeWithNonCharSequenceValue() {
-		// Create property change event with Integer
 		val event = ContextChangeEvent("status", null, 12345)
-
-		// Trigger property change
 		statusBar.propertyChange(event)
-
-		// Verify text was updated with toString()
+		flushEDT()
 		assertThat(statusBar.text).isEqualTo("12345")
 	}
 
 	@Test
 	@DisplayName("handles property change with null value")
 	fun handlesPropertyChangeWithNullValue() {
-		// Set initial text
 		statusBar.text = "Initial text"
-
-		// Create property change event with null new value
 		val event = ContextChangeEvent("status", "old", null)
+		statusBar.propertyChange(event)
+		flushEDT()
+		assertThat(statusBar.text).isEqualTo("Initial text")
+	}
 
-		// Trigger property change
+	@Test
+	@DisplayName("updateSpeedIndicator shows speed text when multiplier is not 1.0x")
+	fun updateSpeedIndicatorShowsSpeedText() {
+		// updateSpeedIndicator uses invokeIfNeeded; flush is still needed when not on EDT
+		statusBar.updateSpeedIndicator(2.0)
+		flushEDT()
+
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 2.0x")
+		assertThat(statusBar.isSpeedIndicatorVisible()).isTrue()
+		// Main status text must NOT be affected
+		assertThat(statusBar.text).contains(PROGRAM_NAME)
+	}
+
+	@Test
+	@DisplayName("updateSpeedIndicator hides speed indicator at default speed (1.0x)")
+	fun updateSpeedIndicatorHidesAtDefaultSpeed() {
+		// First show at non-default speed, then reset
+		statusBar.updateSpeedIndicator(3.0)
+		flushEDT()
+
+		statusBar.updateSpeedIndicator(1.0)
+		flushEDT()
+
+		assertThat(statusBar.isSpeedIndicatorVisible()).isFalse()
+		// Stale text must be cleared so it cannot reappear later
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("")
+	}
+
+	@Test
+	@DisplayName("propertyChange from non-EDT thread defers label update via invokeLater")
+	fun propertyChangeFromNonEdtDefersUpdate() {
+		assertThat(SwingUtilities.isEventDispatchThread()).isFalse()
+		val initialText = statusBar.text
+
+		// Block the EDT so the invokeLater posted by propertyChange cannot execute yet.
+		val edtBlocker = CountDownLatch(1)
+		SwingUtilities.invokeLater { edtBlocker.await(5, TimeUnit.SECONDS) }
+
+		val event = ContextChangeEvent("status", null, "background update")
 		statusBar.propertyChange(event)
 
-		// Verify text remains unchanged when new value is null
-		assertThat(statusBar.text).isEqualTo("Initial text")
+		// EDT is blocked → invokeLater is queued but cannot execute → label holds old text.
+		assertThat(statusBar.text).isEqualTo(initialText)
+
+		// Release EDT, then flush so the queued update runs.
+		edtBlocker.countDown()
+		flushEDT()
+		assertThat(statusBar.text).isEqualTo("background update")
+	}
+
+	@Test
+	@DisplayName("updateSpeedIndicator formats multiplier with Locale.ROOT (dot separator)")
+	fun updateSpeedIndicatorFormatsMultiplier() {
+		statusBar.updateSpeedIndicator(0.5)
+		flushEDT()
+
+		// Must use '.' decimal separator regardless of JVM default locale
+		assertThat(statusBar.speedIndicatorText()).isEqualTo("Speed: 0.5x")
+	}
+
+	/**
+	 * Flushes the EDT queue by calling [SwingUtilities.invokeAndWait] twice.
+	 *
+	 * Two flushes are needed when code under test uses [SwingUtilities.invokeLater]:
+	 * the first flush lets the invokeLater task land on EDT, and the second flush
+	 * runs it.
+	 */
+	private fun flushEDT() {
+		SwingUtilities.invokeAndWait { /* flush 1 */ }
+		SwingUtilities.invokeAndWait { /* flush 2 */ }
 	}
 
 	/**

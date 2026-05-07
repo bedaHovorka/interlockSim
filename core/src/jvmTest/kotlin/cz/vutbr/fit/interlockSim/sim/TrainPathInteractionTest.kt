@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
@@ -145,11 +146,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
 
-			// Act: Train exists and can handle blocked paths
-			val trainConstructed = train != null
-
 			// Assert: Train can be constructed even with blocked path scenarios
-			assertThat(trainConstructed).isEqualTo(true)
+			assertThat(train).isNotNull()
 		}
 
 		@Test
@@ -165,11 +163,8 @@ class TrainPathInteractionTest : KoinTestBase() {
 			val timetable = Timetable(mockInOut, mockOutOut, Time(0.0), Time(0.0), 50.0)
 			val train = Train(mockContext, timetable)
 
-			// Act: Train can respond to path availability changes
-			val trainReady = train != null
-
 			// Assert: Train instance valid for path resumption scenarios
-			assertThat(trainReady).isEqualTo(true)
+			assertThat(train).isNotNull()
 		}
 	}
 

@@ -12,15 +12,22 @@ package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
+import java.awt.Cursor
 import java.awt.event.ActionEvent
 import java.io.File
+import java.util.concurrent.ExecutionException
 import javax.swing.AbstractAction
 import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
+import javax.swing.JMenuItem
 import javax.swing.JOptionPane
+import javax.swing.SwingWorker
 
 /**
  * Application menu bar with File and Help menus
@@ -30,6 +37,8 @@ class MenuBar : JMenuBar() {
 	private val saveAsAction = SaveAsAction()
 
 	companion object {
+		private val logger = KotlinLogging.logger {}
+
 		/**
 		 * Pure validation: returns true if [context] has enough InOut elements to be saved.
 		 * Does not show any dialog — callers handle error presentation.
@@ -265,6 +274,84 @@ class MenuBar : JMenuBar() {
 		}
 	}
 
+	/**
+	 * Shows a file chooser, loads the selected XML as a [SimulationContext], sets it on the
+	 * [Frame] and immediately starts the simulation.
+	 *
+	 * **Resource management:** The intermediate [EditingContext] created by
+	 * [JvmEditingContextFactory.createContext] is wrapped in `use {}` to ensure its Koin
+	 * scope is closed after the [SimulationContext] transformation, preventing a resource
+	 * leak of the temporary editing context.
+	 *
+	 * **Report types:** All report types are enabled on the [SimulationContext] before
+	 * passing it to [Frame.setContext] so that [AnimationController] and
+	 * [cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel] receive property-change
+	 * events and the animation is not visually frozen.
+	 *
+	 * **Modification tracker:** The tracker is cleared before switching to simulation mode
+	 * so that the "unsaved changes" path in [Frame.handleWindowClosing] does not attempt to
+	 * save a [SimulationContext] through the editor's save logic.
+	 */
+	private inner class StartSimulationAction : AbstractAction("Start...") {
+		override fun actionPerformed(e: ActionEvent) {
+			val fileChooser = JFileChooser(System.getProperty("user.dir"))
+			fileChooser.dialogTitle = "Start Simulation"
+
+			val returnValue = fileChooser.showOpenDialog(this@MenuBar)
+			if (returnValue != JFileChooser.APPROVE_OPTION) return
+
+			val selectedFile: File = fileChooser.selectedFile
+			val savedCursor = this@MenuBar.cursor
+			this@MenuBar.cursor = Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR)
+
+			object : SwingWorker<SimulationContext, Void>() {
+				override fun doInBackground(): SimulationContext = loadSimulationContext(selectedFile)
+
+				override fun done() {
+					this@MenuBar.cursor = savedCursor
+					val simContext = try {
+						get()
+					} catch (ex: ExecutionException) {
+						logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
+						JOptionPane.showMessageDialog(
+							this@MenuBar,
+							"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
+								"Ensure the file is a valid railway network XML.",
+							"Cannot Start Simulation",
+							JOptionPane.ERROR_MESSAGE
+						)
+						return
+					}
+
+					val frame = getKoin().get<Frame>()
+					frame.modificationTracker.markClean()
+					frame.modificationTracker.setCurrentFile(null)
+					frame.setContext(simContext)
+					frame.startSimulation()
+				}
+			}.execute()
+		}
+	}
+
+	/** Terminates the currently running simulation via [Frame.stopSimulation]. */
+	private inner class StopSimulationAction : AbstractAction("Stop") {
+		override fun actionPerformed(e: ActionEvent) {
+			val frame = getKoin().get<Frame>()
+			frame.stopSimulation()
+		}
+	}
+
+	/** Sets the simulation speed multiplier via [SimulationController.setSpeed]. */
+	private inner class SetSpeedAction(
+		private val label: String,
+		private val multiplier: Double,
+	) : AbstractAction(label) {
+		override fun actionPerformed(e: ActionEvent) {
+			val frame = getKoin().get<Frame>()
+			frame.simulationController.setSpeed(multiplier)
+		}
+	}
+
 	private inner class InfoAction(
 		private val infoName: String,
 		private val text: String
@@ -274,8 +361,25 @@ class MenuBar : JMenuBar() {
 		}
 	}
 
+	/**
+	 * Parses [file] as a railway XML, transforms it to a [SimulationContext], and enables
+	 * all report types. Must be called off the Event Dispatch Thread.
+	 *
+	 * @throws Exception if the file is unreadable or the XML is invalid.
+	 */
+	internal fun loadSimulationContext(file: File): SimulationContext {
+		val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
+		val simulationContextFactory = getKoin().get<SimulationContextFactory>()
+		return editingContextFactory.createContext(file).use { editCtx ->
+			simulationContextFactory.createContext(editCtx as EditingContext)
+		}.also { simCtx ->
+			simCtx.addReportTypes(*SimulationContext.ReportType.values())
+		}
+	}
+
 	init {
 		add(fileMenu())
+		add(simulationMenu())
 		add(helpMenu())
 	}
 
@@ -286,6 +390,39 @@ class MenuBar : JMenuBar() {
 		menu.add(saveAsAction)
 		menu.addSeparator()
 		menu.add(ExitAction())
+		return menu
+	}
+
+	/**
+	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
+	 *
+	 * Speed presets (0.1x, 0.5x, 1x, 2x, 5x, 10x, 50x) are available via menu items.
+	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
+	 * during simulation mode (Phase 3.1, Issue #193).
+	 */
+	private fun simulationMenu(): JMenu {
+		val menu = JMenu("Simulation")
+		menu.add(StartSimulationAction())
+		menu.add(StopSimulationAction())
+		menu.addSeparator()
+
+		val speedMenu = JMenu("Speed")
+		val speedPresets =
+			listOf(
+				Pair("0.1x", 0.1),
+				Pair("0.5x", 0.5),
+				Pair("1x", 1.0),
+				Pair("2x", 2.0),
+				Pair("5x", 5.0),
+				Pair("10x", 10.0),
+				Pair("50x", 50.0),
+			)
+		for ((label, multiplier) in speedPresets) {
+			val item = JMenuItem(SetSpeedAction(label, multiplier))
+			speedMenu.add(item)
+		}
+		menu.add(speedMenu)
+
 		return menu
 	}
 
@@ -300,7 +437,19 @@ class MenuBar : JMenuBar() {
 					"<br><b>Editing:</b><br>" +
 					"- Left mouse: Insert nodes and join them<br>" +
 					"- Middle mouse: Delete nodes<br>" +
-					"- Right mouse: Popup menu</html>"
+					"- Right mouse: Popup menu<br>" +
+					"<br><b>Simulation:</b><br>" +
+					"- Simulation &gt; Start...: Load XML and start simulation<br>" +
+					"- Simulation &gt; Stop: Terminate running simulation<br>" +
+					"<br><b>Simulation Speed (Phase 3.1 global keyboard shortcuts):</b><br>" +
+					"- Key 1: 0.5x speed (half-time)<br>" +
+					"- Key 2: 1x speed (real-time)<br>" +
+					"- Key 3: 2x speed<br>" +
+					"- Key 4: 5x speed<br>" +
+					"- Key 5: 10x speed<br>" +
+					"- Plus (+): Increase speed by 1.5x<br>" +
+					"- Minus (-): Decrease speed by 1.5x<br>" +
+					"- Space: Pause/resume simulation</html>"
 			)
 		)
 		menu.add(

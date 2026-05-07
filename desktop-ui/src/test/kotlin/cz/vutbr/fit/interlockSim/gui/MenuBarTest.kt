@@ -15,10 +15,13 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.swing.JMenu
 import javax.swing.JMenuItem
@@ -53,8 +56,8 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@DisplayName("menu bar has correct number of menus")
 	fun menuBarHasCorrectNumberOfMenus() {
 		runOnEDT {
-			// Verify menu bar has 2 menus (File and Help)
-			assertThat(menuBar.menuCount).isEqualTo(2)
+			// Verify menu bar has 3 menus (File, Simulation and Help)
+			assertThat(menuBar.menuCount).isEqualTo(3)
 		}
 	}
 
@@ -71,12 +74,134 @@ class MenuBarTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("menu bar has Simulation menu")
+	fun menuBarHasSimulationMenu() {
+		runOnEDT {
+			// Simulation is the second menu (index 1)
+			val simulationMenu = menuBar.getMenu(1) as JMenu
+			assertThat(simulationMenu.text).isEqualTo("Simulation")
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("menu bar has Help menu")
 	fun menuBarHasHelpMenu() {
 		runOnEDT {
-			// Get second menu (Help)
-			val helpMenu = menuBar.getMenu(1) as JMenu
+			// Help is now the third menu (index 2)
+			val helpMenu = menuBar.getMenu(2) as JMenu
 			assertThat(helpMenu.text).isEqualTo("Help")
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Simulation menu has Start action")
+	fun simulationMenuHasStartAction() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+
+			val menuItems =
+				(0 until simMenu.itemCount)
+					.map { simMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
+
+			val startItem = menuItems.find { it.text == "Start..." }
+			assertThat(startItem).isNotNull()
+			assertThat(startItem!!.isEnabled).isEqualTo(true)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Simulation menu has Stop action")
+	fun simulationMenuHasStopAction() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+
+			val menuItems =
+				(0 until simMenu.itemCount)
+					.map { simMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
+
+			val stopItem = menuItems.find { it.text == "Stop" }
+			assertThat(stopItem).isNotNull()
+			assertThat(stopItem!!.isEnabled).isEqualTo(true)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Simulation menu has separator")
+	fun simulationMenuHasSeparator() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+
+			val separatorCount =
+				(0 until simMenu.itemCount)
+					.count { simMenu.getItem(it) == null }
+
+			assertThat(separatorCount).isEqualTo(1)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Simulation menu has Speed submenu")
+	fun simulationMenuHasSpeedSubmenu() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+
+			val speedMenu =
+				(0 until simMenu.itemCount)
+					.mapNotNull { simMenu.getItem(it) }
+					.filterIsInstance<JMenu>()
+					.find { it.text == "Speed" }
+
+			assertThat(speedMenu).isNotNull()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Speed submenu has 7 preset items")
+	fun speedSubmenuHas7Items() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+			val speedMenu =
+				(0 until simMenu.itemCount)
+					.mapNotNull { simMenu.getItem(it) }
+					.filterIsInstance<JMenu>()
+					.first { it.text == "Speed" }
+
+			val speedItems =
+				(0 until speedMenu.itemCount)
+					.mapNotNull { speedMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
+
+			assertThat(speedItems).hasSize(7)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("Speed submenu items have correct labels")
+	fun speedSubmenuItemsHaveCorrectLabels() {
+		runOnEDT {
+			val simMenu = menuBar.getMenu(1) as JMenu
+			val speedMenu =
+				(0 until simMenu.itemCount)
+					.mapNotNull { simMenu.getItem(it) }
+					.filterIsInstance<JMenu>()
+					.first { it.text == "Speed" }
+
+			val labels =
+				(0 until speedMenu.itemCount)
+					.mapNotNull { speedMenu.getItem(it) }
+					.filterIsInstance<JMenuItem>()
+					.map { it.text }
+
+			assertThat(labels).isEqualTo(listOf("0.1x", "0.5x", "1x", "2x", "5x", "10x", "50x"))
 		}
 	}
 
@@ -147,7 +272,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@DisplayName("Help menu has Usage action")
 	fun helpMenuHasUsageAction() {
 		runOnEDT {
-			val helpMenu = menuBar.getMenu(1) as JMenu
+			val helpMenu = menuBar.getMenu(2) as JMenu
 
 			// Get menu items
 			val menuItems =
@@ -166,7 +291,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@DisplayName("Help menu has About action")
 	fun helpMenuHasAboutAction() {
 		runOnEDT {
-			val helpMenu = menuBar.getMenu(1) as JMenu
+			val helpMenu = menuBar.getMenu(2) as JMenu
 
 			// Get menu items
 			val menuItems =
@@ -185,7 +310,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@DisplayName("Help menu has exactly 2 items")
 	fun helpMenuHasExactlyTwoItems() {
 		runOnEDT {
-			val helpMenu = menuBar.getMenu(1) as JMenu
+			val helpMenu = menuBar.getMenu(2) as JMenu
 
 			// Get menu items
 			val menuItems =
@@ -228,13 +353,38 @@ class MenuBarTest : AbstractFrameTestBase() {
 		}
 	}
 
+	// ── loadSimulationContext ─────────────────────────────────────────────────
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("loadSimulationContext returns a SimulationContext for a valid XML file")
+	fun loadSimulationContextWithValidFileReturnsContext() {
+		val tempFile = File.createTempFile("vyhybna", ".xml").apply {
+			outputStream().use { out -> TestFixtures.loadShuntingXml().copyTo(out) }
+			deleteOnExit()
+		}
+		// Must be called off-EDT (SwingWorker's doInBackground thread)
+		val context = menuBar.loadSimulationContext(tempFile)
+		assertThat(context).isNotNull()
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@DisplayName("loadSimulationContext throws for a non-existent file")
+	fun loadSimulationContextWithMissingFileThrows() {
+		assertThrows<Exception> {
+			menuBar.loadSimulationContext(File("this-file-does-not-exist-9x3f.xml"))
+		}
+	}
+
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("menu actions are enabled by default")
 	fun menuActionsAreEnabledByDefault() {
 		runOnEDT {
 			val fileMenu = menuBar.getMenu(0) as JMenu
-			val helpMenu = menuBar.getMenu(1) as JMenu
+			val helpMenu = menuBar.getMenu(2) as JMenu
 
 			// Verify File menu items are enabled
 			val fileItems =

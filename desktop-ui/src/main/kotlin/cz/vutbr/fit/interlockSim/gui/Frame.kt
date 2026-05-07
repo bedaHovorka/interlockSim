@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
@@ -25,6 +26,7 @@ import javax.swing.JFrame
 import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
+import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
@@ -32,7 +34,7 @@ import javax.swing.Timer
  *
  * Provides dynamic layout that adapts based on context type:
  * - **Editing Mode** ([EditingContext]): StatusBar visible, ControlPanel hidden
- * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar hidden
+ * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar remains visible (speed indicator shown)
  *
  * ## Layout Structure
  *
@@ -65,6 +67,8 @@ import javax.swing.Timer
  * ├─────────────────────────────────┤
  * │ EventTimelinePanel (NEW)        │
  * │ [Filters] [Event log...]        │
+ * ├─────────────────────────────────┤
+ * │ StatusBar (speed indicator)     │
  * └─────────────────────────────────┘
  * ```
  *
@@ -74,7 +78,7 @@ import javax.swing.Timer
  * 1. Creates [EventTimelinePanel] (lazy, reused across simulations)
  * 2. Wires EventTimelinePanel to [RailwayNetGridCanvas] → [cz.vutbr.fit.interlockSim.gui.animation.AnimationController]
  * 3. Starts 10 Hz timer for [ControlPanel] time updates
- * 4. Shows ControlPanel and EventTimelinePanel, hides StatusBar
+ * 4. Shows ControlPanel and EventTimelinePanel (above StatusBar); StatusBar remains visible
  *
  * When an [EditingContext] is set, the frame:
  * 1. Hides ControlPanel and EventTimelinePanel
@@ -88,6 +92,8 @@ import javax.swing.Timer
  *
  * @since 2006-2007
  * @see setContext
+ * @see startSimulation
+ * @see stopSimulation
  * @see switchToEditingMode
  * @see switchToSimulationMode
  */
@@ -98,8 +104,44 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	// Animation UI components (Issue #205)
 	private val controlPanel: ControlPanel = ControlPanel()
+	internal val simulationControlPanel: SimulationControlPanel = SimulationControlPanel()
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
+
+	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
+	private val southPanel: JPanel = JPanel().apply {
+		layout = BoxLayout(this, BoxLayout.Y_AXIS)
+	}
+
+	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
+	internal val simulationController: SimulationController =
+		SimulationController(
+			onStateChanged = { state ->
+				runOnEdt {
+					when (state) {
+						SimulationController.SimulationStatus.RUNNING -> {
+							toolBar.showSimulationControls()
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.RUNNING)
+							controlPanel.setStopEnabled(true)
+						}
+
+						SimulationController.SimulationStatus.STOPPED -> {
+							toolBar.hideSimulationControls()
+							simulationControlPanel.runner = null
+							controlPanel.setStopEnabled(false)
+							controlPanel.updateStatus(ControlPanel.SimulationStatus.STOPPED)
+						}
+					}
+				}
+			},
+			onSpeedChanged = { speed ->
+				runOnEdt { statusBar.updateSpeedIndicator(speed) }
+			}
+		)
+	private var currentSimulationContext: SimulationContext? = null
+
+	// Global keyboard shortcuts for simulation speed control (Phase 3.1, Issue #193)
+	private val simulationKeyBindings: SimulationKeyBindings = SimulationKeyBindings(simulationController)
 
 	/**
 	 * Tracks modification state for unsaved changes warning.
@@ -122,10 +164,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		northContainer.add(toolBar)
 		controlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
 		northContainer.add(controlPanel)
+		simulationControlPanel.isVisible = false // Initially hidden (shown only in simulation mode)
+		northContainer.add(simulationControlPanel)
 		contentPane.add(northContainer, BorderLayout.NORTH)
 
+		// Route speed changes from SimulationControlPanel through SimulationController so
+		// desiredSpeed stays in sync and is applied to the next simulation start.
+		simulationControlPanel.onSpeedChanged = { speed -> simulationController.setSpeed(speed) }
+
+		// South panel contains StatusBar (edit mode) and EventTimelinePanel (simulation mode)
 		statusBar.registerProducer(railwayNetGridCanvas)
-		contentPane.add(statusBar, BorderLayout.SOUTH)
+		southPanel.add(statusBar)
+		contentPane.add(southPanel, BorderLayout.SOUTH)
 
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
@@ -150,10 +200,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to simulation mode (Issue #205).
 	 *
-	 * - Hides StatusBar
-	 * - Shows EventTimelinePanel (if created)
+	 * - StatusBar remains visible (its speed indicator [StatusBar.updateSpeedIndicator] shows
+	 *   non-default speeds; [StatusBar.statusLabel] continues to display simulation events)
+	 * - Adds EventTimelinePanel to south panel (if created)
 	 * - Shows ControlPanel
 	 * - Disables editing ToolBar
+	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -162,20 +214,26 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToSimulationMode must be called from EDT"
 		}
 
-		// Hide StatusBar, show EventTimelinePanel
-		statusBar.isVisible = false
-		contentPane.remove(statusBar)
-		eventTimelinePanel?.let {
-			contentPane.add(it, BorderLayout.SOUTH)
+		// Add EventTimelinePanel before StatusBar (index 0 = top of south panel, above StatusBar)
+		eventTimelinePanel?.let { panel ->
+			if (panel.parent == null) {
+				southPanel.add(panel, TIMELINE_PANEL_SOUTH_INDEX)
+			}
 		}
 
-		// Show ControlPanel
+		// Show ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = true
-		controlPanel.updateStatus("Running")
+		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
+		simulationControlPanel.isVisible = true
 
 		// Disable editing toolbar in simulation mode
 		toolBar.setToolsEnabled(false)
 
+		// Install keyboard shortcuts for simulation control (Phase 3.1, Issue #193)
+		simulationKeyBindings.install(rootPane)
+
+		southPanel.revalidate()
+		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -183,10 +241,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * Switch UI layout to editing mode (Issue #205).
 	 *
-	 * - Shows StatusBar
-	 * - Hides EventTimelinePanel
+	 * - Removes EventTimelinePanel from south panel (StatusBar remains visible throughout)
 	 * - Hides ControlPanel
 	 * - Enables editing ToolBar
+	 * - Uninstalls global keyboard shortcuts (Phase 3.1, Issue #193)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -195,19 +253,23 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"switchToEditingMode must be called from EDT"
 		}
 
-		// Show StatusBar, hide EventTimelinePanel
-		eventTimelinePanel?.let {
-			contentPane.remove(it)
+		// Remove EventTimelinePanel from south panel (StatusBar stays visible always)
+		eventTimelinePanel?.let { panel ->
+			southPanel.remove(panel)
 		}
-		contentPane.add(statusBar, BorderLayout.SOUTH)
-		statusBar.isVisible = true
 
-		// Hide ControlPanel
+		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
+		simulationControlPanel.isVisible = false
 
 		// Enable editing toolbar in editing mode
 		toolBar.setToolsEnabled(true)
 
+		// Uninstall keyboard shortcuts (Phase 3.1, Issue #193)
+		simulationKeyBindings.uninstall(rootPane)
+
+		southPanel.revalidate()
+		southPanel.repaint()
 		contentPane.revalidate()
 		contentPane.repaint()
 	}
@@ -227,10 +289,18 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * **Must be called from EDT.**
 	 */
 	fun setContext(context: Context<*, *>) {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"setContext must be called from EDT"
+		}
+		stopSimulation() // Stop any running simulation before switching context
 		stopAnimationUpdates() // Cleanup existing timer
+
+		val previousSimulationContext = currentSimulationContext
 
 		when (context) {
 			is SimulationContext -> {
+				currentSimulationContext = context
+
 				// Lazy-create event timeline panel (reused across simulations)
 				if (eventTimelinePanel == null) {
 					eventTimelinePanel = EventTimelinePanel()
@@ -240,13 +310,21 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
 				startAnimationUpdates()
+
+				// Wire stop button to stopSimulation()
+				controlPanel.onStop = { stopSimulation() }
+				controlPanel.setStopEnabled(false) // enabled only after startSimulation()
 			}
 			is EditingContext -> {
+				currentSimulationContext = null
+				controlPanel.onStop = null
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
 			}
 			else -> {
+				currentSimulationContext = null
+				controlPanel.onStop = null
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
 				railwayNetGridCanvas.setContext(context)
@@ -254,6 +332,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 		context.addPropertyChangeListener(statusBar)
+
+		// Only close the previous context when it is a different instance.
+		// Closing the same context that was just set would invalidate the Koin scope we just wired.
+		if (previousSimulationContext !== null && previousSimulationContext !== context) {
+			previousSimulationContext.close()
+		}
 	}
 
 	/**
@@ -299,6 +383,56 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	}
 
 	/**
+	 * Launch the simulation on a background thread via [SimulationController] (Issue #189).
+	 *
+	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
+	 * running this call is a no-op.
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun startSimulation() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"startSimulation must be called from EDT"
+		}
+
+		val context = currentSimulationContext ?: run {
+			logger.warn { "startSimulation called without a SimulationContext — ignoring" }
+			return
+		}
+
+		try {
+			simulationController.start(context)
+			simulationControlPanel.runner = simulationController.runner?.takeIf { it.isRunning() }
+		} catch (e: Exception) {
+			logger.error(e) { "Failed to start simulation" }
+		}
+	}
+
+	/**
+	 * Request immediate simulation shutdown (Issue #189).
+	 *
+	 * Delegates to [SimulationController.stop]. Safe to call when no simulation is
+	 * running (no-op in that case).
+	 *
+	 * **Must be called from EDT.**
+	 */
+	fun stopSimulation() {
+		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
+			"stopSimulation must be called from EDT"
+		}
+		simulationController.stop()
+		// Detach SimulationControlPanel from runner when simulation stops
+		simulationControlPanel.runner = null
+	}
+
+	companion object {
+		private val logger = KotlinLogging.logger {}
+
+		/** Index at which EventTimelinePanel is inserted in [southPanel] (above StatusBar). */
+		private const val TIMELINE_PANEL_SOUTH_INDEX = 0
+	}
+
+	/**
 	 * Updates the window title to reflect current file and dirty state.
 	 */
 	private fun updateTitle() {
@@ -311,6 +445,20 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			} else {
 				PROGRAM_FULL_NAME
 			}
+	}
+
+	/**
+	 * Execute [action] on EDT.
+	 *
+	 * Runs immediately if already on EDT; otherwise schedules asynchronously via
+	 * [javax.swing.SwingUtilities.invokeLater] to avoid blocking monitor/background threads.
+	 */
+	private fun runOnEdt(action: () -> Unit) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			action()
+		} else {
+			SwingUtilities.invokeLater(action)
+		}
 	}
 
 	/**
@@ -380,6 +528,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Exits the application without saving.
 	 */
 	private fun exitWithoutSaving() {
+		stopSimulation() // Stop any running simulation before exit
+		currentSimulationContext?.close() // Release simulation resources before JVM exit
 		stopAnimationUpdates() // Stop Frame's 10 Hz timer
 		railwayNetGridCanvas.cleanupAnimation() // Stop AnimationController - CRITICAL for GC
 		dispose()

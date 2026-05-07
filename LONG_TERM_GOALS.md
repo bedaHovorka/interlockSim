@@ -209,6 +209,7 @@ Users can automatically collect key performance indicators during simulation inc
 **Category:** I: System Operations
 **Priority:** Critical
 **Development Estimate:** 1 month
+**Status:** ✅ COMPLETE
 
 **User Value:**
 Users can adjust simulation speed from slow motion (for detailed observation) to fast forward (for quick scenario completion). This provides flexibility for different use cases: slow for education, fast for research batch runs.
@@ -222,7 +223,9 @@ Users can adjust simulation speed from slow motion (for detailed observation) to
 **Dependencies:** None (quick win)
 
 **Implementation Notes:**
-- kDisco already supports speed control; needs UI exposure
+- The simulation library interface used by the model (historically jDisco, now kDisco/KMP) runs in pure simulation time and has no native wall-clock speed control or synchronization.
+- Speed control for `ShuntingLoop` is implemented via the `RealTimeSynch` inner process inside `sim/ShuntingLoop.kt` (enabled by `enableRealTimeSync`, paced by `speedMultiplier`). This resides in the `sim/` package.
+- `SimulationRunner` provides a complementary external throttling API (`throttle()`, `awaitIfPaused()`) callable from the simulation thread; this is the designed extension point for future simulation processes that delegate pacing outside the `sim/` package.
 - Quick win - implement early for immediate value
 
 ---

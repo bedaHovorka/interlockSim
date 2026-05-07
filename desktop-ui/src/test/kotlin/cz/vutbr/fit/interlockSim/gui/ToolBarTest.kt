@@ -211,23 +211,70 @@ class ToolBarTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("showSimulationControls adds label to toolbar")
+	fun showSimulationControlsAddsLabelToToolbar() {
+		runOnEDT {
+			val countBefore = toolBar.componentCount
+			toolBar.showSimulationControls()
+			// A separator and a label are added
+			assertThat(toolBar.componentCount).isEqualTo(countBefore + 2)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("hideSimulationControls removes label from toolbar")
+	fun hideSimulationControlsRemovesLabel() {
+		runOnEDT {
+			toolBar.showSimulationControls()
+			val countAfterShow = toolBar.componentCount
+			toolBar.hideSimulationControls()
+			assertThat(toolBar.componentCount).isEqualTo(countAfterShow - 2)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("showSimulationControls is idempotent")
+	fun showSimulationControlsIsIdempotent() {
+		runOnEDT {
+			toolBar.showSimulationControls()
+			val countAfterFirst = toolBar.componentCount
+			toolBar.showSimulationControls() // second call must be a no-op
+			assertThat(toolBar.componentCount).isEqualTo(countAfterFirst)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("hideSimulationControls is idempotent")
+	fun hideSimulationControlsIsIdempotent() {
+		runOnEDT {
+			val countBefore = toolBar.componentCount
+			toolBar.hideSimulationControls() // not shown — must be a no-op
+			assertThat(toolBar.componentCount).isEqualTo(countBefore)
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("toolbar maintains state across multiple grid toggles")
 	fun toolbarMaintainsStateAcrossMultipleGridToggles() {
 		runOnEDT {
 			val canvas = frame.railwayNetGridCanvas
 			val initialState = canvas.isShowGrid()
-			
+
 			// Find grid toggle button
 			val toggleButtons = toolBar.components.filterIsInstance<JToggleButton>()
 			val gridToggleButton = toggleButtons.last()
-			
+
 			// Toggle multiple times
 			gridToggleButton.doClick()
 			assertThat(canvas.isShowGrid()).isEqualTo(!initialState)
-			
+
 			gridToggleButton.doClick()
 			assertThat(canvas.isShowGrid()).isEqualTo(initialState)
-			
+
 			gridToggleButton.doClick()
 			assertThat(canvas.isShowGrid()).isEqualTo(!initialState)
 		}

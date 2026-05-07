@@ -310,7 +310,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 2.0
+					initialSpeedMultiplier = 2.0
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -335,7 +335,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 0.5
+					initialSpeedMultiplier = 0.5
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -348,7 +348,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 1.0
+					initialSpeedMultiplier = 1.0
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -361,7 +361,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 2.0
+					initialSpeedMultiplier = 2.0
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -374,7 +374,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 5.0
+					initialSpeedMultiplier = 5.0
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -394,7 +394,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 0.1
+					initialSpeedMultiplier = 0.1
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -407,7 +407,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 10.0
+					initialSpeedMultiplier = 10.0
 				)
 			assertThat(shuntingLoop).isNotNull()
 		}
@@ -420,7 +420,7 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = 0.0
+					initialSpeedMultiplier = 0.0
 				)
 			}.withMessage("Speed multiplier must be positive")
 				.isFailure()
@@ -435,8 +435,50 @@ class ShuntingLoopTest : KoinTestBase() {
 					validContext,
 					60L,
 					enableRealTimeSync = true,
-					speedMultiplier = -1.0
+					initialSpeedMultiplier = -1.0
 				)
+			}.withMessage("Speed multiplier must be positive")
+				.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
+		}
+
+		@Test
+		@DisplayName("speedMultiplier is mutable post-construction (RealTimeSynch reads live value)")
+		fun speedMultiplier_isMutableAtRuntime() {
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
+
+			// Default initial value
+			assertThat(shuntingLoop.speedMultiplier).isEqualTo(1.0)
+
+			// Mutating from the EDT side (or any thread) must stick — RealTimeSynch.iteration()
+			// reads from this @Volatile field on the simulation thread, so the value seen by
+			// the wall-clock pacing must match the latest write.
+			shuntingLoop.speedMultiplier = 2.5
+			assertThat(shuntingLoop.speedMultiplier).isEqualTo(2.5)
+
+			shuntingLoop.speedMultiplier = 0.1
+			assertThat(shuntingLoop.speedMultiplier).isEqualTo(0.1)
+		}
+
+		@Test
+		@DisplayName("speedMultiplier setter rejects zero")
+		fun speedMultiplier_setter_zero_throwsException() {
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
+
+			assertThatBlock {
+				shuntingLoop.speedMultiplier = 0.0
+			}.withMessage("Speed multiplier must be positive")
+				.isFailure()
+				.isInstanceOf(IllegalArgumentException::class)
+		}
+
+		@Test
+		@DisplayName("speedMultiplier setter rejects negative")
+		fun speedMultiplier_setter_negative_throwsException() {
+			val shuntingLoop = ShuntingLoop(validContext, 60L, enableRealTimeSync = true)
+
+			assertThatBlock {
+				shuntingLoop.speedMultiplier = -1.0
 			}.withMessage("Speed multiplier must be positive")
 				.isFailure()
 				.isInstanceOf(IllegalArgumentException::class)

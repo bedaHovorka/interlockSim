@@ -67,12 +67,22 @@ class ShuntingLoop(
 	context: SimulationContext,
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
-	private val speedMultiplier: Double = 1.0,
+	initialSpeedMultiplier: Double = 1.0,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
 ) : Interlocking(context),
+	SpeedControllable,
 	KoinComponent {
+	@kotlin.concurrent.Volatile
+	override var speedMultiplier: Double = initialSpeedMultiplier
+		set(value) {
+			require(value > 0.0) { "Speed multiplier must be positive, got: $value" }
+			field = value
+		}
+
 	init {
-		require(speedMultiplier > 0.0) { "Speed multiplier must be positive, got: $speedMultiplier" }
+		require(initialSpeedMultiplier > 0.0) {
+			"Speed multiplier must be positive, got: $initialSpeedMultiplier"
+		}
 	}
 
 	// Inject registry for idempotent path reservation checks
@@ -139,7 +149,6 @@ class ShuntingLoop(
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
 	private inner class RealTimeSynch : LoopProcess() {
-		private var presvihnuto: Double = 0.0
 		private var beginTime: Long = 0
 
 		override suspend fun startAction() {
@@ -155,15 +164,12 @@ class ShuntingLoop(
 				// Simulation termination is handled by LoopProcess.terminate() setting the flag
 				// which is checked between iterations — platformSleep interrupt does not cause a tight loop.
 				platformSleep(sleepTime)
-			} else if (sleepTime < 0) {
-				presvihnuto = sleepTime / 1000.0
 			}
 		}
 
 		override suspend fun interLoopSleep() {
 			beginTime = currentTimeMillisKMP()
-			hold(1 + presvihnuto)
-			presvihnuto = 0.0
+			hold(1.0)
 		}
 	}
 

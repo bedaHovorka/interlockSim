@@ -23,6 +23,7 @@ import java.awt.Dimension
 import java.awt.event.ActionEvent
 import javax.swing.AbstractAction
 import javax.swing.ButtonGroup
+import javax.swing.JLabel
 import javax.swing.JToggleButton
 import javax.swing.JToolBar
 
@@ -120,5 +121,38 @@ class ToolBar : JToolBar() {
 			val component = getComponent(i)
 			component.isEnabled = enabled
 		}
+	}
+
+	private val simControlsSeparator: JToolBar.Separator = JToolBar.Separator()
+	private val simControlsLabel: JLabel = JLabel("▶ Simulation")
+
+	/**
+	 * Shows the simulation controls panel in the toolbar.
+	 *
+	 * Called when a simulation starts to indicate simulation mode visually.
+	 * Idempotent: safe to call if controls are already showing.
+	 * Must be called from the Event Dispatch Thread (EDT).
+	 */
+	fun showSimulationControls() {
+		if (simControlsLabel.parent != null) return
+		add(simControlsSeparator)
+		add(simControlsLabel)
+		revalidate()
+		repaint()
+	}
+
+	/**
+	 * Hides the simulation controls panel from the toolbar.
+	 *
+	 * Called when a simulation stops to return to editing mode appearance.
+	 * Idempotent: safe to call if controls are not currently showing.
+	 * Must be called from the Event Dispatch Thread (EDT).
+	 */
+	fun hideSimulationControls() {
+		if (simControlsLabel.parent == null) return
+		remove(simControlsSeparator)
+		remove(simControlsLabel)
+		revalidate()
+		repaint()
 	}
 }

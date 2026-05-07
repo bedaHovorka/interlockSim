@@ -23,7 +23,11 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.Cell.Segment
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import org.koin.mp.KoinPlatformTools
@@ -42,6 +46,22 @@ class MockSimulationContext(
 	private val workers: MutableMap<DynamicInOut, InOutWorker> = mutableMapOf()
 	private val enabledReports: MutableCollection<ReportType> = mutableListOf()
 	private var stopped: Boolean = false
+	private var runListeners: List<ContextPropertyChangeListener> = emptyList()
+
+	/** Number of times [close] has been called. Used by tests to verify scope cleanup. */
+	var closeCount: Int = 0
+		private set
+
+	/**
+	 * On-demand cache for [DynamicTrack] wrappers.
+	 *
+	 * [DefaultSimulationContext.toDynamic] requires [initializeDynamicMapping] to have
+	 * been called first (normally inside [DefaultSimulationContext.run]). Tests that call
+	 * [Frame.setContext] without actually running the simulation trigger the animation
+	 * system which calls [toDynamic] before [run]. This cache creates wrappers on demand
+	 * so tests do not need to call [run] first.
+	 */
+	private val dynamicTrackCache: MutableMap<TrackFacility, DynamicTrack> = mutableMapOf()
 
 	init {
 		// Enable all standard reports by default
@@ -68,8 +88,29 @@ class MockSimulationContext(
 		return delegate.getInOuts()
 	}
 
+	override fun addPropertyChangeListener(listener: ContextPropertyChangeListener) {
+		runListeners = runListeners + listener
+		delegate.addPropertyChangeListener(listener)
+	}
+
+	override fun removePropertyChangeListener(listener: ContextPropertyChangeListener) {
+		runListeners = runListeners - listener
+		delegate.removePropertyChangeListener(listener)
+	}
+
 	override fun run() {
 		stopped = false
+		// Fire directly from runListeners so callers waiting on addPropertyChangeListener
+		// (e.g. FrameSimulationLifecycleTest) are notified when simulation starts.
+		// Cannot rely on delegate.freeze() because ContextTransformer already freezes the
+		// delegate at creation time, making freeze() a no-op here.
+		val event = ContextChangeEvent("frozen", false, true)
+		runListeners.forEach { it.propertyChange(event) }
+	}
+
+	override fun close() {
+		closeCount++
+		delegate.close()
 	}
 
 	override fun stop() {
@@ -138,6 +179,26 @@ class MockSimulationContext(
 		previous: Track?
 	): Boolean {
 		return true
+	}
+
+	/**
+	 * Returns a [DynamicTrack] wrapper for [track], creating one on demand if needed.
+	 *
+	 * Delegate's map is only populated after [DefaultSimulationContext.run] calls
+	 * [initializeDynamicMapping]. Tests that call [Frame.setContext] without starting
+	 * the simulation trigger the animation system before [run], so the map is empty.
+	 * This override falls back to an on-demand cache so tests remain independent of
+	 * simulation startup order.
+	 */
+	override fun toDynamic(track: TrackFacility): DynamicTrack {
+		return try {
+			delegate.toDynamic(track)
+		} catch (_: IllegalStateException) {
+			// Expected: delegate map is empty before initializeDynamicMapping() runs (i.e.,
+			// before DefaultSimulationContext.run()). Create a wrapper on demand for test use.
+			val staticKey = (track as? DynamicTrackBlock)?.staticRef as? TrackFacility ?: track
+			dynamicTrackCache.getOrPut(staticKey) { DynamicTrack(staticKey) }
+		}
 	}
 }
 

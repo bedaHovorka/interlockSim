@@ -2,6 +2,7 @@ package cz.vutbr.fit.interlockSim.gui.animation
 
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
+import javax.swing.JButton
 import javax.swing.JLabel
 import javax.swing.JPanel
 
@@ -9,15 +10,14 @@ import javax.swing.JPanel
  * Control panel for displaying simulation time and status during animated simulation.
  *
  * This component appears at the top of the frame during simulation mode and is hidden
- * during editing mode. It provides real-time feedback on simulation progress without
- * simulation control buttons (due to kDisco framework limitations - simulations cannot
- * be paused, only started and stopped).
+ * during editing mode. It provides real-time feedback on simulation progress and a
+ * Stop button to terminate the running simulation.
  *
  * **Layout Structure:**
  * ```
- * ┌─────────────────────────────────────────────┐
- * │ Time: 00:12:34.567   Status: Running        │
- * └─────────────────────────────────────────────┘
+ * ┌────────────────────────────────────────────────────────┐
+ * │ Time: 00:12:34.567   Status: Running   [Stop]          │
+ * └────────────────────────────────────────────────────────┘
  * ```
  *
  * **Update Frequency:**
@@ -28,9 +28,10 @@ import javax.swing.JPanel
  * All methods must be called from the Event Dispatch Thread (EDT).
  *
  * **Design Constraints:**
- * - No pause/resume buttons: kDisco simulations cannot be paused once started
+ * - No pause/resume button: kDisco simulations cannot be paused once started
+ * - Stop button: enabled while a simulation is running; calls [onStop] callback
  * - Time formatting: HH:MM:SS.mmm (hours:minutes:seconds.milliseconds)
- * - Status values: "Ready", "Running", "Stopped"
+ * - Status values: [SimulationStatus.READY], [SimulationStatus.RUNNING], [SimulationStatus.STOPPED]
  *
  * @since 2026-01-22
  * @see cz.vutbr.fit.interlockSim.gui.Frame
@@ -47,6 +48,18 @@ class ControlPanel : JPanel() {
 	 */
 	private val statusLabel: JLabel
 
+	/**
+	 * Button that requests simulation termination.
+	 * Enabled only while a simulation is running.
+	 */
+	private val stopButton: JButton
+
+	/**
+	 * Callback invoked when the Stop button is clicked.
+	 * Set by [cz.vutbr.fit.interlockSim.gui.Frame] before starting a simulation.
+	 */
+	var onStop: (() -> Unit)? = null
+
 	init {
 		layout = FlowLayout(FlowLayout.LEFT, 10, 5)
 		border = BorderFactory.createEtchedBorder()
@@ -56,8 +69,28 @@ class ControlPanel : JPanel() {
 		add(timeLabel)
 
 		// Create status label with initial state
-		statusLabel = JLabel("Status: Ready")
+		statusLabel = JLabel("Status: ${SimulationStatus.READY.displayName}")
 		add(statusLabel)
+
+		// Create stop button (disabled until simulation starts)
+		stopButton = JButton("Stop")
+		stopButton.isEnabled = false
+		stopButton.addActionListener { onStop?.invoke() }
+		add(stopButton)
+	}
+
+	/**
+	 * Enable or disable the Stop button.
+	 *
+	 * Should be `true` while simulation is running, `false` otherwise.
+	 *
+	 * **Thread Safety:**
+	 * Must be called from the Event Dispatch Thread (EDT).
+	 *
+	 * @param enabled Whether the Stop button should respond to clicks
+	 */
+	fun setStopEnabled(enabled: Boolean) {
+		stopButton.isEnabled = enabled
 	}
 
 	/**
@@ -91,18 +124,13 @@ class ControlPanel : JPanel() {
 	/**
 	 * Updates the displayed simulation status.
 	 *
-	 * **Valid Status Values:**
-	 * - "Ready" - Simulation initialized but not started
-	 * - "Running" - Simulation actively executing
-	 * - "Stopped" - Simulation terminated
-	 *
 	 * **Thread Safety:**
 	 * Must be called from the Event Dispatch Thread (EDT).
 	 *
-	 * @param status The new status to display (typically "Ready", "Running", or "Stopped")
+	 * @param status The new status to display
 	 */
-	fun updateStatus(status: String) {
-		statusLabel.text = "Status: $status"
+	fun updateStatus(status: SimulationStatus) {
+		statusLabel.text = "Status: ${status.displayName}"
 	}
 
 	/**
@@ -134,5 +162,21 @@ class ControlPanel : JPanel() {
 		val milliseconds = totalMilliseconds % 1_000
 
 		return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
+	}
+
+	/**
+	 * Simulation status values used to control the [statusLabel] display.
+	 *
+	 * @property displayName Human-readable label text shown in the UI.
+	 */
+	enum class SimulationStatus(val displayName: String) {
+		/** Context set but simulation not yet started. */
+		READY("Ready"),
+
+		/** Simulation is actively executing. */
+		RUNNING("Running"),
+
+		/** Simulation has finished or was stopped. */
+		STOPPED("Stopped"),
 	}
 }
