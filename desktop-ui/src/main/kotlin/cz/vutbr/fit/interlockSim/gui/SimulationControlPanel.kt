@@ -122,8 +122,11 @@ class SimulationControlPanel : JPanel() {
 			if (!updatingFromRunner) {
 				val speed = sliderToSpeed(slider.value)
 				speedLabel.text = formatSpeedLabel(speed)
-				runner?.speedMultiplier = speed
-				onSpeedChanged?.invoke(speed)
+				if (onSpeedChanged != null) {
+					onSpeedChanged!!.invoke(speed)
+				} else {
+					runner?.speedMultiplier = speed
+				}
 			}
 		}
 		sliderRow.add(slider)

@@ -286,6 +286,19 @@ class SimulationControlPanelTest {
 		assertThat(runner.speedMultiplier).isEqualTo(2.0)
 	}
 
+	@Test
+	@DisplayName("dragging slider routes through onSpeedChanged callback when wired")
+	fun sliderRoutesViaCallbackWhenWired() {
+		val runner = SimulationRunner(context)
+		SwingUtilities.invokeAndWait {
+			panel.runner = runner
+			// Simulate SimulationController.setSpeed: callback updates runner
+			panel.onSpeedChanged = { speed -> runner.speedMultiplier = speed }
+			findSlider().value = 20 // 20 / 10.0 = 2.0x
+		}
+		assertThat(runner.speedMultiplier).isEqualTo(2.0)
+	}
+
 	// ── Runner wiring ─────────────────────────────────────────────────────────
 
 	@Test
