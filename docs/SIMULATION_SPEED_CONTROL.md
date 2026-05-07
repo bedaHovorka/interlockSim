@@ -1,6 +1,6 @@
 # Simulation Speed Control
 
-Goal 7 adds live wall-clock speed control to the animated simulation GUI.
+The animated simulation GUI supports live wall-clock speed control.
 
 The control changes how fast events are presented to the user. It does **not** change simulation semantics, event ordering, or physics calculations.
 
@@ -90,7 +90,6 @@ Notes:
 
 - On many keyboards, `+` requires **Shift+`=`**.
 - Numpad `+` and `-` are also supported.
-- `Space` is the current Goal 8 integration point: it toggles the runner pause flag directly.
 
 ## Common Use Cases
 
@@ -110,18 +109,16 @@ Notes:
 
 ## Limitations
 
-- The slider stops at **10x** even though the runner supports up to **100x**.
-- `50x` is available from presets and the menu.
-- To reach values above that, press `+` repeatedly from `50x` until the runner reaches its `100x` cap, or set the multiplier programmatically.
+- The slider covers **0.1x to 10x**; preset buttons and the **Simulation → Speed** menu extend this to **50x**.
+- To reach values above `50x`, press `+` repeatedly — the runner caps at **100x**.
 - Speeds above roughly **10x** are useful for throughput, but animation becomes progressively harder to follow visually.
-- At **50x** and especially **100x**, small simulation deltas often round down to **0 ms sleep**, so execution becomes effectively CPU-bound.
-- In CPU-bound ranges, expect higher processor usage and less visually smooth animation than at `1x`.
+- At **50x** and above, small simulation deltas often round down to **0 ms sleep**, so execution becomes effectively CPU-bound — expect higher CPU usage and less smooth animation than at `1x`.
 - Console-mode runs do not expose the GUI speed controls.
 
 ## Troubleshooting
 
 - **I cannot see the controls:** make sure you started the animated GUI, not the console example.
 - **The speed indicator disappeared:** that is expected at `1.0x`.
-- **`Space` does nothing:** a simulation must be running and the frame must have keyboard focus.
+- **`Space` does nothing:** a simulation must be running and the window must have keyboard focus. Click anywhere in the window to regain focus, then try again.
 - **The simulation feels too fast to follow:** use a preset such as `1x`, `0.5x`, or `0.1x`.
 - **CPU usage is high at very high speeds:** reduce speed to re-enable more wall-clock throttling.
