@@ -22,6 +22,9 @@ import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.unmockkAll
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
@@ -33,6 +36,16 @@ import java.util.concurrent.TimeUnit
  * `SimulationController.setSpeed` must reach the running main process when it
  * implements [SpeedControllable], not just the bookkeeping field on
  * [SimulationRunner]. Without this, speed buttons are dead in `exampleGui` mode.
+ *
+ * ## Synchronisation design
+ * Each test gets its own [startedLatch] and [blockSim] latches (instance fields,
+ * not companion-object shared state). [blockSim] is counted down in [tearDown]
+ * even if the test fails early, so the sim thread always unblocks and daemon threads
+ * do not linger across tests.
+ *
+ * The 30-second timeouts accommodate busy CI runners where thread scheduling can be
+ * delayed by several seconds (CI uses `maxParallelForks = availableProcessors()`
+ * with multiple JVM forks competing for CPU).
  */
 @DisplayName("SimulationController -> SpeedControllable propagation")
 class SimulationControllerSpeedPropagationTest {
@@ -51,24 +64,39 @@ class SimulationControllerSpeedPropagationTest {
 		override suspend fun iteration() = Unit
 	}
 
-	private fun newController(): SimulationController = SimulationController()
+	// ── Per-test latches (instance fields, NOT companion-object shared state) ───
+	// JUnit 5 creates a fresh test instance per method, so these are naturally
+	// isolated. tearDown() guarantees blockSim is released even on test failure,
+	// preventing lingering sim threads from other tests.
+	private lateinit var startedLatch: CountDownLatch
+	private lateinit var blockSim: CountDownLatch
 
-	private fun mockContext(mainProcess: LoopProcess?): DefaultSimulationContext {
-		val started = CountDownLatch(1)
-		val blockSim = CountDownLatch(1)
-		return mockk<DefaultSimulationContext>(relaxed = true).also { ctx ->
-			every { ctx.getMainProcess() } returns mainProcess
-			every { ctx.run() } answers {
-				started.countDown()
-				blockSim.await(10, TimeUnit.SECONDS)
-			}
-			// Stash the latches on the mock for the test to access.
-			ctx.attachLatches(started, blockSim)
-		}
+	@BeforeEach
+	fun setUp() {
+		startedLatch = CountDownLatch(1)
+		blockSim = CountDownLatch(1)
 	}
 
+	@AfterEach
+	fun tearDown() {
+		// Guarantee the sim thread unblocks even if the test fails before releaseSim().
+		blockSim.countDown()
+		unmockkAll()
+	}
+
+	private fun newController(): SimulationController = SimulationController()
+
+	private fun mockContext(mainProcess: LoopProcess?): DefaultSimulationContext =
+		mockk<DefaultSimulationContext>(relaxed = true).also { ctx ->
+			every { ctx.getMainProcess() } returns mainProcess
+			every { ctx.run() } answers {
+				startedLatch.countDown()
+				blockSim.await(30, TimeUnit.SECONDS)
+			}
+		}
+
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed propagates to a SpeedControllable main process while running")
 	fun setSpeedReachesSpeedControllable() {
 		val process = FakeSpeedyMainProcess()
@@ -76,19 +104,19 @@ class SimulationControllerSpeedPropagationTest {
 		val controller = newController()
 
 		controller.start(ctx)
-		assertThat(ctx.startedLatch().await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(startedLatch.await(30, TimeUnit.SECONDS)).isTrue()
 
 		controller.setSpeed(2.5)
 
 		assertThat(process.speedMultiplier).isEqualTo(2.5)
 		assertThat(controller.runner!!.speedMultiplier).isEqualTo(2.5)
 
-		ctx.releaseSim()
+		blockSim.countDown()
 		controller.stop()
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed before start applies on next start (desiredSpeed propagation)")
 	fun preStartSpeedAppliedOnStart() {
 		val process = FakeSpeedyMainProcess()
@@ -97,63 +125,50 @@ class SimulationControllerSpeedPropagationTest {
 
 		controller.setSpeed(0.5)
 		controller.start(ctx)
-		assertThat(ctx.startedLatch().await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(startedLatch.await(30, TimeUnit.SECONDS)).isTrue()
 
 		assertThat(process.speedMultiplier).isEqualTo(0.5)
 		assertThat(controller.runner!!.speedMultiplier).isEqualTo(0.5)
 
-		ctx.releaseSim()
+		blockSim.countDown()
 		controller.stop()
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed is a safe no-op when main process is not SpeedControllable")
 	fun nonControllableMainProcessNoOp() {
 		val ctx = mockContext(PlainMainProcess())
 		val controller = newController()
 
 		controller.start(ctx)
-		assertThat(ctx.startedLatch().await(5, TimeUnit.SECONDS)).isTrue()
+		assertThat(startedLatch.await(30, TimeUnit.SECONDS)).isTrue()
 
 		controller.setSpeed(3.0) // must not throw, must not crash on the cast
 		assertThat(controller.runner!!.speedMultiplier).isEqualTo(3.0)
 
-		ctx.releaseSim()
+		blockSim.countDown()
 		controller.stop()
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("setSpeed is a safe no-op when main process is null")
 	fun nullMainProcessNoOp() {
 		val ctx = mockContext(null)
 		val controller = newController()
 
 		controller.start(ctx)
-		// runner and speedMultiplier are assigned synchronously inside start() before
-		// the sim thread is launched, so no need to await the sim thread here.
+		// Wait for the sim thread to actually start and block on blockSim.await()
+		// before we call setSpeed() and assert on runner.speedMultiplier.
+		// On a busy CI runner, thread scheduling can delay the sim thread by
+		// several seconds — without this await the test is non-deterministic.
+		assertThat(startedLatch.await(30, TimeUnit.SECONDS)).isTrue()
+
 		controller.setSpeed(1.5)
 		assertThat(controller.runner!!.speedMultiplier).isEqualTo(1.5)
 
-		ctx.releaseSim()
+		blockSim.countDown()
 		controller.stop()
-	}
-
-	// ── latch wiring kept off the production type ────────────────────────────
-	// Stores per-test latches via a side-table keyed on the mock instance, so
-	// production DefaultSimulationContext stays unchanged.
-	companion object {
-		private val latches = java.util.IdentityHashMap<DefaultSimulationContext, Pair<CountDownLatch, CountDownLatch>>()
-	}
-
-	private fun DefaultSimulationContext.attachLatches(started: CountDownLatch, block: CountDownLatch) {
-		latches[this] = started to block
-	}
-
-	private fun DefaultSimulationContext.startedLatch(): CountDownLatch = latches.getValue(this).first
-
-	private fun DefaultSimulationContext.releaseSim() {
-		latches.getValue(this).second.countDown()
 	}
 }
