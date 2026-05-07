@@ -261,8 +261,9 @@ class Main {
 	private fun showContextInGui(context: SimulationContext, sourceFile: File? = null) {
 		javax.swing.SwingUtilities.invokeLater {
 			frame.setContext(context)
-			// Mirror edit-mode title behavior: show source filename in window title
-			sourceFile?.let { frame.modificationTracker.setCurrentFile(it) }
+			// Do not update modificationTracker/currentFile in simulation mode:
+			// File->Save uses that state to enter editing-only save flow.
+			sourceFile?.let { frame.title = it.name }
 			frame.isVisible = true
 			frame.startSimulation()
 		}
