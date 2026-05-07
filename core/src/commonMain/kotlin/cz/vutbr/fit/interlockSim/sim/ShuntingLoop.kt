@@ -139,7 +139,6 @@ class ShuntingLoop(
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
 	private inner class RealTimeSynch : LoopProcess() {
-		private var presvihnuto: Double = 0.0
 		private var beginTime: Long = 0
 
 		override suspend fun startAction() {
@@ -155,15 +154,12 @@ class ShuntingLoop(
 				// Simulation termination is handled by LoopProcess.terminate() setting the flag
 				// which is checked between iterations — platformSleep interrupt does not cause a tight loop.
 				platformSleep(sleepTime)
-			} else if (sleepTime < 0) {
-				presvihnuto = sleepTime / 1000.0
 			}
 		}
 
 		override suspend fun interLoopSleep() {
 			beginTime = currentTimeMillisKMP()
-			hold(1 + presvihnuto)
-			presvihnuto = 0.0
+			hold(1.0)
 		}
 	}
 
