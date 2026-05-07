@@ -222,7 +222,8 @@ Users can adjust simulation speed from slow motion (for detailed observation) to
 **Dependencies:** None (quick win)
 
 **Implementation Notes:**
-- kDisco already supports speed control; needs UI exposure
+- The simulation library interface used by the model (historically jDisco, now kDisco/KMP) runs in pure simulation time and has no native wall-clock speed control or synchronization.
+- Speed control is implemented externally via wall-clock throttling in `SimulationRunner` around `SimulationContext.run()`, preserving simulation semantics unchanged and requiring zero modifications to the `sim/` package.
 - Quick win - implement early for immediate value
 
 ---
