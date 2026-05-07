@@ -52,11 +52,6 @@ This project uses Gradle with Kotlin DSL. Java 21 LTS is required.
 ./gradlew runEditor               # Launch editor GUI
 ./gradlew runExampleGui           # Animated GUI simulation (Issue #268, milestone complete 2026-02-04)
 
-# Goal 7 speed-control shortcuts (simulation mode only)
-# 1-5    -> 0.5x, 1x, 2x, 5x, 10x
-# +/-    -> multiply or divide speed by 1.5
-# Space  -> pause/resume toggle (Goal 8 integration point)
-
 # Other tasks
 ./gradlew javadoc                 # Generate documentation
 ./gradlew dependencies            # Show dependency tree
@@ -64,25 +59,24 @@ This project uses Gradle with Kotlin DSL. Java 21 LTS is required.
 
 For complete build system documentation including dependency management, GitHub Packages authentication, manual JAR execution, and Gradle configuration files, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Build & Development Environment".
 
-### Running Simulation with Speed Control
+### Running Animated Simulation (Current Branch)
 
-Use the animated GUI when you need live speed changes:
+Use the animated GUI when you need the current real-time animated desktop view:
 
 ```bash
-# Built-in animated example with speed controls
+# Built-in animated example
 ./gradlew runExampleGui
 
 # Equivalent manual JAR launch
 java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 ```
 
-For XML files loaded from the desktop UI, use **Simulation → Start...** and then adjust speed with:
+Current branch behavior:
 
-- the speed slider (`0.1x` to `10.0x`)
-- preset buttons/menu items (`0.1x`, `0.5x`, `1x`, `2x`, `5x`, `10x`, `50x`)
-- global keyboard shortcuts (`1`-`5`, `+`, `-`, `Space`)
-
-The status bar shows `Speed: X.Xx` whenever the speed differs from `1.0x`.
+- `runExampleGui` uses fixed real-time synchronization for the built-in GUI example
+- the top `ControlPanel` shows time and status only
+- `StatusBar` is hidden in simulation mode
+- interactive Goal 7 speed controls are not wired into the current desktop UI on this branch
 
 ### Directory Structure
 
@@ -195,12 +189,9 @@ For complete navigation services architecture, Koin DI integration patterns, and
 - AnimatedSim: Real-time animated GUI simulation (Issue #268, milestone complete 2026-02-04)
   - Physics-accurate rendering with velocity/acceleration visualization
   - Visual train movement with smooth interpolation
-  - Goal 7 speed control is built around `SimulationRunner`, which applies wall-clock throttling without changing event semantics
-  - `SimulationController` owns lifecycle, persists the selected speed, and reapplies it on the next simulation start
-  - `SimulationControlPanel` provides a `0.1x`-`10.0x` slider plus preset buttons up to `50x`
-  - `StatusBar.updateSpeedIndicator()` shows the live multiplier whenever speed is not `1.0x`
-  - `SimulationKeyBindings` installs global shortcuts (`1`-`5`, `+`, `-`, `Space`) while the frame is in simulation mode
-  - `Space` currently toggles `SimulationRunner.isPaused` directly as Goal 8 pause-feature groundwork
+  - `runExampleGui` currently starts a fixed `1.0x` real-time synchronized `ShuntingLoop` for the built-in GUI example
+  - `Frame` shows the animation `ControlPanel` and `EventTimelinePanel` in simulation mode and hides `StatusBar`
+  - Interactive Goal 7 speed controls are not currently wired into `Frame` on this branch
   - See `docs/ANIMATION_ARCHITECTURE.md` for technical details
 
 **XML Configuration:**

@@ -1,27 +1,29 @@
 # Simulation Speed Control
 
-Goal 7 adds live wall-clock speed control to the animated simulation GUI.
+This branch does **not** expose interactive Goal 7 speed controls in the desktop GUI yet.
 
-The control changes how fast events are presented to the user. It does **not** change simulation semantics, event ordering, or physics calculations.
+What is currently available is a fixed real-time animated simulation mode for built-in GUI examples. This document describes the current user-visible behavior so the desktop UI is not documented more broadly than it is implemented.
 
-## Overview
+## Current Status
 
-Use speed control when you want to:
+The animated GUI currently provides:
 
-- slow the model down for teaching or demos
-- run near real time while watching train movement
-- fast-forward through long scenarios
-- pause temporarily while preparing for deeper Goal 8 debugging workflows
+- a top `ControlPanel` with **Time** and **Status**
+- an `EventTimelinePanel` for simulation events
+- real-time synchronization for the built-in GUI example path
 
-Supported range:
+The animated GUI currently does **not** provide:
 
-- **0.1x** minimum speed
-- **50x** highest one-click preset
-- **100x** absolute runner limit
+- a speed slider
+- speed preset buttons
+- speed-related menu items
+- keyboard shortcuts for speed changes
+- pause/resume controls
+- a speed indicator in the status bar during simulation mode
 
 ## Quick Start
 
-Start the animated GUI:
+Launch the animated GUI example:
 
 ```bash
 ./gradlew runExampleGui
@@ -33,94 +35,46 @@ Or run the JAR directly after building:
 java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 ```
 
-For your own XML file, open the desktop UI and use **Simulation → Start...**.
+## Current GUI Behavior
 
-When simulation mode is active, the GUI shows:
+When `exampleGui` starts, the application shows:
 
-- the animated control panel (`Time`, `Status`, `Stop`)
-- the speed control panel (`Speed` slider, presets, live speed label)
-- the status bar speed indicator when speed is not `1.0x`
+- the animated railway canvas
+- the top control panel with `Time` and `Status`
+- the event timeline
 
-## GUI Controls
+During simulation mode, `Frame` hides the `StatusBar`, so there is no separate speed readout in the current UI.
 
-### Speed slider
+## What “Speed Control” Means on This Branch
 
-- Range: **0.1x to 10.0x**
-- Step: **0.1x**
-- Best for fine adjustment while the simulation is already running
+For the built-in animated GUI example, `ExampleRegistry` creates `ShuntingLoop` with:
 
-### Preset buttons
+- `enableRealTimeSync = true`
+- `speedMultiplier = 1.0`
 
-The panel and **Simulation → Speed** menu provide these presets:
+That means the current GUI example runs at a fixed real-time rate intended for observation, not live user adjustment.
 
-- `0.1x`
-- `0.5x`
-- `1x`
-- `2x`
-- `5x`
-- `10x`
-- `50x`
-
-`50x` is intentionally above the slider range. The slider stays clamped at its maximum visual position while the runner continues at `50x`.
-
-### Status indicator
-
-The status bar shows `Speed: X.Xx` whenever the current speed differs from `1.0x`. At the default speed the indicator is hidden to keep the bar uncluttered.
-
-![Simulation speed control panel](images/simulation-speed-control-panel.png)
-
-![Simulation speed status indicator](images/simulation-speed-status-indicator.png)
-
-## Keyboard Shortcuts
-
-Shortcuts are active in **simulation mode** while the application window has focus.
-
-| Shortcut | Action |
-| --- | --- |
-| `1` | Set speed to `0.5x` |
-| `2` | Set speed to `1x` |
-| `3` | Set speed to `2x` |
-| `4` | Set speed to `5x` |
-| `5` | Set speed to `10x` |
-| `+` | Increase speed by `×1.5` |
-| `-` | Decrease speed by `÷1.5` |
-| `Space` | Pause or resume the active simulation |
-
-Notes:
-
-- On most keyboards, `+` is **Shift+`=`**.
-- Numpad `+` and `-` are also supported.
-- `Space` is the current Goal 8 integration point: it toggles the runner pause flag directly.
-
-## Common Use Cases
-
-- **Educational demo:** start at `0.5x` or `1x`, then drop to `0.1x` before a switch or semaphore change.
-- **Normal observation:** keep the model at `1x` or `2x` and watch the event timeline.
-- **Long scenario review:** jump to `10x` or `50x` to move through uneventful periods quickly.
-- **Pre-debug pause workflow:** press `Space`, inspect the current state, then resume.
+The console example path still runs without this GUI-specific real-time synchronization.
 
 ## Technical Details
 
-- Speed control is implemented by `SimulationRunner`.
-- The runner wraps `SimulationContext.run()` on a dedicated simulation thread.
-- Wall-clock throttling uses `sleep(simDelta / speedMultiplier)`.
-- `SimulationController` owns lifecycle, remembers the desired speed, and reapplies it on the next run.
-- Swing updates stay on the EDT; simulation execution stays off the EDT.
-- Pause blocks the simulation thread without advancing simulation time.
+- `exampleGui` launches the animated desktop UI from `Main.runExampleGui(...)`.
+- The GUI example uses `ShuntingLoop(..., enableRealTimeSync = true, speedMultiplier = 1.0)`.
+- `Main.runExampleGui(...)` starts `context.run()` on a background thread.
+- `Frame` updates the animated `ControlPanel` time display with a 10 Hz Swing timer.
+- `Frame.switchToSimulationMode()` hides `StatusBar` and shows `ControlPanel` plus `EventTimelinePanel`.
+- A standalone `SimulationRunner` class exists in `desktop-ui`, but it is not wired into `Frame` or the current animated GUI flow on this branch.
 
 ## Limitations
 
-- The slider stops at **10x** even though the runner supports up to **100x**.
-- `50x` is available from presets and the menu; reaching speeds above that requires incremental shortcuts or programmatic control.
-- Speeds above roughly **10x** are useful for throughput, but animation becomes progressively harder to follow visually.
-- At **50x** and especially **100x**, small simulation deltas often round down to **0 ms sleep**, so execution becomes effectively CPU-bound.
-- In CPU-bound ranges, expect higher processor usage and less visually smooth animation than at `1x`.
-- Console-mode runs do not expose the GUI speed controls.
+- No runtime speed adjustment is available in the desktop UI.
+- No keyboard shortcut support is available for speed changes or pause/resume.
+- No speed indicator is visible during simulation mode because `StatusBar` is hidden there.
+- The built-in animated GUI example is fixed to `1.0x` real-time synchronization.
 
 ## Troubleshooting
 
-- **I cannot see the controls:** make sure you started the animated GUI, not the console example.
-- **The speed indicator disappeared:** that is expected at `1.0x`.
-- **`Space` does nothing:** a simulation must be running and the frame must have keyboard focus.
-- **The simulation feels too fast to follow:** use a preset such as `1x`, `0.5x`, or `0.1x`.
-- **CPU usage is high at very high speeds:** reduce speed to re-enable more wall-clock throttling.
+- **I expected a speed slider or preset buttons:** they are not part of the current GUI on this branch.
+- **I cannot find a speed indicator:** the status bar is hidden in simulation mode.
+- **The simulation seems fixed to real time:** that is the current behavior of `exampleGui`.
+- **I need a faster run:** use the console example path when animation is not required.
