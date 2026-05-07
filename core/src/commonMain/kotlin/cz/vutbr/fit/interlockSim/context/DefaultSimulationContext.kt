@@ -1533,4 +1533,12 @@ open class DefaultSimulationContext(
 	fun setMainProcess(process: LoopProcess) {
 		mainProcess = process
 	}
+
+	/**
+	 * Returns the currently registered main process, or `null` if none has been set
+	 * via [setMainProcess]. Callers may downcast to runtime-control interfaces such
+	 * as [cz.vutbr.fit.interlockSim.sim.SpeedControllable] to retune the live
+	 * simulation (e.g. wall-clock pacing) from the EDT.
+	 */
+	fun getMainProcess(): LoopProcess? = mainProcess
 }

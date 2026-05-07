@@ -142,7 +142,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 				context,
 				END_TIME_SECONDS,
 				enableRealTimeSync = enableRealTimeSync,
-				speedMultiplier = speedMultiplier,
+				initialSpeedMultiplier = speedMultiplier,
 			)
 			context.setMainProcess(loop)
 			context.run()

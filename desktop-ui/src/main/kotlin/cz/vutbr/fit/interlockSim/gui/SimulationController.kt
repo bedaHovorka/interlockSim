@@ -10,7 +10,9 @@
 
 package cz.vutbr.fit.interlockSim.gui
 
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 
@@ -63,6 +65,16 @@ internal class SimulationController(
 	private var speedListener: PropertyChangeListener? = null
 
 	/**
+	 * Reference to the running main process when it implements [SpeedControllable]
+	 * (e.g. [cz.vutbr.fit.interlockSim.sim.ShuntingLoop]). `setSpeed` propagates
+	 * speed changes here so the simulation thread's wall-clock pacing actually
+	 * tracks the GUI controls — without this link the runner-side `speedMultiplier`
+	 * is dead-state w.r.t. RealTimeSynch.
+	 */
+	@Volatile
+	private var speedControllable: SpeedControllable? = null
+
+	/**
 	 * Desired speed multiplier applied to new and currently running simulations.
 	 *
 	 * Stored so that a speed selection before [start] is honoured once the runner is created.
@@ -107,6 +119,10 @@ internal class SimulationController(
 		val newRunner = SimulationRunner(context)
 		newRunner.speedMultiplier = desiredSpeed
 		runner = newRunner
+		val mainProcess = (context as? DefaultSimulationContext)?.getMainProcess()
+		val controllable = mainProcess as? SpeedControllable
+		speedControllable = controllable
+		controllable?.speedMultiplier = desiredSpeed
 
 		// Start synchronously BEFORE enabling the Stop button or launching the monitor
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
@@ -155,6 +171,7 @@ internal class SimulationController(
 						if (runner === newRunner) {
 							cleanupSpeedListener(newRunner)
 							runner = null
+							speedControllable = null
 							onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
 							onStateChanged(SimulationStatus.STOPPED)
 							onCompleted()
@@ -177,6 +194,7 @@ internal class SimulationController(
 		cleanupSpeedListener(r)
 		r.stop()
 		runner = null
+		speedControllable = null
 		onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
 		onStateChanged(SimulationStatus.STOPPED)
 	}
@@ -205,6 +223,7 @@ internal class SimulationController(
 		}
 		desiredSpeed = multiplier
 		runner?.speedMultiplier = multiplier
+		speedControllable?.speedMultiplier = multiplier
 	}
 
 	companion object {

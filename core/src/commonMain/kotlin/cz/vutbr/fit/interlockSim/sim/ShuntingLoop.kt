@@ -67,12 +67,22 @@ class ShuntingLoop(
 	context: SimulationContext,
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
-	private val speedMultiplier: Double = 1.0,
+	initialSpeedMultiplier: Double = 1.0,
 	private val pathReservationService: PathReservationService = context.getPathReservationService()
 ) : Interlocking(context),
+	SpeedControllable,
 	KoinComponent {
+	@kotlin.concurrent.Volatile
+	override var speedMultiplier: Double = initialSpeedMultiplier
+		set(value) {
+			require(value > 0.0) { "Speed multiplier must be positive, got: $value" }
+			field = value
+		}
+
 	init {
-		require(speedMultiplier > 0.0) { "Speed multiplier must be positive, got: $speedMultiplier" }
+		require(initialSpeedMultiplier > 0.0) {
+			"Speed multiplier must be positive, got: $initialSpeedMultiplier"
+		}
 	}
 
 	// Inject registry for idempotent path reservation checks
