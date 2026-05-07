@@ -131,8 +131,8 @@ class SimulationControllerSpeedPropagationTest {
 		val controller = newController()
 
 		controller.start(ctx)
-		assertThat(ctx.startedLatch().await(5, TimeUnit.SECONDS)).isTrue()
-
+		// runner and speedMultiplier are assigned synchronously inside start() before
+		// the sim thread is launched, so no need to await the sim thread here.
 		controller.setSpeed(1.5)
 		assertThat(controller.runner!!.speedMultiplier).isEqualTo(1.5)
 
