@@ -88,7 +88,7 @@ Shortcuts are active in **simulation mode** while the application window has foc
 
 Notes:
 
-- On most keyboards, `+` is **Shift+`=`**.
+- On many keyboards, `+` requires **Shift+`=`**.
 - Numpad `+` and `-` are also supported.
 - `Space` is the current Goal 8 integration point: it toggles the runner pause flag directly.
 
@@ -111,7 +111,8 @@ Notes:
 ## Limitations
 
 - The slider stops at **10x** even though the runner supports up to **100x**.
-- `50x` is available from presets and the menu; to reach values above that, press `+` repeatedly from `50x` until the runner reaches its `100x` cap, or set the multiplier programmatically.
+- `50x` is available from presets and the menu.
+- To reach values above that, press `+` repeatedly from `50x` until the runner reaches its `100x` cap, or set the multiplier programmatically.
 - Speeds above roughly **10x** are useful for throughput, but animation becomes progressively harder to follow visually.
 - At **50x** and especially **100x**, small simulation deltas often round down to **0 ms sleep**, so execution becomes effectively CPU-bound.
 - In CPU-bound ranges, expect higher processor usage and less visually smooth animation than at `1x`.
