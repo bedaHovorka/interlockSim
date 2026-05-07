@@ -224,7 +224,8 @@ Users can adjust simulation speed from slow motion (for detailed observation) to
 
 **Implementation Notes:**
 - The simulation library interface used by the model (historically jDisco, now kDisco/KMP) runs in pure simulation time and has no native wall-clock speed control or synchronization.
-- Speed control is implemented externally via wall-clock throttling in `SimulationRunner` around `SimulationContext.run()`, preserving simulation semantics unchanged and requiring zero modifications to the `sim/` package.
+- Speed control for `ShuntingLoop` is implemented via the `RealTimeSynch` inner process inside `sim/ShuntingLoop.kt` (enabled by `enableRealTimeSync`, paced by `speedMultiplier`). This resides in the `sim/` package.
+- `SimulationRunner` provides a complementary external throttling API (`throttle()`, `awaitIfPaused()`) callable from the simulation thread; this is the designed extension point for future simulation processes that delegate pacing outside the `sim/` package.
 - Quick win - implement early for immediate value
 
 ---
