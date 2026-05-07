@@ -34,7 +34,7 @@ import javax.swing.Timer
  *
  * Provides dynamic layout that adapts based on context type:
  * - **Editing Mode** ([EditingContext]): StatusBar visible, ControlPanel hidden
- * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar hidden
+ * - **Simulation Mode** ([SimulationContext]): ControlPanel and EventTimelinePanel visible, StatusBar remains visible (speed indicator shown)
  *
  * ## Layout Structure
  *
@@ -78,7 +78,7 @@ import javax.swing.Timer
  * 1. Creates [EventTimelinePanel] (lazy, reused across simulations)
  * 2. Wires EventTimelinePanel to [RailwayNetGridCanvas] → [cz.vutbr.fit.interlockSim.gui.animation.AnimationController]
  * 3. Starts 10 Hz timer for [ControlPanel] time updates
- * 4. Shows ControlPanel and EventTimelinePanel, hides StatusBar
+ * 4. Shows ControlPanel and EventTimelinePanel (above StatusBar); StatusBar remains visible
  *
  * When an [EditingContext] is set, the frame:
  * 1. Hides ControlPanel and EventTimelinePanel
