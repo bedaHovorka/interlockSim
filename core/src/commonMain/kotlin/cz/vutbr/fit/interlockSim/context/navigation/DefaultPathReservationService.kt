@@ -226,35 +226,60 @@ class DefaultPathReservationService(
 					// Step 2g: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
-						when {
-							// Case 1: START is a semaphore -> configure it (train departing from semaphore)
-							start is DynamicRailSemaphore -> {
-								environment.configureSemaphoreSignal(start, forwardBlocks.first())
-								logger.debug {
-									"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
+						val signalConfigured =
+							when {
+								// Case 1: START is a semaphore -> configure it (train departing from semaphore)
+								start is DynamicRailSemaphore -> {
+									try {
+										environment.configureSemaphoreSignal(start, forwardBlocks.first())
+										logger.debug {
+											"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
+										}
+										true
+									} catch (e: Exception) {
+										logger.warn(e) {
+											"reservePath: Semaphore signal configuration failed - rolling back reservation"
+										}
+										false
+									}
 								}
-							}
-							// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
-							// Path is conceptually: inOut.inSemaphore → blocks → target
-							// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
-							start is DynamicInOut -> {
-								val firstBlock = forwardBlocks.first()
-								val maxSpeed = firstBlock.maxSpeed(start)
-								// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
-								// For valid direction: from=anti(inSem.dir), to=inSem.dir
-								// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
-								start.inSemaphore.setUpSpeed(
-									from = start.direction(), // InOut's direction
-									to =
-										cz.vutbr.fit.interlockSim.objects.core
-											.anti(start.direction()),
-									// Anti = inSemaphore's direction
-									allowedSpeed = maxSpeed
-								)
-								logger.debug {
-									"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
+								// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
+								// Path is conceptually: inOut.inSemaphore → blocks → target
+								// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
+								start is DynamicInOut -> {
+									try {
+										val firstBlock = forwardBlocks.first()
+										val maxSpeed = firstBlock.maxSpeed(start)
+										// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
+										// For valid direction: from=anti(inSem.dir), to=inSem.dir
+										// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
+										start.inSemaphore.setUpSpeed(
+											from = start.direction(), // InOut's direction
+											to =
+												cz.vutbr.fit.interlockSim.objects.core
+													.anti(start.direction()),
+											// Anti = inSemaphore's direction
+											allowedSpeed = maxSpeed
+										)
+										logger.debug {
+											"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
+										}
+										true
+									} catch (e: Exception) {
+										logger.warn(e) {
+											"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
+										}
+										false
+									}
 								}
+								else -> false
 							}
+
+						// Rollback reservation if signal configuration failed
+						// This prevents trains from waiting indefinitely at STOP signals
+						if (!signalConfigured) {
+							rollbackReservation(start, blocks)
+							return PathReservationService.ReservationResult.AllPathsBlocked(1)
 						}
 					}
 
@@ -288,6 +313,7 @@ class DefaultPathReservationService(
 	 * 3. Unregister train from registry
 	 *
 	 * This operation is idempotent - safe to call multiple times.
+	 * Registry cleanup is guaranteed even if block release fails (try-finally).
 	 */
 	override fun releasePath(trainId: String): List<DynamicTrackBlock> {
 		val blocks = registry.getBlocks(trainId)
@@ -295,37 +321,40 @@ class DefaultPathReservationService(
 			return emptyList()
 		}
 
-		// Cancel path setup for all blocks
-		// Note: We don't know which separator was used for reservation,
-		// but cancelPathSetup validates it matches the reservedFrom,
-		// so we need to get it from the block itself
-		blocks.forEach { block ->
-			val reservedFrom = block.reservedFrom
-			if (reservedFrom != null) {
-				try {
-					block.cancelPathSetup(reservedFrom)
-				} catch (e: Exception) {
-					logger.warn(e) { "releasePath: Failed to release block $block" }
+		try {
+			// Cancel path setup for all blocks
+			// Note: We don't know which separator was used for reservation,
+			// but cancelPathSetup validates it matches the reservedFrom,
+			// so we need to get it from the block itself
+			blocks.forEach { block ->
+				val reservedFrom = block.reservedFrom
+				if (reservedFrom != null) {
+					try {
+						block.cancelPathSetup(reservedFrom)
+					} catch (e: Exception) {
+						logger.warn(e) { "releasePath: Failed to release block $block" }
+					}
 				}
 			}
-		}
 
-		// Tier 2: Unlock switches atomically with blocks (Issue #291)
-		val switches = registry.getSwitches(trainId)
-		switches.forEach { switch ->
-			try {
-				switch.unlock()
-				logger.debug { "releasePath: Unlocked switch ${switch.hashCode()} for $trainId" }
-			} catch (e: Exception) {
-				logger.warn(e) { "releasePath: Failed to unlock switch $switch" }
+			// Tier 2: Unlock switches atomically with blocks (Issue #291)
+			val switches = registry.getSwitches(trainId)
+			switches.forEach { switch ->
+				try {
+					switch.unlock()
+					logger.debug { "releasePath: Unlocked switch ${switch.hashCode()} for $trainId" }
+				} catch (e: Exception) {
+					logger.warn(e) { "releasePath: Failed to unlock switch $switch" }
+				}
 			}
+
+			return blocks
+		} finally {
+			// Unregister blocks and switches from registry - ALWAYS executed
+			// This prevents memory leaks and stale reservations if block release fails
+			registry.unregister(trainId)
+			registry.unregisterSwitches(trainId)
 		}
-
-		// Unregister blocks and switches from registry
-		registry.unregister(trainId)
-		registry.unregisterSwitches(trainId)
-
-		return blocks
 	}
 
 	/**
