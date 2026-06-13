@@ -94,7 +94,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 				}
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		logger.info {
 			"Scenario 1 metrics: entered=${process.getTrainsEntered()} " +
@@ -123,7 +123,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 				trainSpecs = listOf(specAB())
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		logger.info {
 			"Scenario 2 metrics: entered=${process.getTrainsEntered()} " +
@@ -170,7 +170,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 				}
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		logger.info {
 			"Scenario 3 metrics: entered=${process.getTrainsEntered()} " +
@@ -231,7 +231,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 				}
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		logger.info {
 			"Scenario 4 metrics: entered=${process.getTrainsEntered()} " +

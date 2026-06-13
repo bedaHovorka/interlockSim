@@ -128,7 +128,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
 
 			// Act: Run simulation
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 
 			// Assert: Validate against hardcoded deterministic baseline
 			// These values represent the deterministic output of ShuntingLoop(60s)
@@ -224,7 +224,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
 
 			// Act: Run simulation
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 
 			// Capture: Extract metrics
 			val graph = ctx.getGraph()

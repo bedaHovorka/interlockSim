@@ -81,7 +81,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		logger.info { "Starting ShuntingLoop regression test (60 time units)" }
 		val shuntingLoop = ShuntingLoop(context, 60L)
 		context.setMainProcess(shuntingLoop)
-		context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		context.run()
 
 		// Then: Simulation should complete (not hang)
 		logger.info { "ShuntingLoop completed successfully" }
@@ -131,7 +131,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		context.setMainProcess(ShuntingLoop(context, 30L))
 		logger.info { "TEST: ShuntingLoop created, starting simulation..." }
 		val startWallTime = System.currentTimeMillis()
-		context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		context.run()
 		val endWallTime = System.currentTimeMillis()
 		logger.info { "TEST: Simulation completed!" }
 
@@ -160,7 +160,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		// When: Run simulation for 100 time units (enough for 2-3 trains)
 		val shuntingLoop = ShuntingLoop(context, 100L)
 		context.setMainProcess(shuntingLoop)
-		context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		context.run()
 
 		// Then: Simulation completes (verifies queue system doesn't deadlock)
 		logger.info { "ShuntingLoop with max 2 trains completed successfully" }

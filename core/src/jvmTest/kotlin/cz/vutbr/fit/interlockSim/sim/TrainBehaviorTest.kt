@@ -47,7 +47,7 @@ import org.koin.test.inject
  * - Verify physics constants and formulas are correctly documented
  * - Check initial state (train at rest)
  * - Test configuration through Train's public API
- * - No kDisco simulation execution (no context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) or Head.run())
+ * - No kDisco simulation execution (no context.run() or Head.run())
  * - No Process.activate() calls (tests configuration, not runtime)
  *
  * Physics Documentation:
@@ -62,7 +62,7 @@ import org.koin.test.inject
  * begins, including proper initialization of motor physics, timetable data,
  * and initial state at rest.
  *
- * For full simulation integration tests that run context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController), see:
+ * For full simulation integration tests that run context.run(), see:
  * @see SimulationExecutionTest
  *
  * @since 2026-01-20 (Issue #247: Re-enable disabled integration tests)

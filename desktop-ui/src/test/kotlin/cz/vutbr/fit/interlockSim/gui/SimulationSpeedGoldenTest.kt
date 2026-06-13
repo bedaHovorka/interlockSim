@@ -146,7 +146,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 					initialSpeedMultiplier = speedMultiplier
 				)
 			context.setMainProcess(loop)
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			context.removePropertyChangeListener(listener)
 

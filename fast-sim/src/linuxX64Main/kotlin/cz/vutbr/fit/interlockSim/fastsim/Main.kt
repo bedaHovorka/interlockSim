@@ -244,7 +244,7 @@ private fun runExample(
 	val reporter = TextReporter(verbosity)
 	ctx.addPropertyChangeListener(reporter)
 	try {
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 		reporter.printSummary()
 		return 0
 	} catch (
@@ -288,7 +288,7 @@ private fun runSim(
 	ctx.addPropertyChangeListener(reporter)
 	try {
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 		reporter.printSummary()
 		return 0
 	} catch (

@@ -47,14 +47,14 @@ import org.koin.test.inject
  * - Check configuration parameters and initial states
  * - Verify relationships (InOut to Worker, Train to Timetable)
  * - Test through public APIs without Process.activate()
- * - No kDisco simulation execution (no context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) or Head.run())
+ * - No kDisco simulation execution (no context.run() or Head.run())
  *
  * Railway Context:
  * These tests validate that railway simulation components are correctly configured
  * before simulation begins. Tests ensure that generators, workers, trains, and signals
  * are properly initialized with valid timetables, queues, and network references.
  *
- * For full simulation integration tests that run context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController), see:
+ * For full simulation integration tests that run context.run(), see:
  * @see SimulationExecutionTest
  *
  * @since 2026-01-20 (Issue #247: Re-enable disabled integration tests)

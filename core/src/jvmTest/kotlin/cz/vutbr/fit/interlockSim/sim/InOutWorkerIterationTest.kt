@@ -73,7 +73,7 @@ class InOutWorkerIterationTest : KoinTestBase() {
 				trainSpecs = listOf(specAB())
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		assertThat(process.getTrainsEntered()).isEqualTo(1)
 		assertThat(process.getAllBlockTransitions().values.sum()).isGreaterThan(0)
@@ -95,7 +95,7 @@ class InOutWorkerIterationTest : KoinTestBase() {
 					)
 			)
 		ctx.setMainProcess(process)
-		ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+		ctx.run()
 
 		// Both trains must have been approved and entered the network.
 		assertThat(process.getTrainsEntered()).isEqualTo(2)

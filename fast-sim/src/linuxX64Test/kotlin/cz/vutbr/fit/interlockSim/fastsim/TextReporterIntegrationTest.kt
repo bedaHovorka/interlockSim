@@ -37,7 +37,7 @@ class TextReporterIntegrationTest {
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 			reporter.printSummary()
 		}
 		assertTrue(output.size > 1, "Expected events, got ${output.size} lines")
@@ -50,7 +50,7 @@ class TextReporterIntegrationTest {
 		val reporter = TextReporter(Verbosity.QUIET) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 			reporter.printSummary()
 		}
 		assertEquals(1, output.size, "QUIET should produce only summary")
@@ -63,7 +63,7 @@ class TextReporterIntegrationTest {
 		val reporter = TextReporter(Verbosity.VERBOSE) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 			reporter.printSummary()
 		}
 		assertTrue(output.any { "[TRAIN_CONTINUOUS]" in it }, "VERBOSE should include TRAIN_CONTINUOUS")
@@ -75,7 +75,7 @@ class TextReporterIntegrationTest {
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", 30, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 		}
 		val regex = Regex("t=[\\d.]+\\s+\\[\\w+]\\s+.+")
 		val eventLines = output.filter { !it.startsWith("---") }
@@ -91,7 +91,7 @@ class TextReporterIntegrationTest {
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", 60, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			ctx.run()
 			reporter.printSummary()
 		}
 		val summary = output.last()

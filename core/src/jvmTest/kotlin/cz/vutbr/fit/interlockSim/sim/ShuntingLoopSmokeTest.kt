@@ -133,10 +133,10 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			val context = createConfiguredSimulation(endTime = 10L)
 
 			// Act: Run simulation
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Simulation initialization and startup completed successfully
-			// Success: context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) returned without exception, kDisco processes terminated normally
+			// Success: context.run() returned without exception, kDisco processes terminated normally
 			logger.info { "Basic simulation smoke test completed successfully" }
 		}
 
@@ -155,7 +155,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 
 			// Act: Run very short simulation
 			val startTime = System.currentTimeMillis()
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
 			// Assert: Simulation completed successfully
@@ -186,7 +186,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 
 			// Act: Run simulation for sufficient time to generate trains
 			// ShuntingLoop.InnerGenerator schedules trains at intervals
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Trains move without deadlock during initial 30s
 			// Success: Simulation progressed to end time with trains moving through system
@@ -221,7 +221,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Act: Run simulation long enough for trains to complete journeys
 			// Issue #280 showed deadlock at time 298-301 seconds
 			// We run for 350 seconds to ensure trains complete or deadlock is detected
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Medium-duration simulation (350s) completes without deadlock
 			// Success: Path reservation system allowed concurrent train movement
@@ -246,7 +246,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Act: Run longer simulation to allow multiple trains to enter and exit
 			// ShuntingLoop has MAX_TRAINS = 2, so we need enough time for both trains
 			// to be approved, move through system, and exit
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Full simulation run (350s) completed successfully
 			// Success: All trains generated, approved, moved through system, and exited (Issue #280)
@@ -281,7 +281,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			logger.info { "Starting full simulation run for ${simulationEndTime}s simulation time" }
 
 			val startTime = System.currentTimeMillis()
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
 			// Assert: Simulation completed successfully
@@ -314,7 +314,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// and produces consistent state.
 
 			// Act: Run simulation with reporting enabled
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Simulation with performance reporting completed successfully
 			// Success: Reports generated during execution (logged to console)
@@ -390,7 +390,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			assertThat(hasK2Path, name = "Expected path using k2 blocks").isTrue()
 
 			// Act: Run simulation to verify no crashes
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Issue #291 validation - both k1 and k2 paths discovered and used
 			// Success: TopologyNavigator found multiple valid paths through shunting loop
@@ -434,7 +434,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 
 			// Act: Run simulation
 			val startTime = System.currentTimeMillis()
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
 			// Assert: Simulation completed successfully
@@ -482,7 +482,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Act: Run simulation past the original deadlock time (298-301s)
 			logger.info { "Running Issue #280 regression test for ${simulationTime}s" }
 
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Extended simulation (600s) completes without resource exhaustion
 			// Success: Long-running simulation terminated normally, no memory leaks
@@ -507,7 +507,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 
 			// Act: Run simulation to exercise path reservation logic
 			logger.info { "Running Issue #275 regression test" }
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 
 			// Assert: Maximum-length simulation (600s) with reporting completed
 			// Success: Performance monitoring active throughout entire simulation duration
@@ -538,7 +538,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			logger.info { "Running stress test for ${simulationTime}s simulation time" }
 
 			val startTime = System.currentTimeMillis()
-			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
 			// Assert: Long simulation completed successfully
