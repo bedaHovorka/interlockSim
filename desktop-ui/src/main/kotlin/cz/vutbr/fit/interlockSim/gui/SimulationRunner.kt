@@ -16,23 +16,20 @@ import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
 
 /**
- * Wall-clock throttling wrapper around [SimulationContext.run].
+ * Wall-clock throttling wrapper and [SimulationController] implementation.
  *
- * Phase 1.1 of Goal 7 (Issue #188). Provides speed control and pause support
- * without altering simulation semantics. Speed only affects the rate at which
- * simulation events are observed in wall-clock time; the event sequence,
- * timestamps, and physics remain identical to an unthrottled run.
+ * Implements Goal 8 pause/step/speed control on top of [SimulationContext.run].
+ * Speed only affects the rate at which simulation events are observed in
+ * wall-clock time; the event sequence, timestamps, and physics remain
+ * identical to an unthrottled run.
  *
  * Threading model:
  *  - [start] launches a dedicated simulation thread that invokes [context.run].
  *  - The kDisco dispatcher is single-threaded; Swing/EDT may read/write
  *    [speedMultiplier] and [isPaused] concurrently with the simulation thread,
  *    so both are `@Volatile`.
- *  - [throttle] and [awaitIfPaused] are called from the simulation thread only.
- *
- * Not wired into Main/Frame by this change — that is Issue #189's scope.
- *
- * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/188">Issue #188</a>
+ *  - [throttle] and [awaitIfPaused] are called from the simulation thread only,
+ *    via the [SimulationContext.run] `beforeEvent` hook.
  */
 class SimulationRunner(
 	private val context: SimulationContext
@@ -120,6 +117,9 @@ class SimulationRunner(
 				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
 			}
 		}
+		// Wake awaitIfPaused so it can re-check for the new step request.
+		// stepLock is released above; acquiring pauseLock here is safe (no circular order).
+		synchronized(pauseLock) { pauseLock.notifyAll() }
 	}
 
 	fun requestStepTime(simSeconds: Double) {
@@ -138,6 +138,8 @@ class SimulationRunner(
 				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
 			}
 		}
+		// Wake awaitIfPaused so it can re-check for the new step request.
+		synchronized(pauseLock) { pauseLock.notifyAll() }
 	}
 
 	override fun pollStepEvent(): Boolean {
@@ -243,35 +245,54 @@ class SimulationRunner(
 	fun isRunning(): Boolean = simThread?.isAlive == true
 
 	/**
-	 * Block the calling thread (expected to be the simulation thread) while
-	 * [isPaused] is true. Returns immediately when not paused. Respects
-	 * thread interruption.
+	 * Suspends the simulation coroutine while [isPaused] is true.
+	 *
+	 * Returns immediately when not paused. Also returns early if a step-event
+	 * ([requestStepEvent]) or step-time request ([requestStepTime]) is pending —
+	 * the step-event is consumed here; the step-time value is left for the
+	 * caller to read via [pollStepTime].
+	 *
+	 * Safe to block here: this is always invoked on the dedicated
+	 * `SimulationRunner-sim` thread via a `runBlocking` dispatcher, so
+	 * [Object.wait] never pins a shared coroutine thread pool.
 	 */
-	@Throws(InterruptedException::class)
 	override suspend fun awaitIfPaused() {
 		synchronized(pauseLock) {
-			while (pausedBacking) {
-				pauseLock.wait()
+			while (pausedBacking && !stepEventRequested && stepTimeRequested == null) {
+				try {
+					pauseLock.wait()
+				} catch (e: InterruptedException) {
+					Thread.currentThread().interrupt()
+					return
+				}
 			}
 		}
+		// Consume a pending step-event outside pauseLock to avoid holding both
+		// locks simultaneously (would invert the stepLock → pauseLock order used
+		// by requestStepEvent/requestStepTime).
+		if (stepEventRequested) {
+			synchronized(stepLock) {
+				if (stepEventRequested) {
+					stepEventRequested = false
+					pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+				}
+			}
+		}
+		// stepTimeRequested is intentionally left unconsumed; the beforeEvent
+		// lambda reads it via pollStepTime() to compute the step-time window.
 	}
 
 	/**
 	 * Sleep wall-clock time proportional to the simulation delta scaled by
-	 * [speedMultiplier]. If paused, blocks until resumed before sleeping.
+	 * [speedMultiplier]. Called from the `beforeEvent` hook after [awaitIfPaused]
+	 * has already handled any pause state for this cycle.
 	 *
 	 * @param simDeltaSeconds Simulation time advanced since the previous
-	 *     tick, in seconds. Must be non-negative. Zero or negative values
-	 *     are a no-op.
+	 *     tick, in seconds. Zero or negative values are a no-op.
 	 */
 	@Throws(InterruptedException::class)
 	override fun throttle(simDeltaSeconds: Double) {
 		if (simDeltaSeconds <= 0.0) return
-		synchronized(pauseLock) {
-			while (pausedBacking) {
-				pauseLock.wait()
-			}
-		}
 		val speed = speedMultiplierBacking
 		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
 		if (sleepMs > 0) {
