@@ -61,7 +61,6 @@ import javax.swing.SwingUtilities
 @DisplayName("SimulationRunner Speed Performance (Phase 4.2)")
 @Tag("integration-test")
 class SimulationSpeedPerformanceTest : KoinTestBase() {
-
 	override fun getTestModule(): Module = integrationTestModule
 
 	private val logger = KotlinLogging.logger {}
@@ -70,8 +69,9 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 
 	private fun loadShuntingLoop(endTime: Long): DefaultSimulationContext {
 		val factory = get<SimulationContextFactory>()
-		val ctx = TestFixtures.loadShuntingXml().use { factory.createContext(it) }
-			as DefaultSimulationContext
+		val ctx =
+			TestFixtures.loadShuntingXml().use { factory.createContext(it) }
+				as DefaultSimulationContext
 		ctx.getInOuts()
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		return ctx
@@ -103,7 +103,10 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		// With SimulationRunner: thread is created, context.run() called inside it
 		val runCtx = mockk<SimulationContext>(relaxed = true)
 		val done = CountDownLatch(1)
-		every { runCtx.run(ofType<SimulationController>()) } answers { Thread.sleep(sleepMs); done.countDown() }
+		every { runCtx.run(ofType<SimulationController>()) } answers {
+			Thread.sleep(sleepMs)
+			done.countDown()
+		}
 		val runner = SimulationRunner(runCtx)
 		val runnerNs = System.nanoTime()
 		runner.start()
@@ -137,7 +140,7 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		runner.speedMultiplier = 100.0
 
 		val startNs = System.nanoTime()
-		repeat(1000) { runner.throttle(0.001) }  // sleepMs = round(0.001/100×1000) = 0ms
+		repeat(1000) { runner.throttle(0.001) } // sleepMs = round(0.001/100×1000) = 0ms
 		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
 
 		logger.info { "100×: 1000 × 0.001s sim events took ${elapsedMs}ms wall-clock (target: CPU-bound, no sleep)" }
@@ -204,10 +207,11 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 			runner.speedMultiplier = 100.0
 
 			val done = CountDownLatch(1)
-			val monitor = Thread {
-				while (runner.isRunning()) Thread.sleep(50)
-				done.countDown()
-			}
+			val monitor =
+				Thread {
+					while (runner.isRunning()) Thread.sleep(50)
+					done.countDown()
+				}
 			monitor.isDaemon = true
 
 			val startNs = System.nanoTime()
@@ -245,7 +249,10 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		val simStarted = CountDownLatch(1)
 		val stopSim = CountDownLatch(1)
 		val mockCtx = mockk<SimulationContext>(relaxed = true)
-		every { mockCtx.run(ofType<SimulationController>()) } answers { simStarted.countDown(); stopSim.await(simBlockTimeoutS, TimeUnit.SECONDS) }
+		every { mockCtx.run(ofType<SimulationController>()) } answers {
+			simStarted.countDown()
+			stopSim.await(simBlockTimeoutS, TimeUnit.SECONDS)
+		}
 
 		val runner = SimulationRunner(mockCtx)
 		runner.speedMultiplier = 100.0

@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim
 import cz.vutbr.fit.interlockSim.context.Context
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.EditingContext
-import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.EmptyContextException
+import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
@@ -168,9 +168,10 @@ class Main {
 					// JvmEditingContextFactory, but if a future factory returns SimulationContext
 					// directly (mirroring the defensiveness in loadSim()), handle it gracefully.
 					is SimulationContext -> rawContext
-					is EditingContext -> rawContext.use { editCtx ->
-						simulationContextFactory.createContext(editCtx)
-					}
+					is EditingContext ->
+						rawContext.use { editCtx ->
+							simulationContextFactory.createContext(editCtx)
+						}
 					else -> {
 						rawContext.close()
 						throw ContextCreationException(
@@ -258,7 +259,10 @@ class Main {
 	 * @param context Simulation context to display; must already have report types added.
 	 * @param sourceFile Optional XML file to show in the window title (null for built-in examples).
 	 */
-	private fun showContextInGui(context: SimulationContext, sourceFile: File? = null) {
+	private fun showContextInGui(
+		context: SimulationContext,
+		sourceFile: File? = null
+	) {
 		javax.swing.SwingUtilities.invokeLater {
 			frame.setContext(context)
 			// Do not update modificationTracker/currentFile in simulation mode:

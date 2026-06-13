@@ -309,19 +309,20 @@ class MenuBar : JMenuBar() {
 
 				override fun done() {
 					this@MenuBar.cursor = savedCursor
-					val simContext = try {
-						get()
-					} catch (ex: ExecutionException) {
-						logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
-						JOptionPane.showMessageDialog(
-							this@MenuBar,
-							"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
-								"Ensure the file is a valid railway network XML.",
-							"Cannot Start Simulation",
-							JOptionPane.ERROR_MESSAGE
-						)
-						return
-					}
+					val simContext =
+						try {
+							get()
+						} catch (ex: ExecutionException) {
+							logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
+							JOptionPane.showMessageDialog(
+								this@MenuBar,
+								"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
+									"Ensure the file is a valid railway network XML.",
+								"Cannot Start Simulation",
+								JOptionPane.ERROR_MESSAGE
+							)
+							return
+						}
 
 					val frame = getKoin().get<Frame>()
 					frame.modificationTracker.markClean()
@@ -344,7 +345,7 @@ class MenuBar : JMenuBar() {
 	/** Sets the simulation speed multiplier via [SimulationController.setSpeed]. */
 	private inner class SetSpeedAction(
 		private val label: String,
-		private val multiplier: Double,
+		private val multiplier: Double
 	) : AbstractAction(label) {
 		override fun actionPerformed(e: ActionEvent) {
 			val frame = getKoin().get<Frame>()
@@ -370,11 +371,13 @@ class MenuBar : JMenuBar() {
 	internal fun loadSimulationContext(file: File): SimulationContext {
 		val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
 		val simulationContextFactory = getKoin().get<SimulationContextFactory>()
-		return editingContextFactory.createContext(file).use { editCtx ->
-			simulationContextFactory.createContext(editCtx as EditingContext)
-		}.also { simCtx ->
-			simCtx.addReportTypes(*SimulationContext.ReportType.values())
-		}
+		return editingContextFactory
+			.createContext(file)
+			.use { editCtx ->
+				simulationContextFactory.createContext(editCtx as EditingContext)
+			}.also { simCtx ->
+				simCtx.addReportTypes(*SimulationContext.ReportType.values())
+			}
 	}
 
 	init {
@@ -415,7 +418,7 @@ class MenuBar : JMenuBar() {
 				Pair("2x", 2.0),
 				Pair("5x", 5.0),
 				Pair("10x", 10.0),
-				Pair("50x", 50.0),
+				Pair("50x", 50.0)
 			)
 		for ((label, multiplier) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))

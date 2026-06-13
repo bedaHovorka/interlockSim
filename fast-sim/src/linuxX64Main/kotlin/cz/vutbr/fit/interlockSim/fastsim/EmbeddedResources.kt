@@ -20,6 +20,5 @@ import cz.vutbr.fit.interlockSim.BuiltinNetworks
  * @since Issue #415 (fast-sim native CLI)
  */
 internal object EmbeddedResources {
-
 	val VYHYBNA_XML = BuiltinNetworks.VYHYBNA_XML
 }

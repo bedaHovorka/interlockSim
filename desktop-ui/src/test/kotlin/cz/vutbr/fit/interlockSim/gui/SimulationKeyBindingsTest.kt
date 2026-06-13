@@ -7,7 +7,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
@@ -23,6 +22,7 @@ import javax.swing.JPanel
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import kotlin.math.abs
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 /**
  * Unit tests for [SimulationKeyBindings] (Phase 3.1, Issue #193).

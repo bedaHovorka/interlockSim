@@ -169,12 +169,14 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 			// Arrange: Create file with properly escaped special characters
 			val specialFile = File.createTempFile("special", ".xml")
 			specialFile.deleteOnExit()
-			specialFile.writeText("""
+			specialFile.writeText(
+				"""
 				<?xml version="1.0"?>
 				<!DOCTYPE net>
 				<net X="10" Y="10">
 				</net>
-			""".trimIndent())
+				""".trimIndent()
+			)
 
 			// Act
 			val result = xmlContextFactory.createContextLenient(specialFile)
@@ -192,19 +194,20 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 			val largeFile = File.createTempFile("large", ".xml")
 			largeFile.deleteOnExit()
 
-			val content = buildString {
-				appendLine("""<?xml version="1.0"?>""")
-				appendLine("""<!DOCTYPE net>""")
-				appendLine("""<net X="50" Y="50">""")
-				// Add many InOut elements to create a larger file
-				for (i in 1..100) {
-					appendLine(
-						"""  <InOut X="${i % 50}" Y="${i / 50}" """ +
-							"""SpatialType="HORIZONTAL" orientation="false" name="InOut$i"/>"""
-					)
+			val content =
+				buildString {
+					appendLine("""<?xml version="1.0"?>""")
+					appendLine("""<!DOCTYPE net>""")
+					appendLine("""<net X="50" Y="50">""")
+					// Add many InOut elements to create a larger file
+					for (i in 1..100) {
+						appendLine(
+							"""  <InOut X="${i % 50}" Y="${i / 50}" """ +
+								"""SpatialType="HORIZONTAL" orientation="false" name="InOut$i"/>"""
+						)
+					}
+					appendLine("""</net>""")
 				}
-				appendLine("""</net>""")
-			}
 			largeFile.writeText(content)
 
 			// Act
@@ -247,9 +250,10 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 			val fixtureFile = getFixtureFile("minimal-network.xml")
 
 			// Act: Parse the same file multiple times sequentially
-			val results = (1..5).map {
-				xmlContextFactory.createContextLenient(fixtureFile)
-			}
+			val results =
+				(1..5).map {
+					xmlContextFactory.createContextLenient(fixtureFile)
+				}
 
 			// Assert: All results should be consistent
 			results.forEach { result ->
@@ -265,8 +269,9 @@ class XMLContextFactoryLenientTest : KoinTestBase() {
 	 */
 	private fun getFixtureFile(filename: String): File {
 		val resourcePath = "cz/vutbr/fit/interlockSim/xml/fixtures/$filename"
-		val url = javaClass.classLoader.getResource(resourcePath)
-			?: throw IllegalArgumentException("Fixture file not found: $filename")
+		val url =
+			javaClass.classLoader.getResource(resourcePath)
+				?: throw IllegalArgumentException("Fixture file not found: $filename")
 		return File(url.toURI())
 	}
 }

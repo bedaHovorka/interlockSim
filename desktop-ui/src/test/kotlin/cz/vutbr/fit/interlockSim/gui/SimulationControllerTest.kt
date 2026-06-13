@@ -18,7 +18,6 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import io.mockk.every
 import io.mockk.mockk
@@ -32,6 +31,7 @@ import java.util.concurrent.TimeUnit
 import javax.swing.JButton
 import javax.swing.JLabel
 import javax.swing.SwingUtilities
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 /**
  * Unit tests for [SimulationController].
@@ -716,7 +716,7 @@ class SimulationControllerTest {
 	private fun createController(
 		toolBar: ToolBar? = null,
 		statusBar: StatusBar? = null,
-		onCompleted: () -> Unit = {},
+		onCompleted: () -> Unit = {}
 	): SimulationController =
 		SimulationController(
 			onStateChanged = { state ->

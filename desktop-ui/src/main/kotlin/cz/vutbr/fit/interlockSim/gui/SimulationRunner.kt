@@ -142,8 +142,8 @@ class SimulationRunner(
 		synchronized(pauseLock) { pauseLock.notifyAll() }
 	}
 
-	override fun pollStepEvent(): Boolean {
-		return synchronized(stepLock) {
+	override fun pollStepEvent(): Boolean =
+		synchronized(stepLock) {
 			val r = stepEventRequested
 			stepEventRequested = false
 			if (r) {
@@ -151,10 +151,9 @@ class SimulationRunner(
 			}
 			r
 		}
-	}
 
-	override fun pollStepTime(): Double? {
-		return synchronized(stepLock) {
+	override fun pollStepTime(): Double? =
+		synchronized(stepLock) {
 			val r = stepTimeRequested
 			stepTimeRequested = null
 			if (r != null) {
@@ -162,7 +161,6 @@ class SimulationRunner(
 			}
 			r
 		}
-	}
 
 	override fun isPaused(): Boolean = pausedBacking
 
@@ -172,7 +170,10 @@ class SimulationRunner(
 	}
 
 	/** Register a listener for a specific property. */
-	fun addPropertyChangeListener(propertyName: String, listener: PropertyChangeListener) {
+	fun addPropertyChangeListener(
+		propertyName: String,
+		listener: PropertyChangeListener
+	) {
 		pcs.addPropertyChangeListener(propertyName, listener)
 	}
 
@@ -180,7 +181,10 @@ class SimulationRunner(
 		pcs.removePropertyChangeListener(listener)
 	}
 
-	fun removePropertyChangeListener(propertyName: String, listener: PropertyChangeListener) {
+	fun removePropertyChangeListener(
+		propertyName: String,
+		listener: PropertyChangeListener
+	) {
 		pcs.removePropertyChangeListener(propertyName, listener)
 	}
 
@@ -195,26 +199,26 @@ class SimulationRunner(
 				logger.debug { "start() ignored — simulation thread already alive" }
 				return
 			}
-			val thread = Thread(
-				@Suppress("TooGenericExceptionCaught")
-				{
-					try {
-						context.run(controller = this)
-					} catch (e: InterruptedException) {
-						logger.debug { "Simulation thread interrupted: ${e.message}" }
-						Thread.currentThread().interrupt()
-					} catch (t: Throwable) {
-						logger.error(t) { "Simulation thread terminated unexpectedly" }
-					} finally {
-						synchronized(lifecycleLock) {
-							if (simThread === Thread.currentThread()) {
-								simThread = null
+			val thread =
+				Thread(
+					@Suppress("TooGenericExceptionCaught") {
+						try {
+							context.run(controller = this)
+						} catch (e: InterruptedException) {
+							logger.debug { "Simulation thread interrupted: ${e.message}" }
+							Thread.currentThread().interrupt()
+						} catch (t: Throwable) {
+							logger.error(t) { "Simulation thread terminated unexpectedly" }
+						} finally {
+							synchronized(lifecycleLock) {
+								if (simThread === Thread.currentThread()) {
+									simThread = null
+								}
 							}
 						}
-					}
-				},
-				"SimulationRunner-sim"
-			)
+					},
+					"SimulationRunner-sim"
+				)
 			thread.isDaemon = true
 			simThread = thread
 			thread.start()

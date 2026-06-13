@@ -36,9 +36,8 @@ class FakeSimulationController(
 	/** Throw [StopSimulation] from [throttle] after this many calls.  0 = never stop this way. */
 	val stopAfterThrottleCalls: Int = 0,
 	/** Pre-loaded queue of values for [pollStepTime]; returns null when empty. */
-	stepTimeValues: List<Double> = emptyList(),
+	stepTimeValues: List<Double> = emptyList()
 ) : SimulationController {
-
 	/** Exception thrown to terminate the simulation loop from inside [throttle]. */
 	class StopSimulation : RuntimeException("FakeSimulationController: stop requested after N throttle calls")
 
@@ -93,8 +92,7 @@ class FakeSimulationController(
 		}
 	}
 
-	override fun isPaused(): Boolean =
-		pauseAfterThrottleCalls > 0 && throttleCalls >= pauseAfterThrottleCalls
+	override fun isPaused(): Boolean = pauseAfterThrottleCalls > 0 && throttleCalls >= pauseAfterThrottleCalls
 
 	/**
 	 * Always returns `false` — step-events are consumed inside [awaitIfPaused], not via this poll.

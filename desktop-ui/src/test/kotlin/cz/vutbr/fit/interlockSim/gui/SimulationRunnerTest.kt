@@ -20,11 +20,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import kotlinx.coroutines.runBlocking
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.concurrent.CountDownLatch
@@ -221,18 +221,19 @@ class SimulationRunnerTest {
 
 		val reachedWait = CountDownLatch(1)
 		val resumed = CountDownLatch(1)
-		val waiter = Thread {
-			try {
-				// Signals the waiter is about to call awaitIfPaused().
-				// Combined with isPaused=true being set first, this is a
-				// tight-enough handshake to avoid Thread.sleep-based timing.
-				reachedWait.countDown()
-				runBlocking { runner.awaitIfPaused() }
-				resumed.countDown()
-			} catch (_: InterruptedException) {
-				// ignored
+		val waiter =
+			Thread {
+				try {
+					// Signals the waiter is about to call awaitIfPaused().
+					// Combined with isPaused=true being set first, this is a
+					// tight-enough handshake to avoid Thread.sleep-based timing.
+					reachedWait.countDown()
+					runBlocking { runner.awaitIfPaused() }
+					resumed.countDown()
+				} catch (_: InterruptedException) {
+					// ignored
+				}
 			}
-		}
 		waiter.isDaemon = true
 		waiter.start()
 
@@ -342,21 +343,23 @@ class SimulationRunnerTest {
 		val iterations = 100_000
 		val startLatch = CountDownLatch(1)
 		
-		val producer = Thread {
-			startLatch.await()
-			for (i in 0 until iterations) {
-				runner.requestStepEvent()
+		val producer =
+			Thread {
+				startLatch.await()
+				for (i in 0 until iterations) {
+					runner.requestStepEvent()
+				}
 			}
-		}
 		
-		val consumer = Thread {
-			startLatch.await()
-			while (producer.isAlive) {
-				runner.pollStepEvent()
+		val consumer =
+			Thread {
+				startLatch.await()
+				while (producer.isAlive) {
+					runner.pollStepEvent()
+				}
+				// Drain remaining
+				while (runner.pollStepEvent()) { /* drain */ }
 			}
-			// Drain remaining
-			while (runner.pollStepEvent()) { /* drain */ }
-		}
 		
 		producer.start()
 		consumer.start()

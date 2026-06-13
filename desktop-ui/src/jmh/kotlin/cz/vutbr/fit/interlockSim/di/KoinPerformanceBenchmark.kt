@@ -15,10 +15,10 @@ import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import org.openjdk.jmh.annotations.*
-import org.openjdk.jmh.infra.Blackhole
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.openjdk.jmh.annotations.*
+import org.openjdk.jmh.infra.Blackhole
 import java.util.concurrent.TimeUnit
 
 /**
@@ -44,12 +44,11 @@ import java.util.concurrent.TimeUnit
 @Measurement(iterations = 5, time = 2, timeUnit = TimeUnit.SECONDS)
 @Fork(value = 3)
 open class KoinPerformanceBenchmark {
-
 	/**
 	 * Railway network XML stream for benchmarking.
 	 * Uses vyhybna.xml (shunting loop configuration) as the standard test network.
 	 */
-	private fun railwayNetworkXml() = 
+	private fun railwayNetworkXml() =
 		javaClass.getResourceAsStream("/cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
 			?: throw IllegalStateException("Railway network XML not found")
 
@@ -83,10 +82,14 @@ open class KoinPerformanceBenchmark {
 	 * Railway Domain: Same network loading but through DI-managed factory.
 	 */
 	@Benchmark
-	fun railwayNetworkLoading_WithKoin(blackhole: Blackhole, diState: DIContainerState) {
-		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
-			SimulationContextFactory::class.java
-		)
+	fun railwayNetworkLoading_WithKoin(
+		blackhole: Blackhole,
+		diState: DIContainerState
+	) {
+		val factoryFromDI =
+			org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
+				SimulationContextFactory::class.java
+			)
 		railwayNetworkXml().use { networkStream ->
 			factoryFromDI.createContext(networkStream).use { railwayNetwork ->
 				blackhole.consume(railwayNetwork)
@@ -126,10 +129,14 @@ open class KoinPerformanceBenchmark {
 	 * Railway Domain: Same simulation setup through DI-managed components.
 	 */
 	@Benchmark
-	fun trainSimulationSetup_WithKoin(blackhole: Blackhole, diState: DIContainerState) {
-		val factoryFromDI = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
-			SimulationContextFactory::class.java
-		)
+	fun trainSimulationSetup_WithKoin(
+		blackhole: Blackhole,
+		diState: DIContainerState
+	) {
+		val factoryFromDI =
+			org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
+				SimulationContextFactory::class.java
+			)
 		railwayNetworkXml().use { networkStream ->
 			(factoryFromDI.createContext(networkStream) as DefaultSimulationContext).use { railwayNetwork ->
 				val mockContext = MockSimulationContext(railwayNetwork)
@@ -153,10 +160,14 @@ open class KoinPerformanceBenchmark {
 	@Benchmark
 	@BenchmarkMode(Mode.AverageTime)
 	@OutputTimeUnit(TimeUnit.MICROSECONDS)
-	fun factoryResolution_RepeatedLookups(blackhole: Blackhole, diState: DIContainerState) {
-		val factoryInstance = org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
-			SimulationContextFactory::class.java
-		)
+	fun factoryResolution_RepeatedLookups(
+		blackhole: Blackhole,
+		diState: DIContainerState
+	) {
+		val factoryInstance =
+			org.koin.java.KoinJavaComponent.get<SimulationContextFactory>(
+				SimulationContextFactory::class.java
+			)
 		blackhole.consume(factoryInstance)
 	}
 
@@ -174,7 +185,10 @@ open class KoinPerformanceBenchmark {
 	@OutputTimeUnit(TimeUnit.MILLISECONDS)
 	fun containerStartup_FullInitialization(blackhole: Blackhole) {
 		startKoin { modules(interlockSimModule) }
-		blackhole.consume(org.koin.java.KoinJavaComponent.getKoin())
+		blackhole.consume(
+			org.koin.java.KoinJavaComponent
+				.getKoin()
+		)
 		stopKoin()
 	}
 

@@ -18,7 +18,6 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
-import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.mockk.every
@@ -31,6 +30,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 /**
  * Verifies the missing link the rest of Goal 7's plumbing did not establish:
@@ -51,7 +51,9 @@ import java.util.concurrent.TimeUnit
 @DisplayName("SimulationController -> SpeedControllable propagation")
 class SimulationControllerSpeedPropagationTest {
 	/** A LoopProcess that exposes a mutable speed multiplier for assertion. */
-	private class FakeSpeedyMainProcess : LoopProcess(), SpeedControllable {
+	private class FakeSpeedyMainProcess :
+		LoopProcess(),
+		SpeedControllable {
 		@Volatile
 		override var speedMultiplier: Double = 1.0
 

@@ -11,14 +11,14 @@ package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
 import cz.vutbr.fit.interlockSim.testutil.NetworkResources
+import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
+import cz.vutbr.fit.interlockSim.util.deleteFile
+import cz.vutbr.fit.interlockSim.util.writeTextFile
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
-import cz.vutbr.fit.interlockSim.util.deleteFile
-import cz.vutbr.fit.interlockSim.util.writeTextFile
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -32,7 +32,6 @@ import kotlin.test.assertFailsWith
  * @since Issue #415 (fast-sim native CLI)
  */
 class NativeSmokeTest {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin { modules(coreModule) }
@@ -61,7 +60,7 @@ class NativeSmokeTest {
 		assertEquals(
 			NetworkResources.VYHYBNA_XML,
 			EmbeddedResources.VYHYBNA_XML,
-			"EmbeddedResources.VYHYBNA_XML diverged from NetworkResources.VYHYBNA_XML",
+			"EmbeddedResources.VYHYBNA_XML diverged from NetworkResources.VYHYBNA_XML"
 		)
 	}
 

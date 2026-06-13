@@ -39,7 +39,7 @@ class ExampleRegistry {
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample,
+			"shuntingLoop" to ::createShuntingLoopExample
 		)
 
 	/**
@@ -50,7 +50,7 @@ class ExampleRegistry {
 	 */
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopGuiExample,
+			"shuntingLoop" to ::createShuntingLoopGuiExample
 		)
 
 	/**
@@ -76,17 +76,19 @@ class ExampleRegistry {
 	 */
 	private fun createShuntingLoopExample(
 		factory: SimulationContextFactory,
-		args: Array<String>,
+		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		val xml = try {
-			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		} catch (e: IllegalArgumentException) {
-			throw ContextCreationException("Resource file vyhybna.xml not found", e)
-		}
-		return xml.byteInputStream()
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
 				val time = args[2].toLong()
@@ -118,17 +120,19 @@ class ExampleRegistry {
 	 */
 	private fun createShuntingLoopGuiExample(
 		factory: SimulationContextFactory,
-		args: Array<String>,
+		args: Array<String>
 	): SimulationContext {
 		if (args.size < 3) {
 			throw ContextCreationException("End time of simulation not specified")
 		}
-		val xml = try {
-			Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
-		} catch (e: IllegalArgumentException) {
-			throw ContextCreationException("Resource file vyhybna.xml not found", e)
-		}
-		return xml.byteInputStream()
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
 			.use { stream ->
 				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
 				val time = args[2].toLong()

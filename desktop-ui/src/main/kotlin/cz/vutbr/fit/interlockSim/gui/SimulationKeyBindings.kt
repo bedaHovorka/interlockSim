@@ -139,11 +139,13 @@ internal class SimulationKeyBindings(
 	 * If no simulation is running, [SimulationController.setSpeed] updates [SimulationController.desiredSpeed]
 	 * which will be applied when the next simulation starts.
 	 */
-	private inner class SpeedPresetAction(private val speed: Double) : AbstractAction() {
+	private inner class SpeedPresetAction(
+		private val speed: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
 			try {
 				simulationController.setSpeed(speed)
-				logger.debug { "Speed preset applied: ${speed}×" }
+				logger.debug { "Speed preset applied: $speed×" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed preset: $speed — ${ex.message}" }
 			}
@@ -161,17 +163,20 @@ internal class SimulationKeyBindings(
 	 * When no simulation is running, this updates [SimulationController.desiredSpeed] so the
 	 * adjusted speed is honoured when the next simulation starts.
 	 */
-	private inner class IncrementalSpeedAction(private val multiplier: Double) : AbstractAction() {
+	private inner class IncrementalSpeedAction(
+		private val multiplier: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
 			val currentSpeed = simulationController.speed
-			val newSpeed = (currentSpeed * multiplier).coerceIn(
-				SimulationRunner.MIN_SPEED,
-				SimulationRunner.MAX_SPEED
-			)
+			val newSpeed =
+				(currentSpeed * multiplier).coerceIn(
+					SimulationRunner.MIN_SPEED,
+					SimulationRunner.MAX_SPEED
+				)
 
 			try {
 				simulationController.setSpeed(newSpeed)
-				logger.debug { "Speed adjusted: ${currentSpeed}× → ${newSpeed}× (×$multiplier)" }
+				logger.debug { "Speed adjusted: $currentSpeed× → $newSpeed× (×$multiplier)" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed adjustment: $newSpeed — ${ex.message}" }
 			}
@@ -263,12 +268,13 @@ internal class SimulationKeyBindings(
 		 * Keys 1-5 → 0.5×, 1×, 2×, 5×, 10× (matches the five standard presets in the UI panel and menu).
 		 * Note: 0.5× is accessible only via keyboard (key 1), panel, or menu — not via incremental shortcuts.
 		 */
-		private val PRESET_BINDINGS: Map<Int, Double> = mapOf(
-			KeyEvent.VK_1 to 0.5,
-			KeyEvent.VK_2 to 1.0,
-			KeyEvent.VK_3 to 2.0,
-			KeyEvent.VK_4 to 5.0,
-			KeyEvent.VK_5 to 10.0
-		)
+		private val PRESET_BINDINGS: Map<Int, Double> =
+			mapOf(
+				KeyEvent.VK_1 to 0.5,
+				KeyEvent.VK_2 to 1.0,
+				KeyEvent.VK_3 to 2.0,
+				KeyEvent.VK_4 to 5.0,
+				KeyEvent.VK_5 to 10.0
+			)
 	}
 }

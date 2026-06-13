@@ -48,7 +48,6 @@ import java.util.concurrent.TimeUnit
 @DisplayName("DefaultSimulationContext — controlled loop")
 @Tag("integration-test")
 class DefaultSimulationContextControllerTest : KoinTestBase() {
-
 	private val logger = KotlinLogging.logger {}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -59,8 +58,9 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 */
 	private fun loadShuntingLoop(endTime: Long): DefaultSimulationContext {
 		val factory = get<SimulationContextFactory>()
-		val ctx = TestFixtures.loadShuntingXml().use { factory.createContext(it) }
-			as DefaultSimulationContext
+		val ctx =
+			TestFixtures.loadShuntingXml().use { factory.createContext(it) }
+				as DefaultSimulationContext
 		ctx.getInOuts()
 		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
 		return ctx
@@ -72,7 +72,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	 */
 	private fun runIgnoringStop(
 		ctx: DefaultSimulationContext,
-		controller: FakeSimulationController,
+		controller: FakeSimulationController
 	) {
 		try {
 			ctx.run(controller)
@@ -164,11 +164,12 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 		// pauseAfterThrottleCalls=1: paused after the 1st throttle call
 		// stepEventsQueued=1: one step-event credit; consumed in the 2nd awaitIfPaused call
 		// stopAfterThrottleCalls=2: abort after the 2nd throttle call
-		val controller = FakeSimulationController(
-			pauseAfterThrottleCalls = 1,
-			stepEventsQueued = 1,
-			stopAfterThrottleCalls = 2,
-		)
+		val controller =
+			FakeSimulationController(
+				pauseAfterThrottleCalls = 1,
+				stepEventsQueued = 1,
+				stopAfterThrottleCalls = 2
+			)
 		loadShuntingLoop(300L).use { ctx ->
 			runIgnoringStop(ctx, controller)
 		}

@@ -70,7 +70,10 @@ class SimulationControlPanelTest {
 		findAllComponents(panel, JButton::class.java).filter { it.text.endsWith("x") }
 
 	/** Recursively find the first component of [type] in the container hierarchy. */
-	private fun <T> findComponent(container: java.awt.Container, type: Class<T>): T? {
+	private fun <T> findComponent(
+		container: java.awt.Container,
+		type: Class<T>
+	): T? {
 		for (c in container.components) {
 			if (type.isInstance(c)) {
 				@Suppress("UNCHECKED_CAST")
@@ -85,7 +88,10 @@ class SimulationControlPanelTest {
 	}
 
 	/** Recursively collect all components of [type] in the container hierarchy. */
-	private fun <T> findAllComponents(container: java.awt.Container, type: Class<T>): List<T> {
+	private fun <T> findAllComponents(
+		container: java.awt.Container,
+		type: Class<T>
+	): List<T> {
 		val result = mutableListOf<T>()
 		for (c in container.components) {
 			if (type.isInstance(c)) {

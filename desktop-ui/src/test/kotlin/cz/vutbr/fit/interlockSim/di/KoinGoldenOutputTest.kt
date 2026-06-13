@@ -70,16 +70,18 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		assertThat(factory).isNotNull()
 
 		// Load vyhybna.xml and create simulation context
-		val context = TestFixtures.loadShuntingXml().use { xml ->
-			factory.createContext(xml)
-		}
+		val context =
+			TestFixtures.loadShuntingXml().use { xml ->
+				factory.createContext(xml)
+			}
 		assertThat(context).isNotNull()
 		assertThat(context).isInstanceOf(DefaultSimulationContext::class)
 
 		// Wrap in MockSimulationContext to avoid running actual simulation
 		context.use { ctx ->
-			val defaultContext = ctx as? DefaultSimulationContext
-				?: throw AssertionError("Context should be DefaultSimulationContext")
+			val defaultContext =
+				ctx as? DefaultSimulationContext
+					?: throw AssertionError("Context should be DefaultSimulationContext")
 			val simContext = MockSimulationContext(defaultContext)
 
 			// Create ShuntingLoop with Koin-managed context
@@ -113,9 +115,10 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	fun `validate simulation against deterministic baseline`() {
 		// Arrange: Create simulation context with ShuntingLoop (60s end time)
 		val factory = get<SimulationContextFactory>()
-		val defaultContext = TestFixtures.loadShuntingXml().use { xml ->
-			factory.createContext(xml) as DefaultSimulationContext
-		}
+		val defaultContext =
+			TestFixtures.loadShuntingXml().use { xml ->
+				factory.createContext(xml) as DefaultSimulationContext
+			}
 
 		defaultContext.use { ctx ->
 			// Initialize dynamic wrapper map
@@ -133,15 +136,16 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			val graph = ctx.getGraph()
 			assertThat(graph.size()).isEqualTo(EXPECTED_GRAPH_SIZE)
 
-			val occupiedBlocks = graph.values().count { block ->
-				when (block) {
-					is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
-						block.occupant != null
-					is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
-						ctx.toDynamic(block).occupant != null
-					else -> false
+			val occupiedBlocks =
+				graph.values().count { block ->
+					when (block) {
+						is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
+							block.occupant != null
+						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
+							ctx.toDynamic(block).occupant != null
+						else -> false
+					}
 				}
-			}
 			assertThat(occupiedBlocks).isEqualTo(EXPECTED_OCCUPIED_BLOCKS)
 
 			val registry = ctx.scope.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry>()
@@ -207,9 +211,10 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	private fun runSimulationAndCapture(): SimulationMetrics {
 		// Arrange: Create simulation context with ShuntingLoop (60s end time)
 		val factory = get<SimulationContextFactory>()
-		val defaultContext = TestFixtures.loadShuntingXml().use { xml ->
-			factory.createContext(xml) as DefaultSimulationContext
-		}
+		val defaultContext =
+			TestFixtures.loadShuntingXml().use { xml ->
+				factory.createContext(xml) as DefaultSimulationContext
+			}
 
 		return defaultContext.use { ctx ->
 			// Initialize dynamic wrapper map
@@ -225,15 +230,16 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			val graph = ctx.getGraph()
 			val graphSize = graph.size()
 
-			val occupiedBlocks = graph.values().count { block ->
-				when (block) {
-					is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
-						block.occupant != null
-					is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
-						ctx.toDynamic(block).occupant != null
-					else -> false
+			val occupiedBlocks =
+				graph.values().count { block ->
+					when (block) {
+						is cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock ->
+							block.occupant != null
+						is cz.vutbr.fit.interlockSim.objects.core.TrackFacility ->
+							ctx.toDynamic(block).occupant != null
+						else -> false
+					}
 				}
-			}
 
 			val registry = ctx.scope.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry>()
 			SimulationMetrics(graphSize, occupiedBlocks, registry.blockCount(), registry.trainCount())
@@ -345,7 +351,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			scope3.get<cz.vutbr.fit.interlockSim.context.navigation.PathReservationService>()
 		}.isInstanceOf(org.koin.core.error.ClosedScopeException::class)
 	}
-	
+
 	/**
 	 * Helper method to build a simple test context with InOut A -> InOut B.
 	 * Each call creates a NEW TestContextBuilder instance to avoid reusing frozen EditingContext.
@@ -368,7 +374,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		val graphSize: Int,
 		val occupiedBlocks: Int,
 		val reservedBlocks: Int,
-		val trainCount: Int,
+		val trainCount: Int
 	)
 
 	companion object {

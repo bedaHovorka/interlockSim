@@ -208,9 +208,10 @@ class MainArgumentParsingTest {
 			// Assert
 			// Example mode with no example name should print list of examples
 			val output = getCapturedOutput()
-			val isExampleMode = output.contains("Available examples") ||
-								output.contains("example") ||
-								output.contains("shuntingLoop")
+			val isExampleMode =
+				output.contains("Available examples") ||
+					output.contains("example") ||
+					output.contains("shuntingLoop")
 			assertThat(isExampleMode).isTrue()
 		}
 

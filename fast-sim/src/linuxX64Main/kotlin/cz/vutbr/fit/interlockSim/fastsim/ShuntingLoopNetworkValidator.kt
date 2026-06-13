@@ -29,8 +29,12 @@ import kotlin.reflect.KClass
  * @since Issue #435
  */
 internal object ShuntingLoopNetworkValidator {
-
-	private data class Required(val x: Int, val y: Int, val expected: KClass<*>, val label: String)
+	private data class Required(
+		val x: Int,
+		val y: Int,
+		val expected: KClass<*>,
+		val label: String
+	)
 
 	private const val LABEL_IN_OUT = "InOut"
 	private const val LABEL_SWITCH = "RailSwitch"
@@ -38,18 +42,19 @@ internal object ShuntingLoopNetworkValidator {
 
 	// Coordinates are sourced from ShuntingLoop.Companion constants so there is
 	// exactly one authoritative list of the vyhybna network contract.
-	private val REQUIRED_CELLS: List<Required> = listOf(
-		Required(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y, DynamicInOut::class, LABEL_IN_OUT),
-		Required(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y, DynamicInOut::class, LABEL_IN_OUT),
-		Required(ShuntingLoop.COORD_SW_A_X, ShuntingLoop.COORD_SW_A_Y, DynamicRailSwitch::class, LABEL_SWITCH),
-		Required(ShuntingLoop.COORD_SW_B_X, ShuntingLoop.COORD_SW_B_Y, DynamicRailSwitch::class, LABEL_SWITCH),
-		Required(ShuntingLoop.COORD_SEM_ZA_X, ShuntingLoop.COORD_SEM_ZA_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(ShuntingLoop.COORD_SEM_DOA1_X, ShuntingLoop.COORD_SEM_DOA1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(ShuntingLoop.COORD_SEM_DOA2_X, ShuntingLoop.COORD_SEM_DOA2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(ShuntingLoop.COORD_SEM_DOB2_X, ShuntingLoop.COORD_SEM_DOB2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-		Required(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
-	)
+	private val REQUIRED_CELLS: List<Required> =
+		listOf(
+			Required(ShuntingLoop.COORD_IN_A_X, ShuntingLoop.COORD_IN_A_Y, DynamicInOut::class, LABEL_IN_OUT),
+			Required(ShuntingLoop.COORD_IN_B_X, ShuntingLoop.COORD_IN_B_Y, DynamicInOut::class, LABEL_IN_OUT),
+			Required(ShuntingLoop.COORD_SW_A_X, ShuntingLoop.COORD_SW_A_Y, DynamicRailSwitch::class, LABEL_SWITCH),
+			Required(ShuntingLoop.COORD_SW_B_X, ShuntingLoop.COORD_SW_B_Y, DynamicRailSwitch::class, LABEL_SWITCH),
+			Required(ShuntingLoop.COORD_SEM_ZA_X, ShuntingLoop.COORD_SEM_ZA_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+			Required(ShuntingLoop.COORD_SEM_DOA1_X, ShuntingLoop.COORD_SEM_DOA1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+			Required(ShuntingLoop.COORD_SEM_DOA2_X, ShuntingLoop.COORD_SEM_DOA2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+			Required(ShuntingLoop.COORD_SEM_DOB2_X, ShuntingLoop.COORD_SEM_DOB2_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+			Required(ShuntingLoop.COORD_SEM_DOB1_X, ShuntingLoop.COORD_SEM_DOB1_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE),
+			Required(ShuntingLoop.COORD_SEM_ZB_X, ShuntingLoop.COORD_SEM_ZB_Y, DynamicRailSemaphore::class, LABEL_SEMAPHORE)
+		)
 
 	/**
 	 * Checks whether the environment's grid has all cells ShuntingLoop requires.

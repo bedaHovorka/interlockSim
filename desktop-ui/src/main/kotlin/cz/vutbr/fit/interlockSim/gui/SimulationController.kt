@@ -50,7 +50,7 @@ import java.beans.PropertyChangeListener
 internal class SimulationController(
 	private val onStateChanged: (SimulationStatus) -> Unit = {},
 	private val onSpeedChanged: (Double) -> Unit = {},
-	private val onCompleted: () -> Unit = {},
+	private val onCompleted: () -> Unit = {}
 ) {
 	/**
 	 * The currently active runner, or `null` when no simulation is running.
@@ -130,14 +130,15 @@ internal class SimulationController(
 
 		// Wire speed callback for SimulationRunner speed changes.
 		// The listener is removed when the simulation stops (in stop() or monitor finally).
-		val listener = PropertyChangeListener { evt ->
-			val multiplier = evt.newValue as? Double
-			if (multiplier == null) {
-				logger.debug { "Ignoring unexpected ${SimulationRunner.PROP_SPEED_MULTIPLIER} value: ${evt.newValue}" }
-				return@PropertyChangeListener
+		val listener =
+			PropertyChangeListener { evt ->
+				val multiplier = evt.newValue as? Double
+				if (multiplier == null) {
+					logger.debug { "Ignoring unexpected ${SimulationRunner.PROP_SPEED_MULTIPLIER} value: ${evt.newValue}" }
+					return@PropertyChangeListener
+				}
+				onSpeedChanged(multiplier)
 			}
-			onSpeedChanged(multiplier)
-		}
 		speedListener = listener
 		newRunner.addPropertyChangeListener(SimulationRunner.PROP_SPEED_MULTIPLIER, listener)
 		onSpeedChanged(newRunner.speedMultiplier)
@@ -236,6 +237,6 @@ internal class SimulationController(
 	/** Simulation lifecycle states emitted via [onStateChanged]. */
 	enum class SimulationStatus {
 		RUNNING,
-		STOPPED,
+		STOPPED
 	}
 }

@@ -110,9 +110,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var animationUpdateTimer: Timer? = null
 
 	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
-	private val southPanel: JPanel = JPanel().apply {
-		layout = BoxLayout(this, BoxLayout.Y_AXIS)
-	}
+	private val southPanel: JPanel =
+		JPanel().apply {
+			layout = BoxLayout(this, BoxLayout.Y_AXIS)
+		}
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
 	internal val simulationController: SimulationController =
@@ -399,10 +400,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"startSimulation must be called from EDT"
 		}
 
-		val context = currentSimulationContext ?: run {
-			logger.warn { "startSimulation called without a SimulationContext — ignoring" }
-			return
-		}
+		val context =
+			currentSimulationContext ?: run {
+				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
+				return
+			}
 
 		try {
 			simulationController.start(context)
@@ -414,10 +416,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				simulationController.runner?.removePropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, old)
 			}
 			if (activeRunner != null) {
-				val listener = PropertyChangeListener { evt ->
-					val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
-					statusBar.updatePausedIndicator(paused)
-				}
+				val listener =
+					PropertyChangeListener { evt ->
+						val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
+						statusBar.updatePausedIndicator(paused)
+					}
 				pausedListener = listener
 				activeRunner.addPropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, listener)
 				// Sync immediately with the current paused state.

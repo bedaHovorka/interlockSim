@@ -51,7 +51,6 @@ import javax.swing.SwingUtilities
  * @see cz.vutbr.fit.interlockSim.gui.Frame
  */
 class SimulationControlPanel : JPanel() {
-
 	/** Scale factor: slider int value → speed double (1 → 0.1, 100 → 10.0). */
 	private val slider: JSlider
 
@@ -99,24 +98,26 @@ class SimulationControlPanel : JPanel() {
 		}
 
 	/** Listener that keeps the speed UI in sync when the runner's speed changes externally. */
-	private val runnerListener = PropertyChangeListener { evt: PropertyChangeEvent ->
-		val speed = evt.newValue as? Double ?: return@PropertyChangeListener
-		if (SwingUtilities.isEventDispatchThread()) {
-			syncUiToSpeed(speed)
-		} else {
-			SwingUtilities.invokeLater { syncUiToSpeed(speed) }
+	private val runnerListener =
+		PropertyChangeListener { evt: PropertyChangeEvent ->
+			val speed = evt.newValue as? Double ?: return@PropertyChangeListener
+			if (SwingUtilities.isEventDispatchThread()) {
+				syncUiToSpeed(speed)
+			} else {
+				SwingUtilities.invokeLater { syncUiToSpeed(speed) }
+			}
 		}
-	}
 
 	/** Listener that keeps the pause UI in sync when the runner's paused state changes externally. */
-	private val pausedListener = PropertyChangeListener { evt: PropertyChangeEvent ->
-		val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
-		if (SwingUtilities.isEventDispatchThread()) {
-			syncUiToPaused(paused)
-		} else {
-			SwingUtilities.invokeLater { syncUiToPaused(paused) }
+	private val pausedListener =
+		PropertyChangeListener { evt: PropertyChangeEvent ->
+			val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
+			if (SwingUtilities.isEventDispatchThread()) {
+				syncUiToPaused(paused)
+			} else {
+				SwingUtilities.invokeLater { syncUiToPaused(paused) }
+			}
 		}
-	}
 
 	/**
 	 * Optional callback invoked whenever the user changes the speed (slider or preset button).

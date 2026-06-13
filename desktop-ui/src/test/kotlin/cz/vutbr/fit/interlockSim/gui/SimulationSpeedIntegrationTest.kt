@@ -15,9 +15,9 @@ import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationController
-import kotlinx.coroutines.runBlocking
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -284,12 +284,13 @@ class SimulationSpeedIntegrationTest {
 
 		val allReady = CountDownLatch(4)
 		val allDone = CountDownLatch(4)
-		val speedSets = listOf(
-			doubleArrayOf(0.1, 0.5, 1.0),
-			doubleArrayOf(2.0, 5.0, 10.0),
-			doubleArrayOf(20.0, 50.0, 100.0),
-			doubleArrayOf(1.0, 3.0, 7.0),
-		)
+		val speedSets =
+			listOf(
+				doubleArrayOf(0.1, 0.5, 1.0),
+				doubleArrayOf(2.0, 5.0, 10.0),
+				doubleArrayOf(20.0, 50.0, 100.0),
+				doubleArrayOf(1.0, 3.0, 7.0)
+			)
 
 		speedSets.forEach { speeds ->
 			Thread {

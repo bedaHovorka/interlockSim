@@ -25,7 +25,6 @@ import kotlin.test.Test
  * @since Issue #436 (graceful SIGINT shutdown)
  */
 class SignalHandlerTest {
-
 	@BeforeTest
 	fun resetSignalState() {
 		SignalState.INTERRUPTED.value = 0

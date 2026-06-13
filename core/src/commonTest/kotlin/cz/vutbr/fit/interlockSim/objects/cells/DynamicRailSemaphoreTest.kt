@@ -270,7 +270,8 @@ class DynamicRailSemaphoreTest {
 		dynamicSemaphore1.addPropertyChangeListener { capturedEvents.add(it) }
 
 		dynamicSemaphore1.setUpPath(
-			Cell.Segment.F, Cell.Segment.A,
+			Cell.Segment.F,
+			Cell.Segment.A,
 			20.0,
 			stubTrackOccupant()
 		)
@@ -339,7 +340,8 @@ class DynamicRailSemaphoreTest {
 
 		// Reverse direction for setUpPath
 		dynamicSemaphore1.setUpPath(
-			Cell.Segment.A, Cell.Segment.F,
+			Cell.Segment.A,
+			Cell.Segment.F,
 			20.0,
 			stubTrackOccupant()
 		)
@@ -361,7 +363,9 @@ class DynamicRailSemaphoreTest {
 private fun stubTrackOccupant(): TrackOccupant =
 	object : TrackOccupant {
 		override val name = "StubTrain"
+
 		override fun distanceToSemaphore() = 0.0
+
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 
@@ -448,9 +452,10 @@ class DynamicRailSemaphoreListenerThreadSafetyTest {
 	fun `listener added during event callback does not cause ConcurrentModificationException`() {
 		val secondListenerCallCount = intArrayOf(0)
 		val secondListener = ContextPropertyChangeListener { secondListenerCallCount[0]++ }
-		val firstListener = ContextPropertyChangeListener {
-			dynamicSemaphore1.addPropertyChangeListener(secondListener)
-		}
+		val firstListener =
+			ContextPropertyChangeListener {
+				dynamicSemaphore1.addPropertyChangeListener(secondListener)
+			}
 		dynamicSemaphore1.addPropertyChangeListener(firstListener)
 		dynamicSemaphore1.signal = Signal.FREE
 		dynamicSemaphore1.signal = Signal.STOP
@@ -461,10 +466,11 @@ class DynamicRailSemaphoreListenerThreadSafetyTest {
 	fun `listener removed during event callback does not cause ConcurrentModificationException`() {
 		var callCount = 0
 		lateinit var selfRemovingListener: ContextPropertyChangeListener
-		selfRemovingListener = ContextPropertyChangeListener {
-			callCount++
-			dynamicSemaphore1.removePropertyChangeListener(selfRemovingListener)
-		}
+		selfRemovingListener =
+			ContextPropertyChangeListener {
+				callCount++
+				dynamicSemaphore1.removePropertyChangeListener(selfRemovingListener)
+			}
 		dynamicSemaphore1.addPropertyChangeListener(selfRemovingListener)
 		dynamicSemaphore1.signal = Signal.FREE
 		val countAfterFirstFire = callCount

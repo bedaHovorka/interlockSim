@@ -179,7 +179,6 @@ class TrainTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Train counter increment")
 	inner class TrainCounterTests {
-
 		@Test
 		fun constructor_multipleCalls_namesIncrement() {
 			// Two consecutively created trains must receive sequential numbers

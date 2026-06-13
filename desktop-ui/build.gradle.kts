@@ -185,7 +185,10 @@ val integrationTest by tasks.registering(Test::class) {
 
     ignoreFailures = false
 
-    testClassesDirs = sourceSets.test.get().output.classesDirs
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
 }
 
@@ -308,7 +311,8 @@ val runExample by tasks.registering(JavaExec::class) {
 
 val runExampleGui by tasks.registering(JavaExec::class) {
     group = "application"
-    description = "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
+    description =
+        "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
     doFirst {
@@ -357,7 +361,7 @@ tasks.jacocoTestReport {
     mustRunAfter(tasks.named("integrationTest"))
 
     executionData.setFrom(
-        fileTree(layout.buildDirectory).include("jacoco/*.exec")
+        fileTree(layout.buildDirectory).include("jacoco/*.exec"),
     )
 
     reports {

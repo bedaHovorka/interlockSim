@@ -27,7 +27,6 @@ import kotlin.test.assertTrue
  * - A non-compatible network (e.g., LINEAR_TRACK_XML) produces actionable issues.
  */
 class ShuntingLoopNetworkValidatorTest {
-
 	private val factory = NativeContextFactory()
 
 	@BeforeTest
@@ -56,7 +55,7 @@ class ShuntingLoopNetworkValidatorTest {
 			// Must include the specific coordinate that's missing (30, 8) — an InOut.
 			assertTrue(
 				issues.any { it.contains("(30, 8)") && it.contains("InOut") },
-				"expected issue mentioning missing InOut at (30, 8); got: $issues",
+				"expected issue mentioning missing InOut at (30, 8); got: $issues"
 			)
 		}
 	}

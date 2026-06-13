@@ -79,7 +79,11 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		val semaphores = mutableListOf<DynamicRailSemaphore>()
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
-				val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+				val cell =
+					grid[
+						cz.vutbr.fit.interlockSim.util
+							.Point(x, y)
+					]
 				if (cell is DynamicRailSemaphore) {
 					semaphores.add(cell)
 				}
@@ -93,7 +97,11 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		val blocks = mutableListOf<DynamicTrackBlock>()
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
-				val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+				val cell =
+					grid[
+						cz.vutbr.fit.interlockSim.util
+							.Point(x, y)
+					]
 				if (cell is DynamicTrackBlock && cell.getState() == TrackFacility.State.FREE) {
 					blocks.add(cell)
 				}
@@ -107,7 +115,11 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 		val switches = mutableListOf<cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch>()
 		for (x in 0 until grid.cols) {
 			for (y in 0 until grid.rows) {
-				val cell = grid[cz.vutbr.fit.interlockSim.util.Point(x, y)]
+				val cell =
+					grid[
+						cz.vutbr.fit.interlockSim.util
+							.Point(x, y)
+					]
 				if (cell is cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch) {
 					switches.add(cell)
 				}

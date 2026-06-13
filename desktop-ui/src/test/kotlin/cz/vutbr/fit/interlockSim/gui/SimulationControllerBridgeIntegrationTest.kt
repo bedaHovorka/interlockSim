@@ -36,7 +36,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("SimulationController -> ShuntingLoop bridge (real types)")
 class SimulationControllerBridgeIntegrationTest : KoinTestBase() {
-
 	override fun getTestModule(): Module = integrationTestModule
 
 	@Test
@@ -73,12 +72,13 @@ class SimulationControllerBridgeIntegrationTest : KoinTestBase() {
 			context.getInOuts()
 			// Long simulated end time + real-time sync so the simulation thread is
 			// active when we change speed. We stop() it explicitly in finally.
-			val loop = ShuntingLoop(
-				context,
-				endTime = 600L,
-				enableRealTimeSync = true,
-				initialSpeedMultiplier = 1.0
-			)
+			val loop =
+				ShuntingLoop(
+					context,
+					endTime = 600L,
+					enableRealTimeSync = true,
+					initialSpeedMultiplier = 1.0
+				)
 			context.setMainProcess(loop)
 
 			val controller = SimulationController()
@@ -111,12 +111,13 @@ class SimulationControllerBridgeIntegrationTest : KoinTestBase() {
 
 		ctx.use { context ->
 			context.getInOuts()
-			val loop = ShuntingLoop(
-				context,
-				endTime = 600L,
-				enableRealTimeSync = true,
-				initialSpeedMultiplier = 1.0
-			)
+			val loop =
+				ShuntingLoop(
+					context,
+					endTime = 600L,
+					enableRealTimeSync = true,
+					initialSpeedMultiplier = 1.0
+				)
 			context.setMainProcess(loop)
 
 			val controller = SimulationController()

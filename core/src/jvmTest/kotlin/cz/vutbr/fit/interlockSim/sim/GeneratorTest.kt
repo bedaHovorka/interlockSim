@@ -68,13 +68,14 @@ class GeneratorTest : KoinTestBase() {
 	fun setUp() {
 		// Create a context with at least 2 InOuts for Generator to use
 		// Track is 200m to accommodate trains up to 150m used in collection management tests
-		mockContext = MockSimulationContext(
-			get<TestContextBuilder>()
-				.withInOut("IN1", 0, 0, isEntry = true)
-				.withInOut("OUT1", 5, 0, isEntry = false)
-				.withConnection(0, 0, 5, 0, 200.0, 80.0)
-				.buildSimulationContext()
-		)
+		mockContext =
+			MockSimulationContext(
+				get<TestContextBuilder>()
+					.withInOut("IN1", 0, 0, isEntry = true)
+					.withInOut("OUT1", 5, 0, isEntry = false)
+					.withConnection(0, 0, 5, 0, 200.0, 80.0)
+					.buildSimulationContext()
+			)
 	}
 
 	@AfterEach
@@ -303,11 +304,12 @@ class GeneratorTest : KoinTestBase() {
 			// generateRandomTimetable() without calling Process.time().
 			// Using 3 elements gives 6 permutations so all must appear across 8 draws.
 			val names = listOf("X", "Y", "Z")
-			val firstElements = (1..8).map {
-				val list = names.toMutableList()
-				list.shuffle(kdiscoRandom.asKotlinRandom())
-				list[0]
-			}
+			val firstElements =
+				(1..8).map {
+					val list = names.toMutableList()
+					list.shuffle(kdiscoRandom.asKotlinRandom())
+					list[0]
+				}
 
 			// Assert: exact expected first-element sequence for seed 0 (fully deterministic).
 			// Pre-computed using java.util.Random(0L) with Kotlin stdlib shuffle on 3 elements.
