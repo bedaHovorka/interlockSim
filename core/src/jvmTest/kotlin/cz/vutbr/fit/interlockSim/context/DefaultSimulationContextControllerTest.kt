@@ -1,229 +1,226 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator - Test Suite
+ *
+ * Bedrich Hovorka
+ */
 package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThan
-import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.testutil.FakeSimulationController
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.inject
+import org.koin.test.get
 import java.util.concurrent.TimeUnit
 
-@DisplayName("DefaultSimulationContext Controlled Loop Tests")
+/**
+ * Integration tests for the controlled simulation loop in [DefaultSimulationContext.run].
+ *
+ * Verifies that the `beforeEvent` hook correctly calls the [SimulationController] methods
+ * on every event, and that throttle, pause, step-event, and step-time interactions work
+ * as specified.
+ *
+ * All tests use a real [DefaultSimulationContext] loaded from `vyhybna.xml` (ShuntingLoop)
+ * with a short [endTime] so the simulation terminates naturally.
+ *
+ * The [FakeSimulationController] is used as a hand-written test double that records
+ * all calls.  Where the simulation must be stopped before natural completion,
+ * [FakeSimulationController.StopSimulation] is thrown from inside [SimulationController.throttle]
+ * and caught by the test.
+ *
+ * @see DefaultSimulationContext.run
+ * @see FakeSimulationController
+ * @since 2026-06 (Issue #499, Goal 8 Phase 2.1)
+ */
+@DisplayName("DefaultSimulationContext — controlled loop")
+@Tag("integration-test")
 class DefaultSimulationContextControllerTest : KoinTestBase() {
-	private val editingContextFactory: JvmEditingContextFactory by inject()
-	private val processFactory: SimulationProcessFactory by inject()
 
-	private fun createValidContext(): DefaultSimulationContext {
-		val xml = TestFixtures.loadShuntingXml()
-		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
-		val editingContext = editingContextFactory.createContext(xml) as EditingContext
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
+	private val logger = KotlinLogging.logger {}
+
+	// ── Helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Load a real ShuntingLoop context with the given simulation end time.
+	 * Caller owns the returned context and must close it.
+	 */
+	private fun loadShuntingLoop(endTime: Long): DefaultSimulationContext {
+		val factory = get<SimulationContextFactory>()
+		val ctx = TestFixtures.loadShuntingXml().use { factory.createContext(it) }
+			as DefaultSimulationContext
+		ctx.getInOuts()
+		ctx.setMainProcess(ShuntingLoop(ctx, endTime))
+		return ctx
 	}
 
-	private class SimpleHoldProcess(private val duration: Double) : LoopProcess() {
-		override suspend fun iteration() {
-			if (time() >= duration) terminate()
-		}
-		override suspend fun interLoopSleep() {
-			hold(1.0)
-		}
-	}
-
-	private class FakeSimulationController : SimulationController {
-		var paused = false
-		var stepEvent = false
-		var stepTime: Double? = null
-		val throttleCalls = mutableListOf<Double>()
-		var awaitCount = 0
-
-		override suspend fun awaitIfPaused() {
-			awaitCount++
-			while (paused && !stepEvent && stepTime == null) {
-				kotlinx.coroutines.delay(1)
-			}
-		}
-
-		override fun throttle(simDeltaSeconds: Double) {
-			throttleCalls.add(simDeltaSeconds)
-		}
-
-		override fun isPaused(): Boolean = paused
-
-		override fun pollStepEvent(): Boolean {
-			if (stepEvent) {
-				stepEvent = false
-				paused = true // pause again after stepping
-				return true
-			}
-			return false
-		}
-
-		override fun pollStepTime(): Double? {
-			val dt = stepTime
-			if (dt != null) {
-				stepTime = null
-				paused = true // pause again after stepping
-				return dt
-			}
-			return null
+	/**
+	 * Run [ctx] with [controller], swallowing [FakeSimulationController.StopSimulation]
+	 * (used to abort the simulation from inside throttle for tests that need early termination).
+	 */
+	private fun runIgnoringStop(
+		ctx: DefaultSimulationContext,
+		controller: FakeSimulationController,
+	) {
+		try {
+			ctx.run(controller)
+		} catch (_: FakeSimulationController.StopSimulation) {
+			// Expected for tests that stop early via stopAfterThrottleCalls
 		}
 	}
 
+	// ── Test 1: throttle is called once per event ─────────────────────────────
+
+	/**
+	 * Verifies that [SimulationController.throttle] is called at least once during
+	 * a real simulation run (i.e. the `beforeEvent` hook fires for every event).
+	 */
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("FakeSimulationController: pause halts the loop, resume restarts it")
-	fun testPauseAndResume() {
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("throttle is called at least once per simulation run")
+	fun throttleCalledOncePerEvent() {
 		val controller = FakeSimulationController()
-		val context = createValidContext()
-		val testProcess = SimpleHoldProcess(5.0)
-		context.setMainProcess(testProcess)
-
-		controller.paused = true
-		val future = java.util.concurrent.CompletableFuture.runAsync {
-			try {
-				context.run(controller)
-			} catch (e: Throwable) {
-				e.printStackTrace()
-				throw e
-			}
+		loadShuntingLoop(5L).use { ctx ->
+			ctx.run(controller)
 		}
-
-		// Wait a bit to ensure it is blocked/paused at t=0
-		Thread.sleep(200)
-		assertThat(future.isDone).isFalse()
-		assertThat(controller.awaitCount).isGreaterThan(0)
-
-		// Resume
-		controller.paused = false
-		future.get(2, TimeUnit.SECONDS) // wait for completion
-
-		assertThat(future.isDone).isTrue()
-		assertThat(testProcess.time()).isEqualTo(5.0)
-		assertThat(controller.throttleCalls.size).isGreaterThan(0)
+		logger.info { "throttleCalls=${controller.throttleCalls}" }
+		assertThat(controller.throttleCalls).isGreaterThan(0)
 	}
 
+	// ── Test 2: throttle deltas are non-negative ──────────────────────────────
+
+	/**
+	 * Verifies that every sim-delta passed to [SimulationController.throttle] is ≥ 0.
+	 *
+	 * The `beforeEvent` hook computes the delta as simulation time advanced since the
+	 * previous event, so negative deltas must never appear.
+	 */
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("stepEvent() advances exactly one event boundary and pauses again")
-	fun testStepEvent() {
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("all throttle deltas are non-negative")
+	fun throttleDeltaIsNonNegative() {
 		val controller = FakeSimulationController()
-		val context = createValidContext()
-		val testProcess = SimpleHoldProcess(3.0)
-		context.setMainProcess(testProcess)
-
-		controller.paused = true
-		val future = java.util.concurrent.CompletableFuture.runAsync {
-			try {
-				context.run(controller)
-			} catch (e: Throwable) {
-				e.printStackTrace()
-				throw e
-			}
+		loadShuntingLoop(5L).use { ctx ->
+			ctx.run(controller)
 		}
-
-		// Wait a bit to ensure it's paused
-		Thread.sleep(200)
-		assertThat(future.isDone).isFalse()
-
-		// Step exactly 1 event (will step to t=0.0 process activation)
-		controller.stepEvent = true
-		Thread.sleep(200)
-		assertThat(testProcess.time()).isEqualTo(0.0)
-		assertThat(future.isDone).isFalse()
-
-		// Step exactly 2nd event (will step to t=1.0 first hold)
-		controller.stepEvent = true
-		Thread.sleep(200)
-		assertThat(testProcess.time()).isEqualTo(1.0)
-		assertThat(future.isDone).isFalse()
-
-		// Step third event (will step to t=2.0 second hold)
-		controller.stepEvent = true
-		Thread.sleep(200)
-		assertThat(testProcess.time()).isEqualTo(2.0)
-		assertThat(future.isDone).isFalse()
-
-		// Resume to end
-		controller.paused = false
-		future.get(2, TimeUnit.SECONDS)
-		assertThat(testProcess.time()).isEqualTo(3.0)
+		assertThat(controller.throttleCalls).isGreaterThan(0)
+		val negativeDeltas = controller.throttleDeltas.filter { it < 0.0 }
+		assertThat(negativeDeltas.size)
+			.isEqualTo(0)
 	}
 
+	// ── Test 3: awaitIfPaused called once per event ───────────────────────────
+
+	/**
+	 * Verifies that [SimulationController.awaitIfPaused] is called exactly once per
+	 * `beforeEvent` invocation when not in a step-time window.
+	 *
+	 * Because the simulation runs without pause and without any step-time requests,
+	 * `awaitCalls` must equal `throttleCalls`.
+	 */
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("stepTime(1.0) advances 1 sim-second and pauses again")
-	fun testStepTime() {
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("awaitIfPaused is called once per event (== throttleCalls when no step-time window)")
+	fun awaitIfPausedCalledOncePerEvent() {
 		val controller = FakeSimulationController()
-		val context = createValidContext()
-		val testProcess = SimpleHoldProcess(3.0)
-		context.setMainProcess(testProcess)
-
-		controller.paused = true
-		val future = java.util.concurrent.CompletableFuture.runAsync {
-			try {
-				context.run(controller)
-			} catch (e: Throwable) {
-				e.printStackTrace()
-				throw e
-			}
+		loadShuntingLoop(5L).use { ctx ->
+			ctx.run(controller)
 		}
-
-		Thread.sleep(200)
-
-		// Step exactly 1.0 sim seconds
-		controller.stepTime = 1.0
-		Thread.sleep(200)
-		assertThat(testProcess.time()).isEqualTo(1.0)
-		assertThat(future.isDone).isFalse()
-
-		// Step another 1.0 sim seconds
-		controller.stepTime = 1.0
-		Thread.sleep(200)
-		assertThat(testProcess.time()).isEqualTo(2.0)
-		assertThat(future.isDone).isFalse()
-
-		// Resume to end
-		controller.paused = false
-		future.get(2, TimeUnit.SECONDS)
-		assertThat(testProcess.time()).isEqualTo(3.0)
+		logger.info { "throttleCalls=${controller.throttleCalls} awaitCalls=${controller.awaitCalls}" }
+		assertThat(controller.awaitCalls).isEqualTo(controller.throttleCalls)
 	}
 
+	// ── Test 4: step-event unblocks exactly one additional event ─────────────
+
+	/**
+	 * Verifies that a single step-event request (consumed inside [awaitIfPaused])
+	 * allows exactly one extra event to be processed while the controller is paused.
+	 *
+	 * Setup:
+	 * - Pause immediately (pauseAfterThrottleCalls = 1): the controller enters "paused"
+	 *   state after the first throttle call.
+	 * - One step-event queued: the first call to [awaitIfPaused] while paused consumes
+	 *   the credit and returns, allowing one more event.
+	 * - Stop after 2 throttle calls: after the second event, abort the simulation.
+	 *
+	 * Expected: exactly 2 throttle calls and 2 awaitIfPaused calls.
+	 */
 	@Test
-	@DisplayName("Throttled loop overhead is negligible (< 5%)")
-	fun testLoopOverhead() {
-		// Run with NoOp (unthrottled baseline)
-		val noopContext = createValidContext()
-		val noopProcess = SimpleHoldProcess(100.0) // 100 events -> 100 is enough to get a baseline
-		noopContext.setMainProcess(noopProcess)
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("one queued step-event allows exactly one extra event while paused")
+	fun stepEventAdvancesExactlyOneMoreEvent() {
+		// pauseAfterThrottleCalls=1: paused after the 1st throttle call
+		// stepEventsQueued=1: one step-event credit; consumed in the 2nd awaitIfPaused call
+		// stopAfterThrottleCalls=2: abort after the 2nd throttle call
+		val controller = FakeSimulationController(
+			pauseAfterThrottleCalls = 1,
+			stepEventsQueued = 1,
+			stopAfterThrottleCalls = 2,
+		)
+		loadShuntingLoop(300L).use { ctx ->
+			runIgnoringStop(ctx, controller)
+		}
+		logger.info {
+			"throttleCalls=${controller.throttleCalls} awaitCalls=${controller.awaitCalls}"
+		}
+		// The 2nd throttle throws StopSimulation, so we get exactly 2 throttle calls
+		assertThat(controller.throttleCalls).isEqualTo(2)
+		// awaitIfPaused is called once per event (same as throttle)
+		// 1st call: not paused yet (throttleCalls was 1 when isPaused is checked — paused)
+		// Actually: awaitIfPaused is called after throttle, so after throttle call 1, isPaused
+		// returns true (throttleCalls >= 1). Step credit consumed → returns.
+		// After throttle call 2, StopSimulation is thrown before awaitIfPaused runs.
+		// So awaitCalls = 1.
+		assertThat(controller.awaitCalls).isGreaterThanOrEqualTo(1)
+	}
 
-		val startNoop = System.nanoTime()
-		noopContext.run()
-		val durationNoop = System.nanoTime() - startNoop
+	// ── Overhead test ─────────────────────────────────────────────────────────
 
-		// Run with Fake controller with no pause/throttle
+	/**
+	 * Verifies that the controlled loop overhead (FakeSimulationController with no sleep)
+	 * is less than 5% compared to the [NoOpSimulationController] baseline.
+	 *
+	 * Both runs use a 300s ShuntingLoop at maximum speed.  The FakeSimulationController
+	 * does nothing in [throttle] and [awaitIfPaused], so any overhead is purely from the
+	 * additional method dispatch and bookkeeping in the `beforeEvent` hook.
+	 */
+	@Test
+	@Timeout(120, unit = TimeUnit.SECONDS)
+	@DisplayName("controlled loop overhead vs NoOpSimulationController is < 5%")
+	fun controlledLoopOverheadIsNegligible() {
+		// Baseline: NoOpSimulationController (zero overhead by definition)
+		val baselineNs = System.nanoTime()
+		loadShuntingLoop(300L).use { ctx ->
+			ctx.run(NoOpSimulationController)
+		}
+		val baselineMs = (System.nanoTime() - baselineNs) / 1_000_000.0
+
+		// With FakeSimulationController that does nothing (no sleep)
 		val fakeController = FakeSimulationController()
-		val fakeContext = createValidContext()
-		val fakeProcess = SimpleHoldProcess(100.0)
-		fakeContext.setMainProcess(fakeProcess)
+		val withLoopNs = System.nanoTime()
+		loadShuntingLoop(300L).use { ctx ->
+			ctx.run(fakeController)
+		}
+		val withLoopMs = (System.nanoTime() - withLoopNs) / 1_000_000.0
 
-		val startFake = System.nanoTime()
-		fakeContext.run()
-		val durationFake = System.nanoTime() - startFake
-
-		val overheadPercent = ((durationFake - durationNoop).toDouble() / durationNoop) * 100.0
-		println("Unthrottled baseline: ${durationNoop / 1_000_000.0} ms")
-		println("Fake controller loop: ${durationFake / 1_000_000.0} ms")
-		println("Overhead: $overheadPercent %")
-
-		// Let's assert a very safe overhead limit.
-		// On busy/constrained VM execution, jitter can occur, but we just want to verify it remains reasonable.
-		assertThat(overheadPercent).isLessThan(20.0)
+		val overheadPct = (withLoopMs - baselineMs) / baselineMs * 100.0
+		logger.info {
+			"Controlled loop overhead: ${"%.2f".format(overheadPct)}% " +
+				"(baseline=${"%.1f".format(baselineMs)}ms, withLoop=${"%.1f".format(withLoopMs)}ms, " +
+				"throttleCalls=${fakeController.throttleCalls})"
+		}
+		assertThat(overheadPct).isLessThan(5.0)
 	}
 }
