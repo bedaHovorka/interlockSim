@@ -16,6 +16,7 @@ package cz.vutbr.fit.interlockSim.testutil
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -98,7 +99,7 @@ class MockSimulationContext(
 		delegate.removePropertyChangeListener(listener)
 	}
 
-	override fun run() {
+	override fun run(controller: SimulationController) {
 		stopped = false
 		// Fire directly from runListeners so callers waiting on addPropertyChangeListener
 		// (e.g. FrameSimulationLifecycleTest) are notified when simulation starts.

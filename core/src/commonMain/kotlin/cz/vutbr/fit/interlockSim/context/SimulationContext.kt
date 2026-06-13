@@ -133,11 +133,14 @@ interface SimulationContext :
 	}
 
 	/**
-	 * Runs the simulation
+	 * Runs the simulation.
+	 *
+	 * @param controller the [SimulationController] governing pause, step, and throttle
+	 *        behaviour. Defaults to [NoOpSimulationController] (no pause, no throttle).
 	 * @throws EmptyContextException Context must not be empty
 	 * @throws SimulationException if simulation failed
 	 */
-	fun run()
+	fun run(controller: SimulationController = NoOpSimulationController)
 
 	/**
 	 * Remove report types from logging.
