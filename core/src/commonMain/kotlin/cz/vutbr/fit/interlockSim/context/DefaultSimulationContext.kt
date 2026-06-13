@@ -48,7 +48,6 @@ import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.yield
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -119,7 +118,6 @@ open class DefaultSimulationContext(
 	 * Decouples context from concrete simulation class implementations.
 	 */
 	private val processFactory: SimulationProcessFactory,
-	private val controller: SimulationController = NoOpSimulationController
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
@@ -271,20 +269,18 @@ open class DefaultSimulationContext(
 		 *
 		 * @param editingContext The editing context with static network configuration
 		 * @param processFactory Factory for creating simulation processes
-		 * @param controller Controller for pause and step control
 		 * @return New simulation context with transformed grid
 		 */
 		fun fromEditingContext(
 			editingContext: EditingContext,
 			processFactory: SimulationProcessFactory,
-			controller: SimulationController = NoOpSimulationController
 		): DefaultSimulationContext {
 			// Create base simulation context
 			val grid = editingContext.getRailWayNetGrid()
 			val cols = grid.cols
 			val rows = grid.rows
 
-			val context = DefaultSimulationContext(cols, rows, processFactory, controller)
+			val context = DefaultSimulationContext(cols, rows, processFactory)
 
 			// PHASE 1: Transform grid (creates dynamic wrappers)
 			@Suppress("UNCHECKED_CAST")
@@ -1137,69 +1133,24 @@ open class DefaultSimulationContext(
 			}
 		simulation = sim
 		try {
+			var prevTime = 0.0
+			var stepTimeTarget: Double? = null
 			runBlocking {
-				while (true) {
-					if (controller.isPaused()) {
-						logger.debug { "Simulation paused at t=${sim.time()}" }
+				sim.run(Double.MAX_VALUE) {
+					val t = sim.time()
+					// Reset step-time guard when target is reached (clock caught up)
+					if (stepTimeTarget != null && t >= stepTimeTarget!!) stepTimeTarget = null
+					// Throttle wall-clock relative to simulation time advanced
+					controller.throttle(t - prevTime)
+					prevTime = t
+					// If we are NOT mid-step-time run: apply pause/step control
+					if (stepTimeTarget == null) {
+						if (controller.isPaused()) logger.debug { "Simulation paused at t=$t" }
 						controller.awaitIfPaused()
-						logger.debug { "Simulation unpaused/stepping at t=${sim.time()}" }
-					} else {
-						controller.awaitIfPaused()
-					}
-
-					if (simulation == null) break
-
-					val targetTime: Double
-					if (controller.pollStepEvent()) {
-						val nextEventTime = cz.vutbr.fit.interlockSim.util.getNextScheduledEventTime(sim)
-						println("STEP_DEBUG: pollStepEvent=true, nextEventTime=$nextEventTime")
-						targetTime = nextEventTime
-					} else {
-						val stepDt = controller.pollStepTime()
-						if (stepDt != null) {
-							println("STEP_DEBUG: pollStepTime=$stepDt")
-							targetTime = sim.time() + stepDt
-						} else {
-							targetTime = Double.MAX_VALUE
-						}
-					}
-
-					println("STEP_DEBUG: LOOP_RUN targetTime=$targetTime timeBefore=${sim.time()}")
-					val timeBefore = sim.time()
-					sim.run(targetTime)
-					val timeAfter = sim.time()
-					val simDeltaSeconds = timeAfter - timeBefore
-					println("STEP_DEBUG: LOOP_RUN_DONE timeAfter=$timeAfter simDeltaSeconds=$simDeltaSeconds")
-
-					controller.throttle(simDeltaSeconds)
-
-					if (simulation == null) break
-					yield() // let pending coroutines execute and schedule next events
-
-					try {
-						val contextField = sim::class.java.getDeclaredField("context")
-						contextField.isAccessible = true
-						val kdiscoContext = contextField.get(sim)
-						val getEventQueueMethod = kdiscoContext::class.java.getMethod("getEventQueue")
-						val eventQueue = getEventQueueMethod.invoke(kdiscoContext)
-						val eventsField = eventQueue::class.java.getDeclaredField("events")
-						eventsField.isAccessible = true
-						val eventsList = eventsField.get(eventQueue) as List<*>
-						println("STEP_DEBUG_QUEUE_CONTENTS: size=${eventsList.size} events=$eventsList")
-					} catch (e: Exception) {
-						e.printStackTrace()
-					}
-
-					var nextEventTime = cz.vutbr.fit.interlockSim.util.getNextScheduledEventTime(sim)
-					var attempts = 0
-					while (nextEventTime == Double.MAX_VALUE && attempts < 25) {
-						kotlinx.coroutines.delay(10)
-						nextEventTime = cz.vutbr.fit.interlockSim.util.getNextScheduledEventTime(sim)
-						attempts++
-					}
-					if (nextEventTime == Double.MAX_VALUE) {
-						logger.debug { "Simulation loop ending naturally: no more scheduled events" }
-						break
+						// Consume a step-event request (impl sets paused=true after consuming)
+						controller.pollStepEvent()
+						// Consume a step-time request; if present, allow events to run until target
+						controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }
 					}
 				}
 			}

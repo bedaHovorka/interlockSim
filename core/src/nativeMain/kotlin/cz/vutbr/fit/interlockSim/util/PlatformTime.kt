@@ -17,5 +17,4 @@ actual fun currentTimeMillisKMP(): Long =
 		ts.tv_sec * 1000L + ts.tv_nsec / 1_000_000L
 	}
 
-actual fun getNextScheduledEventTime(sim: cz.hovorka.kdisco.Simulation): Double = Double.MAX_VALUE
 

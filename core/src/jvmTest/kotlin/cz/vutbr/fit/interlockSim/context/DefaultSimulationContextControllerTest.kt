@@ -12,7 +12,6 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
-import org.koin.test.get
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
 
@@ -21,22 +20,18 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val processFactory: SimulationProcessFactory by inject()
 
-	private fun createValidContext(controller: SimulationController): DefaultSimulationContext {
+	private fun createValidContext(): DefaultSimulationContext {
 		val xml = TestFixtures.loadShuntingXml()
 		requireNotNull(xml) { "vyhybna.xml must exist in resources" }
 		val editingContext = editingContextFactory.createContext(xml) as EditingContext
-		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory, controller)
+		return DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
 	}
 
 	private class SimpleHoldProcess(private val duration: Double) : LoopProcess() {
 		override suspend fun iteration() {
-			println("PROCESS_ITERATION: time=${time()}")
-			if (time() >= duration) {
-				terminate()
-			}
+			if (time() >= duration) terminate()
 		}
 		override suspend fun interLoopSleep() {
-			println("PROCESS_INTERLOOP_SLEEP: time=${time()}")
 			hold(1.0)
 		}
 	}
@@ -86,7 +81,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	@DisplayName("FakeSimulationController: pause halts the loop, resume restarts it")
 	fun testPauseAndResume() {
 		val controller = FakeSimulationController()
-		val context = createValidContext(controller)
+		val context = createValidContext()
 		val testProcess = SimpleHoldProcess(5.0)
 		context.setMainProcess(testProcess)
 
@@ -119,7 +114,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	@DisplayName("stepEvent() advances exactly one event boundary and pauses again")
 	fun testStepEvent() {
 		val controller = FakeSimulationController()
-		val context = createValidContext(controller)
+		val context = createValidContext()
 		val testProcess = SimpleHoldProcess(3.0)
 		context.setMainProcess(testProcess)
 
@@ -166,7 +161,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	@DisplayName("stepTime(1.0) advances 1 sim-second and pauses again")
 	fun testStepTime() {
 		val controller = FakeSimulationController()
-		val context = createValidContext(controller)
+		val context = createValidContext()
 		val testProcess = SimpleHoldProcess(3.0)
 		context.setMainProcess(testProcess)
 
@@ -185,7 +180,6 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 		// Step exactly 1.0 sim seconds
 		controller.stepTime = 1.0
 		Thread.sleep(200)
-		println("TEST_DEBUG: time=${testProcess.time()} terminated=${testProcess.terminated()}")
 		assertThat(testProcess.time()).isEqualTo(1.0)
 		assertThat(future.isDone).isFalse()
 
@@ -205,7 +199,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 	@DisplayName("Throttled loop overhead is negligible (< 5%)")
 	fun testLoopOverhead() {
 		// Run with NoOp (unthrottled baseline)
-		val noopContext = createValidContext(NoOpSimulationController)
+		val noopContext = createValidContext()
 		val noopProcess = SimpleHoldProcess(100.0) // 100 events -> 100 is enough to get a baseline
 		noopContext.setMainProcess(noopProcess)
 
@@ -215,7 +209,7 @@ class DefaultSimulationContextControllerTest : KoinTestBase() {
 
 		// Run with Fake controller with no pause/throttle
 		val fakeController = FakeSimulationController()
-		val fakeContext = createValidContext(fakeController)
+		val fakeContext = createValidContext()
 		val fakeProcess = SimpleHoldProcess(100.0)
 		fakeContext.setMainProcess(fakeProcess)
 
