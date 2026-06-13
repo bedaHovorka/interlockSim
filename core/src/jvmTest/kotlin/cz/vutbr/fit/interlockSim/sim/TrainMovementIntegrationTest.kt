@@ -119,7 +119,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				// Act: Run ShuntingLoop (30 seconds simulation time)
 				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
 				context.setMainProcess(shuntingLoop)
-				context.run()
+				context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 				// Assert: Pre-test reservation should still be in registry (not released by ShuntingLoop)
 				val preTestBlocks = registry.getBlocks(preTestTrainId)
@@ -152,7 +152,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				// Act: Run ShuntingLoop (10 seconds - short run)
 				val shuntingLoop = ShuntingLoop(context, endTime = 10L)
 				context.setMainProcess(shuntingLoop)
-				context.run()
+				context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 				// Assert: Simulation completed (no hang/deadlock)
 				assertThat(context.getGraph()).isNotNull()
@@ -198,7 +198,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				// Act: Run ShuntingLoop (30 seconds - enough for multiple trains)
 				val shuntingLoop = ShuntingLoop(context, endTime = 30L)
 				context.setMainProcess(shuntingLoop)
-				context.run()
+				context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 				// Assert: Simulation completed without deadlock
 				val registry = context.scope.get<PathReservationRegistry>()
@@ -241,7 +241,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 				// Act: Run ShuntingLoop for full lifecycle (60 time units)
 				val shuntingLoop = ShuntingLoop(context, endTime = 60L)
 				context.setMainProcess(shuntingLoop)
-				context.run()
+				context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 				// Assert: Simulation completed
 				assertThat(context.getGraph()).isNotNull()

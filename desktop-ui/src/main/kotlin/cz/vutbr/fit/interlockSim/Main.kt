@@ -91,11 +91,11 @@ class Main {
 				// (to avoid double-close when rawContext is already a SimulationContext)
 				if (context === raw) {
 					context.addReportTypes(*ReportType.values())
-					context.run()
+					context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 				} else {
 					context.use {
 						it.addReportTypes(*ReportType.values())
-						it.run()
+						it.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 					} // context closed
 				}
 			} // rawContext closed
@@ -129,7 +129,7 @@ class Main {
 			val reporter = TextReporter(Verbosity.DEFAULT)
 			context.addPropertyChangeListener(reporter)
 			context.use {
-				it.run()
+				it.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 				reporter.printSummary()
 			} // context closed after simulation
 		} catch (e: ContextCreationException) {

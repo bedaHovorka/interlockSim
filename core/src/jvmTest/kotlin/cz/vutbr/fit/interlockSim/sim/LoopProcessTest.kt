@@ -140,7 +140,7 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 10.0))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 		}
 
 		// At 1 Hz over 10 simulated seconds we expect roughly 10 iterations.
@@ -156,7 +156,7 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-			ctx.run() // must not hang
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) // must not hang
 		}
 
 		assertThat(lp.iterationCount.get(), name = "iterations after termination").isGreaterThan(0)
@@ -170,7 +170,7 @@ class LoopProcessTest : KoinTestBase() {
 		// terminateExtra = 2 → driver calls terminate() 3 times total (2 extra + 1 real)
 		loadVyhybnaContext().use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0, terminateExtra = 2))
-			ctx.run() // must complete without exception or hang
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) // must complete without exception or hang
 		}
 
 		// byTerminateAction must fire exactly once regardless of extra terminate() calls
@@ -185,7 +185,7 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 		}
 
 		assertThat(lp.startCount.get(), name = "startAction call count").isLessThanOrEqualTo(1)
@@ -199,7 +199,7 @@ class LoopProcessTest : KoinTestBase() {
 		val lp = CountingLoopProcess()
 		loadVyhybnaContext().use { ctx ->
 			ctx.setMainProcess(DriverProcess(ctx, lp, endTime = 5.0))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 		}
 
 		assertThat(lp.terminateCount.get(), name = "byTerminateAction call count").isLessThanOrEqualTo(1)

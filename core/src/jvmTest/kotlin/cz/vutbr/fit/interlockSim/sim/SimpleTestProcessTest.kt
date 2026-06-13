@@ -65,7 +65,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			// Act: Run simulation with SimpleTestProcess (5 seconds)
 			val testProcess = SimpleTestProcess(train, endTime = 5.0)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: Train should be created and Process should complete
 			// Note: Train waits for InOutWorker to reserve path, so it may not move
@@ -101,7 +101,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			val endTime = 3.0
 			val testProcess = SimpleTestProcess(train, endTime = endTime)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: Process should have terminated at or before endTime
 			// Note: Simulation time is discrete, so we check against endTime + iteration interval
@@ -135,7 +135,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			// Act: Run simulation with generous endTime (60 seconds)
 			val testProcess = SimpleTestProcess(train, endTime = 60.0)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: Train should have completed journey
 			// Note: In simple linear path (100m track, 80 m/s limit, 10m train),
@@ -144,7 +144,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			assertThat(finalState).isNotNull()
 			// Validation: Process terminated (simulation completed)
 			// We can't directly check train.terminated() because that's internal,
-			// but the fact that context.run() returned proves process completed
+			// but the fact that context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) returned proves process completed
 		}
 	}
 
@@ -170,7 +170,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			// Act: Run simulation
 			val testProcess = SimpleTestProcess(train, endTime = 5.0)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: getTrainState() should return valid state
 			val finalState = testProcess.getTrainState()
@@ -209,7 +209,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			// Act: Run simulation (short time because train won't move without dispatcher)
 			val testProcess = SimpleTestProcess(train, endTime = 5.0)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: Process should complete without errors
 			// Note: Train may or may not have moved depending on InOutWorker behavior
@@ -239,7 +239,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 			// With 1-second iteration interval, this should execute ~10 iterations
 			val testProcess = SimpleTestProcess(train, endTime = 10.0)
 			context.setMainProcess(testProcess)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert: Process should complete multiple iterations without errors
 			// Note: Train behavior depends on InOutWorker and path reservation

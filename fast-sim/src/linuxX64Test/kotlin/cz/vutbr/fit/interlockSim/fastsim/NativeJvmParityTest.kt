@@ -67,7 +67,7 @@ class NativeJvmParityTest {
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 		NativeExampleRegistry.create("shuntingLoop", END_TIME, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 			reporter.printSummary()
 		}
 		val eventLines = output.filter { !it.startsWith("---") }

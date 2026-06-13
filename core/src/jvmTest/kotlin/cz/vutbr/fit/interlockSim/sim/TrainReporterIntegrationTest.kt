@@ -81,7 +81,8 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
-			ctx.run() // covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			// covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
 
 			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 			// is registered (which is always true after ShuntingLoop.actions() runs).
@@ -105,7 +106,8 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
-			ctx.run() // covers: TrainReporter terminate() path when simulation ends
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
+			// covers: TrainReporter terminate() path when simulation ends
 
 			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 			// is registered (which is always true after ShuntingLoop.actions() runs).
@@ -150,7 +152,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 			// SimpleTestProcess does not enable TRAIN_CONTINUOUS — the key condition under test
 			val testProcess = SimpleTestProcess(train, endTime = 10.0)
 			ctx.setMainProcess(testProcess)
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// TrainReporter ran (train moved) but isReporting(TRAIN_CONTINUOUS) was always false,
 			// so env.report() was never reached and no property change events fired.
@@ -172,7 +174,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			assertThat(reportCount.get(), name = "TRAIN_CONTINUOUS rate lower bound (endTime=30, ~1 Hz)")
 				.isGreaterThanOrEqualTo(20)

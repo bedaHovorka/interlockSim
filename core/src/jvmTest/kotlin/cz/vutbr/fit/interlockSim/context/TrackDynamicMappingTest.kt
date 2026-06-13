@@ -167,7 +167,7 @@ class TrackDynamicMappingTest : KoinTestBase() {
 			// This test documents expected behavior that must be verified manually:
 			//
 			// val context = factory.createContext(xmlFile) as DefaultSimulationContext
-			// context.run()  // Would block in test - manual verification needed
+			// context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)  // Would block in test - manual verification needed
 			//
 			// After run(), for each track in graph.values():
 			// - context.toDynamic(track) should return non-null DynamicTrack

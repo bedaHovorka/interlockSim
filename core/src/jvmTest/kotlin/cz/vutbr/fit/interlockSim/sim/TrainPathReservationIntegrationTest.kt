@@ -79,7 +79,7 @@ private val logger = KotlinLogging.logger {}
  *
  * Per CLAUDE.md guidance, simulation classes should have minimal changes.
  * These tests validate the path reservation system at the service level
- * without executing the full kDisco event loop (context.run()).
+ * without executing the full kDisco event loop (context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)).
  *
  * @since 2026-01-29 (Issue #295)
  */

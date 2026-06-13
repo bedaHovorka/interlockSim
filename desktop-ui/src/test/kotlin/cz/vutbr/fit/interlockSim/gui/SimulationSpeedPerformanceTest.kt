@@ -97,7 +97,7 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		val baseCtx = mockk<SimulationContext>(relaxed = true)
 		every { baseCtx.run(ofType<SimulationController>()) } answers { Thread.sleep(sleepMs) }
 		val baselineNs = System.nanoTime()
-		baseCtx.run()
+		baseCtx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 		val baselineMs = (System.nanoTime() - baselineNs) / 1_000_000.0
 
 		// With SimulationRunner: thread is created, context.run() called inside it

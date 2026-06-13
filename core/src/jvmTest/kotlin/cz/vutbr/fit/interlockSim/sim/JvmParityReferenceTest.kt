@@ -72,7 +72,7 @@ class JvmParityReferenceTest : KoinTestBase() {
 				context.setMainProcess(ShuntingLoop(context, END_TIME))
 				val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 				context.addPropertyChangeListener(reporter)
-				context.run()
+				context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 				reporter.printSummary()
 			}
 		val eventLines = output.filter { !it.startsWith("---") }

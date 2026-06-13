@@ -83,7 +83,7 @@ class NativeSmokeTest {
 	fun `NativeExampleRegistry shuntingLoop runs to completion with short endTime`() {
 		val factory = NativeContextFactory()
 		NativeExampleRegistry.create("shuntingLoop", 5, factory).use { ctx ->
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 		}
 	}
 

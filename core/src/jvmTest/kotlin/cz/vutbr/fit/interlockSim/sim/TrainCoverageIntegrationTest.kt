@@ -112,7 +112,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			)
 
 			ctx.setMainProcess(ShuntingLoop(ctx, 200L))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			assertThat(endEvents.get(), name = "train end events in extended sim")
 				.isGreaterThan(2)
@@ -139,7 +139,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			)
 
 			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			assertThat(trainApproved.get(), name = "trains approved (exercising Front paths)")
 				.isGreaterThan(0)
@@ -166,7 +166,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 
 			val testProcess = SimpleTestProcess(train, endTime = 45.0)
 			ctx.setMainProcess(testProcess)
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			val state = testProcess.getTrainState()
 			logger.info {
@@ -248,7 +248,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 
 			val testProcess = SimpleTestProcess(train, endTime = 5.0)
 			ctx.setMainProcess(testProcess)
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			val apField = Train::class.java.getDeclaredField("ap")
 			apField.isAccessible = true
@@ -273,7 +273,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val ctx = loadVyhybnaContext()
 
 			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
-			ctx.run()
+			ctx.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			assertThat(ctx.getGraph()).isNotNull()
 		}

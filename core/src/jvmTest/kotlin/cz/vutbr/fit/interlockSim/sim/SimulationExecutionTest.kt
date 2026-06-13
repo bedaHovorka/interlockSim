@@ -25,7 +25,7 @@ import org.koin.test.inject
 /**
  * Full simulation execution tests with running kDisco event loop.
  *
- * These tests run complete simulations using context.run() to validate
+ * These tests run complete simulations using context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController) to validate
  * that the kDisco simulation framework works correctly for critical scenarios.
  * Unlike SimulationScenarioTest and TrainBehaviorTest which test configuration,
  * these tests run actual simulations.
@@ -38,7 +38,7 @@ import org.koin.test.inject
  * - Full shunting loop: End-to-end scenario from entry to exit
  *
  * Test Strategy:
- * - Run actual kDisco simulations with context.run()
+ * - Run actual kDisco simulations with context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
  * - Use ShuntingLoop as main process (required by vyhybna.xml)
  * - Run with short simulation times (10-30 seconds) for fast execution
  * - Validate results after simulation completes
@@ -123,7 +123,7 @@ class SimulationExecutionTest : KoinTestBase() {
 			context.setMainProcess(shuntingLoop)
 
 			// Act - Run simulation (activates ShuntingLoop, which contains Generator)
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert - After simulation, verify context has InOut workers
 			// Workers track train approvals, indicating trains were created
@@ -161,7 +161,7 @@ class SimulationExecutionTest : KoinTestBase() {
 			context.setMainProcess(shuntingLoop)
 
 			// Act & Assert - Should complete without exceptions
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Verify context is still valid after simulation
 			assertThat(context.getGraph()).isNotNull()
@@ -204,7 +204,7 @@ class SimulationExecutionTest : KoinTestBase() {
 			context.setMainProcess(shuntingLoop)
 
 			// Act - Run simulation with enough time for train movement
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert - Verify simulation ran to completion
 			assertThat(context.getGraph()).isNotNull()
@@ -253,7 +253,7 @@ class SimulationExecutionTest : KoinTestBase() {
 			context.setMainProcess(shuntingLoop)
 
 			// Act - Run simulation
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert - Verify all InOuts have workers
 			val inOuts = context.getInOuts().toList()
@@ -313,7 +313,7 @@ class SimulationExecutionTest : KoinTestBase() {
 			context.setMainProcess(shuntingLoop)
 
 			// Act - Run full simulation
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 
 			// Assert - Verify simulation infrastructure is complete
 			assertThat(context.getGraph()).isNotNull()
@@ -389,7 +389,7 @@ class SimulationExecutionTest : KoinTestBase() {
 
 			// Act - Run full simulation and measure wall-clock duration
 			val startTime = System.currentTimeMillis()
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 			val elapsedMs = System.currentTimeMillis() - startTime
 
 			// Assert
@@ -450,7 +450,7 @@ class SimulationExecutionTest : KoinTestBase() {
 
 			// Act - Run simulation and measure duration
 			val startTime = System.currentTimeMillis()
-			context.run()
+			context.run(cz.vutbr.fit.interlockSim.context.NoOpSimulationController)
 			val elapsedMs = System.currentTimeMillis() - startTime
 
 			// Assert
