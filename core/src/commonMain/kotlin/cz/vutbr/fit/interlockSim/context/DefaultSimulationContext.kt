@@ -1083,7 +1083,7 @@ open class DefaultSimulationContext(
 		)
 	}
 
-	override fun run() {
+	override fun run(controller: SimulationController) {
 		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
 		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
 			logger.warn {
