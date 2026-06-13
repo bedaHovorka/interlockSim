@@ -82,6 +82,12 @@ internal class SimulationKeyBindings(
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), ACTION_KEY_PAUSE_TOGGLE)
 		actionMap.put(ACTION_KEY_PAUSE_TOGGLE, PauseToggleAction())
 
+		// Step controls: S → step one event, T → step by time delta (Goal 8)
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0), ACTION_KEY_STEP_EVENT)
+		actionMap.put(ACTION_KEY_STEP_EVENT, StepEventAction())
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0), ACTION_KEY_STEP_TIME)
+		actionMap.put(ACTION_KEY_STEP_TIME, StepTimeAction())
+
 		logger.debug { "Simulation keyboard shortcuts installed" }
 	}
 
@@ -115,6 +121,12 @@ internal class SimulationKeyBindings(
 		// Remove pause toggle binding
 		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0))
 		actionMap.remove(ACTION_KEY_PAUSE_TOGGLE)
+
+		// Remove step control bindings
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0))
+		actionMap.remove(ACTION_KEY_STEP_EVENT)
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0))
+		actionMap.remove(ACTION_KEY_STEP_TIME)
 
 		logger.debug { "Simulation keyboard shortcuts uninstalled" }
 	}
@@ -190,6 +202,43 @@ internal class SimulationKeyBindings(
 		}
 	}
 
+	/**
+	 * Action that advances the simulation by one event when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepEvent]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepEventAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-event ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepEvent()
+			logger.debug { "Step-event requested" }
+		}
+	}
+
+	/**
+	 * Action that advances the simulation by [SimulationRunner.stepTimeDelta] sim-seconds
+	 * when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepTime]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepTimeAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-time ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepTime(runner.stepTimeDelta)
+			logger.debug { "Step-time requested (delta=${runner.stepTimeDelta}s)" }
+		}
+	}
+
 	companion object {
 		/** Action key for speed-up shortcut. */
 		private const val ACTION_KEY_SPEED_UP = "simulation_speed_up"
@@ -199,6 +248,12 @@ internal class SimulationKeyBindings(
 
 		/** Action key for pause/resume toggle. */
 		private const val ACTION_KEY_PAUSE_TOGGLE = "simulation_pause_toggle"
+
+		/** Action key for step-event shortcut (key S). */
+		private const val ACTION_KEY_STEP_EVENT = "simulation_step_event"
+
+		/** Action key for step-time shortcut (key T). */
+		private const val ACTION_KEY_STEP_TIME = "simulation_step_time"
 
 		/** Incremental speed multiplier: ×1.5 for speed-up, ÷1.5 for speed-down. */
 		private const val SPEED_INCREMENT = 1.5

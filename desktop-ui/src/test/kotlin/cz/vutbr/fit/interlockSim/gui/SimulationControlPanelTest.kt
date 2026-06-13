@@ -67,7 +67,7 @@ class SimulationControlPanelTest {
 	}
 
 	private fun findPresetButtons(): List<JButton> =
-		findAllComponents(panel, JButton::class.java)
+		findAllComponents(panel, JButton::class.java).filter { it.text.endsWith("x") }
 
 	/** Recursively find the first component of [type] in the container hierarchy. */
 	private fun <T> findComponent(container: java.awt.Container, type: Class<T>): T? {
