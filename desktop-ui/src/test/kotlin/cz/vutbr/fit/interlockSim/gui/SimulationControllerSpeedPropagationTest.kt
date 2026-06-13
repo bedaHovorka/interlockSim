@@ -89,7 +89,7 @@ class SimulationControllerSpeedPropagationTest {
 	private fun mockContext(mainProcess: LoopProcess?): DefaultSimulationContext =
 		mockk<DefaultSimulationContext>(relaxed = true).also { ctx ->
 			every { ctx.getMainProcess() } returns mainProcess
-			every { ctx.run() } answers {
+			every { ctx.run(any()) } answers {
 				startedLatch.countDown()
 				blockSim.await(30, TimeUnit.SECONDS)
 			}

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -35,10 +36,20 @@ import java.beans.PropertyChangeSupport
  */
 class SimulationRunner(
 	private val context: SimulationContext
-) {
+) : SimulationController {
 	private val pcs = PropertyChangeSupport(this)
 	private val lifecycleLock = Any()
 	private val pauseLock = Object()
+	private val stepLock = Object()
+
+	@Volatile
+	private var stepEventRequested: Boolean = false
+
+	@Volatile
+	private var stepTimeRequested: Double? = null
+
+	@Volatile
+	var stepTimeDelta: Double = 1.0
 
 	@Volatile
 	private var simThread: Thread? = null
@@ -80,6 +91,7 @@ class SimulationRunner(
 	 * Fires a [PropertyChangeSupport] event with name [PROP_IS_PAUSED]
 	 * on change.
 	 */
+	@get:JvmName("isPausedProp")
 	var isPaused: Boolean
 		get() = pausedBacking
 		set(value) {
@@ -94,6 +106,63 @@ class SimulationRunner(
 			}
 			pcs.firePropertyChange(PROP_IS_PAUSED, old, value)
 		}
+
+	fun requestStepEvent() {
+		synchronized(stepLock) {
+			val oldEvent = stepEventRequested
+			val oldTime = stepTimeRequested
+			stepEventRequested = true
+			stepTimeRequested = null
+			if (!oldEvent) {
+				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, false, true)
+			}
+			if (oldTime != null) {
+				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
+			}
+		}
+	}
+
+	fun requestStepTime(simSeconds: Double) {
+		require(simSeconds > 0.0) {
+			"Step-time delta must be positive, got: $simSeconds"
+		}
+		synchronized(stepLock) {
+			val oldEvent = stepEventRequested
+			val oldTime = stepTimeRequested
+			stepTimeRequested = simSeconds
+			stepEventRequested = false
+			if (oldEvent) {
+				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+			}
+			if (oldTime != simSeconds) {
+				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
+			}
+		}
+	}
+
+	override fun pollStepEvent(): Boolean {
+		return synchronized(stepLock) {
+			val r = stepEventRequested
+			stepEventRequested = false
+			if (r) {
+				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+			}
+			r
+		}
+	}
+
+	override fun pollStepTime(): Double? {
+		return synchronized(stepLock) {
+			val r = stepTimeRequested
+			stepTimeRequested = null
+			if (r != null) {
+				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, r, null)
+			}
+			r
+		}
+	}
+
+	override fun isPaused(): Boolean = pausedBacking
 
 	/** Register a listener for all property change events. */
 	fun addPropertyChangeListener(listener: PropertyChangeListener) {
@@ -128,7 +197,7 @@ class SimulationRunner(
 				@Suppress("TooGenericExceptionCaught")
 				{
 					try {
-						context.run()
+						context.run(controller = this)
 					} catch (e: InterruptedException) {
 						logger.debug { "Simulation thread interrupted: ${e.message}" }
 						Thread.currentThread().interrupt()
@@ -179,7 +248,7 @@ class SimulationRunner(
 	 * thread interruption.
 	 */
 	@Throws(InterruptedException::class)
-	fun awaitIfPaused() {
+	override suspend fun awaitIfPaused() {
 		synchronized(pauseLock) {
 			while (pausedBacking) {
 				pauseLock.wait()
@@ -196,9 +265,13 @@ class SimulationRunner(
 	 *     are a no-op.
 	 */
 	@Throws(InterruptedException::class)
-	fun throttle(simDeltaSeconds: Double) {
+	override fun throttle(simDeltaSeconds: Double) {
 		if (simDeltaSeconds <= 0.0) return
-		awaitIfPaused()
+		synchronized(pauseLock) {
+			while (pausedBacking) {
+				pauseLock.wait()
+			}
+		}
 		val speed = speedMultiplierBacking
 		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
 		if (sleepMs > 0) {
@@ -213,6 +286,8 @@ class SimulationRunner(
 
 		const val PROP_SPEED_MULTIPLIER: String = "speedMultiplier"
 		const val PROP_IS_PAUSED: String = "isPaused"
+		const val PROP_STEP_EVENT_REQUESTED: String = "stepEventRequested"
+		const val PROP_STEP_TIME_REQUESTED: String = "stepTimeRequested"
 
 		private const val MILLIS_PER_SECOND: Double = 1000.0
 

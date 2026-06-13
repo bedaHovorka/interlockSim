@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import io.mockk.every
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import kotlinx.coroutines.runBlocking
 import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.concurrent.CountDownLatch
@@ -147,7 +149,7 @@ class SimulationRunnerTest {
 	fun startInvokesContextRun() {
 		val started = CountDownLatch(1)
 		val finish = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(any()) } answers {
 			started.countDown()
 			finish.await(5, TimeUnit.SECONDS)
 		}
@@ -158,7 +160,7 @@ class SimulationRunnerTest {
 
 		finish.countDown()
 		runner.stop()
-		verify { context.run() }
+		verify { context.run(any()) }
 	}
 
 	@Test
@@ -166,7 +168,7 @@ class SimulationRunnerTest {
 	fun startIdempotent() {
 		val started = CountDownLatch(1)
 		val finish = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(any()) } answers {
 			started.countDown()
 			finish.await(5, TimeUnit.SECONDS)
 		}
@@ -178,7 +180,7 @@ class SimulationRunnerTest {
 
 		finish.countDown()
 		runner.stop()
-		verify(exactly = 1) { context.run() }
+		verify(exactly = 1) { context.run(any()) }
 	}
 
 	@Test
@@ -194,7 +196,7 @@ class SimulationRunnerTest {
 	fun stopInterruptsSimThread() {
 		val started = CountDownLatch(1)
 		val interrupted = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(any()) } answers {
 			started.countDown()
 			try {
 				Thread.sleep(60_000)
@@ -224,7 +226,7 @@ class SimulationRunnerTest {
 				// Combined with isPaused=true being set first, this is a
 				// tight-enough handshake to avoid Thread.sleep-based timing.
 				reachedWait.countDown()
-				runner.awaitIfPaused()
+				runBlocking { runner.awaitIfPaused() }
 				resumed.countDown()
 			} catch (_: InterruptedException) {
 				// ignored
@@ -248,7 +250,7 @@ class SimulationRunnerTest {
 	@DisplayName("awaitIfPaused is a no-op when not paused")
 	fun awaitIfPausedNoop() {
 		val startNs = System.nanoTime()
-		runner.awaitIfPaused()
+		runBlocking { runner.awaitIfPaused() }
 		val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
 		assertThat(elapsedMs < 50L).isTrue()
 	}
@@ -286,5 +288,84 @@ class SimulationRunnerTest {
 		// to avoid flakes on busy CI while still catching pathological hangs.
 		assertThat(elapsedMs >= 80).isTrue()
 		assertThat(elapsedMs < 2000).isTrue()
+	}
+
+	@Test
+	@DisplayName("pollStepEvent returns true once after requestStepEvent, false on next poll")
+	fun pollStepEventBasic() {
+		assertThat(runner.pollStepEvent()).isFalse()
+		runner.requestStepEvent()
+		assertThat(runner.pollStepEvent()).isTrue()
+		assertThat(runner.pollStepEvent()).isFalse()
+	}
+
+	@Test
+	@DisplayName("pollStepTime returns the requested delta once, then null")
+	fun pollStepTimeBasic() {
+		assertThat(runner.pollStepTime()).isNull()
+		runner.requestStepTime(2.5)
+		assertThat(runner.pollStepTime()).isEqualTo(2.5)
+		assertThat(runner.pollStepTime()).isNull()
+	}
+
+	@Test
+	@DisplayName("requestStepTime validates dt > 0")
+	fun requestStepTimeValidation() {
+		assertThrows(IllegalArgumentException::class.java) {
+			runner.requestStepTime(0.0)
+		}
+		assertThrows(IllegalArgumentException::class.java) {
+			runner.requestStepTime(-1.5)
+		}
+		runner.requestStepTime(0.001) // should succeed
+		assertThat(runner.pollStepTime()).isEqualTo(0.001)
+	}
+
+	@Test
+	@DisplayName("event-step cancels a pending time-step and vice versa")
+	fun mutualCancellation() {
+		runner.requestStepTime(2.0)
+		runner.requestStepEvent()
+		assertThat(runner.pollStepTime()).isNull()
+		assertThat(runner.pollStepEvent()).isTrue()
+
+		runner.requestStepEvent()
+		runner.requestStepTime(3.0)
+		assertThat(runner.pollStepEvent()).isFalse()
+		assertThat(runner.pollStepTime()).isEqualTo(3.0)
+	}
+
+	@Test
+	@DisplayName("concurrent requestStepEvent and pollStepEvent does not deadlock or crash")
+	fun concurrentStepEventRaceFree() {
+		val iterations = 100_000
+		val startLatch = CountDownLatch(1)
+		
+		val producer = Thread {
+			startLatch.await()
+			for (i in 0 until iterations) {
+				runner.requestStepEvent()
+			}
+		}
+		
+		val consumer = Thread {
+			startLatch.await()
+			while (producer.isAlive) {
+				runner.pollStepEvent()
+			}
+			// Drain remaining
+			while (runner.pollStepEvent()) { /* drain */ }
+		}
+		
+		producer.start()
+		consumer.start()
+		startLatch.countDown()
+		
+		producer.join(15000)
+		consumer.join(15000)
+		
+		assertThat(producer.isAlive).isFalse()
+		assertThat(consumer.isAlive).isFalse()
+		assertThat(runner.pollStepEvent()).isFalse()
 	}
 }

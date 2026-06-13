@@ -32,6 +32,7 @@ val koinVersion: String by project
 val javaVersion: String by project
 val kotlinVersion: String by project
 val jmhVersion: String by project
+val coroutinesVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -61,6 +62,7 @@ dependencies {
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
     testImplementation(project(":core-test"))
 }

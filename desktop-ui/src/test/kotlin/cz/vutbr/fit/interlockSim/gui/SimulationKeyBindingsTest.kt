@@ -51,7 +51,7 @@ class SimulationKeyBindingsTest {
 
 		// Create mocked simulation context that blocks until tearDown
 		simulationContext = mockk(relaxed = true)
-		every { simulationContext.run() } answers {
+		every { simulationContext.run(any()) } answers {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 
