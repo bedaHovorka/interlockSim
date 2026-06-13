@@ -117,7 +117,8 @@ open class DefaultSimulationContext(
 	 * Factory for creating simulation processes.
 	 * Decouples context from concrete simulation class implementations.
 	 */
-	private val processFactory: SimulationProcessFactory
+	private val processFactory: SimulationProcessFactory,
+	private val controller: SimulationController = NoOpSimulationController
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
@@ -269,18 +270,20 @@ open class DefaultSimulationContext(
 		 *
 		 * @param editingContext The editing context with static network configuration
 		 * @param processFactory Factory for creating simulation processes
+		 * @param controller Controller for pause and step control
 		 * @return New simulation context with transformed grid
 		 */
 		fun fromEditingContext(
 			editingContext: EditingContext,
-			processFactory: SimulationProcessFactory
+			processFactory: SimulationProcessFactory,
+			controller: SimulationController = NoOpSimulationController
 		): DefaultSimulationContext {
 			// Create base simulation context
 			val grid = editingContext.getRailWayNetGrid()
 			val cols = grid.cols
 			val rows = grid.rows
 
-			val context = DefaultSimulationContext(cols, rows, processFactory)
+			val context = DefaultSimulationContext(cols, rows, processFactory, controller)
 
 			// PHASE 1: Transform grid (creates dynamic wrappers)
 			@Suppress("UNCHECKED_CAST")
@@ -1133,7 +1136,48 @@ open class DefaultSimulationContext(
 			}
 		simulation = sim
 		try {
-			runBlocking { sim.run(Double.MAX_VALUE) }
+			runBlocking {
+				while (true) {
+					if (controller.isPaused()) {
+						logger.debug { "Simulation paused at t=${sim.time()}" }
+						controller.awaitIfPaused()
+						logger.debug { "Simulation unpaused/stepping at t=${sim.time()}" }
+					} else {
+						controller.awaitIfPaused()
+					}
+
+					if (simulation == null) break
+
+					val targetTime: Double
+					if (controller.pollStepEvent()) {
+						val nextEventTime = cz.vutbr.fit.interlockSim.util.getNextScheduledEventTime(sim)
+						logger.debug { "Step event requested, stepping to next scheduled event time: $nextEventTime" }
+						targetTime = nextEventTime
+					} else {
+						val stepDt = controller.pollStepTime()
+						if (stepDt != null) {
+							logger.debug { "Step time requested, stepping by delta: $stepDt" }
+							targetTime = sim.time() + stepDt
+						} else {
+							targetTime = Double.MAX_VALUE
+						}
+					}
+
+					val timeBefore = sim.time()
+					sim.run(targetTime)
+					val timeAfter = sim.time()
+					val simDeltaSeconds = timeAfter - timeBefore
+
+					controller.throttle(simDeltaSeconds)
+
+					if (simulation == null) break
+					val nextEventTime = cz.vutbr.fit.interlockSim.util.getNextScheduledEventTime(sim)
+					if (nextEventTime == Double.MAX_VALUE) {
+						logger.debug { "Simulation loop ending naturally: no more scheduled events" }
+						break
+					}
+				}
+			}
 		} catch (e: DiscoException) {
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
