@@ -494,7 +494,10 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 	fun `SimulationRunner speed multiplier does not alter simulation output`() {
 		val baseline = runAtSpeed(speedMultiplier = 1.0)
 
-		for (runnerSpeed in listOf(0.5, 2.0, 10.0)) {
+		// Use speeds ≥ 10x so a 60s simulation completes in ≤ 6s wall-clock.
+		// The semantic goal (identical output at any speed) is preserved; low speeds
+		// would exceed the 20s poll deadline now that throttle() fires per event.
+		for (runnerSpeed in listOf(10.0, 50.0, 100.0)) {
 			val result = runViaSimulationRunner(runnerSpeed)
 
 			assertThat(result.trainsEntered).isEqualTo(baseline.trainsEntered)
