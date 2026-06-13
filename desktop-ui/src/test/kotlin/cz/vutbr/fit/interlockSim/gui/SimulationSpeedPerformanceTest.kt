@@ -17,6 +17,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -94,7 +95,7 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 
 		// Baseline: direct context.run() call
 		val baseCtx = mockk<SimulationContext>(relaxed = true)
-		every { baseCtx.run(any()) } answers { Thread.sleep(sleepMs) }
+		every { baseCtx.run(ofType<SimulationController>()) } answers { Thread.sleep(sleepMs) }
 		val baselineNs = System.nanoTime()
 		baseCtx.run()
 		val baselineMs = (System.nanoTime() - baselineNs) / 1_000_000.0
@@ -102,7 +103,7 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		// With SimulationRunner: thread is created, context.run() called inside it
 		val runCtx = mockk<SimulationContext>(relaxed = true)
 		val done = CountDownLatch(1)
-		every { runCtx.run(any()) } answers { Thread.sleep(sleepMs); done.countDown() }
+		every { runCtx.run(ofType<SimulationController>()) } answers { Thread.sleep(sleepMs); done.countDown() }
 		val runner = SimulationRunner(runCtx)
 		val runnerNs = System.nanoTime()
 		runner.start()
@@ -244,7 +245,7 @@ class SimulationSpeedPerformanceTest : KoinTestBase() {
 		val simStarted = CountDownLatch(1)
 		val stopSim = CountDownLatch(1)
 		val mockCtx = mockk<SimulationContext>(relaxed = true)
-		every { mockCtx.run(any()) } answers { simStarted.countDown(); stopSim.await(simBlockTimeoutS, TimeUnit.SECONDS) }
+		every { mockCtx.run(ofType<SimulationController>()) } answers { simStarted.countDown(); stopSim.await(simBlockTimeoutS, TimeUnit.SECONDS) }
 
 		val runner = SimulationRunner(mockCtx)
 		runner.speedMultiplier = 100.0

@@ -16,6 +16,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -149,7 +150,7 @@ class SimulationRunnerTest {
 	fun startInvokesContextRun() {
 		val started = CountDownLatch(1)
 		val finish = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			started.countDown()
 			finish.await(5, TimeUnit.SECONDS)
 		}
@@ -160,7 +161,7 @@ class SimulationRunnerTest {
 
 		finish.countDown()
 		runner.stop()
-		verify { context.run(any()) }
+		verify { context.run(ofType<SimulationController>()) }
 	}
 
 	@Test
@@ -168,7 +169,7 @@ class SimulationRunnerTest {
 	fun startIdempotent() {
 		val started = CountDownLatch(1)
 		val finish = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			started.countDown()
 			finish.await(5, TimeUnit.SECONDS)
 		}
@@ -180,7 +181,7 @@ class SimulationRunnerTest {
 
 		finish.countDown()
 		runner.stop()
-		verify(exactly = 1) { context.run(any()) }
+		verify(exactly = 1) { context.run(ofType<SimulationController>()) }
 	}
 
 	@Test
@@ -196,7 +197,7 @@ class SimulationRunnerTest {
 	fun stopInterruptsSimThread() {
 		val started = CountDownLatch(1)
 		val interrupted = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			started.countDown()
 			try {
 				Thread.sleep(60_000)

@@ -18,6 +18,7 @@ import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import io.mockk.every
 import io.mockk.mockk
@@ -77,7 +78,7 @@ class SimulationControllerTest {
 	fun startEnablesStopButton() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -101,7 +102,7 @@ class SimulationControllerTest {
 	fun stopDisablesStopButton() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -126,7 +127,7 @@ class SimulationControllerTest {
 	fun startSetsStatusRunning() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -149,7 +150,7 @@ class SimulationControllerTest {
 	fun stopSetsStatusStopped() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -174,7 +175,7 @@ class SimulationControllerTest {
 	fun isRunningTrueWhileSimRunning() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -203,7 +204,7 @@ class SimulationControllerTest {
 	fun isRunningFalseAfterStop() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -238,7 +239,7 @@ class SimulationControllerTest {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
 		var runCount = 0
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			runCount++
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
@@ -273,7 +274,7 @@ class SimulationControllerTest {
 	fun runnerNonNullWhileRunning() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -293,7 +294,7 @@ class SimulationControllerTest {
 	fun runnerNullAfterStop() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -314,7 +315,7 @@ class SimulationControllerTest {
 	@DisplayName("onCompleted is invoked when simulation finishes naturally")
 	fun onCompletedInvokedOnNaturalFinish() {
 		val completedLatch = CountDownLatch(1)
-		every { context.run(any()) } answers { /* returns immediately */ }
+		every { context.run(ofType<CoreSimulationController>()) } answers { /* returns immediately */ }
 
 		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
@@ -327,7 +328,7 @@ class SimulationControllerTest {
 	@DisplayName("onCompleted resets ControlPanel status to Stopped after natural finish")
 	fun onCompletedResetsPanelOnNaturalFinish() {
 		val completedLatch = CountDownLatch(1)
-		every { context.run(any()) } answers { /* returns immediately */ }
+		every { context.run(ofType<CoreSimulationController>()) } answers { /* returns immediately */ }
 
 		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
@@ -341,20 +342,20 @@ class SimulationControllerTest {
 		}
 	}
 
-	// ── context.run(any()) is called ───────────────────────────────────────────────
+	// ── context.run(ofType<CoreSimulationController>()) is called ───────────────────────────────────────────────
 
 	@Test
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
-	@DisplayName("start invokes context.run(any())")
+	@DisplayName("start invokes context.run(ofType<CoreSimulationController>())")
 	fun startInvokesContextRun() {
-		every { context.run(any()) } answers { /* returns immediately */ }
+		every { context.run(ofType<CoreSimulationController>()) } answers { /* returns immediately */ }
 
 		val completedLatch = CountDownLatch(1)
 		val controller = createController(onCompleted = { completedLatch.countDown() })
 		controller.start(context)
 
 		assertThat(completedLatch.await(5, TimeUnit.SECONDS)).isTrue()
-		verify { context.run(any()) }
+		verify { context.run(ofType<CoreSimulationController>()) }
 	}
 
 	// ── race condition fix: runner.start() called before monitor thread ────────
@@ -365,7 +366,7 @@ class SimulationControllerTest {
 	fun stopAlwaysInterruptsAfterStart() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -397,7 +398,7 @@ class SimulationControllerTest {
 		// First run: blocks until explicitly released
 		val run1Started = CountDownLatch(1)
 		val run1Block = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			run1Started.countDown()
 			run1Block.await(10, TimeUnit.SECONDS)
 		}
@@ -405,7 +406,7 @@ class SimulationControllerTest {
 		// Second run: also blocks so we can assert on panel state while it is still running
 		val run2Started = CountDownLatch(1)
 		val run2Block = CountDownLatch(1)
-		every { context2.run(any()) } answers {
+		every { context2.run(ofType<CoreSimulationController>()) } answers {
 			run2Started.countDown()
 			run2Block.await(10, TimeUnit.SECONDS)
 		}
@@ -479,7 +480,7 @@ class SimulationControllerTest {
 	fun setSpeedAppliedImmediatelyToActiveRunner() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -501,7 +502,7 @@ class SimulationControllerTest {
 	fun setSpeedCarriedIntoNextStart() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -522,7 +523,7 @@ class SimulationControllerTest {
 	@DisplayName("speed selection survives natural completion and is applied to the next start()")
 	fun speedSelectionPersistsThroughNaturalCompletion() {
 		val firstCompleted = CountDownLatch(1)
-		every { context.run(any()) } answers { /* returns immediately — natural completion */ }
+		every { context.run(ofType<CoreSimulationController>()) } answers { /* returns immediately — natural completion */ }
 
 		val controller = createController(onCompleted = { firstCompleted.countDown() })
 		controller.setSpeed(2.0)
@@ -534,7 +535,7 @@ class SimulationControllerTest {
 		// Now start a second simulation (blocking so we can inspect runner speed)
 		val started = CountDownLatch(1)
 		val blockSecondSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSecondSim.await(10, TimeUnit.SECONDS)
 		}
@@ -553,7 +554,7 @@ class SimulationControllerTest {
 	fun preselectedSpeedPropagatesOnStart() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -584,7 +585,7 @@ class SimulationControllerTest {
 	fun speedChangePropagatesToStatusBar() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -618,7 +619,7 @@ class SimulationControllerTest {
 	fun stopResetsStatusBarSpeedIndicator() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -650,7 +651,7 @@ class SimulationControllerTest {
 	fun startShowsToolBarSimulationControls() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
@@ -674,7 +675,7 @@ class SimulationControllerTest {
 	fun stopHidesToolBarSimulationControls() {
 		val started = CountDownLatch(1)
 		val blockSim = CountDownLatch(1)
-		every { context.run(any()) } answers {
+		every { context.run(ofType<CoreSimulationController>()) } answers {
 			started.countDown()
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
