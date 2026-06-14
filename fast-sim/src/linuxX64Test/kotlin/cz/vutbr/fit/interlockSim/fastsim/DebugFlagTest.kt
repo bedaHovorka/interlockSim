@@ -30,7 +30,6 @@ import kotlin.test.Test
  * @since Issue #437 (add --debug flag for runtime log output)
  */
 class DebugFlagTest {
-
 	private var savedLevel: Level = Level.OFF
 	private lateinit var savedAppender: Appender
 

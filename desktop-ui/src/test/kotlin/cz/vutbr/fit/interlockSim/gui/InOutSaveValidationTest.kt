@@ -39,7 +39,6 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("InOut Save Validation")
 class InOutSaveValidationTest : KoinTestBase() {
-
 	@Test
 	@DisplayName("context with 0 InOuts cannot be saved")
 	fun contextWith0InOutsCannotBeSaved() {
@@ -53,7 +52,8 @@ class InOutSaveValidationTest : KoinTestBase() {
 	fun contextWith1InOutCanBeSaved() {
 		TestContextBuilder()
 			.withInOut("OnlyEntry", 1, 1, true)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				assertThat(MenuBar.validateForSave(context)).isTrue()
 			}
 	}
@@ -64,7 +64,8 @@ class InOutSaveValidationTest : KoinTestBase() {
 		TestContextBuilder()
 			.withInOut("Entry", 1, 1, true)
 			.withInOut("Exit", 10, 10, false)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				assertThat(MenuBar.validateForSave(context)).isTrue()
 			}
 	}
@@ -76,7 +77,8 @@ class InOutSaveValidationTest : KoinTestBase() {
 			.withInOut("Entry1", 1, 1, true)
 			.withInOut("Exit1", 10, 10, false)
 			.withInOut("Entry2", 5, 5, true)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				assertThat(MenuBar.validateForSave(context)).isTrue()
 			}
 	}
@@ -92,7 +94,8 @@ class InOutSaveValidationTest : KoinTestBase() {
 	fun validateForSave_isIdempotent() {
 		TestContextBuilder()
 			.withInOut("OnlyEntry", 1, 1, true)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				val first = MenuBar.validateForSave(context)
 				val second = MenuBar.validateForSave(context)
 				val third = MenuBar.validateForSave(context)

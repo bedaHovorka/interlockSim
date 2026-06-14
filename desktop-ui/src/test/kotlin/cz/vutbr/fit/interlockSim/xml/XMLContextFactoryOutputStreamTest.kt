@@ -17,7 +17,6 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
@@ -26,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Resources
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -548,7 +548,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			val context = editingContextFactory.createEmptyContext()
 
 			// Create temp file path (but delete the file first to test that save doesn't create it)
-			val tempFile = kotlin.io.path.createTempFile("test", ".xml").toFile()
+			val tempFile =
+				kotlin.io.path
+					.createTempFile("test", ".xml")
+					.toFile()
 			tempFile.delete() // Delete so we can verify save doesn't create it
 
 			try {
@@ -574,7 +577,10 @@ class XMLContextFactoryOutputStreamTest : KoinTestBase() {
 			context.putCell(Point(5, 5), inOut)
 
 			// Attempt to save to file
-			val tempFile = kotlin.io.path.createTempFile("test", ".xml").toFile()
+			val tempFile =
+				kotlin.io.path
+					.createTempFile("test", ".xml")
+					.toFile()
 			try {
 				context.use {
 					val success = editingContextFactory.saveContext(it, tempFile)

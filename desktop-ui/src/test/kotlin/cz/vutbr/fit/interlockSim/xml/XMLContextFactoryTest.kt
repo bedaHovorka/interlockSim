@@ -19,7 +19,6 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultRailWayNetGrid
@@ -35,6 +34,7 @@ import cz.vutbr.fit.interlockSim.testutil.exists
 import cz.vutbr.fit.interlockSim.testutil.isFile
 import cz.vutbr.fit.interlockSim.testutil.withMessage
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Resources
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -1091,7 +1091,6 @@ class XMLContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("Praha Topology Improvements (PR #347)")
 	inner class PragueTopologyImprovementsTests {
-
 		@Test
 		@DisplayName("Praha XML loads with exact element counts after PR #347 additions")
 		fun testPragueExactElementCounts() {
@@ -1215,12 +1214,13 @@ class XMLContextFactoryTest : KoinTestBase() {
 			// Four switches sit on the bypass corridor (Y=20). Their types are the
 			// physical orientation of the diverge — assert each one to lock the
 			// bypass topology against regression.
-			val expectedTypes = mapOf(
-				(11 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-				(15 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-				(46 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
-				(51 to 20) to RailSwitch.Type.SIMPLE_RIGHT_FALSE,
-			)
+			val expectedTypes =
+				mapOf(
+					(11 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+					(15 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+					(46 to 20) to RailSwitch.Type.SIMPLE_RIGHT_TRUE,
+					(51 to 20) to RailSwitch.Type.SIMPLE_RIGHT_FALSE
+				)
 			for ((coords, expectedType) in expectedTypes) {
 				val (x, y) = coords
 				val cell = grid.getCellAt(x, y)

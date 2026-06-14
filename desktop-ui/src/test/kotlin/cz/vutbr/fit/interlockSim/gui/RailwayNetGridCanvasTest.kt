@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell.SpatialType
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.util.Point
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -27,7 +28,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 
 /**
  * Tests for RailwayNetGridCanvas context type handling.

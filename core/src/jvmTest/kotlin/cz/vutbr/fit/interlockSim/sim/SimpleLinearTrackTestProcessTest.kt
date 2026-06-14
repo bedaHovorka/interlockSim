@@ -50,15 +50,19 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 	}
 
 	private fun loadLinearContext(): DefaultSimulationContext {
-		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
-			as DefaultSimulationContext
+		val ctx =
+			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
+				as DefaultSimulationContext
 		// Initialise dynamic InOut wrappers before use (mirrors ShuntingLoop tests).
 		ctx.getInOuts()
 		context = ctx
 		return ctx
 	}
 
-	private fun specAB(inTime: Double = 1.0, outTime: Double = 15.0): SimpleLinearTrackTestProcess.TrainSpec =
+	private fun specAB(
+		inTime: Double = 1.0,
+		outTime: Double = 15.0
+	): SimpleLinearTrackTestProcess.TrainSpec =
 		SimpleLinearTrackTestProcess.TrainSpec(
 			inName = "A",
 			outName = "B",
@@ -78,16 +82,17 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val reservationService = ctx.getPathReservationService()
 
 		var capturedTrain: Train? = null
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 50L,
-			trainSpecs = listOf(specAB()),
-			onTrainCreated = { train ->
-				capturedTrain = train
-				val res = reservationService.reservePath(train.name, a, b)
-				assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-			}
-		)
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 50L,
+				trainSpecs = listOf(specAB()),
+				onTrainCreated = { train ->
+					capturedTrain = train
+					val res = reservationService.reservePath(train.name, a, b)
+					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+				}
+			)
 		ctx.setMainProcess(process)
 		ctx.run()
 
@@ -111,11 +116,12 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 	fun `train halts at semaphore when path not reserved`() {
 		val ctx = loadLinearContext()
 		// No reservation — train should enter but not exit.
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 20L,
-			trainSpecs = listOf(specAB())
-		)
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 20L,
+				trainSpecs = listOf(specAB())
+			)
 		ctx.setMainProcess(process)
 		ctx.run()
 
@@ -141,26 +147,28 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 		// Reserve A→B for the FIRST train created; the second cannot claim it.
 		var firstReserved = false
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 30L,
-			trainSpecs = listOf(
-				specAB(inTime = 1.0, outTime = 15.0),
-				specAB(inTime = 2.0, outTime = 20.0)
-			),
-			onTrainCreated = { train ->
-				if (!firstReserved) {
-					val res = reservationService.reservePath(train.name, a, b)
-					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-					firstReserved = true
-				} else {
-					// Train 1 holds A→B: attempting to reserve for train 2 must fail
-					// with AllPathsBlocked, directly exercising the conflict code path.
-					val conflict = reservationService.reservePath(train.name, a, b)
-					assertThat(conflict).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 30L,
+				trainSpecs =
+					listOf(
+						specAB(inTime = 1.0, outTime = 15.0),
+						specAB(inTime = 2.0, outTime = 20.0)
+					),
+				onTrainCreated = { train ->
+					if (!firstReserved) {
+						val res = reservationService.reservePath(train.name, a, b)
+						assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+						firstReserved = true
+					} else {
+						// Train 1 holds A→B: attempting to reserve for train 2 must fail
+						// with AllPathsBlocked, directly exercising the conflict code path.
+						val conflict = reservationService.reservePath(train.name, a, b)
+						assertThat(conflict).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+					}
 				}
-			}
-		)
+			)
 		ctx.setMainProcess(process)
 		ctx.run()
 
@@ -194,32 +202,34 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 		var capturedTrain: Train? = null
 		var distanceBeforeRelease = 0.0
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 60L,
-			trainSpecs = listOf(specAB()),
-			onTrainCreated = { train ->
-				capturedTrain = train
-				// Schedule a helper process that waits before releasing the blocked
-				// path and reassigning it to the real train.  This ensures there is
-				// a genuine "blocked" period: the train is activated and attempts to
-				// proceed, but the path is still held by Phantom.  Only after the
-				// helper fires does the train receive the reservation and resume.
-				val releaseHelper = object : Process() {
-					override suspend fun actions() {
-						hold(10.0) // 10-second blocking window
-						// Train has been active for ~10 sim-seconds but Phantom still
-						// holds the path — it must not have completed its journey yet.
-						assertThat(train.terminated()).isEqualTo(false)
-						distanceBeforeRelease = train.totalDistance
-						reservationService.releasePath("Phantom")
-						val res = reservationService.reservePath(train.name, a, b)
-						assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
-					}
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 60L,
+				trainSpecs = listOf(specAB()),
+				onTrainCreated = { train ->
+					capturedTrain = train
+					// Schedule a helper process that waits before releasing the blocked
+					// path and reassigning it to the real train.  This ensures there is
+					// a genuine "blocked" period: the train is activated and attempts to
+					// proceed, but the path is still held by Phantom.  Only after the
+					// helper fires does the train receive the reservation and resume.
+					val releaseHelper =
+						object : Process() {
+							override suspend fun actions() {
+								hold(10.0) // 10-second blocking window
+								// Train has been active for ~10 sim-seconds but Phantom still
+								// holds the path — it must not have completed its journey yet.
+								assertThat(train.terminated()).isEqualTo(false)
+								distanceBeforeRelease = train.totalDistance
+								reservationService.releasePath("Phantom")
+								val res = reservationService.reservePath(train.name, a, b)
+								assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+							}
+						}
+					Process.activate(releaseHelper)
 				}
-				Process.activate(releaseHelper)
-			}
-		)
+			)
 		ctx.setMainProcess(process)
 		ctx.run()
 

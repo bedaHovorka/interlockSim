@@ -309,19 +309,20 @@ class MenuBar : JMenuBar() {
 
 				override fun done() {
 					this@MenuBar.cursor = savedCursor
-					val simContext = try {
-						get()
-					} catch (ex: ExecutionException) {
-						logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
-						JOptionPane.showMessageDialog(
-							this@MenuBar,
-							"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
-								"Ensure the file is a valid railway network XML.",
-							"Cannot Start Simulation",
-							JOptionPane.ERROR_MESSAGE
-						)
-						return
-					}
+					val simContext =
+						try {
+							get()
+						} catch (ex: ExecutionException) {
+							logger.error(ex.cause ?: ex) { "Failed to load simulation context from $selectedFile" }
+							JOptionPane.showMessageDialog(
+								this@MenuBar,
+								"Failed to start simulation: ${(ex.cause ?: ex).message}\n\n" +
+									"Ensure the file is a valid railway network XML.",
+								"Cannot Start Simulation",
+								JOptionPane.ERROR_MESSAGE
+							)
+							return
+						}
 
 					val frame = getKoin().get<Frame>()
 					frame.modificationTracker.markClean()
@@ -344,7 +345,7 @@ class MenuBar : JMenuBar() {
 	/** Sets the simulation speed multiplier via [SimulationController.setSpeed]. */
 	private inner class SetSpeedAction(
 		private val label: String,
-		private val multiplier: Double,
+		private val multiplier: Double
 	) : AbstractAction(label) {
 		override fun actionPerformed(e: ActionEvent) {
 			val frame = getKoin().get<Frame>()
@@ -370,11 +371,13 @@ class MenuBar : JMenuBar() {
 	internal fun loadSimulationContext(file: File): SimulationContext {
 		val editingContextFactory = getKoin().get<JvmEditingContextFactory>()
 		val simulationContextFactory = getKoin().get<SimulationContextFactory>()
-		return editingContextFactory.createContext(file).use { editCtx ->
-			simulationContextFactory.createContext(editCtx as EditingContext)
-		}.also { simCtx ->
-			simCtx.addReportTypes(*SimulationContext.ReportType.values())
-		}
+		return editingContextFactory
+			.createContext(file)
+			.use { editCtx ->
+				simulationContextFactory.createContext(editCtx as EditingContext)
+			}.also { simCtx ->
+				simCtx.addReportTypes(*SimulationContext.ReportType.values())
+			}
 	}
 
 	init {
@@ -397,8 +400,12 @@ class MenuBar : JMenuBar() {
 	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
 	 *
 	 * Speed presets (0.1x, 0.5x, 1x, 2x, 5x, 10x, 50x) are available via menu items.
-	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
-	 * during simulation mode (Phase 3.1, Issue #193).
+	 * Global keyboard shortcuts (keys 1–5, +/-, Space, S, T) are handled by
+	 * [SimulationKeyBindings] during simulation mode (Phase 3.1, Issue #193; Goal 8).
+	 *
+	 * **Shortcut reservation:** Keys `S` (step event) and `T` (step time) are reserved
+	 * for simulation-mode step controls. Menu items in this application must not use
+	 * `S` or `T` as mnemonics or accelerators, to avoid conflicts with those bindings.
 	 */
 	private fun simulationMenu(): JMenu {
 		val menu = JMenu("Simulation")
@@ -415,7 +422,7 @@ class MenuBar : JMenuBar() {
 				Pair("2x", 2.0),
 				Pair("5x", 5.0),
 				Pair("10x", 10.0),
-				Pair("50x", 50.0),
+				Pair("50x", 50.0)
 			)
 		for ((label, multiplier) in speedPresets) {
 			val item = JMenuItem(SetSpeedAction(label, multiplier))
@@ -449,7 +456,9 @@ class MenuBar : JMenuBar() {
 					"- Key 5: 10x speed<br>" +
 					"- Plus (+): Increase speed by 1.5x<br>" +
 					"- Minus (-): Decrease speed by 1.5x<br>" +
-					"- Space: Pause/resume simulation</html>"
+					"- Space: Pause/resume simulation<br>" +
+					"- S: Step one simulation event when paused<br>" +
+					"- T: Step forward by the configured time delta when paused</html>"
 			)
 		)
 		menu.add(

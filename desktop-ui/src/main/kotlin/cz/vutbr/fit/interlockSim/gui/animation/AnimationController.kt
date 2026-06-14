@@ -10,11 +10,11 @@
 package cz.vutbr.fit.interlockSim.gui.animation
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
-import cz.vutbr.fit.interlockSim.sim.SimulationEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.sim.SimulationEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
 import javax.swing.SwingUtilities

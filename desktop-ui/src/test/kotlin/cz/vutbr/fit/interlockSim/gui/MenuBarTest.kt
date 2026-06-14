@@ -359,10 +359,11 @@ class MenuBarTest : AbstractFrameTestBase() {
 	@Timeout(value = 10, unit = TimeUnit.SECONDS)
 	@DisplayName("loadSimulationContext returns a SimulationContext for a valid XML file")
 	fun loadSimulationContextWithValidFileReturnsContext() {
-		val tempFile = File.createTempFile("vyhybna", ".xml").apply {
-			outputStream().use { out -> TestFixtures.loadShuntingXml().copyTo(out) }
-			deleteOnExit()
-		}
+		val tempFile =
+			File.createTempFile("vyhybna", ".xml").apply {
+				outputStream().use { out -> TestFixtures.loadShuntingXml().copyTo(out) }
+				deleteOnExit()
+			}
 		// Must be called off-EDT (SwingWorker's doInBackground thread)
 		val context = menuBar.loadSimulationContext(tempFile)
 		assertThat(context).isNotNull()

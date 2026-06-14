@@ -464,6 +464,7 @@ class Train :
 			tail.stop()
 			this@Train.stop()
 			velocity.state = 0.0
+			motor.cancelAccelerating()
 		}
 
 		private fun fireStart(

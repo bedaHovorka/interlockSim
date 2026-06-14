@@ -14,8 +14,10 @@ import assertk.assertThat
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -88,7 +90,7 @@ class SimulationSpeedIntegrationTest {
 	@DisplayName("50 rapid speed changes every 10ms do not crash or deadlock")
 	fun rapidSpeedChangesNoCrash() {
 		val simRunning = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
@@ -159,7 +161,7 @@ class SimulationSpeedIntegrationTest {
 	@DisplayName("10 pause/resume cycles complete without deadlock")
 	fun multiplePauseResumeCycles() {
 		val simRunning = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
@@ -194,7 +196,7 @@ class SimulationSpeedIntegrationTest {
 	@DisplayName("stop at 0.1x speed completes within 5 seconds")
 	fun stopAtSlowSpeedCompletesWithinFiveSeconds() {
 		val simRunning = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
@@ -226,14 +228,14 @@ class SimulationSpeedIntegrationTest {
 		// Fires once the sim thread has observed isPaused=true and is about to block.
 		val enteringPauseWait = CountDownLatch(1)
 
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
 					if (runner.isPaused) {
 						// Signal before blocking so the test knows the thread is paused.
 						enteringPauseWait.countDown()
-						runner.awaitIfPaused()
+						runBlocking { runner.awaitIfPaused() }
 					} else {
 						Thread.sleep(10)
 					}
@@ -264,7 +266,7 @@ class SimulationSpeedIntegrationTest {
 		val simRunning = CountDownLatch(1)
 		val failure = AtomicReference<Exception?>(null)
 
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
@@ -282,12 +284,13 @@ class SimulationSpeedIntegrationTest {
 
 		val allReady = CountDownLatch(4)
 		val allDone = CountDownLatch(4)
-		val speedSets = listOf(
-			doubleArrayOf(0.1, 0.5, 1.0),
-			doubleArrayOf(2.0, 5.0, 10.0),
-			doubleArrayOf(20.0, 50.0, 100.0),
-			doubleArrayOf(1.0, 3.0, 7.0),
-		)
+		val speedSets =
+			listOf(
+				doubleArrayOf(0.1, 0.5, 1.0),
+				doubleArrayOf(2.0, 5.0, 10.0),
+				doubleArrayOf(20.0, 50.0, 100.0),
+				doubleArrayOf(1.0, 3.0, 7.0)
+			)
 
 		speedSets.forEach { speeds ->
 			Thread {
@@ -350,7 +353,7 @@ class SimulationSpeedIntegrationTest {
 		val simRunning = CountDownLatch(1)
 		val failure = AtomicReference<Exception?>(null)
 
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
@@ -402,14 +405,14 @@ class SimulationSpeedIntegrationTest {
 		val enteringPauseWait = CountDownLatch(1)
 		// Fires once the sim thread has exited awaitIfPaused() after resuming.
 		val resumedFromPause = CountDownLatch(1)
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			simRunning.countDown()
 			try {
 				while (!Thread.currentThread().isInterrupted) {
 					if (runner.isPaused) {
 						// Signal before blocking so the test can observe it reliably.
 						enteringPauseWait.countDown()
-						runner.awaitIfPaused()
+						runBlocking { runner.awaitIfPaused() }
 						// Signal after unblocking so the test knows the thread resumed.
 						if (resumedFromPause.count > 0L) resumedFromPause.countDown()
 					} else {
@@ -447,7 +450,7 @@ class SimulationSpeedIntegrationTest {
 	 */
 	private fun verifyStopAfterIterations(iterations: Int) {
 		val latch = CountDownLatch(iterations)
-		every { context.run() } answers {
+		every { context.run(ofType<SimulationController>()) } answers {
 			try {
 				while (!Thread.currentThread().isInterrupted) {
 					// throttle(0.1) at 100x → sleepMs = 1ms: no busy spin.

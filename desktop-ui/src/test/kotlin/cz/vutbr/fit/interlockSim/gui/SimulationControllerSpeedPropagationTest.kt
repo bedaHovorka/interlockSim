@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 /**
  * Verifies the missing link the rest of Goal 7's plumbing did not establish:
@@ -50,7 +51,9 @@ import java.util.concurrent.TimeUnit
 @DisplayName("SimulationController -> SpeedControllable propagation")
 class SimulationControllerSpeedPropagationTest {
 	/** A LoopProcess that exposes a mutable speed multiplier for assertion. */
-	private class FakeSpeedyMainProcess : LoopProcess(), SpeedControllable {
+	private class FakeSpeedyMainProcess :
+		LoopProcess(),
+		SpeedControllable {
 		@Volatile
 		override var speedMultiplier: Double = 1.0
 
@@ -89,7 +92,7 @@ class SimulationControllerSpeedPropagationTest {
 	private fun mockContext(mainProcess: LoopProcess?): DefaultSimulationContext =
 		mockk<DefaultSimulationContext>(relaxed = true).also { ctx ->
 			every { ctx.getMainProcess() } returns mainProcess
-			every { ctx.run() } answers {
+			every { ctx.run(ofType<CoreSimulationController>()) } answers {
 				startedLatch.countDown()
 				blockSim.await(30, TimeUnit.SECONDS)
 			}

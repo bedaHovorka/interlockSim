@@ -21,6 +21,7 @@ import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
+import java.beans.PropertyChangeListener
 import javax.swing.BoxLayout
 import javax.swing.JFrame
 import javax.swing.JOptionPane
@@ -109,9 +110,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var animationUpdateTimer: Timer? = null
 
 	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
-	private val southPanel: JPanel = JPanel().apply {
-		layout = BoxLayout(this, BoxLayout.Y_AXIS)
-	}
+	private val southPanel: JPanel =
+		JPanel().apply {
+			layout = BoxLayout(this, BoxLayout.Y_AXIS)
+		}
 
 	// Simulation lifecycle delegated to SimulationController for testability (Issue #189)
 	internal val simulationController: SimulationController =
@@ -139,6 +141,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 		)
 	private var currentSimulationContext: SimulationContext? = null
+
+	/** Listener registered on the active runner for pause-state changes; removed on stop. */
+	private var pausedListener: PropertyChangeListener? = null
 
 	// Global keyboard shortcuts for simulation speed control (Phase 3.1, Issue #193)
 	private val simulationKeyBindings: SimulationKeyBindings = SimulationKeyBindings(simulationController)
@@ -395,14 +400,32 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			"startSimulation must be called from EDT"
 		}
 
-		val context = currentSimulationContext ?: run {
-			logger.warn { "startSimulation called without a SimulationContext — ignoring" }
-			return
-		}
+		val context =
+			currentSimulationContext ?: run {
+				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
+				return
+			}
 
 		try {
 			simulationController.start(context)
-			simulationControlPanel.runner = simulationController.runner?.takeIf { it.isRunning() }
+			val activeRunner = simulationController.runner?.takeIf { it.isRunning() }
+			simulationControlPanel.runner = activeRunner
+
+			// Wire statusBar paused indicator to the runner's PROP_IS_PAUSED events.
+			pausedListener?.let { old ->
+				simulationController.runner?.removePropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, old)
+			}
+			if (activeRunner != null) {
+				val listener =
+					PropertyChangeListener { evt ->
+						val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
+						statusBar.setPaused(paused)
+					}
+				pausedListener = listener
+				activeRunner.addPropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, listener)
+				// Sync immediately with the current paused state.
+				statusBar.setPaused(activeRunner.isPaused)
+			}
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to start simulation" }
 		}
@@ -420,9 +443,16 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		require(javax.swing.SwingUtilities.isEventDispatchThread()) {
 			"stopSimulation must be called from EDT"
 		}
+		// Remove paused listener before stopping the runner.
+		pausedListener?.let { listener ->
+			simulationController.runner?.removePropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, listener)
+		}
+		pausedListener = null
 		simulationController.stop()
 		// Detach SimulationControlPanel from runner when simulation stops
 		simulationControlPanel.runner = null
+		// Clear the paused indicator when the simulation stops.
+		statusBar.setPaused(false)
 	}
 
 	companion object {

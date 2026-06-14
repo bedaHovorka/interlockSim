@@ -79,11 +79,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	@Test
 	fun testCalculateTrainGridLocation_nullSection() {
 		// Null track section - should return null
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			null,
-			50.0
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				null,
+				50.0
+			)
 
 		assertThat(gridLocation).isNull()
 	}
@@ -92,11 +93,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testCalculateTrainGridLocation_atStart() {
 		// Train at start of section (distance = 0)
 		val trackSection = getFirstTrackSection()
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			trackSection,
-			0.0
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				0.0
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be at one of the endpoints
@@ -108,11 +110,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train at midpoint of section
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			trackSection,
-			sectionLength / 2.0
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				sectionLength / 2.0
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be between the two endpoints
@@ -124,11 +127,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train at end of section (distance = length)
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			trackSection,
-			sectionLength
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				sectionLength
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be at one of the endpoints
@@ -140,11 +144,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// Train beyond end of section (distance > length) - should clamp to 1.0
 		val trackSection = getFirstTrackSection()
 		val sectionLength = trackSection?.length() ?: 0.0
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			trackSection,
-			sectionLength * 2.0
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				sectionLength * 2.0
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be clamped to end of section
@@ -155,11 +160,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	fun testCalculateTrainGridLocation_negativeDistance() {
 		// Train before start (negative distance) - should clamp to 0.0
 		val trackSection = getFirstTrackSection()
-		val gridLocation = calculator.calculateTrainGridLocation(
-			mockTrain,
-			trackSection,
-			-10.0
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				mockTrain,
+				trackSection,
+				-10.0
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Should be clamped to start of section
@@ -201,11 +207,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
-		val gridLocation = calculator.calculateTrainGridLocation(
-			trainWithEntry,
-			trackSection,
-			sectionLength * 0.25
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				sectionLength * 0.25
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Directional check: at 25% the result must be closer to ends[0] (entry) than to ends[1] (exit)
@@ -213,8 +220,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val end1GridPos = calculator.getGridPosition(ends[1])
 		assertThat(end0GridPos).isNotNull()
 		assertThat(end1GridPos).isNotNull()
-		val end0F = cz.vutbr.fit.interlockSim.util.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
-		val end1F = cz.vutbr.fit.interlockSim.util.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
+		val end0F =
+			cz.vutbr.fit.interlockSim.util
+				.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
+		val end1F =
+			cz.vutbr.fit.interlockSim.util
+				.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
 		assertThat(gridLocation!!.distanceTo(end0F) < gridLocation.distanceTo(end1F)).isEqualTo(true)
 	}
 
@@ -235,11 +246,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		// Calculate position at 25% — train is closer to the entry end than to the exit end
 		val sectionLength = trackSection.length()
-		val gridLocation = calculator.calculateTrainGridLocation(
-			trainWithEntry,
-			trackSection,
-			sectionLength * 0.25
-		)
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				sectionLength * 0.25
+			)
 
 		assertThat(gridLocation).isNotNull()
 		// Directional check: at 25% the result must be closer to ends[1] (entry) than to ends[0] (reversed order)
@@ -247,8 +259,12 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val end1GridPos = calculator.getGridPosition(ends[1])
 		assertThat(end0GridPos).isNotNull()
 		assertThat(end1GridPos).isNotNull()
-		val end0F = cz.vutbr.fit.interlockSim.util.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
-		val end1F = cz.vutbr.fit.interlockSim.util.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
+		val end0F =
+			cz.vutbr.fit.interlockSim.util
+				.PointF(end0GridPos!!.x.toFloat(), end0GridPos.y.toFloat())
+		val end1F =
+			cz.vutbr.fit.interlockSim.util
+				.PointF(end1GridPos!!.x.toFloat(), end1GridPos.y.toFloat())
 		assertThat(gridLocation!!.distanceTo(end1F) < gridLocation.distanceTo(end0F)).isEqualTo(true)
 	}
 
@@ -263,9 +279,11 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 
 		// Create mock train with entry separator that doesn't match either end
 		// Use a different separator from the network
-		val allSeparators = context.getRailWayNetGrid()
-			.map { it.value }
-			.filterIsInstance<DynamicPathSeparator>()
+		val allSeparators =
+			context
+				.getRailWayNetGrid()
+				.map { it.value }
+				.filterIsInstance<DynamicPathSeparator>()
 
 		val differentSeparator: DynamicPathSeparator? =
 			allSeparators.firstOrNull { it !== ends[0] && it !== ends[1] }
@@ -301,20 +319,22 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
 
 		// Test at start (distance = 0)
-		val gridLocationStart = calculator.calculateTrainGridLocation(
-			trainWithEntry,
-			trackSection,
-			0.0
-		)
+		val gridLocationStart =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				0.0
+			)
 		assertThat(gridLocationStart).isNotNull()
 
 		// Test at end (distance = length)
 		val sectionLength = trackSection.length()
-		val gridLocationEnd = calculator.calculateTrainGridLocation(
-			trainWithEntry,
-			trackSection,
-			sectionLength
-		)
+		val gridLocationEnd =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				sectionLength
+			)
 		assertThat(gridLocationEnd).isNotNull()
 
 		// Positions should be different (start vs end)
@@ -350,16 +370,18 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		val sectionLength = trackSection.length()
 		val quarterPoint = sectionLength * 0.25
 
-		val positionFromEnd0 = calculator.calculateTrainGridLocation(
-			trainFromEnd0,
-			trackSection,
-			quarterPoint
-		)
-		val positionFromEnd1 = calculator.calculateTrainGridLocation(
-			trainFromEnd1,
-			trackSection,
-			quarterPoint
-		)
+		val positionFromEnd0 =
+			calculator.calculateTrainGridLocation(
+				trainFromEnd0,
+				trackSection,
+				quarterPoint
+			)
+		val positionFromEnd1 =
+			calculator.calculateTrainGridLocation(
+				trainFromEnd1,
+				trackSection,
+				quarterPoint
+			)
 
 		assertThat(positionFromEnd0).isNotNull()
 		assertThat(positionFromEnd1).isNotNull()

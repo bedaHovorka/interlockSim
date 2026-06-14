@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.awt.KeyboardFocusManager
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import javax.swing.AbstractAction
 import javax.swing.JComponent
 import javax.swing.KeyStroke
+import javax.swing.text.JTextComponent
 
 /**
  * Global keyboard shortcuts for simulation speed control (Phase 3.1 of Goal 7, Issue #193).
@@ -22,10 +24,19 @@ import javax.swing.KeyStroke
  * Provides:
  * - Number keys 1-5 → Speed presets (0.5×, 1×, 2×, 5×, 10×)
  * - Plus/minus keys → Incremental speed adjustment (×1.5 or ÷1.5)
- * - Space bar → Pause/resume toggle (Goal 8 preparation)
+ * - Space bar → Pause/resume toggle (Goal 8)
+ * - `S` → Step one simulation event when paused (Goal 8)
+ * - `T` → Step simulation by [SimulationRunner.stepTimeDelta] sim-seconds when paused (Goal 8)
  *
  * All bindings use [JComponent.WHEN_IN_FOCUSED_WINDOW] scope so they work whenever
  * the [Frame] has focus, regardless of which component has keyboard focus.
+ *
+ * Shortcuts are suppressed while a text component has keyboard focus, so typing in
+ * fields such as the Step Time spinner does not accidentally trigger simulation actions.
+ *
+ * Step shortcuts `S` and `T` are deliberately bound as plain keystrokes (no Alt/Ctrl
+ * modifiers). They are active only while the frame is in simulation mode and must not
+ * overlap with menu mnemonics/accelerators; [MenuBar] reserves those keys accordingly.
  *
  * ## Usage
  * ```kotlin
@@ -82,6 +93,12 @@ internal class SimulationKeyBindings(
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), ACTION_KEY_PAUSE_TOGGLE)
 		actionMap.put(ACTION_KEY_PAUSE_TOGGLE, PauseToggleAction())
 
+		// Step controls: S → step one event, T → step by time delta (Goal 8)
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0), ACTION_KEY_STEP_EVENT)
+		actionMap.put(ACTION_KEY_STEP_EVENT, StepEventAction())
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0), ACTION_KEY_STEP_TIME)
+		actionMap.put(ACTION_KEY_STEP_TIME, StepTimeAction())
+
 		logger.debug { "Simulation keyboard shortcuts installed" }
 	}
 
@@ -116,10 +133,28 @@ internal class SimulationKeyBindings(
 		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0))
 		actionMap.remove(ACTION_KEY_PAUSE_TOGGLE)
 
+		// Remove step control bindings
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0))
+		actionMap.remove(ACTION_KEY_STEP_EVENT)
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0))
+		actionMap.remove(ACTION_KEY_STEP_TIME)
+
 		logger.debug { "Simulation keyboard shortcuts uninstalled" }
 	}
 
 	// ── Action implementations ─────────────────────────────────────────────────
+
+	/**
+	 * Returns `true` when the current keyboard focus owner is a text component.
+	 *
+	 * Global shortcuts use [JComponent.WHEN_IN_FOCUSED_WINDOW] scope, which would otherwise
+	 * intercept keys typed into text fields (e.g. the Step Time spinner). This guard lets
+	 * text components consume the key event normally.
+	 */
+	private fun isFocusInTextComponent(): Boolean {
+		val focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+		return focusOwner is JTextComponent
+	}
 
 	/**
 	 * Action that sets the simulation speed to a fixed preset value.
@@ -127,11 +162,17 @@ internal class SimulationKeyBindings(
 	 * If no simulation is running, [SimulationController.setSpeed] updates [SimulationController.desiredSpeed]
 	 * which will be applied when the next simulation starts.
 	 */
-	private inner class SpeedPresetAction(private val speed: Double) : AbstractAction() {
+	private inner class SpeedPresetAction(
+		private val speed: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Speed preset ignored while focus is in a text component" }
+				return
+			}
 			try {
 				simulationController.setSpeed(speed)
-				logger.debug { "Speed preset applied: ${speed}×" }
+				logger.debug { "Speed preset applied: $speed×" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed preset: $speed — ${ex.message}" }
 			}
@@ -149,17 +190,24 @@ internal class SimulationKeyBindings(
 	 * When no simulation is running, this updates [SimulationController.desiredSpeed] so the
 	 * adjusted speed is honoured when the next simulation starts.
 	 */
-	private inner class IncrementalSpeedAction(private val multiplier: Double) : AbstractAction() {
+	private inner class IncrementalSpeedAction(
+		private val multiplier: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Speed adjustment ignored while focus is in a text component" }
+				return
+			}
 			val currentSpeed = simulationController.speed
-			val newSpeed = (currentSpeed * multiplier).coerceIn(
-				SimulationRunner.MIN_SPEED,
-				SimulationRunner.MAX_SPEED
-			)
+			val newSpeed =
+				(currentSpeed * multiplier).coerceIn(
+					SimulationRunner.MIN_SPEED,
+					SimulationRunner.MAX_SPEED
+				)
 
 			try {
 				simulationController.setSpeed(newSpeed)
-				logger.debug { "Speed adjusted: ${currentSpeed}× → ${newSpeed}× (×$multiplier)" }
+				logger.debug { "Speed adjusted: $currentSpeed× → $newSpeed× (×$multiplier)" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed adjustment: $newSpeed — ${ex.message}" }
 			}
@@ -178,6 +226,10 @@ internal class SimulationKeyBindings(
 	 */
 	private inner class PauseToggleAction : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Pause toggle ignored while focus is in a text component" }
+				return
+			}
 			val runner = simulationController.runner
 			if (runner == null) {
 				logger.debug { "Pause toggle ignored (no simulation running)" }
@@ -187,6 +239,51 @@ internal class SimulationKeyBindings(
 			val wasPaused = runner.isPaused
 			runner.isPaused = !wasPaused
 			logger.debug { "Simulation ${if (wasPaused) "resumed" else "paused"}" }
+		}
+	}
+
+	/**
+	 * Action that advances the simulation by one event when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepEvent]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepEventAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Step-event ignored while focus is in a text component" }
+				return
+			}
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-event ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepEvent()
+			logger.debug { "Step-event requested" }
+		}
+	}
+
+	/**
+	 * Action that advances the simulation by [SimulationRunner.stepTimeDelta] sim-seconds
+	 * when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepTime]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepTimeAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Step-time ignored while focus is in a text component" }
+				return
+			}
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-time ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepTime(runner.stepTimeDelta)
+			logger.debug { "Step-time requested (delta=${runner.stepTimeDelta}s)" }
 		}
 	}
 
@@ -200,6 +297,12 @@ internal class SimulationKeyBindings(
 		/** Action key for pause/resume toggle. */
 		private const val ACTION_KEY_PAUSE_TOGGLE = "simulation_pause_toggle"
 
+		/** Action key for step-event shortcut (key S). */
+		private const val ACTION_KEY_STEP_EVENT = "simulation_step_event"
+
+		/** Action key for step-time shortcut (key T). */
+		private const val ACTION_KEY_STEP_TIME = "simulation_step_time"
+
 		/** Incremental speed multiplier: ×1.5 for speed-up, ÷1.5 for speed-down. */
 		private const val SPEED_INCREMENT = 1.5
 
@@ -208,12 +311,13 @@ internal class SimulationKeyBindings(
 		 * Keys 1-5 → 0.5×, 1×, 2×, 5×, 10× (matches the five standard presets in the UI panel and menu).
 		 * Note: 0.5× is accessible only via keyboard (key 1), panel, or menu — not via incremental shortcuts.
 		 */
-		private val PRESET_BINDINGS: Map<Int, Double> = mapOf(
-			KeyEvent.VK_1 to 0.5,
-			KeyEvent.VK_2 to 1.0,
-			KeyEvent.VK_3 to 2.0,
-			KeyEvent.VK_4 to 5.0,
-			KeyEvent.VK_5 to 10.0
-		)
+		private val PRESET_BINDINGS: Map<Int, Double> =
+			mapOf(
+				KeyEvent.VK_1 to 0.5,
+				KeyEvent.VK_2 to 1.0,
+				KeyEvent.VK_3 to 2.0,
+				KeyEvent.VK_4 to 5.0,
+				KeyEvent.VK_5 to 10.0
+			)
 	}
 }

@@ -33,7 +33,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("InOutWorker.iteration — path reservation branches")
 class InOutWorkerIterationTest : KoinTestBase() {
-
 	private var context: DefaultSimulationContext? = null
 
 	@AfterEach
@@ -43,32 +42,36 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	}
 
 	private fun loadLinearContext(): DefaultSimulationContext {
-		val ctx = TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
-			as DefaultSimulationContext
+		val ctx =
+			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = true)
+				as DefaultSimulationContext
 		ctx.getInOuts()
 		context = ctx
 		return ctx
 	}
 
-	private fun specAB(inTime: Double = 1.0, outTime: Double = 20.0) =
-		SimpleLinearTrackTestProcess.TrainSpec(
-			inName = "A",
-			outName = "B",
-			inTime = inTime,
-			outTime = outTime,
-			length = 20.0
-		)
+	private fun specAB(
+		inTime: Double = 1.0,
+		outTime: Double = 20.0
+	) = SimpleLinearTrackTestProcess.TrainSpec(
+		inName = "A",
+		outName = "B",
+		inTime = inTime,
+		outTime = outTime,
+		length = 20.0
+	)
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	@DisplayName("Single train: iteration() reserves path and clears queue (Success path)")
 	fun `iteration reserves path and clears queue on success`() {
 		val ctx = loadLinearContext()
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 50L,
-			trainSpecs = listOf(specAB())
-		)
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 50L,
+				trainSpecs = listOf(specAB())
+			)
 		ctx.setMainProcess(process)
 		ctx.run()
 
@@ -81,14 +84,16 @@ class InOutWorkerIterationTest : KoinTestBase() {
 	@DisplayName("Two trains: second train waits while first occupies path, then both complete")
 	fun `iteration processes two sequential trains both completing successfully`() {
 		val ctx = loadLinearContext()
-		val process = SimpleLinearTrackTestProcess(
-			ctx,
-			endTime = 100L,
-			trainSpecs = listOf(
-				specAB(inTime = 1.0, outTime = 40.0),
-				specAB(inTime = 2.0, outTime = 80.0)
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 100L,
+				trainSpecs =
+					listOf(
+						specAB(inTime = 1.0, outTime = 40.0),
+						specAB(inTime = 2.0, outTime = 80.0)
+					)
 			)
-		)
 		ctx.setMainProcess(process)
 		ctx.run()
 

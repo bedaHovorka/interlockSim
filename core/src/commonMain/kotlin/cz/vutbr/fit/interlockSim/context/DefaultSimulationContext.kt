@@ -117,7 +117,7 @@ open class DefaultSimulationContext(
 	 * Factory for creating simulation processes.
 	 * Decouples context from concrete simulation class implementations.
 	 */
-	private val processFactory: SimulationProcessFactory
+	private val processFactory: SimulationProcessFactory,
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
@@ -273,7 +273,7 @@ open class DefaultSimulationContext(
 		 */
 		fun fromEditingContext(
 			editingContext: EditingContext,
-			processFactory: SimulationProcessFactory
+			processFactory: SimulationProcessFactory,
 		): DefaultSimulationContext {
 			// Create base simulation context
 			val grid = editingContext.getRailWayNetGrid()
@@ -1083,7 +1083,7 @@ open class DefaultSimulationContext(
 		)
 	}
 
-	override fun run() {
+	override fun run(controller: SimulationController) {
 		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
 		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
 			logger.warn {
@@ -1133,7 +1133,29 @@ open class DefaultSimulationContext(
 			}
 		simulation = sim
 		try {
-			runBlocking { sim.run(Double.MAX_VALUE) }
+			var prevTime = 0.0
+			var stepTimeTarget: Double? = null
+			runBlocking {
+				sim.run(Double.MAX_VALUE) {
+					val t = sim.time()
+					// Reset step-time guard when target is reached (clock caught up)
+					if (stepTimeTarget != null && t >= stepTimeTarget!!) stepTimeTarget = null
+					// Throttle wall-clock relative to simulation time advanced
+					controller.throttle(t - prevTime)
+					prevTime = t
+					// If we are NOT mid-step-time run: apply pause/step control
+					if (stepTimeTarget == null) {
+						if (controller.isPaused()) logger.debug { "Simulation paused at t=$t" }
+						controller.awaitIfPaused()
+						// Consume a step-event request. Return value intentionally not acted on:
+						// per SimulationController contract, isPaused() remains true after a
+						// step-event is consumed, so the next iteration re-enters awaitIfPaused().
+						controller.pollStepEvent()
+						// Consume a step-time request; if present, allow events to run until target
+						controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }
+					}
+				}
+			}
 		} catch (e: DiscoException) {
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)

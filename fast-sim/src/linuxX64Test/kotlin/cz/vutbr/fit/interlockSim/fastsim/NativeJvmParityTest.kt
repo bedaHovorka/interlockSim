@@ -42,7 +42,6 @@ import kotlin.test.assertTrue
  * @see NativeExampleRegistry
  */
 class NativeJvmParityTest {
-
 	companion object {
 		private const val END_TIME = 60L
 		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
@@ -112,9 +111,14 @@ class NativeJvmParityTest {
 	@Test
 	fun `invariant 5 - events are in chronological order`() {
 		val (events, _) = runSimulationAndCollect()
-		val timestamps = events.mapNotNull { line ->
-			timestampRegex.find(line)?.groupValues?.get(1)?.toDouble()
-		}
+		val timestamps =
+			events.mapNotNull { line ->
+				timestampRegex
+					.find(line)
+					?.groupValues
+					?.get(1)
+					?.toDouble()
+			}
 		assertTrue(timestamps.size == events.size, "All event lines should have parseable timestamps")
 		for (i in 1 until timestamps.size) {
 			assertTrue(

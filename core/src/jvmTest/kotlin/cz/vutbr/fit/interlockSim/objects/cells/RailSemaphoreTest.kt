@@ -164,7 +164,8 @@ class RailSemaphoreTest : KoinTestBase() {
 				.withInOut("OUT", 2, 0, false)
 				.withConnection(0, 0, 1, 0, 100.0, 20.0)
 				.withConnection(1, 0, 2, 0, 100.0, 20.0)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Get the semaphore from context
 					val dynSemaphore =
 						context
@@ -215,7 +216,8 @@ class RailSemaphoreTest : KoinTestBase() {
 				.withInOut("OUT", 2, 0, false)
 				.withConnection(0, 0, 1, 0, 100.0, 20.0)
 				.withConnection(1, 0, 2, 0, 100.0, 20.0)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					val dynSemaphore =
 						context
@@ -238,7 +240,8 @@ class RailSemaphoreTest : KoinTestBase() {
 				.withInOut("OUT", 2, 0, false)
 				.withConnection(0, 0, 1, 0, 100.0, 20.0)
 				.withConnection(1, 0, 2, 0, 100.0, 20.0)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					val dynSemaphore =
 						context
 							.getRailWayNetGrid()

@@ -81,7 +81,8 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
-			ctx.run() // covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
+			ctx.run()
+			// covers: while-loop body, hold(1.0), isReporting==true branch, terminate()
 
 			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 			// is registered (which is always true after ShuntingLoop.actions() runs).
@@ -105,7 +106,8 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
-			ctx.run() // covers: TrainReporter terminate() path when simulation ends
+			ctx.run()
+			// covers: TrainReporter terminate() path when simulation ends
 
 			// Verify TrainReporter.actions() actually executed — not just that TRAIN_CONTINUOUS
 			// is registered (which is always true after ShuntingLoop.actions() runs).

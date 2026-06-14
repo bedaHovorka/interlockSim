@@ -28,14 +28,14 @@ import kotlin.test.Test
  * Note: `start()` is not tested — it requires an active kDisco simulation context.
  */
 class ContinuousInvariantCheckerTest {
-
 	private var shouldPass = true
 
-	private val checker = object : ContinuousInvariantChecker() {
-		override fun check() = shouldPass
-		override fun report(reportObj: StringBuilder): StringBuilder =
-			reportObj.append("invariant violated")
-	}
+	private val checker =
+		object : ContinuousInvariantChecker() {
+			override fun check() = shouldPass
+
+			override fun report(reportObj: StringBuilder): StringBuilder = reportObj.append("invariant violated")
+		}
 
 	@Test
 	fun derivatives_invariantHolds_noException() {

@@ -22,6 +22,7 @@ import javax.swing.JPanel
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import kotlin.math.abs
+import cz.vutbr.fit.interlockSim.context.SimulationController as CoreSimulationController
 
 /**
  * Unit tests for [SimulationKeyBindings] (Phase 3.1, Issue #193).
@@ -51,7 +52,7 @@ class SimulationKeyBindingsTest {
 
 		// Create mocked simulation context that blocks until tearDown
 		simulationContext = mockk(relaxed = true)
-		every { simulationContext.run() } answers {
+		every { simulationContext.run(ofType<CoreSimulationController>()) } answers {
 			blockSim.await(10, TimeUnit.SECONDS)
 		}
 

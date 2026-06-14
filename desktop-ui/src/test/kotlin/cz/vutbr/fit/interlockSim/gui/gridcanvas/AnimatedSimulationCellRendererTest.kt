@@ -56,6 +56,7 @@ class AnimatedSimulationCellRendererTest {
 		const val MIN_CAB_NARROWNESS_PIXELS = 2
 		const val MIN_NOSE_TAPER_PIXELS = 3
 		const val NOSE_BASE_OFFSET_PIXELS = MIN_NOSE_TAPER_PIXELS
+
 		// These divisors intentionally sample the current silhouette in the rear cab and main-body midpoint.
 		// If the production cab/body ratios change substantially, these probe positions should be revisited too.
 		const val CAB_SAMPLE_POSITION_DIVISOR = 6 // ~17% of total width samples inside the narrower rear cab.

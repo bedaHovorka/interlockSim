@@ -293,7 +293,8 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)
 			.withInOut("B", 5, 5, false)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				val navigator: TopologyNavigator = context.scope.get()
 				val grid = context.getRailWayNetGrid()
 				val inOutA = grid.getCellAt(1, 1) as InOut
@@ -373,7 +374,8 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 			.withConnection(1, 1, 2, 2, 100.0, 80.0)
 			.withConnection(2, 2, 3, 3, 100.0, 80.0)
 			.withConnection(3, 3, 5, 5, 100.0, 80.0)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				val navigator: TopologyNavigator = context.scope.get()
 				val grid = context.getRailWayNetGrid()
 				val inOutA = grid.getCellAt(1, 1) as InOut
@@ -647,14 +649,16 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 			.withInOut("B", 9, 9, false)
 			.withConnection(1, 1, 5, 5, 100.0, 80.0)
 			.withConnection(5, 5, 9, 9, 100.0, 80.0)
-			.buildEditingContext().use { editingContext ->
+			.buildEditingContext()
+			.use { editingContext ->
 				TestContextBuilder()
 					.withInOut("A", 1, 1, true)
 					.withSemaphore(5, 5, false) // RED semaphore
 					.withInOut("B", 9, 9, false)
 					.withConnection(1, 1, 5, 5, 100.0, 80.0)
 					.withConnection(5, 5, 9, 9, 100.0, 80.0)
-					.buildSimulationContext().use { simulationContext ->
+					.buildSimulationContext()
+					.use { simulationContext ->
 						// Create navigators for both contexts
 						val staticNavigator = DefaultTopologyNavigator(editingContext)
 						val dynamicNavigator = DefaultTopologyNavigator(simulationContext)
@@ -718,7 +722,8 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 			.withConnection(3, 3, 5, 5, 100.0, 80.0)
 			.withConnection(5, 5, 7, 7, 100.0, 80.0)
 			.withConnection(7, 7, 9, 9, 100.0, 80.0)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				val navigator: TopologyNavigator = context.scope.get()
 				val grid = context.getRailWayNetGrid()
 				val inOutA = grid.getCellAt(1, 1) as InOut
@@ -834,7 +839,8 @@ class TopologyNavigatorTest : CommonKoinTestBase() {
 			.withConnection(4, 5, 5, 5, 100.0, 80.0)
 			.withConnection(5, 5, 6, 5, 100.0, 80.0)
 			.withConnection(6, 5, 7, 5, 100.0, 80.0)
-			.buildEditingContext().use { context ->
+			.buildEditingContext()
+			.use { context ->
 				val navigator: TopologyNavigator = context.scope.get()
 				val grid = context.getRailWayNetGrid()
 				val inOutA = grid.getCellAt(1, 5) as InOut
