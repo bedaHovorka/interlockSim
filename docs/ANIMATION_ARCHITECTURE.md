@@ -149,12 +149,16 @@ The AnimatedSim architecture provides real-time visual simulation of railway ope
   - Signal visualization (RED/GREEN semaphores)
   - Switch position display (MAIN/BRANCH)
 
-### Frame + ControlPanel + EventTimelinePanel (EDT)
+### Frame + ControlPanel + EventTimelinePanel + StatusBar (EDT)
 - **Purpose:** UI container and supplementary displays
 - **Thread:** EDT
 - **Update Rates:**
   - ControlPanel time: 10 Hz (100ms timer, reads AnimationState)
   - EventTimelinePanel: Real-time event display with filtering
+- **StatusBar pause badge:** The status bar also surfaces the current pause state (Goal 8)
+  via a `[PAUSED]` badge, rendered in `PAUSED_BADGE_COLOR`, next to the speed multiplier
+  indicator. Pause events from `SimulationRunner.PROP_IS_PAUSED` are marshaled to the EDT
+  before updating the badge.
 
 ---
 
@@ -334,6 +338,26 @@ EDT:
 - **TopologyNavigator** - Static graph traversal for validation
 - **PathReservationService** - Track ownership for coloring
 - **TrainNavigationService** - Train path visualization
+
+---
+
+## Keyboard Shortcuts
+
+The simulation view registers global key bindings on the frame's root pane via
+[SimulationKeyBindings](src/main/kotlin/cz/vutbr/fit/interlockSim/gui/SimulationKeyBindings.kt).
+These shortcuts are active whenever the simulation window has focus:
+
+| Key | Action |
+|-----|--------|
+| `1` – `5` | Speed presets: `0.5×`, `1×`, `2×`, `5×`, `10×` |
+| `+` / `-` | Increase or decrease speed by a factor of `1.5` |
+| `Space` | Pause / resume the simulation |
+| `S` | Step one simulation event when paused |
+| `T` | Step forward by the configured time delta when paused |
+
+All shortcuts are suppressed while keyboard focus is inside a text component
+(e.g. the Step Time spinner), so typing into those fields does not accidentally
+trigger simulation commands.
 
 ---
 
