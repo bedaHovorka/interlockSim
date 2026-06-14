@@ -419,12 +419,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				val listener =
 					PropertyChangeListener { evt ->
 						val paused = evt.newValue as? Boolean ?: return@PropertyChangeListener
-						statusBar.updatePausedIndicator(paused)
+						statusBar.setPaused(paused)
 					}
 				pausedListener = listener
 				activeRunner.addPropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, listener)
 				// Sync immediately with the current paused state.
-				statusBar.updatePausedIndicator(activeRunner.isPaused)
+				statusBar.setPaused(activeRunner.isPaused)
 			}
 		} catch (e: Exception) {
 			logger.error(e) { "Failed to start simulation" }
@@ -452,7 +452,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Detach SimulationControlPanel from runner when simulation stops
 		simulationControlPanel.runner = null
 		// Clear the paused indicator when the simulation stops.
-		statusBar.updatePausedIndicator(false)
+		statusBar.setPaused(false)
 	}
 
 	companion object {

@@ -13,7 +13,9 @@ import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
+import cz.vutbr.fit.interlockSim.gui.StatusBarColors.PAUSED_BADGE_COLOR
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.MouseEvent
@@ -30,7 +32,7 @@ import kotlin.math.abs
  * Implemented as a [JPanel] containing three labels:
  * - [statusLabel] (CENTER): shows context property-change messages and mouse-position info.
  * - [pausedLabel] (EAST, leftmost): shows "[PAUSED]" when the simulation is paused; hidden
- *   otherwise. Written only from EDT via [updatePausedIndicator].
+ *   otherwise. Written only from EDT via [setPaused].
  * - [speedLabel] (EAST, rightmost): shows the current simulation speed multiplier when it
  *   differs from 1.0x; hidden at default speed. Written only from EDT via [updateSpeedIndicator].
  *
@@ -166,15 +168,15 @@ class StatusBar :
 	/**
 	 * Shows or hides the "[PAUSED]" indicator in [pausedLabel].
 	 *
-	 * When [paused] is `true`, [pausedLabel] shows "[PAUSED]" and becomes visible.
-	 * When `false`, the label text is cleared and hidden.
+	 * When [paused] is `true`, [pausedLabel] shows "[PAUSED]" in [PAUSED_BADGE_COLOR]
+	 * and becomes visible. When `false`, the label text is cleared and hidden.
 	 *
 	 * This method is EDT-safe: it executes synchronously when already on the EDT and
 	 * uses [SwingUtilities.invokeLater] when called from a background thread.
 	 *
 	 * @param paused Current paused state from [SimulationRunner]
 	 */
-	fun updatePausedIndicator(paused: Boolean) {
+	fun setPaused(paused: Boolean) {
 		if (SwingUtilities.isEventDispatchThread()) {
 			applyPausedIndicator(paused)
 		} else {
@@ -185,6 +187,7 @@ class StatusBar :
 	private fun applyPausedIndicator(paused: Boolean) {
 		pausedLabel.text = if (paused) "[PAUSED]" else ""
 		pausedLabel.isVisible = paused
+		pausedLabel.foreground = PAUSED_BADGE_COLOR
 	}
 
 	/** Returns `true` when the paused indicator label is currently visible. */
@@ -192,6 +195,9 @@ class StatusBar :
 
 	/** Returns the current paused indicator text, or an empty string when hidden. */
 	internal fun pausedIndicatorText(): String = pausedLabel.text ?: ""
+
+	/** Returns the current paused indicator foreground color. */
+	internal fun pausedIndicatorForeground(): Color = pausedLabel.foreground
 
 	companion object {
 		private const val DEFAULT_SPEED = 1.0

@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.gui
 
+import java.awt.Color
+
 /**
  * GUI rendering and interaction constants.
  *
@@ -38,4 +40,12 @@ object GridDimensions {
 object IconSizes {
 	/** Standard icon size for toolbar actions (pixels) */
 	const val ACTION_ICON_SIZE = 20
+}
+
+/**
+ * Status bar badge colors.
+ */
+object StatusBarColors {
+	/** Distinct color for the paused-state badge shown next to the speed indicator. */
+	val PAUSED_BADGE_COLOR: Color = Color(0xFF, 0x8C, 0x00)
 }
