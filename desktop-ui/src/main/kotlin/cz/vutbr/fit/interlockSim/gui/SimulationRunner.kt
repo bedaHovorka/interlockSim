@@ -10,35 +10,43 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationController
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
 
 /**
- * Wall-clock throttling wrapper around [SimulationContext.run].
+ * Wall-clock throttling wrapper and [SimulationController] implementation.
  *
- * Phase 1.1 of Goal 7 (Issue #188). Provides speed control and pause support
- * without altering simulation semantics. Speed only affects the rate at which
- * simulation events are observed in wall-clock time; the event sequence,
- * timestamps, and physics remain identical to an unthrottled run.
+ * Implements Goal 8 pause/step/speed control on top of [SimulationContext.run].
+ * Speed only affects the rate at which simulation events are observed in
+ * wall-clock time; the event sequence, timestamps, and physics remain
+ * identical to an unthrottled run.
  *
  * Threading model:
  *  - [start] launches a dedicated simulation thread that invokes [context.run].
  *  - The kDisco dispatcher is single-threaded; Swing/EDT may read/write
- *    [speedMultiplier] and [isPaused] concurrently with the simulation thread,
- *    so both are `@Volatile`.
- *  - [throttle] and [awaitIfPaused] are called from the simulation thread only.
- *
- * Not wired into Main/Frame by this change — that is Issue #189's scope.
- *
- * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/188">Issue #188</a>
+ *    [speedMultiplier] and [isPaused] concurrently with the simulation thread.
+ *    [speedMultiplier] is `@Volatile`; [isPaused] and step-request flags are
+ *    guarded by [lock].
+ *  - [throttle] and [awaitIfPaused] are called from the simulation thread only,
+ *    via the [SimulationContext.run] `beforeEvent` hook.
  */
 class SimulationRunner(
 	private val context: SimulationContext
-) {
+) : SimulationController {
 	private val pcs = PropertyChangeSupport(this)
 	private val lifecycleLock = Any()
-	private val pauseLock = Object()
+
+	/** Single lock guarding pausedBacking, stepEventRequested, and stepTimeRequested. */
+	private val lock = Object()
+
+	private var stepEventRequested: Boolean = false
+
+	private var stepTimeRequested: Double? = null
+
+	@Volatile
+	var stepTimeDelta: Double = 1.0
 
 	@Volatile
 	private var simThread: Thread? = null
@@ -46,7 +54,6 @@ class SimulationRunner(
 	@Volatile
 	private var speedMultiplierBacking: Double = DEFAULT_SPEED
 
-	@Volatile
 	private var pausedBacking: Boolean = false
 
 	/**
@@ -80,20 +87,72 @@ class SimulationRunner(
 	 * Fires a [PropertyChangeSupport] event with name [PROP_IS_PAUSED]
 	 * on change.
 	 */
+	@get:JvmName("isPausedProp")
 	var isPaused: Boolean
-		get() = pausedBacking
+		get() = synchronized(lock) { pausedBacking }
 		set(value) {
 			val old: Boolean
-			synchronized(pauseLock) {
+			synchronized(lock) {
 				old = pausedBacking
 				if (old == value) return
 				pausedBacking = value
-				if (!value) {
-					pauseLock.notifyAll()
-				}
+				if (!value) lock.notifyAll()
 			}
 			pcs.firePropertyChange(PROP_IS_PAUSED, old, value)
 		}
+
+	fun requestStepEvent() {
+		val oldEvent: Boolean
+		val oldTime: Double?
+		synchronized(lock) {
+			oldEvent = stepEventRequested
+			oldTime = stepTimeRequested
+			stepEventRequested = true
+			stepTimeRequested = null
+			lock.notifyAll()
+		}
+		if (!oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, false, true)
+		if (oldTime != null) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
+	}
+
+	fun requestStepTime(simSeconds: Double) {
+		require(simSeconds > 0.0) {
+			"Step-time delta must be positive, got: $simSeconds"
+		}
+		val oldEvent: Boolean
+		val oldTime: Double?
+		synchronized(lock) {
+			oldEvent = stepEventRequested
+			oldTime = stepTimeRequested
+			stepTimeRequested = simSeconds
+			stepEventRequested = false
+			lock.notifyAll()
+		}
+		if (oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+		if (oldTime != simSeconds) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
+	}
+
+	override fun pollStepEvent(): Boolean {
+		val r: Boolean
+		synchronized(lock) {
+			r = stepEventRequested
+			if (r) stepEventRequested = false
+		}
+		if (r) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+		return r
+	}
+
+	override fun pollStepTime(): Double? {
+		val r: Double?
+		synchronized(lock) {
+			r = stepTimeRequested
+			if (r != null) stepTimeRequested = null
+		}
+		if (r != null) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, r, null)
+		return r
+	}
+
+	override fun isPaused(): Boolean = synchronized(lock) { pausedBacking }
 
 	/** Register a listener for all property change events. */
 	fun addPropertyChangeListener(listener: PropertyChangeListener) {
@@ -101,7 +160,10 @@ class SimulationRunner(
 	}
 
 	/** Register a listener for a specific property. */
-	fun addPropertyChangeListener(propertyName: String, listener: PropertyChangeListener) {
+	fun addPropertyChangeListener(
+		propertyName: String,
+		listener: PropertyChangeListener
+	) {
 		pcs.addPropertyChangeListener(propertyName, listener)
 	}
 
@@ -109,7 +171,10 @@ class SimulationRunner(
 		pcs.removePropertyChangeListener(listener)
 	}
 
-	fun removePropertyChangeListener(propertyName: String, listener: PropertyChangeListener) {
+	fun removePropertyChangeListener(
+		propertyName: String,
+		listener: PropertyChangeListener
+	) {
 		pcs.removePropertyChangeListener(propertyName, listener)
 	}
 
@@ -124,26 +189,26 @@ class SimulationRunner(
 				logger.debug { "start() ignored — simulation thread already alive" }
 				return
 			}
-			val thread = Thread(
-				@Suppress("TooGenericExceptionCaught")
-				{
-					try {
-						context.run()
-					} catch (e: InterruptedException) {
-						logger.debug { "Simulation thread interrupted: ${e.message}" }
-						Thread.currentThread().interrupt()
-					} catch (t: Throwable) {
-						logger.error(t) { "Simulation thread terminated unexpectedly" }
-					} finally {
-						synchronized(lifecycleLock) {
-							if (simThread === Thread.currentThread()) {
-								simThread = null
+			val thread =
+				Thread(
+					@Suppress("TooGenericExceptionCaught") {
+						try {
+							context.run(controller = this)
+						} catch (e: InterruptedException) {
+							logger.debug { "Simulation thread interrupted: ${e.message}" }
+							Thread.currentThread().interrupt()
+						} catch (t: Throwable) {
+							logger.error(t) { "Simulation thread terminated unexpectedly" }
+						} finally {
+							synchronized(lifecycleLock) {
+								if (simThread === Thread.currentThread()) {
+									simThread = null
+								}
 							}
 						}
-					}
-				},
-				"SimulationRunner-sim"
-			)
+					},
+					"SimulationRunner-sim"
+				)
 			thread.isDaemon = true
 			simThread = thread
 			thread.start()
@@ -163,9 +228,7 @@ class SimulationRunner(
 			}
 		}
 		// Wake any paused wait OUTSIDE lifecycleLock so we never hold both locks.
-		synchronized(pauseLock) {
-			pauseLock.notifyAll()
-		}
+		synchronized(lock) { lock.notifyAll() }
 		// simThread is cleared by the simulation thread's own finally block
 		// once it truly terminates.
 	}
@@ -174,31 +237,60 @@ class SimulationRunner(
 	fun isRunning(): Boolean = simThread?.isAlive == true
 
 	/**
-	 * Block the calling thread (expected to be the simulation thread) while
-	 * [isPaused] is true. Returns immediately when not paused. Respects
-	 * thread interruption.
+	 * Suspends the simulation coroutine while [isPaused] is true.
+	 *
+	 * Returns immediately when not paused. Also returns early if a step-event
+	 * ([requestStepEvent]) or step-time request ([requestStepTime]) is pending —
+	 * the step-event is consumed atomically under [lock]; the step-time value is
+	 * left for the caller to read via [pollStepTime].
+	 *
+	 * Safe to block here: this is always invoked on the dedicated
+	 * `SimulationRunner-sim` thread via a `runBlocking` dispatcher, so
+	 * [Object.wait] never pins a shared coroutine thread pool.
+	 *
+	 * All three mutable fields ([pausedBacking], [stepEventRequested],
+	 * [stepTimeRequested]) are guarded by [lock]. Evaluating the wait condition
+	 * and calling [Object.wait] happen under the same lock, so notifications from
+	 * [requestStepEvent], [requestStepTime], or the [isPaused] setter can never
+	 * be lost between the condition check and the [Object.wait] call.
 	 */
-	@Throws(InterruptedException::class)
-	fun awaitIfPaused() {
-		synchronized(pauseLock) {
-			while (pausedBacking) {
-				pauseLock.wait()
+	override suspend fun awaitIfPaused() {
+		var consumedStep = false
+		synchronized(lock) {
+			while (pausedBacking && !stepEventRequested && stepTimeRequested == null) {
+				try {
+					lock.wait()
+				} catch (e: InterruptedException) {
+					Thread.currentThread().interrupt()
+					return
+				}
+			}
+			// Consume a pending step-event atomically while still holding the lock,
+			// eliminating the TOCTOU window that existed when consumption was deferred
+			// outside the synchronized block.
+			if (stepEventRequested) {
+				stepEventRequested = false
+				consumedStep = true
 			}
 		}
+		// Fire property-change event outside the lock — pcs callbacks must not
+		// be invoked while holding any internal lock.
+		if (consumedStep) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+		// stepTimeRequested is intentionally left unconsumed; the beforeEvent
+		// lambda reads it via pollStepTime() to compute the step-time window.
 	}
 
 	/**
 	 * Sleep wall-clock time proportional to the simulation delta scaled by
-	 * [speedMultiplier]. If paused, blocks until resumed before sleeping.
+	 * [speedMultiplier]. Called from the `beforeEvent` hook after [awaitIfPaused]
+	 * has already handled any pause state for this cycle.
 	 *
 	 * @param simDeltaSeconds Simulation time advanced since the previous
-	 *     tick, in seconds. Must be non-negative. Zero or negative values
-	 *     are a no-op.
+	 *     tick, in seconds. Zero or negative values are a no-op.
 	 */
 	@Throws(InterruptedException::class)
-	fun throttle(simDeltaSeconds: Double) {
+	override fun throttle(simDeltaSeconds: Double) {
 		if (simDeltaSeconds <= 0.0) return
-		awaitIfPaused()
 		val speed = speedMultiplierBacking
 		val sleepMs = Math.round(simDeltaSeconds / speed * MILLIS_PER_SECOND)
 		if (sleepMs > 0) {
@@ -213,6 +305,8 @@ class SimulationRunner(
 
 		const val PROP_SPEED_MULTIPLIER: String = "speedMultiplier"
 		const val PROP_IS_PAUSED: String = "isPaused"
+		const val PROP_STEP_EVENT_REQUESTED: String = "stepEventRequested"
+		const val PROP_STEP_TIME_REQUESTED: String = "stepTimeRequested"
 
 		private const val MILLIS_PER_SECOND: Double = 1000.0
 

@@ -60,7 +60,6 @@ import java.util.concurrent.TimeUnit
 @Tag("integration-test")
 @DisplayName("Cross-Platform Parity Tests (Issue #439)")
 class CrossPlatformParityTest {
-
 	companion object {
 		private const val TIMEOUT_SECONDS = 120L
 
@@ -76,7 +75,11 @@ class CrossPlatformParityTest {
 		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
 	}
 
-	data class ProcessResult(val exitCode: Int, val stdout: String, val stderr: String)
+	data class ProcessResult(
+		val exitCode: Int,
+		val stdout: String,
+		val stderr: String
+	)
 
 	/**
 	 * Launches a process with the given command, captures stdout and stderr in
@@ -85,9 +88,10 @@ class CrossPlatformParityTest {
 	 * @throws AssertionError if the process does not complete within [TIMEOUT_SECONDS]
 	 */
 	private fun runProcess(command: List<String>): ProcessResult {
-		val process = ProcessBuilder(command)
-			.redirectErrorStream(false)
-			.start()
+		val process =
+			ProcessBuilder(command)
+				.redirectErrorStream(false)
+				.start()
 
 		var stdout = ""
 		var stderr = ""
@@ -111,26 +115,34 @@ class CrossPlatformParityTest {
 	}
 
 	/** Extracts event lines (those containing `t=<number>`) from process stdout. */
-	private fun parseEvents(output: String): List<String> =
-		output.lines().filter { timestampRegex.containsMatchIn(it) }
+	private fun parseEvents(output: String): List<String> = output.lines().filter { timestampRegex.containsMatchIn(it) }
 
 	/** Extracts the last summary line (starting with `---`) from process stdout. */
-	private fun parseSummary(output: String): String? =
-		output.lines().lastOrNull { it.startsWith("---") }
+	private fun parseSummary(output: String): String? = output.lines().lastOrNull { it.startsWith("---") }
 
 	/** Extracts numeric timestamp values from event lines. */
 	private fun parseTimestamps(events: List<String>): List<Double> =
-		events.mapNotNull { timestampRegex.find(it)?.groupValues?.get(1)?.toDouble() }
+		events.mapNotNull {
+			timestampRegex
+				.find(it)
+				?.groupValues
+				?.get(1)
+				?.toDouble()
+		}
 
 	/** Builds a side-by-side diagnostic string for assertion failure messages. */
-	private fun diagnostics(jvmResult: ProcessResult, nativeResult: ProcessResult): String = buildString {
-		appendLine("=== JVM (exit=${jvmResult.exitCode}) ===")
-		appendLine("STDOUT:\n${jvmResult.stdout}")
-		if (jvmResult.stderr.isNotBlank()) appendLine("STDERR:\n${jvmResult.stderr}")
-		appendLine("=== Native (exit=${nativeResult.exitCode}) ===")
-		appendLine("STDOUT:\n${nativeResult.stdout}")
-		if (nativeResult.stderr.isNotBlank()) appendLine("STDERR:\n${nativeResult.stderr}")
-	}
+	private fun diagnostics(
+		jvmResult: ProcessResult,
+		nativeResult: ProcessResult
+	): String =
+		buildString {
+			appendLine("=== JVM (exit=${jvmResult.exitCode}) ===")
+			appendLine("STDOUT:\n${jvmResult.stdout}")
+			if (jvmResult.stderr.isNotBlank()) appendLine("STDERR:\n${jvmResult.stderr}")
+			appendLine("=== Native (exit=${nativeResult.exitCode}) ===")
+			appendLine("STDOUT:\n${nativeResult.stdout}")
+			if (nativeResult.stderr.isNotBlank()) appendLine("STDERR:\n${nativeResult.stderr}")
+		}
 
 	@Test
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
@@ -143,12 +155,14 @@ class CrossPlatformParityTest {
 				"run ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 first"
 		}
 
-		val jvmResult = runProcess(
-			listOf("java", "-jar", JAR_PATH.absolutePath, "example", "shuntingLoop", "60")
-		)
-		val nativeResult = runProcess(
-			listOf(NATIVE_PATH.absolutePath, "example", "shuntingLoop", "60")
-		)
+		val jvmResult =
+			runProcess(
+				listOf("java", "-jar", JAR_PATH.absolutePath, "example", "shuntingLoop", "60")
+			)
+		val nativeResult =
+			runProcess(
+				listOf(NATIVE_PATH.absolutePath, "example", "shuntingLoop", "60")
+			)
 
 		val diag = diagnostics(jvmResult, nativeResult)
 

@@ -86,7 +86,10 @@ private const val VERSION_STRING = "fast-sim 1.0"
  */
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 internal object StderrAppender : FormattingAppender() {
-	override fun logFormattedMessage(_loggingEvent: KLoggingEvent, formattedMessage: Any?) {
+	override fun logFormattedMessage(
+		_loggingEvent: KLoggingEvent,
+		formattedMessage: Any?
+	) {
 		fprintf(stderr, "%s\n", formattedMessage?.toString() ?: "null")
 	}
 }
@@ -154,15 +157,16 @@ private fun handleEarlyExitArgs(args: Array<String>) {
 	}
 }
 
-private fun parseVerbosity(args: Array<String>): Verbosity = when {
-	CMD_QUIET in args && CMD_VERBOSE in args -> {
-		eprintln("Warning: both --quiet and --verbose specified; --quiet takes precedence")
-		Verbosity.QUIET
+private fun parseVerbosity(args: Array<String>): Verbosity =
+	when {
+		CMD_QUIET in args && CMD_VERBOSE in args -> {
+			eprintln("Warning: both --quiet and --verbose specified; --quiet takes precedence")
+			Verbosity.QUIET
+		}
+		CMD_QUIET in args -> Verbosity.QUIET
+		CMD_VERBOSE in args -> Verbosity.VERBOSE
+		else -> Verbosity.DEFAULT
 	}
-	CMD_QUIET in args -> Verbosity.QUIET
-	CMD_VERBOSE in args -> Verbosity.VERBOSE
-	else -> Verbosity.DEFAULT
-}
 
 /**
  * Entry point for the :fast-sim native CLI binary.
@@ -192,39 +196,50 @@ fun main(args: Array<String>) {
 	val positionalArgs = filterPositionalArgs(args)
 
 	val factory = NativeContextFactory()
-	val exitCode = try {
-		if (positionalArgs.isEmpty()) {
-			printUsage()
+	val exitCode =
+		try {
+			if (positionalArgs.isEmpty()) {
+				printUsage()
+				2
+			} else {
+				when (positionalArgs[0]) {
+					CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
+					CMD_SIM -> runSim(positionalArgs, factory, verbosity)
+					else -> {
+						printUsage()
+						2
+					}
+				}
+			}
+		} catch (e: IllegalArgumentException) {
+			eprintln("Error: ${e.message}")
 			2
-		} else when (positionalArgs[0]) {
-			CMD_EXAMPLE -> runExample(positionalArgs, factory, verbosity)
-			CMD_SIM     -> runSim(positionalArgs, factory, verbosity)
-			else        -> { printUsage(); 2 }
+		} catch (e: Exception) {
+			eprintln("Error: ${e.message}")
+			1
+		} finally {
+			stopKoin()
 		}
-	} catch (e: IllegalArgumentException) {
-		eprintln("Error: ${e.message}")
-		2
-	} catch (e: Exception) {
-		eprintln("Error: ${e.message}")
-		1
-	} finally {
-		stopKoin()
-	}
 
 	exitProcess(exitCode)
 }
 
 @Suppress("ReturnCount")
-private fun runExample(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
+private fun runExample(
+	args: Array<String>,
+	factory: NativeContextFactory,
+	verbosity: Verbosity
+): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
 	}
 	val name = args[1]
-	val endTime = args[2].toLongOrNull() ?: run {
-		eprintln("Error: endTime must be a number, got '${args[2]}'")
-		return 2
-	}
+	val endTime =
+		args[2].toLongOrNull() ?: run {
+			eprintln("Error: endTime must be a number, got '${args[2]}'")
+			return 2
+		}
 	val ctx = NativeExampleRegistry.create(name, endTime, factory)
 	val reporter = TextReporter(verbosity)
 	ctx.addPropertyChangeListener(reporter)
@@ -232,7 +247,9 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory, verbo
 		ctx.run()
 		reporter.printSummary()
 		return 0
-	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+	} catch (
+		@Suppress("TooGenericExceptionCaught") e: Exception
+	) {
 		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
@@ -240,16 +257,21 @@ private fun runExample(args: Array<String>, factory: NativeContextFactory, verbo
 }
 
 @Suppress("ReturnCount")
-private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity: Verbosity): Int {
+private fun runSim(
+	args: Array<String>,
+	factory: NativeContextFactory,
+	verbosity: Verbosity
+): Int {
 	if (args.size < MIN_ARGS_COUNT) {
 		printUsage()
 		return 2
 	}
 	val path = args[1]
-	val endTime = args[2].toLongOrNull() ?: run {
-		eprintln("Error: endTime must be a number, got '${args[2]}'")
-		return 2
-	}
+	val endTime =
+		args[2].toLongOrNull() ?: run {
+			eprintln("Error: endTime must be a number, got '${args[2]}'")
+			return 2
+		}
 	val ctx = factory.createFromFile(path)
 	val issues = ShuntingLoopNetworkValidator.validateVyhybnaCompatible(ctx)
 	if (issues.isNotEmpty()) {
@@ -269,7 +291,9 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
 		ctx.run()
 		reporter.printSummary()
 		return 0
-	} catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+	} catch (
+		@Suppress("TooGenericExceptionCaught") e: Exception
+	) {
 		return handleInterruptedRun(reporter, e)
 	} finally {
 		ctx.close()
@@ -281,7 +305,10 @@ private fun runSim(args: Array<String>, factory: NativeContextFactory, verbosity
  * If SIGINT was received (mid-run interruption), prints partial summary and returns 130.
  * Otherwise, re-throws the original exception.
  */
-private fun handleInterruptedRun(reporter: TextReporter, e: Exception): Int {
+private fun handleInterruptedRun(
+	reporter: TextReporter,
+	e: Exception
+): Int {
 	if (isInterrupted()) {
 		// Safe: TextReporter captures data at PropertyChangeEvent time, not at print time,
 		// so printSummary() does not depend on live context state.

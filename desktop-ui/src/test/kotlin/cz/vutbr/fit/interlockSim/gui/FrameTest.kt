@@ -19,6 +19,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -28,7 +29,6 @@ import java.awt.BorderLayout
 import java.util.concurrent.TimeUnit
 import javax.swing.JFrame
 import javax.swing.JScrollPane
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Tests for Frame GUI component.
@@ -248,9 +248,11 @@ class FrameTest : AbstractFrameTestBase() {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("south panel gains EventTimelinePanel when switching to simulation mode")
 	fun southPanelGainsTimelinePanelInSimulationMode() {
-		val context = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
-		)
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
 		runOnEDT {
 			frame.setContext(context)
 			// Simulation mode: EventTimelinePanel is added above StatusBar
@@ -267,9 +269,11 @@ class FrameTest : AbstractFrameTestBase() {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("south panel returns to one component when switching back to editing mode")
 	fun southPanelRestoresOneComponentAfterSwitchingToEditingMode() {
-		val simContext = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
-		)
+		val simContext =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
 		val editContext = editingContextFactory.createEmptyContext()
 		runOnEDT {
 			frame.setContext(simContext)
@@ -290,12 +294,16 @@ class FrameTest : AbstractFrameTestBase() {
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
 	@DisplayName("setContext closes previous SimulationContext when switching to a new one")
 	fun setContextClosesPreviousSimulationContext() {
-		val context1 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
-		)
-		val context2 = cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-			cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
-		)
+		val context1 =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		val context2 =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
 		runOnEDT {
 			frame.setContext(context1)
 			frame.setContext(context2)

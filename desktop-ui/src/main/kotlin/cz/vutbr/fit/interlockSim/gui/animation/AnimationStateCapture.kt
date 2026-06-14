@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.gui.animation
 
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -16,8 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -101,13 +101,14 @@ object AnimationStateCapture {
 	 *
 	 * @return Current simulation time in seconds, or 0.0 if not inside a simulation
 	 */
-	private fun captureSimulationTime(): Double = try {
-		Process.time()
-	} catch (_: DiscoException) {
-		0.0
-	} catch (_: IllegalStateException) {
-		0.0
-	}
+	private fun captureSimulationTime(): Double =
+		try {
+			Process.time()
+		} catch (_: DiscoException) {
+			0.0
+		} catch (_: IllegalStateException) {
+			0.0
+		}
 
 	/**
 	 * Capture state of all active trains in simulation.
@@ -241,9 +242,7 @@ object AnimationStateCapture {
 	 * @return True for blue color variant (InOut "B"), false for orange (InOut "A" or other)
 	 * @since 2026-02-04 (Fixed train color coding bug)
 	 */
-	private fun determineOriginColorVariant(
-		train: Train
-	): Boolean {
+	private fun determineOriginColorVariant(train: Train): Boolean {
 		val originInOut = train.originInOut
 		val inOutName = originInOut.name
 		return inOutName == "B"

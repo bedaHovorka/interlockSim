@@ -32,6 +32,7 @@ val koinVersion: String by project
 val javaVersion: String by project
 val kotlinVersion: String by project
 val jmhVersion: String by project
+val coroutinesVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -61,6 +62,7 @@ dependencies {
     testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     // Shared test fixtures and XML constants (CommonTestFixtures, NetworkResources, etc.)
     testImplementation(project(":core-test"))
 }
@@ -183,7 +185,10 @@ val integrationTest by tasks.registering(Test::class) {
 
     ignoreFailures = false
 
-    testClassesDirs = sourceSets.test.get().output.classesDirs
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
 }
 
@@ -306,7 +311,8 @@ val runExample by tasks.registering(JavaExec::class) {
 
 val runExampleGui by tasks.registering(JavaExec::class) {
     group = "application"
-    description = "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
+    description =
+        "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
     doFirst {
@@ -355,7 +361,7 @@ tasks.jacocoTestReport {
     mustRunAfter(tasks.named("integrationTest"))
 
     executionData.setFrom(
-        fileTree(layout.buildDirectory).include("jacoco/*.exec")
+        fileTree(layout.buildDirectory).include("jacoco/*.exec"),
     )
 
     reports {

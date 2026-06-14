@@ -27,18 +27,21 @@ import kotlin.math.abs
 /**
  * Status bar for displaying context information and mouse motion status.
  *
- * Implemented as a [JPanel] containing two labels:
+ * Implemented as a [JPanel] containing three labels:
  * - [statusLabel] (CENTER): shows context property-change messages and mouse-position info.
- * - [speedLabel] (EAST): shows the current simulation speed multiplier when it differs from
- *   1.0x; hidden at default speed. Written only from EDT via [updateSpeedIndicator].
+ * - [pausedLabel] (EAST, leftmost): shows "[PAUSED]" when the simulation is paused; hidden
+ *   otherwise. Written only from EDT via [updatePausedIndicator].
+ * - [speedLabel] (EAST, rightmost): shows the current simulation speed multiplier when it
+ *   differs from 1.0x; hidden at default speed. Written only from EDT via [updateSpeedIndicator].
  *
- * Separating the two labels avoids the conflict where simulation-thread property-change
- * callbacks (via [ContextChangeListener]) would otherwise overwrite the speed indicator text.
+ * Separating the labels avoids the conflict where simulation-thread property-change callbacks
+ * (via [ContextChangeListener]) would otherwise overwrite the speed/pause indicator text.
  */
 class StatusBar :
 	JPanel(),
 	ContextChangeListener {
 	private val statusLabel = JLabel()
+	private val pausedLabel = JLabel().apply { isVisible = false }
 	private val speedLabel = JLabel().apply { isVisible = false }
 
 	private val mouseListener =
@@ -65,7 +68,12 @@ class StatusBar :
 	init {
 		layout = BorderLayout()
 		add(statusLabel, BorderLayout.CENTER)
-		add(speedLabel, BorderLayout.EAST)
+		// East panel: pausedLabel (left) + speedLabel (right) as a horizontal pair.
+		val eastPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0))
+		eastPanel.isOpaque = false
+		eastPanel.add(pausedLabel)
+		eastPanel.add(speedLabel)
+		add(eastPanel, BorderLayout.EAST)
 		preferredSize = Dimension(100, 25)
 		text = "Welcome to " + PROGRAM_NAME
 	}
@@ -154,6 +162,36 @@ class StatusBar :
 
 	/** Returns the current speed indicator text, or an empty string when hidden. */
 	internal fun speedIndicatorText(): String = speedLabel.text ?: ""
+
+	/**
+	 * Shows or hides the "[PAUSED]" indicator in [pausedLabel].
+	 *
+	 * When [paused] is `true`, [pausedLabel] shows "[PAUSED]" and becomes visible.
+	 * When `false`, the label text is cleared and hidden.
+	 *
+	 * This method is EDT-safe: it executes synchronously when already on the EDT and
+	 * uses [SwingUtilities.invokeLater] when called from a background thread.
+	 *
+	 * @param paused Current paused state from [SimulationRunner]
+	 */
+	fun updatePausedIndicator(paused: Boolean) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			applyPausedIndicator(paused)
+		} else {
+			SwingUtilities.invokeLater { applyPausedIndicator(paused) }
+		}
+	}
+
+	private fun applyPausedIndicator(paused: Boolean) {
+		pausedLabel.text = if (paused) "[PAUSED]" else ""
+		pausedLabel.isVisible = paused
+	}
+
+	/** Returns `true` when the paused indicator label is currently visible. */
+	internal fun isPausedIndicatorVisible(): Boolean = pausedLabel.isVisible
+
+	/** Returns the current paused indicator text, or an empty string when hidden. */
+	internal fun pausedIndicatorText(): String = pausedLabel.text ?: ""
 
 	companion object {
 		private const val DEFAULT_SPEED = 1.0

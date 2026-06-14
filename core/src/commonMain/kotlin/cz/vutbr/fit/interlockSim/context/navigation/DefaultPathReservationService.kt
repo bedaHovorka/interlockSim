@@ -278,7 +278,7 @@ class DefaultPathReservationService(
 						// Rollback reservation if signal configuration failed
 						// This prevents trains from waiting indefinitely at STOP signals
 						if (!signalConfigured) {
-							rollbackReservation(start, blocks)
+							rollbackCompleteReservation(trainId, blocks, start)
 							return PathReservationService.ReservationResult.AllPathsBlocked(1)
 						}
 					}
@@ -1473,6 +1473,22 @@ class DefaultPathReservationService(
 		separator: PathSeparator,
 		blocks: List<DynamicTrackBlock>
 	) {
+		rollbackBlocks(separator, blocks)
+	}
+
+	/**
+	 * Rollback block reservations only.
+	 *
+	 * Used when path discovery fails before registration.
+	 * Only cancels block path setup via cancelPathSetup().
+	 *
+	 * @param separator The path separator that reserved the blocks
+	 * @param blocks The blocks to rollback
+	 */
+	private fun rollbackBlocks(
+		separator: PathSeparator,
+		blocks: List<DynamicTrackBlock>
+	) {
 		for (block in blocks) {
 			try {
 				// Only rollback if block was actually reserved from this separator
@@ -1480,8 +1496,58 @@ class DefaultPathReservationService(
 					block.cancelPathSetup(separator)
 				}
 			} catch (e: Exception) {
-				logger.warn(e) { "rollbackReservation: Failed to rollback block $block" }
+				logger.warn(e) { "rollbackBlocks: Failed to rollback block $block" }
 			}
+		}
+	}
+
+	/**
+	 * Complete rollback of path reservation including registry, PathInfo, and switches.
+	 *
+	 * Used when signal configuration fails after successful registration.
+	 * Reverts ALL mutations:
+	 * - Block reservations (cancelPathSetup)
+	 * - Registry ownership (unregister from blockToTrain/trainToBlocks)
+	 * - PathInfo metadata (unregister from trainToPathInfo)
+	 * - Switch locks (unlock and remove from switchToTrain/trainToSwitches)
+	 *
+	 * @param trainId The train identifier
+	 * @param blocks The blocks that were reserved
+	 * @param separator The path separator that reserved the blocks (needed for cancelPathSetup)
+	 */
+	private fun rollbackCompleteReservation(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		separator: PathSeparator
+	) {
+		// Step 1: Cancel block path setup
+		for (block in blocks) {
+			try {
+				// Only rollback if block was actually reserved from this separator
+				if (block.reservedFrom === separator) {
+					block.cancelPathSetup(separator)
+				}
+			} catch (e: Exception) {
+				logger.warn(e) { "rollbackCompleteReservation: Failed to cancel block $block" }
+			}
+		}
+
+		// Step 2: Unregister switches (unlock them and remove from registry)
+		try {
+			registry.unregisterSwitches(trainId)
+		} catch (e: Exception) {
+			logger.warn(e) { "rollbackCompleteReservation: Failed to unregister switches for $trainId" }
+		}
+
+		// Step 3: Unregister train from registry (removes block ownership and PathInfo)
+		try {
+			registry.unregister(trainId)
+		} catch (e: Exception) {
+			logger.warn(e) { "rollbackCompleteReservation: Failed to unregister train $trainId" }
+		}
+
+		logger.debug {
+			"rollbackCompleteReservation: Completed full rollback for train $trainId"
 		}
 	}
 

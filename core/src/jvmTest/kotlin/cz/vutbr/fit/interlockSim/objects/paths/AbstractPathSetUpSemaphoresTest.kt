@@ -92,11 +92,12 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml()
 				?: throw IllegalStateException("vyhybna.xml not found in resources")
 
-		val simulationCtx = xmlStream.use { stream ->
-			editingContextFactory.createContext(stream).use { ec ->
-				simulationContextFactory.createContext(ec as EditingContext) as DefaultSimulationContext
+		val simulationCtx =
+			xmlStream.use { stream ->
+				editingContextFactory.createContext(stream).use { ec ->
+					simulationContextFactory.createContext(ec as EditingContext) as DefaultSimulationContext
+				}
 			}
-		}
 		simulationCtx.use { simulationContext ->
 			// Step 1: Get topology navigator
 			val navigator: TopologyNavigator = simulationContext.scope.get()
@@ -173,11 +174,12 @@ class AbstractPathSetUpSemaphoresTest : KoinTestBase() {
 	fun setUpSemaphoresUsesSwitchSpeedWhenPrecedingSwitchExists() {
 		val xmlStream = TestFixtures.loadSwitchBetweenSemaphoresXml()
 
-		val simulationCtx = xmlStream.use { stream ->
-			editingContextFactory.createContext(stream).use { ec ->
-				simulationContextFactory.createContext(ec as EditingContext) as DefaultSimulationContext
+		val simulationCtx =
+			xmlStream.use { stream ->
+				editingContextFactory.createContext(stream).use { ec ->
+					simulationContextFactory.createContext(ec as EditingContext) as DefaultSimulationContext
+				}
 			}
-		}
 		simulationCtx.use { simulationContext ->
 			// Step 1: Get topology navigator
 			val navigator: TopologyNavigator = simulationContext.scope.get()

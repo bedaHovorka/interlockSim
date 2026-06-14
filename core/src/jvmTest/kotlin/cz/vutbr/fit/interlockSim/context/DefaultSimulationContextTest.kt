@@ -473,7 +473,8 @@ class DefaultSimulationContextTest : KoinTestBase() {
 				.withInOut("Entry", 2, 2, false)
 				.withSemaphore(5, 5, true)
 				.withInOut("Exit", 8, 8, true)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Assert
 					assertThat(context).isNotNull()
 					assertThat(context.getRailWayNetGrid().getCellAt(2, 2)).isNotNull().isInstanceOf(DynamicInOut::class)

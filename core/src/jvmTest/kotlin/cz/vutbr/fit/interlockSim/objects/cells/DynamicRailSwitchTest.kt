@@ -14,8 +14,8 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.containsAll
 import assertk.assertions.hasSize
-import assertk.assertions.isEqualTo
 import assertk.assertions.isEmpty
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isInstanceOf
@@ -470,7 +470,6 @@ class DynamicRailSwitchTest {
 	@Nested
 	@DisplayName("Lock and Unlock listener notifications")
 	inner class LockUnlockListenerNotifications {
-
 		@Test
 		fun `lock fires locked property change event`() {
 			// Given: listener registered and switch is unlocked
@@ -533,7 +532,6 @@ class DynamicRailSwitchTest {
 	@Nested
 	@DisplayName("setUpPath listener notifications")
 	inner class SetUpPathListenerNotifications {
-
 		private lateinit var mockOccupant: TrackOccupant
 
 		@BeforeEach

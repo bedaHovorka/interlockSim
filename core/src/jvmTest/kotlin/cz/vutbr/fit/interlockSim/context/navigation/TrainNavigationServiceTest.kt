@@ -367,7 +367,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				.withInOut("A", 1, 1, true)
 				.withInOut("B", 10, 10, false)
 				// No connection!
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					val service = context.getTrainNavigationService()
 					val grid = context.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
@@ -456,7 +457,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			TestContextBuilder()
 				.withInOut("A", 1, 1, true)
 				.withInOut("B", 10, 10, false)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					val service = context.getTrainNavigationService()
 					val grid = context.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
@@ -514,7 +516,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			TestContextBuilder()
 				.withInOut("A", 1, 1, true)
 				.withInOut("B", 10, 10, false)
-				.buildSimulationContext().use { disconnectedCtx ->
+				.buildSimulationContext()
+				.use { disconnectedCtx ->
 					val disconnectedService = disconnectedCtx.getTrainNavigationService()
 					val grid = disconnectedCtx.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut

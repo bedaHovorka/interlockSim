@@ -30,7 +30,6 @@ import kotlin.random.Random
 @Warmup(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS)
 @Fork(value = 2, jvmArgs = ["-ea"])
 open class GridStoragePerformance {
-
 	// Railway grid dimensions for simulation
 	private val gridDimension = 1000
 
@@ -45,12 +44,13 @@ open class GridStoragePerformance {
 	fun prepareTestData() {
 		// Generate consistent test coordinates using seeded random
 		val coordinateGenerator = Random(42)
-		testCoordinates = List(gridDimension) {
-			Point(
-				coordinateGenerator.nextInt(gridDimension),
-				coordinateGenerator.nextInt(gridDimension)
-			)
-		}
+		testCoordinates =
+			List(gridDimension) {
+				Point(
+					coordinateGenerator.nextInt(gridDimension),
+					coordinateGenerator.nextInt(gridDimension)
+				)
+			}
 
 		// Initialize Array2DMap with test data
 		customGridMap = Array2DMap()

@@ -82,6 +82,12 @@ internal class SimulationKeyBindings(
 		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), ACTION_KEY_PAUSE_TOGGLE)
 		actionMap.put(ACTION_KEY_PAUSE_TOGGLE, PauseToggleAction())
 
+		// Step controls: S → step one event, T → step by time delta (Goal 8)
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0), ACTION_KEY_STEP_EVENT)
+		actionMap.put(ACTION_KEY_STEP_EVENT, StepEventAction())
+		inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0), ACTION_KEY_STEP_TIME)
+		actionMap.put(ACTION_KEY_STEP_TIME, StepTimeAction())
+
 		logger.debug { "Simulation keyboard shortcuts installed" }
 	}
 
@@ -116,6 +122,12 @@ internal class SimulationKeyBindings(
 		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0))
 		actionMap.remove(ACTION_KEY_PAUSE_TOGGLE)
 
+		// Remove step control bindings
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0))
+		actionMap.remove(ACTION_KEY_STEP_EVENT)
+		inputMap.remove(KeyStroke.getKeyStroke(KeyEvent.VK_T, 0))
+		actionMap.remove(ACTION_KEY_STEP_TIME)
+
 		logger.debug { "Simulation keyboard shortcuts uninstalled" }
 	}
 
@@ -127,11 +139,13 @@ internal class SimulationKeyBindings(
 	 * If no simulation is running, [SimulationController.setSpeed] updates [SimulationController.desiredSpeed]
 	 * which will be applied when the next simulation starts.
 	 */
-	private inner class SpeedPresetAction(private val speed: Double) : AbstractAction() {
+	private inner class SpeedPresetAction(
+		private val speed: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
 			try {
 				simulationController.setSpeed(speed)
-				logger.debug { "Speed preset applied: ${speed}×" }
+				logger.debug { "Speed preset applied: $speed×" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed preset: $speed — ${ex.message}" }
 			}
@@ -149,17 +163,20 @@ internal class SimulationKeyBindings(
 	 * When no simulation is running, this updates [SimulationController.desiredSpeed] so the
 	 * adjusted speed is honoured when the next simulation starts.
 	 */
-	private inner class IncrementalSpeedAction(private val multiplier: Double) : AbstractAction() {
+	private inner class IncrementalSpeedAction(
+		private val multiplier: Double
+	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
 			val currentSpeed = simulationController.speed
-			val newSpeed = (currentSpeed * multiplier).coerceIn(
-				SimulationRunner.MIN_SPEED,
-				SimulationRunner.MAX_SPEED
-			)
+			val newSpeed =
+				(currentSpeed * multiplier).coerceIn(
+					SimulationRunner.MIN_SPEED,
+					SimulationRunner.MAX_SPEED
+				)
 
 			try {
 				simulationController.setSpeed(newSpeed)
-				logger.debug { "Speed adjusted: ${currentSpeed}× → ${newSpeed}× (×$multiplier)" }
+				logger.debug { "Speed adjusted: $currentSpeed× → $newSpeed× (×$multiplier)" }
 			} catch (ex: IllegalArgumentException) {
 				logger.warn { "Invalid speed adjustment: $newSpeed — ${ex.message}" }
 			}
@@ -190,6 +207,43 @@ internal class SimulationKeyBindings(
 		}
 	}
 
+	/**
+	 * Action that advances the simulation by one event when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepEvent]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepEventAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-event ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepEvent()
+			logger.debug { "Step-event requested" }
+		}
+	}
+
+	/**
+	 * Action that advances the simulation by [SimulationRunner.stepTimeDelta] sim-seconds
+	 * when paused.
+	 *
+	 * Calls [SimulationRunner.requestStepTime]. If no simulation is running, the
+	 * action is a no-op.
+	 */
+	private inner class StepTimeAction : AbstractAction() {
+		override fun actionPerformed(e: ActionEvent) {
+			val runner = simulationController.runner
+			if (runner == null) {
+				logger.debug { "Step-time ignored (no simulation running)" }
+				return
+			}
+			runner.requestStepTime(runner.stepTimeDelta)
+			logger.debug { "Step-time requested (delta=${runner.stepTimeDelta}s)" }
+		}
+	}
+
 	companion object {
 		/** Action key for speed-up shortcut. */
 		private const val ACTION_KEY_SPEED_UP = "simulation_speed_up"
@@ -200,6 +254,12 @@ internal class SimulationKeyBindings(
 		/** Action key for pause/resume toggle. */
 		private const val ACTION_KEY_PAUSE_TOGGLE = "simulation_pause_toggle"
 
+		/** Action key for step-event shortcut (key S). */
+		private const val ACTION_KEY_STEP_EVENT = "simulation_step_event"
+
+		/** Action key for step-time shortcut (key T). */
+		private const val ACTION_KEY_STEP_TIME = "simulation_step_time"
+
 		/** Incremental speed multiplier: ×1.5 for speed-up, ÷1.5 for speed-down. */
 		private const val SPEED_INCREMENT = 1.5
 
@@ -208,12 +268,13 @@ internal class SimulationKeyBindings(
 		 * Keys 1-5 → 0.5×, 1×, 2×, 5×, 10× (matches the five standard presets in the UI panel and menu).
 		 * Note: 0.5× is accessible only via keyboard (key 1), panel, or menu — not via incremental shortcuts.
 		 */
-		private val PRESET_BINDINGS: Map<Int, Double> = mapOf(
-			KeyEvent.VK_1 to 0.5,
-			KeyEvent.VK_2 to 1.0,
-			KeyEvent.VK_3 to 2.0,
-			KeyEvent.VK_4 to 5.0,
-			KeyEvent.VK_5 to 10.0
-		)
+		private val PRESET_BINDINGS: Map<Int, Double> =
+			mapOf(
+				KeyEvent.VK_1 to 0.5,
+				KeyEvent.VK_2 to 1.0,
+				KeyEvent.VK_3 to 2.0,
+				KeyEvent.VK_4 to 5.0,
+				KeyEvent.VK_5 to 10.0
+			)
 	}
 }

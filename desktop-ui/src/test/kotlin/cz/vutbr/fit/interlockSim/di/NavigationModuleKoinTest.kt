@@ -83,10 +83,12 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			val pathElements = (path as PathResult.Available).path
 
 			// Extract blocks from path returned by TrainNavigationService
-			val blocksFromPath = pathElements.filterIsInstance<TrackSection>()
-				.map { it.getTrackBlock() }
-				.filterIsInstance<DynamicTrackBlock>()
-				.toSet()
+			val blocksFromPath =
+				pathElements
+					.filterIsInstance<TrackSection>()
+					.map { it.getTrackBlock() }
+					.filterIsInstance<DynamicTrackBlock>()
+					.toSet()
 
 			// Compare with blocks from PathReservationService (should be identical)
 			val blocksFromReservation = blocks.toSet()

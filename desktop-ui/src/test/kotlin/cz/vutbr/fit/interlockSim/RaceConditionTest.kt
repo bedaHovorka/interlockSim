@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -37,7 +38,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 
 /**
  * Concurrent access tests for railway simulation components.
@@ -461,11 +461,12 @@ class RaceConditionTest : KoinTestBase() {
 			val track2 = DynamicTrack(SimpleTrackBlock(end2, end3, 100.0, 80.0))
 			val track3 = DynamicTrack(SimpleTrackBlock(end3, end4, 100.0, 80.0))
 			// Map each track to its appropriate separator for path operations
-			val trackSeparators = listOf(
-				track1 to end1,
-				track2 to end2,
-				track3 to end3
-			)
+			val trackSeparators =
+				listOf(
+					track1 to end1,
+					track2 to end2,
+					track3 to end3
+				)
 
 			val occupant = createMockTrackOccupant("Train1")
 			val iterations = STRESS_TEST_ITERATIONS

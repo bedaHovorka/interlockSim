@@ -93,7 +93,8 @@ class NodeCellTest : KoinTestBase() {
 			get<TestContextBuilder>()
 				.withInOut("Left", 0, 0, true)
 				.withInOut("Right", 1, 0, false)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Assert
 					// Both nodes should exist in the grid at adjacent positions
 					val cellLeft = context.getRailWayNetGrid().getCellAt(0, 0)
@@ -152,7 +153,8 @@ class NodeCellTest : KoinTestBase() {
 				.withInOut("A", 0, 0, true)
 				.withInOut("B", 1, 0, false)
 				.withInOut("C", 2, 0, true)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					// Get cells from grid
 					val cellA = context.getRailWayNetGrid().getCellAt(0, 0)
@@ -190,7 +192,8 @@ class NodeCellTest : KoinTestBase() {
 			get<TestContextBuilder>()
 				.withInOut("Start", 0, 0, true)
 				.withInOut("Next", 1, 0, false)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					val cellStart = context.getRailWayNetGrid().getCellAt(0, 0)
 
@@ -234,7 +237,8 @@ class NodeCellTest : KoinTestBase() {
 				.withInOut("B", 1, 0, true) // Right
 				.withInOut("C", 0, 0, true) // Center (would have multiple neighbors)
 				.withInOut("D", 1, 1, false) // Bottom-right
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					val cellA = context.getRailWayNetGrid().getCellAt(0, 1)
 					val cellB = context.getRailWayNetGrid().getCellAt(1, 0)
@@ -262,7 +266,8 @@ class NodeCellTest : KoinTestBase() {
 			// Arrange
 			get<TestContextBuilder>()
 				.withInOut("TestNode", 5, 10, true)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					val cell = context.getRailWayNetGrid().getCellAt(5, 10)
 
@@ -285,7 +290,8 @@ class NodeCellTest : KoinTestBase() {
 			// Arrange
 			get<TestContextBuilder>()
 				.withInOut("FixedNode", 3, 7, true)
-				.buildSimulationContext().use { context ->
+				.buildSimulationContext()
+				.use { context ->
 					// Act
 					val cell = context.getRailWayNetGrid().getCellAt(3, 7)
 					val cellAtOtherLocation = context.getRailWayNetGrid().getCellAt(4, 7)

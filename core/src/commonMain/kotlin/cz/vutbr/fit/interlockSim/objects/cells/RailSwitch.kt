@@ -9,14 +9,14 @@
  */
 package cz.vutbr.fit.interlockSim.objects.cells
 
-import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED as DOMAIN_BRANCH_SPEED
-import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED as DOMAIN_MAIN_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Type
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.anti
 import cz.vutbr.fit.interlockSim.util.EnumUnorientedGraph
 import io.github.oshai.kotlinlogging.KotlinLogging
+import cz.vutbr.fit.interlockSim.domain.COMMON_BRANCH_SPEED as DOMAIN_BRANCH_SPEED
+import cz.vutbr.fit.interlockSim.domain.COMMON_MAIN_SPEED as DOMAIN_MAIN_SPEED
 
 /**
  * Switch

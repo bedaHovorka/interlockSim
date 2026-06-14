@@ -169,7 +169,9 @@ class ControlPanel : JPanel() {
 	 *
 	 * @property displayName Human-readable label text shown in the UI.
 	 */
-	enum class SimulationStatus(val displayName: String) {
+	enum class SimulationStatus(
+		val displayName: String
+	) {
 		/** Context set but simulation not yet started. */
 		READY("Ready"),
 
@@ -177,6 +179,6 @@ class ControlPanel : JPanel() {
 		RUNNING("Running"),
 
 		/** Simulation has finished or was stopped. */
-		STOPPED("Stopped"),
+		STOPPED("Stopped")
 	}
 }

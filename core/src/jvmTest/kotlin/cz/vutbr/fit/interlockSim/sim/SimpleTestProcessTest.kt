@@ -46,7 +46,6 @@ import org.junit.jupiter.api.Test
 @Tag("integration-test")
 @DisplayName("SimpleTestProcess Integration Tests")
 class SimpleTestProcessTest : KoinTestBase() {
-
 	// ==================== Test 1: Process Activates Train ====================
 
 	@Test

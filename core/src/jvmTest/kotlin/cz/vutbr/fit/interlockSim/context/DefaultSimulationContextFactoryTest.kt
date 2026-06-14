@@ -31,7 +31,6 @@ import java.nio.file.Path
  */
 @DisplayName("DefaultSimulationContextFactory")
 class DefaultSimulationContextFactoryTest : KoinTestBase() {
-
 	private val factory: SimulationContextFactory by inject()
 	private val editingFactory: JvmEditingContextFactory by inject()
 
@@ -49,7 +48,6 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("createContext from file")
 	inner class CreateContextFromFileTests {
-
 		@Test
 		fun createContext_file_returnsSimulationContext() {
 			factory.createContext(shuntingFile).use { result ->
@@ -62,7 +60,6 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("createContext from stream")
 	inner class CreateContextFromStreamTests {
-
 		@Test
 		fun createContext_inputStream_returnsSimulationContext() {
 			TestFixtures.loadShuntingXml().use { stream ->
@@ -77,7 +74,6 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("createContext from EditingContext")
 	inner class CreateContextFromEditingContextTests {
-
 		@Test
 		fun createContext_editingContext_returnsSimulationContext() {
 			TestFixtures.loadShuntingXml().use { stream ->
@@ -105,7 +101,6 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("saveContext")
 	inner class SaveContextTests {
-
 		@Test
 		fun saveContext_toFile_returnsTrueAndWritesFile() {
 			TestFixtures.loadShuntingXml().use { stream ->
@@ -122,8 +117,12 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 		fun saveContext_toStream_returnsTrue() {
 			TestFixtures.loadShuntingXml().use { stream ->
 				(editingFactory.createContext(stream) as EditingContext).use { editingCtx ->
-					val result = tmpDir.resolve("saved-stream.xml").toFile().outputStream()
-						.use { factory.saveContext(editingCtx, it) }
+					val result =
+						tmpDir
+							.resolve("saved-stream.xml")
+							.toFile()
+							.outputStream()
+							.use { factory.saveContext(editingCtx, it) }
 					assertThat(result).isTrue()
 				}
 			}
@@ -133,7 +132,6 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@Nested
 	@DisplayName("createEmptyContext")
 	inner class CreateEmptyContextTests {
-
 		@Test
 		fun createEmptyContext_returnsSimulationContext() {
 			factory.createEmptyContext().use { result ->

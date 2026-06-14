@@ -21,7 +21,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class TextReporterIntegrationTest {
-
 	@BeforeTest
 	fun setUp() {
 		startKoin { modules(coreModule) }

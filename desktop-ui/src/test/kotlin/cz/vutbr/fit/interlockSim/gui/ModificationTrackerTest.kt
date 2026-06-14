@@ -17,10 +17,10 @@ import assertk.assertions.isFalse
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import java.io.File
 
 /**

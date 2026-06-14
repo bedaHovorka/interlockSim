@@ -55,9 +55,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripVyhybnaPreservesInOutCount() {
-		val (inOutCount, xml) = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { ctx1 ->
-			ctx1.getInOuts().size to writer.generate(ctx1)
-		}
+		val (inOutCount, xml) =
+			CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { ctx1 ->
+				ctx1.getInOuts().size to writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(inOutCount)
@@ -66,9 +67,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripVyhybnaPreservesTrackBlocks() {
-		val (edges1, xml) = CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { ctx1 ->
-			ctx1.getGraph().entrySet().size to writer.generate(ctx1)
-		}
+		val (edges1, xml) =
+			CommonTestFixtures.parseEditingContext(NetworkResources.VYHYBNA_XML).use { ctx1 ->
+				ctx1.getGraph().entrySet().size to writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getGraph().entrySet().size).isEqualTo(edges1)
@@ -104,9 +106,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripLinearTrackPreservesStructure() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(2)
@@ -116,9 +119,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripLinearTrackPreservesTrackLength() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			val trackBlock =
@@ -135,9 +139,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSwitchPreservesThreeInOuts() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(3)
@@ -146,9 +151,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSwitchPreservesSwitchType() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			// Coordinate coupled to SWITCH_BASIC_XML fixture: the switch element is at grid (15,10)
@@ -160,9 +166,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSwitchPreservesThreeTrackBlocks() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SWITCH_BASIC_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getGraph().entrySet()).hasSize(3)
@@ -173,9 +180,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSemaphorePreservesSemaphoreElement() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SEMAPHORE_BASIC_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SEMAPHORE_BASIC_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			// Coordinate coupled to SEMAPHORE_BASIC_XML fixture: the semaphore element is at grid (15,10)
@@ -187,9 +195,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSemaphorePreservesTwoTrackBlocks() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SEMAPHORE_BASIC_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SEMAPHORE_BASIC_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getGraph().entrySet()).hasSize(2)
@@ -200,9 +209,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripParallelTracksPreservesFourInOuts() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(4)
@@ -211,9 +221,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripParallelTracksPreservesTwoTrackBlocks() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getGraph().entrySet()).hasSize(2)
@@ -227,17 +238,18 @@ class XmlRoundTripNetworkResourcesTest {
 			val edgeCount: Int,
 			val cols: Int,
 			val rows: Int,
-			val xml: String,
+			val xml: String
 		)
-		val data1 = CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
-			NetworkStructureData(
-				ctx1.getInOuts().size,
-				ctx1.getGraph().entrySet().size,
-				ctx1.getRailWayNetGrid().cols,
-				ctx1.getRailWayNetGrid().rows,
-				writer.generate(ctx1)
-			)
-		}
+		val data1 =
+			CommonTestFixtures.parseEditingContext(NetworkResources.TWO_TRACKS_PARALLEL_XML).use { ctx1 ->
+				NetworkStructureData(
+					ctx1.getInOuts().size,
+					ctx1.getGraph().entrySet().size,
+					ctx1.getRailWayNetGrid().cols,
+					ctx1.getRailWayNetGrid().rows,
+					writer.generate(ctx1)
+				)
+			}
 
 		reader.parse(data1.xml).use { ctx2 ->
 			val xml2 = writer.generate(ctx2)
@@ -256,9 +268,10 @@ class XmlRoundTripNetworkResourcesTest {
 
 	@Test
 	fun roundTripSingleInOutPreservesOneInOut() {
-		val xml = CommonTestFixtures.parseEditingContext(NetworkResources.SINGLE_INOUT_XML).use { ctx1 ->
-			writer.generate(ctx1)
-		}
+		val xml =
+			CommonTestFixtures.parseEditingContext(NetworkResources.SINGLE_INOUT_XML).use { ctx1 ->
+				writer.generate(ctx1)
+			}
 
 		reader.parse(xml).use { ctx2 ->
 			assertThat(ctx2.getInOuts()).hasSize(1)
