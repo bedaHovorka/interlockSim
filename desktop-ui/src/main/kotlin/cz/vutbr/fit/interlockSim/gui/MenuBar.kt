@@ -400,8 +400,12 @@ class MenuBar : JMenuBar() {
 	 * Builds the "Simulation" menu with Start/Stop actions and a Speed submenu.
 	 *
 	 * Speed presets (0.1x, 0.5x, 1x, 2x, 5x, 10x, 50x) are available via menu items.
-	 * Global keyboard shortcuts (keys 1–5, +/-, Space) are handled by [SimulationKeyBindings]
-	 * during simulation mode (Phase 3.1, Issue #193).
+	 * Global keyboard shortcuts (keys 1–5, +/-, Space, S, T) are handled by
+	 * [SimulationKeyBindings] during simulation mode (Phase 3.1, Issue #193; Goal 8).
+	 *
+	 * **Shortcut reservation:** Keys `S` (step event) and `T` (step time) are reserved
+	 * for simulation-mode step controls. Menu items in this application must not use
+	 * `S` or `T` as mnemonics or accelerators, to avoid conflicts with those bindings.
 	 */
 	private fun simulationMenu(): JMenu {
 		val menu = JMenu("Simulation")
@@ -452,7 +456,9 @@ class MenuBar : JMenuBar() {
 					"- Key 5: 10x speed<br>" +
 					"- Plus (+): Increase speed by 1.5x<br>" +
 					"- Minus (-): Decrease speed by 1.5x<br>" +
-					"- Space: Pause/resume simulation</html>"
+					"- Space: Pause/resume simulation<br>" +
+					"- S: Step one simulation event when paused<br>" +
+					"- T: Step forward by the configured time delta when paused</html>"
 			)
 		)
 		menu.add(

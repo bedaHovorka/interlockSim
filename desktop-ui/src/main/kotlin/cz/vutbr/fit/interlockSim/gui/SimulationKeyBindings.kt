@@ -34,6 +34,10 @@ import javax.swing.text.JTextComponent
  * Shortcuts are suppressed while a text component has keyboard focus, so typing in
  * fields such as the Step Time spinner does not accidentally trigger simulation actions.
  *
+ * Step shortcuts `S` and `T` are deliberately bound as plain keystrokes (no Alt/Ctrl
+ * modifiers). They are active only while the frame is in simulation mode and must not
+ * overlap with menu mnemonics/accelerators; [MenuBar] reserves those keys accordingly.
+ *
  * ## Usage
  * ```kotlin
  * val keyBindings = SimulationKeyBindings(frame.simulationController)
