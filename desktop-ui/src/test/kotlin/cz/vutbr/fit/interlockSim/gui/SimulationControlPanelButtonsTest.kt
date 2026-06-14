@@ -13,6 +13,7 @@ package cz.vutbr.fit.interlockSim.gui
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationContext
@@ -316,13 +317,21 @@ class SimulationControlPanelButtonsTest {
 	}
 
 	@Test
-	@DisplayName("spinner value is coerced into the allowed range when syncing from runner")
-	fun spinnerCoercesOutOfRangeRunnerDelta() {
+	@DisplayName("spinner rejects an out-of-range user value with ParseException")
+	fun spinnerRejectsOutOfRangeUserValue() {
 		val runner = runnerWith(paused = false)
-		runner.stepTimeDelta = 120.0
+		var parseException: java.text.ParseException? = null
 		SwingUtilities.invokeAndWait {
 			panel.runner = runner
+			val spinner = findSpinner()
+			(spinner.editor as? javax.swing.JSpinner.DefaultEditor)?.textField?.text = "120.0"
+			try {
+				spinner.commitEdit()
+			} catch (e: java.text.ParseException) {
+				parseException = e
+			}
 		}
-		assertThat(spinnerModel().value as Double).isEqualTo(60.0)
+		assertThat(parseException).isNotNull()
+		assertThat(runner.stepTimeDelta).isEqualTo(1.0)
 	}
 }

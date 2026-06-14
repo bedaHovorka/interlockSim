@@ -42,9 +42,10 @@ class SimulationRunnerTest {
 	}
 
 	@Test
-	@DisplayName("defaults: speedMultiplier=1.0, isPaused=false, not running")
+	@DisplayName("defaults: speedMultiplier=1.0, stepTimeDelta=1.0, isPaused=false, not running")
 	fun defaults() {
 		assertThat(runner.speedMultiplier).isEqualTo(1.0)
+		assertThat(runner.stepTimeDelta).isEqualTo(1.0)
 		assertThat(runner.isPaused).isFalse()
 		assertThat(runner.isRunning()).isFalse()
 	}
@@ -80,6 +81,32 @@ class SimulationRunnerTest {
 	@DisplayName("speed 100.1 above upper bound throws")
 	fun speedAboveUpperBoundThrows() {
 		assertThrows(IllegalArgumentException::class.java) { runner.speedMultiplier = 100.1 }
+	}
+
+	@Test
+	@DisplayName("stepTimeDelta below 0.001 throws")
+	fun stepTimeDeltaBelowLowerBoundThrows() {
+		assertThrows(IllegalArgumentException::class.java) { runner.stepTimeDelta = 0.0009 }
+	}
+
+	@Test
+	@DisplayName("stepTimeDelta 0.001 accepted (inclusive lower bound)")
+	fun stepTimeDeltaLowerBoundAccepted() {
+		runner.stepTimeDelta = 0.001
+		assertThat(runner.stepTimeDelta).isEqualTo(0.001)
+	}
+
+	@Test
+	@DisplayName("stepTimeDelta 60.0 accepted (inclusive upper bound)")
+	fun stepTimeDeltaUpperBoundAccepted() {
+		runner.stepTimeDelta = 60.0
+		assertThat(runner.stepTimeDelta).isEqualTo(60.0)
+	}
+
+	@Test
+	@DisplayName("stepTimeDelta above 60.0 throws")
+	fun stepTimeDeltaAboveUpperBoundThrows() {
+		assertThrows(IllegalArgumentException::class.java) { runner.stepTimeDelta = 60.1 }
 	}
 
 	@Test
@@ -311,7 +338,7 @@ class SimulationRunnerTest {
 	}
 
 	@Test
-	@DisplayName("requestStepTime validates dt > 0")
+	@DisplayName("requestStepTime validates dt is within 0.001..60.0")
 	fun requestStepTimeValidation() {
 		assertThrows(IllegalArgumentException::class.java) {
 			runner.requestStepTime(0.0)
@@ -319,8 +346,16 @@ class SimulationRunnerTest {
 		assertThrows(IllegalArgumentException::class.java) {
 			runner.requestStepTime(-1.5)
 		}
-		runner.requestStepTime(0.001) // should succeed
+		assertThrows(IllegalArgumentException::class.java) {
+			runner.requestStepTime(0.0009)
+		}
+		assertThrows(IllegalArgumentException::class.java) {
+			runner.requestStepTime(60.1)
+		}
+		runner.requestStepTime(0.001) // inclusive lower bound
 		assertThat(runner.pollStepTime()).isEqualTo(0.001)
+		runner.requestStepTime(60.0) // inclusive upper bound
+		assertThat(runner.pollStepTime()).isEqualTo(60.0)
 	}
 
 	@Test

@@ -223,8 +223,8 @@ class SimulationControlPanel : JPanel() {
 		stepTimeDeltaSpinner = JSpinner(
 			SpinnerNumberModel(
 				DEFAULT_STEP_TIME_DELTA,
-				MIN_STEP_TIME_DELTA,
-				MAX_STEP_TIME_DELTA,
+				SimulationRunner.MIN_STEP_TIME_DELTA,
+				SimulationRunner.MAX_STEP_TIME_DELTA,
 				STEP_TIME_SPINNER_STEP
 			)
 		)
@@ -314,8 +314,11 @@ class SimulationControlPanel : JPanel() {
 	 * Called from the [runner] setter when a non-null runner is attached.
 	 */
 	private fun syncUiToStepTimeDelta(delta: Double) {
+		val coerced = delta.coerceIn(
+			SimulationRunner.MIN_STEP_TIME_DELTA,
+			SimulationRunner.MAX_STEP_TIME_DELTA
+		)
 		val model = stepTimeDeltaSpinner.model as SpinnerNumberModel
-		val coerced = delta.coerceIn(model.minimum as Double, model.maximum as Double)
 		if (model.value as Double != coerced) {
 			model.value = coerced
 		}
@@ -341,12 +344,6 @@ class SimulationControlPanel : JPanel() {
 
 		/** Default step-time delta (seconds). */
 		private const val DEFAULT_STEP_TIME_DELTA: Double = 1.0
-
-		/** Minimum step-time delta (seconds). */
-		private const val MIN_STEP_TIME_DELTA: Double = 0.001
-
-		/** Maximum step-time delta (seconds). */
-		private const val MAX_STEP_TIME_DELTA: Double = 60.0
 
 		/** Spinner step size for the step-time delta (seconds). */
 		private const val STEP_TIME_SPINNER_STEP: Double = 0.1
