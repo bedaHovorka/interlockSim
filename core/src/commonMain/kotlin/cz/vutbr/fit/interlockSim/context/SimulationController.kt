@@ -78,6 +78,12 @@ interface SimulationController {
 	 * control thread, then resets to `false`. This allows the simulation loop to
 	 * advance by exactly one event when paused.
 	 *
+	 * **Implementation invariant:** When this method returns `true`, the
+	 * controller's [isPaused] MUST still return `true` on the immediately
+	 * following call. This ensures the simulation loop re-enters pause state
+	 * after processing exactly one step event. The loop does not enforce this
+	 * invariant itself; all [SimulationController] implementations must maintain it.
+	 *
 	 * @return `true` if a step-event was requested (consumed on read), `false` otherwise
 	 */
 	fun pollStepEvent(): Boolean

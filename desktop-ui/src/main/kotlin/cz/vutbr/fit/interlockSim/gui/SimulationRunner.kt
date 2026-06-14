@@ -26,8 +26,9 @@ import java.beans.PropertyChangeSupport
  * Threading model:
  *  - [start] launches a dedicated simulation thread that invokes [context.run].
  *  - The kDisco dispatcher is single-threaded; Swing/EDT may read/write
- *    [speedMultiplier] and [isPaused] concurrently with the simulation thread,
- *    so both are `@Volatile`.
+ *    [speedMultiplier] and [isPaused] concurrently with the simulation thread.
+ *    [speedMultiplier] is `@Volatile`; [isPaused] and step-request flags are
+ *    guarded by [lock].
  *  - [throttle] and [awaitIfPaused] are called from the simulation thread only,
  *    via the [SimulationContext.run] `beforeEvent` hook.
  */
@@ -36,13 +37,12 @@ class SimulationRunner(
 ) : SimulationController {
 	private val pcs = PropertyChangeSupport(this)
 	private val lifecycleLock = Any()
-	private val pauseLock = Object()
-	private val stepLock = Object()
 
-	@Volatile
+	/** Single lock guarding pausedBacking, stepEventRequested, and stepTimeRequested. */
+	private val lock = Object()
+
 	private var stepEventRequested: Boolean = false
 
-	@Volatile
 	private var stepTimeRequested: Double? = null
 
 	@Volatile
@@ -54,7 +54,6 @@ class SimulationRunner(
 	@Volatile
 	private var speedMultiplierBacking: Double = DEFAULT_SPEED
 
-	@Volatile
 	private var pausedBacking: Boolean = false
 
 	/**
@@ -90,79 +89,70 @@ class SimulationRunner(
 	 */
 	@get:JvmName("isPausedProp")
 	var isPaused: Boolean
-		get() = pausedBacking
+		get() = synchronized(lock) { pausedBacking }
 		set(value) {
 			val old: Boolean
-			synchronized(pauseLock) {
+			synchronized(lock) {
 				old = pausedBacking
 				if (old == value) return
 				pausedBacking = value
-				if (!value) {
-					pauseLock.notifyAll()
-				}
+				if (!value) lock.notifyAll()
 			}
 			pcs.firePropertyChange(PROP_IS_PAUSED, old, value)
 		}
 
 	fun requestStepEvent() {
-		synchronized(stepLock) {
-			val oldEvent = stepEventRequested
-			val oldTime = stepTimeRequested
+		val oldEvent: Boolean
+		val oldTime: Double?
+		synchronized(lock) {
+			oldEvent = stepEventRequested
+			oldTime = stepTimeRequested
 			stepEventRequested = true
 			stepTimeRequested = null
-			if (!oldEvent) {
-				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, false, true)
-			}
-			if (oldTime != null) {
-				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
-			}
+			lock.notifyAll()
 		}
-		// Wake awaitIfPaused so it can re-check for the new step request.
-		// stepLock is released above; acquiring pauseLock here is safe (no circular order).
-		synchronized(pauseLock) { pauseLock.notifyAll() }
+		if (!oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, false, true)
+		if (oldTime != null) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, null)
 	}
 
 	fun requestStepTime(simSeconds: Double) {
 		require(simSeconds > 0.0) {
 			"Step-time delta must be positive, got: $simSeconds"
 		}
-		synchronized(stepLock) {
-			val oldEvent = stepEventRequested
-			val oldTime = stepTimeRequested
+		val oldEvent: Boolean
+		val oldTime: Double?
+		synchronized(lock) {
+			oldEvent = stepEventRequested
+			oldTime = stepTimeRequested
 			stepTimeRequested = simSeconds
 			stepEventRequested = false
-			if (oldEvent) {
-				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
-			}
-			if (oldTime != simSeconds) {
-				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
-			}
+			lock.notifyAll()
 		}
-		// Wake awaitIfPaused so it can re-check for the new step request.
-		synchronized(pauseLock) { pauseLock.notifyAll() }
+		if (oldEvent) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+		if (oldTime != simSeconds) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, oldTime, simSeconds)
 	}
 
-	override fun pollStepEvent(): Boolean =
-		synchronized(stepLock) {
-			val r = stepEventRequested
-			stepEventRequested = false
-			if (r) {
-				pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
-			}
-			r
+	override fun pollStepEvent(): Boolean {
+		val r: Boolean
+		synchronized(lock) {
+			r = stepEventRequested
+			if (r) stepEventRequested = false
 		}
+		if (r) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
+		return r
+	}
 
-	override fun pollStepTime(): Double? =
-		synchronized(stepLock) {
-			val r = stepTimeRequested
-			stepTimeRequested = null
-			if (r != null) {
-				pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, r, null)
-			}
-			r
+	override fun pollStepTime(): Double? {
+		val r: Double?
+		synchronized(lock) {
+			r = stepTimeRequested
+			if (r != null) stepTimeRequested = null
 		}
+		if (r != null) pcs.firePropertyChange(PROP_STEP_TIME_REQUESTED, r, null)
+		return r
+	}
 
-	override fun isPaused(): Boolean = pausedBacking
+	override fun isPaused(): Boolean = synchronized(lock) { pausedBacking }
 
 	/** Register a listener for all property change events. */
 	fun addPropertyChangeListener(listener: PropertyChangeListener) {
@@ -238,9 +228,7 @@ class SimulationRunner(
 			}
 		}
 		// Wake any paused wait OUTSIDE lifecycleLock so we never hold both locks.
-		synchronized(pauseLock) {
-			pauseLock.notifyAll()
-		}
+		synchronized(lock) { lock.notifyAll() }
 		// simThread is cleared by the simulation thread's own finally block
 		// once it truly terminates.
 	}
@@ -253,35 +241,41 @@ class SimulationRunner(
 	 *
 	 * Returns immediately when not paused. Also returns early if a step-event
 	 * ([requestStepEvent]) or step-time request ([requestStepTime]) is pending —
-	 * the step-event is consumed here; the step-time value is left for the
-	 * caller to read via [pollStepTime].
+	 * the step-event is consumed atomically under [lock]; the step-time value is
+	 * left for the caller to read via [pollStepTime].
 	 *
 	 * Safe to block here: this is always invoked on the dedicated
 	 * `SimulationRunner-sim` thread via a `runBlocking` dispatcher, so
 	 * [Object.wait] never pins a shared coroutine thread pool.
+	 *
+	 * All three mutable fields ([pausedBacking], [stepEventRequested],
+	 * [stepTimeRequested]) are guarded by [lock]. Evaluating the wait condition
+	 * and calling [Object.wait] happen under the same lock, so notifications from
+	 * [requestStepEvent], [requestStepTime], or the [isPaused] setter can never
+	 * be lost between the condition check and the [Object.wait] call.
 	 */
 	override suspend fun awaitIfPaused() {
-		synchronized(pauseLock) {
+		var consumedStep = false
+		synchronized(lock) {
 			while (pausedBacking && !stepEventRequested && stepTimeRequested == null) {
 				try {
-					pauseLock.wait()
+					lock.wait()
 				} catch (e: InterruptedException) {
 					Thread.currentThread().interrupt()
 					return
 				}
 			}
-		}
-		// Consume a pending step-event outside pauseLock to avoid holding both
-		// locks simultaneously (would invert the stepLock → pauseLock order used
-		// by requestStepEvent/requestStepTime).
-		if (stepEventRequested) {
-			synchronized(stepLock) {
-				if (stepEventRequested) {
-					stepEventRequested = false
-					pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
-				}
+			// Consume a pending step-event atomically while still holding the lock,
+			// eliminating the TOCTOU window that existed when consumption was deferred
+			// outside the synchronized block.
+			if (stepEventRequested) {
+				stepEventRequested = false
+				consumedStep = true
 			}
 		}
+		// Fire property-change event outside the lock — pcs callbacks must not
+		// be invoked while holding any internal lock.
+		if (consumedStep) pcs.firePropertyChange(PROP_STEP_EVENT_REQUESTED, true, false)
 		// stepTimeRequested is intentionally left unconsumed; the beforeEvent
 		// lambda reads it via pollStepTime() to compute the step-time window.
 	}

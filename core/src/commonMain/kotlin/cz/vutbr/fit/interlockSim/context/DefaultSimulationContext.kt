@@ -1147,7 +1147,9 @@ open class DefaultSimulationContext(
 					if (stepTimeTarget == null) {
 						if (controller.isPaused()) logger.debug { "Simulation paused at t=$t" }
 						controller.awaitIfPaused()
-						// Consume a step-event request (impl sets paused=true after consuming)
+						// Consume a step-event request. Return value intentionally not acted on:
+						// per SimulationController contract, isPaused() remains true after a
+						// step-event is consumed, so the next iteration re-enters awaitIfPaused().
 						controller.pollStepEvent()
 						// Consume a step-time request; if present, allow events to run until target
 						controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }

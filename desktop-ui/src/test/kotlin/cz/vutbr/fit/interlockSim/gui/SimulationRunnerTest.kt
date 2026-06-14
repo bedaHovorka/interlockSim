@@ -338,6 +338,75 @@ class SimulationRunnerTest {
 	}
 
 	@Test
+	@DisplayName("lost-wakeup regression: requestStepEvent concurrent with awaitIfPaused always wakes the waiter")
+	fun lostWakeupRegression() {
+		// Regression test for the lost-wakeup bug where stepEventRequested was written
+		// under stepLock but read in the awaitIfPaused wait-condition under pauseLock.
+		// With the single-lock fix, the notification can never arrive before wait().
+		val iterations = 1_000
+		repeat(iterations) {
+			val fresh = SimulationRunner(context)
+			fresh.isPaused = true
+
+			val waiterReady = CountDownLatch(1)
+			val waiterDone = CountDownLatch(1)
+
+			val waiter = Thread {
+				// Signal before calling awaitIfPaused to tighten the race window.
+				waiterReady.countDown()
+				runBlocking { fresh.awaitIfPaused() }
+				waiterDone.countDown()
+			}
+			waiter.isDaemon = true
+			waiter.start()
+
+			waiterReady.await(5, TimeUnit.SECONDS)
+			// Request step immediately — races with awaitIfPaused entering wait().
+			fresh.requestStepEvent()
+
+			assertThat(waiterDone.await(5, TimeUnit.SECONDS)).isTrue()
+			waiter.join(5_000)
+			assertThat(waiter.isAlive).isFalse()
+		}
+	}
+
+	@Test
+	@DisplayName("TOCTOU regression: awaitIfPaused consumes step-event atomically so pollStepEvent sees nothing left")
+	fun toctouStepEventConsumedAtomically() {
+		// Regression test: previously awaitIfPaused read stepEventRequested outside the lock
+		// after releasing pauseLock, creating a window where pollStepEvent() could double-fire
+		// the "consumed" property-change event. With the single-lock fix, awaitIfPaused consumes
+		// the event atomically under the lock — pollStepEvent() always finds the flag already clear.
+		val iterations = 10_000
+		repeat(iterations) {
+			val fresh = SimulationRunner(context)
+			fresh.isPaused = true
+			fresh.requestStepEvent()
+
+			val falseEvents = mutableListOf<Boolean>()
+			fresh.addPropertyChangeListener(SimulationRunner.PROP_STEP_EVENT_REQUESTED) { evt ->
+				if (evt.newValue == false) falseEvents.add(false)
+			}
+
+			// awaitIfPaused must consume the event and return (not block: step event is pending).
+			val done = CountDownLatch(1)
+			val waiter = Thread {
+				runBlocking { fresh.awaitIfPaused() }
+				done.countDown()
+			}
+			waiter.isDaemon = true
+			waiter.start()
+			assertThat(done.await(5, TimeUnit.SECONDS)).isTrue()
+
+			// pollStepEvent must find nothing left — the event was already consumed atomically.
+			assertThat(fresh.pollStepEvent()).isFalse()
+
+			// The "false" property-change (consumed) must have fired exactly once.
+			assertThat(falseEvents.size).isEqualTo(1)
+		}
+	}
+
+	@Test
 	@DisplayName("concurrent requestStepEvent and pollStepEvent does not deadlock or crash")
 	fun concurrentStepEventRaceFree() {
 		val iterations = 100_000
