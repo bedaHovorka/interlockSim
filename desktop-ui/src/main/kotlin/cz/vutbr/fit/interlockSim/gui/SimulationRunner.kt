@@ -46,7 +46,23 @@ class SimulationRunner(
 	private var stepTimeRequested: Double? = null
 
 	@Volatile
-	var stepTimeDelta: Double = 1.0
+	private var stepTimeDeltaBacking: Double = DEFAULT_STEP_TIME_DELTA
+
+	/**
+	 * Time delta used by [requestStepTime] when advancing the simulation by a
+	 * fixed amount of simulation time.
+	 *
+	 * Valid range: [MIN_STEP_TIME_DELTA]..[MAX_STEP_TIME_DELTA]. Values outside
+	 * the range throw [IllegalArgumentException].
+	 */
+	var stepTimeDelta: Double
+		get() = stepTimeDeltaBacking
+		set(value) {
+			require(value in MIN_STEP_TIME_DELTA..MAX_STEP_TIME_DELTA) {
+				"stepTimeDelta must be in [$MIN_STEP_TIME_DELTA..$MAX_STEP_TIME_DELTA], got: $value"
+			}
+			stepTimeDeltaBacking = value
+		}
 
 	@Volatile
 	private var simThread: Thread? = null
@@ -116,8 +132,8 @@ class SimulationRunner(
 	}
 
 	fun requestStepTime(simSeconds: Double) {
-		require(simSeconds > 0.0) {
-			"Step-time delta must be positive, got: $simSeconds"
+		require(simSeconds in MIN_STEP_TIME_DELTA..MAX_STEP_TIME_DELTA) {
+			"Step-time delta must be in [$MIN_STEP_TIME_DELTA..$MAX_STEP_TIME_DELTA], got: $simSeconds"
 		}
 		val oldEvent: Boolean
 		val oldTime: Double?
@@ -302,6 +318,10 @@ class SimulationRunner(
 		const val MIN_SPEED: Double = 0.1
 		const val MAX_SPEED: Double = 100.0
 		const val DEFAULT_SPEED: Double = 1.0
+
+		const val MIN_STEP_TIME_DELTA: Double = 0.001
+		const val MAX_STEP_TIME_DELTA: Double = 60.0
+		const val DEFAULT_STEP_TIME_DELTA: Double = 1.0
 
 		const val PROP_SPEED_MULTIPLIER: String = "speedMultiplier"
 		const val PROP_IS_PAUSED: String = "isPaused"
