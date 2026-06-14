@@ -10,11 +10,13 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.awt.KeyboardFocusManager
 import java.awt.event.ActionEvent
 import java.awt.event.KeyEvent
 import javax.swing.AbstractAction
 import javax.swing.JComponent
 import javax.swing.KeyStroke
+import javax.swing.text.JTextComponent
 
 /**
  * Global keyboard shortcuts for simulation speed control (Phase 3.1 of Goal 7, Issue #193).
@@ -22,10 +24,15 @@ import javax.swing.KeyStroke
  * Provides:
  * - Number keys 1-5 → Speed presets (0.5×, 1×, 2×, 5×, 10×)
  * - Plus/minus keys → Incremental speed adjustment (×1.5 or ÷1.5)
- * - Space bar → Pause/resume toggle (Goal 8 preparation)
+ * - Space bar → Pause/resume toggle (Goal 8)
+ * - `S` → Step one simulation event when paused (Goal 8)
+ * - `T` → Step simulation by [SimulationRunner.stepTimeDelta] sim-seconds when paused (Goal 8)
  *
  * All bindings use [JComponent.WHEN_IN_FOCUSED_WINDOW] scope so they work whenever
  * the [Frame] has focus, regardless of which component has keyboard focus.
+ *
+ * Shortcuts are suppressed while a text component has keyboard focus, so typing in
+ * fields such as the Step Time spinner does not accidentally trigger simulation actions.
  *
  * ## Usage
  * ```kotlin
@@ -134,6 +141,18 @@ internal class SimulationKeyBindings(
 	// ── Action implementations ─────────────────────────────────────────────────
 
 	/**
+	 * Returns `true` when the current keyboard focus owner is a text component.
+	 *
+	 * Global shortcuts use [JComponent.WHEN_IN_FOCUSED_WINDOW] scope, which would otherwise
+	 * intercept keys typed into text fields (e.g. the Step Time spinner). This guard lets
+	 * text components consume the key event normally.
+	 */
+	private fun isFocusInTextComponent(): Boolean {
+		val focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner
+		return focusOwner is JTextComponent
+	}
+
+	/**
 	 * Action that sets the simulation speed to a fixed preset value.
 	 *
 	 * If no simulation is running, [SimulationController.setSpeed] updates [SimulationController.desiredSpeed]
@@ -143,6 +162,10 @@ internal class SimulationKeyBindings(
 		private val speed: Double
 	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Speed preset ignored while focus is in a text component" }
+				return
+			}
 			try {
 				simulationController.setSpeed(speed)
 				logger.debug { "Speed preset applied: $speed×" }
@@ -167,6 +190,10 @@ internal class SimulationKeyBindings(
 		private val multiplier: Double
 	) : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Speed adjustment ignored while focus is in a text component" }
+				return
+			}
 			val currentSpeed = simulationController.speed
 			val newSpeed =
 				(currentSpeed * multiplier).coerceIn(
@@ -195,6 +222,10 @@ internal class SimulationKeyBindings(
 	 */
 	private inner class PauseToggleAction : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Pause toggle ignored while focus is in a text component" }
+				return
+			}
 			val runner = simulationController.runner
 			if (runner == null) {
 				logger.debug { "Pause toggle ignored (no simulation running)" }
@@ -215,6 +246,10 @@ internal class SimulationKeyBindings(
 	 */
 	private inner class StepEventAction : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Step-event ignored while focus is in a text component" }
+				return
+			}
 			val runner = simulationController.runner
 			if (runner == null) {
 				logger.debug { "Step-event ignored (no simulation running)" }
@@ -234,6 +269,10 @@ internal class SimulationKeyBindings(
 	 */
 	private inner class StepTimeAction : AbstractAction() {
 		override fun actionPerformed(e: ActionEvent) {
+			if (isFocusInTextComponent()) {
+				logger.debug { "Step-time ignored while focus is in a text component" }
+				return
+			}
 			val runner = simulationController.runner
 			if (runner == null) {
 				logger.debug { "Step-time ignored (no simulation running)" }
