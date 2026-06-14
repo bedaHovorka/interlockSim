@@ -23,3 +23,5 @@ actual fun deleteFile(path: String) {
 }
 
 actual fun fileExists(path: String): Boolean = java.io.File(path).exists()
+
+actual fun tempDirectory(): String = System.getProperty("java.io.tmpdir") ?: "/tmp"

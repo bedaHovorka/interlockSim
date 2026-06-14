@@ -21,7 +21,8 @@ class PlatformIOTest {
 	}
 
 	private fun tempPath(suffix: String): String {
-		val path = "/tmp/interlockSim-platform-io-$suffix-${currentTimeMillisKMP()}.txt"
+		val dir = tempDirectory().trimEnd('/', '\\')
+		val path = "$dir/interlockSim-platform-io-$suffix-${currentTimeMillisKMP()}.txt"
 		testFiles += path
 		return path
 	}
@@ -59,7 +60,8 @@ class PlatformIOTest {
 
 	@Test
 	fun `readTextFile throws for non-existent file`() {
-		val path = "/tmp/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
+		val dir = tempDirectory().trimEnd('/', '\\')
+		val path = "$dir/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
 		assertFailsWith<IllegalStateException> { readTextFile(path) }
 	}
 
@@ -75,7 +77,8 @@ class PlatformIOTest {
 
 	@Test
 	fun `fileExists returns false for non-existent path`() {
-		val path = "/tmp/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
+		val dir = tempDirectory().trimEnd('/', '\\')
+		val path = "$dir/interlockSim-does-not-exist-${currentTimeMillisKMP()}.txt"
 		assertThat(fileExists(path)).isEqualTo(false)
 	}
 

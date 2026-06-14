@@ -66,3 +66,5 @@ actual fun deleteFile(path: String) {
 }
 
 actual fun fileExists(path: String): Boolean = platform.posix.access(path, platform.posix.F_OK) == 0
+
+actual fun tempDirectory(): String = "/tmp"

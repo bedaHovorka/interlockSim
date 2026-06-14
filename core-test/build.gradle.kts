@@ -23,6 +23,9 @@ val kotlinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
+// Linux native target requires a linuxX64 toolchain — only configure on Linux hosts.
+val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+
 kotlin {
 	jvm {
 		compilerOptions {
@@ -33,7 +36,9 @@ kotlin {
 		}
 	}
 
-	linuxX64()
+	if (isLinuxHost) {
+		linuxX64()
+	}
 
 	sourceSets {
 		val commonMain by getting {
@@ -71,8 +76,10 @@ tasks.named("compileKotlinJvm") {
 	dependsOn(rootProject.tasks.named("checkKdisco"))
 }
 
-tasks.named("compileKotlinLinuxX64") {
-	dependsOn(rootProject.tasks.named("checkKdisco"))
+if (isLinuxHost) {
+	tasks.named("compileKotlinLinuxX64") {
+		dependsOn(rootProject.tasks.named("checkKdisco"))
+	}
 }
 
 // ===========================================

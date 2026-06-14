@@ -42,7 +42,11 @@ class DefaultSimulationContextFactoryTest : KoinTestBase() {
 	@BeforeEach
 	fun writeTempXml() {
 		shuntingFile = tmpDir.resolve("vyhybna.xml").toFile()
-		TestFixtures.loadShuntingXml().use { it.copyTo(shuntingFile.outputStream()) }
+		TestFixtures.loadShuntingXml().use { input ->
+			shuntingFile.outputStream().use { output ->
+				input.copyTo(output)
+			}
+		}
 	}
 
 	@Nested
