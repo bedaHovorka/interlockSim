@@ -16,20 +16,26 @@ import java.util.Locale
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JButton
+import javax.swing.JFormattedTextField
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JSlider
+import javax.swing.JSpinner
+import javax.swing.SpinnerNumberModel
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
 
 /**
- * Speed control panel for the simulation, implementing Phase 2.1 of Goal 7 (Issue #190).
+ * Speed control panel for the simulation, implementing Phase 2.1 of Goal 7 (Issue #190)
+ * and the pause/step controls of Goal 8 (Issue #501).
  *
  * Provides:
  * - A linear [JSlider] covering 0.1× to 10× in 0.1× increments
  * - Seven preset buttons: 0.1×, 0.5×, 1×, 2×, 5×, 10×, 50×
  * - A live speed label showing the current multiplier
  * - Pause/Resume toggle, Step Event, and Step Time buttons (Goal 8)
+ * - A [JSpinner] next to Step Time to configure [SimulationRunner.stepTimeDelta]
+ *   (default 1.0 s, range 0.001–60.0 s)
  *
  * The slider range is 0.1×–10× (expert users reach 50× via the preset button only).
  * All slider integer values are mapped to `value / SLIDER_SCALE` so that the internal
@@ -39,7 +45,7 @@ import javax.swing.SwingUtilities
  * - Setting [runner] installs listeners on [SimulationRunner.PROP_SPEED_MULTIPLIER] and
  *   [SimulationRunner.PROP_IS_PAUSED] so that changes made programmatically (e.g. from
  *   tests or keyboard shortcuts) are reflected in the UI.
- * - User interaction (slider drag, button click) writes back to [SimulationRunner].
+ * - User interaction (slider drag, button click, spinner change) writes back to [SimulationRunner].
  * - The panel is automatically hidden/shown by [cz.vutbr.fit.interlockSim.gui.Frame] when
  *   switching between editing and simulation modes.
  *
@@ -66,15 +72,18 @@ class SimulationControlPanel : JPanel() {
 	/** Step Time button — advances [SimulationRunner.stepTimeDelta] sim-seconds when paused (Goal 8). */
 	private val stepTimeButton: JButton
 
+	/** Spinner that configures the time delta used by [stepTimeButton]. */
+	private val stepTimeDeltaSpinner: JSpinner
+
 	/**
 	 * The [SimulationRunner] currently wired to this panel, or `null` when no
 	 * simulation is running.  Setting this property:
 	 * - Removes the listeners from the old runner (if any)
 	 * - Installs listeners on the new runner (if non-null) for [SimulationRunner.PROP_SPEED_MULTIPLIER]
 	 *   and [SimulationRunner.PROP_IS_PAUSED]
-	 * - Synchronises the slider, label, and pause buttons to the new runner's current state
-	 *   (when non-null); setting to `null` retains the last displayed speed so the panel is
-	 *   not visually reset, and disables the pause controls.
+	 * - Synchronises the slider, label, pause buttons, and step-time spinner to the new runner's
+	 *   current state (when non-null); setting to `null` retains the last displayed speed so the panel
+	 *   is not visually reset, and disables the pause controls.
 	 *
 	 * Must be set from the EDT.
 	 */
@@ -88,12 +97,14 @@ class SimulationControlPanel : JPanel() {
 			if (value != null) {
 				syncUiToSpeed(value.speedMultiplier)
 				syncUiToPaused(value.isPaused)
+				syncUiToStepTimeDelta(value.stepTimeDelta)
 			} else {
 				// When value is null: disable pause controls, keep speed display as-is.
 				syncUiToPaused(false)
 				pauseButton.isEnabled = false
 				stepEventButton.isEnabled = false
 				stepTimeButton.isEnabled = false
+				stepTimeDeltaSpinner.isEnabled = false
 			}
 		}
 
@@ -180,11 +191,11 @@ class SimulationControlPanel : JPanel() {
 
 		add(buttonRow)
 
-		// ── Row 3: pause / step controls (Goal 8) ─────────────────────────────
+		// ── Row 3: pause / step controls (Goal 8, Issue #501) ───────────────────
 		val pauseRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
 
 		pauseButton = JButton(LABEL_PAUSE)
-		pauseButton.toolTipText = "Pause or resume the simulation (Space)"
+		pauseButton.toolTipText = "Pause/resume the simulation (Space)"
 		pauseButton.isEnabled = false
 		pauseButton.addActionListener {
 			val r = runner ?: return@addActionListener
@@ -193,7 +204,7 @@ class SimulationControlPanel : JPanel() {
 		pauseRow.add(pauseButton)
 
 		stepEventButton = JButton("Step Event")
-		stepEventButton.toolTipText = "Advance one simulation event (S)"
+		stepEventButton.toolTipText = "Advance by one event (S)"
 		stepEventButton.isEnabled = false
 		stepEventButton.addActionListener {
 			runner?.requestStepEvent()
@@ -201,13 +212,34 @@ class SimulationControlPanel : JPanel() {
 		pauseRow.add(stepEventButton)
 
 		stepTimeButton = JButton("Step Time")
-		stepTimeButton.toolTipText = "Advance simulation by one time delta (T)"
+		stepTimeButton.toolTipText = "Advance by the configured time delta (T)"
 		stepTimeButton.isEnabled = false
 		stepTimeButton.addActionListener {
 			val r = runner ?: return@addActionListener
 			r.requestStepTime(r.stepTimeDelta)
 		}
 		pauseRow.add(stepTimeButton)
+
+		stepTimeDeltaSpinner = JSpinner(
+			SpinnerNumberModel(
+				DEFAULT_STEP_TIME_DELTA,
+				MIN_STEP_TIME_DELTA,
+				MAX_STEP_TIME_DELTA,
+				STEP_TIME_SPINNER_STEP
+			)
+		)
+		stepTimeDeltaSpinner.toolTipText = "Simulation time delta for Step Time (seconds)"
+		stepTimeDeltaSpinner.isEnabled = false
+		// Commit the value immediately when focus is lost so action listeners always see
+		// the latest delta, even if the user typed a value but did not press Enter.
+		((stepTimeDeltaSpinner.editor as? JSpinner.DefaultEditor)?.textField as? JFormattedTextField)
+			?.focusLostBehavior = JFormattedTextField.COMMIT
+		stepTimeDeltaSpinner.addChangeListener {
+			val value = (stepTimeDeltaSpinner.value as? Number)?.toDouble() ?: return@addChangeListener
+			runner?.stepTimeDelta = value
+		}
+		pauseRow.add(JLabel("Delta:"))
+		pauseRow.add(stepTimeDeltaSpinner)
 
 		add(pauseRow)
 	}
@@ -273,6 +305,20 @@ class SimulationControlPanel : JPanel() {
 		pauseButton.isEnabled = simRunning
 		stepEventButton.isEnabled = simRunning && paused
 		stepTimeButton.isEnabled = simRunning && paused
+		stepTimeDeltaSpinner.isEnabled = simRunning
+	}
+
+	/**
+	 * Synchronise the step-time spinner to [delta] without writing it back to the runner.
+	 *
+	 * Called from the [runner] setter when a non-null runner is attached.
+	 */
+	private fun syncUiToStepTimeDelta(delta: Double) {
+		val model = stepTimeDeltaSpinner.model as SpinnerNumberModel
+		val coerced = delta.coerceIn(model.minimum as Double, model.maximum as Double)
+		if (model.value as Double != coerced) {
+			model.value = coerced
+		}
 	}
 
 	companion object {
@@ -292,5 +338,17 @@ class SimulationControlPanel : JPanel() {
 		/** Button labels for the pause/resume toggle. */
 		private const val LABEL_PAUSE = "Pause"
 		private const val LABEL_RESUME = "Resume"
+
+		/** Default step-time delta (seconds). */
+		private const val DEFAULT_STEP_TIME_DELTA: Double = 1.0
+
+		/** Minimum step-time delta (seconds). */
+		private const val MIN_STEP_TIME_DELTA: Double = 0.001
+
+		/** Maximum step-time delta (seconds). */
+		private const val MAX_STEP_TIME_DELTA: Double = 60.0
+
+		/** Spinner step size for the step-time delta (seconds). */
+		private const val STEP_TIME_SPINNER_STEP: Double = 0.1
 	}
 }
