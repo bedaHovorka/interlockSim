@@ -1,0 +1,86 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../kdisco-core/0.5.0/kdisco-core-0.5.0.module",
+    "group": "cz.hovorka.kdisco",
+    "module": "kdisco-core",
+    "version": "0.5.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.12"
+    }
+  },
+  "variants": [
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib"
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kdisco-core-linuxX64Main-0.5.0.klib",
+          "url": "kdisco-core-linuxx64-0.5.0.klib",
+          "size": 80845,
+          "sha512": "a45be87e3cac8af9751c670511bbef011a8c07799b307b2762571957f2ddfddefa4f50ae34425e2987b9addeba1b0b4ba1a821f4be43cf25eeacf3a87a8be922",
+          "sha256": "55a621baa5a3edd9b8c6e2472a2f0cf33830f950f3d5bcec7cd0cf1bbdcad926",
+          "sha1": "64ac7d749169bbb5a2e4f4dbaa74ab627fa5802a",
+          "md5": "23d72437740f0e9bbf7dbf4d80e79421"
+        }
+      ]
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "files": [
+        {
+          "name": "kdisco-core-linuxx64-0.5.0-sources.jar",
+          "url": "kdisco-core-linuxx64-0.5.0-sources.jar",
+          "size": 24728,
+          "sha512": "f98c584b9a29644a0f0b3bc160611793c94b8a115a59685008ed32e87c44885eca190bd023fedf43b92199237fb21fe2ecd5f548a6db7dc0e047d4bb1b8ffd07",
+          "sha256": "4850e5f6fee8ad5d4162c116672134a3dc4ed4506acc02f8540f1342203748f8",
+          "sha1": "181f4185e86f8a73a483ce1537c4a0d541de1936",
+          "md5": "5710d1f2b4f4debdfc96bc74eaeba7a6"
+        }
+      ]
+    }
+  ]
+}

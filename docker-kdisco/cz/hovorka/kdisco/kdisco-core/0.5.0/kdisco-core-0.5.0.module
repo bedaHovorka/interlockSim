@@ -1,0 +1,321 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "cz.hovorka.kdisco",
+    "module": "kdisco-core",
+    "version": "0.5.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.12"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib"
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.1"
+          }
+        }
+      ],
+      "dependencyConstraints": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "kdisco-core-metadata-0.5.0.jar",
+          "url": "kdisco-core-0.5.0.jar",
+          "size": 16852,
+          "sha512": "ed1e8657c08223b54cc1dbaa47d9373c99ff4e768baf46d2ddf710e45b23d9169b2ea0ae8c1c0fa02923e6d472783d644bdde1e6ff711f118038b5457c30a7de",
+          "sha256": "4b564cd6037be873fe94af3590e6f4ce7cd94611eeb3a4a98d9425677307a43e",
+          "sha1": "69e96b8b54275493c5ab6bac6f9519d544c8c098",
+          "md5": "b0bc3b7964aa3da2ecf7be667a0f5763"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "kdisco-core-kotlin-0.5.0-sources.jar",
+          "url": "kdisco-core-0.5.0-sources.jar",
+          "size": 24728,
+          "sha512": "e523e51b979ce3eb6b6c641c7fb276bccc4a9f7a8bed7ba4bf252f3ce2d609a5652ac79ab9f04f32f141469f65d78f79a9b7c3de0299c77ec6ad403c573c03be",
+          "sha256": "02de917d19645496026701f30b81fd0f2ce0a349c41332eb69ae7077f35b497b",
+          "sha1": "03335298f6caa355a376e61fd1eed131e2805faf",
+          "md5": "400c823e8ea0d1a656fcdace00373a2b"
+        }
+      ]
+    },
+    {
+      "name": "jsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-js/0.5.0/kdisco-core-js-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-js",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "jsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-js/0.5.0/kdisco-core-js-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-js",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "jsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-js/0.5.0/kdisco-core-js-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-js",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-jvm/0.5.0/kdisco-core-jvm-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-jvm",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-jvm/0.5.0/kdisco-core-jvm-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-jvm",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-jvm/0.5.0/kdisco-core-jvm-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-jvm",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-linuxx64/0.5.0/kdisco-core-linuxx64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-linuxx64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-linuxx64/0.5.0/kdisco-core-linuxx64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-linuxx64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosArm64ApiElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosarm64/0.5.0/kdisco-core-macosarm64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosarm64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosarm64/0.5.0/kdisco-core-macosarm64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosarm64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosArm64MetadataElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosarm64/0.5.0/kdisco-core-macosarm64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosarm64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosX64ApiElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosx64/0.5.0/kdisco-core-macosx64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosx64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosx64/0.5.0/kdisco-core-macosx64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosx64",
+        "version": "0.5.0"
+      }
+    },
+    {
+      "name": "macosX64MetadataElements-published",
+      "attributes": {
+        "artifactType": "org.jetbrains.kotlin.klib",
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../kdisco-core-macosx64/0.5.0/kdisco-core-macosx64-0.5.0.module",
+        "group": "cz.hovorka.kdisco",
+        "module": "kdisco-core-macosx64",
+        "version": "0.5.0"
+      }
+    }
+  ]
+}

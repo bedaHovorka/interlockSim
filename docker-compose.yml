@@ -37,8 +37,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
-      cache_from:
-        - interlocksim:latest
       # GitHub Packages authentication for kDisco dependency
       # Set GITHUB_ACTOR and GITHUB_TOKEN in environment or .env file
       args:
@@ -88,8 +86,6 @@ services:
     build:
       context: .
       dockerfile: text/Dockerfile
-      cache_from:
-        - interlocksim-text:latest
     image: interlocksim-text:latest
     volumes:
       # Mount local directory to extract artifacts
