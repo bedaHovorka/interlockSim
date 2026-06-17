@@ -52,20 +52,14 @@ COPY core/build.gradle.kts /build/interlockSim/core/
 COPY core-test/build.gradle.kts /build/interlockSim/core-test/
 COPY desktop-ui/build.gradle.kts /build/interlockSim/desktop-ui/
 
-# Layer 2.5: Pre-stage kdisco-core-jvm:0.4.0 artifacts
-# Copied to /root/kdisco-prebuild/ (not /root/.m2/) because the build-step
-# cache mount at /root/.m2/repository would shadow a direct COPY there.
-# The RUN step below installs from this location into the mounted mavenLocal.
-# To refresh: re-run `./gradlew :kdisco-core:publishToMavenLocal` in kdisco
-# and copy the output to docker-kdisco/ in this repo.
-COPY docker-kdisco/ /root/kdisco-prebuild/
+# Layer 2.5: kDisco is fetched from GitHub Packages during dependency resolution.
+# Provide GITHUB_ACTOR and GITHUB_TOKEN build args (already declared above).
+# BuildKit cache mount at /root/.m2/repository keeps the downloaded artifacts warm.
 
-# Layer 3: Resolve dependencies with BuildKit cache mount
-# Install pre-staged kdisco into mounted mavenLocal, then resolve all deps.
+# Layer 3: Resolve dependencies with BuildKit cache mount and GitHub Packages authentication.
 RUN --mount=type=cache,target=/root/.gradle/caches,id=app-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=app-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=app-m2 \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
@@ -80,7 +74,6 @@ COPY core-test/src/ /build/interlockSim/core-test/src/
 RUN --mount=type=cache,target=/root/.gradle/caches,id=app-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=app-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=app-m2 \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
     GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
 
