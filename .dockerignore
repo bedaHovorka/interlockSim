@@ -7,7 +7,8 @@ target/
 artifacts/
 
 # Dependency caches - managed via BuildKit cache mounts
-# docker-kdisco/ is intentionally NOT listed here — it contains pre-built kdisco artifacts for the Docker build
+# kDisco is now fetched from GitHub Packages at build time
+docker-kdisco/
 .ivy2/
 .m2/
 jdisco/.m2/
