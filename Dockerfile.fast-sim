@@ -23,6 +23,10 @@
 # Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
 FROM --platform=linux/amd64 eclipse-temurin:21-jdk AS builder
 
+# Build arguments for GitHub Packages authentication (required for kDisco)
+ARG GITHUB_ACTOR
+ARG GITHUB_TOKEN
+
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
 # libicu-dev: transitive dependency of libxml2-dev on Debian
@@ -53,14 +57,14 @@ COPY core-test/build.gradle.kts /build/core-test/
 COPY desktop-ui/build.gradle.kts /build/desktop-ui/
 COPY fast-sim/build.gradle.kts /build/fast-sim/
 
-# Layer 2.5: Pre-stage kDisco artifacts for offline build
-COPY docker-kdisco/ /root/kdisco-prebuild/
+# Layer 2.5: kDisco artifacts are fetched from GitHub Packages during resolution.
+# GITHUB_ACTOR and GITHUB_TOKEN are forwarded from docker-compose.yml.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
 RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
 # Layer 4: Copy source code (changes most frequently)
@@ -76,7 +80,7 @@ ENV GRADLE_OPTS="-Xmx2g"
 RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
     --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
     --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    cp -rn /root/kdisco-prebuild/. /root/.m2/repository/ && \
+    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
     ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
 
 # Verify binary was created
