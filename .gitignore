@@ -78,3 +78,6 @@ Thumbs.db
 # Claude Code configuration (local settings and skills)
 .claude/
 desktop-ui/*.xml
+
+# Pre-built kDisco artifacts for Docker — now fetched from GitHub Packages
+/docker-kdisco/
