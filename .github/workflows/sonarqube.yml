@@ -49,11 +49,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-sonar
 
-    - name: Install kDisco 0.3.0 artifacts from repository
-      run: |
-        mkdir -p ~/.m2/repository/cz/hovorka/kdisco
-        cp -r docker-kdisco/cz/hovorka/kdisco/. ~/.m2/repository/cz/hovorka/kdisco/
-
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
