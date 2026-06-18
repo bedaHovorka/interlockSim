@@ -7,7 +7,7 @@
 #      Railway Interlocking Simulator
 #
 #      fast-sim: native linuxX64 CLI binary
-#      Multi-stage build: Debian Bookworm builder → Alpine runtime
+#      Multi-stage build: Ubuntu 24.04 LTS (Noble) builder → Alpine runtime
 #
 #      Usage:
 #        docker compose build fast-sim
@@ -31,7 +31,7 @@ ARG GITHUB_TOKEN
 
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
-# libicu-dev: transitive dependency of libxml2-dev on Debian
+# libicu-dev: transitive dependency of libxml2-dev on Debian/Ubuntu
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libxml2-dev \
