@@ -19,8 +19,10 @@
 # ============================================
 # Stage 1: Build native binary with Gradle
 # ============================================
-# Eclipse Temurin provides JDK 21 on Debian Bookworm base.
-# Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
+# Eclipse Temurin provides JDK 21 on Ubuntu 24.04 LTS (Noble).
+# We pin to the -noble tag instead of the rolling 21-jdk tag because the
+# rolling tag now resolves to Ubuntu 26.04 (Resolute), whose libxml2 has
+# SONAME libxml2.so.16 — incompatible with alpine:3.21's libxml2.so.2.
 FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 
 # Build arguments for GitHub Packages authentication (required for kDisco)
@@ -89,13 +91,11 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # ============================================
 # Stage 2: Minimal runtime image
 # ============================================
-# Alpine Linux base (~8MB) instead of debian:bookworm-slim (base ~85MB, total 174MB with libxml2+libicu).
-# Fixes #421: image exceeded 120MB target because Debian's libxml2
-# depends on libicu72 (~30MB). Alpine's libxml2 has no ICU dependency.
-#
-# gcompat provides glibc ABI compatibility for the Kotlin/Native binary,
-# which is compiled against glibc on linuxX64. This is a well-established
-# pattern used by Go (CGO), Rust, and other native binaries on Alpine.
+# Alpine Linux base (~8MB) instead of Ubuntu/Debian slim (~85MB+ with libxml2+libicu).
+# Fixes #421: image exceeded 120MB target because Debian/Ubuntu's libxml2
+# depends on libicu (~30MB). Alpine's libxml2 has no ICU dependency.
+# The builder is pinned to Ubuntu 24.04 LTS (Noble) so its libxml2.so.2
+# SONAME matches Alpine 3.21's libxml2 at runtime.
 FROM --platform=linux/amd64 alpine:3.21
 
 # gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
