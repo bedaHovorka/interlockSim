@@ -23,8 +23,7 @@ val kotlinVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Linux native target requires a linuxX64 toolchain — only configure on Linux hosts.
-val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+val isLinuxHost: Boolean by gradle.extra
 
 kotlin {
 	jvm {

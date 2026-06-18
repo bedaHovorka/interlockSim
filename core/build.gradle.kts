@@ -61,8 +61,7 @@ val ktlintVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-// Linux native target requires libxml2 headers and a linuxX64 toolchain — only configure on Linux hosts.
-val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+val isLinuxHost: Boolean by gradle.extra
 
 // commonMain is KMP-clean: no java.*/javax.* imports, no JVM-only idioms.
 // JVM-only code (xml/, context factories) lives in jvmMain.

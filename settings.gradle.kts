@@ -22,7 +22,9 @@ include(":desktop-ui")
 
 // :fast-sim is a linuxX64 native CLI binary and cannot be built on non-Linux hosts
 // (it requires libxml2 native headers and a Kotlin/Native linuxX64 toolchain).
+// Defined here once; consumed in build scripts via `val isLinuxHost: Boolean by gradle.extra`.
 val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+gradle.extra["isLinuxHost"] = isLinuxHost
 if (isLinuxHost) {
 	include(":fast-sim")
 }

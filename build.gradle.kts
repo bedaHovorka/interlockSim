@@ -80,8 +80,9 @@ listOf(
     tasks.register(name) { dependsOn(":desktop-ui:$name") }
 }
 
-// :fast-sim is only included on Linux hosts; guard lifecycle tasks accordingly.
-val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+// :fast-sim and native subprojects are only included on Linux hosts; guard lifecycle tasks accordingly.
+// Defined in settings.gradle.kts and shared via gradle.extra.
+val isLinuxHost: Boolean by gradle.extra
 if (isLinuxHost) {
 	tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
 	tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
