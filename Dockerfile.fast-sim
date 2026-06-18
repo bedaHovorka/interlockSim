@@ -21,7 +21,7 @@
 # ============================================
 # Eclipse Temurin provides JDK 21 on Debian Bookworm base.
 # Debian bookworm only ships openjdk-17, but Gradle + Kotlin require JDK 21.
-FROM --platform=linux/amd64 eclipse-temurin:21-jdk AS builder
+FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 
 # Build arguments for GitHub Packages authentication (required for kDisco)
 ARG GITHUB_ACTOR
