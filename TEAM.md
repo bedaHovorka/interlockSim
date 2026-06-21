@@ -29,8 +29,9 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Focus Areas:**
 1. **Simulation Engine**
-   - kDisco library usage and limitations
-   - DSOL/Kalasim migration planning (Goal 10)
+   - kDisco 0.5.0 (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
+   - Kalasim migration planning (Goal 10, Phase 2, future)
+   - `:fast-sim` native CLI subproject (linuxX64, PR #421)
    - Discrete-event simulation patterns
    - Event scheduling and timing correctness
 
@@ -691,16 +692,14 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 - Approve phase implementations
 
 **traffic-simulation-expert responsibilities:**
-- ENFORCE sim/ package exclusion from DI
-- Validate simulation correctness after DI changes
+- Validate simulation correctness after DI changes in sim/ package
 - Approve golden output test results
 - Monitor performance benchmarks
 
 **kotlin-junior-dev guidelines:**
 - Use `by inject()` for property injection
 - Use constructor injection when possible
-- Never inject into sim/ package classes
-- Ask kotlin-tech-lead for DI pattern guidance
+- Ask kotlin-tech-lead for DI guidance when working in sim/ package
 
 **java-senior-dev perspective:**
 - Original 2007 code had no DI framework
@@ -719,7 +718,7 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 
 ### Critical DI Rules (All Team Members)
 
-1. ❌ **NEVER inject into sim/ package** - Wait for kDisco migration
+1. ✅ **sim/ package injection allowed** - kDisco Phase 1 migration complete (2026-03-20)
 2. ✅ **Contexts are NOT singletons** - Use factory/scope patterns
 3. ✅ **Preserve factory patterns** - Inject factories, not products
 4. ✅ **Golden output validation required** - Simulation must be unchanged
@@ -727,5 +726,5 @@ The original Java code had well-tuned null safety that must be preserved in Kotl
 
 ---
 
-*Last updated: 2026-01-12*
-*Complete: All 7 agent roles defined + Koin DI guidelines*
+*Last updated: 2026-06-21*
+*Complete: All 7 agent roles defined + Koin DI guidelines (sim/ Koin restriction lifted 2026-03-20)*
