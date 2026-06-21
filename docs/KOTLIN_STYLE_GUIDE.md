@@ -648,20 +648,20 @@ fun tearDown() {
 
 ### Critical DI Rules
 
-#### 1. sim/ Package EXCLUDED
+#### 1. sim/ Package — Koin Injection Allowed
 
-**Rule:** No Koin injection in simulation classes (`sim/` package) until jDisco→DSOL/Kalasim migration.
+**Rule:** Koin injection is allowed in `sim/` package — kDisco Phase 1 migration complete (2026-03-20).
 
-**Rationale:** Simulation correctness depends on jDisco process lifecycle. Physics calculations must remain untouched.
+**Rationale:** Physics calculations and simulation correctness must still be validated thoroughly after DI changes; the DI restriction itself is lifted.
 
 ```kotlin
-// WRONG - Do not inject into simulation classes
-class Train {
-	private val context: SimulationContext by inject()  // ❌ Don't do this
-}
-
-// CORRECT - Pass dependencies explicitly
+// Prefer constructor injection in sim/ (easier to test and reason about)
 class Train(private val context: SimulationContext)  // ✅ Constructor parameter
+
+// Property injection also allowed
+class Train {
+	private val context: SimulationContext by inject()  // ✅ Allowed since 2026-03-20
+}
 ```
 
 #### 2. Contexts are NOT Singletons
@@ -843,7 +843,7 @@ InterlockSim DI modules are defined in `src/main/kotlin/cz/vutbr/fit/interlockSi
 - **contextModule** - Context lifecycle management
 - **objectsModule** - Domain model (minimal by design)
 - **guiModule** - Swing components (ready for expansion)
-- **sim/** - ❌ **EXCLUDED** (deferred until jDisco migration)
+- **sim/** - ✅ **ALLOWED** (kDisco Phase 1 migration complete 2026-03-20)
 
 **Note:** Objects module is intentionally minimal. Domain objects (RailSwitch, RailSemaphore, tracks) are created optimally via XML reflection. Only extend when runtime construction is needed (e.g., Goal 16: Signal Explanation UI).
 

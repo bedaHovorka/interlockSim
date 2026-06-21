@@ -60,7 +60,7 @@ fun setMainProcess(loop: ShuntingLoop) {
 
 ### Hard Constraints
 
-1. **sim/ Package Restriction**: Cannot add Koin DI to sim/ package (traffic-simulation-expert requirement)
+1. **sim/ Package**: Koin DI allowed in sim/ package — kDisco Phase 1 migration complete (2026-03-20)
 2. **jDisco Migration**: Future migration to DSOL/Kalasim planned - design must accommodate this
 3. **Test Compatibility**: All 662 tests must pass
 4. **Backwards Compatibility**: Existing code using contexts must continue to work

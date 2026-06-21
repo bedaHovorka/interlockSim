@@ -246,7 +246,7 @@ pathToSemaphore?.removeFirst()  // ← Why twice???
 ## Constraints (Critical!)
 
 **From CLAUDE.md - Code Modification Guidelines:**
-- ❌ **sim/ package is restricted** - Minimal changes only until jDisco migration
+- ⚠️ **sim/ package** - Minimal logic changes only; Koin DI allowed since 2026-03-20 (kDisco Phase 1 complete)
 - ✅ **Tests are mandatory** - Any modified code MUST be covered by tests
 - ✅ **No breaking changes** - Maintain backward compatibility with existing XML configurations
 - ✅ **Conservative approach** - Only make explicitly required changes
