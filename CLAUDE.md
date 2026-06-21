@@ -15,6 +15,8 @@ Throughout this documentation, the following status markers are used:
 
 ## Agent Team Structure
 
+@TEAM.md
+
 For multi-agent development workflows, see **[TEAM.md](TEAM.md)** which defines 7 specialized agent roles:
 - **traffic-simulation-expert** - Main leader, arbiter, simulation & physics expert
 - **kotlin-tech-lead** - Technical architect, code reviewer, mentor
@@ -24,7 +26,7 @@ For multi-agent development workflows, see **[TEAM.md](TEAM.md)** which defines 
 - **railway-civil-engineer** - Railway domain expert, visioner, requirements definer
 - **qa-engineer** - Quality assurance specialists, UX/UI experts (2-3 allowed)
 
-TEAM.md includes decision authority hierarchy, collaboration patterns, and railway-inspired Agent-to-Agent (A2A) communication protocols.
+TEAM.md includes decision authority hierarchy, collaboration patterns, and railway-inspired Agent-to-Agent (A2A) communication protocols. For fan-of-subagents dispatch, use the role templates in `.claude/TEAM_INVOCATION_GUIDE.md`.
 
 ## Project Overview
 
