@@ -100,6 +100,8 @@ FROM --platform=linux/amd64 alpine:3.21
 
 # gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
 #          Provides /lib64/ld-linux-x86-64.so.2 and glibc symbol wrappers.
+# libgcc:  GCC runtime support library — required alongside gcompat for complete
+#          glibc ABI compatibility on musl-based Alpine.
 # libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2 at build time).
 #          Alpine's libxml2 does NOT pull libicu, unlike Debian's (~30MB saved).
 RUN apk add --no-cache \
