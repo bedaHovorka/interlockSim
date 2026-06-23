@@ -678,7 +678,7 @@ src/main/kotlin/cz/vutbr/fit/interlockSim/context/
 **Koin DI Integration:**
 - Factory injected as singleton
 - Contexts created fresh (not singletons)
-- No DI in sim/ package (as required)
+- Koin injection allowed in sim/ (kDisco Phase 1 complete 2026-03-20)
 
 ### Migration Path for Consumers
 

@@ -2107,7 +2107,7 @@ Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true
 
 **Conservative approach differentiated by component type:**
 
-### Critical Restrictions (Until jDisco Migration)
+### Restrictions for sim/ Package (Logic Only — Koin Now Allowed)
 
 **Simulation Core (`sim/` package):**
 - **Minimal changes only** - Be extremely conservative with simulation logic
@@ -2115,11 +2115,11 @@ Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true
 - **Tests required** - Any changes MUST have comprehensive test coverage first
 - **No unsolicited improvements** - Only make explicitly requested changes
 - **No hallucinated solutions** - Bugfixes must reference working tag behavior with minimal diffs; no speculative spaghetti code
-- **Rationale:** These components use jDisco library. Major changes should wait until migration to DSOL/Kalasim (see LONG_TERM_GOALS.md)
+- **Koin injection allowed** - The Koin restriction was lifted 2026-03-20 (kDisco Phase 1 complete)
 
-**jDisco Library:**
-- **Do not modify** - jDisco is maintained as a separate project at https://github.com/bedavs/jDisco
-- Report issues at the jDisco repository
+**kDisco Library:**
+- **Do not modify** - kDisco is maintained as a separate project at https://github.com/bedaHovorka/kdisco
+- Report issues at the kDisco repository
 
 ### Flexible Development (Other Components)
 
@@ -2147,9 +2147,9 @@ Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true
 - Modernizing utility classes with Kotlin idioms
 - Adding metrics collection infrastructure for Goal 6
 
-**RESTRICTED (until jDisco migration):**
+**RESTRICTED (sim/ package — conservative approach required):**
 - Changing Train physics calculations
-- Modifying jDisco process scheduling
+- Modifying kDisco process scheduling
 - Restructuring simulation event handling
 - Changing core simulation algorithms
 
@@ -2157,7 +2157,7 @@ Quality gates permissive by default. Enable strict: `sonar.qualitygate.wait=true
 - Changes that break existing XML configurations
 - Modifications that fail existing tests
 - Changes that conflict with LONG_TERM_GOALS.md
-- jDisco library modifications
+- kDisco library modifications (maintain at https://github.com/bedaHovorka/kdisco)
 
 ## Project Architecture Context
 
