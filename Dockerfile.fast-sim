@@ -113,10 +113,12 @@ RUN apk add --no-cache \
 COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
     /usr/local/bin/fast-sim
 
-# Native resource roots are baked into the binary as absolute build-tree paths.
-# Copy the same directories the binary expects so Resources.read() can locate XML fixtures.
+# Native resource roots are baked into the binary as absolute build-tree paths. (This is intentional; resources are accessed via absolute paths baked at compile time; see Resources.read implementation.)
+# Only commonMain/resources is required at runtime (vyhybna.xml, data.xsd via
+# BuiltinNetworks and XmlSchemaContent). Test-only roots (core-test/commonMain
+# and core/commonTest) are intentionally omitted to keep the release image small;
+# Resources.read skips missing roots silently.
 COPY --from=builder /build/core/src/commonMain/resources /build/core/src/commonMain/resources
-COPY --from=builder /build/core-test/src/commonMain/resources /build/core-test/src/commonMain/resources
 
 ENTRYPOINT ["fast-sim"]
 CMD ["--help"]
