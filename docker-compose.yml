@@ -88,6 +88,8 @@ services:
     build:
       context: .
       dockerfile: text/Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
     image: interlocksim-text:latest
     volumes:
       # Mount local directory to extract artifacts
