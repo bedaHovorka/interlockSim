@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/session-start.sh",
+            "statusMessage": "Loading session context..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/ktlint-check.sh",
+            "statusMessage": "Running ktlintCheck..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./gradlew integrationTest && docker compose up --build -d",
+            "if": "Bash(git push:*)",
+            "timeout": 600,
+            "statusMessage": "Running pre-push checks (integrationTest + docker build)..."
+          }
+        ]
+      }
+    ]
+  }
+}
