@@ -12,7 +12,9 @@ actual fun writeTextFile(
 	content: String
 ) {
 	try {
-		java.io.File(path).writeText(content)
+		val file = java.io.File(path)
+		file.parentFile?.mkdirs()
+		file.writeText(content)
 	} catch (e: java.io.IOException) {
 		throw IllegalStateException("Cannot write file: $path (${e.message})", e)
 	}
@@ -32,4 +34,4 @@ actual fun deleteFile(path: String) {
 
 actual fun fileExists(path: String): Boolean = java.io.File(path).exists()
 
-actual fun tempDirectory(): String = System.getProperty("java.io.tmpdir") ?: "/tmp"
+actual fun tempDirectory(): String = System.getProperty("java.io.tmpdir")?.takeIf { it.isNotBlank() } ?: "/tmp"
