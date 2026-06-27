@@ -75,8 +75,10 @@ Thumbs.db
 # Phase 0: Baseline outputs (regenerate with ./capture-golden-outputs.sh)
 # Only track metadata (README, analysis, checksums), not 22MB of .log files
 
-# Claude Code configuration (local settings and skills)
-.claude/
+# Claude Code -- ignore local/personal files; commit settings.json and hooks/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 desktop-ui/*.xml
 
 # Pre-built kDisco artifacts for Docker — now fetched from GitHub Packages
