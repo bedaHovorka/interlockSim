@@ -39,7 +39,6 @@ import javax.swing.SwingUtilities
  * - All three shortcuts are suppressed while a text component has keyboard focus
  */
 class SimulationKeyBindingsStepTest {
-
 	private lateinit var controller: SimulationController
 	private lateinit var runner: SimulationRunner
 	private lateinit var keyBindings: SimulationKeyBindings
@@ -170,10 +169,12 @@ class SimulationKeyBindingsStepTest {
 	private fun focusOnTextField(textField: JTextField = JTextField()) {
 		SwingUtilities.invokeAndWait {
 			originalKfm = KeyboardFocusManager.getCurrentKeyboardFocusManager()
-			val stub = object : DefaultKeyboardFocusManager() {
-				override fun getFocusOwner() = textField
-				override fun getPermanentFocusOwner() = textField
-			}
+			val stub =
+				object : DefaultKeyboardFocusManager() {
+					override fun getFocusOwner() = textField
+
+					override fun getPermanentFocusOwner() = textField
+				}
 			KeyboardFocusManager.setCurrentKeyboardFocusManager(stub)
 		}
 	}

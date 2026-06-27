@@ -5,6 +5,15 @@
  * Migrated from Apache Ant + Ivy build system in 2026
  */
 
+pluginManagement {
+	val ktlintPluginVersion: String by settings
+	val detektPluginVersion: String by settings
+	plugins {
+		id("org.jlleitschuh.gradle.ktlint") version ktlintPluginVersion
+		id("io.gitlab.arturbosch.detekt") version detektPluginVersion
+	}
+}
+
 rootProject.name = "interlockSim"
 
 include(":core")

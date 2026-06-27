@@ -33,6 +33,7 @@ val javaVersion: String by project
 val kotlinVersion: String by project
 val jmhVersion: String by project
 val coroutinesVersion: String by project
+val ktlintVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -435,10 +436,9 @@ tasks.register("checkDeprecations") {
 // ===========================================
 
 ktlint {
-    version.set("1.5.0")
+    version.set(ktlintVersion)
     verbose.set(true)
     outputToConsole.set(true)
-    outputColorName.set("AUTO")
     enableExperimentalRules.set(false)
     android.set(false)
     filter {
@@ -452,9 +452,10 @@ ktlint {
     }
 }
 
-tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
-    enabled = false
-}
+// JMH benchmarks use wildcard imports and underscore function names by JMH convention.
+tasks
+    .matching { it.name.contains("Jmh") && (it.name.startsWith("ktlint") || it.name.startsWith("runKtlint")) }
+    .configureEach { enabled = false }
 
 // ===========================================
 // Detekt Configuration

@@ -77,12 +77,13 @@ class StatusBarPausedIndicatorTest {
 	fun propertyChangeEventUpdatesIndicator() {
 		val runner = SimulationRunner(context)
 		val latch = CountDownLatch(1)
-		val listener = PropertyChangeListener { evt ->
-			if (evt.propertyName == SimulationRunner.PROP_IS_PAUSED) {
-				statusBar.setPaused(evt.newValue as Boolean)
-				latch.countDown()
+		val listener =
+			PropertyChangeListener { evt ->
+				if (evt.propertyName == SimulationRunner.PROP_IS_PAUSED) {
+					statusBar.setPaused(evt.newValue as Boolean)
+					latch.countDown()
+				}
 			}
-		}
 		runner.addPropertyChangeListener(SimulationRunner.PROP_IS_PAUSED, listener)
 
 		runner.isPaused = true

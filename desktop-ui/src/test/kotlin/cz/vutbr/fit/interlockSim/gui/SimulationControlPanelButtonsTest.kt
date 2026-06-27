@@ -48,21 +48,22 @@ class SimulationControlPanelButtonsTest {
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
-	private fun findButton(text: String): JButton {
-		return findAllComponents(panel, JButton::class.java)
+	private fun findButton(text: String): JButton =
+		findAllComponents(panel, JButton::class.java)
 			.firstOrNull { it.text == text }
 			?: error("JButton with text '$text' not found in SimulationControlPanel")
-	}
 
-	private fun findSpinner(): JSpinner {
-		return findComponent(panel, JSpinner::class.java)
+	private fun findSpinner(): JSpinner =
+		findComponent(panel, JSpinner::class.java)
 			?: error("JSpinner not found in SimulationControlPanel")
-	}
 
 	private fun spinnerModel(): SpinnerNumberModel = findSpinner().model as SpinnerNumberModel
 
 	/** Recursively find the first component of [type] in the container hierarchy. */
-	private fun <T> findComponent(container: java.awt.Container, type: Class<T>): T? {
+	private fun <T> findComponent(
+		container: java.awt.Container,
+		type: Class<T>
+	): T? {
 		for (c in container.components) {
 			if (type.isInstance(c)) {
 				@Suppress("UNCHECKED_CAST")
@@ -77,7 +78,10 @@ class SimulationControlPanelButtonsTest {
 	}
 
 	/** Recursively collect all components of [type] in the container hierarchy. */
-	private fun <T> findAllComponents(container: java.awt.Container, type: Class<T>): List<T> {
+	private fun <T> findAllComponents(
+		container: java.awt.Container,
+		type: Class<T>
+	): List<T> {
 		val result = mutableListOf<T>()
 		for (c in container.components) {
 			if (type.isInstance(c)) {
@@ -91,7 +95,10 @@ class SimulationControlPanelButtonsTest {
 		return result
 	}
 
-	private fun runnerWith(delta: Double = 1.0, paused: Boolean = false): SimulationRunner {
+	private fun runnerWith(
+		delta: Double = 1.0,
+		paused: Boolean = false
+	): SimulationRunner {
 		val runner = SimulationRunner(context)
 		runner.stepTimeDelta = delta
 		runner.isPaused = paused
@@ -227,10 +234,11 @@ class SimulationControlPanelButtonsTest {
 		}
 
 		val latch = CountDownLatch(1)
-		val thread = Thread {
-			runner.isPaused = true
-			latch.countDown()
-		}
+		val thread =
+			Thread {
+				runner.isPaused = true
+				latch.countDown()
+			}
 		thread.isDaemon = true
 		thread.start()
 		latch.await()

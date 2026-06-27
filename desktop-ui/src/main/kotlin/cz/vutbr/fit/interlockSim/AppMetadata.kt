@@ -9,13 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim
 
-/**
+/*
  * Application metadata constants.
  *
  * These constants define the application identity and version information
  * used in window titles, about dialogs, and logging.
- *
- * @since 0.1-bachelor
  */
 
 /** Application name */

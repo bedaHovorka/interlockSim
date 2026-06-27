@@ -11,13 +11,11 @@ package cz.vutbr.fit.interlockSim.gui
 
 import java.awt.Color
 
-/**
+/*
  * GUI rendering and interaction constants.
  *
  * These constants define visual dimensions, scrolling behavior, and UI element sizing
  * for the railway network editor and simulation visualizer.
- *
- * @since 0.1-bachelor
  */
 
 /**

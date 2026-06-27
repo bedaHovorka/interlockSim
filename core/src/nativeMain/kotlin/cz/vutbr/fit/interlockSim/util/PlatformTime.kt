@@ -16,5 +16,3 @@ actual fun currentTimeMillisKMP(): Long =
 		if (rc != 0) error("clock_gettime failed with code $rc")
 		ts.tv_sec * 1000L + ts.tv_nsec / 1_000_000L
 	}
-
-

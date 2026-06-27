@@ -23,13 +23,10 @@ import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
-/**
+/*
  * Koin Dependency Injection module for InterlockSim
  *
  * Koin migration implementation (2026-01-12 and later)
- *
- * @see org.koin.core.context.startKoin
- * @see cz.vutbr.fit.interlockSim.Main
  */
 
 /**

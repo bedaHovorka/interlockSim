@@ -12,8 +12,8 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
-import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.gui.StatusBarColors.PAUSED_BADGE_COLOR
+import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component

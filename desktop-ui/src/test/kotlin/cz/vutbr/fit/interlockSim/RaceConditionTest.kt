@@ -660,6 +660,7 @@ class RaceConditionTest : KoinTestBase() {
 							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
 							// This test would need to use EditingContext instead.
 							// Commented out since test is already @Disabled
+
 							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
@@ -736,6 +737,7 @@ class RaceConditionTest : KoinTestBase() {
 							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
 							// This test would need to use EditingContext instead.
 							// Commented out since test is already @Disabled
+
 							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util
@@ -1024,6 +1026,7 @@ class RaceConditionTest : KoinTestBase() {
 							// NOTE: After Issue #153.5, SimulationContext no longer supports editing.
 							// This test would need to use EditingContext instead.
 							// Commented out since test is already @Disabled
+
 							/*
 							context.putCell(
 								cz.vutbr.fit.interlockSim.util

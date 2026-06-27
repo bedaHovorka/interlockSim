@@ -360,6 +360,8 @@ For complete SonarQube configuration, quality gates setup, CI/CD integration, an
 
 ### Kotlin Code Quality (Detekt and Ktlint)
 
+**RULE: Disabling ktlint is forbidden.** Never set `enabled = false` on ktlint tasks or add workaround comments to bypass enforcement. Fix violations; don't silence the checker.
+
 **Dual-level approach:**
 - `detekt.yml` - Permissive rules for legacy Java→Kotlin converted code
 - `detekt-strict.yml` - Strict rules for new Kotlin code written from scratch
@@ -369,7 +371,7 @@ For complete SonarQube configuration, quality gates setup, CI/CD integration, an
 ./gradlew detekt              # Legacy/converted code
 ./gradlew detektStrict        # New Kotlin code
 ./gradlew ktlintCheck         # Formatting check
-./gradlew ktlintFormat        # Auto-format (preserves tabs)
+./gradlew ktlintFormat        # Auto-format
 ```
 
 For complete Detekt/Ktlint configuration, rule details, and quality enforcement levels, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Code Quality Enforcement Levels".

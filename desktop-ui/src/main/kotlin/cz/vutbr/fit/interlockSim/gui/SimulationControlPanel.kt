@@ -220,14 +220,15 @@ class SimulationControlPanel : JPanel() {
 		}
 		pauseRow.add(stepTimeButton)
 
-		stepTimeDeltaSpinner = JSpinner(
-			SpinnerNumberModel(
-				DEFAULT_STEP_TIME_DELTA,
-				SimulationRunner.MIN_STEP_TIME_DELTA,
-				SimulationRunner.MAX_STEP_TIME_DELTA,
-				STEP_TIME_SPINNER_STEP
+		stepTimeDeltaSpinner =
+			JSpinner(
+				SpinnerNumberModel(
+					DEFAULT_STEP_TIME_DELTA,
+					SimulationRunner.MIN_STEP_TIME_DELTA,
+					SimulationRunner.MAX_STEP_TIME_DELTA,
+					STEP_TIME_SPINNER_STEP
+				)
 			)
-		)
 		stepTimeDeltaSpinner.toolTipText = "Simulation time delta for Step Time (seconds)"
 		stepTimeDeltaSpinner.isEnabled = false
 		// Commit the value immediately when focus is lost so action listeners always see
@@ -314,10 +315,11 @@ class SimulationControlPanel : JPanel() {
 	 * Called from the [runner] setter when a non-null runner is attached.
 	 */
 	private fun syncUiToStepTimeDelta(delta: Double) {
-		val coerced = delta.coerceIn(
-			SimulationRunner.MIN_STEP_TIME_DELTA,
-			SimulationRunner.MAX_STEP_TIME_DELTA
-		)
+		val coerced =
+			delta.coerceIn(
+				SimulationRunner.MIN_STEP_TIME_DELTA,
+				SimulationRunner.MAX_STEP_TIME_DELTA
+			)
 		val model = stepTimeDeltaSpinner.model as SpinnerNumberModel
 		if (model.value as Double != coerced) {
 			model.value = coerced
