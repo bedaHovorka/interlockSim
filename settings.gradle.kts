@@ -25,7 +25,7 @@ include(":desktop-ui")
 // Defined here once; consumed in build scripts via `val isLinuxHost: Boolean by gradle.extra`.
 val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
 gradle.extra["isLinuxHost"] = isLinuxHost
-if (isLinuxHost) {
+if (file("fast-sim/build.gradle.kts").exists()) {
 	include(":fast-sim")
 }
 

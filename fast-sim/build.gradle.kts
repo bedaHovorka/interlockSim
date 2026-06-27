@@ -17,31 +17,35 @@ val ktlintVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
-kotlin {
-    // linuxX64 only — this is a native CLI binary, not a library
-    linuxX64 {
-        binaries {
-            executable {
-                entryPoint = "cz.vutbr.fit.interlockSim.fastsim.main"
-                baseName = "fast-sim"
-            }
-        }
-    }
+val isLinuxHost: Boolean by gradle.extra
 
-    sourceSets {
-        val linuxX64Main by getting {
-            dependencies {
-                // :core commonMain uses KMP artifacts with linuxX64 klibs:
-                // koin-core 3.5.6, kdisco-core 0.5.0, xmlutil:core 0.91.0,
-                // kotlin-logging 7.0.3 — all validated by :core:compileKotlinLinuxX64 passing.
-                implementation(project(":core"))
+if (isLinuxHost) {
+    kotlin {
+        // linuxX64 only — this is a native CLI binary, not a library
+        linuxX64 {
+            binaries {
+                executable {
+                    entryPoint = "cz.vutbr.fit.interlockSim.fastsim.main"
+                    baseName = "fast-sim"
+                }
             }
         }
-        val linuxX64Test by getting {
-            dependencies {
-                implementation(kotlin("test"))
-                // :core-test provides CommonTestFixtures, NetworkResources, CommonCoreTestModule
-                implementation(project(":core-test"))
+
+        sourceSets {
+            val linuxX64Main by getting {
+                dependencies {
+                    // :core commonMain uses KMP artifacts with linuxX64 klibs:
+                    // koin-core 3.5.6, kdisco-core 0.5.0, xmlutil:core 0.91.0,
+                    // kotlin-logging 7.0.3 — all validated by :core:compileKotlinLinuxX64 passing.
+                    implementation(project(":core"))
+                }
+            }
+            val linuxX64Test by getting {
+                dependencies {
+                    implementation(kotlin("test"))
+                    // :core-test provides CommonTestFixtures, NetworkResources, CommonCoreTestModule
+                    implementation(project(":core-test"))
+                }
             }
         }
     }
@@ -51,33 +55,37 @@ kotlin {
 // checkKdisco dependency
 // ===========================================
 
-tasks.named("compileKotlinLinuxX64") {
-    dependsOn(rootProject.tasks.named("checkKdisco"))
+if (isLinuxHost) {
+    tasks.named("compileKotlinLinuxX64") {
+        dependsOn(rootProject.tasks.named("checkKdisco"))
+    }
 }
 
 // ===========================================
 // linuxX64 Test Output Configuration
 // ===========================================
 
-tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
-    testLogging {
-        events("passed", "skipped", "failed")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        showExceptions = true
-        showCauses = true
-        showStackTraces = true
-        showStandardStreams = false
-        afterSuite(
-            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-                if (desc.parent == null) {
-                    println("\n:fast-sim linuxX64 Test Results: ${result.resultType}")
-                    println("  Tests run: ${result.testCount}")
-                    println("  Passed: ${result.successfulTestCount}")
-                    println("  Failed: ${result.failedTestCount}")
-                    println("  Skipped: ${result.skippedTestCount}")
-                }
-            }),
-        )
+if (isLinuxHost) {
+    tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
+        testLogging {
+            events("passed", "skipped", "failed")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = false
+            afterSuite(
+                KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                    if (desc.parent == null) {
+                        println("\n:fast-sim linuxX64 Test Results: ${result.resultType}")
+                        println("  Tests run: ${result.testCount}")
+                        println("  Passed: ${result.successfulTestCount}")
+                        println("  Failed: ${result.failedTestCount}")
+                        println("  Skipped: ${result.skippedTestCount}")
+                    }
+                }),
+            )
+        }
     }
 }
 
