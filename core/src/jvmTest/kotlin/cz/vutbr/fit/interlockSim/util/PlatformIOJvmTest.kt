@@ -64,6 +64,25 @@ class PlatformIOJvmTest {
 	}
 
 	@Test
+	fun `deleteFile throws when path targets a non-empty directory`() {
+		val dir = Files.createTempDirectory("interlockSimDelDirTest").toFile()
+		try {
+			java.io.File(dir, "child.txt").writeText("content")
+			assertFailsWith<IllegalStateException> { deleteFile(dir.absolutePath) }
+		} finally {
+			dir.deleteRecursively()
+		}
+	}
+
+	@Test
+	fun `writeTextFile with no directory component writes to current directory`() {
+		val filename = "interlockSim-no-parent-${currentTimeMillisKMP()}.txt"
+		testFiles += filename
+		writeTextFile(filename, "content")
+		assertThat(readTextFile(filename)).isEqualTo("content")
+	}
+
+	@Test
 	fun `concurrent writes to distinct temporary files succeed`() {
 		val threadCount = 5
 		val results = mutableListOf<Pair<String, String>>()
