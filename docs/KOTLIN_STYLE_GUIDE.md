@@ -27,7 +27,7 @@ This is not a modernization project. This is a **syntax migration** from Java to
 
 The interlockSim codebase is a working 2007 BSc thesis project with:
 - Complex simulation logic that must remain correct
-- Integration with jDisco library (Java 6 compatible)
+- Integration with kDisco library (Kotlin Multiplatform, replaces jDisco)
 - 237 tests that must continue to pass
 - Historical value - preserving original design intent
 
@@ -500,7 +500,7 @@ trains.forEach {
 
 ### Java Interoperability
 
-**Maintain clean Java interop** - jDisco is Java 6 compatible:
+**Maintain clean Java interop** - kDisco is Kotlin Multiplatform and the project retains Java callers:
 
 ```kotlin
 // Use @JvmStatic for static methods called from Java
@@ -1264,7 +1264,7 @@ class Doubleton<T, V>(
 - Don't use !! without justification
 - Don't refactor or redesign during conversion
 - Don't introduce advanced Kotlin features without careful consideration
-- Don't break Java interoperability (jDisco compatibility)
+- Don't break Java interoperability (kDisco and legacy APIs)
 
 ### When in Doubt
 - Choose the more explicit, Java-like Kotlin syntax
@@ -1792,11 +1792,11 @@ Which parameterized annotation to use?
 ### Dependency Management
 
 Dependencies are managed via Gradle with fallback strategy:
-- **jDisco 1.2.0** - Discrete event simulation library (external Maven dependency, Java 6 compatible)
-  - Repository: https://github.com/bedaHovorka/jdisco
-  - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/jdisco`
-  - Fallback order: `mavenLocal()` (cache) → GitHub Packages → build fails
-  - Requires GitHub authentication for package download (see below)
+- **kDisco 0.5.0** - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
+  - Repository: https://github.com/bedaHovorka/kdisco
+  - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/kdisco`
+  - Fallback order: `mavenLocal()` (local cache) → GitHub Packages → build fails
+  - Requires GitHub authentication for package download unless installed locally (see below)
 - **JUnit 5.11.4** - Testing framework (JUnit Jupiter API and Engine)
 - **AssertK 0.28.1** - Fluent Kotlin assertion library
 - **MockK 1.13.14** - Kotlin-native mocking framework (supports sealed classes, coroutines)
@@ -1812,7 +1812,7 @@ Gradle automatically downloads dependencies during the build. Configuration file
 
 **GitHub Packages Authentication:**
 
-To download jDisco from GitHub Packages, set these environment variables:
+To download kDisco from GitHub Packages, set these environment variables:
 ```bash
 export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-personal-access-token
@@ -1825,6 +1825,30 @@ gpr.key=your-personal-access-token
 ```
 
 **Note:** In GitHub Actions CI/CD, authentication is automatic via `GITHUB_TOKEN`.
+
+**Offline / Local Maven Fallback:**
+
+If GitHub Packages is unreachable or you do not want to use a token, build and install kDisco locally:
+```bash
+# Clone kDisco repository
+cd ~/work
+git clone https://github.com/bedaHovorka/kdisco.git
+cd kdisco
+
+# Build and install to local Maven repository
+./gradlew :kdisco-core:publishToMavenLocal
+
+# Return to interlockSim
+cd ~/work/interlockSim
+```
+
+Then run Gradle normally. Because `mavenLocal()` is checked before GitHub Packages, the locally published artifacts satisfy the dependency without network authentication.
+
+Verify installation:
+```bash
+ls ~/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/0.5.0/
+# Should show: kdisco-core-jvm-0.5.0.jar, kdisco-core-jvm-0.5.0.pom
+```
 
 ### Gradle Build Commands
 
@@ -1910,11 +1934,11 @@ java -jar build/libs/interlockSim.jar example
 
 **Build services:**
 ```bash
-# Set GitHub credentials for jDisco download
+# Set GitHub credentials for kDisco download
 export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-personal-access-token
 
-# Build app (jDisco downloaded from GitHub Packages or uses local cache)
+# Build app (kDisco downloaded from GitHub Packages or uses local cache)
 docker compose build app
 
 # Build thesis
@@ -2360,7 +2384,7 @@ context.close()  // Idempotent
 DefaultSimulationContext uses dependency injection to obtain a `SimulationProcessFactory` rather than directly instantiating simulation classes. This:
 - Follows Dependency Inversion Principle (depends on abstraction, not concrete classes)
 - Enables testing with mock factories
-- Prepares for jDisco→DSOL/Kalasim migration
+- Prepares for kDisco→DSOL/Kalasim migration
 
 **Module Configuration:**
 

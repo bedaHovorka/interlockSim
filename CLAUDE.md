@@ -120,6 +120,8 @@ docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 docker compose up text
 ```
 
+**Offline builds:** If GitHub Packages is unreachable, build kDisco locally first (`./gradlew :kdisco-core:publishToMavenLocal` in the kDisco repo), then run `docker compose build` without `GITHUB_TOKEN`. `mavenLocal()` satisfies the kDisco dependency before GitHub Packages is consulted. See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Dependency Management" for full instructions.
+
 For X11 forwarding troubleshooting, authentication setup, SELinux configuration (Fedora), and Docker architecture details, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Build & Development Environment".
 
 ## Architecture
@@ -438,7 +440,7 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 The project currently uses **kDisco** (replaces jDisco, Phase 1 migration complete 2026-03-04). The long-term target is **Kalasim** (Phase 2, future). Research on modern alternatives is documented in `docs/jdisco-research.md`.
 
 **Migration status:**
-- ✅ **Phase 1 complete (2026-03-04):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-jvm:0.3.0`). See commit history on `feature/simulation-library-decision-round2`.
+- ✅ **Phase 1 complete (2026-03-20):** Swapped jDisco for kDisco (`cz.hovorka.kdisco:kdisco-core-jvm:0.5.0`). See commit history on `feature/simulation-library-decision-round2`.
 - 🆕 **Phase 2 (future):** Migrate from kDisco to Kalasim (native Kotlin coroutines-based discrete event simulation).
 
 **Alternative frameworks researched (see `docs/jdisco-research.md`):**

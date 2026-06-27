@@ -8,7 +8,7 @@
 #
 #      Dockerization: 2025
 #      Gradle migration: 2026-01
-#      Java 21 migration: 2026-01 (Eclipse Temurin + Debian Bookworm)
+#      Java 21 migration: 2026-01 (Eclipse Temurin + Ubuntu 24.04 LTS Noble)
 #
 #      Multi-stage build for interlockSim with GUI support
 #      Dependency management: Gradle with Kotlin DSL
@@ -20,7 +20,7 @@
 # ============================================
 # Stage 1: Build interlockSim with Gradle
 # ============================================
-FROM eclipse-temurin:21-jdk AS builder
+FROM eclipse-temurin:21-jdk-noble AS builder
 
 # Build arguments for GitHub Packages authentication
 # Required to download kdisco-core-jvm from GitHub Packages (bedaHovorka/kdisco)
@@ -85,7 +85,7 @@ RUN ls -lh /build/interlockSim/desktop-ui/build/libs/interlockSim.jar && \
 # ============================================
 # Stage 2: Runtime with JRE and X11 support
 # ============================================
-FROM eclipse-temurin:21-jre AS runner
+FROM eclipse-temurin:21-jre-noble AS runner
 
 # Install X11 libraries for GUI support
 # Eclipse Temurin already includes Java 21 JRE

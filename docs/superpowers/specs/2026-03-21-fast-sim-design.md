@@ -193,8 +193,8 @@ kotlin-logging uses `println` as the backend on Kotlin/Native (no SLF4J). Since 
 
 **Dockerfile.fast-sim:**
 ```dockerfile
-# Build stage (Eclipse Temurin JDK 21 on Debian Bookworm + libxml2-dev for cinterop)
-FROM --platform=linux/amd64 eclipse-temurin:21-jdk AS builder
+# Build stage (Eclipse Temurin JDK 21 on Ubuntu 24.04 LTS Noble + libxml2-dev for cinterop)
+FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev
 COPY . /build
 WORKDIR /build
@@ -209,7 +209,8 @@ ENTRYPOINT ["fast-sim"]
 
 **Notes:**
 - Runtime base is `alpine:3.21` (~8MB) with `gcompat` for glibc ABI compatibility
-- Alpine's `libxml2` does NOT depend on `libicu` (unlike Debian's ~30MB transitive dependency)
+- Alpine's `libxml2` does NOT depend on `libicu` (unlike Debian/Ubuntu's ~30MB transitive dependency)
+- Builder is pinned to `eclipse-temurin:21-jdk-noble` (Ubuntu 24.04 LTS) because its `libxml2.so.2` SONAME matches Alpine 3.21
 - `gcompat` provides `/lib64/ld-linux-x86-64.so.2` and glibc symbol wrappers for K/N binary
 - No XML files copied to image — built-in examples use embedded XML; `sim` mode requires bind-mounting files
 - Image size target: < 30MB (Alpine ~8MB + gcompat ~2MB + libxml2 ~5MB + binary ~4.4MB)
