@@ -33,7 +33,6 @@ import javax.swing.SwingUtilities
  * with standard menu hotkeys.
  */
 class SimulationKeyBindingsConflictTest {
-
 	private val reservedStepKeys = setOf(KeyEvent.VK_S, KeyEvent.VK_T)
 
 	/**
@@ -96,7 +95,10 @@ class SimulationKeyBindingsConflictTest {
 	 * Recursively invokes [action] for every [JMenuItem] contained in [menuBar],
 	 * including nested sub-menus.
 	 */
-	private fun forEachMenuItem(menuBar: JMenuBar, action: (JMenuItem) -> Unit) {
+	private fun forEachMenuItem(
+		menuBar: JMenuBar,
+		action: (JMenuItem) -> Unit
+	) {
 		val queue = ArrayDeque<JMenu>()
 		repeat(menuBar.menuCount) { index ->
 			val menu = menuBar.getMenu(index)

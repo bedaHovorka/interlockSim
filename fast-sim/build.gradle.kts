@@ -12,6 +12,8 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
+val ktlintVersion: String by project
+
 group = "cz.vutbr.fit"
 version = "1.0"
 
@@ -121,10 +123,9 @@ dependencies {
 // ===========================================
 
 ktlint {
-    version.set("1.5.0")
+    version.set(ktlintVersion)
     verbose.set(true)
     outputToConsole.set(true)
-    outputColorName.set("AUTO")
     enableExperimentalRules.set(false)
     android.set(false)
     filter {
@@ -135,12 +136,4 @@ ktlint {
         reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN)
         reporter(org.jlleitschuh.gradle.ktlint.reporter.ReporterType.CHECKSTYLE)
     }
-}
-
-// Disable ktlint checks — project-wide policy (:core and :desktop-ui have the same disable block).
-// Reason: tabs per .editorconfig conflict with ktlint's default spaces rule.
-// Detekt handles structural quality checks instead.
-// TODO: Re-enable ktlint project-wide once tab/space configuration is resolved (tracked).
-tasks.matching { it.name.startsWith("ktlint") && it.name.endsWith("Check") }.configureEach {
-    enabled = false
 }

@@ -38,10 +38,11 @@ class SimulationControllerTest {
 	}
 
 	@Test
-	fun `NoOpSimulationController awaitIfPaused returns immediately`() = runBlocking {
-		// Should complete without suspending
-		NoOpSimulationController.awaitIfPaused()
-	}
+	fun `NoOpSimulationController awaitIfPaused returns immediately`() =
+		runBlocking {
+			// Should complete without suspending
+			NoOpSimulationController.awaitIfPaused()
+		}
 
 	@Test
 	fun `NoOpSimulationController throttle does nothing`() {

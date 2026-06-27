@@ -40,8 +40,8 @@ class NodeCellAction(
 	}
 
 	companion object {
-		private const val iconSize: Int = 20
-		private val editorCellRenderer = EditorCellRenderer(iconSize, iconSize)
+		private const val ICON_SIZE: Int = 20
+		private val editorCellRenderer = EditorCellRenderer(ICON_SIZE, ICON_SIZE)
 		private val renderingHints: MutableMap<RenderingHints.Key, Any> =
 			mutableMapOf<RenderingHints.Key, Any>().apply {
 				put(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
@@ -60,11 +60,11 @@ class NodeCellAction(
 			} catch (e: Exception) {
 				error("Failed to create cell icon: $e")
 			}
-			val img = BufferedImage(iconSize, iconSize, BufferedImage.TYPE_INT_RGB)
+			val img = BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_RGB)
 			val g = img.createGraphics()
 			g.setRenderingHints(renderingHints)
 			g.color = Color.WHITE
-			g.fillRect(0, 0, iconSize, iconSize)
+			g.fillRect(0, 0, ICON_SIZE, ICON_SIZE)
 			g.color = Color.BLACK
 			editorCellRenderer.draw(g, cell)
 			return ImageIcon(img)

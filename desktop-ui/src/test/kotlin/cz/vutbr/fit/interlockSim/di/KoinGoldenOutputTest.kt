@@ -378,7 +378,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 	)
 
 	companion object {
-		/** Deterministic baseline for ShuntingLoop(60s) on vyhybna.xml */
+		// Deterministic baseline for ShuntingLoop(60s) on vyhybna.xml.
 		// Baseline established with kdisco-engine 0.3.0-SNAPSHOT (java.util.Random, seed=0L).
 		// Values differ from kDisco 0.2.0 due to RNG sequence change (java.util.Random vs kDisco Random)
 		// and coroutine scheduling differences. Confirmed stable and deterministic across runs.

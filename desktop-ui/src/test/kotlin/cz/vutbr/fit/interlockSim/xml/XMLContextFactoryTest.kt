@@ -160,14 +160,14 @@ class XMLContextFactoryTest : KoinTestBase() {
 			val context = editingContextFactory.createContext(xml)
 
 			val cellIN = context.getRailWayNetGrid().getCellAt(10, 10)
-			val cellOUT_PLUS = context.getRailWayNetGrid().getCellAt(20, 10)
-			val cellOUT_MINUS = context.getRailWayNetGrid().getCellAt(20, 11)
+			val cellOutPlus = context.getRailWayNetGrid().getCellAt(20, 10)
+			val cellOutMinus = context.getRailWayNetGrid().getCellAt(20, 11)
 			assertThat(cellIN).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellOUT_PLUS).isNotNull().isInstanceOf(InOut::class)
-			assertThat(cellOUT_MINUS).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellOutPlus).isNotNull().isInstanceOf(InOut::class)
+			assertThat(cellOutMinus).isNotNull().isInstanceOf(InOut::class)
 			assertThat((cellIN as InOut).getName()).isEqualTo("IN")
-			assertThat((cellOUT_PLUS as InOut).getName()).isEqualTo("OUT_PLUS")
-			assertThat((cellOUT_MINUS as InOut).getName()).isEqualTo("OUT_MINUS")
+			assertThat((cellOutPlus as InOut).getName()).isEqualTo("OUT_PLUS")
+			assertThat((cellOutMinus as InOut).getName()).isEqualTo("OUT_MINUS")
 		}
 
 		@Test

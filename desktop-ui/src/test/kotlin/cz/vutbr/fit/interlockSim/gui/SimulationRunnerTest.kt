@@ -386,12 +386,13 @@ class SimulationRunnerTest {
 			val waiterReady = CountDownLatch(1)
 			val waiterDone = CountDownLatch(1)
 
-			val waiter = Thread {
-				// Signal before calling awaitIfPaused to tighten the race window.
-				waiterReady.countDown()
-				runBlocking { fresh.awaitIfPaused() }
-				waiterDone.countDown()
-			}
+			val waiter =
+				Thread {
+					// Signal before calling awaitIfPaused to tighten the race window.
+					waiterReady.countDown()
+					runBlocking { fresh.awaitIfPaused() }
+					waiterDone.countDown()
+				}
 			waiter.isDaemon = true
 			waiter.start()
 
@@ -425,10 +426,11 @@ class SimulationRunnerTest {
 
 			// awaitIfPaused must consume the event and return (not block: step event is pending).
 			val done = CountDownLatch(1)
-			val waiter = Thread {
-				runBlocking { fresh.awaitIfPaused() }
-				done.countDown()
-			}
+			val waiter =
+				Thread {
+					runBlocking { fresh.awaitIfPaused() }
+					done.countDown()
+				}
 			waiter.isDaemon = true
 			waiter.start()
 			assertThat(done.await(5, TimeUnit.SECONDS)).isTrue()

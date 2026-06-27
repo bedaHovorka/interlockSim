@@ -11,8 +11,8 @@ plugins {
     kotlin("jvm") version "2.1.10" apply false
     kotlin("multiplatform") version "2.1.10" apply false
     id("com.gradleup.shadow") version "8.3.8" apply false
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.2" apply false
-    id("io.gitlab.arturbosch.detekt") version "1.23.7" apply false
+    id("org.jlleitschuh.gradle.ktlint") apply false  // version in gradle.properties via pluginManagement
+    id("io.gitlab.arturbosch.detekt") apply false     // version in gradle.properties via pluginManagement
     id("me.champeau.jmh") version "0.7.2" apply false
     id("app.cash.burst") version "2.4.0" apply false  // keep in sync with burstVersion in gradle.properties
     id("dev.mokkery") version "2.7.3" apply false  // keep in sync with mokkeryVersion in gradle.properties

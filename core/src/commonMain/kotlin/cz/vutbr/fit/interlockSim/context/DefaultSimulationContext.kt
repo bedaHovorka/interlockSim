@@ -117,7 +117,7 @@ open class DefaultSimulationContext(
 	 * Factory for creating simulation processes.
 	 * Decouples context from concrete simulation class implementations.
 	 */
-	private val processFactory: SimulationProcessFactory,
+	private val processFactory: SimulationProcessFactory
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
 	SimulationContext {
 	/**
@@ -273,7 +273,7 @@ open class DefaultSimulationContext(
 		 */
 		fun fromEditingContext(
 			editingContext: EditingContext,
-			processFactory: SimulationProcessFactory,
+			processFactory: SimulationProcessFactory
 		): DefaultSimulationContext {
 			// Create base simulation context
 			val grid = editingContext.getRailWayNetGrid()
