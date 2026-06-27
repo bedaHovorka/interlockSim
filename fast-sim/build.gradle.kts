@@ -19,6 +19,14 @@ version = "1.0"
 
 val isLinuxHost: Boolean by gradle.extra
 
+// :fast-sim is included on non-Linux hosts (see settings.gradle.kts) so IDEA can
+// index its sources and lifecycle tasks remain discoverable. Because this module
+// is a native CLI binary, it only registers a linuxX64 target on Linux. On
+// other hosts the kotlin{} block below is skipped, so the KMP plugin prints:
+//   "Please initialize at least one Kotlin target in 'fast-sim (:fast-sim)'."
+// That message is expected and harmless; detekt/ktlint still run, but no native
+// compilation or toolchain download is attempted on non-Linux hosts.
+
 if (isLinuxHost) {
     kotlin {
         // linuxX64 only — this is a native CLI binary, not a library
