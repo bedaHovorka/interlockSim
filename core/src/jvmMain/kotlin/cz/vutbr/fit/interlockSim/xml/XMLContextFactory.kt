@@ -132,8 +132,7 @@ class XMLContextFactory : JvmEditingContextFactory {
 	 *   - Network structure is invalid
 	 */
 	@Throws(ContextCreationException::class)
-	override fun createContext(stream: InputStream): Context<*, *> =
-		InputStreamReader(stream).use { createContext(it) }
+	override fun createContext(stream: InputStream): Context<*, *> = InputStreamReader(stream).use { createContext(it) }
 
 	/**
 	 * Result of lenient XML parsing for editor mode.

@@ -9,8 +9,10 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.set
 import kotlinx.cinterop.toCValues
 import kotlinx.cinterop.toKString
+import platform.posix.ENOENT
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
+import platform.posix.errno
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fread
@@ -62,7 +64,9 @@ actual fun writeTextFile(
 }
 
 actual fun deleteFile(path: String) {
-	remove(path)
+	if (remove(path) != 0 && errno != ENOENT) {
+		error("Cannot delete file: $path")
+	}
 }
 
 actual fun fileExists(path: String): Boolean = platform.posix.access(path, platform.posix.F_OK) == 0

@@ -19,7 +19,15 @@ actual fun writeTextFile(
 }
 
 actual fun deleteFile(path: String) {
-	java.io.File(path).delete()
+	try {
+		java.nio.file.Files
+			.deleteIfExists(
+				java.nio.file.Paths
+					.get(path)
+			)
+	} catch (e: java.io.IOException) {
+		throw IllegalStateException("Cannot delete file: $path (${e.message})", e)
+	}
 }
 
 actual fun fileExists(path: String): Boolean = java.io.File(path).exists()

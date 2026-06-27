@@ -146,7 +146,7 @@ class ValidationDialogTest : AbstractFrameTestBase() {
 			val fileLabel = findLabelContaining(dialog, "File:")
 			assertThat(fileLabel).isNotNull()
 			assertThat(fileLabel!!.text).contains("network.xml")
-			assertThat(fileLabel.text).contains("/test/path/network.xml")
+			assertThat(fileLabel.text).contains(file.path)
 		}
 	}
 
