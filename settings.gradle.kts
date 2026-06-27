@@ -19,7 +19,15 @@ rootProject.name = "interlockSim"
 include(":core")
 include(":core-test")
 include(":desktop-ui")
-include(":fast-sim")
+
+// :fast-sim is a linuxX64 native CLI binary and cannot be built on non-Linux hosts
+// (it requires libxml2 native headers and a Kotlin/Native linuxX64 toolchain).
+// Defined here once; consumed in build scripts via `val isLinuxHost: Boolean by gradle.extra`.
+val isLinuxHost = System.getProperty("os.name").lowercase().contains("linux")
+gradle.extra["isLinuxHost"] = isLinuxHost
+if (file("fast-sim/build.gradle.kts").exists()) {
+	include(":fast-sim")
+}
 
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)

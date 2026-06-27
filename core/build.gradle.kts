@@ -61,6 +61,8 @@ val ktlintVersion: String by project
 group = "cz.vutbr.fit"
 version = "1.0"
 
+val isLinuxHost: Boolean by gradle.extra
+
 // commonMain is KMP-clean: no java.*/javax.* imports, no JVM-only idioms.
 // JVM-only code (xml/, context factories) lives in jvmMain.
 // linuxX64 target added for native compilation verification.
@@ -104,10 +106,12 @@ kotlin {
     // linuxX64 target: runs native commonTest subset (NativeSanityTest).
     // kDisco 0.5.0 ships a linuxX64 klib; kotlinx-coroutines-core, koin-core, assertk all have native variants.
     // Note: KMP automatically creates a debugTest binary for linuxX64 — no explicit binaries.test() needed.
-    linuxX64 {
-        compilations["main"].cinterops {
-            create("libxml2") {
-                defFile = file("src/nativeInterop/cinterop/libxml2.def")
+    if (isLinuxHost) {
+        linuxX64 {
+            compilations["main"].cinterops {
+                create("libxml2") {
+                    defFile = file("src/nativeInterop/cinterop/libxml2.def")
+                }
             }
         }
     }
@@ -225,44 +229,47 @@ val generateNativeResourceRoot =
         }
     }
 
-kotlin.sourceSets.named("nativeMain") {
-    kotlin.srcDir(nativeResourceRootDir)
+if (isLinuxHost) {
+    kotlin.sourceSets.named("nativeMain") {
+        kotlin.srcDir(nativeResourceRootDir)
+    }
+
+    tasks.named("compileKotlinLinuxX64").configure { dependsOn(generateNativeResourceRoot) }
+
+    // ktlint's per-source-set check tasks consume the generated dir too; declare dependency explicitly
+    // so Gradle doesn't warn about an implicit producer/consumer relationship.
+    tasks
+        .matching {
+            it.name == "runKtlintCheckOverNativeMainSourceSet" ||
+                it.name == "runKtlintFormatOverNativeMainSourceSet"
+        }.configureEach { dependsOn(generateNativeResourceRoot) }
 }
-
-tasks.named("compileKotlinLinuxX64").configure { dependsOn(generateNativeResourceRoot) }
-
-// ktlint's per-source-set check tasks consume the generated dir too; declare dependency explicitly
-// so Gradle doesn't warn about an implicit producer/consumer relationship.
-// Also exclude the generated file — the global filter{} block doesn't apply to per-source-set tasks.
-tasks
-    .matching {
-        it.name == "runKtlintCheckOverNativeMainSourceSet" ||
-            it.name == "runKtlintFormatOverNativeMainSourceSet"
-    }.configureEach { dependsOn(generateNativeResourceRoot) }
 
 // ===========================================
 // linuxX64 Test Output Configuration
 // ===========================================
 
-tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
-    testLogging {
-        events("passed", "skipped", "failed")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        showExceptions = true
-        showCauses = true
-        showStackTraces = true
-        showStandardStreams = false
-        afterSuite(
-            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
-                if (desc.parent == null) {
-                    println("\n:core linuxX64 Test Results: ${result.resultType}")
-                    println("  Tests run: ${result.testCount}")
-                    println("  Passed: ${result.successfulTestCount}")
-                    println("  Failed: ${result.failedTestCount}")
-                    println("  Skipped: ${result.skippedTestCount}")
-                }
-            }),
-        )
+if (isLinuxHost) {
+    tasks.named<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>("linuxX64Test") {
+        testLogging {
+            events("passed", "skipped", "failed")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            showStandardStreams = false
+            afterSuite(
+                KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                    if (desc.parent == null) {
+                        println("\n:core linuxX64 Test Results: ${result.resultType}")
+                        println("  Tests run: ${result.testCount}")
+                        println("  Passed: ${result.successfulTestCount}")
+                        println("  Failed: ${result.failedTestCount}")
+                        println("  Skipped: ${result.skippedTestCount}")
+                    }
+                }),
+            )
+        }
     }
 }
 

@@ -8,7 +8,8 @@
 
 plugins {
     // Declare versions for subprojects (apply false — subprojects opt in)
-    kotlin("jvm") version "2.1.10" apply false
+    kotlin("jvm") version "2.1.10" apply
+        false
     kotlin("multiplatform") version "2.1.10" apply false
     id("com.gradleup.shadow") version "8.3.8" apply false
     id("org.jlleitschuh.gradle.ktlint") apply false  // version in gradle.properties via pluginManagement
@@ -79,10 +80,15 @@ listOf(
     tasks.register(name) { dependsOn(":desktop-ui:$name") }
 }
 
-tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
-tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
-tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
+// :fast-sim and native subprojects are only included on Linux hosts; guard lifecycle tasks accordingly.
+// Defined in settings.gradle.kts and shared via gradle.extra.
+val isLinuxHost: Boolean by gradle.extra
+if (isLinuxHost) {
+	tasks.register("buildFastSim") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
+	tasks.register("runFastSim") { dependsOn(":fast-sim:runDebugExecutableLinuxX64") }
+	tasks.register("buildFastSimRelease") { dependsOn(":fast-sim:linkReleaseExecutableLinuxX64") }
+	tasks.register("runFastSimRelease") { dependsOn(":fast-sim:runReleaseExecutableLinuxX64") }
+}
 
 // ===========================================
 // SonarQube Configuration

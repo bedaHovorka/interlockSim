@@ -44,3 +44,12 @@ expect fun deleteFile(path: String)
  * @return true if the file exists, false otherwise
  */
 expect fun fileExists(path: String): Boolean
+
+/**
+ * Returns the platform-specific temporary directory.
+ *
+ * KMP expect/actual: JVM uses [java.io.File.tmpDir]; native uses "/tmp".
+ *
+ * @return Absolute path to a writable temporary directory, without trailing separator.
+ */
+expect fun tempDirectory(): String

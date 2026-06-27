@@ -104,6 +104,42 @@ For more details, see the Docker section below or `CLAUDE.md`.
 
 ---
 
+## Prerequisites for Windows: Running the GUI in Docker
+
+The default `docker compose run app` command opens the Swing editor GUI and requires an X11
+server on the Windows host. Docker containers cannot use the Windows display directly, so a
+separate X server is needed.
+
+### Steps
+
+1. **Install VcXsrv**
+   Download and install from https://sourceforge.net/projects/vcxsrv/
+
+2. **Launch XLaunch** (included with VcXsrv) with these settings:
+   - Display settings: **Multiple windows**, Display number `0`
+   - Client startup: **Start no client**
+   - Extra settings: check **Disable access control**
+   - Click **Finish**
+
+3. **Allow VcXsrv through Windows Firewall**
+   Windows will prompt on first launch — click **Allow access** for both private and public
+   networks. Without this, the Docker container connection is silently dropped.
+
+4. **Run the app**
+   ```bash
+   docker compose run app
+   ```
+   The editor GUI will appear in the VcXsrv window.
+
+### Why this is needed
+
+The container sets `DISPLAY=host.docker.internal:0` when `$DISPLAY` is not set in the
+environment. This routes the X11 connection from the Linux container over TCP to port 6000 on
+the Windows host, where VcXsrv is listening. The Unix socket path (`/tmp/.X11-unix`) used on
+Linux does not exist on Windows.
+
+---
+
 ## Building the Project
 
 ### Quick Start
