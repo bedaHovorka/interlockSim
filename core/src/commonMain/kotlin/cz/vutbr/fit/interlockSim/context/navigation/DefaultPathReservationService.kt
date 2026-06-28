@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
@@ -1593,6 +1594,14 @@ class DefaultPathReservationService(
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean = registry.unregisterBlock(trainId, block)
+
+	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.addBlockOccupancyListener(listener)
+	}
+
+	override fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.removeBlockOccupancyListener(listener)
+	}
 
 	/**
 	 * Minimal TrackOccupant implementation for switch configuration.

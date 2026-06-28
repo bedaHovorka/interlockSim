@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -474,4 +475,30 @@ interface SimulationEnvironment {
 		trainId: String,
 		block: DynamicTrackBlock
 	)
+
+	// ========================================
+	// External Observer API
+	// ========================================
+
+	/**
+	 * Subscribe an external (non-train) agent to block occupancy/release events.
+	 *
+	 * The subscriber receives [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent]
+	 * instances whenever a block is reserved, occupied, or released. This is the primary
+	 * integration point for the Goal 10 AI dispatcher and other external planners.
+	 *
+	 * @param listener The listener to add
+	 */
+	fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		getPathReservationService().addBlockOccupancyListener(listener)
+	}
+
+	/**
+	 * Unsubscribe an external agent from block occupancy/release events.
+	 *
+	 * @param listener The listener to remove
+	 */
+	fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		getPathReservationService().removeBlockOccupancyListener(listener)
+	}
 }

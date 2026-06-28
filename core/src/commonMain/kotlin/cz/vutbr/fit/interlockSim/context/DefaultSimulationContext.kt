@@ -14,6 +14,7 @@ import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Random
 import cz.hovorka.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException

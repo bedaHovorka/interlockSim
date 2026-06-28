@@ -34,6 +34,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -1995,6 +1998,47 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		}	}
+
+	@Nested
+	inner class ExternalObserverApi {
+		@Test
+		fun `environment addBlockOccupancyListener receives reserve and release events`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			assertThat(listener.events).hasSize(success.reservedBlocks.size)
+			listener.events.forEach { event ->
+				assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_RESERVED)
+				assertThat(event.trainId).isEqualTo("train1")
+				assertThat(event.previousState).isEqualTo(TrackFacility.State.FREE)
+				assertThat(event.newState).isEqualTo(TrackFacility.State.RESERVED)
+			}
+
+			service.releasePath("train1")
+
+			val reservedCount = listener.events.count { it.type == BlockOccupancyEventType.BLOCK_RESERVED }
+			val releasedCount = listener.events.count { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedCount).isEqualTo(reservedCount)
+			listener.events
+				.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+				.forEach { event ->
+					assertThat(event.trainId).isEqualTo("train1")
+					assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+					assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+				}
+		}
+	}
+
+
+	private class RecordingListener : BlockOccupancyListener {
+		val events = mutableListOf<BlockOccupancyEvent>()
+		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+			events.add(event)
 		}
 	}
 }
