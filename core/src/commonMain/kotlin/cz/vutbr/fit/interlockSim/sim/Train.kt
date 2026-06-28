@@ -186,7 +186,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				requireSimulation(position.isActive() && pv.isActive()) {
+				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
 				waitUntil {
@@ -541,7 +541,11 @@ class Train :
 			requireSimulation(pathToSemaphore?.getFirst() == where) {
 				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
 			}
-			if (next != null) next.enter(this@Train)
+			if (next != null) {
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block" }
+				env.report("enter block", this@Train, ReportType.TRAIN_EVENTS)
+				next.enter(this@Train)
+			}
 		}
 	}
 
@@ -563,6 +567,8 @@ class Train :
 			}
 
 			if (current != null) {
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block" }
+				env.report("leave block", this@Train, ReportType.TRAIN_EVENTS)
 				current.leave(this@Train)
 				val block = current.getTrackBlock()
 				if (block is DynamicTrackBlock) {
