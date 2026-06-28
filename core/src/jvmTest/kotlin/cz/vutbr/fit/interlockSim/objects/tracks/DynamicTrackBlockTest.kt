@@ -482,6 +482,7 @@ class DynamicTrackBlockTest {
 
 	private class RecordingSink : BlockOccupancyEventSink {
 		val events = mutableListOf<BlockOccupancyEvent>()
+
 		override fun emit(event: BlockOccupancyEvent) {
 			events.add(event)
 		}

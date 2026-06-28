@@ -515,6 +515,7 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 	private class RecordingListener : BlockOccupancyListener {
 		val events = mutableListOf<BlockOccupancyEvent>()
+
 		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
 			events.add(event)
 		}

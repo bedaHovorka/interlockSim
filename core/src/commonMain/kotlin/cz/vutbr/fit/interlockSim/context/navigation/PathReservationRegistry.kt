@@ -73,7 +73,6 @@ private val logger = KotlinLogging.logger {}
 class PathReservationRegistry(
 	private val context: SimulationContext
 ) : BlockOccupancyNotifier {
-
 	/**
 	 * Registered external listeners for block occupancy/release events.
 	 * Copy-on-write snapshot guarantees stable iteration even if a listener

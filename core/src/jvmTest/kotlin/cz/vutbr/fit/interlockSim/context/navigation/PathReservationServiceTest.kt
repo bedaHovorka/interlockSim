@@ -1998,7 +1998,8 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
-		}	}
+		}
+	}
 
 	@Nested
 	inner class ExternalObserverApi {
@@ -2034,9 +2035,9 @@ class PathReservationServiceTest : KoinTestBase() {
 		}
 	}
 
-
 	private class RecordingListener : BlockOccupancyListener {
 		val events = mutableListOf<BlockOccupancyEvent>()
+
 		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
 			events.add(event)
 		}
