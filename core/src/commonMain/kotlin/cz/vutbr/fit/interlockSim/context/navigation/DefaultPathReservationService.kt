@@ -283,6 +283,16 @@ class DefaultPathReservationService(
 						}
 					}
 
+					// Step 2h: Configure intermediate semaphore signals along the full path.
+					// reservePath() is called with the entry (InOut/semaphore) and the exit
+					// (InOut/semaphore) as end-points, so the reserved path may pass through
+					// one or more intermediate semaphores.  Step 2g only sets the START
+					// separator's signal; intermediate semaphores remain at STOP unless we
+					// configure them here.  Without this, a train entering a multi-block path
+					// will travel through the first block, stop at the intermediate semaphore
+					// (signal=STOP) and wait forever.
+					configureIntermediateSemaphores(blocks)
+
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -1601,5 +1611,50 @@ class DefaultPathReservationService(
 		override fun distanceToSemaphore(): Double = 0.0
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
+	}
+
+	/**
+	 * Configure the signal for every semaphore that lies at the junction between
+	 * two consecutive blocks in the reserved path.
+	 *
+	 * When [reservePath] reserves a path spanning multiple blocks
+	 * (e.g. InOut A → semaphore → InOut B), step 2g only sets the signal for the
+	 * *start* separator.  Any intermediate semaphore keeps its default STOP signal,
+	 * causing the train to halt at that separator and never reach its destination.
+	 *
+	 * This method walks the ordered list of reserved blocks and, for each
+	 * consecutive pair, finds the common end-point separator.  If that separator is
+	 * a [DynamicRailSemaphore] it is configured to ALLOW in the direction of the
+	 * *next* block (i.e. the block the train will enter after passing the
+	 * semaphore).
+	 *
+	 * The call is idempotent — re-setting a signal that is already ALLOW is safe.
+	 * Failures are non-fatal and are logged at WARN level by
+	 * [SimulationEnvironment.configureSemaphoreSignal].
+	 *
+	 * @param blocks Ordered list of [DynamicTrackBlock] objects from path start to target.
+	 *               Must be in traversal order (the order produced by
+	 *               [extractUniqueBlocks] from a BFS/DFS path).
+	 */
+	private fun configureIntermediateSemaphores(blocks: List<DynamicTrackBlock>) {
+		if (blocks.size < 2) return
+		for (i in 0 until blocks.size - 1) {
+			val currentBlock = blocks[i]
+			val nextBlock = blocks[i + 1]
+			// Find the shared end-point between the two consecutive blocks.
+			// DynamicTrackBlock.ends() returns Array<PathSeparator> whose elements
+			// are the DynamicPathSeparator instances shared across the graph.
+			for (end in currentBlock.ends()) {
+				if (end is DynamicRailSemaphore && nextBlock.ends().contains(end)) {
+					// `end` sits between currentBlock and nextBlock; configure it so
+					// the train can pass from currentBlock into nextBlock.
+					environment.configureSemaphoreSignal(end, nextBlock)
+					logger.debug {
+						"reservePath: Configured intermediate semaphore ${end.name} to ALLOW " +
+							"(between block $i and block ${i + 1})"
+					}
+				}
+			}
+		}
 	}
 }
