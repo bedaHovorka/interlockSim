@@ -67,7 +67,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @see PathReservationService
  * @see ShuntingLoop
  */
-class MultiTrainLoop(
+open class MultiTrainLoop(
 	context: SimulationContext,
 	private val endTime: Long,
 	private val trainSpecs: List<TrainSpec> = emptyList(),
