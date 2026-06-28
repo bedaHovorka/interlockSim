@@ -22,14 +22,16 @@ private val logger = KotlinLogging.logger {}
  * Default implementation of [AutomaticPathFindingService].
  *
  * The implementation delegates topology expansion to the injected
- * [DefaultTopologyNavigator] via the internal [DefaultTopologyNavigator.getAllNextTrackSections]
+ * [DefaultTopologyNavigator] via the internal [DefaultTopologyNavigator.getSwitchConstrainedNextTrackSections]
  * primitive. This avoids polluting the public [cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator]
  * interface with a graph-expansion detail that callers such as [cz.vutbr.fit.interlockSim.sim.Train]
  * and [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService] do not need.
  *
  * The search itself is a textbook Dijkstra algorithm over states of the form
  * `(separator, incoming section)`, which is sufficient to capture direction-dependent
- * switch behaviour.
+ * switch behaviour. Switch constraints encoded in the graph are enforced by the
+ * navigator, so impossible transitions (e.g. from the straight end of a switch to
+ * the branch end) are never explored.
  *
  * The queue is a plain list with O(n) `minByOrNull`. Railway networks in this
  * simulator have at most ~100 nodes, so the quadratic worst-case is irrelevant.
@@ -80,7 +82,7 @@ class DefaultAutomaticPathFindingService(
 			}
 
 			val outgoing =
-				navigator.getAllNextTrackSections(
+				navigator.getSwitchConstrainedNextTrackSections(
 					current.separator,
 					current.incomingSection
 				)
@@ -115,7 +117,7 @@ class DefaultAutomaticPathFindingService(
 		maxDepth: Int,
 		costFunction: PathCostFunction
 	): List<PathFindingResult> {
-		val rawPaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
+		val rawPaths = navigator.findAllSwitchConstrainedPaths(start, target, maxDepth)
 
 		val results =
 			rawPaths
