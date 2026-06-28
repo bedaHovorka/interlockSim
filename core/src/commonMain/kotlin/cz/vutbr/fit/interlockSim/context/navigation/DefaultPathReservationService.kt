@@ -22,8 +22,11 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
@@ -76,6 +79,7 @@ private val logger = KotlinLogging.logger {}
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
+@Suppress("LargeClass") // Core reservation service; splitting would obscure the algorithm
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
@@ -300,6 +304,18 @@ class DefaultPathReservationService(
 					val simTime = currentSimulationTime()
 					blocks.forEach { block ->
 						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
+						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+						registry.emit(
+							BlockOccupancyEvent(
+								block = block,
+								type = BlockOccupancyEventType.BLOCK_RESERVED,
+								trainId = trainId,
+								occupant = null,
+								previousState = TrackFacility.State.FREE,
+								newState = TrackFacility.State.RESERVED,
+								simulationTime = simTime
+							)
+						)
 					}
 
 					PathReservationService.ReservationResult.Success(blocks)
@@ -377,6 +393,18 @@ class DefaultPathReservationService(
 			val simTime = currentSimulationTime()
 			blocks.forEach { block ->
 				emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+				// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+				registry.emit(
+					BlockOccupancyEvent(
+						block = block,
+						type = BlockOccupancyEventType.BLOCK_RELEASED,
+						trainId = trainId,
+						occupant = null,
+						previousState = TrackFacility.State.RESERVED,
+						newState = TrackFacility.State.FREE,
+						simulationTime = simTime
+					)
+				)
 			}
 		}
 	}

@@ -195,6 +195,13 @@ open class DefaultSimulationContext(
 	private val pendingSimEventListeners: MutableList<(cz.hovorka.kdisco.SimulationEvent) -> Unit> = mutableListOf()
 
 	/**
+	 * True once run() has been invoked and the simulation has started.
+	 * Guards onBlockEvent/onSimulationEvent: listeners registered after this point are silently ignored.
+	 * Distinct from isFrozen() because fromEditingContext() freezes the context before run() is called.
+	 */
+	private var simulationHasStarted: Boolean = false
+
+	/**
 	 * Random number generator for name generation (kDisco)
 	 */
 	private val random: Random = Random(0L)
@@ -1091,16 +1098,20 @@ open class DefaultSimulationContext(
 	}
 
 	override fun onBlockEvent(listener: (BlockEvent) -> Unit) {
-		if (isFrozen()) return
+		if (simulationHasStarted) return
 		pendingBlockEventListeners += listener
 	}
 
 	override fun onSimulationEvent(listener: (cz.hovorka.kdisco.SimulationEvent) -> Unit) {
-		if (isFrozen()) return
+		if (simulationHasStarted) return
 		pendingSimEventListeners += listener
 	}
 
 	override fun run(controller: SimulationController) {
+		// Mark simulation as started — listeners registered after this point are silently ignored.
+		// Must be set before any simulation logic so that late-registering callers are correctly rejected.
+		simulationHasStarted = true
+
 		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
 		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
 			logger.warn {

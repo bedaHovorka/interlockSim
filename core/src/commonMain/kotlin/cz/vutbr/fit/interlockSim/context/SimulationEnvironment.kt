@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
@@ -26,6 +25,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 
 /**
  * Facade interface for simulation environment operations.
@@ -81,6 +81,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  * @see SimulationProcessFactory
  * @since 2026-01 (Issue #94)
  */
+@Suppress("TooManyFunctions", "ComplexInterface") // Facade for simulation subsystems; splitting would hurt usability
 interface SimulationEnvironment {
 	// ========================================
 	// Network Query Operations
