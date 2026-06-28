@@ -14,7 +14,7 @@ import cz.hovorka.kdisco.Process
 import cz.hovorka.kdisco.Random
 import cz.hovorka.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
-import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
@@ -187,6 +187,12 @@ open class DefaultSimulationContext(
 	 * kdisco-engine Simulation instance; set in [run], used in [stop] to signal exit.
 	 */
 	private var simulation: Simulation? = null
+
+	/** Block-event listeners registered before run(); wired into kdisco at run() time. */
+	private val pendingBlockEventListeners: MutableList<(BlockEvent) -> Unit> = mutableListOf()
+
+	/** Raw kdisco event listeners registered before run(); wired into kdisco at run() time. */
+	private val pendingSimEventListeners: MutableList<(cz.hovorka.kdisco.SimulationEvent) -> Unit> = mutableListOf()
 
 	/**
 	 * Random number generator for name generation (kDisco)
@@ -1084,6 +1090,16 @@ open class DefaultSimulationContext(
 		)
 	}
 
+	override fun onBlockEvent(listener: (BlockEvent) -> Unit) {
+		if (isFrozen()) return
+		pendingBlockEventListeners += listener
+	}
+
+	override fun onSimulationEvent(listener: (cz.hovorka.kdisco.SimulationEvent) -> Unit) {
+		if (isFrozen()) return
+		pendingSimEventListeners += listener
+	}
+
 	override fun run(controller: SimulationController) {
 		val gridEmpty = !getRailWayNetGrid().iterator().hasNext()
 		if (getGraph().isEmpty() || gridEmpty || inouts.isEmpty()) {
@@ -1133,6 +1149,16 @@ open class DefaultSimulationContext(
 				Process.activate(requireNotNull(mainProcess) { "mainProcess must be initialized before activation" })
 			}
 		simulation = sim
+		// Wire pre-registered listeners into kdisco simulation
+		pendingSimEventListeners.forEach { sim.onEvent(it) }
+		if (pendingBlockEventListeners.isNotEmpty()) {
+			val blockListeners = pendingBlockEventListeners.toList()
+			sim.onEvent { event ->
+				if (event is cz.hovorka.kdisco.SimulationEvent.Custom && event.payload is BlockEvent) {
+					blockListeners.forEach { it(event.payload as BlockEvent) }
+				}
+			}
+		}
 		try {
 			var prevTime = 0.0
 			var stepTimeTarget: Double? = null

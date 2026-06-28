@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.context
 
 import cz.hovorka.kdisco.Condition
+import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
@@ -19,8 +21,8 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
-import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
@@ -501,4 +503,28 @@ interface SimulationEnvironment {
 	fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
 		getPathReservationService().removeBlockOccupancyListener(listener)
 	}
+
+	// ========================================
+	// Event Subscription (Issue #569)
+	// ========================================
+
+	/**
+	 * Subscribe to block-level domain events (reserve / release / occupancy changes).
+	 *
+	 * Listener is called synchronously on the simulation thread in simulation-time order.
+	 * Listeners registered after [run] has started are silently ignored (context is frozen).
+	 *
+	 * @since Issue #569 (Goal 10 prereq)
+	 */
+	fun onBlockEvent(listener: (BlockEvent) -> Unit)
+
+	/**
+	 * Subscribe to raw kdisco simulation events (process lifecycle, resource changes, custom payloads).
+	 *
+	 * Listener is called synchronously on the simulation thread in simulation-time order.
+	 * Listeners registered after [run] has started are silently ignored (context is frozen).
+	 *
+	 * @since Issue #569 (Goal 10 prereq)
+	 */
+	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)
 }
