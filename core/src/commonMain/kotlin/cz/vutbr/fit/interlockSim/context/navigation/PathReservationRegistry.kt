@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -91,11 +92,32 @@ class PathReservationRegistry(
 		 *
 		 * @property conflictingBlock The first block that caused the conflict
 		 * @property existingOwner The train that already owns the conflicting block
+		 * @property reason Why the conflict occurred (reserved vs physically occupied)
 		 */
 		data class Conflict(
 			val conflictingBlock: DynamicTrackBlock,
-			val existingOwner: String
+			val existingOwner: String,
+			val reason: ConflictReason = ConflictReason.RESERVED_BY_OTHER_TRAIN
 		) : RegistrationResult()
+	}
+
+	/**
+	 * Reason for a registration conflict.
+	 *
+	 * Distinguishes between two distinct safety-critical failure modes:
+	 * - **RESERVED_BY_OTHER_TRAIN**: The block is reserved (but not yet occupied) by another train.
+	 * - **OCCUPIED_BY_OTHER_TRAIN**: The block is currently physically occupied by another train.
+	 *
+	 * Callers can use this code to decide whether to retry, wait, or escalate.
+	 *
+	 * @since Issue #581 (Goal 1 SP2)
+	 */
+	enum class ConflictReason {
+		/** Block already reserved by a different train. */
+		RESERVED_BY_OTHER_TRAIN,
+
+		/** Block currently physically occupied by a different train. */
+		OCCUPIED_BY_OTHER_TRAIN
 	}
 
 	/**
@@ -141,8 +163,12 @@ class PathReservationRegistry(
 	/**
 	 * Atomically register blocks for a train.
 	 *
-	 * Validates no conflicts exist, then registers all blocks. If any conflict
-	 * is detected, no blocks are registered (all-or-nothing semantics).
+	 * Performs an atomic check-and-reserve: it validates that every block is
+	 * available, then registers all blocks. If any conflict is detected, no
+	 * blocks are registered (all-or-nothing semantics). This makes the operation
+	 * safe even when multiple trains attempt to reserve the same resource during
+	 * the same simulation step: the first caller succeeds, subsequent callers see
+	 * the updated ownership and receive a deterministic [RegistrationResult.Conflict].
 	 *
 	 * ## Atomicity Guarantee
 	 *
@@ -150,15 +176,23 @@ class PathReservationRegistry(
 	 * - Either all blocks are registered
 	 * - Or no blocks are registered
 	 *
-	 * However, note that block state (reservedFrom, trainId) is managed
-	 * separately by DynamicTrackBlock and must be rolled back by the caller
-	 * if registration fails.
-	 *
 	 * ## Conflict Detection
 	 *
 	 * A conflict occurs when any block is already owned by a **different** train.
+	 * The check consults, in order:
+	 * 1. The registry's `blockToTrain` mapping.
+	 * 2. The block's own `trainName` reservation field (defence in depth).
+	 * 3. The block's current physical `occupant` (defence in depth).
+	 *
 	 * If the same train attempts to register the same block again, it is allowed
 	 * (idempotent operation).
+	 *
+	 * ## Conflict Reason
+	 *
+	 * The returned [RegistrationResult.Conflict] includes a [ConflictReason] that
+	 * tells the caller whether the block is merely reserved by another train or is
+	 * currently physically occupied by another train. Occupied conflicts are more
+	 * severe and callers should typically wait longer before retrying.
 	 *
 	 * ## Usage Example
 	 *
@@ -168,7 +202,10 @@ class PathReservationRegistry(
 	 *         logger.info { "All blocks registered" }
 	 *     }
 	 *     is RegistrationResult.Conflict -> {
-	 *         logger.warn { "Block ${result.conflictingBlock} owned by ${result.existingOwner}" }
+	 *         logger.warn {
+	 *             "Block ${result.conflictingBlock} owned by ${result.existingOwner} " +
+	 *             "(reason=${result.reason})"
+	 *         }
 	 *         rollbackBlockReservations(blocks)
 	 *     }
 	 * }
@@ -184,9 +221,27 @@ class PathReservationRegistry(
 	): RegistrationResult {
 		// Phase 1: Validate no conflicts
 		for (block in blocks) {
-			val existingOwner = blockToTrain[block]
-			if (existingOwner != null && existingOwner != trainId) {
-				return RegistrationResult.Conflict(block, existingOwner)
+			val registryOwner = blockToTrain[block]
+			if (registryOwner != null && registryOwner != trainId) {
+				return RegistrationResult.Conflict(block, registryOwner, classifyConflict(block))
+			}
+
+			// Defence in depth: also check the block's own reservation state in case
+			// the registry and the dynamic block have diverged (e.g. manual cleanup).
+			val blockOwner = block.trainName
+			if (blockOwner != null && blockOwner != trainId) {
+				return RegistrationResult.Conflict(block, blockOwner, classifyConflict(block))
+			}
+
+			// Defence in depth: a block may be occupied even if the registry has no
+			// record of it. Reject the reservation to avoid entering an occupied block.
+			val occupant = block.occupant
+			if (occupant != null && occupant.name != trainId) {
+				return RegistrationResult.Conflict(
+					block,
+					occupant.name,
+					ConflictReason.OCCUPIED_BY_OTHER_TRAIN
+				)
 			}
 		}
 
@@ -201,6 +256,19 @@ class PathReservationRegistry(
 
 		return RegistrationResult.Success
 	}
+
+	/**
+	 * Classify a conflict based on the block's physical state.
+	 *
+	 * @return [ConflictReason.OCCUPIED_BY_OTHER_TRAIN] if the block currently has
+	 *         a physical occupant, [ConflictReason.RESERVED_BY_OTHER_TRAIN] otherwise.
+	 */
+	private fun classifyConflict(block: DynamicTrackBlock): ConflictReason =
+		if (block.occupant != null) {
+			ConflictReason.OCCUPIED_BY_OTHER_TRAIN
+		} else {
+			ConflictReason.RESERVED_BY_OTHER_TRAIN
+		}
 
 	/**
 	 * Register blocks as reserved by a train.
@@ -374,6 +442,47 @@ class PathReservationRegistry(
 	 * @return Train ID if block is registered, null otherwise
 	 */
 	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
+
+	/**
+	 * Get the current physical occupant of a block.
+	 *
+	 * This reflects the actual train object currently on the block, which is
+	 * independent from the reservation owner. A block may be reserved but not yet
+	 * occupied, or (in exceptional cases) occupied without a registry record.
+	 *
+	 * @param block The block to query
+	 * @return The train currently occupying the block, or null if it is unoccupied
+	 * @since Issue #581 (Goal 1 SP2)
+	 */
+	fun getOccupant(block: DynamicTrackBlock): TrackOccupant? = block.occupant
+
+	/**
+	 * Get the train ID of the current physical occupant of a block.
+	 *
+	 * @param block The block to query
+	 * @return Train ID if block is currently occupied, null otherwise
+	 * @since Issue #581 (Goal 1 SP2)
+	 */
+	fun getOccupantName(block: DynamicTrackBlock): String? = block.occupant?.name
+
+	/**
+	 * Check whether a block is currently physically occupied.
+	 *
+	 * @param block The block to check
+	 * @return true if a train is currently on the block, false otherwise
+	 * @since Issue #581 (Goal 1 SP2)
+	 */
+	fun isOccupied(block: DynamicTrackBlock): Boolean = block.occupant != null
+
+	/**
+	 * Get all blocks currently physically occupied by a train.
+	 *
+	 * @param trainId The train identifier
+	 * @return List of blocks currently occupied by this train (empty if none)
+	 * @since Issue #581 (Goal 1 SP2)
+	 */
+	fun getOccupiedBlocks(trainId: String): List<DynamicTrackBlock> =
+		trainToBlocks[trainId]?.filter { it.occupant?.name == trainId } ?: emptyList()
 
 	/**
 	 * Register switches as reserved by a train (Tier 2).
