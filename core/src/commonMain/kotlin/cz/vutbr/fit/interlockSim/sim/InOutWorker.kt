@@ -70,16 +70,24 @@ class InOutWorker(
 			logger.debug { "InOutWorker ${inOut.name} queue non-empty, processing train" }
 			env.report("waiting to free aPath", inOut, ReportType.NODE_EVENTS)
 			waitUntil(pathFree)
-			val first = queqe.first() as Link
+			val first = queqe.first()
+			if (first == null) {
+				logger.debug {
+					"InOutWorker ${inOut.name} queue became empty while waiting for a free path; " +
+						"resuming loop to re-check queue state"
+				}
+				continue
+			}
+			val firstLink = first as Link
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
 			try {
 				// Use integrated path setup like working version
 				// This reserves blocks AND sets up semaphore signals in one call
-				val train = first as? Train
+				val train = firstLink as? Train
 				val trainId =
 					train?.name ?: throw SimulationException(
-						"InOutWorker ${inOut.name} encountered non-Train entity in queue: $first"
+						"InOutWorker ${inOut.name} encountered non-Train entity in queue: $firstLink"
 					)
 				// next is guaranteed non-null by init check
 				val result =
@@ -126,19 +134,19 @@ class InOutWorker(
 			} catch (e: Exception) {
 				logger.warn {
 					"${Process.time()} APPROVAL_DENIED: InOut ${inOut.name} - " +
-						"path setup failed for $first: ${e.message}"
+						"path setup failed for $firstLink: ${e.message}"
 				}
 				logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
 				env.errorStop(e)
 				return
 			}
-			env.report("Path reserved for $first", inOut, ReportType.NODE_EVENTS)
+			env.report("Path reserved for $firstLink", inOut, ReportType.NODE_EVENTS)
 
 			// cekej na odchod vlaku z fronty
-			logger.debug { "InOutWorker ${inOut.name} waiting for train $first to leave queue" }
+			logger.debug { "InOutWorker ${inOut.name} waiting for train $firstLink to leave queue" }
 			waitUntil(
 				object : Condition {
-					override fun test(): Boolean = first != queqe.first()
+					override fun test(): Boolean = firstLink != queqe.first()
 				}
 			)
 			logger.debug { "InOutWorker ${inOut.name} train left queue" }
