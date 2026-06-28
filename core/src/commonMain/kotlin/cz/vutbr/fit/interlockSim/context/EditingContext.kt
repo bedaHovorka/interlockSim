@@ -309,4 +309,17 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 * @since Issue #292 Phase 5
 	 */
 	fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+
+	/**
+	 * Get the automatic path finding service for static Dijkstra-based route search.
+	 *
+	 * The service computes shortest and all-topological paths from a start [PathSeparator]
+	 * to a target [PathSeparator] without consulting dynamic reservation state. It can
+	 * therefore be used in the editor to validate network connectivity or to preview
+	 * possible routes before a simulation is started.
+	 *
+	 * @return AutomaticPathFindingService scoped to this editing context
+	 * @see cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+	 */
+	fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 }
