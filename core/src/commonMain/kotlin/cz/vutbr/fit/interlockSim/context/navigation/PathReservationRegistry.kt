@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.hovorka.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -442,6 +443,40 @@ class PathReservationRegistry(
 	 * @return Train ID if block is registered, null otherwise
 	 */
 	fun getOwner(block: DynamicTrackBlock): String? = blockToTrain[block]
+
+	/**
+	 * Check whether a block is available for a new reservation.
+	 *
+	 * A block is considered available when:
+	 * - Its dynamic state is [TrackFacility.State.FREE]
+	 * - It has no registry owner
+	 * - It has no physical occupant
+	 *
+	 * This predicate is used by [createBlockAvailableCondition] to build kDisco
+	 * [Condition]s that wake a waiting process as soon as a block is released.
+	 *
+	 * @param block The block to check
+	 * @return true if the block can be reserved by another train
+	 * @since Issue #582 (Goal 1 SP3)
+	 */
+	fun isBlockAvailable(block: DynamicTrackBlock): Boolean =
+		block.getState() == TrackFacility.State.FREE &&
+			blockToTrain[block] == null &&
+			block.occupant == null
+
+	/**
+	 * Create a kDisco [Condition] that becomes true when [block] is released.
+	 *
+	 * The condition is deterministic: kDisco re-evaluates all wait notices after
+	 * every discrete event (including the block-release event that happens when
+	 * [unregister] or [unregisterBlock] removes the owner). A process can suspend
+	 * with [cz.hovorka.kdisco.Process.waitUntil] and resume without busy-polling.
+	 *
+	 * @param block The block to wait for
+	 * @return A condition evaluating to true once the block is free
+	 * @since Issue #582 (Goal 1 SP3)
+	 */
+	fun createBlockAvailableCondition(block: DynamicTrackBlock): Condition = Condition { isBlockAvailable(block) }
 
 	/**
 	 * Get the current physical occupant of a block.

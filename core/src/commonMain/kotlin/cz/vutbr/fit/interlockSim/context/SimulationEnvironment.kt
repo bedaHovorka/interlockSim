@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.hovorka.kdisco.Condition
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -161,6 +163,30 @@ interface SimulationEnvironment {
 	 * @since Issue #295 (Phase 3 of Issue #292)
 	 */
 	fun getTrainNavigationService(): TrainNavigationService
+
+	/**
+	 * Create a kDisco [Condition] that becomes true when the path starting at
+	 * [separator] is reserved for [trainId].
+	 *
+	 * This lets a train process suspend with [cz.hovorka.kdisco.Process.waitUntil]
+	 * and resume deterministically as soon as the dispatcher reserves the path
+	 * (or as soon as a conflicting train releases the required blocks).
+	 *
+	 * The condition is evaluated after every discrete event, so it integrates
+	 * with kDisco event scheduling without busy-polling.
+	 *
+	 * @param trainId The train waiting for a path
+	 * @param separator The separator where the train is waiting
+	 * @return A condition that is true when [findReservedPathForTrain] returns [PathResult.Available]
+	 * @since Issue #582 (Goal 1 SP3)
+	 */
+	fun createPathAvailableCondition(
+		trainId: String,
+		separator: PathSeparator
+	): Condition =
+		Condition {
+			getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
+		}
 
 	/**
 	 * Get path reservation service for dispatcher/interlocking path reservation.
