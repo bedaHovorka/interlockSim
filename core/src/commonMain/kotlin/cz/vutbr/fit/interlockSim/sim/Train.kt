@@ -186,7 +186,7 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
-				requireSimulation(position.isActive() && pv.isActive()) {
+				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
 				waitUntil {

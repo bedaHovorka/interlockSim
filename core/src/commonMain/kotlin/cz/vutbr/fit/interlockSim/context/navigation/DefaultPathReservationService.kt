@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
@@ -20,8 +22,12 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -73,6 +79,7 @@ private val logger = KotlinLogging.logger {}
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
+@Suppress("LargeClass") // Core reservation service; splitting would obscure the algorithm
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
@@ -293,6 +300,24 @@ class DefaultPathReservationService(
 					// (signal=STOP) and wait forever.
 					configureIntermediateSemaphores(blocks)
 
+					// Emit BlockReserved for each successfully reserved block
+					val simTime = currentSimulationTime()
+					blocks.forEach { block ->
+						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
+						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+						registry.emit(
+							BlockOccupancyEvent(
+								block = block,
+								type = BlockOccupancyEventType.BLOCK_RESERVED,
+								trainId = trainId,
+								occupant = null,
+								previousState = TrackFacility.State.FREE,
+								newState = TrackFacility.State.RESERVED,
+								simulationTime = simTime
+							)
+						)
+					}
+
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -364,6 +389,23 @@ class DefaultPathReservationService(
 			// This prevents memory leaks and stale reservations if block release fails
 			registry.unregister(trainId)
 			registry.unregisterSwitches(trainId)
+			// Emit BlockReleased after registry cleanup so isBlockAvailable() returns true for subscribers
+			val simTime = currentSimulationTime()
+			blocks.forEach { block ->
+				emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+				// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+				registry.emit(
+					BlockOccupancyEvent(
+						block = block,
+						type = BlockOccupancyEventType.BLOCK_RELEASED,
+						trainId = trainId,
+						occupant = null,
+						previousState = TrackFacility.State.RESERVED,
+						newState = TrackFacility.State.FREE,
+						simulationTime = simTime
+					)
+				)
+			}
 		}
 	}
 
@@ -1576,6 +1618,10 @@ class DefaultPathReservationService(
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
 				releasedBlocks.joinToString(", ") { it.toString() }
 		}
+		val simTime = currentSimulationTime()
+		releasedBlocks.forEach { block ->
+			emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+		}
 		return releasedBlocks
 	}
 
@@ -1592,7 +1638,21 @@ class DefaultPathReservationService(
 	override fun unregisterBlock(
 		trainId: String,
 		block: DynamicTrackBlock
-	): Boolean = registry.unregisterBlock(trainId, block)
+	): Boolean {
+		val released = registry.unregisterBlock(trainId, block)
+		if (released) {
+			emitCustom(BlockEvent.BlockReleased(block, trainId, currentSimulationTime()))
+		}
+		return released
+	}
+
+	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.addBlockOccupancyListener(listener)
+	}
+
+	override fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.removeBlockOccupancyListener(listener)
+	}
 
 	/**
 	 * Minimal TrackOccupant implementation for switch configuration.
@@ -1612,6 +1672,14 @@ class DefaultPathReservationService(
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
+
+	/**
+	 * Returns the current simulation time, or 0.0 if called outside a simulation context.
+	 *
+	 * Uses [Process.time] which is safe to call from any kDisco process.
+	 * Falls back to 0.0 when called outside simulation (e.g., in unit tests).
+	 */
+	private fun currentSimulationTime(): Double = runCatching { Process.time() }.getOrDefault(0.0)
 
 	/**
 	 * Configure the signal for every semaphore that lies at the junction between

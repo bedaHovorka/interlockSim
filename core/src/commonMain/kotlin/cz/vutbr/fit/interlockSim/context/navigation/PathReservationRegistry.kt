@@ -17,6 +17,9 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.ArrayPath
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfo
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyNotifier
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -69,7 +72,15 @@ private val logger = KotlinLogging.logger {}
  */
 class PathReservationRegistry(
 	private val context: SimulationContext
-) {
+) : BlockOccupancyNotifier {
+	/**
+	 * Registered external listeners for block occupancy/release events.
+	 * Copy-on-write snapshot guarantees stable iteration even if a listener
+	 * unsubscribes while an event is being dispatched.
+	 */
+	@kotlin.concurrent.Volatile
+	private var occupancyListeners: List<BlockOccupancyListener> = emptyList()
+
 	/**
 	 * Result of an atomic registration attempt.
 	 *
@@ -160,6 +171,31 @@ class PathReservationRegistry(
 	 * @since Issue #295/#296 Phase 3
 	 */
 	private val trainToPathInfo = mutableMapOf<String, PathInfo>()
+
+	/**
+	 * Subscribe an external agent to block occupancy/release events.
+	 *
+	 * The listener is invoked synchronously from the simulation event loop whenever
+	 * a [DynamicTrackBlock] changes occupancy or reservation state.
+	 */
+	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		occupancyListeners = occupancyListeners + listener
+	}
+
+	/**
+	 * Unsubscribe a previously registered external agent.
+	 */
+	override fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		occupancyListeners = occupancyListeners - listener
+	}
+
+	/**
+	 * Dispatch a block occupancy event to all registered external listeners.
+	 */
+	override fun emit(event: BlockOccupancyEvent) {
+		val snapshot = occupancyListeners
+		snapshot.forEach { it.onBlockOccupancyChanged(event) }
+	}
 
 	/**
 	 * Atomically register blocks for a train.

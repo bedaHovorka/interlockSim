@@ -23,7 +23,11 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -451,6 +455,69 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(first).isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
 			assertThat(second).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
 			assertThat(registry.getOwner(block)).isEqualTo("train1")
+		}
+	}
+
+	@Nested
+	inner class BlockOccupancyListeners {
+		private fun fakeEvent(block: DynamicTrackBlock): BlockOccupancyEvent =
+			BlockOccupancyEvent(
+				block = block,
+				type = BlockOccupancyEventType.BLOCK_RELEASED,
+				trainId = "train-test",
+				occupant = null,
+				previousState = TrackFacility.State.OCCUPIED,
+				newState = TrackFacility.State.FREE,
+				simulationTime = 42.0
+			)
+
+		@Test
+		fun `addBlockOccupancyListener delivers events to subscriber`() {
+			val listener = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(listener)
+			registry.emit(event)
+
+			assertThat(listener.events).containsExactly(event)
+		}
+
+		@Test
+		fun `removeBlockOccupancyListener stops event delivery`() {
+			val listener = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(listener)
+			registry.removeBlockOccupancyListener(listener)
+			registry.emit(event)
+
+			assertThat(listener.events).isEmpty()
+		}
+
+		@Test
+		fun `multiple listeners receive the same event in registration order`() {
+			val first = RecordingListener()
+			val second = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(first)
+			registry.addBlockOccupancyListener(second)
+			registry.emit(event)
+
+			assertThat(first.events).containsExactly(event)
+			assertThat(second.events).containsExactly(event)
+			assertThat(first.events[0]).isSameInstanceAs(second.events[0])
+		}
+	}
+
+	private class RecordingListener : BlockOccupancyListener {
+		val events = mutableListOf<BlockOccupancyEvent>()
+
+		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+			events.add(event)
 		}
 	}
 

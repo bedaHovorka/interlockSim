@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.context.navigation
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 
@@ -444,4 +445,16 @@ interface PathReservationService {
 		trainId: String,
 		block: DynamicTrackBlock
 	): Boolean
+
+	/**
+	 * Subscribe an external agent to block occupancy/release events.
+	 *
+	 * Events are emitted whenever a block's reservation or occupancy state changes.
+	 */
+	fun addBlockOccupancyListener(listener: BlockOccupancyListener)
+
+	/**
+	 * Unsubscribe a previously registered external agent.
+	 */
+	fun removeBlockOccupancyListener(listener: BlockOccupancyListener)
 }
