@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
@@ -39,7 +40,8 @@ class ExampleRegistry {
 	 */
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopExample
+			"shuntingLoop" to ::createShuntingLoopExample,
+			"multiTrainLoop" to ::createMultiTrainLoopExample
 		)
 
 	/**
@@ -50,7 +52,8 @@ class ExampleRegistry {
 	 */
 	val guiExamples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
-			"shuntingLoop" to ::createShuntingLoopGuiExample
+			"shuntingLoop" to ::createShuntingLoopGuiExample,
+			"multiTrainLoop" to ::createMultiTrainLoopGuiExample
 		)
 
 	/**
@@ -140,6 +143,69 @@ class ExampleRegistry {
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
 				context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0))
+				context
+			}
+	}
+
+	/**
+	 * Creates a console-based multi-train shunting loop example with three simultaneous trains.
+	 */
+	private fun createMultiTrainLoopExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val endTime = if (args.size >= 3) args[2].toLong() else 300L
+				val specs =
+					listOf(
+						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 0.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
+					)
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				context.setMainProcess(MultiTrainLoop(context, endTime, specs, enableRealTimeSync = false))
+				context
+			}
+	}
+
+	/**
+	 * Creates a GUI-based multi-train shunting loop example with three simultaneous trains.
+	 */
+	private fun createMultiTrainLoopGuiExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val endTime = if (args.size >= 3) args[2].toLong() else 300L
+				val specs =
+					listOf(
+						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 0.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "B", outName = "A", inTime = 1.0, length = 40.0),
+						MultiTrainLoop.TrainSpec(inName = "A", outName = "B", inTime = 2.0, length = 40.0)
+					)
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				// Enable real-time synchronization for GUI mode with 1x speed multiplier
+				context.setMainProcess(MultiTrainLoop(context, endTime, specs, enableRealTimeSync = true))
 				context
 			}
 	}

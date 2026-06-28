@@ -86,8 +86,9 @@ class ExampleLoadingTest : KoinTestBase() {
 			val exampleNames = registry.getAvailableExamples()
 
 			// Assert
-			assertThat(exampleNames).hasSize(1)
+			assertThat(exampleNames).hasSize(2)
 			assertThat(exampleNames.contains("shuntingLoop")).isTrue()
+			assertThat(exampleNames.contains("multiTrainLoop")).isTrue()
 		}
 	}
 
@@ -275,7 +276,7 @@ class ExampleLoadingTest : KoinTestBase() {
 
 			// Assert
 			assertThat(sortedNames.size > 0).isTrue()
-			assertThat(sortedNames).isEqualTo(listOf("shuntingLoop"))
+			assertThat(sortedNames).isEqualTo(listOf("multiTrainLoop", "shuntingLoop"))
 		}
 	}
 }
