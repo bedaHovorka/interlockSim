@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.emitCustom
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -103,7 +105,8 @@ private val logger = KotlinLogging.logger {}
 class DynamicTrackBlock(
 	val staticRef: TrackBlock,
 	private val end1: DynamicPathSeparator,
-	private val end2: DynamicPathSeparator
+	private val end2: DynamicPathSeparator,
+	private val eventSink: BlockOccupancyEventSink? = null
 ) : TrackBlock by staticRef,
 	TrackSection,
 	TrackFacility {
@@ -231,6 +234,13 @@ class DynamicTrackBlock(
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
+		emitCustom(BlockEvent.OccupancySet(this, newOccupant, currentSimulationTime()))
+		emitBlockOccupancyEvent(
+			type = BlockOccupancyEventType.BLOCK_OCCUPIED,
+			previousState = TrackFacility.State.RESERVED,
+			newState = TrackFacility.State.OCCUPIED,
+			occupant = newOccupant
+		)
 
 		// IMPORTANT: trainId remains set from reservation phase (setUpPathWithTrainId).
 		// This preserves ownership tracking across the RESERVED → OCCUPIED transition.
@@ -256,8 +266,16 @@ class DynamicTrackBlock(
 			"TrackBlock occupant mismatch on leave"
 		}
 		assertGoodStateChange(TrackFacility.State.OCCUPIED, TrackFacility.State.FREE)
+		val previousOccupant = occupant
+		emitBlockOccupancyEvent(
+			type = BlockOccupancyEventType.BLOCK_RELEASED,
+			previousState = TrackFacility.State.OCCUPIED,
+			newState = TrackFacility.State.FREE,
+			occupant = previousOccupant
+		)
 		occupant = null
 		trainName = null
+		emitCustom(BlockEvent.OccupancyCleared(this, currentSimulationTime()))
 	}
 
 	/**
@@ -315,6 +333,11 @@ class DynamicTrackBlock(
 		exceptionStateChange(TrackFacility.State.FREE, TrackFacility.State.RESERVED, "setUpPath")
 		reservedFrom = from
 		trainName = reservingTrainId
+		emitBlockOccupancyEvent(
+			type = BlockOccupancyEventType.BLOCK_RESERVED,
+			previousState = TrackFacility.State.FREE,
+			newState = TrackFacility.State.RESERVED
+		)
 	}
 
 	/**
@@ -357,6 +380,11 @@ class DynamicTrackBlock(
 		if (from !== reservedFrom) {
 			throw TrackOperationException("wrong end on cancel", staticRef)
 		}
+		emitBlockOccupancyEvent(
+			type = BlockOccupancyEventType.BLOCK_RELEASED,
+			previousState = TrackFacility.State.RESERVED,
+			newState = TrackFacility.State.FREE
+		)
 		reservedFrom = null
 		trainName = null
 	}
@@ -387,6 +415,27 @@ class DynamicTrackBlock(
 	}
 
 	private fun errorStateMessage(from: TrackFacility.State): String = "Wrong state: $_state , expected : $from"
+
+	private fun emitBlockOccupancyEvent(
+		type: BlockOccupancyEventType,
+		previousState: TrackFacility.State,
+		newState: TrackFacility.State,
+		occupant: TrackOccupant? = null
+	) {
+		eventSink?.emit(
+			BlockOccupancyEvent(
+				block = this,
+				type = type,
+				trainId = trainName,
+				occupant = occupant,
+				previousState = previousState,
+				newState = newState,
+				simulationTime = currentSimulationTime()
+			)
+		)
+	}
+
+	private fun currentSimulationTime(): Double = runCatching { Process.time() }.getOrDefault(0.0)
 
 	private fun assertGoodStateChange(
 		from: TrackFacility.State,
