@@ -10,6 +10,8 @@
 package cz.vutbr.fit.interlockSim.objects.tracks
 
 import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.emitCustom
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -232,6 +234,7 @@ class DynamicTrackBlock(
 		assertGoodStateChange(TrackFacility.State.RESERVED, TrackFacility.State.OCCUPIED)
 		occupant = newOccupant
 		reservedFrom = null
+		emitCustom(BlockEvent.OccupancySet(this, newOccupant, currentSimulationTime()))
 		emitBlockOccupancyEvent(
 			type = BlockOccupancyEventType.BLOCK_OCCUPIED,
 			previousState = TrackFacility.State.RESERVED,
@@ -272,6 +275,7 @@ class DynamicTrackBlock(
 		)
 		occupant = null
 		trainName = null
+		emitCustom(BlockEvent.OccupancyCleared(this, currentSimulationTime()))
 	}
 
 	/**
