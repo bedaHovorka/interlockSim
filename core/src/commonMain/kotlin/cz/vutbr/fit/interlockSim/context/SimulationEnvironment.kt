@@ -200,6 +200,18 @@ interface SimulationEnvironment {
 	 */
 	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 
+	/**
+	 * Get the automatic path finding service for static Dijkstra-based route search.
+	 *
+	 * The service computes shortest and all-topological paths from a start [PathSeparator]
+	 * to a target [PathSeparator] without consulting dynamic reservation state. Useful for
+	 * dispatcher logic that needs to know which routes exist before attempting reservation.
+	 *
+	 * @return AutomaticPathFindingService scoped to this simulation context
+	 * @see cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+	 */
+	fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+
 	// ========================================
 	// Grid and Graph Access
 	// ========================================

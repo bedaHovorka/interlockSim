@@ -21,6 +21,8 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -122,6 +124,12 @@ val navigationModule: Module =
 						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
+
+			// AutomaticPathFindingService: scoped to editing context
+			// Requires DefaultTopologyNavigator (concrete) for internal graph-expansion primitive
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
 		}
 
 		// Define simulationScope for per-context lifecycle management
@@ -175,6 +183,12 @@ val navigationModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val registry: PathReservationRegistry = get()
 				DefaultTrainNavigationService(context, registry)
+			}
+
+			// AutomaticPathFindingService: scoped to simulation context
+			// Requires DefaultTopologyNavigator (concrete) for internal graph-expansion primitive
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
 			}
 		}
 	}
