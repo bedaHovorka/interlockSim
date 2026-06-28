@@ -42,6 +42,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.util.Point
@@ -231,6 +232,14 @@ open class DefaultSimulationContext(
 	 */
 	private val pathReservationServiceInstance: PathReservationService by lazy {
 		scope.get<PathReservationService>()
+	}
+
+	/**
+	 * Automatic path finding service for static Dijkstra-based route search.
+	 * Lazy-initialized; scoped to this simulation context.
+	 */
+	private val automaticPathFindingServiceInstance: AutomaticPathFindingService by lazy {
+		scope.get<AutomaticPathFindingService>()
 	}
 
 	// ========================================
@@ -1522,6 +1531,8 @@ open class DefaultSimulationContext(
 	 * @see PathReservationService
 	 */
 	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+
+	override fun getAutomaticPathFindingService(): AutomaticPathFindingService = automaticPathFindingServiceInstance
 
 	/**
 	 * Get PathSeparator grid position cache for animation rendering.
