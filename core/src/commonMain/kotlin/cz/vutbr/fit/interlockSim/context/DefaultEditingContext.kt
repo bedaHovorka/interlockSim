@@ -175,6 +175,9 @@ open class DefaultEditingContext(
 	 */
 	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator = scope.get()
 
+	override fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService =
+		scope.get()
+
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)
 	 */

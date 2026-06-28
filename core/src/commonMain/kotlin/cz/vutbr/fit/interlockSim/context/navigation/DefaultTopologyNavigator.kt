@@ -397,7 +397,7 @@ class DefaultTopologyNavigator(
 	 * @param current The current track section (for within-block navigation), or null
 	 * @return List of all possible next track sections (may be empty, or contain multiple for switches)
 	 */
-	private fun getAllNextTrackSections(
+	internal fun getAllNextTrackSections(
 		separator: PathSeparator,
 		current: TrackSection?
 	): List<TrackSection> {
