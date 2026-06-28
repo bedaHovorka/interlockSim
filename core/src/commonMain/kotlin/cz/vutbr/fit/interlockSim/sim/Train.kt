@@ -156,30 +156,30 @@ class Train :
 					motor.cancelAccelerating()
 					this@Train.stop()
 
-					/**
-					 * Polling Mechanism Trade-off (Issue #291, PR #358)
-					 *
-					 * Uses hold(5.0) instead of passivate() to prevent motor creeping bug.
-					 *
-					 * Performance consideration:
-					 * - Polling overhead: 0.2 wakeups/second per blocked train
-					 * - Acceptable impact: Discrete event simulation operates at simulation-time (seconds),
-					 *   not real-time (microseconds). The 5-second poll interval is insignificant
-					 *   compared to typical train travel times (60+ seconds between signals).
-					 * - Worst case: 10 blocked trains = 2 wakeups/second (negligible CPU overhead)
-					 *
-					 * Alternative considered (passivate):
-					 * - ❌ Rejected: Motor continued running during passivation, causing train to
-					 *   drift ~100m from semaphore after 146+ simulation seconds (see TRAIN_PASSIVATION_FIX.md)
-					 * - ❌ Rejected: Requires dispatcher to explicitly reactivate train (unreliable)
-					 *
-					 * Physics validation:
-					 * - Before: velocity=8.48E-4 m/s, acceleration=-3.6E-9 m/s² (creeping)
-					 * - After: velocity=0.0 m/s, acceleration=0.0 m/s² (fully stopped)
-					 *
-					 * @see docs/TRAIN_PASSIVATION_FIX.md for detailed analysis
-					 */
-					hold(5.0) // Wait 5 seconds before retrying path request
+					if (pathResult is PathResult.OwnershipConflict) {
+						/**
+						 * Event-Driven Wait (Issue #582, Goal 1 SP3)
+						 *
+						 * Instead of polling with a fixed 5-second hold, suspend until the
+						 * dispatcher reserves the path. kDisco re-evaluates the condition
+						 * after every discrete event (including block releases), so the train
+						 * resumes exactly when the path becomes available.
+						 *
+						 * The motor has already been stopped, so there is no creeping risk.
+						 */
+						logger.debug {
+							"Train $number: event-driven wait for path reservation at $where"
+						}
+						waitUntil(env.createPathAvailableCondition(name, where))
+					} else {
+						/**
+						 * Polling Mechanism Trade-off (Issue #291, PR #358)
+						 *
+						 * For permanent failures (no topological path) keep the conservative
+						 * 5-second retry so the train does not freeze silently.
+						 */
+						hold(5.0) // Wait 5 seconds before retrying path request
+					}
 					continue // Restart loop to retry path request
 				}
 				val nextLength: Double = next!!.length()
