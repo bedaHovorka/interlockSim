@@ -41,7 +41,11 @@ class PlatformIOJvmTest {
 	}
 
 	@Test
-	@DisabledIfSystemProperty(named = "user.name", matches = "root", disabledReason = "Root bypasses directory write permissions")
+	@DisabledIfSystemProperty(
+		named = "user.name",
+		matches = "root",
+		disabledReason = "Root bypasses directory write permissions"
+	)
 	fun `writeTextFile throws when parent directory is not writable`() {
 		val baseDir = Files.createTempDirectory("interlockSimPermTest").toFile()
 		try {
