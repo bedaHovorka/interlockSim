@@ -125,34 +125,32 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Run the JVM application as an unprivileged user for image hygiene.
-# Note: the runtime UID/GID defaults to 1000; align with the host user if you
-# mount the ./artifacts/app volume for JAR extraction.
-# Use UID/GID 1001 to avoid colliding with the base image's ubuntu group (1000).
-ARG RUNTIME_UID=1001
-ARG RUNTIME_GID=1001
-RUN groupadd --gid ${RUNTIME_GID} app \
-    && useradd --uid ${RUNTIME_UID} --gid app --shell /bin/bash app \
-    && mkdir -p /app /artifacts \
-    && chown -R app:app /app /artifacts
-
+# The runtime stage runs as root, intentionally -- unlike the builder stage,
+# which runs as the non-root `builder` user. The split is deliberate:
+#   * The builder stage MUST be non-root: the test suite includes filesystem
+#     permission tests that are auto-skipped under root (e.g.
+#     @DisabledIfSystemProperty(matches = "root")), because root bypasses write
+#     permissions and cannot exercise them. Running tests as root would silently
+#     skip coverage.
+#   * The runtime stage only launches the app, so it has no such constraint, and
+#     root is required for GUI/X11 forwarding: the host X11 auth cookie is bind
+#     -mounted read-only (mode 0600, owned by the host user), so a non-root
+#     container user cannot read it and Swing fails with "Can't connect to X11".
+# See PR #620 (non-root build) and the X11 regression fix that followed.
 WORKDIR /app
 
 # Copy compiled uber JAR from builder stage (Gradle output)
-COPY --chown=app:app --from=builder /build/interlockSim/desktop-ui/build/libs/interlockSim.jar /app/
+COPY --from=builder /build/interlockSim/desktop-ui/build/libs/interlockSim.jar /app/
 
 # Copy resources if needed at runtime (XML schemas, examples)
-COPY --chown=app:app --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
+COPY --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
-# Copy JAR to artifacts for host extraction
-RUN cp /app/interlockSim.jar /artifacts/
-
-USER app
+# Create artifacts directory and copy JAR for host extraction
+RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/
 
 # Environment variables for X11 forwarding
 ENV DISPLAY=:0
-ENV HOME=/app
 
 # Default command: run editor GUI
 # Users can override with: docker compose run app java -jar interlockSim.jar sim file.xml
