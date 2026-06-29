@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
@@ -52,6 +53,7 @@ import java.io.InputStream
  *
  * @since Issue #292 Phase 2 Enhancement (Plan Phase 2)
  */
+@Tag("integration-test")
 class PathReservationRegistryTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
