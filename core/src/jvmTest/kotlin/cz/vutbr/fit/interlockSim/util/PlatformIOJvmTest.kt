@@ -4,6 +4,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty
 import java.nio.file.Files
 import kotlin.concurrent.thread
 import kotlin.test.assertFailsWith
@@ -40,6 +41,7 @@ class PlatformIOJvmTest {
 	}
 
 	@Test
+	@DisabledIfSystemProperty(named = "user.name", matches = "root", disabledReason = "Root bypasses directory write permissions")
 	fun `writeTextFile throws when parent directory is not writable`() {
 		val baseDir = Files.createTempDirectory("interlockSimPermTest").toFile()
 		try {

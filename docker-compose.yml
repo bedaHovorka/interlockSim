@@ -8,25 +8,28 @@
 #
 #      Dockerization: 2025
 #      Optimized: 2026-01 (BuildKit cache mounts)
+#      Security fix: 2026-06 (BuildKit secrets for GitHub Packages token)
 #
 #      Docker Compose orchestration for interlockSim project
 #
 #      Usage:
 #        # Build services:
-#        docker-compose build app        # Build app (kDisco downloaded from GitHub Packages)
-#        docker-compose build text       # Build LaTeX thesis
+#        docker compose build app        # Build app (kDisco downloaded from GitHub Packages)
+#        docker compose build text       # Build LaTeX thesis
 #
 #        # Run GUI editor (requires X11):
-#        docker-compose up app
+#        docker compose up app
 #
 #        # Run simulation with example:
-#        docker-compose run app java -jar interlockSim.jar example shuntingLoop 60
+#        docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 #
 #        # Run simulation with custom XML:
-#        docker-compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
+#        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 #
-#        # Note: Requires GITHUB_TOKEN for GitHub Packages access
-#        # Export GITHUB_TOKEN before building or create .env file
+#      GitHub Packages authentication:
+#        Set GITHUB_ACTOR and GITHUB_TOKEN in the environment or in a .env file.
+#        The token is passed to the build as a BuildKit secret so it never appears
+#        in the resolved RUN command, image layers, or docker history.
 #
 
 services:
@@ -37,12 +40,15 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
-      # GitHub Packages authentication for kDisco dependency
-      # Set GITHUB_ACTOR and GITHUB_TOKEN in environment or .env file
       args:
-        GITHUB_ACTOR: ${GITHUB_ACTOR}
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        # Non-sensitive cache hint only
         BUILDKIT_INLINE_CACHE: 1
+      secrets:
+        # GitHub Packages credentials for kDisco dependency.
+        # Values are read from host environment variables and mounted as BuildKit
+        # secrets at /run/secrets/github_actor and /run/secrets/github_token.
+        - github_actor
+        - github_token
     image: interlocksim:latest
     environment:
       # Pass host DISPLAY to container for X11 forwarding
@@ -76,9 +82,12 @@ services:
       context: .
       dockerfile: Dockerfile.fast-sim
       args:
-        GITHUB_ACTOR: ${GITHUB_ACTOR}
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
+        # Non-sensitive cache hint only
         BUILDKIT_INLINE_CACHE: 1
+      secrets:
+        # GitHub Packages credentials for kDisco dependency (see app service above).
+        - github_actor
+        - github_token
     image: interlocksim-fast-sim:latest
     container_name: interlocksim-fast-sim
     command: ["example", "shuntingLoop", "60"]
@@ -103,6 +112,14 @@ services:
 networks:
   default:
     name: interlocksim-network
+
+# BuildKit secrets: map host environment variables to secret IDs used in Dockerfiles.
+# The values are mounted at runtime and are not persisted in the image.
+secrets:
+  github_actor:
+    environment: GITHUB_ACTOR
+  github_token:
+    environment: GITHUB_TOKEN
 
 # Note: BuildKit cache mounts are managed in Dockerfiles, not here
 # Runtime volumes can be added here if needed in the future
