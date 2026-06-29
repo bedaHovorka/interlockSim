@@ -27,9 +27,17 @@
 #        docker compose run -v $(pwd)/myfile.xml:/app/myfile.xml app java -jar interlockSim.jar sim myfile.xml
 #
 #      GitHub Packages authentication:
-#        Set GITHUB_ACTOR and GITHUB_TOKEN in the environment or in a .env file.
-#        The token is passed to the build as a BuildKit secret so it never appears
-#        in the resolved RUN command, image layers, or docker history.
+#        Set GITHUB_ACTOR and GITHUB_TOKEN and EXPORT them before building. The
+#        token is passed to the build as a BuildKit secret (secrets.environment
+#        below) so it never appears in the resolved RUN command, image layers, or
+#        docker history. Because the secret provider reads the *process* env (not
+#        .env, which compose only auto-loads for ${VAR} interpolation), a .env
+#        file alone is NOT enough -- export it first:
+#
+#            set -a; source .env; set +a
+#            docker compose up --build
+#
+#        A non-exported .env yields an empty token and a 401 from GitHub Packages.
 #
 
 services:
