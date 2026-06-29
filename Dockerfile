@@ -18,9 +18,9 @@
 # syntax=docker/dockerfile:1.4
 
 # ============================================
-# Stage 1: Build interlockSim with Gradle
+# Stage 1a: Gradle build environment (non-root user)
 # ============================================
-FROM eclipse-temurin:21-jdk-noble AS builder
+FROM eclipse-temurin:21-jdk-noble AS builder-base
 
 # GitHub Packages authentication is provided at build time via BuildKit secrets
 # (see docker-compose.yml secrets: github_actor / github_token). The credentials
@@ -91,8 +91,13 @@ COPY --chown=builder:builder desktop-ui/src/ /build/interlockSim/desktop-ui/src/
 COPY --chown=builder:builder core/src/ /build/interlockSim/core/src/
 COPY --chown=builder:builder core-test/src/ /build/interlockSim/core-test/src/
 
-# Layer 5: Build and test with cache mount
-# Tests run during build (haltOnFailure), creating uber JAR with shadowJar
+# ============================================
+# Stage 1b: Produce runtime artifacts (no tests)
+# ============================================
+FROM builder-base AS builder
+
+# Build the application and uber JAR without running tests. Tests are executed
+# in the separate builder-test stage / app-test Compose service (issue #619).
 RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
@@ -100,12 +105,30 @@ RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=100
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
     GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
-    ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
+    ./gradlew clean assemble shadowJar --no-daemon --warning-mode=summary
 
 # Verify JAR was created
+USER root
 RUN ls -lh /build/interlockSim/desktop-ui/build/libs/interlockSim.jar && \
     echo "=== JAR Info ===" && \
     jar tf /build/interlockSim/desktop-ui/build/libs/interlockSim.jar | head -20
+
+# ============================================
+# Stage 1c: Test environment (non-root user, tests enabled)
+# ============================================
+FROM builder-base AS builder-test
+
+# Run the full test suite as the non-root builder user. Kept as a separate
+# stage so docker compose run app-test can execute tests without coupling them
+# to the runtime image build.
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+    --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
+    --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
+    GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
+    ./gradlew clean test integrationTest :core:linuxX64Test --no-daemon --warning-mode=summary
 
 # ============================================
 # Stage 2: Runtime with JRE and X11 support

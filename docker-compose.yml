@@ -20,6 +20,9 @@
 #        # Run GUI editor (requires X11):
 #        docker compose up app
 #
+#        # Run tests inside the Docker build environment (non-root user):
+#        docker compose run app-test
+#
 #        # Run simulation with example:
 #        docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 #
@@ -41,8 +44,11 @@
 #
 
 services:
-  # Build and run Java application with GUI support
-  # kDisco is automatically downloaded from GitHub Packages or uses local Maven cache
+  # Build the Java application image. Tests are intentionally NOT run here
+  # (see app-test service). The image only contains the compiled uber JAR and
+  # runtime dependencies. kDisco is downloaded from GitHub Packages or uses the
+  # local Maven cache. The builder stage runs as a non-root 'builder' user
+  # (issue #619).
   app:
     build:
       context: .
@@ -80,6 +86,27 @@ services:
     # Optional: uncomment to keep container running for debugging
     # stdin_open: true
     # tty: true
+
+  # Run the full Gradle test suite inside the builder environment. This uses
+  # the same non-root builder user as the image build, so tests that rely on
+  # Unix DAC permission checks (issue #619) execute correctly.
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder-test
+      args:
+        # Non-sensitive cache hint only
+        BUILDKIT_INLINE_CACHE: 1
+      secrets:
+        # GitHub Packages credentials for kDisco dependency (see app service above).
+        - github_actor
+        - github_token
+    image: interlocksim-builder-test:latest
+    container_name: interlocksim-app-test
+    # The builder-test stage already runs the test suite as the non-root
+    # builder user. A plain 'docker compose run app-test' therefore executes
+    # tests and exits; you can override command for ad-hoc Gradle tasks.
 
   # Native fast-sim CLI binary (no JVM, minimal image)
   # Usage:
