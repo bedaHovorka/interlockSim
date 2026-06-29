@@ -83,3 +83,6 @@ desktop-ui/*.xml
 
 # Pre-built kDisco artifacts for Docker — now fetched from GitHub Packages
 /docker-kdisco/
+
+# Claude Code superpowers workspace files (local-only)
+/.superpowers/
