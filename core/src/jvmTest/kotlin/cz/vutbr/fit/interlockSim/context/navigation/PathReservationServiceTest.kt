@@ -43,6 +43,7 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
@@ -73,6 +74,7 @@ import java.io.InputStream
  *
  * @since Issue #294 (Phase 2 of Issue #292)
  */
+@Tag("integration-test")
 class PathReservationServiceTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
