@@ -120,6 +120,10 @@ docker compose run app java -jar interlockSim.jar example shuntingLoop 60
 docker compose up text
 ```
 
+**Security note:** `GITHUB_TOKEN` is passed to the Docker build as a BuildKit secret (`--mount=type=secret`), not as a build `ARG`. The token is never interpolated into Dockerfile `RUN` command strings, so it cannot leak into build logs or image history when a build step fails.
+
+**Non-root builds:** The Gradle build and tests run as an unprivileged `builder` user (UID/GID 1001). Cache mounts and the project directory are owned by this user, so generated files are not owned by `root`. The build stage *must* stay non-root: the test suite includes filesystem-permission tests that are auto-skipped under root (e.g. `@DisabledIfSystemProperty(matches = "root")`), so running tests as root would silently drop coverage. The final **runtime** image, by contrast, runs as `root` — it only launches the app, and root is required to read the bind-mounted host X11 auth cookie (mode 0600, owned by the host user) for GUI forwarding. A non-root runtime user cannot read that cookie and Swing fails with "Can't connect to X11 window server".
+
 **Offline builds:** If GitHub Packages is unreachable, build kDisco locally first (`./gradlew :kdisco-core:publishToMavenLocal` in the kDisco repo), then run `docker compose build` without `GITHUB_TOKEN`. `mavenLocal()` satisfies the kDisco dependency before GitHub Packages is consulted. See **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Dependency Management" for full instructions.
 
 For X11 forwarding troubleshooting, authentication setup, SELinux configuration (Fedora), and Docker architecture details, see **[docs/KOTLIN_STYLE_GUIDE.md](docs/KOTLIN_STYLE_GUIDE.md)** under "Build & Development Environment".

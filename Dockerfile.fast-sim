@@ -25,9 +25,11 @@
 # SONAME libxml2.so.16 — incompatible with alpine:3.21's libxml2.so.2.
 FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 
-# Build arguments for GitHub Packages authentication (required for kDisco)
-ARG GITHUB_ACTOR
-ARG GITHUB_TOKEN
+# GitHub Packages authentication is provided at build time via BuildKit secrets
+# (see docker-compose.yml secrets: github_actor / github_token). The credentials
+# are mounted under /run/secrets/ and exported as environment variables only
+# inside the RUN steps that invoke Gradle. They are never interpolated into the
+# Dockerfile command string, so they cannot leak into image history or build logs.
 
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
@@ -39,50 +41,73 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/include/unicode /usr/include/libxml2/unicode
 
+# Create an unprivileged builder user so the native build runs as a normal user.
+# Cache mounts, Gradle home, and the project directory are owned by this user.
+# Use UID/GID 1001 to avoid colliding with the base image's ubuntu group (1000).
+ARG BUILDER_UID=1001
+ARG BUILDER_GID=1001
+RUN (getent group ${BUILDER_GID} || groupadd --gid ${BUILDER_GID} builder) \
+    && (getent passwd builder || useradd --uid ${BUILDER_UID} --gid ${BUILDER_GID} --shell /bin/bash --create-home builder) \
+    && mkdir -p /build /home/builder/.gradle /home/builder/.m2 \
+    && chown -R builder:builder /build /home/builder
+
+ENV HOME=/home/builder
+ENV GRADLE_USER_HOME=/home/builder/.gradle
+
 WORKDIR /build
 
 # Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
-COPY gradlew /build/
-COPY gradlew.bat /build/
-COPY gradle/ /build/gradle/
+COPY --chown=builder:builder gradlew /build/
+COPY --chown=builder:builder gradlew.bat /build/
+COPY --chown=builder:builder gradle/ /build/gradle/
 RUN chmod +x gradlew
 
 # Layer 2: Copy build configuration files (cached until config changes)
-COPY settings.gradle.kts /build/
-COPY gradle.properties /build/
-COPY build.gradle.kts /build/
-COPY detekt.yml /build/
-COPY detekt-strict.yml /build/
-COPY .editorconfig /build/
-COPY core/build.gradle.kts /build/core/
-COPY core-test/build.gradle.kts /build/core-test/
-COPY desktop-ui/build.gradle.kts /build/desktop-ui/
-COPY fast-sim/build.gradle.kts /build/fast-sim/
+COPY --chown=builder:builder settings.gradle.kts /build/
+COPY --chown=builder:builder gradle.properties /build/
+COPY --chown=builder:builder build.gradle.kts /build/
+COPY --chown=builder:builder detekt.yml /build/
+COPY --chown=builder:builder detekt-strict.yml /build/
+COPY --chown=builder:builder .editorconfig /build/
+COPY --chown=builder:builder core/build.gradle.kts /build/core/
+COPY --chown=builder:builder core-test/build.gradle.kts /build/core-test/
+COPY --chown=builder:builder desktop-ui/build.gradle.kts /build/desktop-ui/
+COPY --chown=builder:builder fast-sim/build.gradle.kts /build/fast-sim/
+
+# All subsequent Gradle commands run as the builder user.
+USER builder
 
 # Layer 2.5: kDisco artifacts are fetched from GitHub Packages during resolution.
-# GITHUB_ACTOR and GITHUB_TOKEN are forwarded from docker-compose.yml.
+# Credentials come from BuildKit secret mounts, not from ARG, so the token is
+# never visible in image history or in BuildKit's resolved RUN command output.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
-RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
-    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
-    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+    --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
+    --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
+    GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
     ./gradlew dependencies --no-daemon --warning-mode=summary
 
 # Layer 4: Copy source code (changes most frequently)
-COPY core/src/ /build/core/src/
-COPY core-test/src/ /build/core-test/src/
-COPY fast-sim/src/ /build/fast-sim/src/
+COPY --chown=builder:builder core/src/ /build/core/src/
+COPY --chown=builder:builder core-test/src/ /build/core-test/src/
+COPY --chown=builder:builder fast-sim/src/ /build/fast-sim/src/
 # desktop-ui source needed for Gradle configuration resolution (settings.gradle.kts includes it)
 # but not compiled — only an empty placeholder is required.
 RUN mkdir -p /build/desktop-ui/src/main/kotlin
 
 # Layer 5: Build release native binary
 ENV GRADLE_OPTS="-Xmx2g"
-RUN --mount=type=cache,target=/root/.gradle/caches,id=fast-sim-gradle \
-    --mount=type=cache,target=/root/.gradle/wrapper,id=fast-sim-wrapper \
-    --mount=type=cache,target=/root/.m2/repository,id=fast-sim-m2 \
-    GITHUB_ACTOR=${GITHUB_ACTOR} GITHUB_TOKEN=${GITHUB_TOKEN} \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+    --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
+    --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
+    GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
     ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --warning-mode=summary
 
 # Verify binary was created
@@ -109,8 +134,17 @@ RUN apk add --no-cache \
     libgcc \
     libxml2
 
+# Run the native binary as an unprivileged user for image hygiene.
+# Use UID/GID 1001 to avoid colliding with the base image's ubuntu group (1000).
+ARG RUNTIME_UID=1001
+ARG RUNTIME_GID=1001
+RUN addgroup -g ${RUNTIME_GID} app \
+    && adduser -u ${RUNTIME_UID} -G app -s /bin/sh -D app \
+    && mkdir -p /build/core/src/commonMain/resources \
+    && chown -R app:app /build/core/src/commonMain/resources
+
 # Copy native binary from builder
-COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
+COPY --chown=app:app --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
     /usr/local/bin/fast-sim
 
 # Native resource roots are baked into the binary as absolute build-tree paths. (This is intentional; resources are accessed via absolute paths baked at compile time; see Resources.read implementation.)
@@ -118,7 +152,9 @@ COPY --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-si
 # BuiltinNetworks and XmlSchemaContent). Test-only roots (core-test/commonMain
 # and core/commonTest) are intentionally omitted to keep the release image small;
 # Resources.read skips missing roots silently.
-COPY --from=builder /build/core/src/commonMain/resources /build/core/src/commonMain/resources
+COPY --chown=app:app --from=builder /build/core/src/commonMain/resources /build/core/src/commonMain/resources
+
+USER app
 
 ENTRYPOINT ["fast-sim"]
 CMD ["--help"]

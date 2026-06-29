@@ -1939,6 +1939,9 @@ export GITHUB_ACTOR=your-github-username
 export GITHUB_TOKEN=your-personal-access-token
 
 # Build app (kDisco downloaded from GitHub Packages or uses local cache)
+# GITHUB_TOKEN is passed as a BuildKit secret; it is never interpolated into
+# Dockerfile RUN command strings, so it cannot leak into build logs or image history.
+# The Gradle build and tests run as an unprivileged builder user (UID/GID 1001).
 docker compose build app
 
 # Build thesis

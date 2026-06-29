@@ -70,10 +70,24 @@ The simulator uses a combined discrete-continuous simulation approach powered by
 
 **Dockerization: 2025** - Complete containerized build and runtime environment with no host dependencies.
 
+### Prerequisites: GitHub Packages credentials
+
+The build downloads the kDisco dependency from GitHub Packages, which requires
+authentication. Put your credentials in `.env` (copy `.env.example`) and **export
+them** before building — `docker compose` auto-loads `.env` only for `${VAR}`
+interpolation, while the BuildKit secret that carries the token reads the
+*process* environment. A non-exported `.env` produces an empty token and a 401:
+
+```bash
+set -a; source .env; set +a    # export GITHUB_ACTOR / GITHUB_TOKEN
+```
+
+Use a Personal Access Token with the `read:packages` scope (see `.env.example`).
+
 ### Build and Run
 
 ```bash
-# Build Docker images
+# Build Docker images (after exporting credentials, see above)
 docker compose build
 
 # Run graphical editor (X11 forwarding)
