@@ -2,7 +2,9 @@ package cz.vutbr.fit.interlockSim.context.navigation
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
@@ -254,5 +256,41 @@ class SwitchConfigurationTest : KoinTestBase() {
 		// The important thing is that count is NOT 2+ (duplicate configuration)
 		assertThat(confChangeCount).isGreaterThanOrEqualTo(0)
 		assertThat(confChangeCount).isLessThanOrEqualTo(1)
+	}
+
+	/**
+	 * Test that a second train can reconfigure a switch after the first train completes.
+	 *
+	 * Simulates the real production flow: the tail of train1 leaves every reserved
+	 * block (making it FREE), then the train-completion cleanup path
+	 * pathService.unregister(trainId) removes registry ownership and unlocks switches.
+	 * After that, train2 must be able to reserve a path requiring vA in the opposite
+	 * configuration.
+	 */
+	@Test
+	fun `second train can reconfigure switch after first train completes`() {
+		// First train: zA -> vA(BRANCH) -> doA2
+		val pathService = context.getPathReservationService()
+		val result1 = pathService.reservePath("train1", zA, doA2)
+		assertThat(result1).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.BRANCH)
+		assertThat(vA.locked).isTrue()
+
+		// Simulate train1's tail leaving each reserved block, transitioning blocks
+		// from RESERVED to FREE. In production this is done by Train.Tail.
+		val reservedBlocks = (result1 as PathReservationService.ReservationResult.Success).reservedBlocks
+		reservedBlocks.forEach { block ->
+			block.cancelPathSetup(zA)
+		}
+
+		// Production completion cleanup for train1: registry removal + switch unlock
+		pathService.unregister("train1")
+		assertThat(vA.locked).isFalse()
+
+		// Second train: zA -> vA(MAIN) -> doA1 (opposite configuration)
+		val result2 = pathService.reservePath("train2", zA, doA1)
+		assertThat(result2).isInstanceOf(PathReservationService.ReservationResult.Success::class)
+		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.MAIN)
+		assertThat(vA.locked).isTrue()
 	}
 }
