@@ -65,6 +65,13 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 		/** Minimum observed peak concurrency to confirm trains actually contended. */
 		const val MIN_CONCURRENT_TRAINS: Int = 2
 
+		/**
+		 * Number of initial runs discarded as JIT warmup before computing runtime
+		 * statistics. Rep 1 runs several times slower than steady state due to JIT
+		 * cold start, which would otherwise inflate the wall-clock spread.
+		 */
+		const val WARMUP_RUNS: Int = 10
+
 		/** Thread-safe collector for per-run results across @RepeatedTest invocations. */
 		private val results: ConcurrentLinkedQueue<RunResult> = ConcurrentLinkedQueue()
 	}
@@ -96,19 +103,17 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 				factory.createContext(stream) as DefaultSimulationContext
 			}
 		context.use { ctx ->
-			// Initialize InOut elements before running the scenario.
+			// Pre-warm InOut wrappers (matches TwoTrainLoopTest pattern); run()
+			// would initialize them internally anyway, so this is harmless.
 			ctx.getInOuts()
 			val process = ThreeTrainLoop(ctx, endTime = END_TIME)
 			ctx.setMainProcess(process)
 			ctx.run()
 			val wallMs = (System.nanoTime() - startNs) / 1_000_000
 
-			assertThat(process.getTrainsEntered(), name = "trains entered").isEqualTo(3)
-			assertThat(process.getTrainsExited(), name = "trains exited").isEqualTo(3)
-			assertThat(process.getOccupiedResourceCount(), name = "occupied resources").isZero()
-			assertThat(process.getMaxConcurrentTrains(), name = "peak concurrent trains")
-				.isGreaterThanOrEqualTo(MIN_CONCURRENT_TRAINS)
-
+			// Record the result before asserting so a failing rep still contributes to
+			// the aggregate. Otherwise one per-run failure also trips the count check
+			// with a misleading "recorded run count" message instead of the real defect.
 			results.add(
 				RunResult(
 					wallMs = wallMs,
@@ -118,6 +123,12 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 					occupiedResources = process.getOccupiedResourceCount()
 				)
 			)
+
+			assertThat(process.getTrainsEntered(), name = "trains entered").isEqualTo(3)
+			assertThat(process.getTrainsExited(), name = "trains exited").isEqualTo(3)
+			assertThat(process.getOccupiedResourceCount(), name = "occupied resources").isZero()
+			assertThat(process.getMaxConcurrentTrains(), name = "peak concurrent trains")
+				.isGreaterThanOrEqualTo(MIN_CONCURRENT_TRAINS)
 		}
 	}
 
@@ -126,8 +137,15 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	 *
 	 * Acceptance criteria:
 	 * - Exactly 1000 results recorded.
-	 * - Coefficient of variation of wall-clock runtimes stays below 0.5.
-	 * - Max-min wall-clock spread stays below 2000 ms.
+	 * - Coefficient of variation of steady-state wall-clock runtimes stays below 0.5.
+	 * - Max-min steady-state wall-clock spread stays below 2000 ms.
+	 *
+	 * Note: with real-time sync disabled the simulation runs as fast as the CPU
+	 * allows, so wall-clock variance is dominated by JIT/GC/scheduler noise
+	 * rather than simulation work. The first [WARMUP_RUNS] reps are discarded to
+	 * remove JIT cold start. These thresholds are environment-dependent and may
+	 * need relaxing on heavily loaded shared CI runners; treat CV as the primary
+	 * signal and the spread as secondary.
 	 */
 	@Order(2)
 	@Test
@@ -136,16 +154,16 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	fun aggregate1000RunStatistics() {
 		assertThat(results.size, name = "recorded run count").isEqualTo(EXPECTED_RUNS)
 
-		val wallTimes = results.map { it.wallMs }
-		val minMs = wallTimes.min()
-		val maxMs = wallTimes.max()
-		val mean = wallTimes.average()
-		val stdDev = sqrt(wallTimes.map { (it - mean) * (it - mean) }.average())
+		val steady = results.drop(WARMUP_RUNS).map { it.wallMs }
+		val minMs = steady.min()
+		val maxMs = steady.max()
+		val mean = steady.average()
+		val stdDev = sqrt(steady.map { (it - mean) * (it - mean) }.average())
 		val cv = if (mean > 0.0) stdDev / mean else 0.0
 
 		logger.info {
 			"ThreeTrainLoop 1000-run race complete: " +
-				"runs=$EXPECTED_RUNS, " +
+				"runs=$EXPECTED_RUNS (warmup=$WARMUP_RUNS), " +
 				"min=${minMs}ms, max=${maxMs}ms, mean=${mean}ms, " +
 				"stdDev=${stdDev}ms, CV=$cv"
 		}
