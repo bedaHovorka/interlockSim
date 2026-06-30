@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -81,6 +82,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	 * - Peak concurrent trains reaches at least 2 (contention/queuing occurred).
 	 * - Run completes within the per-run timeout → no deadlock.
 	 */
+	@Order(1)
 	@RepeatedTest(1000)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("ThreeTrainLoop run completes cleanly")
@@ -123,6 +125,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	 * - Coefficient of variation of wall-clock runtimes stays below 0.5.
 	 * - Max-min wall-clock spread stays below 2000 ms.
 	 */
+	@Order(2)
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	@DisplayName("1000-run aggregate: statistics and runtime stability")
