@@ -123,13 +123,14 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # SONAME matches Alpine 3.21's libxml2 at runtime.
 FROM --platform=linux/amd64 alpine:3.21
 
-# gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
-#          Provides /lib64/ld-linux-x86-64.so.2 and glibc symbol wrappers.
-# libgcc:  GCC runtime support library — required alongside gcompat for complete
-#          glibc ABI compatibility on musl-based Alpine.
-# libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2 at build time).
-#          Alpine's libxml2 does NOT pull libicu, unlike Debian's (~30MB saved).
-RUN apk add --no-cache \
+# Upgrade all base packages (such as busybox or musl) to their latest available
+# patch releases inside alpine:3.21 to pick up any backported upstream patches.
+# Note: CVE-2025-60876 (wget CRLF injection in busybox) is currently marked as
+# unfixable by Alpine for 3.21 as of 2026-06-30. It is bypassed using .scout-ignore
+# and .trivyignore files. The container only runs a static native CLI and does
+# not use wget at runtime, so risk is minimal.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
     gcompat \
     libgcc \
     libxml2
