@@ -28,7 +28,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 class DefaultRouteFinder(
 	private val engine: AutomaticPathFindingService
 ) : RouteFinder {
-
 	override fun findRoutes(
 		from: InOut,
 		to: InOut,
@@ -39,20 +38,24 @@ class DefaultRouteFinder(
 		val start = normalize(from)
 		val target = normalize(to)
 
-		return engine.findAllPaths(
-			start = start,
-			target = target,
-			maxPaths = maxRoutes,
-			costFunction = costFunction
-		).map { result ->
-			Route(
-				start = from,
-				target = to,
-				segments = result.sections,
-				cost = result.totalCost,
-				costBreakdown = buildBreakdown(result.sections, start, costFunction)
+		val results =
+			engine.findAllPaths(
+				start = start,
+				target = target,
+				maxPaths = maxRoutes,
+				costFunction = costFunction
 			)
-		}
+		val routes =
+			results.map { result ->
+				Route(
+					start = from,
+					target = to,
+					segments = result.sections,
+					cost = result.totalCost,
+					costBreakdown = buildBreakdown(result.sections, start, costFunction)
+				)
+			}
+		return routes
 	}
 
 	/**
@@ -62,8 +65,7 @@ class DefaultRouteFinder(
 	 * (static objects) and [cz.vutbr.fit.interlockSim.context.SimulationContext]
 	 * (dynamic wrappers).
 	 */
-	private fun normalize(separator: PathSeparator): PathSeparator =
-		CellUtilities.assertNodeCell(separator)
+	private fun normalize(separator: PathSeparator): PathSeparator = CellUtilities.assertNodeCell(separator)
 
 	/**
 	 * Compute per-segment cost contributions by walking the sections in order.

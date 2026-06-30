@@ -1504,8 +1504,7 @@ open class DefaultSimulationContext(
 
 	override fun getAutomaticPathFindingService(): AutomaticPathFindingService = automaticPathFindingServiceInstance
 
-	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder =
-		routeFinderInstance
+	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder = routeFinderInstance
 
 	/**
 	 * Get PathSeparator grid position cache for animation rendering.

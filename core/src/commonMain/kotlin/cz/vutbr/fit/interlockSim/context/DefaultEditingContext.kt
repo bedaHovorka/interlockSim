@@ -178,8 +178,7 @@ open class DefaultEditingContext(
 	override fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService =
 		scope.get()
 
-	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder =
-		scope.get()
+	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder = scope.get()
 
 	/**
 	 * Swap X and Y coordinates of a point (used in Bresenham algorithm)

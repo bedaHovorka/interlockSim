@@ -76,6 +76,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  * @see SimulationProcessFactory
  * @since 2026-01 (Issue #94)
  */
+@Suppress("TooManyFunctions", "ComplexInterface")
 interface SimulationEnvironment : NetworkState {
 	// ========================================
 	// Network Query Operations

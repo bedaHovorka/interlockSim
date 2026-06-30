@@ -56,8 +56,10 @@ class RouteFinderTest : KoinTestBase() {
 		return ctx
 	}
 
-	private fun findInOut(ctx: EditingContext, name: String): InOut =
-		ctx.getInOuts().single { it.getName() == name }
+	private fun findInOut(
+		ctx: EditingContext,
+		name: String
+	): InOut = ctx.getInOuts().single { it.getName() == name }
 
 	@Nested
 	@DisplayName("findRoutes")
