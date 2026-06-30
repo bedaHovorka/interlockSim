@@ -2117,6 +2117,26 @@ class PathReservationServiceTest : KoinTestBase() {
 				assertThat(switch.locked).isFalse()
 			}
 		}
+
+		@Test
+		fun `releaseTrainReservations unlocks switches through production entry point`() {
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			val switches = registry.getSwitches("train1")
+			assertThat(switches).isNotEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isTrue()
+			}
+
+			simulationContext.releaseTrainReservations("train1")
+
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isFalse()
+			}
+		}
 	}
 
 	private class RecordingListener : BlockOccupancyListener {
