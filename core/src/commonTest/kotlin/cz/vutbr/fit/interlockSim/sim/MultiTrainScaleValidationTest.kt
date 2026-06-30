@@ -25,7 +25,7 @@ import kotlin.test.Test
 /**
  * Scale validation for Goal 1 multi-train simulation: five trains on the station-scale
  * Praha fixture (`praha-hlavni-nadrazi.xml`), on every KMP target (JVM `test` and
- * `:core:linuxX64Test`).
+ * `:core:linuxX64Test`). The topology is large enough to avoid trivial contention.
  *
  * The five routes are pairwise block-disjoint, so every train obtains its entry route on its
  * first attempt. The attempt cap is small anyway: if a route ever stops being free, the run
