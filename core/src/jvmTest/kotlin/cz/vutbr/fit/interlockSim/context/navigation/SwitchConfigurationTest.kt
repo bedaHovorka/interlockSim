@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 
@@ -267,6 +268,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	 * After that, train2 must be able to reserve a path requiring vA in the opposite
 	 * configuration.
 	 */
+	@Tag("integration-test")
 	@Test
 	fun `second train can reconfigure switch after first train completes`() {
 		// First train: zA -> vA(BRANCH) -> doA2
