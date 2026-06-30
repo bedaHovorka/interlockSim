@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.paths.Route
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.FlowLayout
 import javax.swing.BorderFactory
 import javax.swing.DefaultComboBoxModel
@@ -138,7 +139,7 @@ class PathPreviewPanel :
 		routeList.selectionMode = ListSelectionModel.SINGLE_SELECTION
 		routeList.visibleRowCount = 3
 		val scrollPane = JScrollPane(routeList)
-		scrollPane.preferredSize = java.awt.Dimension(scrollPane.preferredSize.width, 60)
+		scrollPane.preferredSize = Dimension(scrollPane.preferredSize.width, 60)
 		add(scrollPane, BorderLayout.CENTER)
 
 		// ── Button actions ────────────────────────────────────────────────────
@@ -245,10 +246,9 @@ class PathPreviewPanel :
 		}
 
 		routes.forEachIndexed { index, route ->
-			val length = "%.0f m".format(route.totalLength)
 			val label =
-				"Route ${index + 1}  –  cost %.1f  –  length $length  –  ${route.elementCount} elements"
-					.format(route.cost)
+				"Route %d  –  cost %.1f  –  length %.0f m  –  %d elements"
+					.format(index + 1, route.cost, route.totalLength, route.elementCount)
 			routeListModel.addElement(label)
 		}
 

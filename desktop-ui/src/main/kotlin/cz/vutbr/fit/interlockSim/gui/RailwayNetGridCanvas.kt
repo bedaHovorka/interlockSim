@@ -34,11 +34,11 @@ import cz.vutbr.fit.interlockSim.objects.paths.Route
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
+import java.awt.AlphaComposite
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.Graphics
 import java.awt.Graphics2D
-import java.awt.Point
 import java.awt.Rectangle
 import java.awt.event.MouseEvent
 import java.awt.event.MouseListener
@@ -46,6 +46,7 @@ import java.awt.event.MouseMotionListener
 import javax.swing.JComponent
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
+import cz.vutbr.fit.interlockSim.util.Point as GridPoint
 
 /**
  * Main GUI component for rendering and editing railway elements in a grid.
@@ -263,7 +264,7 @@ class RailwayNetGridCanvas :
 	private var state = State.EDITING
 	private var toolbarCellClass: Class<out NodeCell>? = null
 	private var toolbarArgs: Array<Any?>? = null
-	private var selectedKey: cz.vutbr.fit.interlockSim.util.Point? = null
+	private var selectedKey: GridPoint? = null
 
 	// Animation support (Issue #202)
 	private var animationController: AnimationController? = null
@@ -274,7 +275,7 @@ class RailwayNetGridCanvas :
 
 	// Path preview highlight state (Issue #596)
 	// Maps route index → set of grid points to highlight for that route.
-	private var previewHighlights: Map<Int, Set<cz.vutbr.fit.interlockSim.util.Point>> = emptyMap()
+	private var previewHighlights: Map<Int, Set<GridPoint>> = emptyMap()
 	private var selectedPreviewIndex: Int = -1
 
 	init {
@@ -540,7 +541,7 @@ class RailwayNetGridCanvas :
 			repaint(100)
 			return
 		}
-		val highlights = mutableMapOf<Int, Set<cz.vutbr.fit.interlockSim.util.Point>>()
+		val highlights = mutableMapOf<Int, Set<GridPoint>>()
 		routes.forEachIndexed { index, route ->
 			val pts = buildHighlightPoints(route)
 			if (pts.isNotEmpty()) highlights[index] = pts
@@ -569,10 +570,10 @@ class RailwayNetGridCanvas :
 	 * blocks. Includes both [TrackBlockPart] intermediate cells and the [NodeCell]
 	 * endpoint separators of each segment.
 	 */
-	private fun buildHighlightPoints(route: Route): Set<cz.vutbr.fit.interlockSim.util.Point> {
+	private fun buildHighlightPoints(route: Route): Set<GridPoint> {
 		val ctx = context as? EditingContext ?: return emptySet()
 		val grid = ctx.getRailWayNetGrid()
-		val points = mutableSetOf<cz.vutbr.fit.interlockSim.util.Point>()
+		val points = mutableSetOf<GridPoint>()
 
 		val blocks = route.segments.map { it.getTrackBlock() }.toSet()
 
@@ -611,16 +612,16 @@ class RailwayNetGridCanvas :
 			if (routeIndex == selectedPreviewIndex) {
 				// Primary route: solid blue at 50% opacity
 				g.composite =
-					java.awt.AlphaComposite.getInstance(
-						java.awt.AlphaComposite.SRC_OVER,
+					AlphaComposite.getInstance(
+						AlphaComposite.SRC_OVER,
 						0.5f
 					)
 				g.color = PATH_PRIMARY_COLOR
 			} else {
 				// Alternative routes: cyan at 30% opacity
 				g.composite =
-					java.awt.AlphaComposite.getInstance(
-						java.awt.AlphaComposite.SRC_OVER,
+					AlphaComposite.getInstance(
+						AlphaComposite.SRC_OVER,
 						0.3f
 					)
 				g.color = PATH_ALTERNATIVE_COLOR
@@ -657,9 +658,7 @@ class RailwayNetGridCanvas :
 	}
 
 	// Mouse coordinate to grid coordinate conversion
-	private fun currentKey(e: MouseEvent): cz.vutbr.fit.interlockSim.util.Point =
-		cz.vutbr.fit.interlockSim.util
-			.Point(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
+	private fun currentKey(e: MouseEvent): GridPoint = GridPoint(e.x / CELL_WIDTH, e.y / CELL_HEIGHT)
 
 	private fun cellOn(
 		x: Int,
@@ -815,7 +814,7 @@ class RailwayNetGridCanvas :
 	// ContextPropertyChangeListener for context updates
 	override fun propertyChange(event: ContextChangeEvent) {
 		val newValue = event.newValue
-		if (newValue is cz.vutbr.fit.interlockSim.util.Point) {
+		if (newValue is GridPoint) {
 			repaint(10, newValue.x * CELL_WIDTH, newValue.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
 		} else {
 			repaint(100)
