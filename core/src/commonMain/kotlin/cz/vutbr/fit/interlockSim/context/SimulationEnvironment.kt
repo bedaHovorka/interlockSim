@@ -81,8 +81,8 @@ import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
  * @see SimulationProcessFactory
  * @since 2026-01 (Issue #94)
  */
-@Suppress("TooManyFunctions", "ComplexInterface") // Facade for simulation subsystems; splitting would hurt usability
-interface SimulationEnvironment {
+@Suppress("TooManyFunctions", "ComplexInterface")
+interface SimulationEnvironment : NetworkState {
 	// ========================================
 	// Network Query Operations
 	// ========================================
@@ -241,6 +241,19 @@ interface SimulationEnvironment {
 	 * @see cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 	 */
 	fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+
+	/**
+	 * Get the route finder for automatic route planning between InOut elements.
+	 *
+	 * The returned [RouteFinder] is scoped to this simulation context. In this slice
+	 * it performs purely topological search; future slices will consult the supplied
+	 * [NetworkState] for dynamic constraints.
+	 *
+	 * @return RouteFinder instance for this simulation context
+	 * @see RouteFinder
+	 * @see NetworkState
+	 */
+	fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder
 
 	// ========================================
 	// Grid and Graph Access

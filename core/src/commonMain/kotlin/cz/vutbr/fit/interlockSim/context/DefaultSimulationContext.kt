@@ -242,6 +242,14 @@ open class DefaultSimulationContext(
 		scope.get<AutomaticPathFindingService>()
 	}
 
+	/**
+	 * Route finder for automatic route planning between InOut elements.
+	 * Lazy-initialized; scoped to this simulation context.
+	 */
+	private val routeFinderInstance: cz.vutbr.fit.interlockSim.context.RouteFinder by lazy {
+		scope.get<cz.vutbr.fit.interlockSim.context.RouteFinder>()
+	}
+
 	// ========================================
 	// Context Interface Implementation
 	// ========================================
@@ -1533,6 +1541,8 @@ open class DefaultSimulationContext(
 	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
 
 	override fun getAutomaticPathFindingService(): AutomaticPathFindingService = automaticPathFindingServiceInstance
+
+	override fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder = routeFinderInstance
 
 	/**
 	 * Get PathSeparator grid position cache for animation rendering.
