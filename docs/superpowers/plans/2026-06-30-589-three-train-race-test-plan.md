@@ -92,10 +92,13 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -104,6 +107,7 @@ import kotlin.math.sqrt
 
 @Tag("integration-test")
 @DisplayName("ThreeTrainLoop — 1000-iteration deterministic race test (Goal 1 SP6 #589)")
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ThreeTrainLoopRaceTest : KoinTestBase() {
 
@@ -153,6 +157,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
      * - Peak concurrent trains reaches at least 2 (contention/queuing occurred).
      * - Run completes within the per-run timeout → no deadlock.
      */
+    @Order(1)
     @RepeatedTest(1000)
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     @DisplayName("ThreeTrainLoop run completes cleanly")
@@ -162,6 +167,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
             factory.createContext(stream) as DefaultSimulationContext
         }
         context.use { ctx ->
+            // Initialize InOut elements before running the scenario.
             ctx.getInOuts()
             val process = ThreeTrainLoop(ctx, endTime = END_TIME)
             ctx.setMainProcess(process)
@@ -194,6 +200,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
      * - Coefficient of variation of wall-clock runtimes stays below 0.5.
      * - Max-min wall-clock spread stays below 2000 ms.
      */
+    @Order(2)
     @Test
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
     @DisplayName("1000-run aggregate: statistics and runtime stability")
@@ -225,7 +232,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 Run:
 
 ```bash
-./gradlew :core:compileTestKotlin
+./gradlew :core:compileTestKotlinJvm
 ```
 
 Expected: BUILD SUCCESSFUL (or compile errors that you fix before continuing).
@@ -233,7 +240,7 @@ Expected: BUILD SUCCESSFUL (or compile errors that you fix before continuing).
 - [ ] **Step 3: Run the new test class in isolation**
 
 ```bash
-./gradlew :core:test --tests "cz.vutbr.fit.interlockSim.sim.ThreeTrainLoopRaceTest"
+./gradlew :core:integrationTest --tests "*ThreeTrainLoopRaceTest"
 ```
 
 Expected: 1001 tests pass (1000 repeated + 1 aggregate). Note: this may take several minutes.

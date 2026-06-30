@@ -60,8 +60,34 @@ Issue #589 explicitly asks for a 1000-iteration race test. The production scenar
 **File:** `core/src/jvmTest/kotlin/cz/vutbr/fit/interlockSim/sim/ThreeTrainLoopRaceTest.kt`
 
 ```kotlin
+import assertk.assertThat
+import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThan
+import assertk.assertions.isZero
+import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
+import cz.vutbr.fit.interlockSim.testutil.TestFixtures
+import io.github.oshai.kotlinlogging.KotlinLogging
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.MethodOrderer
+import org.junit.jupiter.api.Order
+import org.junit.jupiter.api.RepeatedTest
+import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.TestMethodOrder
+import org.junit.jupiter.api.Timeout
+import org.koin.test.inject
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeUnit
+import kotlin.math.sqrt
+
 @Tag("integration-test")
 @DisplayName("ThreeTrainLoop — 1000-iteration deterministic race test (Goal 1 SP6 #589)")
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ThreeTrainLoopRaceTest : KoinTestBase() {
 
@@ -91,21 +117,22 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
         results.clear()
     }
 
-    /** Single race run. Repeats 1000 times. */
+    @Order(1)
     @RepeatedTest(1000)
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     @DisplayName("ThreeTrainLoop run completes cleanly")
     fun eachRunCompletesCleanly() {
         val startNs = System.nanoTime()
-        val ctx = TestFixtures.loadShuntingXml().use { stream ->
-            val factory = KoinPlatformTools.defaultContext().get().get<SimulationContextFactory>()
-            factory.createContext(stream) as DefaultSimulationContext
-        }
-        ctx.use { c ->
-            c.getInOuts()
-            val process = ThreeTrainLoop(c, endTime = END_TIME)
-            c.setMainProcess(process)
-            c.run()
+        val context =
+            TestFixtures.loadShuntingXml().use { stream ->
+                factory.createContext(stream) as DefaultSimulationContext
+            }
+        context.use { ctx ->
+            // Initialize InOut elements before running the scenario.
+            ctx.getInOuts()
+            val process = ThreeTrainLoop(ctx, endTime = END_TIME)
+            ctx.setMainProcess(process)
+            ctx.run()
             val wallMs = (System.nanoTime() - startNs) / 1_000_000
 
             assertThat(process.getTrainsEntered(), name = "trains entered").isEqualTo(3)
@@ -127,6 +154,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
     }
 
     /** Aggregate validation after all 1000 repeated runs have completed. */
+    @Order(2)
     @Test
     @Timeout(value = 120, unit = TimeUnit.SECONDS)
     @DisplayName("1000-run aggregate: statistics and runtime stability")
@@ -156,6 +184,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 ### 4.2 Design decisions
 
 - **@RepeatedTest(1000) per-run method + final aggregate `@Test`**: Gives per-run reporting in JUnit/IDE plus a clean place for aggregate statistics. A `ConcurrentLinkedQueue` safely collects results across repeated invocations.
+- **`@TestMethodOrder(OrderAnnotation::class)` + `@Order`**: Ensures the aggregate `@Test` runs only after all 1000 repetitions have completed and recorded their results.
 - **`@TestInstance(PER_CLASS)`**: Optional; keeps `results` logically scoped to the test instance. The companion holder is thread-safe either way.
 - **No deterministic transition comparison**: Per discussion, we intentionally do not compare transition sequences across runs; we only assert completion, cleanup, concurrency, and runtime stability.
 - **No production code changes**: `ThreeTrainLoop` and `MultiTrainLoop` observability counters are already sufficient.
@@ -166,13 +195,11 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 
 ### 4.4 Context factory lookup
 
-The test uses the same pattern as other integration tests:
+The test uses Koin property injection, consistent with other `:core` JVM integration tests that extend `KoinTestBase`:
 
 ```kotlin
-val factory = KoinPlatformTools.defaultContext().get().get<SimulationContextFactory>()
+private val factory: SimulationContextFactory by inject()
 ```
-
-If `SimulationContextFactory` is not directly bound in `coreTestModule`, we will adjust to the equivalent `DefaultSimulationContext.fromEditingContext(...)` call used in `TestTopologies`.
 
 ### 4.5 Timeout rationale
 

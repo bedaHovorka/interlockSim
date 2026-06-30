@@ -96,6 +96,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 				factory.createContext(stream) as DefaultSimulationContext
 			}
 		context.use { ctx ->
+			// Initialize InOut elements before running the scenario.
 			ctx.getInOuts()
 			val process = ThreeTrainLoop(ctx, endTime = END_TIME)
 			ctx.setMainProcess(process)
