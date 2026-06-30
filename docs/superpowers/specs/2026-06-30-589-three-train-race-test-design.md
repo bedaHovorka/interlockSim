@@ -3,7 +3,7 @@
 **Date:** 2026-06-30
 **Issue:** [#589 — Goal 1 SP6: Run 1000-iteration deterministic race test for three-train scenario](https://github.com/bedaHovorka/interlockSim/issues/589)
 **Branch:** `feat/issue-589-three-train-race-test`
-**PR target:** `develop`
+**PR target:** `goal-1`
 
 ---
 
@@ -219,10 +219,10 @@ The change must pass:
 
 ## 8. Branch and PR Plan
 
-1. Create branch `feat/issue-589-three-train-race-test` from `develop`.
+1. Create branch `feat/issue-589-three-train-race-test` from `goal-1`.
 2. Add `ThreeTrainLoopRaceTest.kt`.
 3. Run the full quality gate locally.
-4. Open a PR to `develop` with a description following `.github/PULL_REQUEST_TEMPLATE.md`.
+4. Open a PR to `goal-1` with a description following `.github/PULL_REQUEST_TEMPLATE.md`.
 5. Do **not** auto-merge; wait for external review (per project memory).
 
 ---
@@ -234,4 +234,4 @@ The change must pass:
 - [ ] Per-run assertions: 3 entered, 3 exited, 0 occupied resources, peak concurrency ≥ 2.
 - [ ] Aggregate test asserts 1000 results recorded and runtime stability (CV < 0.5, spread < 2000 ms).
 - [ ] `./gradlew clean build detekt ktlintCheck test integrationTest` green.
-- [ ] PR opened to `develop`; not auto-merged.
+- [ ] PR opened to `goal-1`; not auto-merged.
