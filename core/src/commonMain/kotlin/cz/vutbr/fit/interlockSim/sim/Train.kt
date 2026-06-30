@@ -551,6 +551,17 @@ class Train :
 				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block" }
 				env.report("enter block", this@Train, ReportType.TRAIN_EVENTS)
 				next.enter(this@Train)
+				val block = next.getTrackBlock()
+				if (block is DynamicTrackBlock) {
+					env.fireBlockEvent(
+						cz.vutbr.fit.interlockSim.sim.events.BlockEvent.OccupancySet(
+							block = block,
+							occupant = this@Train,
+							entrySeparator = where,
+							time = time()
+						)
+					)
+				}
 			}
 		}
 	}
@@ -579,6 +590,13 @@ class Train :
 				val block = current.getTrackBlock()
 				if (block is DynamicTrackBlock) {
 					env.unregisterBlock(name, block)
+					env.fireBlockEvent(
+						cz.vutbr.fit.interlockSim.sim.events.BlockEvent.OccupancyCleared(
+							block = block,
+							occupant = this@Train,
+							time = time()
+						)
+					)
 				}
 			}
 			if (next == null &&

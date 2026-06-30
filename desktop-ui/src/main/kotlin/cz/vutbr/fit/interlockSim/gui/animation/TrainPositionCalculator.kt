@@ -139,14 +139,17 @@ class TrainPositionCalculator(
 		if (distanceAlongSection > sectionLength && sectionLength > 0.0) {
 			// Distance exceeds section length - train is in transition window
 			// Return position at section exit to prevent jumping
+			val entrySeparator = train.trainEntrySeparator
 			val ends = currentSection.ends()
 			if (ends.isEmpty()) {
 				return null
 			}
 
-			// Use first end as entry, second as exit (arbitrary but consistent)
-			val entryPos = getGridPosition(ends[0]) ?: return null
-			val exitPos = getGridPosition(ends.getOrElse(1) { ends[0] }) ?: return null
+			// Use trainEntrySeparator to find the computed exit separator, fallback to arbitrary ends if not available
+			val computedExitSeparator = if (entrySeparator != null) currentSection.getSecondEnd(entrySeparator) else null
+			
+			val entryPos = getGridPosition(entrySeparator ?: ends[0]) ?: return null
+			val exitPos = getGridPosition(computedExitSeparator ?: ends.getOrElse(1) { ends[0] }) ?: return null
 
 			// Return exit position (ratio = 1.0)
 			return PointF(exitPos.x.toFloat(), exitPos.y.toFloat())

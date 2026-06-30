@@ -53,11 +53,13 @@ import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -1636,6 +1638,20 @@ open class DefaultSimulationContext(
 		} else {
 			allowedReportTypes.addAll(types.asList())
 		}
+	}
+
+	private val blockEventListeners = mutableListOf<BlockEventListener>()
+
+	override fun addBlockEventListener(listener: BlockEventListener) {
+		blockEventListeners.add(listener)
+	}
+
+	override fun removeBlockEventListener(listener: BlockEventListener) {
+		blockEventListeners.remove(listener)
+	}
+
+	override fun fireBlockEvent(event: AnimBlockEvent) {
+		blockEventListeners.toList().forEach { it.onBlockEvent(event) }
 	}
 
 	/**

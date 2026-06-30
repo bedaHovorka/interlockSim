@@ -27,7 +27,9 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
 /**
  * Facade interface for simulation environment operations.
@@ -411,6 +413,27 @@ interface SimulationEnvironment : NetworkState {
 	 * @param trainId The train identifier to release reservations for
 	 */
 	fun releaseTrainReservations(trainId: String)
+
+	/**
+	 * Subscribe to block occupancy events.
+	 *
+	 * @param listener Listener to add
+	 */
+	fun addBlockEventListener(listener: BlockEventListener)
+
+	/**
+	 * Unsubscribe from block occupancy events.
+	 *
+	 * @param listener Listener to remove
+	 */
+	fun removeBlockEventListener(listener: BlockEventListener)
+
+	/**
+	 * Fire a block event.
+	 *
+	 * @param event The event to fire
+	 */
+	fun fireBlockEvent(event: AnimBlockEvent)
 
 	/**
 	 * Unregister a single block for a train.

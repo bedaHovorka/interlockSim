@@ -157,6 +157,42 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	}
 
 	@Test
+	fun testCalculateTrainGridLocation_beyondEnd_fromEnd1() {
+		// Test transition window clamp when train enters from ends[1]
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+		
+		val ends = trackSection!!.ends()
+		assertThat(ends.size).isEqualTo(2)
+		
+		val end0Dynamic = context.toDynamic(ends[0])
+		val end1Dynamic = context.toDynamic(ends[1])
+		assertThat(end1Dynamic).isNotNull()
+
+		val trainWithEntry = mockk<Train>(relaxed = true)
+		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
+
+		val sectionLength = trackSection.length()
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				sectionLength * 2.0 // Beyond end
+			)
+
+		assertThat(gridLocation).isNotNull()
+		
+		// The exit separator is determined from the train's entry separator using getSecondEnd.
+		// Since we enter from end1Dynamic (ends[1]), the exit should be ends[0].
+		val computedExitPos = calculator.getGridPosition(ends[0])
+		assertThat(computedExitPos).isNotNull()
+		
+		// When entering from end[1] and going beyond end, it should clamp to end[0] (the computed exit)
+		assertThat(gridLocation!!.x).isEqualTo(computedExitPos!!.x.toFloat())
+		assertThat(gridLocation.y).isEqualTo(computedExitPos.y.toFloat())
+	}
+
+	@Test
 	fun testCalculateTrainGridLocation_negativeDistance() {
 		// Train before start (negative distance) - should clamp to 0.0
 		val trackSection = getFirstTrackSection()
