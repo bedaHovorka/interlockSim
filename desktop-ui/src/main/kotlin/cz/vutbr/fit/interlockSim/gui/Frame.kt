@@ -109,6 +109,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 	private var animationUpdateTimer: Timer? = null
 
+	// Path preview panel (Issue #596) – visible in editing mode
+	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
+
 	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
 	private val southPanel: JPanel =
 		JPanel().apply {
@@ -182,6 +185,17 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		southPanel.add(statusBar)
 		contentPane.add(southPanel, BorderLayout.SOUTH)
 
+		// Wire PathPreviewPanel callbacks to the canvas (Issue #596)
+		pathPreviewPanel.onRouteSelected = { routes, selectedIndex ->
+			railwayNetGridCanvas.setPathPreview(routes, selectedIndex)
+		}
+		pathPreviewPanel.onClear = {
+			railwayNetGridCanvas.clearPathPreview()
+		}
+		// PathPreviewPanel sits above the status bar in the south panel; visible in editing mode
+		pathPreviewPanel.isVisible = false
+		southPanel.add(pathPreviewPanel, PATH_PREVIEW_SOUTH_INDEX)
+
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
 			object : ComponentAdapter() {
@@ -226,6 +240,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			}
 		}
 
+		// Hide PathPreviewPanel in simulation mode
+		pathPreviewPanel.isVisible = false
+
 		// Show ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = true
 		controlPanel.updateStatus(ControlPanel.SimulationStatus.READY)
@@ -262,6 +279,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		eventTimelinePanel?.let { panel ->
 			southPanel.remove(panel)
 		}
+
+		// Show PathPreviewPanel in editing mode
+		pathPreviewPanel.isVisible = true
 
 		// Hide ControlPanel and SimulationControlPanel
 		controlPanel.isVisible = false
@@ -319,6 +339,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				// Wire stop button to stopSimulation()
 				controlPanel.onStop = { stopSimulation() }
 				controlPanel.setStopEnabled(false) // enabled only after startSimulation()
+				// Clear PathPreviewPanel context (Issue #596)
+				pathPreviewPanel.setEditingContext(null)
 			}
 			is EditingContext -> {
 				currentSimulationContext = null
@@ -326,6 +348,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				switchToEditingMode()
 				railwayNetGridCanvas.setContext(context)
 				context.addPropertyChangeListener(modificationTracker)
+				// Bind PathPreviewPanel to new editing context (Issue #596)
+				pathPreviewPanel.setEditingContext(context)
 			}
 			else -> {
 				currentSimulationContext = null
@@ -333,6 +357,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				// Unknown context type - default to simulation mode (read-only)
 				switchToSimulationMode()
 				railwayNetGridCanvas.setContext(context)
+				// Clear PathPreviewPanel context (Issue #596)
+				pathPreviewPanel.setEditingContext(null)
 			}
 		}
 
@@ -460,6 +486,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		/** Index at which EventTimelinePanel is inserted in [southPanel] (above StatusBar). */
 		private const val TIMELINE_PANEL_SOUTH_INDEX = 0
+
+		/**
+		 * Index at which PathPreviewPanel is inserted in [southPanel] (Issue #596).
+		 *
+		 * Sits above the StatusBar (index 0 is top). When EventTimelinePanel is also present
+		 * it is at index 0, so PathPreviewPanel lands at index 1, just below it. When no
+		 * timeline panel is present it sits at index 0, just above the StatusBar.
+		 */
+		private const val PATH_PREVIEW_SOUTH_INDEX = 0
 	}
 
 	/**

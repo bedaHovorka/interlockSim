@@ -26,9 +26,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.TrackBlockPart
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
+import cz.vutbr.fit.interlockSim.objects.paths.Route
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
@@ -270,6 +272,11 @@ class RailwayNetGridCanvas :
 	// Event timeline integration (Issue #205)
 	private var eventTimelinePanel: cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel? = null
 
+	// Path preview highlight state (Issue #596)
+	// Maps route index → set of grid points to highlight for that route.
+	private var previewHighlights: Map<Int, Set<cz.vutbr.fit.interlockSim.util.Point>> = emptyMap()
+	private var selectedPreviewIndex: Int = -1
+
 	init {
 		background = Color.BLACK
 		autoscrolls = true
@@ -292,6 +299,8 @@ class RailwayNetGridCanvas :
 	fun setContext(newContext: Context<*, *>) {
 		// Stop any existing animation controller
 		stopAnimation()
+		// Clear path preview when switching context
+		clearPathPreview()
 
 		when (newContext) {
 			is SimulationContext -> {
@@ -487,6 +496,7 @@ class RailwayNetGridCanvas :
 		// Render grid lines and selection highlight
 		if (showGrid) paintGrid(g)
 		if (selectedKey != null) paintMarkSelected(g)
+		if (previewHighlights.isNotEmpty()) paintPathHighlights(g)
 	}
 
 	// Highlight the selected cell for connection
@@ -503,6 +513,124 @@ class RailwayNetGridCanvas :
 
 	private fun cancelClip(g: Graphics2D) {
 		g.clip = visibleRect
+	}
+
+	/**
+	 * Set the candidate paths to highlight as a path preview overlay (Issue #596).
+	 *
+	 * Computes grid positions for each route's track blocks and stores them for
+	 * overlay rendering on top of the regular cell layer. Call with null or empty
+	 * routes to clear the preview.
+	 *
+	 * The primary route ([selectedIndex]) is rendered in solid blue; all other
+	 * alternative routes are rendered in a semi-transparent cyan.
+	 *
+	 * **Must be called from the EDT.**
+	 *
+	 * @param routes candidate routes from RouteFinder, or null/empty to clear
+	 * @param selectedIndex index of the primary (selected) route; -1 if none
+	 */
+	fun setPathPreview(
+		routes: List<Route>?,
+		selectedIndex: Int
+	) {
+		if (routes.isNullOrEmpty()) {
+			previewHighlights = emptyMap()
+			selectedPreviewIndex = -1
+			repaint(100)
+			return
+		}
+		val highlights = mutableMapOf<Int, Set<cz.vutbr.fit.interlockSim.util.Point>>()
+		routes.forEachIndexed { index, route ->
+			val pts = buildHighlightPoints(route)
+			if (pts.isNotEmpty()) highlights[index] = pts
+		}
+		previewHighlights = highlights
+		selectedPreviewIndex = selectedIndex
+		repaint(100)
+	}
+
+	/**
+	 * Clear the path preview overlay (Issue #596).
+	 *
+	 * Equivalent to calling [setPathPreview] with null routes. Safe to call when
+	 * no preview is active.
+	 *
+	 * **Must be called from the EDT.**
+	 */
+	fun clearPathPreview() {
+		previewHighlights = emptyMap()
+		selectedPreviewIndex = -1
+		repaint(100)
+	}
+
+	/**
+	 * Collect grid positions that represent the cells belonging to [route]'s track
+	 * blocks. Includes both [TrackBlockPart] intermediate cells and the [NodeCell]
+	 * endpoint separators of each segment.
+	 */
+	private fun buildHighlightPoints(route: Route): Set<cz.vutbr.fit.interlockSim.util.Point> {
+		val ctx = context as? EditingContext ?: return emptySet()
+		val grid = ctx.getRailWayNetGrid()
+		val points = mutableSetOf<cz.vutbr.fit.interlockSim.util.Point>()
+
+		val blocks = route.segments.map { it.getTrackBlock() }.toSet()
+
+		for (entry in grid) {
+			val cell = entry.value
+			when {
+				cell is TrackBlockPart && cell.getTrackBlock() in blocks -> points.add(entry.key)
+				cell is NodeCell && isRouteEndpoint(cell, route) -> points.add(entry.key)
+			}
+		}
+		return points
+	}
+
+	/**
+	 * Return true if [nodeCell] is one of the separator endpoints of any segment in [route].
+	 */
+	private fun isRouteEndpoint(
+		nodeCell: NodeCell,
+		route: Route
+	): Boolean =
+		route.segments.any { section ->
+			section.getTrackBlock().ends().any { sep -> sep === nodeCell }
+		}
+
+	/**
+	 * Draw semi-transparent color overlays for path preview routes (Issue #596).
+	 *
+	 * - Primary route ([selectedPreviewIndex]): solid blue overlay
+	 * - Alternative routes: semi-transparent cyan overlay
+	 */
+	private fun paintPathHighlights(g: Graphics2D) {
+		cancelClip(g)
+		val oldComposite = g.composite
+
+		previewHighlights.forEach { (routeIndex, points) ->
+			if (routeIndex == selectedPreviewIndex) {
+				// Primary route: solid blue at 50% opacity
+				g.composite =
+					java.awt.AlphaComposite.getInstance(
+						java.awt.AlphaComposite.SRC_OVER,
+						0.5f
+					)
+				g.color = PATH_PRIMARY_COLOR
+			} else {
+				// Alternative routes: cyan at 30% opacity
+				g.composite =
+					java.awt.AlphaComposite.getInstance(
+						java.awt.AlphaComposite.SRC_OVER,
+						0.3f
+					)
+				g.color = PATH_ALTERNATIVE_COLOR
+			}
+			for (pt in points) {
+				g.fillRect(pt.x * CELL_WIDTH, pt.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
+			}
+		}
+
+		g.composite = oldComposite
 	}
 
 	// Draw grid lines for alignment
@@ -702,6 +830,12 @@ class RailwayNetGridCanvas :
 		private const val MAX_UNIT_INCREMENT = 35
 		private const val CELL_WIDTH = 16
 		private const val CELL_HEIGHT = 16
+
+		/** Color used for the primary (selected) path preview route. */
+		private val PATH_PRIMARY_COLOR = Color(0x00, 0x80, 0xFF)
+
+		/** Color used for alternative (non-selected) path preview routes. */
+		private val PATH_ALTERNATIVE_COLOR = Color(0x00, 0xFF, 0xFF)
 
 		// Public accessors for cell dimensions (used by other components)
 		fun getCellHeight(): Int = CELL_HEIGHT
