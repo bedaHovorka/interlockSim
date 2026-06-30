@@ -2037,6 +2037,59 @@ class PathReservationServiceTest : KoinTestBase() {
 					assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
 				}
 		}
+
+		@Test
+		fun `legacy listener receives BLOCK_RELEASED on unregister path`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+			val reservedCount = success.reservedBlocks.size
+
+			// Clear reserve events so we can count releases in isolation
+			listener.events.clear()
+
+			service.unregister("train1")
+
+			val releasedEvents = listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedEvents).hasSize(reservedCount)
+			releasedEvents.forEach { event ->
+				assertThat(event.trainId).isEqualTo("train1")
+				assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+				assertThat(event.occupant).isNull()
+			}
+		}
+
+		@Test
+		fun `legacy listener receives BLOCK_RELEASED on unregisterBlock path`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+			val firstBlock = success.reservedBlocks.first()
+
+			// unregisterBlock only releases FREE blocks (production path is after block.leave()).
+			// Cancel the reservation manually so we can exercise the single-block release path.
+			firstBlock.cancelPathSetup(inOut1)
+
+			listener.events.clear()
+
+			val released = service.unregisterBlock("train1", firstBlock)
+			assertThat(released).isTrue()
+
+			val releasedEvents = listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedEvents).hasSize(1)
+			val event = releasedEvents.first()
+			assertThat(event.block).isEqualTo(firstBlock)
+			assertThat(event.trainId).isEqualTo("train1")
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+		}
 	}
 
 	@Nested

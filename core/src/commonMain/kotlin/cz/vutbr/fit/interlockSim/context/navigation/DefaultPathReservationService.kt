@@ -1622,7 +1622,7 @@ class DefaultPathReservationService(
 		}
 		val simTime = currentSimulationTime()
 		releasedBlocks.forEach { block ->
-			emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+			emitBlockReleased(block, trainId, simTime)
 		}
 		return releasedBlocks
 	}
@@ -1643,7 +1643,7 @@ class DefaultPathReservationService(
 	): Boolean {
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
-			emitCustom(BlockEvent.BlockReleased(block, trainId, currentSimulationTime()))
+			emitBlockReleased(block, trainId, currentSimulationTime())
 		}
 		return released
 	}
