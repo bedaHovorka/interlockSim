@@ -1601,7 +1601,21 @@ class DefaultPathReservationService(
 	 * @return List of blocks that were released
 	 */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> {
+		// Unlock switches before registry cleanup, matching releasePath behavior.
+		// unregister is the production train-completion path; releasePath is test-only.
+		val switches = registry.getSwitches(trainId)
+		switches.forEach { switch ->
+			try {
+				switch.unlock()
+				logger.debug { "unregister: Unlocked switch ${switch.hashCode()} for $trainId" }
+			} catch (e: Exception) {
+				logger.warn(e) { "unregister: Failed to unlock switch $switch" }
+			}
+		}
+
 		val releasedBlocks = registry.unregister(trainId)
+		registry.unregisterSwitches(trainId)
+
 		logger.info {
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
 				releasedBlocks.joinToString(", ") { it.toString() }

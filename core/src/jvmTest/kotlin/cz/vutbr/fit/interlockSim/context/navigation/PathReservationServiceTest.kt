@@ -82,6 +82,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	private lateinit var simulationContext: DefaultSimulationContext
 	private lateinit var environment: SimulationEnvironment
 	private lateinit var navigator: TopologyNavigator
+	private lateinit var registry: PathReservationRegistry
 	private lateinit var service: PathReservationService
 	private lateinit var inOut1: DynamicPathSeparator
 	private lateinit var inOut2: DynamicPathSeparator
@@ -106,6 +107,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		// TopologyNavigator is internal to PathReservationService, but tests need it
 		// Create it directly for test purposes (not from scope)
 		navigator = simulationContext.scope.get()
+		registry = simulationContext.scope.get()
 
 		// Get InOut elements
 		val inOuts = simulationContext.getInOuts()
@@ -2034,6 +2036,33 @@ class PathReservationServiceTest : KoinTestBase() {
 					assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
 					assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
 				}
+		}
+	}
+
+	@Nested
+	inner class SwitchCleanupTests {
+		@Test
+		fun `unregister unlocks all switches and clears switch registry`() {
+			// Arrange: reserve a path through a switch (vyhybna.xml)
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			val switches = registry.getSwitches("train1")
+			assertThat(switches).isNotEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isTrue()
+			}
+
+			// Act: production cleanup path
+			val releasedBlocks = service.unregister("train1")
+
+			// Assert: blocks and switches released
+			assertThat(releasedBlocks).isNotEmpty()
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isFalse()
+			}
 		}
 	}
 
