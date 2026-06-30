@@ -32,7 +32,7 @@ WORKDIR /build/interlockSim
 
 # Install git before COPY layers so this layer is cached independently of source changes.
 # Moving it here avoids re-downloading git on every gradle.properties / build.gradle.kts bump.
-RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/include/unicode /usr/include/libxml2/unicode
 
 # Create an unprivileged builder user so the build and tests run as a normal user.
@@ -114,7 +114,7 @@ FROM eclipse-temurin:21-jre-noble AS runner
 
 # Install X11 libraries for GUI support
 # Eclipse Temurin already includes Java 21 JRE
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     libxext6 \
     libxrender1 \
     libxtst6 \
