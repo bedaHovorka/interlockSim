@@ -124,7 +124,7 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 FROM --platform=linux/amd64 alpine:3.21
 
 # Upgrade all base packages (such as busybox or musl) to their latest available
-# patch releases inside alpine:3.21 to pick up any backported upstream patches.
+# patch releases inside Alpine 3.21 to pick up any backported upstream patches.
 # Note: CVE-2025-60876 (wget CRLF injection in busybox) is currently marked as
 # unfixable by Alpine for 3.21 as of 2026-06-30. It is bypassed using .scout-ignore
 # and .trivyignore files. The container only runs a static native CLI and does
