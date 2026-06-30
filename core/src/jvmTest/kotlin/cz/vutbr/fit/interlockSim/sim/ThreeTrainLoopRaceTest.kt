@@ -21,11 +21,13 @@ import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -34,6 +36,7 @@ import kotlin.math.sqrt
 
 @Tag("integration-test")
 @DisplayName("ThreeTrainLoop — 1000-iteration deterministic race test (Goal 1 SP6 #589)")
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ThreeTrainLoopRaceTest : KoinTestBase() {
 	private data class RunResult(

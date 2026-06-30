@@ -35,11 +35,11 @@
 
 **Interfaces:** none
 
-- [ ] **Step 1: Check out a fresh branch from `develop`**
+- [ ] **Step 1: Check out a fresh branch from `goal-1`**
 
 ```bash
-git checkout develop
-git pull origin develop
+git checkout goal-1
+git pull origin goal-1
 git checkout -b feat/issue-589-three-train-race-test
 ```
 
