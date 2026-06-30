@@ -157,7 +157,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		}
 
 	init {
-		setSize(800, 600)
+		setSize(1024, 768)
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE) // Handle close event manually
 		setLayout(BorderLayout())
 		jMenuBar = MenuBar()
@@ -314,6 +314,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				switchToSimulationMode()
 				railwayNetGridCanvas.setEventTimelinePanel(eventTimelinePanel)
 				railwayNetGridCanvas.setContext(context)
+				railwayNetGridCanvas.autoCenterViewport()
 				startAnimationUpdates()
 
 				// Wire stop button to stopSimulation()
