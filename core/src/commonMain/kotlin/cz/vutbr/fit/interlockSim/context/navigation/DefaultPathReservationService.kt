@@ -392,19 +392,7 @@ class DefaultPathReservationService(
 			// Emit BlockReleased after registry cleanup so isBlockAvailable() returns true for subscribers
 			val simTime = currentSimulationTime()
 			blocks.forEach { block ->
-				emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
-				// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
-				registry.emit(
-					BlockOccupancyEvent(
-						block = block,
-						type = BlockOccupancyEventType.BLOCK_RELEASED,
-						trainId = trainId,
-						occupant = null,
-						previousState = TrackFacility.State.RESERVED,
-						newState = TrackFacility.State.FREE,
-						simulationTime = simTime
-					)
-				)
+				emitBlockReleased(block, trainId, simTime)
 			}
 		}
 	}
@@ -1613,14 +1601,28 @@ class DefaultPathReservationService(
 	 * @return List of blocks that were released
 	 */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> {
+		// Unlock switches before registry cleanup, matching releasePath behavior.
+		// unregister is the production train-completion path; releasePath is test-only.
+		val switches = registry.getSwitches(trainId)
+		switches.forEach { switch ->
+			try {
+				switch.unlock()
+				logger.debug { "unregister: Unlocked switch ${switch.hashCode()} for $trainId" }
+			} catch (e: Exception) {
+				logger.warn(e) { "unregister: Failed to unlock switch $switch" }
+			}
+		}
+
 		val releasedBlocks = registry.unregister(trainId)
+		registry.unregisterSwitches(trainId)
+
 		logger.info {
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
 				releasedBlocks.joinToString(", ") { it.toString() }
 		}
 		val simTime = currentSimulationTime()
 		releasedBlocks.forEach { block ->
-			emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+			emitBlockReleased(block, trainId, simTime)
 		}
 		return releasedBlocks
 	}
@@ -1641,7 +1643,7 @@ class DefaultPathReservationService(
 	): Boolean {
 		val released = registry.unregisterBlock(trainId, block)
 		if (released) {
-			emitCustom(BlockEvent.BlockReleased(block, trainId, currentSimulationTime()))
+			emitBlockReleased(block, trainId, currentSimulationTime())
 		}
 		return released
 	}
@@ -1652,6 +1654,32 @@ class DefaultPathReservationService(
 
 	override fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
 		registry.removeBlockOccupancyListener(listener)
+	}
+
+	/**
+	 * Emit both the new kdisco-bus [BlockEvent.BlockReleased] and the legacy
+	 * [BlockOccupancyEvent] (BLOCK_RELEASED) for a single block.
+	 *
+	 * This keeps the two event channels consistent on every release path
+	 * ([releasePath], [unregister], [unregisterBlock]).
+	 */
+	private fun emitBlockReleased(
+		block: DynamicTrackBlock,
+		trainId: String,
+		simTime: Double
+	) {
+		emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+		registry.emit(
+			BlockOccupancyEvent(
+				block = block,
+				type = BlockOccupancyEventType.BLOCK_RELEASED,
+				trainId = trainId,
+				occupant = null,
+				previousState = TrackFacility.State.RESERVED,
+				newState = TrackFacility.State.FREE,
+				simulationTime = simTime
+			)
+		)
 	}
 
 	/**
