@@ -157,8 +157,8 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	}
 
 	@Test
-	fun testCalculateTrainGridLocation_beyondEnd_fromEnd1() {
-		// Test transition window clamp when train enters from ends[1]
+	fun testCalculateTrainGridLocation_beyondEnd_whenEnteringFromEnd1_returnsCorrectExit() {
+		// Test correct exit position calculation when train enters from ends[1] using trainEntrySeparator
 		val trackSection = getFirstTrackSection()
 		assertThat(trackSection).isNotNull()
 		

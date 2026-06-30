@@ -304,7 +304,8 @@ class AnimationController(
 	override fun onBlockEvent(event: BlockEvent) {
 		// This method executes on kDisco simulation thread!
 		require(!SwingUtilities.isEventDispatchThread()) {
-			"Block event should come from simulation thread, not EDT"
+			"BlockEvent handler called on EDT instead of simulation thread - " +
+				"this indicates a threading violation in event dispatch."
 		}
 		
 		SwingUtilities.invokeLater {

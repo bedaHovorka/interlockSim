@@ -31,6 +31,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -554,7 +555,7 @@ class Train :
 				val block = next.getTrackBlock()
 				if (block is DynamicTrackBlock) {
 					env.fireBlockEvent(
-						cz.vutbr.fit.interlockSim.sim.events.BlockEvent.OccupancySet(
+						BlockEvent.OccupancySet(
 							block = block,
 							occupant = this@Train,
 							entrySeparator = where,
@@ -591,7 +592,7 @@ class Train :
 				if (block is DynamicTrackBlock) {
 					env.unregisterBlock(name, block)
 					env.fireBlockEvent(
-						cz.vutbr.fit.interlockSim.sim.events.BlockEvent.OccupancyCleared(
+						BlockEvent.OccupancyCleared(
 							block = block,
 							occupant = this@Train,
 							time = time()

@@ -1651,7 +1651,17 @@ open class DefaultSimulationContext(
 	}
 
 	override fun fireBlockEvent(event: AnimBlockEvent) {
-		blockEventListeners.toList().forEach { it.onBlockEvent(event) }
+		// Create a snapshot to prevent ConcurrentModificationException if listeners add/remove during iteration
+		val snapshot = blockEventListeners.toList()
+		snapshot.forEach { listener ->
+			try {
+				listener.onBlockEvent(event)
+			} catch (e: Exception) {
+				logger.error(e) {
+					"Error dispatching BlockEvent ${event::class.simpleName} to listener ${listener::class.simpleName}"
+				}
+			}
+		}
 	}
 
 	/**
