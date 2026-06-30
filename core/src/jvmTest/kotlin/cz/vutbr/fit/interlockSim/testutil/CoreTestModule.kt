@@ -8,6 +8,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.GridTransformer
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
@@ -20,6 +21,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
@@ -94,6 +96,10 @@ val coreTestModule: Module =
 			scoped<AutomaticPathFindingService> {
 				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
 			}
+
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
 		}
 
 		// Define simulationScope for per-context lifecycle management
@@ -139,6 +145,10 @@ val coreTestModule: Module =
 
 			scoped<AutomaticPathFindingService> {
 				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
 			}
 		}
 	}

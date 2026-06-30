@@ -46,7 +46,9 @@ import cz.vutbr.fit.interlockSim.util.Point
  * @see Context
  * @see javax.annotation.concurrent.NotThreadSafe
  */
-interface EditingContext : Context<AbstractCell, TrackBlock> {
+interface EditingContext :
+	Context<AbstractCell, TrackBlock>,
+	NetworkState {
 	/**
 	 * Replace an existing node cell at the given location with a new instance.
 	 *
@@ -322,4 +324,16 @@ interface EditingContext : Context<AbstractCell, TrackBlock> {
 	 * @see cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 	 */
 	fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+
+	/**
+	 * Get the route finder for automatic route planning between InOut elements.
+	 *
+	 * The returned [RouteFinder] is scoped to this editing context and computes
+	 * purely topological routes. It is safe to call before a simulation is started.
+	 *
+	 * @return RouteFinder instance for this editing context
+	 * @see RouteFinder
+	 * @see NetworkState
+	 */
+	fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder
 }
