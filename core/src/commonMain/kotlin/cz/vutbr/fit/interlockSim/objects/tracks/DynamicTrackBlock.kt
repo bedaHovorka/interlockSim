@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -227,6 +228,13 @@ class DynamicTrackBlock(
 				"${Process.time()} CONFLICT: TrackBlock ${staticRef.hashCode()} collision! " +
 					"Existing occupant=$occupant, newOccupant=$newOccupant"
 			}
+			emitCustom(
+				CollisionWarning.BlockEntryViolation(
+					trainId = newOccupant.name,
+					block = this,
+					time = currentSimulationTime()
+				)
+			)
 		}
 		requireSimulation(occupant == null) {
 			"TrackBlock occupant collision - must be null on entry (shunting not implemented)"

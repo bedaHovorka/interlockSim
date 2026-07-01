@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim.collision
 
+import cz.hovorka.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -20,7 +21,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * warning emission, and the [PauseController] bridge. Detection rules are added per
  * Goal 3 sub-phase so each rule ships with its own dedicated tests:
  * - [CollisionWarning.ReservationConflict] detection  → SP2 (#612) — implemented here
- * - [CollisionWarning.BlockEntryViolation] detection  → SP3 (#613) — deferred
+ * - [CollisionWarning.BlockEntryViolation] detection  → SP3 (#613) — implemented here
  * - [CollisionWarning.PredictiveCollision] detection   → SP4 (#614) — deferred
  *
  * **Detection rules (SP2, #612):**
@@ -33,8 +34,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   Duplicate warnings for the same conflict pair are suppressed within a
  *   [DEDUP_WINDOW_SECONDS]-second window.
  *
- * The [BlockEvent] subscription is registered in the constructor so it is buffered by
- * [SimulationEnvironment.onBlockEvent] before
+ * **Detection rules (SP3, #613):**
+ * - [CollisionWarning.BlockEntryViolation] (double-occupancy): emitted when
+ *   [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.enter] is called on an
+ *   already-occupied block; `DynamicTrackBlock` emits the warning via `emitCustom` before
+ *   throwing, and this service receives it via [SimulationEnvironment.onSimulationEvent].
+ *
+ * The [BlockEvent] and [SimulationEvent] subscriptions are registered in the constructor
+ * so they are buffered by [SimulationEnvironment.onBlockEvent] /
+ * [SimulationEnvironment.onSimulationEvent] before
  * [cz.vutbr.fit.interlockSim.context.SimulationContext.run] is called.
  *
  * When a warning is emitted, the service:
@@ -42,9 +50,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    is isolated — a throwing listener is logged and does **not** prevent the remaining
  *    listeners or the pause request.
  * 2. Calls [PauseController.requestPause] so the operator can inspect the state.
+ * 3. If [autoHaltTrainOnViolation] is true and the warning is a
+ *    [CollisionWarning.BlockEntryViolation], calls the halt callback registered via
+ *    [registerHaltCallback] for the entering train.
  *
  * @param pauseController Receives [PauseController.requestPause] on every emitted warning.
- * @param env The simulation environment used to subscribe to block events. Production
+ * @param env The simulation environment used to subscribe to block and simulation events. Production
  *   wiring (CoreModule) always provides it; `null` is permitted only for unit tests that
  *   exercise the emission machinery directly via [emitWarning].
  * @since Issue #611 (Goal 3 SP1)
@@ -54,6 +65,36 @@ class DefaultCollisionDetectionService(
 	env: SimulationEnvironment? = null
 ) : CollisionDetectionService {
 	private val listeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
+	private val haltCallbacks: MutableMap<String, () -> Unit> = mutableMapOf()
+
+	/**
+	 * When true, the halt callback registered via [registerHaltCallback] for the
+	 * entering train is called immediately after a [CollisionWarning.BlockEntryViolation]
+	 * is detected.
+	 *
+	 * Defaults to false. Can be set before [cz.vutbr.fit.interlockSim.context.SimulationContext.run]
+	 * is called.
+	 *
+	 * @since Issue #613 (Goal 3 SP3)
+	 */
+	var autoHaltTrainOnViolation: Boolean = false
+
+	/**
+	 * Register a halt callback for a specific train.
+	 *
+	 * When [autoHaltTrainOnViolation] is true and a [CollisionWarning.BlockEntryViolation]
+	 * is detected for [trainId], the [callback] is invoked immediately after warning delivery.
+	 *
+	 * @param trainId The train identifier to associate with the callback.
+	 * @param callback The action to take to halt the train (e.g., call `fireStop()`).
+	 * @since Issue #613 (Goal 3 SP3)
+	 */
+	fun registerHaltCallback(
+		trainId: String,
+		callback: () -> Unit
+	) {
+		haltCallbacks[trainId] = callback
+	}
 
 	/**
 	 * Deduplication state for [BlockEvent.ReservationConflictDetected].
@@ -70,6 +111,10 @@ class DefaultCollisionDetectionService(
 		// Subscribe to domain-level block events (reserve / occupancy changes).
 		// The call happens before run(), so it is buffered by DefaultSimulationContext.
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
+
+		// Subscribe to raw kdisco events to receive CollisionWarning.BlockEntryViolation
+		// emitted by DynamicTrackBlock.enter() via emitCustom before throwing on double-occupancy.
+		env?.onSimulationEvent { event -> handleSimulationEvent(event) }
 	}
 
 	override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) {
@@ -93,6 +138,20 @@ class DefaultCollisionDetectionService(
 			}
 		}
 		pauseController.requestPause()
+		if (autoHaltTrainOnViolation && warning is CollisionWarning.BlockEntryViolation) {
+			haltCallbacks[warning.trainId]?.invoke()
+		}
+	}
+
+	private fun handleSimulationEvent(event: SimulationEvent) {
+		// Receive CollisionWarning.BlockEntryViolation emitted by DynamicTrackBlock.enter()
+		// via emitCustom before throwing on double-occupancy.
+		if (event is SimulationEvent.Custom) {
+			val payload = event.payload
+			if (payload is CollisionWarning.BlockEntryViolation) {
+				emit(payload)
+			}
+		}
 	}
 
 	private fun handleBlockEvent(event: BlockEvent) {
