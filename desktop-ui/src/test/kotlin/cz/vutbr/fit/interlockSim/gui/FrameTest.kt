@@ -13,12 +13,14 @@ package cz.vutbr.fit.interlockSim.gui
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -232,15 +234,17 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("south panel has one component (StatusBar) in editing mode")
-	fun southPanelHasOneComponentInEditingMode() {
+	@DisplayName("south panel has PathPreviewPanel and StatusBar in editing mode")
+	fun southPanelHasPathPreviewAndStatusBarInEditingMode() {
 		runOnEDT {
-			// Default state after Frame construction is editing mode — only StatusBar in south panel
+			// Default state after Frame construction is editing mode — PathPreviewPanel + StatusBar
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(1)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(StatusBar::class)
+			assertThat(southPanel.componentCount).isEqualTo(2)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(0) as PathPreviewPanel).isVisible).isTrue()
+			assertThat(southPanel.getComponent(1)).isInstanceOf(StatusBar::class)
 		}
 	}
 
@@ -255,11 +259,15 @@ class FrameTest : AbstractFrameTestBase() {
 			)
 		runOnEDT {
 			frame.setContext(context)
-			// Simulation mode: EventTimelinePanel is added above StatusBar
+			// Simulation mode: EventTimelinePanel is added above PathPreviewPanel and StatusBar
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(2)
+			assertThat(southPanel.componentCount).isEqualTo(3)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(EventTimelinePanel::class)
+			assertThat(southPanel.getComponent(1)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(1) as PathPreviewPanel).isVisible).isFalse()
+			assertThat(southPanel.getComponent(2)).isInstanceOf(StatusBar::class)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -267,8 +275,8 @@ class FrameTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("south panel returns to one component when switching back to editing mode")
-	fun southPanelRestoresOneComponentAfterSwitchingToEditingMode() {
+	@DisplayName("south panel returns to PathPreviewPanel and StatusBar when switching back to editing mode")
+	fun southPanelRestoresPathPreviewAndStatusBarAfterSwitchingToEditingMode() {
 		val simContext =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
 				cz.vutbr.fit.interlockSim.testutil.TestFixtures
@@ -277,12 +285,14 @@ class FrameTest : AbstractFrameTestBase() {
 		val editContext = editingContextFactory.createEmptyContext()
 		runOnEDT {
 			frame.setContext(simContext)
-			// switch back to editing — EventTimelinePanel removed, only StatusBar remains
+			// switch back to editing — EventTimelinePanel removed, PathPreviewPanel + StatusBar remain
 			frame.setContext(editContext)
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(1)
+			assertThat(southPanel.componentCount).isEqualTo(2)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(0) as PathPreviewPanel).isVisible).isTrue()
 			// StatusBar must still be visible after returning to editing mode
 			assertThat(frame.statusBar.isVisible).isTrue()
 		}
