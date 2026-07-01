@@ -194,7 +194,7 @@ For complete navigation services architecture, Koin DI integration patterns, and
 - `objects/paths/` - Route management
 
 **Simulation engine:**
-- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-jvm:0.5.0`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-20)
+- Built on kDisco library (`cz.hovorka.kdisco:kdisco-core-jvm:0.6.0`) — replaces jDisco entirely (Phase 1 migration complete 2026-03-20)
 - kDisco repo: https://github.com/bedaHovorka/kdisco
 - `sim/` package contains simulation processes (e.g., `ShuntingLoop`)
 

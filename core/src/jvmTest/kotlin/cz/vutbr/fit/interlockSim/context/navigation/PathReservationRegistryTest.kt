@@ -16,16 +16,24 @@ import assertk.assertions.hasMessage
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.koin.test.inject
 import java.io.InputStream
@@ -45,6 +53,7 @@ import java.io.InputStream
  *
  * @since Issue #292 Phase 2 Enhancement (Plan Phase 2)
  */
+@Tag("integration-test")
 class PathReservationRegistryTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
@@ -151,6 +160,8 @@ class PathReservationRegistryTest : KoinTestBase() {
 			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
 			assertThat(conflict.conflictingBlock).isEqualTo(blocks.first())
 			assertThat(conflict.existingOwner).isEqualTo("train1")
+			assertThat(conflict.reason)
+				.isEqualTo(PathReservationRegistry.ConflictReason.RESERVED_BY_OTHER_TRAIN)
 		}
 
 		@Test
@@ -168,6 +179,8 @@ class PathReservationRegistryTest : KoinTestBase() {
 			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
 			assertThat(conflict.conflictingBlock).isEqualTo(secondBlock)
 			assertThat(conflict.existingOwner).isEqualTo("train1")
+			assertThat(conflict.reason)
+				.isEqualTo(PathReservationRegistry.ConflictReason.RESERVED_BY_OTHER_TRAIN)
 		}
 	}
 
@@ -197,6 +210,11 @@ class PathReservationRegistryTest : KoinTestBase() {
 
 			// Verify train1 still owns last block
 			assertThat(registry.getOwner(lastBlock)).isEqualTo("train1")
+
+			// Verify reason is "reserved" (block is reserved, not physically occupied)
+			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
+			assertThat(conflict.reason)
+				.isEqualTo(PathReservationRegistry.ConflictReason.RESERVED_BY_OTHER_TRAIN)
 		}
 	}
 
@@ -340,5 +358,176 @@ class PathReservationRegistryTest : KoinTestBase() {
 			assertThat(registry.trainCount()).isEqualTo(0)
 			assertThat(registry.blockCount()).isEqualTo(0)
 		}
+	}
+
+	@Nested
+	inner class OccupantTracking {
+		@Test
+		fun `getOccupant returns null for unoccupied block`() {
+			registry.registerAtomic("train1", blocks.take(1))
+
+			assertThat(registry.getOccupant(blocks.first())).isEqualTo(null)
+			assertThat(registry.getOccupantName(blocks.first())).isEqualTo(null)
+			assertThat(registry.isOccupied(blocks.first())).isEqualTo(false)
+		}
+
+		@Test
+		fun `getOccupant returns occupant after train enters block`() {
+			val block = blocks.first()
+			val separator = block.ends().first() as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+			block.setUpPath(separator, "train1")
+
+			val occupant = FakeTrackOccupant("train1")
+			block.enter(occupant)
+
+			assertThat(registry.getOccupant(block)).isSameInstanceAs(occupant)
+			assertThat(registry.getOccupantName(block)).isEqualTo("train1")
+			assertThat(registry.isOccupied(block)).isEqualTo(true)
+		}
+
+		@Test
+		fun `getOccupiedBlocks returns only blocks physically occupied by train`() {
+			val firstBlock = blocks[0]
+			val secondBlock = blocks[1]
+			val separator1 = firstBlock.ends().first() as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+			val separator2 = secondBlock.ends().first() as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+
+			registry.registerAtomic("train1", listOf(firstBlock, secondBlock))
+			firstBlock.setUpPath(separator1, "train1")
+			secondBlock.setUpPath(separator2, "train1")
+			firstBlock.enter(FakeTrackOccupant("train1"))
+
+			assertThat(registry.getOccupiedBlocks("train1"))
+				.containsExactly(firstBlock)
+		}
+	}
+
+	@Nested
+	inner class OccupiedConflictDetection {
+		@Test
+		fun `registerAtomic reports occupied conflict when block is physically occupied`() {
+			val block = blocks.first()
+			val separator = block.ends().first() as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+
+			// Train1 reserves and physically enters the block
+			block.setUpPath(separator, "train1")
+			block.enter(FakeTrackOccupant("train1"))
+			registry.registerAtomic("train1", listOf(block))
+
+			// Train2 attempts to reserve the same block
+			val result = registry.registerAtomic("train2", listOf(block))
+
+			assertThat(result).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
+			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
+			assertThat(conflict.existingOwner).isEqualTo("train1")
+			assertThat(conflict.reason)
+				.isEqualTo(PathReservationRegistry.ConflictReason.OCCUPIED_BY_OTHER_TRAIN)
+		}
+	}
+
+	@Nested
+	inner class DefenceInDepth {
+		@Test
+		fun `registerAtomic detects conflict when block state diverges from registry`() {
+			val block = blocks.first()
+			val separator = block.ends().first() as cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+
+			// Block is reserved directly without registry record
+			block.setUpPath(separator, "train1")
+
+			val result = registry.registerAtomic("train2", listOf(block))
+
+			assertThat(result).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
+			val conflict = result as PathReservationRegistry.RegistrationResult.Conflict
+			assertThat(conflict.existingOwner).isEqualTo("train1")
+			assertThat(conflict.reason)
+				.isEqualTo(PathReservationRegistry.ConflictReason.RESERVED_BY_OTHER_TRAIN)
+		}
+	}
+
+	@Nested
+	inner class SameStepConcurrency {
+		@Test
+		fun `two reservation attempts for the same block cannot both succeed`() {
+			val block = blocks.first()
+
+			val first = registry.registerAtomic("train1", listOf(block))
+			val second = registry.registerAtomic("train2", listOf(block))
+
+			assertThat(first).isInstanceOf<PathReservationRegistry.RegistrationResult.Success>()
+			assertThat(second).isInstanceOf<PathReservationRegistry.RegistrationResult.Conflict>()
+			assertThat(registry.getOwner(block)).isEqualTo("train1")
+		}
+	}
+
+	@Nested
+	inner class BlockOccupancyListeners {
+		private fun fakeEvent(block: DynamicTrackBlock): BlockOccupancyEvent =
+			BlockOccupancyEvent(
+				block = block,
+				type = BlockOccupancyEventType.BLOCK_RELEASED,
+				trainId = "train-test",
+				occupant = null,
+				previousState = TrackFacility.State.OCCUPIED,
+				newState = TrackFacility.State.FREE,
+				simulationTime = 42.0
+			)
+
+		@Test
+		fun `addBlockOccupancyListener delivers events to subscriber`() {
+			val listener = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(listener)
+			registry.emit(event)
+
+			assertThat(listener.events).containsExactly(event)
+		}
+
+		@Test
+		fun `removeBlockOccupancyListener stops event delivery`() {
+			val listener = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(listener)
+			registry.removeBlockOccupancyListener(listener)
+			registry.emit(event)
+
+			assertThat(listener.events).isEmpty()
+		}
+
+		@Test
+		fun `multiple listeners receive the same event in registration order`() {
+			val first = RecordingListener()
+			val second = RecordingListener()
+			val block = blocks.first()
+			val event = fakeEvent(block)
+
+			registry.addBlockOccupancyListener(first)
+			registry.addBlockOccupancyListener(second)
+			registry.emit(event)
+
+			assertThat(first.events).containsExactly(event)
+			assertThat(second.events).containsExactly(event)
+			assertThat(first.events[0]).isSameInstanceAs(second.events[0])
+		}
+	}
+
+	private class RecordingListener : BlockOccupancyListener {
+		val events = mutableListOf<BlockOccupancyEvent>()
+
+		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+			events.add(event)
+		}
+	}
+
+	private class FakeTrackOccupant(
+		override val name: String
+	) : TrackOccupant {
+		override fun distanceToSemaphore(): Double = 0.0
+
+		override fun nextSemaphore(): OrientedPathSeparator? = null
 	}
 }

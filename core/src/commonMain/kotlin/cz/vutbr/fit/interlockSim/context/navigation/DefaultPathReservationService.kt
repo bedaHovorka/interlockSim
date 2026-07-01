@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.hovorka.kdisco.Process
+import cz.hovorka.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
@@ -20,8 +22,12 @@ import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -73,6 +79,7 @@ private val logger = KotlinLogging.logger {}
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
+@Suppress("LargeClass") // Core reservation service; splitting would obscure the algorithm
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
@@ -283,6 +290,34 @@ class DefaultPathReservationService(
 						}
 					}
 
+					// Step 2h: Configure intermediate semaphore signals along the full path.
+					// reservePath() is called with the entry (InOut/semaphore) and the exit
+					// (InOut/semaphore) as end-points, so the reserved path may pass through
+					// one or more intermediate semaphores.  Step 2g only sets the START
+					// separator's signal; intermediate semaphores remain at STOP unless we
+					// configure them here.  Without this, a train entering a multi-block path
+					// will travel through the first block, stop at the intermediate semaphore
+					// (signal=STOP) and wait forever.
+					configureIntermediateSemaphores(blocks)
+
+					// Emit BlockReserved for each successfully reserved block
+					val simTime = currentSimulationTime()
+					blocks.forEach { block ->
+						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
+						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
+						registry.emit(
+							BlockOccupancyEvent(
+								block = block,
+								type = BlockOccupancyEventType.BLOCK_RESERVED,
+								trainId = trainId,
+								occupant = null,
+								previousState = TrackFacility.State.FREE,
+								newState = TrackFacility.State.RESERVED,
+								simulationTime = simTime
+							)
+						)
+					}
+
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -354,6 +389,11 @@ class DefaultPathReservationService(
 			// This prevents memory leaks and stale reservations if block release fails
 			registry.unregister(trainId)
 			registry.unregisterSwitches(trainId)
+			// Emit BlockReleased after registry cleanup so isBlockAvailable() returns true for subscribers
+			val simTime = currentSimulationTime()
+			blocks.forEach { block ->
+				emitBlockReleased(block, trainId, simTime)
+			}
 		}
 	}
 
@@ -1561,10 +1601,28 @@ class DefaultPathReservationService(
 	 * @return List of blocks that were released
 	 */
 	override fun unregister(trainId: String): List<DynamicTrackBlock> {
+		// Unlock switches before registry cleanup, matching releasePath behavior.
+		// unregister is the production train-completion path; releasePath is test-only.
+		val switches = registry.getSwitches(trainId)
+		switches.forEach { switch ->
+			try {
+				switch.unlock()
+				logger.debug { "unregister: Unlocked switch ${switch.hashCode()} for $trainId" }
+			} catch (e: Exception) {
+				logger.warn(e) { "unregister: Failed to unlock switch $switch" }
+			}
+		}
+
 		val releasedBlocks = registry.unregister(trainId)
+		registry.unregisterSwitches(trainId)
+
 		logger.info {
 			"unregister: Released ${releasedBlocks.size} blocks for train '$trainId': " +
 				releasedBlocks.joinToString(", ") { it.toString() }
+		}
+		val simTime = currentSimulationTime()
+		releasedBlocks.forEach { block ->
+			emitBlockReleased(block, trainId, simTime)
 		}
 		return releasedBlocks
 	}
@@ -1582,7 +1640,47 @@ class DefaultPathReservationService(
 	override fun unregisterBlock(
 		trainId: String,
 		block: DynamicTrackBlock
-	): Boolean = registry.unregisterBlock(trainId, block)
+	): Boolean {
+		val released = registry.unregisterBlock(trainId, block)
+		if (released) {
+			emitBlockReleased(block, trainId, currentSimulationTime())
+		}
+		return released
+	}
+
+	override fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.addBlockOccupancyListener(listener)
+	}
+
+	override fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		registry.removeBlockOccupancyListener(listener)
+	}
+
+	/**
+	 * Emit both the new kdisco-bus [BlockEvent.BlockReleased] and the legacy
+	 * [BlockOccupancyEvent] (BLOCK_RELEASED) for a single block.
+	 *
+	 * This keeps the two event channels consistent on every release path
+	 * ([releasePath], [unregister], [unregisterBlock]).
+	 */
+	private fun emitBlockReleased(
+		block: DynamicTrackBlock,
+		trainId: String,
+		simTime: Double
+	) {
+		emitCustom(BlockEvent.BlockReleased(block, trainId, simTime))
+		registry.emit(
+			BlockOccupancyEvent(
+				block = block,
+				type = BlockOccupancyEventType.BLOCK_RELEASED,
+				trainId = trainId,
+				occupant = null,
+				previousState = TrackFacility.State.RESERVED,
+				newState = TrackFacility.State.FREE,
+				simulationTime = simTime
+			)
+		)
+	}
 
 	/**
 	 * Minimal TrackOccupant implementation for switch configuration.
@@ -1601,5 +1699,58 @@ class DefaultPathReservationService(
 		override fun distanceToSemaphore(): Double = 0.0
 
 		override fun nextSemaphore(): OrientedPathSeparator? = null
+	}
+
+	/**
+	 * Returns the current simulation time, or 0.0 if called outside a simulation context.
+	 *
+	 * Uses [Process.time] which is safe to call from any kDisco process.
+	 * Falls back to 0.0 when called outside simulation (e.g., in unit tests).
+	 */
+	private fun currentSimulationTime(): Double = runCatching { Process.time() }.getOrDefault(0.0)
+
+	/**
+	 * Configure the signal for every semaphore that lies at the junction between
+	 * two consecutive blocks in the reserved path.
+	 *
+	 * When [reservePath] reserves a path spanning multiple blocks
+	 * (e.g. InOut A → semaphore → InOut B), step 2g only sets the signal for the
+	 * *start* separator.  Any intermediate semaphore keeps its default STOP signal,
+	 * causing the train to halt at that separator and never reach its destination.
+	 *
+	 * This method walks the ordered list of reserved blocks and, for each
+	 * consecutive pair, finds the common end-point separator.  If that separator is
+	 * a [DynamicRailSemaphore] it is configured to ALLOW in the direction of the
+	 * *next* block (i.e. the block the train will enter after passing the
+	 * semaphore).
+	 *
+	 * The call is idempotent — re-setting a signal that is already ALLOW is safe.
+	 * Failures are non-fatal and are logged at WARN level by
+	 * [SimulationEnvironment.configureSemaphoreSignal].
+	 *
+	 * @param blocks Ordered list of [DynamicTrackBlock] objects from path start to target.
+	 *               Must be in traversal order (the order produced by
+	 *               [extractUniqueBlocks] from a BFS/DFS path).
+	 */
+	private fun configureIntermediateSemaphores(blocks: List<DynamicTrackBlock>) {
+		if (blocks.size < 2) return
+		for (i in 0 until blocks.size - 1) {
+			val currentBlock = blocks[i]
+			val nextBlock = blocks[i + 1]
+			// Find the shared end-point between the two consecutive blocks.
+			// DynamicTrackBlock.ends() returns Array<PathSeparator> whose elements
+			// are the DynamicPathSeparator instances shared across the graph.
+			for (end in currentBlock.ends()) {
+				if (end is DynamicRailSemaphore && nextBlock.ends().contains(end)) {
+					// `end` sits between currentBlock and nextBlock; configure it so
+					// the train can pass from currentBlock into nextBlock.
+					environment.configureSemaphoreSignal(end, nextBlock)
+					logger.debug {
+						"reservePath: Configured intermediate semaphore ${end.name} to ALLOW " +
+							"(between block $i and block ${i + 1})"
+					}
+				}
+			}
+		}
 	}
 }

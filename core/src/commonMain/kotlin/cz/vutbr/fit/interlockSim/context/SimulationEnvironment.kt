@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.context
 
+import cz.hovorka.kdisco.Condition
+import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
+import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
@@ -18,9 +21,11 @@ import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.Track
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 
 /**
  * Facade interface for simulation environment operations.
@@ -76,6 +81,7 @@ import cz.vutbr.fit.interlockSim.sim.InOutWorker
  * @see SimulationProcessFactory
  * @since 2026-01 (Issue #94)
  */
+@Suppress("TooManyFunctions", "ComplexInterface") // Facade for simulation subsystems; splitting would hurt usability
 interface SimulationEnvironment {
 	// ========================================
 	// Network Query Operations
@@ -161,6 +167,30 @@ interface SimulationEnvironment {
 	 * @since Issue #295 (Phase 3 of Issue #292)
 	 */
 	fun getTrainNavigationService(): TrainNavigationService
+
+	/**
+	 * Create a kDisco [Condition] that becomes true when the path starting at
+	 * [separator] is reserved for [trainId].
+	 *
+	 * This lets a train process suspend with [cz.hovorka.kdisco.Process.waitUntil]
+	 * and resume deterministically as soon as the dispatcher reserves the path
+	 * (or as soon as a conflicting train releases the required blocks).
+	 *
+	 * The condition is evaluated after every discrete event, so it integrates
+	 * with kDisco event scheduling without busy-polling.
+	 *
+	 * @param trainId The train waiting for a path
+	 * @param separator The separator where the train is waiting
+	 * @return A condition that is true when [findReservedPathForTrain] returns [PathResult.Available]
+	 * @since Issue #582 (Goal 1 SP3)
+	 */
+	fun createPathAvailableCondition(
+		trainId: String,
+		separator: PathSeparator
+	): Condition =
+		Condition {
+			getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
+		}
 
 	/**
 	 * Get path reservation service for dispatcher/interlocking path reservation.
@@ -448,4 +478,56 @@ interface SimulationEnvironment {
 		trainId: String,
 		block: DynamicTrackBlock
 	)
+
+	// ========================================
+	// External Observer API
+	// ========================================
+
+	/**
+	 * Subscribe an external (non-train) agent to legacy block reservation/release events.
+	 *
+	 * The subscriber receives [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent]
+	 * instances when blocks are reserved or released via the path reservation service.
+	 * For occupancy enter/leave events, prefer [onBlockEvent] (Issue #569).
+	 *
+	 * @param listener The listener to add
+	 */
+	fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
+		getPathReservationService().addBlockOccupancyListener(listener)
+	}
+
+	/**
+	 * Unsubscribe an external agent from block occupancy/release events.
+	 *
+	 * @param listener The listener to remove
+	 */
+	fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
+		getPathReservationService().removeBlockOccupancyListener(listener)
+	}
+
+	// ========================================
+	// Event Subscription (Issue #569)
+	// ========================================
+
+	/**
+	 * Subscribe to block-level domain events (reserve / release / occupancy changes).
+	 *
+	 * Listener is called synchronously on the simulation thread in simulation-time order.
+	 * Listeners registered after [run] has started are silently ignored (this is based on simulation start,
+	 * not on context freezing).
+	 *
+	 * @since Issue #569 (Goal 10 prereq)
+	 */
+	fun onBlockEvent(listener: (BlockEvent) -> Unit)
+
+	/**
+	 * Subscribe to raw kdisco simulation events (process lifecycle, resource changes, custom payloads).
+	 *
+	 * Listener is called synchronously on the simulation thread in simulation-time order.
+	 * Listeners registered after [run] has started are silently ignored (this is based on simulation start,
+	 * not on context freezing).
+	 *
+	 * @since Issue #569 (Goal 10 prereq)
+	 */
+	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)
 }

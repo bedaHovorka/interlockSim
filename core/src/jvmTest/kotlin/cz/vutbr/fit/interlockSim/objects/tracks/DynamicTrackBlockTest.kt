@@ -388,4 +388,103 @@ class DynamicTrackBlockTest {
 			assertThat(dynamicBlock1.getTrackOccupant()).isNull()
 		}
 	}
+
+	// ========== Block Occupancy Events (Issue #569) ==========
+
+	@Nested
+	@DisplayName("Block Occupancy Events")
+	inner class BlockOccupancyEvents {
+		@Test
+		@DisplayName("setUpPath emits BLOCK_RESERVED event")
+		fun setupPathEmitsReservedEvent() {
+			val sink = RecordingSink()
+			val block = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2, sink)
+
+			block.setUpPath(dynSemaphore1, "train-A")
+
+			assertThat(sink.events).hasSize(1)
+			val event = sink.events[0]
+			assertThat(event.block).isEqualTo(block)
+			assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_RESERVED)
+			assertThat(event.trainId).isEqualTo("train-A")
+			assertThat(event.occupant).isNull()
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.FREE)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.RESERVED)
+		}
+
+		@Test
+		@DisplayName("enter emits BLOCK_OCCUPIED event")
+		fun enterEmitsOccupiedEvent() {
+			val sink = RecordingSink()
+			val block = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2, sink)
+			block.setUpPath(dynSemaphore1, "train-A")
+
+			block.enter(train)
+
+			assertThat(sink.events).hasSize(2)
+			val event = sink.events[1]
+			assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_OCCUPIED)
+			assertThat(event.trainId).isEqualTo("train-A")
+			assertThat(event.occupant).isEqualTo(train)
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.OCCUPIED)
+		}
+
+		@Test
+		@DisplayName("leave emits BLOCK_RELEASED event with previous occupant")
+		fun leaveEmitsReleasedEvent() {
+			val sink = RecordingSink()
+			val block = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2, sink)
+			block.setUpPath(dynSemaphore1, "train-A")
+			block.enter(train)
+
+			block.leave(train)
+
+			assertThat(sink.events).hasSize(3)
+			val event = sink.events[2]
+			assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_RELEASED)
+			assertThat(event.trainId).isEqualTo("train-A")
+			assertThat(event.occupant).isEqualTo(train)
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.OCCUPIED)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+		}
+
+		@Test
+		@DisplayName("cancelPathSetup emits BLOCK_RELEASED event")
+		fun cancelPathSetupEmitsReleasedEvent() {
+			val sink = RecordingSink()
+			val block = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2, sink)
+			block.setUpPath(dynSemaphore1, "train-A")
+
+			block.cancelPathSetup(dynSemaphore1)
+
+			assertThat(sink.events).hasSize(2)
+			val event = sink.events[1]
+			assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_RELEASED)
+			assertThat(event.trainId).isEqualTo("train-A")
+			assertThat(event.occupant).isNull()
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+		}
+
+		@Test
+		@DisplayName("idempotent setUpPath does not emit duplicate event")
+		fun idempotentSetupPathDoesNotDuplicateEvent() {
+			val sink = RecordingSink()
+			val block = DynamicTrackBlock(staticBlock1, dynSemaphore1, dynSemaphore2, sink)
+			block.setUpPath(dynSemaphore1, "train-A")
+
+			block.setUpPath(dynSemaphore1, "train-A")
+
+			assertThat(sink.events).hasSize(1)
+		}
+	}
+
+	private class RecordingSink : BlockOccupancyEventSink {
+		val events = mutableListOf<BlockOccupancyEvent>()
+
+		override fun emit(event: BlockOccupancyEvent) {
+			events.add(event)
+		}
+	}
 }

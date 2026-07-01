@@ -34,12 +34,16 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.isNotEmpty
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
@@ -70,6 +74,7 @@ import java.io.InputStream
  *
  * @since Issue #294 (Phase 2 of Issue #292)
  */
+@Tag("integration-test")
 class PathReservationServiceTest : KoinTestBase() {
 	private val editingContextFactory: JvmEditingContextFactory by inject()
 	private val simulationContextFactory: SimulationContextFactory by inject()
@@ -77,6 +82,7 @@ class PathReservationServiceTest : KoinTestBase() {
 	private lateinit var simulationContext: DefaultSimulationContext
 	private lateinit var environment: SimulationEnvironment
 	private lateinit var navigator: TopologyNavigator
+	private lateinit var registry: PathReservationRegistry
 	private lateinit var service: PathReservationService
 	private lateinit var inOut1: DynamicPathSeparator
 	private lateinit var inOut2: DynamicPathSeparator
@@ -101,6 +107,7 @@ class PathReservationServiceTest : KoinTestBase() {
 		// TopologyNavigator is internal to PathReservationService, but tests need it
 		// Create it directly for test purposes (not from scope)
 		navigator = simulationContext.scope.get()
+		registry = simulationContext.scope.get()
 
 		// Get InOut elements
 		val inOuts = simulationContext.getInOuts()
@@ -1995,6 +2002,148 @@ class PathReservationServiceTest : KoinTestBase() {
 			val result2 = service.reservePathToAnyNextSemaphore(secondTrainId, secondSemaphore)
 			// Assert
 			assertThat(result2).isInstanceOf<PathReservationService.ReservationResult.AllPathsBlocked>()
+		}
+	}
+
+	@Nested
+	inner class ExternalObserverApi {
+		@Test
+		fun `environment addBlockOccupancyListener receives reserve and release events`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+
+			assertThat(listener.events).hasSize(success.reservedBlocks.size)
+			listener.events.forEach { event ->
+				assertThat(event.type).isEqualTo(BlockOccupancyEventType.BLOCK_RESERVED)
+				assertThat(event.trainId).isEqualTo("train1")
+				assertThat(event.previousState).isEqualTo(TrackFacility.State.FREE)
+				assertThat(event.newState).isEqualTo(TrackFacility.State.RESERVED)
+			}
+
+			service.releasePath("train1")
+
+			val reservedCount = listener.events.count { it.type == BlockOccupancyEventType.BLOCK_RESERVED }
+			val releasedCount = listener.events.count { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedCount).isEqualTo(reservedCount)
+			listener.events
+				.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+				.forEach { event ->
+					assertThat(event.trainId).isEqualTo("train1")
+					assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+					assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+				}
+		}
+
+		@Test
+		fun `legacy listener receives BLOCK_RELEASED on unregister path`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+			val reservedCount = success.reservedBlocks.size
+
+			// Clear reserve events so we can count releases in isolation
+			listener.events.clear()
+
+			service.unregister("train1")
+
+			val releasedEvents = listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedEvents).hasSize(reservedCount)
+			releasedEvents.forEach { event ->
+				assertThat(event.trainId).isEqualTo("train1")
+				assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+				assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+				assertThat(event.occupant).isNull()
+			}
+		}
+
+		@Test
+		fun `legacy listener receives BLOCK_RELEASED on unregisterBlock path`() {
+			val listener = RecordingListener()
+			environment.addBlockOccupancyListener(listener)
+
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+			val success = result as PathReservationService.ReservationResult.Success
+			val firstBlock = success.reservedBlocks.first()
+
+			// unregisterBlock only releases FREE blocks (production path is after block.leave()).
+			// Cancel the reservation manually so we can exercise the single-block release path.
+			firstBlock.cancelPathSetup(inOut1)
+
+			listener.events.clear()
+
+			val released = service.unregisterBlock("train1", firstBlock)
+			assertThat(released).isTrue()
+
+			val releasedEvents = listener.events.filter { it.type == BlockOccupancyEventType.BLOCK_RELEASED }
+			assertThat(releasedEvents).hasSize(1)
+			val event = releasedEvents.first()
+			assertThat(event.block).isEqualTo(firstBlock)
+			assertThat(event.trainId).isEqualTo("train1")
+			assertThat(event.previousState).isEqualTo(TrackFacility.State.RESERVED)
+			assertThat(event.newState).isEqualTo(TrackFacility.State.FREE)
+		}
+	}
+
+	@Nested
+	inner class SwitchCleanupTests {
+		@Test
+		fun `unregister unlocks all switches and clears switch registry`() {
+			// Arrange: reserve a path through a switch (vyhybna.xml)
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			val switches = registry.getSwitches("train1")
+			assertThat(switches).isNotEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isTrue()
+			}
+
+			// Act: production cleanup path
+			val releasedBlocks = service.unregister("train1")
+
+			// Assert: blocks and switches released
+			assertThat(releasedBlocks).isNotEmpty()
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isFalse()
+			}
+		}
+
+		@Test
+		fun `releaseTrainReservations unlocks switches through production entry point`() {
+			val result = service.reservePath("train1", inOut1, inOut2)
+			assertThat(result).isInstanceOf<PathReservationService.ReservationResult.Success>()
+
+			val switches = registry.getSwitches("train1")
+			assertThat(switches).isNotEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isTrue()
+			}
+
+			simulationContext.releaseTrainReservations("train1")
+
+			assertThat(registry.getBlocks("train1")).isEmpty()
+			assertThat(registry.getSwitches("train1")).isEmpty()
+			switches.forEach { switch ->
+				assertThat(switch.locked).isFalse()
+			}
+		}
+	}
+
+	private class RecordingListener : BlockOccupancyListener {
+		val events = mutableListOf<BlockOccupancyEvent>()
+
+		override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+			events.add(event)
 		}
 	}
 }
