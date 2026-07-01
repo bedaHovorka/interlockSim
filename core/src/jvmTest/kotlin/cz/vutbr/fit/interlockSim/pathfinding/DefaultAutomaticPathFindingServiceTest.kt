@@ -337,10 +337,28 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 			val exitMain = inOuts.single { it.getName() == "ExitMain" }
 			val exitBranch = inOuts.single { it.getName() == "ExitBranch" }
 
-			// Travelling from the straight end of the switch to the branch end
-			// is not a physically possible switch movement.
+			// One-way edge case: travelling from the straight (main) end of the switch
+			// to the branch end is not physically possible. possibleFollowers(F) = {A},
+			// so the route ExitMain → Switch(F→G) → ExitBranch is excluded by the
+			// switch constraint.
 			assertThat(svc.findAllPaths(exitMain, exitBranch)).isEmpty()
 			assertThat(svc.findShortestPath(exitMain, exitBranch)).isNull()
+		}
+
+		@Test
+		fun `blocked switch position excludes dependent route from branch side`() {
+			val ctx = yJunctionContext()
+			val svc = ctx.getAutomaticPathFindingService()
+			val inOuts = ctx.getInOuts()
+			val exitBranch = inOuts.single { it.getName() == "ExitBranch" }
+			val exitMain = inOuts.single { it.getName() == "ExitMain" }
+
+			// Switch-position constraint: when approaching from the branch arm the switch
+			// blocks the main-arm exit. possibleFollowers(G) = {A} only, so any attempt
+			// to reach ExitMain from ExitBranch without revisiting the switch (which
+			// cycle detection prevents) yields no valid route.
+			assertThat(svc.findAllPaths(exitBranch, exitMain)).isEmpty()
+			assertThat(svc.findShortestPath(exitBranch, exitMain)).isNull()
 		}
 	}
 
@@ -383,8 +401,24 @@ class DefaultAutomaticPathFindingServiceTest : KoinTestBase() {
 	@Nested
 	@DisplayName("performance")
 	inner class Performance {
+		/**
+		 * Verifies that path finding on a 100-element network completes in under 1 second.
+		 *
+		 * **Network composition (deterministic):**
+		 * - 2 InOut separators (entry A and exit B)
+		 * - 49 RailSemaphore separators
+		 * - 50 SimpleTrackBlock edges connecting them in a linear chain
+		 * - Total: 51 node separators + 50 track blocks = 101 path elements
+		 *
+		 * **Determinism:** The topology is fully static (no dynamic state). Five warm-up
+		 * iterations are performed before measurement to allow JVM JIT compilation to
+		 * stabilise, making the timed result representative and repeatable.
+		 *
+		 * The 1 000 ms budget is conservative; typical JVM execution is well under 50 ms.
+		 */
 		@Test
 		fun `findShortestPath completes in under one second on a 100-element network`() {
+			// 49 semaphores + 2 InOuts + 50 track blocks = 101 path elements (>= 100).
 			val ctx = TestTopologies.linearPathWithSemaphoreSequence(semaphoreCount = 49).also { context = it }
 			val svc = ctx.getAutomaticPathFindingService()
 			val inOuts = ctx.getInOuts()
