@@ -12,8 +12,7 @@ package cz.vutbr.fit.interlockSim.context
 import cz.hovorka.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
-import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
@@ -50,9 +49,12 @@ import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
  * **Network Query Operations:**
  * - [getInOuts] - Get all entry/exit points
  * - [isSeparatorInDirection] - Check signal orientation
- * - [getTopologyNavigator] - Get static topology navigation service
- * - [getPathReservationService] - Get path reservation service
- * - [getTrainNavigationService] - Get service for train-specific path navigation
+ *
+ * **Routing Services:**
+ * - [getRoutingServices] - Access grouped routing/navigation services
+ *   ([RoutingServices.getTopologyNavigator],
+ *   [RoutingServices.getPathReservationService],
+ *   [RoutingServices.getTrainNavigationService])
  *
  * **Dynamic State Management:**
  * - [toDynamic] (PathSeparator) - Convert to dynamic wrapper
@@ -96,23 +98,23 @@ interface SimulationEnvironment : NetworkState {
 	fun getInOuts(): Collection<DynamicInOut>
 
 	/**
-	 * Get topology navigator for pure topology navigation (no state dependencies).
+	 * Get the grouped routing/navigation services for this simulation environment.
 	 *
-	 * The TopologyNavigator provides static graph traversal without any dependency on
-	 * dynamic state (block reservations, occupancy, etc.). Use this for finding the next
-	 * track section based purely on network topology.
+	 * Routing accessors (topology navigation, path reservation, train navigation) are
+	 * grouped behind the [RoutingServices] sub-interface rather than being flattened
+	 * directly onto this facade. Callers reach a specific service via this single accessor:
 	 *
-	 * ## Use Cases
+	 * ```kotlin
+	 * val navigator = env.getRoutingServices().getTopologyNavigator()
+	 * val pathService = env.getRoutingServices().getPathReservationService()
+	 * val trainNav = env.getRoutingServices().getTrainNavigationService()
+	 * ```
 	 *
-	 * - InOutWorker finding initial track section from InOut
-	 * - Network validation and connectivity analysis
-	 * - Editor features requiring topology queries
-	 *
-	 * @return TopologyNavigator instance for this simulation context
-	 * @see TopologyNavigator
-	 * @since Issue #296 Phase 5 (InOutWorker dependency)
+	 * @return RoutingServices instance for this simulation context
+	 * @see RoutingServices
+	 * @since Issue #651 (routing accessor segregation)
 	 */
-	fun getTopologyNavigator(): TopologyNavigator
+	fun getRoutingServices(): RoutingServices
 
 	/**
 	 * Check if an oriented separator (semaphore) faces the specified direction.
@@ -128,45 +130,6 @@ interface SimulationEnvironment : NetworkState {
 		next: Track?,
 		previous: Track?
 	): Boolean
-
-	/**
-	 * Get train navigation service for train-specific path following.
-	 *
-	 * The TrainNavigationService provides train-specific path navigation that validates
-	 * block ownership. It only returns paths through blocks RESERVED for the specific train.
-	 *
-	 * ## Use Cases
-	 *
-	 * - Train requests path to next semaphore (only through owned blocks)
-	 * - Train waits when blocks are reserved for different train
-	 * - Train resumes when path becomes available
-	 *
-	 * ## Example Usage
-	 *
-	 * ```kotlin
-	 * // In Train.Front.semaphoreAction():
-	 * val trainNavService = env.getTrainNavigationService()
-	 * val path = trainNavService.findReservedPathForTrain(
-	 *     trainId = toString(),
-	 *     separator = semaphore,
-	 *     next = next
-	 * )
-	 *
-	 * if (path == null) {
-	 *     // Path not reserved for this train, halt and wait
-	 *     fireStop()
-	 *     waitUntil { trainNavService.isPathReservedForTrain(...) }
-	 * } else {
-	 *     // Path is reserved for us, continue
-	 *     accelerateToSignal(semaphore, path)
-	 * }
-	 * ```
-	 *
-	 * @return TrainNavigationService instance for this simulation context
-	 * @see TrainNavigationService
-	 * @since Issue #295 (Phase 3 of Issue #292)
-	 */
-	fun getTrainNavigationService(): TrainNavigationService
 
 	/**
 	 * Create a kDisco [Condition] that becomes true when the path starting at
@@ -189,46 +152,8 @@ interface SimulationEnvironment : NetworkState {
 		separator: PathSeparator
 	): Condition =
 		Condition {
-			getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
+			getRoutingServices().getTrainNavigationService().findReservedPathForTrain(trainId, separator) is PathResult.Available
 		}
-
-	/**
-	 * Get path reservation service for dispatcher/interlocking path reservation.
-	 *
-	 * The PathReservationService provides atomic path reservation with train ownership
-	 * tracking. Used by dispatchers and interlocking logic to reserve paths before
-	 * trains enter the network.
-	 *
-	 * ## Use Cases
-	 *
-	 * - InOutWorker reserves path for incoming train
-	 * - Interlocking reserves continuation path when train approaches semaphore
-	 * - Dispatcher pre-reserves paths for scheduled trains
-	 *
-	 * ## Example Usage
-	 *
-	 * ```kotlin
-	 * // In InOutWorker or Interlocking:
-	 * val pathService = env.getPathReservationService()
-	 * val result = pathService.reservePath(trainId, start, target)
-	 *
-	 * when (result) {
-	 *     is Success -> {
-	 *         // Path reserved, train can proceed
-	 *         approveTrainEntry(train)
-	 *     }
-	 *     is AllPathsBlocked -> {
-	 *         // Wait for path to become available
-	 *         waitUntil { pathService.isPathAvailable(start, target) }
-	 *     }
-	 * }
-	 * ```
-	 *
-	 * @return PathReservationService instance for this simulation context
-	 * @see cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-	 * @since Issue #296 (ShuntingLoop refactoring)
-	 */
-	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 
 	/**
 	 * Get the automatic path finding service for static Dijkstra-based route search.
@@ -335,7 +260,7 @@ interface SimulationEnvironment : NetworkState {
 	 * ## Example Usage
 	 *
 	 * ```kotlin
-	 * val result = env.getPathReservationService().reservePath(trainId, start, target)
+	 * val result = env.getRoutingServices().getPathReservationService().reservePath(trainId, start, target)
 	 * when (result) {
 	 *     is Success -> {
 	 *         if (result.reservedBlocks.isNotEmpty()) {
@@ -518,7 +443,7 @@ interface SimulationEnvironment : NetworkState {
 	 * @param listener The listener to add
 	 */
 	fun addBlockOccupancyListener(listener: BlockOccupancyListener) {
-		getPathReservationService().addBlockOccupancyListener(listener)
+		getRoutingServices().getPathReservationService().addBlockOccupancyListener(listener)
 	}
 
 	/**
@@ -527,7 +452,7 @@ interface SimulationEnvironment : NetworkState {
 	 * @param listener The listener to remove
 	 */
 	fun removeBlockOccupancyListener(listener: BlockOccupancyListener) {
-		getPathReservationService().removeBlockOccupancyListener(listener)
+		getRoutingServices().getPathReservationService().removeBlockOccupancyListener(listener)
 	}
 
 	// ========================================

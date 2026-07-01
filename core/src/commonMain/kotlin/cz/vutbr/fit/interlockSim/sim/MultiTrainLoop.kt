@@ -74,7 +74,7 @@ open class MultiTrainLoop(
 	private val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
 	private val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS,
-	private val pathReservationService: PathReservationService = context.getPathReservationService()
+	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
 ) : Interlocking(context),
 	SpeedControllable {
 	companion object {
@@ -124,7 +124,7 @@ open class MultiTrainLoop(
 		}
 	}
 
-	private val topologyNavigator: TopologyNavigator = context.getTopologyNavigator()
+	private val topologyNavigator: TopologyNavigator = context.getRoutingServices().getTopologyNavigator()
 	private val blockResources: BlockResourceRegistry = BlockResourceRegistry(context)
 
 	private val pendingSpecs: ArrayDeque<TrainSpec> = ArrayDeque(trainSpecs.sortedBy { it.inTime })

@@ -839,7 +839,7 @@ class Train :
 		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
-		trainNavService = env.getTrainNavigationService()
+		trainNavService = env.getRoutingServices().getTrainNavigationService()
 
 		// Issue #60: Validate train length against track distance between InOuts
 		validateTrainLength(env, validatedTimetable, this.length)
@@ -883,7 +883,7 @@ class Train :
 		}
 
 		try {
-			val topologyNavigator = env.getTopologyNavigator()
+			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
 			// Find all topologically possible paths between InOuts
 			val paths =

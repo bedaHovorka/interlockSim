@@ -349,7 +349,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		fun `shunting loop discovers and uses both k1 and k2 paths`() {
 			// Arrange: Create simulation context
 			val context = createConfiguredSimulation(endTime = 60L)
-			val navigator = context.getTopologyNavigator()
+			val navigator = context.getRoutingServices().getTopologyNavigator()
 
 			// Get the two InOut separators
 			val inOuts = context.getInOuts()

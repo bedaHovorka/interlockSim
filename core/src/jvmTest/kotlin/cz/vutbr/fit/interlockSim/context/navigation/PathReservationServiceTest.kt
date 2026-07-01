@@ -102,7 +102,7 @@ class PathReservationServiceTest : KoinTestBase() {
 
 		// Get navigation services from the simulation context
 		// (Services are scoped to the context, accessed via public API)
-		service = simulationContext.getPathReservationService()
+		service = simulationContext.getRoutingServices().getPathReservationService()
 
 		// TopologyNavigator is internal to PathReservationService, but tests need it
 		// Create it directly for test purposes (not from scope)

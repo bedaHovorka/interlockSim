@@ -66,7 +66,7 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 
 		// Get navigation services from the simulation context
 		// Cast to DefaultPathReservationService to access internal registry for testing
-		service = simulationContext.getPathReservationService() as DefaultPathReservationService
+		service = simulationContext.getRoutingServices().getPathReservationService() as DefaultPathReservationService
 
 		// Get a semaphore to use as start point
 		val semaphores = collectSemaphores()

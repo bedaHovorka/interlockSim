@@ -108,7 +108,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Test
 	fun testSwitchConfiguredToMain() {
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA1 (main route)
 		val result = pathService.reservePath("train1", zA, doA1)
@@ -128,7 +128,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Test
 	fun testSwitchConfiguredToBranch() {
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA2 (branch route)
 		val result = pathService.reservePath("train1", zA, doA2)
@@ -163,7 +163,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 		)
 
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA2 (branch route)
 		val result = pathService.reservePath("train1", zA, doA2)
@@ -185,7 +185,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Test
 	fun testSwitchLockedAfterConfiguration() {
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA1
 		val result = pathService.reservePath("train1", zA, doA1)
@@ -205,7 +205,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Test
 	fun testMultipleSwitchesConfiguredIndependently() {
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA2 (switch vA to BRANCH)
 		val result1 = pathService.reservePath("train1", zA, doA2)
@@ -243,7 +243,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 		)
 
 		// Get PathReservationService
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 
 		// Reserve path: zA → vA → doA2 (branch route)
 		val result = pathService.reservePath("train1", zA, doA2)
@@ -272,7 +272,7 @@ class SwitchConfigurationTest : KoinTestBase() {
 	@Test
 	fun `second train can reconfigure switch after first train completes`() {
 		// First train: zA -> vA(BRANCH) -> doA2
-		val pathService = context.getPathReservationService()
+		val pathService = context.getRoutingServices().getPathReservationService()
 		val result1 = pathService.reservePath("train1", zA, doA2)
 		assertThat(result1).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 		assertThat(vA.conf).isEqualTo(RailSwitch.Conf.BRANCH)

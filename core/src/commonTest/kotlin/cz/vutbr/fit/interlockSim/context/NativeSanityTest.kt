@@ -102,7 +102,7 @@ class NativeSanityTest : KoinComponent {
 		val processFactory = get<SimulationProcessFactory>()
 		val editingCtx = CommonTestFixtures.parseEditingContext(NetworkResources.LINEAR_TRACK_XML)
 		DefaultSimulationContext.fromEditingContext(editingCtx, processFactory).use { simCtx ->
-			val navigator: TopologyNavigator = simCtx.getTopologyNavigator()
+			val navigator: TopologyNavigator = simCtx.getRoutingServices().getTopologyNavigator()
 			assertThat(navigator).isNotNull()
 		}
 	}

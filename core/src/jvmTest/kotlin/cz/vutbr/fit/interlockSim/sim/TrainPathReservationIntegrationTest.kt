@@ -105,8 +105,8 @@ class TrainPathReservationIntegrationTest : KoinTestBase() {
 		context = MockSimulationContext(loadedContext)
 
 		// Get services from context
-		reservationService = context.getPathReservationService()
-		trainNavService = context.getTrainNavigationService()
+		reservationService = context.getRoutingServices().getPathReservationService()
+		trainNavService = context.getRoutingServices().getTrainNavigationService()
 
 		logger.info { "Integration test setup complete" }
 	}

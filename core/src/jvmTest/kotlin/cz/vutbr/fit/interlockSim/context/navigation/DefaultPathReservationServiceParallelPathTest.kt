@@ -59,8 +59,8 @@ class DefaultPathReservationServiceParallelPathTest : KoinTestBase() {
 			context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 
-		pathReservationService = context.getPathReservationService()
-		navigator = context.getTopologyNavigator()
+		pathReservationService = context.getRoutingServices().getPathReservationService()
+		navigator = context.getRoutingServices().getTopologyNavigator()
 
 		// Get InOut elements (there are exactly 2 in vyhybna.xml)
 		val inOuts = context.getInOuts().toList()

@@ -79,7 +79,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val inOuts = ctx.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
 		val b = inOuts.single { it.name == "B" }
-		val reservationService = ctx.getPathReservationService()
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
 
 		var capturedTrain: Train? = null
 		val process =
@@ -143,7 +143,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val inOuts = ctx.getInOuts().toList()
 		val a = inOuts.single { it.name == "A" }
 		val b = inOuts.single { it.name == "B" }
-		val reservationService = ctx.getPathReservationService()
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
 
 		// Reserve A→B for the FIRST train created; the second cannot claim it.
 		var firstReserved = false
@@ -195,7 +195,7 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		val a = inOuts.single { it.name == "A" }
 		val b = inOuts.single { it.name == "B" }
 
-		val reservationService = ctx.getPathReservationService()
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
 		// Reserve for a phantom owner first to block the path.
 		val reserved = reservationService.reservePath("Phantom", a, b)
 		assertThat(reserved).isInstanceOf<PathReservationService.ReservationResult.Success>()

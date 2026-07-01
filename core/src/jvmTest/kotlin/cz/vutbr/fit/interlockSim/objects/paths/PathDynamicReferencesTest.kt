@@ -80,7 +80,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val inOut2 = context.toDynamic(inOutsList[1])
 
 				// Get TopologyNavigator from context scope
-				val navigator = context.getTopologyNavigator()
+				val navigator = context.getRoutingServices().getTopologyNavigator()
 
 				// Act - Find all topological paths from InOut1 to InOut2
 				val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
@@ -119,7 +119,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val inOut1 = context.toDynamic(inOuts[0])
 				val inOut2 = context.toDynamic(inOuts[1])
 
-				val navigator = context.getTopologyNavigator()
+				val navigator = context.getRoutingServices().getTopologyNavigator()
 
 				// Act - Get paths and iterate
 				val paths = navigator.findAllTopologicalPaths(inOut1, inOut2)
@@ -152,7 +152,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val inOut1 = context.toDynamic(inOuts[0])
 				val inOut2 = context.toDynamic(inOuts[1])
 
-				val service = context.getPathReservationService()
+				val service = context.getRoutingServices().getPathReservationService()
 
 				// Act - Reserve path
 				val result = service.reservePath("train1", inOut1, inOut2)
@@ -193,7 +193,7 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				assertThat(dynamicInOut1).isInstanceOf(DynamicPathSeparator::class)
 				assertThat(dynamicInOut2).isInstanceOf(DynamicPathSeparator::class)
 
-				val service = context.getPathReservationService()
+				val service = context.getRoutingServices().getPathReservationService()
 
 				// Act - Reserve path using dynamic separators
 				val result = service.reservePath("train1", dynamicInOut1, dynamicInOut2)
@@ -220,12 +220,12 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val inOut2 = context.toDynamic(inOuts[1])
 
 				// Reserve path first
-				val reservationService = context.getPathReservationService()
+				val reservationService = context.getRoutingServices().getPathReservationService()
 				val reservationResult = reservationService.reservePath("train1", inOut1, inOut2)
 				assertThat(reservationResult).isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
 				// Get TrainNavigationService
-				val trainService = context.getTrainNavigationService()
+				val trainService = context.getRoutingServices().getTrainNavigationService()
 
 				// Act - Find reserved path for train
 				val path = trainService.findReservedPathForTrain("train1", inOut1)
@@ -263,11 +263,11 @@ class PathDynamicReferencesTest : KoinTestBase() {
 				val inOut2 = context.toDynamic(inOuts[1])
 
 				// Reserve path for train1
-				val reservationService = context.getPathReservationService()
+				val reservationService = context.getRoutingServices().getPathReservationService()
 				reservationService.reservePath("train1", inOut1, inOut2)
 
 				// Get TrainNavigationService
-				val trainService = context.getTrainNavigationService()
+				val trainService = context.getRoutingServices().getTrainNavigationService()
 
 				// Act - Check if path is reserved for train1 (should be true)
 				val isReservedForTrain1 = trainService.isPathReservedForTrain("train1", inOut1)
