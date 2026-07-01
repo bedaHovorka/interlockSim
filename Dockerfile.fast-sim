@@ -142,9 +142,7 @@ RUN apk upgrade --no-cache \
 ARG RUNTIME_UID=1001
 ARG RUNTIME_GID=1001
 RUN addgroup -g ${RUNTIME_GID} app \
-    && adduser -u ${RUNTIME_UID} -G app -s /bin/sh -D app \
-    && mkdir -p /build/core/src/commonMain/resources \
-    && chown -R app:app /build/core/src/commonMain/resources
+    && adduser -u ${RUNTIME_UID} -G app -s /bin/sh -D app
 
 # Copy native binary from builder
 COPY --chown=app:app --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
