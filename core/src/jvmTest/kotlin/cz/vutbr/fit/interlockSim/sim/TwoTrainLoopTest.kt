@@ -211,8 +211,8 @@ class TwoTrainLoopTest : KoinTestBase() {
 			}
 		}
 
-		// Wall-clock runtime statistics.
-		val wallTimes = results.map { it.wallMs }
+		// Wall-clock runtime statistics (discard a small warmup window to avoid JIT cold-start skew).
+		val wallTimes = results.drop(10).map { it.wallMs }
 		val minMs = wallTimes.min()
 		val maxMs = wallTimes.max()
 		val mean = wallTimes.average()
