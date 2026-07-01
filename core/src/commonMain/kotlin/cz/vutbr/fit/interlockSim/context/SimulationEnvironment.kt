@@ -484,11 +484,11 @@ interface SimulationEnvironment {
 	// ========================================
 
 	/**
-	 * Subscribe an external (non-train) agent to block occupancy/release events.
+	 * Subscribe an external (non-train) agent to legacy block reservation/release events.
 	 *
 	 * The subscriber receives [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent]
-	 * instances whenever a block is reserved, occupied, or released. This is the primary
-	 * integration point for the Goal 10 AI dispatcher and other external planners.
+	 * instances when blocks are reserved or released via the path reservation service.
+	 * For occupancy enter/leave events, prefer [onBlockEvent] (Issue #569).
 	 *
 	 * @param listener The listener to add
 	 */
