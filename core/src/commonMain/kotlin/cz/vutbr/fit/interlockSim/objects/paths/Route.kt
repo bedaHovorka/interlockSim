@@ -20,6 +20,12 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
  * actually traverses during simulation (including dynamic wrappers and reservation
  * metadata).
  *
+ * Immutability caveat: [Route] is *shallowly* immutable — its own properties are
+ * `val`, but [segments] holds references to live, mutable domain objects
+ * ([TrackSection] / track blocks whose reservation and occupancy state may change
+ * across simulation ticks). Treat a [Route] as a plan over the static topology, not
+ * as a safe snapshot to hold and re-read across state mutations.
+ *
  * @property start entry/exit point where the route begins
  * @property target entry/exit point where the route ends
  * @property segments ordered track sections from [start] to [target]

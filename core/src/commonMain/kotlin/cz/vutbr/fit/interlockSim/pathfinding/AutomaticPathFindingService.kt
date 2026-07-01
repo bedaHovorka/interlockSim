@@ -90,14 +90,17 @@ interface AutomaticPathFindingService {
 	 * Return all topologically valid routes from [start] to [target], sorted
 	 * by [costFunction] from cheapest to most expensive.
 	 *
-	 * The number of returned routes is capped by [maxPaths] to avoid runaway
-	 * enumeration on networks with many switch permutations. For a network
-	 * with a single route the returned list has exactly one element.
+	 * Note: the underlying search enumerates every switch-constrained path
+	 * up to [maxDepth] before sorting and applying [maxPaths]; the cap is an
+	 * upper bound on the *returned* routes, not a bound on enumeration. On
+	 * networks with many sequential switches the enumeration itself can be
+	 * combinatorial. For a single-route network the returned list has one
+	 * element.
 	 *
 	 * @param start starting path separator
 	 * @param target target path separator
-	 * @param maxPaths upper bound on the number of returned routes
-	 * @param maxDepth maximum search depth passed to the topology navigator
+	 * @param maxPaths upper bound on returned routes (applied after enumeration)
+	 * @param maxDepth maximum search depth; the real bound on enumeration breadth
 	 * @param costFunction cost metric used for sorting
 	 * @return sorted list of routes; empty when no route exists
 	 */
