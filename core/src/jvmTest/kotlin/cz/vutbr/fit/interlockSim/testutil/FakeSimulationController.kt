@@ -106,4 +106,16 @@ class FakeSimulationController(
 		pollStepTimeCalls++
 		return if (stepTimeQueue.isEmpty()) null else stepTimeQueue.removeFirst()
 	}
+
+	/** Total number of [requestPause] calls received. */
+	var requestPauseCalls: Int = 0
+		private set
+
+	/**
+	 * Records the call; sets [pauseRequested] so tests can assert on it.
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun requestPause() {
+		requestPauseCalls++
+	}
 }

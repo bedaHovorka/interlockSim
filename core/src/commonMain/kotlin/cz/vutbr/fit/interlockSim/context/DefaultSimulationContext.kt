@@ -46,6 +46,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
+import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -122,7 +126,8 @@ open class DefaultSimulationContext(
 	 */
 	private val processFactory: SimulationProcessFactory
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
-	SimulationContext {
+	SimulationContext,
+	PauseController {
 	/**
 	 * Koin scope for this simulation context.
 	 * Manages lifecycle of navigation services and ensures one shared PathReservationRegistry
@@ -202,6 +207,26 @@ open class DefaultSimulationContext(
 	 * Distinct from isFrozen() because fromEditingContext() freezes the context before run() is called.
 	 */
 	private var simulationHasStarted: Boolean = false
+
+	/**
+	 * Active [SimulationController] for the current run; used by [requestPause] to delegate
+	 * pause requests from the collision detection service.
+	 * Set at the start of [run] and cleared when run completes.
+	 */
+	private var currentController: SimulationController? = null
+
+	/** Collision warning listeners registered before run(); wired into the service at run() time. */
+	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
+
+	/**
+	 * Collision detection service scoped to this context.
+	 * Lazy-initialized so [DefaultCollisionDetectionService] subscribes to block events via
+	 * [onBlockEvent] while [simulationHasStarted] is still false.
+	 * Retrieved from this context's Koin scope.
+	 */
+	private val collisionDetectionServiceInstance: CollisionDetectionService by lazy {
+		scope.get<CollisionDetectionService>()
+	}
 
 	/**
 	 * Random number generator for name generation (kDisco)
@@ -1141,7 +1166,46 @@ open class DefaultSimulationContext(
 		pendingSimEventListeners += listener
 	}
 
+	/**
+	 * Subscribe to collision warnings. Listeners registered before [run] are buffered and wired to the
+	 * [CollisionDetectionService] at [run] time. Listeners registered after [run] are silently ignored.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) {
+		if (simulationHasStarted) return
+		pendingCollisionWarningListeners += listener
+	}
+
+	/**
+	 * Return the [CollisionDetectionService] scoped to this context.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun getCollisionDetectionService(): CollisionDetectionService = collisionDetectionServiceInstance
+
+	/**
+	 * Request an immediate pause via the active [SimulationController].
+	 * Delegates to the controller stored at the start of [run]; safe to call from the simulation thread.
+	 * Does nothing if called before [run] or after simulation finishes.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun requestPause() {
+		currentController?.requestPause()
+	}
+
 	override fun run(controller: SimulationController) {
+		// Store the active controller so requestPause() can delegate to it.
+		currentController = controller
+
+		// Force-initialize the collision detection service before simulationHasStarted is set to true,
+		// so that the service's init block can subscribe to block events (which requires buffering).
+		val collisionService = collisionDetectionServiceInstance
+
+		// Wire pending collision warning listeners into the service before starting.
+		pendingCollisionWarningListeners.forEach { collisionService.onCollisionWarning(it) }
+
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.
 		simulationHasStarted = true
@@ -1233,6 +1297,7 @@ open class DefaultSimulationContext(
 			throw SimulationException(e)
 		} finally {
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+			currentController = null
 		}
 	}
 

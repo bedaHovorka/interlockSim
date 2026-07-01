@@ -480,4 +480,31 @@ interface SimulationEnvironment : NetworkState {
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
 	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)
+
+	// ========================================
+	// Collision Detection (Issue #611)
+	// ========================================
+
+	/**
+	 * Subscribe to collision warnings emitted by the [cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService].
+	 *
+	 * Listener is called synchronously on the simulation thread when a
+	 * [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning] is detected.
+	 * Listeners registered after [run] has started are silently ignored (same contract as [onBlockEvent]).
+	 *
+	 * @param listener The callback to invoke on each detected warning.
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	fun onCollisionWarning(listener: (cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning) -> Unit)
+
+	/**
+	 * Get the collision detection service scoped to this simulation context.
+	 *
+	 * The service monitors block reservation and occupancy events and emits
+	 * [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning]s when hazardous states are detected.
+	 *
+	 * @return [cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService] instance for this context
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	fun getCollisionDetectionService(): cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 }

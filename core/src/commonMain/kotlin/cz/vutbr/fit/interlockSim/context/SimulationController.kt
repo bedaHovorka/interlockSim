@@ -99,6 +99,20 @@ interface SimulationController {
 	 *         `null` otherwise
 	 */
 	fun pollStepTime(): Double?
+
+	/**
+	 * Request an immediate pause of the simulation.
+	 *
+	 * Called by external agents (e.g., the collision detection service) when a hazardous
+	 * state is detected and the operator must review the situation before the simulation
+	 * continues.
+	 *
+	 * **Thread safety:** implementations must be thread-safe; this method may be called
+	 * from the simulation thread while the control thread reads pause state.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	fun requestPause()
 }
 
 /**
@@ -128,4 +142,8 @@ object NoOpSimulationController : SimulationController {
 	override fun pollStepEvent(): Boolean = false
 
 	override fun pollStepTime(): Double? = null
+
+	override fun requestPause() {
+		// No-op: headless / no-GUI runs do not support pause requests
+	}
 }
