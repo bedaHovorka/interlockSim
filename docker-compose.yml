@@ -55,6 +55,12 @@ services:
       args:
         # Non-sensitive cache hint only
         BUILDKIT_INLINE_CACHE: 1
+        # Match the host user's UID/GID so the container can read the 0600
+        # X11 auth cookie and write artifacts with host-user ownership.
+        # Set in .env or export before building:
+        #   export RUNTIME_UID=$(id -u) RUNTIME_GID=$(id -g)
+        RUNTIME_UID: ${RUNTIME_UID:-1000}
+        RUNTIME_GID: ${RUNTIME_GID:-1000}
       secrets:
         # GitHub Packages credentials for kDisco dependency.
         # Values are read from host environment variables and mounted as BuildKit
