@@ -174,15 +174,15 @@ For X11 forwarding troubleshooting, authentication setup, SELinux configuration 
 Three specialized services replaced the removed `pathToNextSemaphore()` API:
 
 1. **TopologyNavigator** - Static topology navigation (pure graph traversal)
-   - Access: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getTopologyNavigator()`
+   - Access: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getRoutingServices().getTopologyNavigator()`
    - Use case: Editor validation, network analysis
 
 2. **PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
-   - Access: `SimulationEnvironment.getPathReservationService()`
+   - Access: `SimulationEnvironment.getRoutingServices().getPathReservationService()`
    - Use case: Interlocking path setup, atomic reservation
 
 3. **TrainNavigationService** - Train-specific navigation (follow RESERVED paths only)
-   - Access: `SimulationEnvironment.getTrainNavigationService()`
+   - Access: `SimulationEnvironment.getRoutingServices().getTrainNavigationService()`
    - Use case: Train requesting next track section
 
 4. **PathReservationRegistry** - Bidirectional train↔block ownership tracking

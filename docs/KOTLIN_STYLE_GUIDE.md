@@ -2277,14 +2277,14 @@ Three specialized services handle path finding and reservation using **scope-per
 - Interface: `context/navigation/TopologyNavigator`
 - Implementation: `context/navigation/DefaultTopologyNavigator`
 - **Use Case**: Editor validation, network analysis without dynamic state
-- **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getTopologyNavigator()`
+- **Access**: `EditingContext.getTopologyNavigator()` or `SimulationEnvironment.getRoutingServices().getTopologyNavigator()`
 - **Methods**: `findPath()`, `getNextTrackSection()`, `findPathToNextSemaphore()`
 
 **2. PathReservationService** - Dispatcher logic (find FREE paths, reserve atomically)
 - Interface: `context/navigation/PathReservationService`
 - Implementation: `context/navigation/DefaultPathReservationService`
 - **Use Case**: Dispatcher finding available routes, interlocking path setup
-- **Access**: `SimulationEnvironment.getPathReservationService()`
+- **Access**: `SimulationEnvironment.getRoutingServices().getPathReservationService()`
 - **Features**: Atomic reservation, all-or-nothing semantics, TOCTOU race condition fix
 - **Methods**: `reservePath()`, `releasePath()`, `findReservablePaths()`, `reservePathToAnyNextSemaphore()`
 
@@ -2292,7 +2292,7 @@ Three specialized services handle path finding and reservation using **scope-per
 - Interface: `context/navigation/TrainNavigationService`
 - Implementation: `context/navigation/DefaultTrainNavigationService`
 - **Use Case**: Train requesting next track section (only through owned blocks)
-- **Access**: `SimulationEnvironment.getTrainNavigationService()`
+- **Access**: `SimulationEnvironment.getRoutingServices().getTrainNavigationService()`
 - **Features**: Explicit ownership validation, null = "not reserved for THIS train"
 - **Methods**: `findReservedPathForTrain()`, `isPathReservedForTrain()`, `getReservedBlocks()`
 
