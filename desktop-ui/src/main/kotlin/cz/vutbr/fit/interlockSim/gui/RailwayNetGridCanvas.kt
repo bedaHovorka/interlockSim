@@ -432,6 +432,43 @@ class RailwayNetGridCanvas :
 		revalidate()
 	}
 
+	/**
+	 * Auto-center the viewport on the populated area of the grid.
+	 * Helps to immediately show the active track area when starting simulation.
+	 */
+	fun autoCenterViewport() {
+		val ctx = context ?: return
+		val grid = ctx.getRailWayNetGrid()
+
+		var minX = Int.MAX_VALUE
+		var minY = Int.MAX_VALUE
+		var maxX = Int.MIN_VALUE
+		var maxY = Int.MIN_VALUE
+
+		for (entry in grid) {
+			val key = entry.key
+			if (key.x < minX) minX = key.x
+			if (key.y < minY) minY = key.y
+			if (key.x > maxX) maxX = key.x
+			if (key.y > maxY) maxY = key.y
+		}
+
+		// Check if we actually found any cells
+		if (minX == Int.MAX_VALUE) return
+
+		val padding = VIEWPORT_PADDING_CELLS
+		val startX = kotlin.math.max(0, (minX - padding) * CELL_WIDTH)
+		val startY = kotlin.math.max(0, (minY - padding) * CELL_HEIGHT)
+		val endX = ((maxX + 1 + padding) * CELL_WIDTH)
+		val endY = ((maxY + 1 + padding) * CELL_HEIGHT)
+
+		val rect = Rectangle(startX, startY, endX - startX, endY - startY)
+
+		javax.swing.SwingUtilities.invokeLater {
+			scrollRectToVisible(rect)
+		}
+	}
+
 	// Painting methods
 	override fun paintComponent(g: Graphics) {
 		requireEditor(g is Graphics2D) { "Graphics context must be Graphics2D" }
@@ -702,6 +739,12 @@ class RailwayNetGridCanvas :
 		private const val MAX_UNIT_INCREMENT = 35
 		private const val CELL_WIDTH = 16
 		private const val CELL_HEIGHT = 16
+
+		/**
+		 * Extra padding in grid cells to add around the populated track area
+		 * when automatically centering the viewport.
+		 */
+		private const val VIEWPORT_PADDING_CELLS = 2
 
 		// Public accessors for cell dimensions (used by other components)
 		fun getCellHeight(): Int = CELL_HEIGHT
