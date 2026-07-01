@@ -43,7 +43,6 @@ import kotlin.test.Test
  * - ✅ sections match findAllTopologicalPaths output
  */
 class PathCandidateCostTest : CommonKoinTestBase() {
-
 	// ========================================================================
 	// No path
 	// ========================================================================

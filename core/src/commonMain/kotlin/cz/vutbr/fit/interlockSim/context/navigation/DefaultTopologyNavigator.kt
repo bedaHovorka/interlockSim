@@ -378,7 +378,7 @@ class DefaultTopologyNavigator(
 		findAllTopologicalPaths(start, target, maxDepth).map { sections ->
 			PathCandidate(
 				sections = sections,
-				switchMovementCount = countSwitchMovements(start, sections),
+				switchMovementCount = countSwitchMovements(start, sections)
 			)
 		}
 
@@ -393,7 +393,10 @@ class DefaultTopologyNavigator(
 	 * @param sections The ordered list of track sections constituting the path.
 	 * @return Number of [RailSwitch] separators in the path (≥ 0).
 	 */
-	private fun countSwitchMovements(start: PathSeparator, sections: List<TrackSection>): Int {
+	private fun countSwitchMovements(
+		start: PathSeparator,
+		sections: List<TrackSection>
+	): Int {
 		var count = if (CellUtilities.assertNodeCell(start) is RailSwitch) 1 else 0
 		var currentSeparator: PathSeparator = start
 		for (section in sections) {

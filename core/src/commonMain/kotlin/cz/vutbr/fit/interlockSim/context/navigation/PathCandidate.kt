@@ -57,5 +57,5 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 data class PathCandidate(
 	val sections: List<TrackSection>,
 	val switchMovementCount: Int,
-	val conflictRiskWeight: Double = 0.0,
+	val conflictRiskWeight: Double = 0.0
 )
