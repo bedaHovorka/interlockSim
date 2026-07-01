@@ -1201,10 +1201,12 @@ open class DefaultSimulationContext(
 
 		// Force-initialize the collision detection service before simulationHasStarted is set to true,
 		// so that the service's init block can subscribe to block events (which requires buffering).
+		// The local variable exists purely for the side-effect of triggering lazy initialization.
+		@Suppress("UNUSED_VARIABLE")
 		val collisionService = collisionDetectionServiceInstance
 
 		// Wire pending collision warning listeners into the service before starting.
-		pendingCollisionWarningListeners.forEach { collisionService.onCollisionWarning(it) }
+		pendingCollisionWarningListeners.forEach { collisionDetectionServiceInstance.onCollisionWarning(it) }
 
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.

@@ -112,7 +112,7 @@ class FakeSimulationController(
 		private set
 
 	/**
-	 * Records the call; sets [pauseRequested] so tests can assert on it.
+	 * Records the call so tests can assert on pause request count.
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
 	override fun requestPause() {

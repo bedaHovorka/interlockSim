@@ -117,7 +117,7 @@ class DefaultCollisionDetectionService(
 	) {
 		// Supplementary detection via the legacy BlockOccupancyEvent channel.
 		// Primary detection is covered by handleBlockEvent (BlockEvent).
-		// Reserved for future SP2+ predictive collision analysis.
+		// TODO SP2+: implement predictive collision analysis using occupancy velocity/position data.
 	}
 
 	/**
