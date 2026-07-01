@@ -82,6 +82,28 @@ class DefaultPathReservationService(
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder
 ) : PathReservationService {
+	private fun findCandidatePaths(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		maxDepth: Int
+	): List<List<TrackSection>> {
+		if (start is DynamicInOut && target is DynamicInOut) {
+			val routes = routeFinder.findRoutes(start.staticRef, target.staticRef, environment)
+			if (routes.isEmpty()) {
+				logger.info { "reservePath: RouteFinder found no routes from $start to $target for $trainId" }
+				return emptyList()
+			}
+			logger.debug {
+				"reservePath: RouteFinder returned ${routes.size} route(s) for $trainId " +
+					"(cheapest cost=${routes.first().cost})"
+			}
+			return routes.map { it.segments }
+		}
+
+		return navigator.findAllTopologicalPaths(start, target, maxDepth)
+	}
+
 	/**
 	 * Find and reserve a free path from start to target separator.
 	 *
@@ -116,25 +138,7 @@ class DefaultPathReservationService(
 		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
-		// Step 1: Find candidate paths.
-		// When both endpoints are InOut elements, delegate to RouteFinder for cost-based ordering
-		// (lowest-cost path tried first). For other separator types fall back to the
-		// topology-only BFS provided by TopologyNavigator.
-		val candidatePaths: List<List<TrackSection>> =
-			if (start is DynamicInOut && target is DynamicInOut) {
-				val routes = routeFinder.findRoutes(start.staticRef, target.staticRef, environment)
-				if (routes.isEmpty()) {
-					logger.info { "reservePath: RouteFinder found no routes from $start to $target for $trainId" }
-					return PathReservationService.ReservationResult.NoPathExists
-				}
-				logger.debug {
-					"reservePath: RouteFinder returned ${routes.size} route(s) for $trainId " +
-						"(cheapest cost=${routes.first().cost})"
-				}
-				routes.map { it.segments }
-			} else {
-				navigator.findAllTopologicalPaths(start, target, maxDepth)
-			}
+		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
 			return PathReservationService.ReservationResult.NoPathExists
