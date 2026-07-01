@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
@@ -71,21 +72,50 @@ private val logger = KotlinLogging.logger {}
  * @property environment Simulation environment for dynamic block access
  * @property registry Ownership registry for tracking train reservations
  * @property pathInfoBuilder Builder for PathInfo metadata (Issue #295/#296 Phase 4)
+ * @property routeFinder Cost-based route planner for InOut-to-InOut automatic route selection (Issue #597)
  * @since Issue #294 (Phase 2 of Issue #292)
  */
 class DefaultPathReservationService(
 	private val navigator: TopologyNavigator,
 	private val environment: SimulationEnvironment,
 	private val registry: PathReservationRegistry,
-	private val pathInfoBuilder: PathInfoBuilder
+	private val pathInfoBuilder: PathInfoBuilder,
+	private val routeFinder: RouteFinder
 ) : PathReservationService {
+	private fun findCandidatePaths(
+		trainId: String,
+		start: DynamicPathSeparator,
+		target: DynamicPathSeparator,
+		maxDepth: Int
+	): List<List<TrackSection>> {
+		if (start is DynamicInOut && target is DynamicInOut) {
+			val routes = routeFinder.findRoutes(start.staticRef, target.staticRef, environment)
+			if (routes.isEmpty()) {
+				logger.info { "reservePath: RouteFinder found no routes from $start to $target for $trainId" }
+				return emptyList()
+			}
+			logger.debug {
+				"reservePath: RouteFinder returned ${routes.size} route(s) for $trainId " +
+					"(cheapest cost=${routes.first().cost})"
+			}
+			return routes.map { it.segments }
+		}
+
+		return navigator.findAllTopologicalPaths(start, target, maxDepth)
+	}
+
 	/**
 	 * Find and reserve a free path from start to target separator.
 	 *
 	 * ## Algorithm Implementation
 	 *
-	 * 1. Use navigator.findAllTopologicalPaths() to get all possible routes
-	 * 2. For each path in priority order (BFS = shortest first):
+	 * When both [start] and [target] are [DynamicInOut] elements, [RouteFinder] is used
+	 * to obtain cost-sorted candidate routes. The lowest-cost route is tried first.
+	 * For other separator types (e.g. semaphore-to-InOut), BFS topology paths from
+	 * [TopologyNavigator] are used instead.
+	 *
+	 * 1. Obtain candidate paths (RouteFinder for InOut↔InOut, TopologyNavigator otherwise)
+	 * 2. For each path in priority order (cheapest cost first for InOut routes):
 	 *    a. Extract unique DynamicTrackBlocks from TrackSections
 	 *    b. Validate all blocks are FREE
 	 *    c. Atomically reserve all blocks with rollback on failure
@@ -95,6 +125,7 @@ class DefaultPathReservationService(
 	 *
 	 * ## Error Handling
 	 *
+	 * - RouteFinder returns empty list → return NoPathExists (clear failure, no crash)
 	 * - TrackOperationException during setUpPath() → rollback and try next path
 	 * - IllegalStateException from registry → return Conflict result
 	 * - Empty paths list → return NoPathExists
@@ -107,8 +138,7 @@ class DefaultPathReservationService(
 		target: DynamicPathSeparator,
 		maxDepth: Int
 	): PathReservationService.ReservationResult {
-		// Step 1: Find all topologically possible paths
-		val candidatePaths = navigator.findAllTopologicalPaths(start, target, maxDepth)
+		val candidatePaths = findCandidatePaths(trainId, start, target, maxDepth)
 
 		if (candidatePaths.isEmpty()) {
 			return PathReservationService.ReservationResult.NoPathExists

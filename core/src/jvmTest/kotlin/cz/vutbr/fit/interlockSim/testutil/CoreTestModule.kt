@@ -132,7 +132,8 @@ val coreTestModule: Module =
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
-				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
+				val routeFinder: RouteFinder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder, routeFinder)
 			}
 
 			scoped<TrainNavigationService> {

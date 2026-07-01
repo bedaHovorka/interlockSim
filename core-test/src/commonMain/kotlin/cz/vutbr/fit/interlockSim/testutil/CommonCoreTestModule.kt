@@ -5,6 +5,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
@@ -18,6 +19,9 @@ import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.util.Point
 import org.koin.core.module.Module
@@ -125,7 +129,8 @@ val commonCoreTestModule: Module =
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
-				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
+				val routeFinder: RouteFinder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder, routeFinder)
 			}
 
 			scoped<TrainNavigationService> {
@@ -134,6 +139,14 @@ val commonCoreTestModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val registry: PathReservationRegistry = get()
 				DefaultTrainNavigationService(context, registry)
+			}
+
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
 			}
 		}
 	}
