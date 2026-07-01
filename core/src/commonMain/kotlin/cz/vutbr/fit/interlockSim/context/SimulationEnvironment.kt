@@ -513,7 +513,8 @@ interface SimulationEnvironment {
 	 * Subscribe to block-level domain events (reserve / release / occupancy changes).
 	 *
 	 * Listener is called synchronously on the simulation thread in simulation-time order.
-	 * Listeners registered after [run] has started are silently ignored.
+	 * Listeners registered after [run] has started are silently ignored (this is based on simulation start,
+	 * not on context freezing).
 	 *
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
@@ -523,7 +524,8 @@ interface SimulationEnvironment {
 	 * Subscribe to raw kdisco simulation events (process lifecycle, resource changes, custom payloads).
 	 *
 	 * Listener is called synchronously on the simulation thread in simulation-time order.
-	 * Listeners registered after [run] has started are silently ignored.
+	 * Listeners registered after [run] has started are silently ignored (this is based on simulation start,
+	 * not on context freezing).
 	 *
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
