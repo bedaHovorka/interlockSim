@@ -48,6 +48,9 @@ class RouteFinderTest : KoinTestBase() {
 	private fun semaphoreContext(): EditingContext =
 		TestTopologies.linearPathWithSemaphore(semaphoreAllowing = false).also { context = it }
 
+	private fun asymmetricSpeedContext(): EditingContext =
+		TestTopologies.linearPathWithAsymmetricSpeeds().also { context = it }
+
 	private fun yJunctionContext(): EditingContext = TestTopologies.yJunctionWithSwitch().also { context = it }
 
 	private fun shuntingLoopContext(): EditingContext {
@@ -138,6 +141,31 @@ class RouteFinderTest : KoinTestBase() {
 
 			assertThat(routes).isNotEmpty()
 			val route = routes.first()
+			assertThat(route.costBreakdown.sumOf { it.cost }).isEqualTo(route.cost)
+		}
+
+		@Test
+		fun `cost breakdown per-segment values match direction-dependent speed`() {
+			// Topology: A -[600m@60]-> Sem -[900m@90]-> B  (speeds measured from the entry end)
+			// BY_TRAVEL_TIME from A to B:
+			//   segment 0 (A→Sem): 600 / 60  = 10.0 s
+			//   segment 1 (Sem→B): 900 / 90  = 10.0 s
+			//   total = 20.0 s
+			// A wrong separator passed to the cost function would either throw (wrong end) or
+			// produce a different value (e.g. 600/120 = 5.0 or 900/180 = 5.0).
+			val ctx = asymmetricSpeedContext()
+			val finder = ctx.getRouteFinder()
+			val a = findInOut(ctx, "A")
+			val b = findInOut(ctx, "B")
+
+			val routes = finder.findRoutes(a, b, ctx, costFunction = PathCostFunctions.BY_TRAVEL_TIME)
+
+			assertThat(routes).isNotEmpty()
+			val route = routes.first()
+			assertThat(route.costBreakdown).hasSize(2)
+			assertThat(route.costBreakdown[0].cost).isEqualTo(10.0)
+			assertThat(route.costBreakdown[1].cost).isEqualTo(10.0)
+			assertThat(route.cost).isEqualTo(20.0)
 			assertThat(route.costBreakdown.sumOf { it.cost }).isEqualTo(route.cost)
 		}
 
