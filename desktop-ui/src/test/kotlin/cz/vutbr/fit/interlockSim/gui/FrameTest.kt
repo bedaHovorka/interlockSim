@@ -69,8 +69,8 @@ class FrameTest : AbstractFrameTestBase() {
 	@DisplayName("frame has correct initial size")
 	fun frameHasCorrectInitialSize() {
 		runOnEDT {
-			assertThat(frame.width).isEqualTo(800)
-			assertThat(frame.height).isEqualTo(600)
+			assertThat(frame.width).isEqualTo(1024)
+			assertThat(frame.height).isEqualTo(768)
 		}
 	}
 
