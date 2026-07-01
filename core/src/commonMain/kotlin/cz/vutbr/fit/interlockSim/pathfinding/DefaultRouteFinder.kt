@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.pathfinding
 
 import cz.vutbr.fit.interlockSim.context.NetworkState
 import cz.vutbr.fit.interlockSim.context.RouteFinder
-import cz.vutbr.fit.interlockSim.objects.cells.CellUtilities
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.paths.Route
@@ -35,37 +34,23 @@ class DefaultRouteFinder(
 		maxRoutes: Int,
 		costFunction: PathCostFunction
 	): List<Route> {
-		val start = normalize(from)
-		val target = normalize(to)
-
 		val results =
 			engine.findAllPaths(
-				start = start,
-				target = target,
+				start = from,
+				target = to,
 				maxPaths = maxRoutes,
 				costFunction = costFunction
 			)
-		val routes =
-			results.map { result ->
-				Route(
-					start = from,
-					target = to,
-					segments = result.sections,
-					cost = result.totalCost,
-					costBreakdown = buildBreakdown(result.sections, start, costFunction)
-				)
-			}
-		return routes
+		return results.map { result ->
+			Route(
+				start = from,
+				target = to,
+				segments = result.sections,
+				cost = result.totalCost,
+				costBreakdown = buildBreakdown(result.sections, from, costFunction)
+			)
+		}
 	}
-
-	/**
-	 * Normalize an InOut or DynamicInOut to its static [PathSeparator] reference.
-	 *
-	 * This keeps [RouteFinder] usable from both [cz.vutbr.fit.interlockSim.context.EditingContext]
-	 * (static objects) and [cz.vutbr.fit.interlockSim.context.SimulationContext]
-	 * (dynamic wrappers).
-	 */
-	private fun normalize(separator: PathSeparator): PathSeparator = CellUtilities.assertNodeCell(separator)
 
 	/**
 	 * Compute per-segment cost contributions by walking the sections in order.

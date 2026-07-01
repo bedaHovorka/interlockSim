@@ -108,6 +108,42 @@ object TestTopologies {
 		return context
 	}
 
+	/**
+	 * Linear A → Sem → B network with direction-dependent speed limits.
+	 *
+	 * Block1 (A→Sem): length=600m, maxSpeed from A = 60 m/s, maxSpeed from Sem = 120 m/s
+	 * Block2 (Sem→B): length=900m, maxSpeed from Sem = 90 m/s, maxSpeed from B = 180 m/s
+	 *
+	 * Expected BY_TRAVEL_TIME cost from A to B:
+	 *   Block1 = 600 / 60  = 10.0 s
+	 *   Block2 = 900 / 90  = 10.0 s
+	 *   Total  = 20.0 s
+	 *
+	 * Used to verify that [cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder.buildBreakdown]
+	 * passes the correct directional separator to the cost function for every segment.
+	 */
+	fun linearPathWithAsymmetricSpeeds(): EditingContext {
+		val context = DefaultEditingContext(100, 100)
+
+		val inA = InOut("A", false, Cell.SpatialType.HORIZONTAL)
+		val sem = RailSemaphore(false, Cell.SpatialType.HORIZONTAL)
+		val inB = InOut("B", true, Cell.SpatialType.HORIZONTAL)
+
+		context.putCell(Point(5, 5), inA)
+		context.putCell(Point(30, 5), sem)
+		context.putCell(Point(55, 5), inB)
+
+		// Asymmetric: different cost depending on which end the train enters from.
+		// maxSpeed1 applies when the train enters from end1; maxSpeed2 from end2.
+		val block1 = SimpleTrackBlock(inA, sem, 600.0, 60.0, 120.0)
+		val block2 = SimpleTrackBlock(sem, inB, 900.0, 90.0, 180.0)
+
+		context.joinCells(Point(5, 5), Point(30, 5), block1)
+		context.joinCells(Point(30, 5), Point(55, 5), block2)
+
+		return context
+	}
+
 	fun deadEndSingleInOut(): EditingContext =
 		TestContextBuilder()
 			.withInOut("A", 1, 1, true)

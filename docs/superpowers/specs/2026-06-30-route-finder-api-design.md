@@ -176,12 +176,9 @@ class DefaultRouteFinder(
         maxRoutes: Int,
         costFunction: PathCostFunction
     ): List<Route> {
-        val start = normalize(from)
-        val target = normalize(to)
-
         return engine.findAllPaths(
-            start = start,
-            target = target,
+            start = from,
+            target = to,
             maxPaths = maxRoutes,
             costFunction = costFunction
         ).map { result ->
@@ -190,13 +187,10 @@ class DefaultRouteFinder(
                 target = to,
                 segments = result.sections,
                 cost = result.totalCost,
-                costBreakdown = buildBreakdown(result.sections, start, costFunction)
+                costBreakdown = buildBreakdown(result.sections, from, costFunction)
             )
         }
     }
-
-    private fun normalize(separator: PathSeparator): PathSeparator =
-        CellUtilities.assertNodeCell(separator)
 
     private fun buildBreakdown(
         sections: List<TrackSection>,
@@ -249,7 +243,7 @@ EditingContext.getRouteFinder() / SimulationEnvironment.getRouteFinder()
        v
 DefaultRouteFinder.findRoutes(from, to, state)
        |
-       |-- normalizes InOut / DynamicInOut to static PathSeparator
+       |-- from/to are static InOut references (simulation callers extract staticRef)
        |
        v
 AutomaticPathFindingService.findAllPaths(start, target, costFunction)
@@ -291,8 +285,17 @@ This section is documented explicitly because the behavior must be predictable f
 
 ### 5.4 Dynamic wrappers
 
-- Simulation callers pass `DynamicInOut` instances.
-- `DefaultRouteFinder.normalize` delegates to `CellUtilities.assertNodeCell`, which extracts the static `InOut` reference. This matches the normalization already used by `DefaultAutomaticPathFindingService` and ensures map equality works across static/dynamic contexts.
+- `RouteFinder.findRoutes` accepts only static `InOut` parameters; `DynamicInOut` does **not** extend
+  `InOut` and cannot be passed directly.
+- Simulation callers that hold `DynamicInOut` references must extract the static `InOut` via
+  `dynamicInOut.staticRef` before calling `findRoutes`. The simulation-compatibility test in
+  `RouteFinderTest` demonstrates this pattern:
+  ```kotlin
+  val routes = finder.findRoutes(dynamicA.staticRef, dynamicB.staticRef, ctx)
+  ```
+- `DefaultRouteFinder` passes `from`/`to` directly to `AutomaticPathFindingService.findAllPaths`;
+  no normalization step is needed because the engine already operates on static `PathSeparator`
+  instances and `InOut` is always a static object.
 
 ### 5.5 `NetworkState` is null or unsupported
 
