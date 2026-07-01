@@ -66,7 +66,6 @@ class TwoTrainLoopTest : KoinTestBase() {
 
 	/** Single validation run that records block transitions and basic metrics. */
 	private fun runOnce(runIndex: Int): RunResult {
-		System.err.println("runOnce start $runIndex")
 		val transitions = mutableListOf<String>()
 		val listener =
 			ContextPropertyChangeListener { event ->
