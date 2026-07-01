@@ -182,10 +182,47 @@ interface TopologyNavigator {
 	 * - Foundation for Phase 2: PathReservationService will filter by availability
 	 *
 	 * @see getNextTrackSection
+	 * @see findCandidatePaths
 	 */
 	fun findAllTopologicalPaths(
 		start: PathSeparator,
 		target: PathSeparator,
 		maxDepth: Int = 100
 	): List<List<TrackSection>>
+
+	/**
+	 * Find all topologically possible paths with a pre-computed cost breakdown.
+	 *
+	 * Equivalent to [findAllTopologicalPaths] but wraps each result in a
+	 * [PathCandidate] that exposes:
+	 * - [PathCandidate.switchMovementCount] — number of [cz.vutbr.fit.interlockSim.objects.cells.RailSwitch]
+	 *   separators traversed (including start / target when they are switches).
+	 * - [PathCandidate.conflictRiskWeight] — hook for the dispatcher layer; always `0.0`
+	 *   at the static topology level; a dynamic layer (e.g. PathReservationService) can
+	 *   produce an updated copy via [PathCandidate.copy].
+	 *
+	 * ## Usage
+	 *
+	 * ```kotlin
+	 * val candidates = navigator.findCandidatePaths(entry, exit)
+	 *
+	 * // Rank by fewest switch movements, then by conflict risk
+	 * val ranked = candidates
+	 *     .sortedWith(compareBy({ it.switchMovementCount }, { it.conflictRiskWeight }))
+	 * ```
+	 *
+	 * @param start    The starting path separator (typically InOut or switch).
+	 * @param target   The target path separator to reach.
+	 * @param maxDepth Maximum search depth to prevent infinite loops (default: 100).
+	 * @return List of [PathCandidate]; empty when no topological path exists.
+	 *
+	 * @see findAllTopologicalPaths
+	 * @see PathCandidate
+	 * @since Issue #567
+	 */
+	fun findCandidatePaths(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int = 100
+	): List<PathCandidate>
 }

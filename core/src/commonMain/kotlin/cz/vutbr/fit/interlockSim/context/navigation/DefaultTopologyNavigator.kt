@@ -360,6 +360,53 @@ class DefaultTopologyNavigator(
 	}
 
 	/**
+	 * Find all topologically possible paths with pre-computed cost breakdown.
+	 *
+	 * Delegates to [findAllTopologicalPaths] and wraps each result in a [PathCandidate]
+	 * whose [PathCandidate.switchMovementCount] is computed by traversing the section list
+	 * from [start] and counting every [RailSwitch] separator encountered (including start
+	 * and target when they are switches).
+	 *
+	 * [PathCandidate.conflictRiskWeight] is always `0.0` at this static layer; a dynamic
+	 * layer can produce updated copies via [PathCandidate.copy].
+	 */
+	override fun findCandidatePaths(
+		start: PathSeparator,
+		target: PathSeparator,
+		maxDepth: Int
+	): List<PathCandidate> =
+		findAllTopologicalPaths(start, target, maxDepth).map { sections ->
+			PathCandidate(
+				sections = sections,
+				switchMovementCount = countSwitchMovements(start, sections)
+			)
+		}
+
+	/**
+	 * Count the number of [RailSwitch] separators traversed in a path.
+	 *
+	 * Walks from [start] through [sections] using [cz.vutbr.fit.interlockSim.objects.core.StaticTrack.getSecondEnd]
+	 * and increments the counter for each separator that resolves to a [RailSwitch]
+	 * (dynamic wrappers are unwrapped via [CellUtilities.assertNodeCell]).
+	 *
+	 * @param start    The first separator of the path (before any section).
+	 * @param sections The ordered list of track sections constituting the path.
+	 * @return Number of [RailSwitch] separators in the path (≥ 0).
+	 */
+	private fun countSwitchMovements(
+		start: PathSeparator,
+		sections: List<TrackSection>
+	): Int {
+		var count = if (CellUtilities.assertNodeCell(start) is RailSwitch) 1 else 0
+		var currentSeparator: PathSeparator = start
+		for (section in sections) {
+			currentSeparator = section.getSecondEnd(currentSeparator)
+			if (CellUtilities.assertNodeCell(currentSeparator) is RailSwitch) count++
+		}
+		return count
+	}
+
+	/**
 	 * Helper method to get segment for a location based on current block direction.
 	 *
 	 * Extracted from DefaultSimulationContext to support getNextTrackBlock.
