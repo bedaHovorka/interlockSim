@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<!DOCTYPE net>
+<!--
+  Fixture: parallel-routes.xml
+  Purpose: Minimal network with exactly two routes from InOut A to InOut B,
+           used by RouteSegmentVerificationTest (Goal 2 SP6, Issue #598).
+
+  Topology:
+                     sem1 (15,10)
+                    /             \
+  A(5,10) -> swA(10,10)           swB(20,10) -> B(25,10)
+                    \             /
+                     sem2 (15,13)
+
+  Route k1 (main, CHEAPER):  A -> swA -> sem1 -> swB -> B
+    Segment lengths : 100 + 100 + 100 + 100 = 400 m
+    BY_ELEMENT_COUNT: 4
+    BY_LENGTH       : 400.0
+
+  Route k2 (branch, COSTLIER): A -> swA -> sem2 -> swB -> B
+    Segment lengths : 100 + 300 + 300 + 100 = 800 m
+    BY_ELEMENT_COUNT: 4
+    BY_LENGTH       : 800.0
+
+  Switch types and segment usage:
+    swA (SIMPLE_RIGHT_FALSE, HORIZONTAL) - merging at A (W), main F (E), branch G (SE)
+      A(5,10) -> swA via A segment
+      swA     -> sem1 via F segment  (east, same row)
+      swA     -> sem2 via G segment  (SE, row +3)
+    swB (SIMPLE_LEFT_TRUE, HORIZONTAL)  - merging at F (E), main A (W), branch D (SW)
+      sem1    -> swB via A segment  (west, same row)
+      sem2    -> swB via D segment  (SW, row +3)
+      swB     -> B   via F segment  (east)
+-->
+<net X="100" Y="100">
+	<!-- Entry/exit points -->
+	<InOut X="5"  Y="10" SpatialType="HORIZONTAL" orientation="false" name="A"/>
+	<InOut X="25" Y="10" SpatialType="HORIZONTAL" orientation="true"  name="B"/>
+
+	<!-- Diverging switch: splits traffic to k1 (main) or k2 (branch) -->
+	<RailSwitch X="10" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_RIGHT_FALSE" name="swA"/>
+
+	<!-- Route k1: upper/main track (sem1, 100 m each side of swA/swB) -->
+	<RailSemaphore X="15" Y="10" SpatialType="HORIZONTAL" orientation="true" name="sem1"/>
+
+	<!-- Route k2: lower/branch track (sem2, 300 m each side of swA/swB) -->
+	<RailSemaphore X="15" Y="13" SpatialType="HORIZONTAL" orientation="true" name="sem2"/>
+
+	<!-- Converging switch: merges k1 and k2 back to single exit -->
+	<RailSwitch X="20" Y="10" SpatialType="HORIZONTAL" Type="SIMPLE_LEFT_TRUE" name="swB"/>
+
+	<!-- Approach track: A -> swA (100 m) -->
+	<SimpleTrackBlock fromX="5"  fromY="10" toX="10" toY="10"
+	                  fromSegment="F" toSegment="A"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- k1 entry leg: swA -> sem1 via main (F) segment (100 m) -->
+	<SimpleTrackBlock fromX="10" fromY="10" toX="15" toY="10"
+	                  fromSegment="F" toSegment="A"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- k2 entry leg: swA -> sem2 via branch (G) segment (300 m) -->
+	<SimpleTrackBlock fromX="10" fromY="10" toX="15" toY="13"
+	                  fromSegment="G" toSegment="A"
+	                  length="300.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+
+	<!-- k1 exit leg: sem1 -> swB via main (A) segment (100 m) -->
+	<SimpleTrackBlock fromX="15" fromY="10" toX="20" toY="10"
+	                  fromSegment="F" toSegment="A"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+
+	<!-- k2 exit leg: sem2 -> swB via branch (D) segment (300 m) -->
+	<SimpleTrackBlock fromX="15" fromY="13" toX="20" toY="10"
+	                  fromSegment="F" toSegment="D"
+	                  length="300.0" maxSpeedfrom="20.0" maxSpeedto="20.0"/>
+
+	<!-- Exit track: swB -> B (100 m) -->
+	<SimpleTrackBlock fromX="20" fromY="10" toX="25" toY="10"
+	                  fromSegment="F" toSegment="A"
+	                  length="100.0" maxSpeedfrom="24.0" maxSpeedto="24.0"/>
+</net>

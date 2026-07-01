@@ -81,8 +81,8 @@ import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
  * @see SimulationProcessFactory
  * @since 2026-01 (Issue #94)
  */
-@Suppress("TooManyFunctions", "ComplexInterface") // Facade for simulation subsystems; splitting would hurt usability
-interface SimulationEnvironment {
+@Suppress("TooManyFunctions", "ComplexInterface")
+interface SimulationEnvironment : NetworkState {
 	// ========================================
 	// Network Query Operations
 	// ========================================
@@ -229,6 +229,31 @@ interface SimulationEnvironment {
 	 * @since Issue #296 (ShuntingLoop refactoring)
 	 */
 	fun getPathReservationService(): cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+
+	/**
+	 * Get the automatic path finding service for static Dijkstra-based route search.
+	 *
+	 * The service computes shortest and all-topological paths from a start [PathSeparator]
+	 * to a target [PathSeparator] without consulting dynamic reservation state. Useful for
+	 * dispatcher logic that needs to know which routes exist before attempting reservation.
+	 *
+	 * @return AutomaticPathFindingService scoped to this simulation context
+	 * @see cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+	 */
+	fun getAutomaticPathFindingService(): cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+
+	/**
+	 * Get the route finder for automatic route planning between InOut elements.
+	 *
+	 * The returned [RouteFinder] is scoped to this simulation context. In this slice
+	 * it performs purely topological search; future slices will consult the supplied
+	 * [NetworkState] for dynamic constraints.
+	 *
+	 * @return RouteFinder instance for this simulation context
+	 * @see RouteFinder
+	 * @see NetworkState
+	 */
+	fun getRouteFinder(): cz.vutbr.fit.interlockSim.context.RouteFinder
 
 	// ========================================
 	// Grid and Graph Access

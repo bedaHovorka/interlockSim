@@ -186,6 +186,12 @@ class Train :
 				separatorAction(where, current, next)
 
 				onNext = true
+				// kDisco 0.6.0 renamed Variable.isActive()/Continuous.isActive() (which returned
+				// `_pred != null` = "in the active integration list") to isStarted(). The Process
+				// base class now owns isActive() with a different meaning (process lifecycle
+				// RUNNING/SCHEDULED), so isStarted() is the faithful equivalent here — it asserts
+				// the position Variable and the pv SimpleIntegration (Continuous) are both in
+				// their respective active lists and thus being integrated before we advance.
 				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
@@ -878,7 +884,7 @@ class Train :
 
 		try {
 			val topologyNavigator = env.getTopologyNavigator()
-			
+
 			// Find all topologically possible paths between InOuts
 			val paths =
 				topologyNavigator.findAllTopologicalPaths(
@@ -886,19 +892,19 @@ class Train :
 					target = outOut,
 					maxDepth = 100
 				)
-			
+
 			requireSimulation(paths.isNotEmpty()) {
 				"Train length validation failed: No route exists between " +
 					"InOut '${inOut.name}' and InOut '${outOut.name}'. " +
 					"Railway network must provide at least one path between entry and exit points."
 			}
-			
+
 			// Calculate distance for each path and find the shortest using idiomatic Kotlin
 			val shortestPathDistance =
 				paths.minOf { path ->
 					path.sumOf { section -> section.length() }
 				}
-			
+
 			// Validate train length against shortest path
 			requireSimulation(trainLength <= shortestPathDistance) {
 				"Train length ($trainLength m) exceeds track distance ($shortestPathDistance m) " +
@@ -906,7 +912,7 @@ class Train :
 					"Minimum track length required: $trainLength m, available: $shortestPathDistance m. " +
 					"Reduce train length or increase track distance to resolve this issue."
 			}
-			
+
 			logger.debug {
 				"Train length validation passed: train=$trainLength m, " +
 					"shortest path=$shortestPathDistance m (${inOut.name} → ${outOut.name})"

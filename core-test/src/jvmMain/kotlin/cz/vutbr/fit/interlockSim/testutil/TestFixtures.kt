@@ -45,6 +45,14 @@ object TestFixtures {
 
 	fun loadRudyUjezdXml(): InputStream = fixture("rudyUjezd.xml")
 
+	/**
+	 * Two-parallel-route network (Issue #598 Goal 2 SP6).
+	 *
+	 * Minimal diamond topology: A → [swA] → {k1 (400 m) | k2 (800 m)} → [swB] → B.
+	 * Exactly two routes exist; k1 is cheapest by length and by element count.
+	 */
+	fun loadParallelRoutesXml(): InputStream = fixture("parallel-routes.xml")
+
 	fun loadLegacyNetworkNoNamesXml(): InputStream = fixture("legacy-network-no-names.xml")
 
 	fun loadValidSpecialCharsNamesXml(): InputStream = fixture("valid-special-chars-names.xml")

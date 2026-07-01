@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.di
 import cz.vutbr.fit.interlockSim.context.DefaultEditingContext
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.GridTransformer
+import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.DefaultTopologyNavigator
@@ -21,6 +22,9 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
+import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
+import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -122,6 +126,18 @@ val navigationModule: Module =
 						?: throw IllegalStateException("DefaultEditingContext source not found in scope")
 				DefaultTopologyNavigator(context)
 			}
+
+			// AutomaticPathFindingService: scoped to editing context
+			// Requires DefaultTopologyNavigator (concrete) for internal graph-expansion primitive
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			// RouteFinder: scoped to editing context
+			// Builds on AutomaticPathFindingService (same scope)
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
 		}
 
 		// Define simulationScope for per-context lifecycle management
@@ -156,7 +172,7 @@ val navigationModule: Module =
 			}
 
 			// PathReservationService: scoped to this simulation context
-			// Navigator, registry, and pathInfoBuilder are injected from the same scope (shared instances)
+			// Navigator, registry, pathInfoBuilder and routeFinder are injected from the same scope (shared instances)
 			scoped<PathReservationService> {
 				val context =
 					getSource<DefaultSimulationContext>()
@@ -164,7 +180,8 @@ val navigationModule: Module =
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
-				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
+				val routeFinder: RouteFinder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder, routeFinder)
 			}
 
 			// TrainNavigationService: scoped to this simulation context
@@ -175,6 +192,18 @@ val navigationModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				val registry: PathReservationRegistry = get()
 				DefaultTrainNavigationService(context, registry)
+			}
+
+			// AutomaticPathFindingService: scoped to simulation context
+			// Requires DefaultTopologyNavigator (concrete) for internal graph-expansion primitive
+			scoped<AutomaticPathFindingService> {
+				DefaultAutomaticPathFindingService(get<TopologyNavigator>() as DefaultTopologyNavigator)
+			}
+
+			// RouteFinder: scoped to simulation context
+			// Builds on AutomaticPathFindingService (same scope)
+			scoped<RouteFinder> {
+				DefaultRouteFinder(get<AutomaticPathFindingService>())
 			}
 		}
 	}
