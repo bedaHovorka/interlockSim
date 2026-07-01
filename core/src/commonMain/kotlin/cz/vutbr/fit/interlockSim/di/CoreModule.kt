@@ -172,7 +172,7 @@ val navigationModule: Module =
 			}
 
 			// PathReservationService: scoped to this simulation context
-			// Navigator, registry, and pathInfoBuilder are injected from the same scope (shared instances)
+			// Navigator, registry, pathInfoBuilder and routeFinder are injected from the same scope (shared instances)
 			scoped<PathReservationService> {
 				val context =
 					getSource<DefaultSimulationContext>()
@@ -180,7 +180,8 @@ val navigationModule: Module =
 				val navigator: TopologyNavigator = get()
 				val registry: PathReservationRegistry = get()
 				val pathInfoBuilder: PathInfoBuilder = get()
-				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder)
+				val routeFinder: RouteFinder = get()
+				DefaultPathReservationService(navigator, context, registry, pathInfoBuilder, routeFinder)
 			}
 
 			// TrainNavigationService: scoped to this simulation context
