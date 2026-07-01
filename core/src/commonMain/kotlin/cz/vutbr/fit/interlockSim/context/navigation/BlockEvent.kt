@@ -55,4 +55,28 @@ sealed class BlockEvent {
 		override val block: DynamicTrackBlock,
 		override val time: Double
 	) : BlockEvent()
+
+	/**
+	 * A reservation conflict was detected: [trainId] attempted to use [block]
+	 * that is already held by [conflictingTrainId].
+	 *
+	 * Emitted by [DefaultPathReservationService] when:
+	 * - [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict]
+	 *   is returned (registry-level race), or
+	 * - [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked]
+	 *   is about to be returned and a blocking owner is identified.
+	 *
+	 * Consumed by
+	 * [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * which re-emits the conflict as a [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.ReservationConflict]
+	 * after applying a deduplication window.
+	 *
+	 * @since Issue #612 (Goal 3 SP2)
+	 */
+	data class ReservationConflictDetected(
+		override val block: DynamicTrackBlock,
+		val trainId: String,
+		val conflictingTrainId: String,
+		override val time: Double
+	) : BlockEvent()
 }

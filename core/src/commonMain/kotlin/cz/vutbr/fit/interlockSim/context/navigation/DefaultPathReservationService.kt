@@ -150,6 +150,10 @@ class DefaultPathReservationService(
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
+		// Tracks the first blocked (block, owningTrain) pair across all candidate paths.
+		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
+		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
+
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
@@ -197,6 +201,8 @@ class DefaultPathReservationService(
 
 			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
 			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
+				// Capture a blocked (block, owner) pair for the AllPathsBlocked conflict warning.
+				firstBlockedConflict = findFirstBlockedConflict(forwardBlocks, trainId)
 				continue
 			}
 
@@ -355,6 +361,15 @@ class DefaultPathReservationService(
 						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}"
 					}
 					rollbackReservation(start, blocks)
+					val simTime = currentSimulationTime()
+					emitCustom(
+						BlockEvent.ReservationConflictDetected(
+							block = result.conflictingBlock,
+							trainId = trainId,
+							conflictingTrainId = result.existingOwner,
+							time = simTime
+						)
+					)
 					PathReservationService.ReservationResult.Conflict(
 						result.conflictingBlock,
 						result.existingOwner
@@ -363,8 +378,41 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// All paths tried, all were blocked
+		// All paths tried, all were blocked.
+		// Emit a ReservationConflictDetected event if we found a blocking train during the search.
+		firstBlockedConflict?.let { (blockedBlock, owner) ->
+			emitCustom(
+				BlockEvent.ReservationConflictDetected(
+					block = blockedBlock,
+					trainId = trainId,
+					conflictingTrainId = owner,
+					time = currentSimulationTime()
+				)
+			)
+		}
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
+	}
+
+	/**
+	 * Find the first block in [blocks] that is not free and not owned by [trainId],
+	 * and return it paired with its owning train ID.
+	 *
+	 * Returns `null` when no such block exists (all blocks are free or owned by [trainId]).
+	 *
+	 * Extracted from [reservePath] to keep that method within the cyclomatic-complexity budget.
+	 *
+	 * @since Issue #612 (Goal 3 SP2)
+	 */
+	private fun findFirstBlockedConflict(
+		blocks: List<DynamicTrackBlock>,
+		trainId: String
+	): Pair<DynamicTrackBlock, String>? {
+		val blockedBlock =
+			blocks.firstOrNull { block ->
+				block.getState() != TrackFacility.State.FREE && block.trainName != trainId
+			} ?: return null
+		val owner = registry.getOwner(blockedBlock) ?: blockedBlock.trainName ?: return null
+		return Pair(blockedBlock, owner)
 	}
 
 	/**
