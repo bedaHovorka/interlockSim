@@ -113,18 +113,21 @@ RUN ls -lh /build/interlockSim/desktop-ui/build/libs/interlockSim.jar && \
 # ============================================
 # Stage 1.5: Test runner (separate from app image build)
 # ============================================
-# Build and run this target to execute the full test suite independently
-# of the app image:
+# Build this target to execute the full test suite independently of the
+# app image. Tests run DURING the image build (there is no runtime test
+# entry point -- BuildKit cache mounts and secrets only exist at build time):
 #   docker compose --profile test build test
-#   docker compose --profile test run --rm test
 #
-# This stage extends the compiled `builder` image so no recompilation is
-# needed. Tests run as the non-root `builder` user (UID 1001), which is
-# required for filesystem-permission tests (root bypasses DAC checks).
+# This stage extends the `builder` image, reusing its dependency cache and
+# main-source compilation; test sources and the Kotlin/Native target are
+# compiled here. Tests run as the non-root `builder` user (UID 1001), which
+# is required for filesystem-permission tests (root bypasses DAC checks).
 FROM builder AS test-runner
 
-# Layer T1: Run the full test suite using the compiled sources and cached
-# Gradle dependencies from the builder stage.
+# Layer T1: Run the full test suite and quality gates using the compiled
+# sources and cached Gradle dependencies from the builder stage.
+# `check` covers what the old `build`-based Layer 5 enforced: unit tests,
+# detekt, ktlintCheck, and :core:checkCoreCommonMainPurity.
 RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
@@ -132,7 +135,7 @@ RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=100
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
     GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
-    ./gradlew test integrationTest :core:allTests --no-daemon --warning-mode=summary
+    ./gradlew check integrationTest :core:allTests --no-daemon --warning-mode=summary
 
 # ============================================
 # Stage 2: Runtime with JRE and X11 support

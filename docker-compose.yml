@@ -17,9 +17,9 @@
 #        docker compose build app        # Build app (no tests; kDisco from GitHub Packages)
 #        docker compose build text       # Build LaTeX thesis
 #
-#        # Run test suite (separate from app image build):
-#        docker compose --profile test build test   # Build test image (runs tests during build)
-#        docker compose --profile test run --rm test  # Re-run from cached test image
+#        # Run test suite (separate from app image build; tests execute
+#        # DURING the image build -- there is no runtime test entry point):
+#        docker compose --profile test build test
 #
 #        # Run GUI editor (requires X11):
 #        docker compose up app
@@ -85,14 +85,15 @@ services:
     # stdin_open: true
     # tty: true
 
-  # Run the full test suite in a dedicated container (separate from the app image build).
+  # Run the full test suite in a dedicated image build (separate from the app image).
+  # Tests and quality gates execute DURING `build` -- BuildKit cache mounts and
+  # secrets only exist at build time, so there is no runtime test entry point.
   # Tests run as the non-root `builder` user so filesystem-permission tests work.
   # This service is gated behind the "test" profile so it is never built or started
   # by a plain `docker compose up` or `docker compose up --build`.
   #
   # Usage:
-  #   docker compose --profile test build test   # Build test image (runs tests during build)
-  #   docker compose --profile test run --rm test  # Re-run from existing image
+  #   docker compose --profile test build test   # Runs tests; fails if the suite fails
   test:
     profiles: ["test"]
     build:
