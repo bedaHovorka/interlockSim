@@ -68,6 +68,7 @@ val isLinuxHost: Boolean by gradle.extra
 // linuxX64 target added for native compilation verification.
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 kotlin {
+    jvmToolchain(21)
     applyDefaultHierarchyTemplate()
     jvm {
         compilations.all {
