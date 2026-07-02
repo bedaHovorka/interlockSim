@@ -35,6 +35,20 @@ class InOutWorker(
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * Simulation-time delay before retrying a reservation that returned AllPathsBlocked.
+		 *
+		 * Required to prevent a wall-clock livelock (Issue #685): kDisco's `waitUntil`
+		 * returns immediately without suspending when the condition is already true.
+		 * `pathFree` (isPathToAnyNextSemaphoreAvailable) only checks block FREE-ness,
+		 * while the actual reservation can still fail (e.g. switch locks held by another
+		 * train, next-block validation). When the two disagree, a bare `continue` back
+		 * to `waitUntil(pathFree)` spins forever at a fixed simulation time. Holding
+		 * before the retry guarantees simulation time advances so other processes can
+		 * run and release the conflicting resources.
+		 */
+		private const val RETRY_HOLD_SECONDS = 1.0
 	}
 
 	private val queqe = Head()
@@ -81,6 +95,7 @@ class InOutWorker(
 			val firstLink = first as Link
 			logger.debug { "InOutWorker ${inOut.name} path is now free, reserving for train" }
 
+			var allPathsBlocked = false
 			try {
 				// Use integrated path setup like working version
 				// This reserves blocks AND sets up semaphore signals in one call
@@ -119,8 +134,7 @@ class InOutWorker(
 								"All ${result.attemptedPaths} path(s) blocked for train $trainId, " +
 								"will retry"
 						}
-						// Continue waiting (waitUntil will be called again in next iteration)
-						continue
+						allPathsBlocked = true
 					}
 					is PathReservationService.ReservationResult.Conflict -> {
 						val errorMsg =
@@ -139,6 +153,16 @@ class InOutWorker(
 				logger.error(e) { "InOutWorker ${inOut.name} path setup failed with exception" }
 				env.errorStop(e)
 				return
+			}
+			if (allPathsBlocked) {
+				// LIVELOCK GUARD (Issue #685): pathFree may still test true (it only
+				// checks block FREE-ness, not switch locks / next-block validation),
+				// in which case waitUntil() would return immediately and this loop
+				// would spin forever at the same simulation time, hanging the run.
+				// Hold first so simulation time advances and other processes can
+				// release the conflicting resources.
+				hold(RETRY_HOLD_SECONDS)
+				continue
 			}
 			env.report("Path reserved for $firstLink", inOut, ReportType.NODE_EVENTS)
 
