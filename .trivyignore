@@ -1,0 +1,10 @@
+# Trivy Vulnerability Ignore File
+# ================================
+# This file tells Trivy to skip specific CVEs during image scanning.
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+
+# Alpine busybox - wget CRLF injection (MEDIUM severity, CVSS 6.5)
+# Affects: apk / alpine/busybox / 1.37.0-r14
+# This CVE is currently unfixable on Alpine 3.21 as no patched version has been backported.
+# The fast-sim container runs a static native CLI and does not use wget at runtime, so risk is minimal.
+CVE-2025-60876
