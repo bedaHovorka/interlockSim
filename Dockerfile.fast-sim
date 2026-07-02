@@ -82,9 +82,9 @@ USER builder
 # never visible in image history or in BuildKit's resolved RUN command output.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -101,9 +101,9 @@ RUN mkdir -p /build/desktop-ui/src/main/kotlin
 
 # Layer 5: Build release native binary
 ENV GRADLE_OPTS="-Xmx2g"
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \

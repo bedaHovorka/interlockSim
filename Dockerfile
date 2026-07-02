@@ -76,9 +76,9 @@ USER builder
 # downloaded artifacts warm. The cache mounts are owned by the builder user.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount and GitHub Packages authentication.
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -96,9 +96,9 @@ COPY --chown=builder:builder core-test/src/ /build/interlockSim/core-test/src/
 # `test-runner` stage below. This means `docker compose build app` always
 # produces the image even when a test suite is temporarily broken, which
 # mirrors how CI works (compile/assemble and test are separate steps).
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -128,9 +128,9 @@ FROM builder AS test-runner
 # sources and cached Gradle dependencies from the builder stage.
 # `check` covers what the old `build`-based Layer 5 enforced: unit tests,
 # detekt, ktlintCheck, and :core:checkCoreCommonMainPurity.
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
