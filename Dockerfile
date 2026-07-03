@@ -17,10 +17,6 @@
 
 # syntax=docker/dockerfile:1.4
 
-# Global build args (resolved before any stage)
-# BUILDKIT_INLINE_CACHE embeds cache metadata in the image for use with --cache-from.
-ARG BUILDKIT_INLINE_CACHE
-
 # ============================================
 # Stage 1: Build interlockSim with Gradle
 # ============================================
