@@ -8,7 +8,7 @@
 #      Railway Interlocking Simulator
 #
 #      fast-sim: native linuxX64 CLI binary
-#      Multi-stage build: Ubuntu 24.04 LTS (Noble) builder → Alpine runtime
+#      Multi-stage build: Ubuntu 24.04 LTS (Noble) builder → Debian 12 slim runtime
 #
 #      Usage:
 #        docker compose build fast-sim
@@ -21,7 +21,8 @@
 # Eclipse Temurin provides JDK 21 on Ubuntu 24.04 LTS (Noble).
 # We pin to the -noble tag instead of the rolling 21-jdk tag because the
 # rolling tag now resolves to Ubuntu 26.04 (Resolute), whose libxml2 has
-# SONAME libxml2.so.16 — incompatible with alpine:3.21's libxml2.so.2.
+# SONAME libxml2.so.16 — incompatible with debian:12-slim's libxml2.so.2
+# at runtime (the kexe records the SONAME of the libxml2 it was linked against).
 FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 
 # GitHub Packages authentication is provided at build time via BuildKit secrets
@@ -115,33 +116,30 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # ============================================
 # Stage 2: Minimal runtime image
 # ============================================
-# Alpine Linux base (~8MB) instead of Ubuntu/Debian slim (~85MB+ with libxml2+libicu).
-# Fixes #421: image exceeded 120MB target because Debian/Ubuntu's libxml2
-# depends on libicu (~30MB). Alpine's libxml2 has no ICU dependency.
-# The builder is pinned to Ubuntu 24.04 LTS (Noble) so its libxml2.so.2
-# SONAME matches Alpine 3.21's libxml2 at runtime.
-FROM --platform=linux/amd64 alpine:3.21
+# glibc base is REQUIRED here (Issue #685): Kotlin/Native linuxX64 binaries
+# are linked against glibc, and running them on Alpine's musl libc through
+# the gcompat shim causes an intermittent all-threads futex deadlock in the
+# Kotlin/Native runtime (GC/thread-parking handshake) — fast-sim hung at a
+# random point in ~20-30% of runs. Reproduced with both image-built and
+# host-built binaries on alpine:3.21+gcompat; zero hangs on any glibc base.
+# Do NOT switch this stage back to Alpine/musl.
+# debian:12-slim + libxml2 (which pulls libicu) stays within the 120MB
+# image-size target from #421.
+FROM --platform=linux/amd64 debian:12-slim
 
-# Upgrade all base packages (such as busybox or musl) to their latest available
-# patch releases inside Alpine 3.21 to pick up any backported upstream patches.
-# Note: CVE-2025-60876 (wget CRLF injection in busybox) is currently marked as
-# unfixable by Alpine for 3.21 as of 2026-06-30. It is suppressed for Trivy scans
-# via the .trivyignore file. (Docker Scout has no ignore-file mechanism; if Scout
-# suppression is ever needed, use a VEX statement or a Scout Dashboard exception.)
-# The container only runs a static native CLI and does not use wget at runtime,
-# so risk is minimal.
-RUN apk upgrade --no-cache \
-    && apk add --no-cache \
-    gcompat \
-    libgcc \
-    libxml2
+# Upgrade all base packages to their latest patch releases inside Debian 12
+# (bookworm) to pick up any backported upstream security patches.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends libxml2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Run the native binary as an unprivileged user for image hygiene.
-# Use UID/GID 1001 to avoid colliding with the base image's ubuntu group (1000).
+# Use UID/GID 1001 to avoid colliding with common host default UIDs (1000).
 ARG RUNTIME_UID=1001
 ARG RUNTIME_GID=1001
-RUN addgroup -g ${RUNTIME_GID} app \
-    && adduser -u ${RUNTIME_UID} -G app -s /bin/sh -D app
+RUN groupadd --gid ${RUNTIME_GID} app \
+    && useradd --uid ${RUNTIME_UID} --gid ${RUNTIME_GID} --shell /usr/sbin/nologin --create-home app
 
 # Copy native binary from builder
 COPY --chown=app:app --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \
