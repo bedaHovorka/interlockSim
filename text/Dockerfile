@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
@@ -11,8 +12,6 @@
 #
 #      LaTeX thesis compilation with Czech language tools
 #
-
-# syntax=docker/dockerfile:1.4
 
 # ============================================
 # Stage 1: Install TeX Live and Czech tools
