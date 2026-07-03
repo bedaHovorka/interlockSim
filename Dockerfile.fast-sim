@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
@@ -13,8 +14,6 @@
 #        docker compose build fast-sim
 #        docker compose run fast-sim example shuntingLoop 60
 #
-
-# syntax=docker/dockerfile:1.4
 
 # ============================================
 # Stage 1: Build native binary with Gradle

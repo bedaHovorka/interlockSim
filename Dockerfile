@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
@@ -14,8 +15,6 @@
 #      Dependency management: Gradle with Kotlin DSL
 #      Build system: Java 21 LTS with Eclipse Temurin
 #
-
-# syntax=docker/dockerfile:1.4
 
 # ============================================
 # Stage 1: Build interlockSim with Gradle
