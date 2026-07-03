@@ -190,9 +190,14 @@ COPY --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr
                     /app/resource/
 
 # Create artifacts directory, copy JAR for host extraction, and transfer
-# ownership to the app user so files are accessible at runtime.
+# ownership of /artifacts and /app to the app user so files are accessible
+# and writable at runtime. /app must be writable in the opt-in case
+# (RUNTIME_UID != 1000) where useradd sets --home-dir /app; without this
+# the app user cannot write caches/preferences to its own $HOME and
+# Swing/fontconfig may fail to persist.
 RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/ \
-    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /artifacts
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /artifacts \
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /app
 
 USER ${RUNTIME_UID}:${RUNTIME_GID}
 
