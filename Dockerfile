@@ -155,18 +155,31 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# The runtime stage runs as root, intentionally -- unlike the builder stage,
-# which runs as the non-root `builder` user. The split is deliberate:
-#   * The builder stage MUST be non-root: the test suite includes filesystem
-#     permission tests that are auto-skipped under root (e.g.
-#     @DisabledIfSystemProperty(matches = "root")), because root bypasses write
-#     permissions and cannot exercise them. Running tests as root would silently
-#     skip coverage.
-#   * The runtime stage only launches the app, so it has no such constraint, and
-#     root is required for GUI/X11 forwarding: the host X11 auth cookie is bind
-#     -mounted read-only (mode 0600, owned by the host user), so a non-root
-#     container user cannot read it and Swing fails with "Can't connect to X11".
-# See PR #620 (non-root build) and the X11 regression fix that followed.
+# The runtime stage runs as a non-root 'app' user whose UID/GID is set at
+# build time via RUNTIME_UID / RUNTIME_GID ARGs (default 1000/1000).
+# Passing the host user's UID/GID (e.g. via docker-compose.yml build args)
+# creates a container user whose UID matches the host user, so the 0600
+# X11 auth cookie bind-mounted from the host is readable without root.
+# This is the standard matching-UID pattern for X11-forwarding dev containers.
+# It is also safer than root: bind-mounted host directories (e.g.
+# ./artifacts/app) are written with host-user ownership, not root.
+#
+# The builder stage still MUST run as non-root because the test suite
+# includes filesystem-permission tests that are auto-skipped under root (e.g.
+# @DisabledIfSystemProperty(matches = "root")). Running tests as root would
+# silently skip coverage.
+# See PR #620 (non-root build) and issue #624 (matching-UID runtime).
+
+ARG RUNTIME_UID=1000
+ARG RUNTIME_GID=1000
+
+# Create a non-root 'app' group and user with the target UID/GID.
+# Guards handle the case where the base image already has an entry at that
+# UID/GID (e.g. the 'ubuntu' user at UID 1000 in eclipse-temurin:21-jre-noble).
+RUN (getent group ${RUNTIME_GID} || groupadd --gid ${RUNTIME_GID} app) \
+    && (getent passwd ${RUNTIME_UID} || useradd --uid ${RUNTIME_UID} --gid ${RUNTIME_GID} \
+        --no-create-home --home-dir /app --shell /bin/sh app)
+
 WORKDIR /app
 
 # Copy compiled uber JAR from builder stage (Gradle output)
@@ -176,8 +189,17 @@ COPY --from=builder /build/interlockSim/desktop-ui/build/libs/interlockSim.jar /
 COPY --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
-# Create artifacts directory and copy JAR for host extraction
-RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/
+# Create artifacts directory, copy JAR for host extraction, and transfer
+# ownership of /artifacts and /app to the app user so files are accessible
+# and writable at runtime. /app must be writable in the opt-in case
+# (RUNTIME_UID != 1000) where useradd sets --home-dir /app; without this
+# the app user cannot write caches/preferences to its own $HOME and
+# Swing/fontconfig may fail to persist.
+RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/ \
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /artifacts \
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /app
+
+USER ${RUNTIME_UID}:${RUNTIME_GID}
 
 # Environment variables for X11 forwarding
 ENV DISPLAY=:0
