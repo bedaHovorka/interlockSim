@@ -1,0 +1,7 @@
+# Trivy Vulnerability Ignore File
+# ================================
+# This file tells Trivy to skip specific CVEs during image scanning.
+# See: https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+
+# (No active suppressions. CVE-2025-60876 was removed 2026-07-03 when the
+# fast-sim runtime image moved from alpine:3.21 to debian:12-slim — Issue #685.)

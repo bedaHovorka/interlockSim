@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
@@ -15,8 +16,6 @@
 #      Build system: Java 21 LTS with Eclipse Temurin
 #
 
-# syntax=docker/dockerfile:1.4
-
 # ============================================
 # Stage 1: Build interlockSim with Gradle
 # ============================================
@@ -32,7 +31,7 @@ WORKDIR /build/interlockSim
 
 # Install git before COPY layers so this layer is cached independently of source changes.
 # Moving it here avoids re-downloading git on every gradle.properties / build.gradle.kts bump.
-RUN apt-get update && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends git libxml2-dev libicu-dev && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/include/unicode /usr/include/libxml2/unicode
 
 # Create an unprivileged builder user so the build and tests run as a normal user.
@@ -76,9 +75,9 @@ USER builder
 # downloaded artifacts warm. The cache mounts are owned by the builder user.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount and GitHub Packages authentication.
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -91,21 +90,51 @@ COPY --chown=builder:builder desktop-ui/src/ /build/interlockSim/desktop-ui/src/
 COPY --chown=builder:builder core/src/ /build/interlockSim/core/src/
 COPY --chown=builder:builder core-test/src/ /build/interlockSim/core-test/src/
 
-# Layer 5: Build and test with cache mount
-# Tests run during build (haltOnFailure), creating uber JAR with shadowJar
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2,uid=1001,gid=1001 \
+# Layer 5: Compile and package with cache mount (no tests).
+# Tests are decoupled from the app image build and run in the separate
+# `test-runner` stage below. This means `docker compose build app` always
+# produces the image even when a test suite is temporarily broken, which
+# mirrors how CI works (compile/assemble and test are separate steps).
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
     GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
-    ./gradlew clean build shadowJar --no-daemon --warning-mode=summary
+    ./gradlew clean shadowJar --no-daemon --warning-mode=summary
 
 # Verify JAR was created
 RUN ls -lh /build/interlockSim/desktop-ui/build/libs/interlockSim.jar && \
     echo "=== JAR Info ===" && \
     jar tf /build/interlockSim/desktop-ui/build/libs/interlockSim.jar | head -20
+
+# ============================================
+# Stage 1.5: Test runner (separate from app image build)
+# ============================================
+# Build this target to execute the full test suite independently of the
+# app image. Tests run DURING the image build (there is no runtime test
+# entry point -- BuildKit cache mounts and secrets only exist at build time):
+#   docker compose --profile test build test
+#
+# This stage extends the `builder` image, reusing its dependency cache and
+# main-source compilation; test sources and the Kotlin/Native target are
+# compiled here. Tests run as the non-root `builder` user (UID 1001), which
+# is required for filesystem-permission tests (root bypasses DAC checks).
+FROM builder AS test-runner
+
+# Layer T1: Run the full test suite and quality gates using the compiled
+# sources and cached Gradle dependencies from the builder stage.
+# `check` covers what the old `build`-based Layer 5 enforced: unit tests,
+# detekt, ktlintCheck, and :core:checkCoreCommonMainPurity.
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
+    --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
+    --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
+    GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token)" \
+    ./gradlew check integrationTest :core:allTests --no-daemon --warning-mode=summary
 
 # ============================================
 # Stage 2: Runtime with JRE and X11 support
@@ -114,7 +143,7 @@ FROM eclipse-temurin:21-jre-noble AS runner
 
 # Install X11 libraries for GUI support
 # Eclipse Temurin already includes Java 21 JRE
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     libxext6 \
     libxrender1 \
     libxtst6 \
@@ -125,18 +154,31 @@ RUN apt-get update && apt-get install -y \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# The runtime stage runs as root, intentionally -- unlike the builder stage,
-# which runs as the non-root `builder` user. The split is deliberate:
-#   * The builder stage MUST be non-root: the test suite includes filesystem
-#     permission tests that are auto-skipped under root (e.g.
-#     @DisabledIfSystemProperty(matches = "root")), because root bypasses write
-#     permissions and cannot exercise them. Running tests as root would silently
-#     skip coverage.
-#   * The runtime stage only launches the app, so it has no such constraint, and
-#     root is required for GUI/X11 forwarding: the host X11 auth cookie is bind
-#     -mounted read-only (mode 0600, owned by the host user), so a non-root
-#     container user cannot read it and Swing fails with "Can't connect to X11".
-# See PR #620 (non-root build) and the X11 regression fix that followed.
+# The runtime stage runs as a non-root 'app' user whose UID/GID is set at
+# build time via RUNTIME_UID / RUNTIME_GID ARGs (default 1000/1000).
+# Passing the host user's UID/GID (e.g. via docker-compose.yml build args)
+# creates a container user whose UID matches the host user, so the 0600
+# X11 auth cookie bind-mounted from the host is readable without root.
+# This is the standard matching-UID pattern for X11-forwarding dev containers.
+# It is also safer than root: bind-mounted host directories (e.g.
+# ./artifacts/app) are written with host-user ownership, not root.
+#
+# The builder stage still MUST run as non-root because the test suite
+# includes filesystem-permission tests that are auto-skipped under root (e.g.
+# @DisabledIfSystemProperty(matches = "root")). Running tests as root would
+# silently skip coverage.
+# See PR #620 (non-root build) and issue #624 (matching-UID runtime).
+
+ARG RUNTIME_UID=1000
+ARG RUNTIME_GID=1000
+
+# Create a non-root 'app' group and user with the target UID/GID.
+# Guards handle the case where the base image already has an entry at that
+# UID/GID (e.g. the 'ubuntu' user at UID 1000 in eclipse-temurin:21-jre-noble).
+RUN (getent group ${RUNTIME_GID} || groupadd --gid ${RUNTIME_GID} app) \
+    && (getent passwd ${RUNTIME_UID} || useradd --uid ${RUNTIME_UID} --gid ${RUNTIME_GID} \
+        --no-create-home --home-dir /app --shell /bin/sh app)
+
 WORKDIR /app
 
 # Copy compiled uber JAR from builder stage (Gradle output)
@@ -146,8 +188,17 @@ COPY --from=builder /build/interlockSim/desktop-ui/build/libs/interlockSim.jar /
 COPY --from=builder /build/interlockSim/desktop-ui/build/resources/main/cz/vutbr/fit/interlockSim/resource/ \
                     /app/resource/
 
-# Create artifacts directory and copy JAR for host extraction
-RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/
+# Create artifacts directory, copy JAR for host extraction, and transfer
+# ownership of /artifacts and /app to the app user so files are accessible
+# and writable at runtime. /app must be writable in the opt-in case
+# (RUNTIME_UID != 1000) where useradd sets --home-dir /app; without this
+# the app user cannot write caches/preferences to its own $HOME and
+# Swing/fontconfig may fail to persist.
+RUN mkdir -p /artifacts && cp /app/interlockSim.jar /artifacts/ \
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /artifacts \
+    && chown -R ${RUNTIME_UID}:${RUNTIME_GID} /app
+
+USER ${RUNTIME_UID}:${RUNTIME_GID}
 
 # Environment variables for X11 forwarding
 ENV DISPLAY=:0

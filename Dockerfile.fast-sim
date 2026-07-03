@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 #
 #      Brno University of Technology
 #      Faculty of Information Technology
@@ -7,14 +8,12 @@
 #      Railway Interlocking Simulator
 #
 #      fast-sim: native linuxX64 CLI binary
-#      Multi-stage build: Ubuntu 24.04 LTS (Noble) builder → Alpine runtime
+#      Multi-stage build: Ubuntu 24.04 LTS (Noble) builder → Debian 12 slim runtime
 #
 #      Usage:
 #        docker compose build fast-sim
 #        docker compose run fast-sim example shuntingLoop 60
 #
-
-# syntax=docker/dockerfile:1.4
 
 # ============================================
 # Stage 1: Build native binary with Gradle
@@ -22,7 +21,8 @@
 # Eclipse Temurin provides JDK 21 on Ubuntu 24.04 LTS (Noble).
 # We pin to the -noble tag instead of the rolling 21-jdk tag because the
 # rolling tag now resolves to Ubuntu 26.04 (Resolute), whose libxml2 has
-# SONAME libxml2.so.16 — incompatible with alpine:3.21's libxml2.so.2.
+# SONAME libxml2.so.16 — incompatible with debian:12-slim's libxml2.so.2
+# at runtime (the kexe records the SONAME of the libxml2 it was linked against).
 FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 
 # GitHub Packages authentication is provided at build time via BuildKit secrets
@@ -34,7 +34,7 @@ FROM --platform=linux/amd64 eclipse-temurin:21-jdk-noble AS builder
 # Install git and native build dependencies
 # libxml2-dev: cinterop headers for Kotlin/Native libxml2 bindings
 # libicu-dev: transitive dependency of libxml2-dev on Debian/Ubuntu
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     git \
     libxml2-dev \
     libicu-dev \
@@ -82,9 +82,9 @@ USER builder
 # never visible in image history or in BuildKit's resolved RUN command output.
 
 # Layer 3: Resolve dependencies with BuildKit cache mount
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -101,9 +101,9 @@ RUN mkdir -p /build/desktop-ui/src/main/kotlin
 
 # Layer 5: Build release native binary
 ENV GRADLE_OPTS="-Xmx2g"
-RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper,uid=1001,gid=1001 \
-    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2,uid=1001,gid=1001 \
+RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=fast-sim-gradle-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.gradle/wrapper,id=fast-sim-wrapper-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.m2/repository,id=fast-sim-m2-v2,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -116,32 +116,30 @@ RUN ls -lh /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
 # ============================================
 # Stage 2: Minimal runtime image
 # ============================================
-# Alpine Linux base (~8MB) instead of Ubuntu/Debian slim (~85MB+ with libxml2+libicu).
-# Fixes #421: image exceeded 120MB target because Debian/Ubuntu's libxml2
-# depends on libicu (~30MB). Alpine's libxml2 has no ICU dependency.
-# The builder is pinned to Ubuntu 24.04 LTS (Noble) so its libxml2.so.2
-# SONAME matches Alpine 3.21's libxml2 at runtime.
-FROM --platform=linux/amd64 alpine:3.21
+# glibc base is REQUIRED here (Issue #685): Kotlin/Native linuxX64 binaries
+# are linked against glibc, and running them on Alpine's musl libc through
+# the gcompat shim causes an intermittent all-threads futex deadlock in the
+# Kotlin/Native runtime (GC/thread-parking handshake) — fast-sim hung at a
+# random point in ~20-30% of runs. Reproduced with both image-built and
+# host-built binaries on alpine:3.21+gcompat; zero hangs on any glibc base.
+# Do NOT switch this stage back to Alpine/musl.
+# debian:12-slim + libxml2 (which pulls libicu) stays within the 120MB
+# image-size target from #421.
+FROM --platform=linux/amd64 debian:12-slim
 
-# gcompat: glibc ABI compatibility layer — K/N linuxX64 binaries link against glibc.
-#          Provides /lib64/ld-linux-x86-64.so.2 and glibc symbol wrappers.
-# libgcc:  GCC runtime support library — required alongside gcompat for complete
-#          glibc ABI compatibility on musl-based Alpine.
-# libxml2: XML parsing via Kotlin/Native cinterop (linked with -lxml2 at build time).
-#          Alpine's libxml2 does NOT pull libicu, unlike Debian's (~30MB saved).
-RUN apk add --no-cache \
-    gcompat \
-    libgcc \
-    libxml2
+# Upgrade all base packages to their latest patch releases inside Debian 12
+# (bookworm) to pick up any backported upstream security patches.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends libxml2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Run the native binary as an unprivileged user for image hygiene.
-# Use UID/GID 1001 to avoid colliding with the base image's ubuntu group (1000).
+# Use UID/GID 1001 to avoid colliding with common host default UIDs (1000).
 ARG RUNTIME_UID=1001
 ARG RUNTIME_GID=1001
-RUN addgroup -g ${RUNTIME_GID} app \
-    && adduser -u ${RUNTIME_UID} -G app -s /bin/sh -D app \
-    && mkdir -p /build/core/src/commonMain/resources \
-    && chown -R app:app /build/core/src/commonMain/resources
+RUN groupadd --gid ${RUNTIME_GID} app \
+    && useradd --uid ${RUNTIME_UID} --gid ${RUNTIME_GID} --shell /usr/sbin/nologin --create-home app
 
 # Copy native binary from builder
 COPY --chown=app:app --from=builder /build/fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe \

@@ -68,6 +68,11 @@ val isLinuxHost: Boolean by gradle.extra
 // linuxX64 target added for native compilation verification.
 @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 kotlin {
+    // Pin the :core KMP JVM compile to JDK 21 (project's Java 21 LTS toolchain and CI)
+    // for reproducible security-patched builds. Consistent with :desktop-ui's
+    // JavaLanguageVersion.of(21) toolchain; grouped with the Logback/Docker security
+    // fixes so the whole branch yields a clean, JDK-21-pinned patched build.
+    jvmToolchain(21)
     applyDefaultHierarchyTemplate()
     jvm {
         compilations.all {
