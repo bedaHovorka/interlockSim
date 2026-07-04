@@ -24,7 +24,8 @@ import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
 
 /**
- * Unit tests for [DefaultSimulationContext.onCollisionWarning] subscription contract (#611).
+ * Unit tests for the [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices.onCollisionWarning]
+ * subscription contract on [DefaultSimulationContext] (#611).
  *
  * ## Acceptance Criteria
  * - Listener registered **before** [DefaultSimulationContext.run] receives warnings delivered
@@ -77,12 +78,12 @@ class CollisionWarningSubscriptionTest : KoinTestBase() {
 		val received = mutableListOf<CollisionWarning>()
 
 		// Register BEFORE run — must be wired into the service at run() time
-		ctx.onCollisionWarning { received.add(it) }
+		ctx.getCollisionServices().onCollisionWarning { received.add(it) }
 
 		runWithSingleTrain(ctx)
 
 		// Manually emit a warning via the internal test hook — no live collision required
-		val service = ctx.getCollisionDetectionService() as DefaultCollisionDetectionService
+		val service = ctx.getCollisionServices().getCollisionDetectionService() as DefaultCollisionDetectionService
 		val warning =
 			CollisionWarning.ReservationConflict(
 				trainId = "T1",
@@ -104,10 +105,10 @@ class CollisionWarningSubscriptionTest : KoinTestBase() {
 
 		// Register AFTER run — must be silently ignored
 		val received = mutableListOf<CollisionWarning>()
-		ctx.onCollisionWarning { received.add(it) }
+		ctx.getCollisionServices().onCollisionWarning { received.add(it) }
 
 		// Emit a warning; since the listener was registered after run(), it should receive nothing
-		val service = ctx.getCollisionDetectionService() as DefaultCollisionDetectionService
+		val service = ctx.getCollisionServices().getCollisionDetectionService() as DefaultCollisionDetectionService
 		service.emitWarning(
 			CollisionWarning.ReservationConflict(
 				trainId = "T1",

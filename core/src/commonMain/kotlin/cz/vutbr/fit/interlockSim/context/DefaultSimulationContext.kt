@@ -47,8 +47,8 @@ import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
-import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
@@ -212,7 +212,12 @@ open class DefaultSimulationContext(
 	 * Active [SimulationController] for the current run; used by [requestPause] to delegate
 	 * pause requests from the collision detection service.
 	 * Set at the start of [run] and cleared when run completes.
+	 *
+	 * Marked `@Volatile` because it is written on the control/caller thread at the start of
+	 * [run] and cleared on completion, but read from the simulation thread inside
+	 * [requestPause] (the [PauseController] contract permits call from the simulation thread).
 	 */
+	@kotlin.concurrent.Volatile
 	private var currentController: SimulationController? = null
 
 	/** Collision warning listeners registered before run(); wired into the service at run() time. */
@@ -220,12 +225,25 @@ open class DefaultSimulationContext(
 
 	/**
 	 * Collision detection service scoped to this context.
-	 * Lazy-initialized so [DefaultCollisionDetectionService] subscribes to block events via
-	 * [onBlockEvent] while [simulationHasStarted] is still false.
-	 * Retrieved from this context's Koin scope.
+	 * Retrieved from this context's Koin scope. SP1 ships a thin backbone; SP2/SP3/SP4
+	 * will add the block-event subscriptions and detection rules.
 	 */
 	private val collisionDetectionServiceInstance: CollisionDetectionService by lazy {
 		scope.get<CollisionDetectionService>()
+	}
+
+	/**
+	 * Grouped collision-detection services facade for this simulation context.
+	 * Delegates to the buffered warning-subscription path and the scoped
+	 * [CollisionDetectionService], keeping them behind a single [CollisionServices]
+	 * accessor instead of flattening them onto [SimulationEnvironment].
+	 */
+	private val collisionServicesInstance: CollisionServices by lazy {
+		object : CollisionServices {
+			override fun getCollisionDetectionService(): CollisionDetectionService = collisionDetectionServiceInstance
+
+			override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) = registerCollisionWarningListener(listener)
+		}
 	}
 
 	/**
@@ -1167,22 +1185,25 @@ open class DefaultSimulationContext(
 	}
 
 	/**
-	 * Subscribe to collision warnings. Listeners registered before [run] are buffered and wired to the
-	 * [CollisionDetectionService] at [run] time. Listeners registered after [run] are silently ignored.
+	 * Buffer a collision-warning listener registered before [run]; listeners registered
+	 * after [run] has started are silently ignored (same contract as [onBlockEvent]).
+	 * Wired into the [CollisionDetectionService] at [run] time.
 	 *
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
-	override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) {
+	private fun registerCollisionWarningListener(listener: (CollisionWarning) -> Unit) {
 		if (simulationHasStarted) return
 		pendingCollisionWarningListeners += listener
 	}
 
 	/**
-	 * Return the [CollisionDetectionService] scoped to this context.
+	 * Collision-detection services facade for this context. Exposes the scoped
+	 * [CollisionDetectionService] and the buffered [CollisionServices.onCollisionWarning]
+	 * subscription path behind a single accessor.
 	 *
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
-	override fun getCollisionDetectionService(): CollisionDetectionService = collisionDetectionServiceInstance
+	override fun getCollisionServices(): CollisionServices = collisionServicesInstance
 
 	/**
 	 * Request an immediate pause via the active [SimulationController].
@@ -1199,13 +1220,9 @@ open class DefaultSimulationContext(
 		// Store the active controller so requestPause() can delegate to it.
 		currentController = controller
 
-		// Force-initialize the collision detection service before simulationHasStarted is set to true,
-		// so that the service's init block can subscribe to block events (which requires buffering).
-		// The local variable exists purely for the side-effect of triggering lazy initialization.
-		@Suppress("UNUSED_VARIABLE")
-		val collisionService = collisionDetectionServiceInstance
-
 		// Wire pending collision warning listeners into the service before starting.
+		// This also lazily initializes the service; no separate force-init is needed because
+		// SP1's thin backbone does not subscribe to block events in its constructor.
 		pendingCollisionWarningListeners.forEach { collisionDetectionServiceInstance.onCollisionWarning(it) }
 
 		// Mark simulation as started — listeners registered after this point are silently ignored.

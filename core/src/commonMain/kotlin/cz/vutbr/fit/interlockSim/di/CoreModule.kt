@@ -209,12 +209,12 @@ val navigationModule: Module =
 			}
 
 			// CollisionDetectionService: scoped to simulation context (Issue #611 Goal 3 SP1)
-			// Subscribes to block events and calls pause controller when a hazard is detected.
+			// SP1 thin backbone: listener registry + pause bridge. SP2/SP3/SP4 add detection rules.
 			scoped<CollisionDetectionService> {
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultCollisionDetectionService(context, context)
+				DefaultCollisionDetectionService(context)
 			}
 		}
 	}
