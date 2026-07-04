@@ -98,7 +98,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 		TestFixtures.loadShuntingXml().use { xml ->
 			simulationContextFactory.createContext(xml).use { ctx ->
 				val context = ctx as DefaultSimulationContext
-				val reservationService = context.getPathReservationService()
+				val reservationService = context.getRoutingServices().getPathReservationService()
 
 				val inOuts = context.getInOuts().toList()
 				require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }
@@ -185,7 +185,7 @@ class TrainMovementIntegrationTest : KoinTestBase() {
 		TestFixtures.loadShuntingXml().use { xml ->
 			simulationContextFactory.createContext(xml).use { ctx ->
 				val context = ctx as DefaultSimulationContext
-				val reservationService = context.getPathReservationService()
+				val reservationService = context.getRoutingServices().getPathReservationService()
 
 				val inOuts = context.getInOuts().toList()
 				require(inOuts.size >= 2) { "Shunting loop must have at least 2 InOuts" }

@@ -107,7 +107,7 @@ interface TrainNavigationService {
 	 *
 	 * ```kotlin
 	 * // In Train.Front.semaphoreAction():
-	 * val result = env.getTrainNavigationService().findReservedPathForTrain(
+	 * val result = env.getRoutingServices().getTrainNavigationService().findReservedPathForTrain(
 	 *     trainId = toString(),  // "Train #1"
 	 *     separator = semaphore
 	 * )

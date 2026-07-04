@@ -84,7 +84,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 	fun `SimpleTestProcess terminates after endTime`() {
 		// Arrange: Create simple linear path
 		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { context ->
-			val reservationService = context.getPathReservationService()
+			val reservationService = context.getRoutingServices().getPathReservationService()
 
 			val inOuts = context.getInOuts().toList()
 			val startInOut = inOuts[0]
@@ -119,7 +119,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 		// Arrange: Create simple linear path with VERY short distance
 		// This ensures train can complete journey before endTime
 		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { context ->
-			val reservationService = context.getPathReservationService()
+			val reservationService = context.getRoutingServices().getPathReservationService()
 
 			val inOuts = context.getInOuts().toList()
 			val startInOut = inOuts[0]
@@ -154,7 +154,7 @@ class SimpleTestProcessTest : KoinTestBase() {
 	fun `SimpleTestProcess provides valid train state`() {
 		// Arrange: Create simple linear path
 		(TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext).use { context ->
-			val reservationService = context.getPathReservationService()
+			val reservationService = context.getRoutingServices().getPathReservationService()
 
 			val inOuts = context.getInOuts().toList()
 			val startInOut = inOuts[0]

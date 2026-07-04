@@ -57,7 +57,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val inOuts = simCtx.getInOuts().toList()
 				val start = inOuts[0]
 				val target = inOuts[1]
@@ -85,7 +85,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val routeFinder = simCtx.getRouteFinder()
 				val inOuts = simCtx.getInOuts().toList()
 				val inOut0 = inOuts[0]
@@ -125,7 +125,7 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 					.buildSimulationContext()
 
 			simCtx.use {
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val inOuts = simCtx.getInOuts().toList()
 				val start = inOuts[0]
 				val target = inOuts[1]
@@ -150,8 +150,8 @@ class RouteFinderIntegrationTest : KoinTestBase() {
 			val simCtx = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 			simCtx.use {
-				val service = simCtx.getPathReservationService()
-				val navigator = simCtx.getTopologyNavigator()
+				val service = simCtx.getRoutingServices().getPathReservationService()
+				val navigator = simCtx.getRoutingServices().getTopologyNavigator()
 				val inOuts = simCtx.getInOuts().toList()
 				val inOut = simCtx.toDynamic(inOuts[0]) as DynamicInOut
 

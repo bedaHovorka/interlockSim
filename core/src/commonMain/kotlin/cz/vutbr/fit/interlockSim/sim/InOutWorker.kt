@@ -30,8 +30,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 class InOutWorker(
 	private val env: SimulationEnvironment,
 	private val inOut: DynamicInOut,
-	val navigator: TopologyNavigator = env.getTopologyNavigator(),
-	private val pathReservationService: PathReservationService = env.getPathReservationService()
+	val navigator: TopologyNavigator = env.getRoutingServices().getTopologyNavigator(),
+	private val pathReservationService: PathReservationService = env.getRoutingServices().getPathReservationService()
 ) : LoopProcess() {
 	companion object {
 		private val logger = KotlinLogging.logger {}

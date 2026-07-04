@@ -510,7 +510,7 @@ class DefaultTrainNavigationService(
 	 * @return True if there is a topological continuation, false otherwise
 	 */
 	private fun hasTopologicalContinuation(separator: PathSeparator): Boolean {
-		val navigator = context.getTopologyNavigator()
+		val navigator = context.getRoutingServices().getTopologyNavigator()
 		val nodeCell = (separator as? NodeCell) ?: CellUtilities.assertNodeCell(separator)
 		return navigator.getNextTrackBlock(nodeCell, null) != null
 	}

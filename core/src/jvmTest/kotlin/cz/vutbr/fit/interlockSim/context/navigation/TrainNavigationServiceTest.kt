@@ -98,7 +98,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
 			// Get real services from context scope
-			service = context.getTrainNavigationService()
+			service = context.getRoutingServices().getTrainNavigationService()
 			registry = context.scope.get()
 		}
 
@@ -115,7 +115,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val inOutB = grid.getCellAt(5, 5) as DynamicInOut
 
 			// Reserve path using real PathReservationService
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			pathService.reservePath("train1", inOutA, inOutB)
 
 			// Act: Navigate using real TrainNavigationService
@@ -147,8 +147,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 					simulationContextFactory.createContext(editingContext).use { simCtx ->
 						val vyhybnaContext = simCtx as DefaultSimulationContext
 
-						val vyhybnaService = vyhybnaContext.getTrainNavigationService()
-						val vyhybnaPathService = vyhybnaContext.getPathReservationService()
+						val vyhybnaService = vyhybnaContext.getRoutingServices().getTrainNavigationService()
+						val vyhybnaPathService = vyhybnaContext.getRoutingServices().getPathReservationService()
 
 						val grid = vyhybnaContext.getRailWayNetGrid()
 						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
@@ -176,7 +176,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 			val inOutB = grid.getCellAt(5, 5) as DynamicInOut
 
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			pathService.reservePath("train1", inOutA, inOutB)
 
 			// Act
@@ -202,7 +202,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml().use { xmlStream ->
 				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
 				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-				service = context.getTrainNavigationService()
+				service = context.getRoutingServices().getTrainNavigationService()
 			}
 		}
 
@@ -214,7 +214,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `findReservedPathForTrain returns OwnershipConflict when one block owned by different train`() {
 			// Arrange: Reserve full path from A to B for train1
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val registry = context.scope.get<PathReservationRegistry>()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
@@ -286,7 +286,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain returns OwnershipConflict when last block not owned`() {
 			// Arrange: Reserve path for train1, then release it, then partially reserve for train2
 			// This creates a scenario where first blocks are owned by train2, not train1
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -304,7 +304,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `isPathReservedForTrain returns false when ownership conflict exists`() {
 			// Arrange: Reserve full path from A to B for train1
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val registry = context.scope.get<PathReservationRegistry>()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
@@ -369,7 +369,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				// No connection!
 				.buildSimulationContext()
 				.use { context ->
-					val service = context.getTrainNavigationService()
+					val service = context.getRoutingServices().getTrainNavigationService()
 					val grid = context.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
@@ -385,7 +385,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		fun `findReservedPathForTrain returns OwnershipConflict when single InOut has no connections`() {
 			// Arrange: Single InOut (no connections = no path topologically)
 			TestTopologies.deadEndSingleInOutSimulation().use { context ->
-				val service = context.getTrainNavigationService()
+				val service = context.getRoutingServices().getTrainNavigationService()
 				val grid = context.getRailWayNetGrid()
 				val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
@@ -404,8 +404,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				editingContextFactory.createContext(xmlStream).use { editingCtx ->
 					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
 						val context = ctx as DefaultSimulationContext
-						val service = context.getTrainNavigationService()
-						val pathService = context.getPathReservationService()
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
 
 						val grid = context.getRailWayNetGrid()
 						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
@@ -431,8 +431,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				editingContextFactory.createContext(xmlStream).use { editingCtx ->
 					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
 						val context = ctx as DefaultSimulationContext
-						val service = context.getTrainNavigationService()
-						val pathService = context.getPathReservationService()
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
 
 						val grid = context.getRailWayNetGrid()
 						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
@@ -459,7 +459,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				.withInOut("B", 10, 10, false)
 				.buildSimulationContext()
 				.use { context ->
-					val service = context.getTrainNavigationService()
+					val service = context.getRoutingServices().getTrainNavigationService()
 					val grid = context.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
@@ -483,7 +483,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			// Simple linear network: A → B
 			context = TestTopologies.simpleLinearPathSimulation() as DefaultSimulationContext
 
-			service = context.getTrainNavigationService()
+			service = context.getRoutingServices().getTrainNavigationService()
 		}
 
 		@AfterEach
@@ -498,7 +498,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 			val inOutB = grid.getCellAt(5, 5) as DynamicInOut
 
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			pathService.reservePath("train1", inOutA, inOutB)
 
 			// Act
@@ -518,7 +518,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				.withInOut("B", 10, 10, false)
 				.buildSimulationContext()
 				.use { disconnectedCtx ->
-					val disconnectedService = disconnectedCtx.getTrainNavigationService()
+					val disconnectedService = disconnectedCtx.getRoutingServices().getTrainNavigationService()
 					val grid = disconnectedCtx.getRailWayNetGrid()
 					val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 
@@ -539,7 +539,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			val inOutA = grid.getCellAt(1, 1) as DynamicInOut
 			val inOutB = grid.getCellAt(5, 5) as DynamicInOut
 
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			pathService.reservePath("train2", inOutA, inOutB) // Different owner
 
 			// Act: Train1 tries to navigate
@@ -567,7 +567,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 			TestFixtures.loadShuntingXml().use { xmlStream ->
 				val editingContext = editingContextFactory.createContext(xmlStream) as DefaultEditingContext
 				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
-				service = context.getTrainNavigationService()
+				service = context.getRoutingServices().getTrainNavigationService()
 			}
 		}
 
@@ -579,7 +579,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `extractDynamicTrackBlocks filters PathSeparator elements`() {
 			// Arrange
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -596,7 +596,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `extractDynamicTrackBlocks extracts only DynamicTrackBlock instances`() {
 			// Arrange
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -616,7 +616,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `extractDynamicTrackBlocks preserves block order`() {
 			// Arrange
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -633,7 +633,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `extractDynamicTrackBlocks handles mixed element types`() {
 			// Arrange: vyhybna.xml has mixed separators and blocks
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -650,7 +650,7 @@ class TrainNavigationServiceTest : KoinTestBase() {
 		@Test
 		fun `getReservedBlocks returns blocks for owned path`() {
 			// Arrange
-			val pathService = context.getPathReservationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val inOutA = grid.getCellAt(11, 8) as DynamicInOut
 			val inOutB = grid.getCellAt(30, 8) as DynamicInOut
@@ -684,8 +684,8 @@ class TrainNavigationServiceTest : KoinTestBase() {
 				context = simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 
 				// Get real services from context scope
-				navService = context.getTrainNavigationService()
-				pathService = context.getPathReservationService()
+				navService = context.getRoutingServices().getTrainNavigationService()
+				pathService = context.getRoutingServices().getPathReservationService()
 				registry = context.scope.get()
 			}
 		}

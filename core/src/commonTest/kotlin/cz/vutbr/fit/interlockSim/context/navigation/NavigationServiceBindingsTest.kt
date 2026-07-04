@@ -100,7 +100,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val navigator = simCtx.getTopologyNavigator()
+				val navigator = simCtx.getRoutingServices().getTopologyNavigator()
 				assertThat(navigator).isNotNull()
 				assertThat(navigator).isInstanceOf<TopologyNavigator>()
 			}
@@ -113,7 +113,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.VYHYBNA_XML,
 				processFactory
 			).use { simCtx ->
-				val navigator = simCtx.getTopologyNavigator()
+				val navigator = simCtx.getRoutingServices().getTopologyNavigator()
 				val inOuts = simCtx.getInOuts().toList()
 				assertThat(inOuts).hasSize(2)
 
@@ -129,7 +129,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.SWITCH_BASIC_XML,
 				processFactory
 			).use { simCtx ->
-				val navigator = simCtx.getTopologyNavigator()
+				val navigator = simCtx.getRoutingServices().getTopologyNavigator()
 				val inOuts = simCtx.getInOuts().toList()
 				assertThat(inOuts).hasSize(3)
 
@@ -152,7 +152,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				assertThat(service).isNotNull()
 				assertThat(service).isInstanceOf<PathReservationService>()
 			}
@@ -165,7 +165,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val inOuts = simCtx.getInOuts().toList()
 				assertThat(inOuts).hasSize(2)
 
@@ -182,7 +182,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val inOuts = simCtx.getInOuts().toList()
 
 				val result = service.reservePath("testTrain", inOuts[0], inOuts[1])
@@ -200,7 +200,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val inOuts = simCtx.getInOuts().toList()
 
 				// Reserve
@@ -223,7 +223,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getPathReservationService()
+				val service = simCtx.getRoutingServices().getPathReservationService()
 				val blocks = service.getReservedBlocks("nonexistentTrain")
 				assertThat(blocks).isEmpty()
 			}
@@ -240,7 +240,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getTrainNavigationService()
+				val service = simCtx.getRoutingServices().getTrainNavigationService()
 				assertThat(service).isNotNull()
 				assertThat(service).isInstanceOf<TrainNavigationService>()
 			}
@@ -253,7 +253,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx ->
-				val service = simCtx.getTrainNavigationService()
+				val service = simCtx.getRoutingServices().getTrainNavigationService()
 				val inOuts = simCtx.getInOuts().toList()
 
 				// No path reserved for this train, so navigation should not find reserved path
@@ -273,9 +273,9 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.VYHYBNA_XML,
 				processFactory
 			).use { simCtx ->
-				val topoNav = simCtx.getTopologyNavigator()
-				val pathService = simCtx.getPathReservationService()
-				val trainNav = simCtx.getTrainNavigationService()
+				val topoNav = simCtx.getRoutingServices().getTopologyNavigator()
+				val pathService = simCtx.getRoutingServices().getPathReservationService()
+				val trainNav = simCtx.getRoutingServices().getTrainNavigationService()
 
 				assertThat(topoNav).isNotNull()
 				assertThat(pathService).isNotNull()
@@ -291,7 +291,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 				NetworkResources.LINEAR_TRACK_XML,
 				processFactory
 			).use { simCtx1 ->
-				val service1 = simCtx1.getPathReservationService()
+				val service1 = simCtx1.getRoutingServices().getPathReservationService()
 				val inOuts1 = simCtx1.getInOuts().toList()
 				service1.reservePath("train1", inOuts1[0], inOuts1[1])
 
@@ -301,7 +301,7 @@ class NavigationServiceBindingsTest : KoinComponent {
 						NetworkResources.SWITCH_BASIC_XML,
 						processFactory
 					).use { simCtx2 ->
-						val service2 = simCtx2.getPathReservationService()
+						val service2 = simCtx2.getRoutingServices().getPathReservationService()
 						// Second context should have no reservations
 						val blocks = service2.getReservedBlocks("train1")
 						assertThat(blocks).isEmpty()

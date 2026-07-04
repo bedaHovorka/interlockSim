@@ -16,6 +16,7 @@ import cz.hovorka.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
+import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
@@ -248,6 +249,22 @@ open class DefaultSimulationContext(
 	 */
 	private val routeFinderInstance: cz.vutbr.fit.interlockSim.context.RouteFinder by lazy {
 		scope.get<cz.vutbr.fit.interlockSim.context.RouteFinder>()
+	}
+
+	/**
+	 * Grouped routing/navigation services facade for this simulation context.
+	 * Delegates to the scoped service instances, keeping them behind a single
+	 * [RoutingServices] accessor instead of flattening them onto [SimulationEnvironment].
+	 */
+	private val routingServicesInstance: RoutingServices by lazy {
+		object : RoutingServices {
+			override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
+				topologyNavigatorInstance
+
+			override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+
+			override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
+		}
 	}
 
 	// ========================================
@@ -675,7 +692,7 @@ open class DefaultSimulationContext(
 		requireSimulation(separator is OrientedPathSeparator) {
 			"PathSeparator must be OrientedPathSeparator, got ${separator::class.simpleName ?: "unknown"}"
 		}
-		val segment = getSegment(separator, secondEndTrack!!)
+		val segment = getSegment(separator, secondEndTrack)
 		// Match Java 1:1: return null when segment doesn't exist
 		return separator.getFollowingSegment(segment)
 	}
@@ -748,7 +765,7 @@ open class DefaultSimulationContext(
 	private fun getLocation(node: NodeCell): Point {
 		val location = getRailWayNetGrid().getLocation(node)
 		requireSimulation(location != null) { "Location not found for nodeCell $node in grid" }
-		return location!!
+		return location
 	}
 
 	/**
@@ -1446,7 +1463,7 @@ open class DefaultSimulationContext(
 	 * @param trainId The train identifier to release reservations for
 	 */
 	override fun releaseTrainReservations(trainId: String) {
-		val pathService = getPathReservationService()
+		val pathService = pathReservationServiceInstance
 		val releasedBlocks = pathService.unregister(trainId)
 		logger.debug {
 			"releaseTrainReservations: Released ${releasedBlocks.size} blocks for train '$trainId'"
@@ -1466,7 +1483,7 @@ open class DefaultSimulationContext(
 		trainId: String,
 		block: DynamicTrackBlock
 	) {
-		val pathService = getPathReservationService()
+		val pathService = pathReservationServiceInstance
 		pathService.unregisterBlock(trainId, block)
 	}
 
@@ -1506,39 +1523,17 @@ open class DefaultSimulationContext(
 		workers[inOut] ?: throw IllegalStateException("No worker found for InOut: $inOut")
 
 	/**
-	 * Get topology navigator for pure topology navigation (no state dependencies).
+	 * Get the grouped routing/navigation services for this simulation context.
 	 *
-	 * Returns the TopologyNavigator instance for this simulation context.
-	 * The navigator provides static graph traversal without state validation.
+	 * Routing accessors (topology navigation, path reservation, train navigation) are
+	 * grouped behind the [RoutingServices] sub-interface rather than being flattened
+	 * directly onto [SimulationEnvironment]. This implementation delegates to the
+	 * scoped service instances resolved via Koin.
 	 *
-	 * @return TopologyNavigator instance
-	 * @see cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
+	 * @return RoutingServices instance for this simulation context
+	 * @see RoutingServices
 	 */
-	override fun getTopologyNavigator(): cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator =
-		topologyNavigatorInstance
-
-	/**
-	 * Get train navigation service for train-specific path following.
-	 *
-	 * Returns the TrainNavigationService instance for this simulation context.
-	 * The service validates train ownership of blocks before returning paths.
-	 *
-	 * @return TrainNavigationService instance
-	 * @see TrainNavigationService
-	 */
-	override fun getTrainNavigationService(): TrainNavigationService = trainNavigationServiceInstance
-
-	/**
-	 * Get path reservation service for atomic path reservation.
-	 *
-	 * Returns the PathReservationService instance for this simulation context.
-	 * The service provides dispatcher logic for finding and reserving free paths
-	 * with atomic all-or-nothing semantics and train ownership tracking.
-	 *
-	 * @return PathReservationService instance
-	 * @see PathReservationService
-	 */
-	override fun getPathReservationService(): PathReservationService = pathReservationServiceInstance
+	override fun getRoutingServices(): RoutingServices = routingServicesInstance
 
 	override fun getAutomaticPathFindingService(): AutomaticPathFindingService = automaticPathFindingServiceInstance
 

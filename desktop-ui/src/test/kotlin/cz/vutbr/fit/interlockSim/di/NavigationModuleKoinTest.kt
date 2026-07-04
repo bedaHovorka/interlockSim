@@ -59,8 +59,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 		buildTestContext().use { context ->
 			// Arrange - create one simulation context
 			// Act - get both navigation services from the context
-			val pathReservationService = context.getPathReservationService()
-			val trainNavigationService = context.getTrainNavigationService()
+			val pathReservationService = context.getRoutingServices().getPathReservationService()
+			val trainNavigationService = context.getRoutingServices().getTrainNavigationService()
 
 			// Reserve path using PathReservationService
 			val grid = context.getRailWayNetGrid()
@@ -106,7 +106,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 			buildTestContext().use { context2 ->
 				// Arrange - create two simulation contexts
 				// Act - reserve path in context1
-				val service1 = context1.getPathReservationService()
+				val service1 = context1.getRoutingServices().getPathReservationService()
 				val grid1 = context1.getRailWayNetGrid()
 				val cellA1 = grid1.getCellAt(1, 1)
 				val cellB1 = grid1.getCellAt(5, 5)
@@ -117,7 +117,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 				service1.reservePath("train1", inOutA1, inOutB1)
 
 				// Assert - context2 should not see train1's reservation (different scope)
-				val service2 = context2.getPathReservationService()
+				val service2 = context2.getRoutingServices().getPathReservationService()
 				assertThat(service2.getReservedBlocks("train1")).isEmpty()
 			}
 		}
@@ -128,7 +128,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 		buildTestContext().use { context ->
 			// Arrange - create context
 			// Act - get service from context and use it
-			val service = context.getPathReservationService()
+			val service = context.getRoutingServices().getPathReservationService()
 			val grid = context.getRailWayNetGrid()
 			val cellA = grid.getCellAt(1, 1)
 			val cellB = grid.getCellAt(5, 5)
@@ -150,8 +150,8 @@ class NavigationModuleKoinTest : KoinTestBase() {
 		buildTestContext().use { context ->
 			// Arrange - create context with train
 			// Act - reserve path and get train navigation service
-			val pathService = context.getPathReservationService()
-			val trainService = context.getTrainNavigationService()
+			val pathService = context.getRoutingServices().getPathReservationService()
+			val trainService = context.getRoutingServices().getTrainNavigationService()
 
 			val grid = context.getRailWayNetGrid()
 			val cellA = grid.getCellAt(1, 1)
@@ -180,7 +180,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 	fun `closing context cleans up scoped resources`() {
 		buildTestContext().use { context ->
 			// Arrange - create context and use services
-			val service = context.getPathReservationService()
+			val service = context.getRoutingServices().getPathReservationService()
 
 			val grid = context.getRailWayNetGrid()
 			val cellA = grid.getCellAt(1, 1)
@@ -198,7 +198,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 		// Assert - scope is closed (accessing services after close would fail)
 		// We verify that creating a new context gives us a clean slate
 		buildTestContext().use { newContext ->
-			val newService = newContext.getPathReservationService()
+			val newService = newContext.getRoutingServices().getPathReservationService()
 			assertThat(newService.getReservedBlocks("train1")).isEmpty()
 		}
 	}
@@ -210,7 +210,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 		buildTestContext().use { context1 ->
 			// Arrange - create first context and register trains
-			val service1 = context1.getPathReservationService()
+			val service1 = context1.getRoutingServices().getPathReservationService()
 			val grid1 = context1.getRailWayNetGrid()
 			val cellA1 = grid1.getCellAt(1, 1)
 			val cellB1 = grid1.getCellAt(5, 5)
@@ -226,7 +226,7 @@ class NavigationModuleKoinTest : KoinTestBase() {
 
 		// Create second context and verify clean state
 		buildTestContext().use { context2 ->
-			val service2 = context2.getPathReservationService()
+			val service2 = context2.getRoutingServices().getPathReservationService()
 
 			// Assert - new context has clean registry (no leakage)
 			assertThat(service2.getReservedBlocks("train1")).isEmpty()

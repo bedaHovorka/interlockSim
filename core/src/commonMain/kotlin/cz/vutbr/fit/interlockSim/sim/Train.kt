@@ -492,7 +492,7 @@ class Train :
 			val thisSignal: Signal = semaphore.signal
 			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-			val lastSeparator = path!!.getLast()
+			val lastSeparator = path.getLast()
 			val nextSemaphore: DynamicRailSemaphore =
 				when (lastSeparator) {
 					is DynamicRailSemaphore -> lastSeparator
@@ -839,7 +839,7 @@ class Train :
 		name = "Train #$number"
 		val inName = validatedTimetable.getIn().name
 		val outName = validatedTimetable.getOut().name
-		trainNavService = env.getTrainNavigationService()
+		trainNavService = env.getRoutingServices().getTrainNavigationService()
 
 		// Issue #60: Validate train length against track distance between InOuts
 		validateTrainLength(env, validatedTimetable, this.length)
@@ -883,7 +883,7 @@ class Train :
 		}
 
 		try {
-			val topologyNavigator = env.getTopologyNavigator()
+			val topologyNavigator = env.getRoutingServices().getTopologyNavigator()
 
 			// Find all topologically possible paths between InOuts
 			val paths =

@@ -68,7 +68,7 @@ class ShuntingLoop(
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
-	private val pathReservationService: PathReservationService = context.getPathReservationService()
+	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent {

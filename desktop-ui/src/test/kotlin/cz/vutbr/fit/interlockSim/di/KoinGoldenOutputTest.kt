@@ -272,7 +272,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		repeat(50) { iteration ->
 			buildTestContext().use { context ->
 				// Verify scope is active and services are accessible
-				val service = context.getPathReservationService()
+				val service = context.getRoutingServices().getPathReservationService()
 				assertThat(service).isNotNull()
 				
 				// Make a reservation to populate internal state
@@ -295,7 +295,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		// TEST 2: Deep state isolation - verify no data bleeding between contexts
 		// Create first context with significant state
 		buildTestContext().use { context1 ->
-			val service1 = context1.getPathReservationService()
+			val service1 = context1.getRoutingServices().getPathReservationService()
 			val grid1 = context1.getRailWayNetGrid()
 			val cellA1 = grid1.getCellAt(1, 1)
 			val cellB1 = grid1.getCellAt(5, 5)
@@ -315,7 +315,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		
 		// Create second context and verify complete isolation
 		buildTestContext().use { context2 ->
-			val service2 = context2.getPathReservationService()
+			val service2 = context2.getRoutingServices().getPathReservationService()
 			
 			// Verify context2's registry is completely clean (no leakage from context1)
 			assertThat(service2.getReservedBlocks("train-alpha")).isEmpty()
@@ -339,7 +339,7 @@ class KoinGoldenOutputTest : KoinTestBase() {
 		val scope3 = context3.scope
 		
 		// Verify scope is active before close
-		val serviceBeforeClose = context3.getPathReservationService()
+		val serviceBeforeClose = context3.getRoutingServices().getPathReservationService()
 		assertThat(serviceBeforeClose).isNotNull()
 		
 		// Manually close the context (and its scope)

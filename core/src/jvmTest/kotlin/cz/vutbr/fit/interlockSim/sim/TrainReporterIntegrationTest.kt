@@ -144,7 +144,7 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 			val targetInOut = inOuts[1]
 
 			// Reserve path so train can actually move (exercises TrainReporter.iteration() repeatedly)
-			ctx.getPathReservationService().reservePath("Test#1", startInOut, targetInOut)
+			ctx.getRoutingServices().getPathReservationService().reservePath("Test#1", startInOut, targetInOut)
 
 			val timetable = Timetable(startInOut, targetInOut, Time(0.0), Time(60.0), 100.0)
 			val train = Train(ctx, timetable)

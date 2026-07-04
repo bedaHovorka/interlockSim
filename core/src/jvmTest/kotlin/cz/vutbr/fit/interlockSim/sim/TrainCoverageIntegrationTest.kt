@@ -159,7 +159,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2) { "Test requires at least 2 InOuts" }
 
-			ctx.getPathReservationService().reservePath("CoverageTest#1", inOuts[0], inOuts[1])
+			ctx.getRoutingServices().getPathReservationService().reservePath("CoverageTest#1", inOuts[0], inOuts[1])
 
 			val timetable = Timetable(inOuts[0], inOuts[1], Time(0.0), Time(60.0), 50.0)
 			val train = Train(ctx, timetable)
@@ -206,7 +206,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2)
 
-			ctx.getPathReservationService().reservePath("ReflTest#1", inOuts[0], inOuts[1])
+			ctx.getRoutingServices().getPathReservationService().reservePath("ReflTest#1", inOuts[0], inOuts[1])
 
 			val timetable = Timetable(inOuts[0], inOuts[1], Time(0.0), Time(60.0), 100.0)
 			val train = Train(ctx, timetable)
@@ -241,7 +241,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2)
 
-			ctx.getPathReservationService().reservePath("ReportTest#1", inOuts[0], inOuts[1])
+			ctx.getRoutingServices().getPathReservationService().reservePath("ReportTest#1", inOuts[0], inOuts[1])
 
 			val timetable = Timetable(inOuts[0], inOuts[1], Time(0.0), Time(60.0), 100.0)
 			val train = Train(ctx, timetable)
@@ -290,7 +290,7 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 			val inOuts = ctx.getInOuts().toList()
 			require(inOuts.size >= 2)
 
-			ctx.getPathReservationService().reservePath("RefTest#1", inOuts[0], inOuts[1])
+			ctx.getRoutingServices().getPathReservationService().reservePath("RefTest#1", inOuts[0], inOuts[1])
 
 			val timetable = Timetable(inOuts[0], inOuts[1], Time(0.0), Time(60.0), 100.0)
 			val train = Train(ctx, timetable)
