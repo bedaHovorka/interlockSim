@@ -22,6 +22,7 @@ import java.awt.event.ActionEvent
 import java.io.File
 import java.util.concurrent.ExecutionException
 import javax.swing.AbstractAction
+import javax.swing.JCheckBoxMenuItem
 import javax.swing.JFileChooser
 import javax.swing.JMenu
 import javax.swing.JMenuBar
@@ -406,6 +407,10 @@ class MenuBar : JMenuBar() {
 	 * **Shortcut reservation:** Keys `S` (step event) and `T` (step time) are reserved
 	 * for simulation-mode step controls. Menu items in this application must not use
 	 * `S` or `T` as mnemonics or accelerators, to avoid conflicts with those bindings.
+	 *
+	 * Also contains the **Collision Response** submenu (Issue #616, Goal 3 SP6) with
+	 * configurable auto-pause, auto-halt, and sound toggles, and a **Warning Panel**
+	 * visibility toggle.
 	 */
 	private fun simulationMenu(): JMenu {
 		val menu = JMenu("Simulation")
@@ -430,7 +435,68 @@ class MenuBar : JMenuBar() {
 		}
 		menu.add(speedMenu)
 
+		// Collision Response submenu (Issue #616, Goal 3 SP6)
+		menu.addSeparator()
+		menu.add(collisionResponseMenu())
+
+		// Warning Panel toggle (Issue #616, Goal 3 SP6)
+		menu.add(warningPanelToggleItem())
+
 		return menu
+	}
+
+	/**
+	 * Builds the "Collision Response" submenu with three configurable toggles.
+	 *
+	 * - **Auto-pause on critical warning** (default: on): keeps the simulation paused
+	 *   after every collision warning; unchecking it causes the runner to resume
+	 *   immediately on the EDT after the warning is logged.
+	 * - **Auto-halt train on violation** (default: off): calls the halt callback
+	 *   registered on [DefaultCollisionDetectionService] for the offending train.
+	 * - **Sound on critical warning** (default: off): plays a short system beep via
+	 *   [java.awt.Toolkit.beep] for each CRITICAL warning.
+	 *
+	 * @since Issue #616 (Goal 3 SP6)
+	 */
+	private fun collisionResponseMenu(): JMenu {
+		val menu = JMenu("Collision Response")
+
+		val autoPauseItem = JCheckBoxMenuItem("Auto-pause on critical warning", true)
+		autoPauseItem.addActionListener {
+			val frame = getKoin().get<Frame>()
+			frame.autoPauseOnCriticalWarning = autoPauseItem.isSelected
+		}
+		menu.add(autoPauseItem)
+
+		val autoHaltItem = JCheckBoxMenuItem("Auto-halt train on violation", false)
+		autoHaltItem.addActionListener {
+			val frame = getKoin().get<Frame>()
+			frame.autoHaltTrainOnViolation = autoHaltItem.isSelected
+		}
+		menu.add(autoHaltItem)
+
+		val soundItem = JCheckBoxMenuItem("Sound on critical warning", false)
+		soundItem.addActionListener {
+			val frame = getKoin().get<Frame>()
+			frame.soundOnCriticalWarning = soundItem.isSelected
+		}
+		menu.add(soundItem)
+
+		return menu
+	}
+
+	/**
+	 * Builds a checkbox menu item that toggles the visibility of the warning log panel.
+	 *
+	 * @since Issue #616 (Goal 3 SP6)
+	 */
+	private fun warningPanelToggleItem(): JCheckBoxMenuItem {
+		val item = JCheckBoxMenuItem("Warning Panel", true)
+		item.addActionListener {
+			val frame = getKoin().get<Frame>()
+			frame.warningPanel.isVisible = item.isSelected
+		}
+		return item
 	}
 
 	private fun helpMenu(): JMenu {

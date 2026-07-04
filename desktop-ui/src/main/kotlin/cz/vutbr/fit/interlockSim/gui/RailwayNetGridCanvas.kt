@@ -32,6 +32,7 @@ import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.paths.Route
 import cz.vutbr.fit.interlockSim.objects.tracks.SimpleTrackBlock
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.mp.KoinPlatform.getKoin
 import java.awt.AlphaComposite
@@ -277,6 +278,10 @@ class RailwayNetGridCanvas :
 	// Maps route index → set of grid points to highlight for that route.
 	private var previewHighlights: Map<Int, Set<GridPoint>> = emptyMap()
 	private var selectedPreviewIndex: Int = -1
+
+	// Warning block highlight state (Issue #616, Goal 3 SP6)
+	// Grid points for the block involved in the currently-selected collision warning.
+	private var warningHighlights: Set<GridPoint> = emptySet()
 
 	init {
 		background = Color.BLACK
@@ -535,6 +540,7 @@ class RailwayNetGridCanvas :
 		if (showGrid) paintGrid(g)
 		if (selectedKey != null) paintMarkSelected(g)
 		if (previewHighlights.isNotEmpty()) paintPathHighlights(g)
+		if (warningHighlights.isNotEmpty()) paintWarningHighlights(g)
 	}
 
 	// Highlight the selected cell for connection
@@ -599,6 +605,53 @@ class RailwayNetGridCanvas :
 	fun clearPathPreview() {
 		previewHighlights = emptyMap()
 		selectedPreviewIndex = -1
+		repaint(100)
+	}
+
+	/**
+	 * Highlight the track block involved in [warning] with a red overlay (Issue #616).
+	 *
+	 * - [CollisionWarning.BlockEntryViolation]: highlights [CollisionWarning.BlockEntryViolation.block].
+	 * - [CollisionWarning.ReservationConflict]: highlights [CollisionWarning.ReservationConflict.conflictingBlock]
+	 *   if non-null.
+	 * - [CollisionWarning.PredictiveCollision]: no block reference → clears any existing highlight.
+	 *
+	 * The method iterates the current context grid to find [TrackBlockPart] cells whose
+	 * block name matches the warning block name, then triggers a repaint.
+	 *
+	 * **Must be called from the EDT.**
+	 *
+	 * @since Issue #616 (Goal 3 SP6)
+	 */
+	fun highlightWarningBlock(warning: CollisionWarning) {
+		val blockName: String? =
+			when (warning) {
+				is CollisionWarning.BlockEntryViolation -> warning.block.name
+				is CollisionWarning.ReservationConflict -> warning.conflictingBlock?.name
+				is CollisionWarning.PredictiveCollision -> null
+			}
+
+		if (blockName == null) {
+			warningHighlights = emptySet()
+			repaint(100)
+			return
+		}
+
+		val ctx = context
+		if (ctx == null) {
+			warningHighlights = emptySet()
+			return
+		}
+
+		val grid = ctx.getRailWayNetGrid()
+		val points = mutableSetOf<GridPoint>()
+		for (entry in grid) {
+			val cell = entry.value
+			if (cell is TrackBlockPart && cell.getTrackBlock().name == blockName) {
+				points.add(entry.key)
+			}
+		}
+		warningHighlights = points
 		repaint(100)
 	}
 
@@ -668,6 +721,21 @@ class RailwayNetGridCanvas :
 			}
 		}
 
+		g.composite = oldComposite
+	}
+
+	/**
+	 * Draw a semi-transparent red overlay over the block grid positions stored in
+	 * [warningHighlights] (Issue #616, Goal 3 SP6).
+	 */
+	private fun paintWarningHighlights(g: Graphics2D) {
+		cancelClip(g)
+		val oldComposite = g.composite
+		g.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f)
+		g.color = WARNING_HIGHLIGHT_COLOR
+		for (pt in warningHighlights) {
+			g.fillRect(pt.x * CELL_WIDTH, pt.y * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT)
+		}
 		g.composite = oldComposite
 	}
 
@@ -872,6 +940,12 @@ class RailwayNetGridCanvas :
 
 		/** Color used for alternative (non-selected) path preview routes. */
 		private val PATH_ALTERNATIVE_COLOR = Color(0x00, 0xFF, 0xFF)
+
+		/**
+		 * Color used for the warning block highlight overlay (Issue #616, Goal 3 SP6).
+		 * Matches [GuiConstants.WARNING_BADGE_COLOR].
+		 */
+		private val WARNING_HIGHLIGHT_COLOR = GuiConstants.WARNING_BADGE_COLOR
 
 		/**
 		 * Extra padding in grid cells to add around the populated track area
