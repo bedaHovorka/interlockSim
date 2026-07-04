@@ -30,12 +30,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Integration tests for [DefaultCollisionDetectionService] SP2 — reservation conflict warnings.
  *
- * Verifies that when two trains compete for the same path during `reservePath`,
- * a [CollisionWarning.ReservationConflict] is emitted with the correct train IDs
- * and the conflicting block reference.
- *
- * Deduplication ensures that only one warning fires per unique conflict pair within
- * the deduplication window, so a single `reservePath` conflict produces exactly one warning.
+ * Verifies that when two trains compete for the same path during `reservePath` and the
+ * contention never resolves before the run ends, a [CollisionWarning.ReservationConflict]
+ * is emitted (via the end-of-run flush) with the correct train IDs and the conflicting
+ * block reference — while routine "path busy, will retry" contention that resolves
+ * normally is never flagged (issue #612: timing-based live heuristics misfire on
+ * ordinary queueing at shared bottlenecks, so no mid-run signal is derived from
+ * `AllPathsBlocked` outcomes).
  *
  * @since Issue #612 (Goal 3 SP2)
  */
@@ -57,10 +58,11 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	/**
 	 * Acceptance criteria (Issue #612):
 	 * - When `reservePath` returns `AllPathsBlocked` because a second train attempts
-	 *   to reserve a path already owned by the first, a [CollisionWarning.ReservationConflict]
-	 *   is emitted.
+	 *   to reserve a path already owned by the first, and that contention is still
+	 *   unresolved when the run ends, a [CollisionWarning.ReservationConflict] is
+	 *   emitted by the end-of-run flush.
 	 * - Warning includes both train IDs and the conflicting block.
-	 * - Exactly one warning is emitted for a single conflict attempt (dedup window).
+	 * - Exactly one warning is emitted for a single conflict attempt.
 	 */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -80,9 +82,10 @@ class ReservationConflictWarningTest : KoinTestBase() {
 		// Custom interlocking process:
 		// 1. Reserves path for T1 (A→B) — succeeds.
 		// 2. Immediately tries to reserve the same path for T2 — gets AllPathsBlocked
-		//    because T1 already owns the blocks, which triggers BlockEvent.ReservationConflictDetected
-		//    → DefaultCollisionDetectionService emits CollisionWarning.ReservationConflict.
-		// 3. Stops the simulation; no further retries → exactly one warning.
+		//    because T1 already owns the blocks; the contention is recorded (no mid-run event).
+		// 3. Stops the simulation with T2 still blocked → the end-of-run flush emits
+		//    BlockEvent.ReservationConflictDetected → DefaultCollisionDetectionService
+		//    emits exactly one CollisionWarning.ReservationConflict.
 		val process =
 			object : Interlocking(ctx) {
 				override suspend fun iteration() {
@@ -94,9 +97,9 @@ class ReservationConflictWarningTest : KoinTestBase() {
 					assertThat(result1)
 						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
-					// Train2 tries the same A→B path — must fail (blocks owned by Train1)
-					// This call triggers BlockEvent.ReservationConflictDetected inside reservePath,
-					// which DefaultCollisionDetectionService converts to CollisionWarning.ReservationConflict.
+					// Train2 tries the same A→B path — must fail (blocks owned by Train1).
+					// No event is emitted here; the unresolved contention is reported by
+					// flushUnresolvedConflicts once the run ends.
 					val result2 = reservationService.reservePath("TrainConflictB", inA, inB)
 					assertThat(result2)
 						.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
@@ -145,7 +148,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	 * completely routine ones.
 	 *
 	 * Acceptance criteria:
-	 * - TrainBusy reserves A→B and holds it well past the concurrent-claim window.
+	 * - TrainBusy reserves A→B and holds it for a while.
 	 * - TrainWaiting's reservation attempt against the same path returns
 	 *   `AllPathsBlocked` but emits NO [CollisionWarning.ReservationConflict].
 	 * - Once TrainBusy releases the path, TrainWaiting's retry succeeds normally, and
@@ -177,8 +180,8 @@ class ReservationConflictWarningTest : KoinTestBase() {
 					assertThat(result1)
 						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
-					// Let the reservation age well past the concurrent-claim window, so a
-					// later blocked attempt is unambiguously "routine busy", not a fresh race.
+					// Let the reservation settle in before the blocked attempt — this is
+					// ordinary "another train is using the path" traffic, not a race.
 					hold(2.0)
 
 					// TrainWaiting tries the same path while it's still busy -- routine
@@ -222,10 +225,10 @@ class ReservationConflictWarningTest : KoinTestBase() {
 
 	/**
 	 * Regression test for [DefaultCollisionDetectionService]/[DefaultPathReservationService]'s
-	 * "unresolved by end of run" fallback: contention that never produces a live concurrent
-	 * claim, and never resolves before the simulation stops, must still be surfaced as a
-	 * [CollisionWarning.ReservationConflict] -- otherwise a genuine deadlock-like situation
-	 * would silently vanish rather than being reported at all.
+	 * "unresolved by end of run" signal: contention that never resolves before the
+	 * simulation stops must be surfaced as a [CollisionWarning.ReservationConflict] --
+	 * otherwise a genuine deadlock-like situation would silently vanish rather than
+	 * being reported at all.
 	 *
 	 * Deliberately does **not** use a running-clock "stuck for N seconds" threshold (an
 	 * earlier version of this feature guessed one and produced false positives on ordinary
@@ -237,8 +240,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 	 *
 	 * Acceptance criteria:
 	 * - TrainBusy reserves A→B and never releases it.
-	 * - TrainWaiting's blocked attempt happens well outside the concurrent-claim window,
-	 *   so it produces no live warning during the run.
+	 * - TrainWaiting's blocked attempt produces no warning during the run.
 	 * - The simulation stops with TrainWaiting still blocked (no further retry).
 	 * - After `ctx.run()` returns, exactly one [CollisionWarning.ReservationConflict] has
 	 *   been emitted, for the pair (TrainWaiting, TrainBusy).
@@ -269,8 +271,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 					assertThat(result1)
 						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
 
-					// Let the reservation age well past the concurrent-claim window, so this
-					// is unambiguously "routine busy" from a live-detection point of view.
+					// Let the reservation settle in before the blocked attempt.
 					hold(2.0)
 
 					// TrainWaiting is blocked and never gets another chance to retry --
@@ -279,7 +280,7 @@ class ReservationConflictWarningTest : KoinTestBase() {
 					assertThat(result2)
 						.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
 
-					// No warning yet -- live detection correctly saw only routine contention.
+					// No warning yet -- blocked-path contention is never flagged mid-run.
 					assertThat(warnings.filterIsInstance<CollisionWarning.ReservationConflict>()).isEmpty()
 
 					env.stop()

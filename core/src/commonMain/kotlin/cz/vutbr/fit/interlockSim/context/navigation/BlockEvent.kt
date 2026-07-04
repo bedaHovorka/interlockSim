@@ -62,9 +62,12 @@ sealed class BlockEvent {
 	 *
 	 * Emitted by [DefaultPathReservationService] when:
 	 * - [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict]
-	 *   is returned (registry-level race), or
-	 * - [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked]
-	 *   is about to be returned and a blocking owner is identified.
+	 *   is returned (registry-level race detected atomically at reservation time), or
+	 * - the run has ended with blocked-path contention still unresolved
+	 *   ([cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.flushUnresolvedConflicts]).
+	 *   A routine [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.AllPathsBlocked]
+	 *   outcome alone never emits this event mid-run (issue #612: timing-based
+	 *   heuristics misfire on ordinary queueing at shared bottlenecks).
 	 *
 	 * Consumed by
 	 * [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]

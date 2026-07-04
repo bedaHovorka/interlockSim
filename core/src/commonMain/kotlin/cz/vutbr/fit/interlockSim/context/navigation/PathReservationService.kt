@@ -192,8 +192,7 @@ interface PathReservationService {
 
 	/**
 	 * Emit [BlockEvent.ReservationConflictDetected] for every blocked-path contention
-	 * that is still unresolved when the simulation ends, without ever having looked like
-	 * a live concurrent claim while the run was in progress. This is the "unresolved by
+	 * that is still unresolved when the simulation ends. This is the "unresolved by
 	 * end of run" signal for genuine, never-clearing contention (e.g. a real deadlock),
 	 * as distinct from routine "train waits its turn, then proceeds" contention -- however
 	 * long that takes mid-run -- which always resolves (via [reservePath] `Success` or
@@ -207,8 +206,8 @@ interface PathReservationService {
 	 * the run has ended.
 	 *
 	 * @param simulationEndTime Simulation clock value to stamp on the returned event(s).
-	 * @return Events for contention that was never resolved and never looked like a live
-	 *         race; empty if there is none.
+	 * @return Events for contention that was never resolved before the run ended;
+	 *         empty if there is none.
 	 * @since Issue #612 (Goal 3 SP2 follow-up)
 	 */
 	fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected>

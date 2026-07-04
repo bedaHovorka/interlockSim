@@ -97,20 +97,20 @@ class DefaultPathReservationService(
 	// makes DefaultCollisionDetectionService auto-pause the simulation on completely
 	// routine contention (regression: SimulationSpeedPerformanceTest hang).
 	//
-	// Two independent mechanisms decide what's a genuine conflict:
-	// 1. Live, mid-run: [isConcurrentClaim] -- the blocking train reserved the block
-	//    within [CONCURRENT_CLAIM_WINDOW_SECONDS] of this attempt, i.e. the two trains
-	//    are actively racing for the same section, not one waiting on the other's
-	//    already-settled occupancy. Reported immediately via [emitConflictIfGenuine].
-	// 2. End-of-run: [flushUnresolvedConflicts] -- contention that never produced a
-	//    concurrent claim AND never resolved before the run ended. Deliberately NOT a
-	//    live/running-clock threshold (an earlier version guessed one and produced false
-	//    positives on ordinary long waits, e.g. reversal choreography in ShuntingLoop) --
-	//    "unresolved when the run ends" is the actual signal, checked exactly once.
+	// No timing signal derived from an AllPathsBlocked outcome can distinguish a
+	// genuine race from ordinary queueing at a shared bottleneck (three heuristics
+	// were tried and all misfired at high-traffic chokepoints -- see issue #612).
+	// Genuine conflicts are therefore surfaced by exactly two mechanisms, neither
+	// based on AllPathsBlocked timing:
+	// 1. Live, mid-run: the atomic registry race ([PathReservationRegistry.RegistrationResult.Conflict]
+	//    in [reservePath]) -- a real double-booking detected at reservation time.
+	// 2. End-of-run: [flushUnresolvedConflicts] -- blocked-path contention that never
+	//    resolved before the run ended (deadlock/starvation indicator). Deliberately
+	//    NOT a live/running-clock threshold; "unresolved when the run ends" is the
+	//    actual signal, checked exactly once after the run has stopped.
 	//
-	// Both maps are cleared per-train on Success and in releasePath(), so they stay
+	// The map is cleared per-train on Success and in releasePath(), so it stays
 	// bounded to currently-active trains.
-	private val blockReservedAt: MutableMap<DynamicTrackBlock, Double> = mutableMapOf()
 	private val blockedSince: MutableMap<Pair<String, DynamicTrackBlock>, Double> = mutableMapOf()
 
 	private fun findCandidatePaths(
@@ -365,10 +365,6 @@ class DefaultPathReservationService(
 					// Emit BlockReserved for each successfully reserved block
 					val simTime = currentSimulationTime()
 					blocks.forEach { block ->
-						// Record when this block's current reservation was made, so a later
-						// blocked-path attempt against it can tell a fresh/concurrent claim
-						// (genuine conflict) apart from a long-settled, routine occupancy.
-						blockReservedAt[block] = simTime
 						emitCustom(BlockEvent.BlockReserved(block, trainId, simTime))
 						// Also notify addBlockOccupancyListener subscribers (legacy API, works without run())
 						registry.emit(
@@ -413,68 +409,36 @@ class DefaultPathReservationService(
 		}
 
 		// All paths tried, all were blocked.
-		// Emit a ReservationConflictDetected event ONLY if the blocked-path outcome looks like
-		// a genuine conflict rather than routine "path busy, will retry" contention -- see
-		// isGenuineConflict() for the concurrent-claim / unresolved-contention criteria.
-		firstBlockedConflict?.let { (blockedBlock, owner) -> emitConflictIfGenuine(trainId, blockedBlock, owner) }
+		// Deliberately NO ReservationConflictDetected emission here: a blocked-path
+		// outcome is routine "path busy, will retry" contention. The contention is only
+		// recorded so [flushUnresolvedConflicts] can surface it if it never resolves
+		// before the run ends (see the class-level disambiguation comment).
+		firstBlockedConflict?.let { (blockedBlock, _) -> recordBlockedContention(trainId, blockedBlock) }
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
 	}
 
 	/**
-	 * Emit [BlockEvent.ReservationConflictDetected] for a blocked-path outcome, but only
-	 * when [isConcurrentClaim] says the contention is a real, live conflict rather than
-	 * routine "path busy, will retry" behaviour. Either way, the contention is recorded
-	 * in [blockedSince] so [flushUnresolvedConflicts] can still catch it later if it
-	 * never resolves and the run ends first.
-	 *
-	 * Extracted out of [reservePath] purely to keep that method's cyclomatic complexity
-	 * within budget; carries no logic of its own beyond the guard + emit.
+	 * Record a blocked-path contention for [trainId] on [blockedBlock] in [blockedSince],
+	 * keeping the earliest blocked time if the same contention repeats. Never emits
+	 * anything mid-run; [flushUnresolvedConflicts] reports whatever is still unresolved
+	 * once the run has ended, and [clearBlockedTracking] forgets contention that resolved.
 	 */
-	private fun emitConflictIfGenuine(
+	private fun recordBlockedContention(
 		trainId: String,
-		blockedBlock: DynamicTrackBlock,
-		owner: String
+		blockedBlock: DynamicTrackBlock
 	) {
-		val key = trainId to blockedBlock
-		blockedSince.getOrPut(key) { currentSimulationTime() }
-
-		if (!isConcurrentClaim(blockedBlock)) return
-
-		// Already surfaced live -- flushUnresolvedConflicts() must not report it again.
-		blockedSince.remove(key)
-		emitCustom(
-			BlockEvent.ReservationConflictDetected(
-				block = blockedBlock,
-				trainId = trainId,
-				conflictingTrainId = owner,
-				time = currentSimulationTime()
-			)
-		)
-	}
-
-	/**
-	 * True when [block]'s current reservation was made within
-	 * [CONCURRENT_CLAIM_WINDOW_SECONDS] of right now -- i.e. the blocking train claimed
-	 * it essentially at the same simulated instant as the competing attempt, rather than
-	 * holding a long-settled, routine occupancy. This is the "two trains actively racing
-	 * for the same path" case (e.g. a test where a second reservation attempt happens
-	 * immediately after the first succeeds).
-	 */
-	private fun isConcurrentClaim(block: DynamicTrackBlock): Boolean {
-		val reservedAt = blockReservedAt[block] ?: return false
-		return (currentSimulationTime() - reservedAt) <= CONCURRENT_CLAIM_WINDOW_SECONDS
+		blockedSince.getOrPut(trainId to blockedBlock) { currentSimulationTime() }
 	}
 
 	/**
 	 * Emit [BlockEvent.ReservationConflictDetected] for every (trainId, block) contention
-	 * that is still tracked as blocked when the simulation ends, without ever having
-	 * produced a live [isConcurrentClaim] conflict.
+	 * that is still tracked as blocked when the simulation ends.
 	 *
 	 * This is the "unresolved by end of run" signal: genuine, never-clearing contention
-	 * (e.g. an actual deadlock) is still surfaced, even though it never looked like a
-	 * fresh concurrent race -- but routine "train waits its turn, then proceeds"
-	 * contention, however long it takes mid-run, is never reported this way, because by
-	 * definition it resolves ([reservePath] Success or [releasePath]) before the run ends.
+	 * (e.g. an actual deadlock) is still surfaced -- but routine "train waits its turn,
+	 * then proceeds" contention, however long it takes mid-run, is never reported this
+	 * way, because by definition it resolves ([reservePath] Success or [releasePath])
+	 * before the run ends.
 	 *
 	 * Deliberately does **not** call [emitCustom] -- that top-level function is a no-op
 	 * once the simulation's event loop has stopped (`Process.activeContext == null`),
@@ -512,15 +476,6 @@ class DefaultPathReservationService(
 	 */
 	private fun clearBlockedTracking(trainId: String) {
 		blockedSince.keys.removeAll { it.first == trainId }
-	}
-
-	private companion object {
-		/**
-		 * Window within which a block's reservation is considered "hot"/actively
-		 * contested -- i.e. claimed essentially at the same simulated instant as the
-		 * competing attempt, rather than long-settled routine occupancy.
-		 */
-		private const val CONCURRENT_CLAIM_WINDOW_SECONDS = 0.5
 	}
 
 	/**
