@@ -168,6 +168,18 @@ class SimulationRunner(
 		return r
 	}
 
+	/**
+	 * Request an immediate pause from the simulation thread (e.g., triggered by a collision warning).
+	 *
+	 * Thread-safe: may be called from the simulation thread; sets [isPaused] to `true` so that the
+	 * next [awaitIfPaused] tick suspends the loop.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun requestPause() {
+		isPaused = true
+	}
+
 	override fun isPaused(): Boolean = synchronized(lock) { pausedBacking }
 
 	/** Register a listener for all property change events. */

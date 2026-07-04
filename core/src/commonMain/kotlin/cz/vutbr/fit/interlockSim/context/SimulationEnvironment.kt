@@ -56,6 +56,11 @@ import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
  *   [RoutingServices.getPathReservationService],
  *   [RoutingServices.getTrainNavigationService])
  *
+ * **Collision Services:**
+ * - [getCollisionServices] - Access grouped collision-detection services
+ *   ([cz.vutbr.fit.interlockSim.sim.collision.CollisionServices.getCollisionDetectionService],
+ *   [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices.onCollisionWarning])
+ *
  * **Dynamic State Management:**
  * - [toDynamic] (PathSeparator) - Convert to dynamic wrapper
  * - [toDynamic] (TrackFacility) - Convert track to dynamic wrapper
@@ -480,4 +485,28 @@ interface SimulationEnvironment : NetworkState {
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
 	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)
+
+	// ========================================
+	// Collision Detection (Issue #611)
+	// ========================================
+
+	/**
+	 * Get the grouped collision-detection services for this simulation environment.
+	 *
+	 * Collision accessors (warning subscription, collision detection service) are grouped
+	 * behind the [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices] sub-interface
+	 * rather than being flattened directly onto this facade, mirroring the
+	 * [getRoutingServices] / [RoutingServices] segregation pattern. Callers reach a
+	 * specific accessor via this single entry point:
+	 *
+	 * ```kotlin
+	 * val service = env.getCollisionServices().getCollisionDetectionService()
+	 * env.getCollisionServices().onCollisionWarning { warning -> /* ... */ }
+	 * ```
+	 *
+	 * @return [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices] instance for this context
+	 * @see cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	fun getCollisionServices(): cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 }
