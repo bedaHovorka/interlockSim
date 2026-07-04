@@ -31,7 +31,7 @@ import kotlin.test.Test
  *
  * Tests that require a real [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock]
  * (needed for [CollisionWarning.BlockEntryViolation] payloads) are kept in the JVM-only
- * [AutoHaltPolicyTest] to avoid Koin/context setup overhead in commonTest.
+ * `BlockEntryViolationWarningTest` to avoid Koin/context setup overhead in commonTest.
  *
  * @since Issue #615 (Goal 3 SP5)
  */
