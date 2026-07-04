@@ -47,3 +47,14 @@ object StatusBarColors {
 	/** Distinct color for the paused-state badge shown next to the speed indicator. */
 	val PAUSED_BADGE_COLOR: Color = Color(0xFF, 0x8C, 0x00)
 }
+
+/**
+ * Shared GUI constants for warning presentation (Issue #616, Goal 3 SP6).
+ */
+object GuiConstants {
+	/** Red used for CRITICAL collision-warning indicators (status bar + warning panel rows). */
+	val WARNING_BADGE_COLOR: Color = Color(0xCC, 0x00, 0x00)
+
+	/** Default preferred height (pixels) for the [warning.WarningPanel] when visible. */
+	const val WARNING_PANEL_HEIGHT: Int = 120
+}
