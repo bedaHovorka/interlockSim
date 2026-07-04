@@ -20,6 +20,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.collision.TrainSnapshot
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -381,4 +382,28 @@ open class MultiTrainLoop(
 
 	/** Test-observability: number of block resources currently occupied. */
 	fun getOccupiedResourceCount(): Int = blockResources.occupiedCount()
+
+	/**
+	 * Return a [TrainSnapshot] for the approved train with the given [trainId], or `null`
+	 * if no such train is currently in [approvedTrains].
+	 *
+	 * Intended for use by [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * to evaluate predictive time-to-collision warnings after each block-reservation event.
+	 * Register this method as the snapshot provider via
+	 * `collisionDetectionService.registerTrainSnapshotProvider(multiTrainLoop::getTrainSnapshot)`.
+	 *
+	 * @param trainId The identifier of the queried train (matches [Train.name]).
+	 * @return A [TrainSnapshot] capturing the train's current velocity, position, and length;
+	 *   `null` when the train is not (yet) in [approvedTrains].
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	fun getTrainSnapshot(trainId: String): TrainSnapshot? =
+		approvedTrains.find { it.name == trainId }?.let { train ->
+			TrainSnapshot(
+				trainId = trainId,
+				velocity = train.getVelocity(),
+				totalDistance = train.totalDistance,
+				length = train.getLength()
+			)
+		}
 }
