@@ -492,7 +492,7 @@ class Train :
 			val thisSignal: Signal = semaphore.signal
 			requireSimulation(thisSignal.isAllowing()) { "Signal must be allowing: $thisSignal" }
 			@Suppress("RECEIVER_NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
-			val lastSeparator = path!!.getLast()
+			val lastSeparator = path.getLast()
 			val nextSemaphore: DynamicRailSemaphore =
 				when (lastSeparator) {
 					is DynamicRailSemaphore -> lastSeparator

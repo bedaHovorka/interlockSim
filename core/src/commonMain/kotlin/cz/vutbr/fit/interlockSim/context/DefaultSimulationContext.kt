@@ -692,7 +692,7 @@ open class DefaultSimulationContext(
 		requireSimulation(separator is OrientedPathSeparator) {
 			"PathSeparator must be OrientedPathSeparator, got ${separator::class.simpleName ?: "unknown"}"
 		}
-		val segment = getSegment(separator, secondEndTrack!!)
+		val segment = getSegment(separator, secondEndTrack)
 		// Match Java 1:1: return null when segment doesn't exist
 		return separator.getFollowingSegment(segment)
 	}
@@ -765,7 +765,7 @@ open class DefaultSimulationContext(
 	private fun getLocation(node: NodeCell): Point {
 		val location = getRailWayNetGrid().getLocation(node)
 		requireSimulation(location != null) { "Location not found for nodeCell $node in grid" }
-		return location!!
+		return location
 	}
 
 	/**
