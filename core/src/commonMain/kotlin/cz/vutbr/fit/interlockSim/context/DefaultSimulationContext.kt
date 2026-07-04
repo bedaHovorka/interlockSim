@@ -50,6 +50,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.collision.PauseController
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -200,6 +201,9 @@ open class DefaultSimulationContext(
 
 	/** Raw kdisco event listeners registered before run(); wired into kdisco at run() time. */
 	private val pendingSimEventListeners: MutableList<(cz.hovorka.kdisco.SimulationEvent) -> Unit> = mutableListOf()
+
+	/** Spatial-conflict event listeners registered before run(); wired into kdisco at run() time. */
+	private val pendingConflictEventListeners: MutableList<(ConflictDetectedEvent) -> Unit> = mutableListOf()
 
 	/**
 	 * True once run() has been invoked and the simulation has started.
@@ -1191,6 +1195,11 @@ open class DefaultSimulationContext(
 		pendingSimEventListeners += listener
 	}
 
+	override fun onConflictDetectedEvent(listener: (ConflictDetectedEvent) -> Unit) {
+		if (simulationHasStarted) return
+		pendingConflictEventListeners += listener
+	}
+
 	/**
 	 * Buffer a collision-warning listener registered before [run]; listeners registered
 	 * after [run] has started are silently ignored (same contract as [onBlockEvent]).
@@ -1293,6 +1302,14 @@ open class DefaultSimulationContext(
 			sim.onEvent { event ->
 				if (event is cz.hovorka.kdisco.SimulationEvent.Custom && event.payload is BlockEvent) {
 					blockListeners.forEach { it(event.payload as BlockEvent) }
+				}
+			}
+		}
+		if (pendingConflictEventListeners.isNotEmpty()) {
+			val conflictListeners = pendingConflictEventListeners.toList()
+			sim.onEvent { event ->
+				if (event is cz.hovorka.kdisco.SimulationEvent.Custom && event.payload is ConflictDetectedEvent) {
+					conflictListeners.forEach { it(event.payload as ConflictDetectedEvent) }
 				}
 			}
 		}

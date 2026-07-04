@@ -14,6 +14,7 @@ import cz.hovorka.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -400,6 +401,14 @@ class DefaultPathReservationService(
 							time = simTime
 						)
 					)
+					emitCustom(
+						ConflictDetectedEvent(
+							block = result.conflictingBlock,
+							trainId = trainId,
+							conflictingTrainId = result.existingOwner,
+							time = simTime
+						)
+					)
 					PathReservationService.ReservationResult.Conflict(
 						result.conflictingBlock,
 						result.existingOwner
@@ -409,11 +418,27 @@ class DefaultPathReservationService(
 		}
 
 		// All paths tried, all were blocked.
-		// Deliberately NO ReservationConflictDetected emission here: a blocked-path
-		// outcome is routine "path busy, will retry" contention. The contention is only
-		// recorded so [flushUnresolvedConflicts] can surface it if it never resolves
-		// before the run ends (see the class-level disambiguation comment).
-		firstBlockedConflict?.let { (blockedBlock, _) -> recordBlockedContention(trainId, blockedBlock) }
+		// No BlockEvent.ReservationConflictDetected emission here (Goal 3): a blocked-path
+		// outcome is routine "path busy, will retry" contention for the collision-warning layer.
+		// The contention is recorded so [flushUnresolvedConflicts] can surface it if it never
+		// resolves before the run ends (see the class-level disambiguation comment).
+		//
+		// However, ConflictDetectedEvent (Goal 9 SP1) IS emitted immediately: it does not
+		// trigger an automatic simulation pause, so it can be delivered mid-run without the
+		// false-positive-pause problem that led to the Goal 3 restriction. This gives the
+		// Goal 9 conflict-resolution layer an immediate signal to act on.
+		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
+			recordBlockedContention(trainId, blockedBlock)
+			val simTime = currentSimulationTime()
+			emitCustom(
+				ConflictDetectedEvent(
+					block = blockedBlock,
+					trainId = trainId,
+					conflictingTrainId = owningTrain,
+					time = simTime
+				)
+			)
+		}
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
 	}
 
