@@ -88,6 +88,31 @@ class DefaultPathReservationService(
 	private val pathInfoBuilder: PathInfoBuilder,
 	private val routeFinder: RouteFinder
 ) : PathReservationService {
+	// ── Conflict-vs-routine-contention disambiguation (Issue #612 follow-up) ──
+	//
+	// reservePath() returning AllPathsBlocked is the ORDINARY outcome whenever a
+	// candidate path is merely busy right now (e.g. another train is still using a
+	// shared switch during routine ShuntingLoop choreography). That must not, on
+	// its own, be treated as a [BlockEvent.ReservationConflictDetected] -- doing so
+	// makes DefaultCollisionDetectionService auto-pause the simulation on completely
+	// routine contention (regression: SimulationSpeedPerformanceTest hang).
+	//
+	// No timing signal derived from an AllPathsBlocked outcome can distinguish a
+	// genuine race from ordinary queueing at a shared bottleneck (three heuristics
+	// were tried and all misfired at high-traffic chokepoints -- see issue #612).
+	// Genuine conflicts are therefore surfaced by exactly two mechanisms, neither
+	// based on AllPathsBlocked timing:
+	// 1. Live, mid-run: the atomic registry race ([PathReservationRegistry.RegistrationResult.Conflict]
+	//    in [reservePath]) -- a real double-booking detected at reservation time.
+	// 2. End-of-run: [flushUnresolvedConflicts] -- blocked-path contention that never
+	//    resolved before the run ended (deadlock/starvation indicator). Deliberately
+	//    NOT a live/running-clock threshold; "unresolved when the run ends" is the
+	//    actual signal, checked exactly once after the run has stopped.
+	//
+	// The map is cleared per-train on Success and in releasePath(), so it stays
+	// bounded to currently-active trains.
+	private val blockedSince: MutableMap<Pair<String, DynamicTrackBlock>, Double> = mutableMapOf()
+
 	private fun findCandidatePaths(
 		trainId: String,
 		start: DynamicPathSeparator,
@@ -150,6 +175,10 @@ class DefaultPathReservationService(
 			return PathReservationService.ReservationResult.NoPathExists
 		}
 
+		// Tracks the first blocked (block, owningTrain) pair across all candidate paths.
+		// Used to emit ReservationConflictDetected when AllPathsBlocked is about to be returned.
+		var firstBlockedConflict: Pair<DynamicTrackBlock, String>? = null
+
 		// Step 2: Try each candidate path until we find a free one
 		for ((index, path) in candidatePaths.withIndex()) {
 			// Step 2a: Extract unique DynamicTrackBlocks from TrackSections
@@ -192,11 +221,15 @@ class DefaultPathReservationService(
 				val pathInfo = pathInfoBuilder.buildPathInfo(start, target, path)
 				registry.registerPathInfo(trainId, pathInfo)
 
+				// Resolved -- this train is no longer contending for any block.
+				clearBlockedTracking(trainId)
 				return PathReservationService.ReservationResult.Success(blocks)
 			}
 
 			// Step 2b: Check if all forward blocks are available (FREE or RESERVED by THIS train)
 			if (!forwardBlocks.areAllFreeOrOwnedBy(trainId)) {
+				// Capture a blocked (block, owner) pair for the AllPathsBlocked conflict warning.
+				firstBlockedConflict = findFirstBlockedConflict(forwardBlocks, trainId)
 				continue
 			}
 
@@ -347,6 +380,9 @@ class DefaultPathReservationService(
 						)
 					}
 
+					// Resolved -- this train is no longer contending for any block.
+					clearBlockedTracking(trainId)
+
 					PathReservationService.ReservationResult.Success(blocks)
 				}
 				is PathReservationRegistry.RegistrationResult.Conflict -> {
@@ -355,6 +391,15 @@ class DefaultPathReservationService(
 						"reservePath: Registry conflict - ${result.conflictingBlock} owned by ${result.existingOwner}"
 					}
 					rollbackReservation(start, blocks)
+					val simTime = currentSimulationTime()
+					emitCustom(
+						BlockEvent.ReservationConflictDetected(
+							block = result.conflictingBlock,
+							trainId = trainId,
+							conflictingTrainId = result.existingOwner,
+							time = simTime
+						)
+					)
 					PathReservationService.ReservationResult.Conflict(
 						result.conflictingBlock,
 						result.existingOwner
@@ -363,8 +408,96 @@ class DefaultPathReservationService(
 			}
 		}
 
-		// All paths tried, all were blocked
+		// All paths tried, all were blocked.
+		// Deliberately NO ReservationConflictDetected emission here: a blocked-path
+		// outcome is routine "path busy, will retry" contention. The contention is only
+		// recorded so [flushUnresolvedConflicts] can surface it if it never resolves
+		// before the run ends (see the class-level disambiguation comment).
+		firstBlockedConflict?.let { (blockedBlock, _) -> recordBlockedContention(trainId, blockedBlock) }
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
+	}
+
+	/**
+	 * Record a blocked-path contention for [trainId] on [blockedBlock] in [blockedSince],
+	 * keeping the earliest blocked time if the same contention repeats. Never emits
+	 * anything mid-run; [flushUnresolvedConflicts] reports whatever is still unresolved
+	 * once the run has ended, and [clearBlockedTracking] forgets contention that resolved.
+	 */
+	private fun recordBlockedContention(
+		trainId: String,
+		blockedBlock: DynamicTrackBlock
+	) {
+		blockedSince.getOrPut(trainId to blockedBlock) { currentSimulationTime() }
+	}
+
+	/**
+	 * Emit [BlockEvent.ReservationConflictDetected] for every (trainId, block) contention
+	 * that is still tracked as blocked when the simulation ends.
+	 *
+	 * This is the "unresolved by end of run" signal: genuine, never-clearing contention
+	 * (e.g. an actual deadlock) is still surfaced -- but routine "train waits its turn,
+	 * then proceeds" contention, however long it takes mid-run, is never reported this
+	 * way, because by definition it resolves ([reservePath] Success or [releasePath])
+	 * before the run ends.
+	 *
+	 * Deliberately does **not** call [emitCustom] -- that top-level function is a no-op
+	 * once the simulation's event loop has stopped (`Process.activeContext == null`),
+	 * which is exactly the state the caller is in when the run has just ended. Instead,
+	 * this returns the events for the caller ([cz.vutbr.fit.interlockSim.context.DefaultSimulationContext.run])
+	 * to deliver directly to its buffered block-event listeners. Calling this mid-run
+	 * would reintroduce the original false-positive-pause bug this design avoids, so it
+	 * must only be called once, after the run has fully stopped.
+	 *
+	 * @param simulationEndTime Simulation clock value to stamp on the returned event(s).
+	 * @since Issue #612 (Goal 3 SP2 follow-up)
+	 */
+	override fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected> {
+		if (blockedSince.isEmpty()) return emptyList()
+		val unresolved = blockedSince.keys.toList()
+		blockedSince.clear()
+		return unresolved.mapNotNull { (trainId, block) ->
+			val owner = registry.getOwner(block) ?: block.trainName ?: return@mapNotNull null
+			BlockEvent.ReservationConflictDetected(
+				block = block,
+				trainId = trainId,
+				conflictingTrainId = owner,
+				time = simulationEndTime
+			)
+		}
+	}
+
+	/**
+	 * Forget any in-progress blocked-path contention tracked for [trainId].
+	 *
+	 * Called whenever [trainId] resolves its reservation attempt (Success) or gives
+	 * up its reservations entirely ([releasePath]), so [blockedSince] never conflates
+	 * a stale, already-resolved contention with a fresh one on the same block later,
+	 * and so [flushUnresolvedConflicts] never reports contention that actually resolved.
+	 */
+	private fun clearBlockedTracking(trainId: String) {
+		blockedSince.keys.removeAll { it.first == trainId }
+	}
+
+	/**
+	 * Find the first block in [blocks] that is not free and not owned by [trainId],
+	 * and return it paired with its owning train ID.
+	 *
+	 * Returns `null` when no such block exists (all blocks are free or owned by [trainId]).
+	 *
+	 * Extracted from [reservePath] to keep that method within the cyclomatic-complexity budget.
+	 *
+	 * @since Issue #612 (Goal 3 SP2)
+	 */
+	private fun findFirstBlockedConflict(
+		blocks: List<DynamicTrackBlock>,
+		trainId: String
+	): Pair<DynamicTrackBlock, String>? {
+		val blockedBlock =
+			blocks.firstOrNull { block ->
+				block.getState() != TrackFacility.State.FREE && block.trainName != trainId
+			} ?: return null
+		val owner = registry.getOwner(blockedBlock) ?: blockedBlock.trainName ?: return null
+		return Pair(blockedBlock, owner)
 	}
 
 	/**
@@ -423,6 +556,8 @@ class DefaultPathReservationService(
 			blocks.forEach { block ->
 				emitBlockReleased(block, trainId, simTime)
 			}
+			// Train is done contending for any block it may have been blocked on.
+			clearBlockedTracking(trainId)
 		}
 	}
 
