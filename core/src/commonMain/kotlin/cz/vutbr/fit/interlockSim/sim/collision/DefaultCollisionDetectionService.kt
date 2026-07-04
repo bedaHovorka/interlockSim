@@ -22,7 +22,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Goal 3 sub-phase so each rule ships with its own dedicated tests:
  * - [CollisionWarning.ReservationConflict] detection  → SP2 (#612) — implemented here
  * - [CollisionWarning.BlockEntryViolation] detection  → SP3 (#613) — implemented here
- * - [CollisionWarning.PredictiveCollision] detection   → SP4 (#614) — deferred
+ * - [CollisionWarning.PredictiveCollision] detection   → SP4 (#614) — implemented here
  *
  * **Detection rules (SP2, #612):**
  * - [CollisionWarning.ReservationConflict]: emitted when [BlockEvent.BlockReserved] fires
@@ -45,6 +45,30 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   throwing, and this service receives it via [SimulationEnvironment.onSimulationEvent].
  *   The two paths cannot double-fire for one entry: on double-occupancy, `enter()` throws
  *   before its [BlockEvent.OccupancySet] emission is reached.
+ *
+ * **Detection rules (SP4, #614) — predictive TTC:**
+ * - [CollisionWarning.PredictiveCollision]: emitted after each [BlockEvent.BlockReserved]
+ *   or [BlockEvent.BlockReleased] event when a snapshot provider (registered via
+ *   [registerTrainSnapshotProvider]) indicates that a fast trailing train will reach the
+ *   leading train's tail in fewer than [MIN_TIME_TO_COLLISION_SECONDS] seconds.
+ *
+ *   **Algorithm:**
+ *   1. Maintain a set of currently active train IDs by counting `BlockReserved` /
+ *      `BlockReleased` events per train.
+ *   2. After each reservation-change event, collect a [TrainSnapshot] for every active
+ *      train via the registered provider.
+ *   3. For each ordered pair (leading, trailing) where `trailing.totalDistance <
+ *      leading.totalDistance` **and** `trailing.velocity > leading.velocity`:
+ *      - `separation = leading.totalDistance − leading.length − trailing.totalDistance`
+ *      - `relativeVelocity = trailing.velocity − leading.velocity`
+ *      - `ttc = separation / relativeVelocity`
+ *   4. If `ttc ≤ [MIN_TIME_TO_COLLISION_SECONDS]` (and positive), emit
+ *      [CollisionWarning.PredictiveCollision].  Duplicate warnings for the same
+ *      (trailing, leading) pair are suppressed within a
+ *      [PREDICTIVE_DEDUP_WINDOW_SECONDS]-second window.
+ *
+ *   Configure via [safetyMarginSeconds] and [minTimeToCollisionSeconds].
+ *   Register snapshot providers with [registerTrainSnapshotProvider].
  *
  * The [BlockEvent] and [SimulationEvent] subscriptions are registered in the constructor
  * so they are buffered by [SimulationEnvironment.onBlockEvent] /
@@ -113,6 +137,81 @@ class DefaultCollisionDetectionService(
 	 */
 	private val lastConflictWarningTime: MutableMap<Pair<String, String>, Double> = mutableMapOf()
 
+	// ── SP4: Predictive TTC state ─────────────────────────────────────────────
+
+	/**
+	 * Safety margin added to [minTimeToCollisionSeconds] in the TTC check.
+	 *
+	 * A warning is emitted when `ttc < minTimeToCollisionSeconds + safetyMarginSeconds`.
+	 * Increase this value to trigger warnings earlier.
+	 *
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	var safetyMarginSeconds: Double = DEFAULT_SAFETY_MARGIN_SECONDS
+
+	/**
+	 * Maximum TTC value (seconds) at which a warning is emitted.
+	 *
+	 * Trains with a computed TTC **greater** than this value are considered safely
+	 * separated and no warning is emitted.
+	 *
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	var minTimeToCollisionSeconds: Double = DEFAULT_MIN_TIME_TO_COLLISION_SECONDS
+
+	/**
+	 * Snapshot provider for active trains.
+	 *
+	 * Returns the current kinematic [TrainSnapshot] for the given train ID, or `null`
+	 * if no snapshot is available for that train (e.g., the train has not yet started).
+	 *
+	 * Default: always returns `null` (TTC checks produce no results). Override via
+	 * [registerTrainSnapshotProvider].
+	 */
+	private var snapshotProvider: (trainId: String) -> TrainSnapshot? = { null }
+
+	/**
+	 * Deduplication state for [CollisionWarning.PredictiveCollision] warnings.
+	 *
+	 * Key: ordered pair (trailingTrainId, leadingTrainId).
+	 * Value: simulation time of the last emitted warning for that pair.
+	 */
+	private val lastPredictiveTtcWarningTime: MutableMap<Pair<String, String>, Double> = mutableMapOf()
+
+	/**
+	 * Per-train count of currently reserved blocks, used to determine when a train
+	 * has completely left the network (count → 0) and should be removed from
+	 * [activeTrainIds].
+	 */
+	private val trainReservationCount: MutableMap<String, Int> = mutableMapOf()
+
+	/**
+	 * IDs of trains that currently have at least one reserved block.
+	 *
+	 * Populated by [BlockEvent.BlockReserved] and pruned by [BlockEvent.BlockReleased].
+	 * Used as the candidate set for TTC evaluation.
+	 */
+	private val activeTrainIds: MutableSet<String> = mutableSetOf()
+
+	/**
+	 * Register a snapshot provider for the predictive TTC monitor.
+	 *
+	 * The [provider] is called once per active train every time TTC is evaluated
+	 * (after each [BlockEvent.BlockReserved] or [BlockEvent.BlockReleased] event).
+	 * Returning `null` for a train ID means no TTC check is performed for that train.
+	 *
+	 * In production, register a lambda that reads position/velocity from the live
+	 * [cz.vutbr.fit.interlockSim.sim.Train] processes (e.g., via
+	 * [cz.vutbr.fit.interlockSim.sim.MultiTrainLoop.getTrainSnapshot]).  In tests,
+	 * register a stub that returns controlled [TrainSnapshot] values.
+	 *
+	 * @param provider Callback returning [TrainSnapshot] for a given trainId, or `null`.
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	fun registerTrainSnapshotProvider(provider: (trainId: String) -> TrainSnapshot?) {
+		snapshotProvider = provider
+	}
+
 	init {
 		// Subscribe to domain-level block events (reserve / occupancy changes).
 		// The call happens before run(), so it is buffered by DefaultSimulationContext.
@@ -177,6 +276,11 @@ class DefaultCollisionDetectionService(
 						)
 					)
 				}
+				// SP4: track active train and re-evaluate TTC.
+				activeTrainIds.add(event.trainId)
+				trainReservationCount[event.trainId] =
+					(trainReservationCount[event.trainId] ?: 0) + 1
+				evaluatePredictiveTtc(event.time)
 			}
 			is BlockEvent.ReservationConflictDetected -> handleReservationConflictDetected(event)
 			is BlockEvent.OccupancySet -> {
@@ -196,10 +300,21 @@ class DefaultCollisionDetectionService(
 					)
 				}
 			}
-			is BlockEvent.BlockReleased,
-			is BlockEvent.OccupancyCleared
-			-> {
-				// Release events do not indicate a hazard.
+			is BlockEvent.BlockReleased -> {
+				// SP4: update reservation count; remove train when all blocks released.
+				val remaining = (trainReservationCount[event.trainId] ?: 1) - 1
+				if (remaining <= 0) {
+					activeTrainIds.remove(event.trainId)
+					trainReservationCount.remove(event.trainId)
+				} else {
+					trainReservationCount[event.trainId] = remaining
+				}
+				// Re-evaluate TTC because the leading train may have cleared a block,
+				// changing the separation distance.
+				evaluatePredictiveTtc(event.time)
+			}
+			is BlockEvent.OccupancyCleared -> {
+				// Occupancy-cleared events do not by themselves indicate a hazard.
 			}
 		}
 	}
@@ -239,6 +354,83 @@ class DefaultCollisionDetectionService(
 	}
 
 	/**
+	 * Evaluate predictive time-to-collision for all pairs of active trains.
+	 *
+	 * Called after each [BlockEvent.BlockReserved] or [BlockEvent.BlockReleased] event.
+	 * Iterates over all ordered (leading, trailing) pairs and emits
+	 * [CollisionWarning.PredictiveCollision] when the trailing train will reach the
+	 * leading train's tail in fewer than [minTimeToCollisionSeconds] +
+	 * [safetyMarginSeconds] seconds.
+	 *
+	 * @param eventTime Simulation time at which the triggering event occurred.
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	private fun evaluatePredictiveTtc(eventTime: Double) {
+		if (activeTrainIds.size < 2) return
+
+		// Collect snapshots; skip trains whose provider returns null.
+		val snapshotPairs =
+			activeTrainIds.mapNotNull { id ->
+				snapshotProvider(id)?.let { snap -> id to snap }
+			}
+		val snapshots: Map<String, TrainSnapshot> = snapshotPairs.toMap()
+
+		if (snapshots.size < 2) return
+
+		val trainIds = snapshots.keys.toList()
+		val threshold = minTimeToCollisionSeconds + safetyMarginSeconds
+
+		for (leadingId in trainIds) {
+			for (trailingId in trainIds) {
+				if (leadingId == trailingId) continue
+				val leading = snapshots[leadingId] ?: continue
+				val trailing = snapshots[trailingId] ?: continue
+
+				// Trailing must be behind leading (lower total distance).
+				if (trailing.totalDistance >= leading.totalDistance) continue
+
+				// Trailing must be faster (catching up to leading).
+				val relativeVelocity = trailing.velocity - leading.velocity
+				if (relativeVelocity <= 0.0) continue
+
+				// Gap between trailing front and leading tail.
+				val separation = leading.totalDistance - leading.length - trailing.totalDistance
+				if (separation <= 0.0) continue // already overlapping — BlockEntryViolation handles this
+
+				val ttc = separation / relativeVelocity
+				if (ttc > threshold) continue
+
+				// Deduplication: suppress repeated warnings for the same pair.
+				val dedupKey = Pair(trailingId, leadingId)
+				val lastTime = lastPredictiveTtcWarningTime[dedupKey]
+				if (lastTime != null && (eventTime - lastTime) < PREDICTIVE_DEDUP_WINDOW_SECONDS) {
+					logger.debug {
+						"evaluatePredictiveTtc: suppressed duplicate for " +
+							"($trailingId → $leadingId) at t=$eventTime (last at t=$lastTime)"
+					}
+					continue
+				}
+				lastPredictiveTtcWarningTime[dedupKey] = eventTime
+
+				logger.warn {
+					"evaluatePredictiveTtc: TTC=${"%.1f".format(ttc)}s for " +
+						"trailing=$trailingId (v=${trailing.velocity} m/s, " +
+						"pos=${trailing.totalDistance} m) → " +
+						"leading=$leadingId (v=${leading.velocity} m/s, " +
+						"pos=${leading.totalDistance} m, len=${leading.length} m)"
+				}
+				emit(
+					CollisionWarning.PredictiveCollision(
+						trainId = trailingId,
+						targetTrainId = leadingId,
+						time = eventTime
+					)
+				)
+			}
+		}
+	}
+
+	/**
 	 * Emit a [CollisionWarning] directly, bypassing internal event detection.
 	 *
 	 * Provided for test scenarios that need to trigger warning delivery without
@@ -260,5 +452,25 @@ class DefaultCollisionDetectionService(
 		 * @since Issue #612 (Goal 3 SP2)
 		 */
 		private const val DEDUP_WINDOW_SECONDS = 1.0
+
+		/**
+		 * Default safety margin in seconds added to [DEFAULT_MIN_TIME_TO_COLLISION_SECONDS].
+		 * @since Issue #614 (Goal 3 SP4)
+		 */
+		internal const val DEFAULT_SAFETY_MARGIN_SECONDS = 10.0
+
+		/**
+		 * Default threshold: do not warn when computed TTC exceeds this value.
+		 * @since Issue #614 (Goal 3 SP4)
+		 */
+		internal const val DEFAULT_MIN_TIME_TO_COLLISION_SECONDS = 30.0
+
+		/**
+		 * Deduplication window for predictive TTC warnings (seconds).
+		 * Prevents the same pair from generating a storm of warnings at every
+		 * block-reservation event.
+		 * @since Issue #614 (Goal 3 SP4)
+		 */
+		private const val PREDICTIVE_DEDUP_WINDOW_SECONDS = 5.0
 	}
 }
