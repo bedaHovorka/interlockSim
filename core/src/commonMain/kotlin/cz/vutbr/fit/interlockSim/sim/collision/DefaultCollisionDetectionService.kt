@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim.collision
 import cz.hovorka.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -53,11 +54,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   leading train's tail in fewer than [MIN_TIME_TO_COLLISION_SECONDS] seconds.
  *
  *   **Algorithm:**
- *   1. Maintain a set of currently active train IDs by counting `BlockReserved` /
- *      `BlockReleased` events per train.
+ *   1. Maintain a set of currently active train IDs, and the set of blocks each one
+ *      currently has reserved, by tracking `BlockReserved` / `BlockReleased` events per
+ *      train.
  *   2. After each reservation-change event, collect a [TrainSnapshot] for every active
  *      train via the registered provider.
- *   3. For each ordered pair (leading, trailing) where `trailing.totalDistance <
+ *   3. For each ordered pair (leading, trailing) that currently **share at least one
+ *      reserved block** — trains with no shared block are skipped, since
+ *      [TrainSnapshot.totalDistance] is a per-train odometer and is not spatially
+ *      comparable across unrelated routes — where `trailing.totalDistance <
  *      leading.totalDistance` **and** `trailing.velocity > leading.velocity`:
  *      - `separation = leading.totalDistance − leading.length − trailing.totalDistance`
  *      - `relativeVelocity = trailing.velocity − leading.velocity`
@@ -194,6 +199,21 @@ class DefaultCollisionDetectionService(
 	private val activeTrainIds: MutableSet<String> = mutableSetOf()
 
 	/**
+	 * Currently reserved blocks per train, populated by [BlockEvent.BlockReserved] and
+	 * pruned by [BlockEvent.BlockReleased].
+	 *
+	 * Used to restrict TTC evaluation ([evaluatePredictiveTtc]) to train pairs that
+	 * actually share a reserved block — per the SP4 algorithm ("for any shared block,
+	 * estimate..."). Without this restriction, trains on unrelated routes would be
+	 * compared by raw [TrainSnapshot.totalDistance], which is a per-train odometer
+	 * since that train's own start and is not a shared spatial coordinate — comparing
+	 * it across trains with no common block produces meaningless results.
+	 *
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	private val trainReservedBlocks: MutableMap<String, MutableSet<DynamicTrackBlock>> = mutableMapOf()
+
+	/**
 	 * Register a snapshot provider for the predictive TTC monitor.
 	 *
 	 * The [provider] is called once per active train every time TTC is evaluated
@@ -276,10 +296,11 @@ class DefaultCollisionDetectionService(
 						)
 					)
 				}
-				// SP4: track active train and re-evaluate TTC.
+				// SP4: track active train, its reserved blocks, and re-evaluate TTC.
 				activeTrainIds.add(event.trainId)
 				trainReservationCount[event.trainId] =
 					(trainReservationCount[event.trainId] ?: 0) + 1
+				trainReservedBlocks.getOrPut(event.trainId) { mutableSetOf() }.add(event.block)
 				evaluatePredictiveTtc(event.time)
 			}
 			is BlockEvent.ReservationConflictDetected -> handleReservationConflictDetected(event)
@@ -303,9 +324,11 @@ class DefaultCollisionDetectionService(
 			is BlockEvent.BlockReleased -> {
 				// SP4: update reservation count; remove train when all blocks released.
 				val remaining = (trainReservationCount[event.trainId] ?: 1) - 1
+				trainReservedBlocks[event.trainId]?.remove(event.block)
 				if (remaining <= 0) {
 					activeTrainIds.remove(event.trainId)
 					trainReservationCount.remove(event.trainId)
+					trainReservedBlocks.remove(event.trainId)
 				} else {
 					trainReservationCount[event.trainId] = remaining
 				}
@@ -385,50 +408,86 @@ class DefaultCollisionDetectionService(
 				if (leadingId == trailingId) continue
 				val leading = snapshots[leadingId] ?: continue
 				val trailing = snapshots[trailingId] ?: continue
+				if (!sharesReservedBlock(leadingId, trailingId)) continue
 
-				// Trailing must be behind leading (lower total distance).
-				if (trailing.totalDistance >= leading.totalDistance) continue
-
-				// Trailing must be faster (catching up to leading).
-				val relativeVelocity = trailing.velocity - leading.velocity
-				if (relativeVelocity <= 0.0) continue
-
-				// Gap between trailing front and leading tail.
-				val separation = leading.totalDistance - leading.length - trailing.totalDistance
-				if (separation <= 0.0) continue // already overlapping — BlockEntryViolation handles this
-
-				val ttc = separation / relativeVelocity
-				if (ttc > threshold) continue
-
-				// Deduplication: suppress repeated warnings for the same pair.
-				val dedupKey = Pair(trailingId, leadingId)
-				val lastTime = lastPredictiveTtcWarningTime[dedupKey]
-				if (lastTime != null && (eventTime - lastTime) < PREDICTIVE_DEDUP_WINDOW_SECONDS) {
-					logger.debug {
-						"evaluatePredictiveTtc: suppressed duplicate for " +
-							"($trailingId → $leadingId) at t=$eventTime (last at t=$lastTime)"
-					}
-					continue
-				}
-				lastPredictiveTtcWarningTime[dedupKey] = eventTime
-
-				logger.warn {
-					val ttcTenths = (ttc * 10).toLong().coerceAtLeast(0)
-					"evaluatePredictiveTtc: TTC=${ttcTenths / 10}.${ttcTenths % 10}s for " +
-						"trailing=$trailingId (v=${trailing.velocity} m/s, " +
-						"pos=${trailing.totalDistance} m) → " +
-						"leading=$leadingId (v=${leading.velocity} m/s, " +
-						"pos=${leading.totalDistance} m, len=${leading.length} m)"
-				}
-				emit(
-					CollisionWarning.PredictiveCollision(
-						trainId = trailingId,
-						targetTrainId = leadingId,
-						time = eventTime
-					)
-				)
+				checkTrainPair(leadingId, leading, trailingId, trailing, eventTime, threshold)
 			}
 		}
+	}
+
+	/**
+	 * True if [firstId] and [secondId] currently have at least one reserved block in
+	 * common. Used to restrict TTC comparison to trains on convergent routes — see
+	 * [trainReservedBlocks].
+	 *
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	private fun sharesReservedBlock(
+		firstId: String,
+		secondId: String
+	): Boolean {
+		val firstBlocks = trainReservedBlocks[firstId]
+		val secondBlocks = trainReservedBlocks[secondId]
+		if (firstBlocks.isNullOrEmpty() || secondBlocks.isNullOrEmpty()) return false
+		return firstBlocks.any { it in secondBlocks }
+	}
+
+	/**
+	 * Evaluate a single ordered (leading, trailing) pair and emit
+	 * [CollisionWarning.PredictiveCollision] if the trailing train is on a collision
+	 * course with the leading train's tail within [threshold] seconds.
+	 *
+	 * @since Issue #614 (Goal 3 SP4)
+	 */
+	private fun checkTrainPair(
+		leadingId: String,
+		leading: TrainSnapshot,
+		trailingId: String,
+		trailing: TrainSnapshot,
+		eventTime: Double,
+		threshold: Double
+	) {
+		// Trailing must be behind leading (lower total distance).
+		if (trailing.totalDistance >= leading.totalDistance) return
+
+		// Trailing must be faster (catching up to leading).
+		val relativeVelocity = trailing.velocity - leading.velocity
+		if (relativeVelocity <= 0.0) return
+
+		// Gap between trailing front and leading tail.
+		val separation = leading.totalDistance - leading.length - trailing.totalDistance
+		if (separation <= 0.0) return // already overlapping — BlockEntryViolation handles this
+
+		val ttc = separation / relativeVelocity
+		if (ttc > threshold) return
+
+		// Deduplication: suppress repeated warnings for the same pair.
+		val dedupKey = Pair(trailingId, leadingId)
+		val lastTime = lastPredictiveTtcWarningTime[dedupKey]
+		if (lastTime != null && (eventTime - lastTime) < PREDICTIVE_DEDUP_WINDOW_SECONDS) {
+			logger.debug {
+				"evaluatePredictiveTtc: suppressed duplicate for " +
+					"($trailingId → $leadingId) at t=$eventTime (last at t=$lastTime)"
+			}
+			return
+		}
+		lastPredictiveTtcWarningTime[dedupKey] = eventTime
+
+		logger.warn {
+			val ttcTenths = (ttc * 10).toLong().coerceAtLeast(0)
+			"evaluatePredictiveTtc: TTC=${ttcTenths / 10}.${ttcTenths % 10}s for " +
+				"trailing=$trailingId (v=${trailing.velocity} m/s, " +
+				"pos=${trailing.totalDistance} m) → " +
+				"leading=$leadingId (v=${leading.velocity} m/s, " +
+				"pos=${leading.totalDistance} m, len=${leading.length} m)"
+		}
+		emit(
+			CollisionWarning.PredictiveCollision(
+				trainId = trailingId,
+				targetTrainId = leadingId,
+				time = eventTime
+			)
+		)
 	}
 
 	/**
