@@ -36,11 +36,13 @@ sealed class CollisionWarning {
 	 * @property trainId The train that attempted the conflicting reservation.
 	 * @property conflictingTrainId The train that already holds the reservation.
 	 * @property time Simulation time of detection.
+	 * @property conflictingBlock The specific block that caused the conflict, if known.
 	 */
 	data class ReservationConflict(
 		val trainId: String,
 		val conflictingTrainId: String,
-		override val time: Double
+		override val time: Double,
+		val conflictingBlock: DynamicTrackBlock? = null
 	) : CollisionWarning()
 
 	/**

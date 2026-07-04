@@ -158,7 +158,7 @@ val coreTestModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultCollisionDetectionService(context)
+				DefaultCollisionDetectionService(context, context)
 			}
 		}
 	}
