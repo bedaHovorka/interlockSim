@@ -96,9 +96,7 @@ one is known to exist. Sizes are the **default Q4 download size**; VRAM at runti
 ### Tier R — Reactive / fast candidates (only if TRAIN ever goes LLM)
 
 | # | Ollama tag | ~Size (Q4) | Issue row | Tool calling | Proposed Koog constant | Notes |
-|---|---|---|---|---|---|---|
-| R1 | `llama3.2:3b` | ~2.0 GB | ~2 GB "very fast, already in Koog Meta" | Native | `OllamaModels.Meta.LLAMA_3_2` | Already in Koog; used in the #533 wiring sketch; still unlikely to hit 50 ms |
-| R2 | `gemma3:4b` | ~3.3 GB | (shared with D5) | Gemma-3 | `OllamaModels.Google.GEMMA_3_*` *(verify)* | Fast deliberative fallback; borderline for hot path |
+| R1 | `llama3.2:3b` | ~2.0 GB | ~2 GB "very fast, already in Koog Meta" | Native | `OllamaModels.Meta.LLAMA_3_2` *(verify)* | Referenced in the #533 wiring sketch; still unlikely to hit 50 ms |
 
 ### Stretch — over budget, documented for completeness
 
