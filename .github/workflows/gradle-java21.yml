@@ -1,10 +1,7 @@
 name: Gradle Build with Kotlin 2.0 and Java 21
 
 on:
-  push:
-    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
-  pull_request:
-    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'ci/**', 'copilot/**', 'claude/**' ]
+  push:  # Every push, any branch — no PR trigger, so each commit runs CI exactly once.
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -83,6 +80,32 @@ jobs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew integrationTest --no-daemon --warning-mode=all --stacktrace
+
+    - name: Generate JaCoCo coverage report
+      timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew jacocoTestReport :core:jacocoTestReport --no-daemon --stacktrace
+
+    - name: Upload Sonar inputs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: sonar-inputs-${{ github.sha }}
+        path: |
+          desktop-ui/build/classes/kotlin/main
+          desktop-ui/build/classes/kotlin/test
+          desktop-ui/build/test-results/test
+          desktop-ui/build/test-results/integrationTest
+          desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml
+          core/build/classes/kotlin/jvm/main
+          core/build/classes/kotlin/jvm/test
+          core/build/test-results/jvmTest
+          core/build/test-results/integrationTest
+          core/build/reports/jacoco/jvmTest/jacocoTestReport.xml
+        retention-days: 7
+        if-no-files-found: error
 
     - name: Run linuxX64 native tests
       timeout-minutes: 5

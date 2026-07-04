@@ -679,7 +679,6 @@ The project uses GitHub Actions for continuous integration and quality assurance
 
 - **Gradle Build (Java 21)** - Compiles, tests, and creates JAR artifacts
 - **SonarQube Analysis** - Code quality analysis and coverage reporting
-- **Claude Code Review** - Automated code review for pull requests
 
 View workflow status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
 

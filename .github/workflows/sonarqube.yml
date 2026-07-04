@@ -1,20 +1,20 @@
 name: SonarQube Analysis
 
 on:
-  push:
-    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
-  pull_request:
-    branches: [ main, develop, 'feature/**', 'feat/**', 'fix/**', 'copilot/**', 'claude/**' ]
+  workflow_run:
+    workflows: [ "Gradle Build with Kotlin 2.0 and Java 21" ]
+    types: [ completed ]
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
   contents: read
   checks: write
   pull-requests: read  # Required for PR analysis
+  actions: read  # Required to download artifacts from the triggering gradle-java21.yml run
   packages: read  # Required for GitHub Packages (kDisco dependency)
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -27,11 +27,15 @@ jobs:
     name: SonarQube Code Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        # Check out the exact commit gradle-java21.yml built — github.sha is meaningless
+        # for a workflow_run event (it would resolve to the default branch tip instead).
+        ref: ${{ github.event.workflow_run.head_sha || github.sha }}
         # Fetch full history for better analysis (blame information, issue assignment)
         fetch-depth: 0
 
@@ -58,42 +62,32 @@ jobs:
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
 
-    - name: Install libxml2 development headers
-      run: |
-        sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev libicu-dev
-        sudo ln -sf /usr/include/unicode /usr/include/libxml2/unicode
-
-    - name: Build and test with coverage
-      env:
-        GITHUB_ACTOR: ${{ github.actor }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew clean build test integrationTest jacocoTestReport :core:jacocoTestReport --no-daemon --warning-mode=all --stacktrace
-
-    - name: Upload JaCoCo coverage report
-      uses: actions/upload-artifact@v4
-      if: always()
+    - name: Download build/test outputs from gradle-java21.yml
+      uses: actions/download-artifact@v4
       with:
-        name: jacoco-coverage-report-${{ github.sha }}
-        path: |
-          desktop-ui/build/reports/jacoco/
-          core/build/reports/jacoco/
-        retention-days: 30
-        compression-level: 9
+        name: sonar-inputs-${{ github.event.workflow_run.head_sha }}
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: .
 
     - name: Generate coverage report summary
       if: always()
       run: |
-        if [ -f desktop-ui/build/reports/jacoco/test/html/index.html ]; then
+        if [ -f desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml ]; then
           echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "JaCoCo coverage report generated" >> $GITHUB_STEP_SUMMARY
-          echo "[View Coverage Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "JaCoCo coverage data reused from gradle-java21.yml (no re-run of tests)" >> $GITHUB_STEP_SUMMARY
         fi
 
     # SonarCloud Analysis (for public repositories)
     # Requires SONAR_TOKEN and SONAR_ORGANIZATION secrets configured in GitHub
     # If secrets are not configured, this step will skip gracefully
+    #
+    # Reuses gradle-java21.yml's compiled classes/test-results/jacoco XML (downloaded above)
+    # instead of rebuilding and retesting — the :desktop-ui:test, :desktop-ui:integrationTest,
+    # :desktop-ui:jacocoTestReport, :core:jvmTest, :core:integrationTest and
+    # :core:jacocoTestReport tasks that "sonar" hard-depends on (build.gradle.kts) are
+    # explicitly excluded so Gradle doesn't re-walk that graph.
     - name: SonarCloud Scan
-      if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -113,16 +107,21 @@ jobs:
 
         echo "🔍 Running SonarCloud analysis..."
 
-        # Explicitly pass PR parameters when triggered by a pull_request event so that
-        # SonarCloud always uses PR analysis mode (no coverage gate) for PRs, even when
-        # a competing push-triggered branch analysis is also in flight for the same branch.
+        # PR context comes from the workflow_run event's pull_requests[] array, which GitHub
+        # populates for same-repo branches with an open PR regardless of whether the
+        # triggering gradle-java21.yml run itself fired on push or pull_request.
         PR_ARGS=""
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          PR_ARGS="-Dsonar.pullrequest.key=${{ github.event.pull_request.number }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.pullrequest.base=${{ github.base_ref }}"
-          echo "PR analysis mode: PR #${{ github.event.pull_request.number }} (${{ github.head_ref }} → ${{ github.base_ref }})"
+        PR_COUNT=$(jq 'length' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
+        if [ "$PR_COUNT" -gt 0 ]; then
+          PR_NUMBER=$(jq -r '.[0].number' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
+          PR_BASE=$(jq -r '.[0].base.ref' <<< '${{ toJson(github.event.workflow_run.pull_requests) }}')
+          PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=${{ github.event.workflow_run.head_branch }} -Dsonar.pullrequest.base=$PR_BASE"
+          echo "PR analysis mode: PR #$PR_NUMBER (${{ github.event.workflow_run.head_branch }} → $PR_BASE)"
         fi
 
         ./gradlew sonar \
+          -x :desktop-ui:test -x :desktop-ui:integrationTest -x :desktop-ui:jacocoTestReport \
+          -x :core:jvmTest -x :core:integrationTest -x :core:jacocoTestReport \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=$SONAR_ORGANIZATION \
           -Dsonar.token=$SONAR_TOKEN \

@@ -317,16 +317,15 @@ See `CLAUDE.md` "Known Bugs and Issues" section for detailed information.
 ## CI/CD
 
 GitHub Actions workflows in `.github/workflows/`:
-- `gradle-java21.yml` - Build, test, package JAR
-- `sonarqube.yml` - Code quality analysis
-- `claude.yml` - Claude AI integration
+- `gradle-java21.yml` - Build, test, package JAR (triggers on every push)
+- `sonarqube.yml` - Code quality analysis (triggers automatically after gradle-java21.yml completes)
 
 ## Additional Resources
 
 - **Comprehensive documentation:** See `CLAUDE.md` for detailed information
 - **Architecture:** See `STATIC_DYNAMIC_SEPARATION_ARCHITECTURE.md` for static/dynamic separation pattern
 - **Code style guide:** See `docs/KOTLIN_STYLE_GUIDE.md`
-- **CI/CD workflows:** See `CICD_WORKFLOW_QUICK_START.md`
+- **CI/CD workflows:** See `.github/CI_CD_QUICK_REFERENCE.md`
 
 ## Getting Help
 
