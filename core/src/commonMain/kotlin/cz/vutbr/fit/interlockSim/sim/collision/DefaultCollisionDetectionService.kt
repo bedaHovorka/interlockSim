@@ -413,7 +413,8 @@ class DefaultCollisionDetectionService(
 				lastPredictiveTtcWarningTime[dedupKey] = eventTime
 
 				logger.warn {
-					"evaluatePredictiveTtc: TTC=${"%.1f".format(ttc)}s for " +
+					val ttcTenths = (ttc * 10).toLong().coerceAtLeast(0)
+					"evaluatePredictiveTtc: TTC=${ttcTenths / 10}.${ttcTenths % 10}s for " +
 						"trailing=$trailingId (v=${trailing.velocity} m/s, " +
 						"pos=${trailing.totalDistance} m) → " +
 						"leading=$leadingId (v=${leading.velocity} m/s, " +
