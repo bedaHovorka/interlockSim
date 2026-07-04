@@ -68,9 +68,11 @@ import kotlinx.serialization.Serializable
 @Serializable
 @LLMDescription("Requested switch position: PLUS for the normal/direct route, MINUS for diverging.")
 enum class SwitchPosition {
+    @SerialName("plus")
     @LLMDescription("Normal or direct switch position.")
     PLUS,
 
+    @SerialName("minus")
     @LLMDescription("Diverging switch position.")
     MINUS,
 }
