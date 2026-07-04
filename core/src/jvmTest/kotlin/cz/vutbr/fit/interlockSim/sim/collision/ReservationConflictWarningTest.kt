@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.collision
 
 import assertk.assertThat
 import assertk.assertions.hasSize
+import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
@@ -122,6 +123,183 @@ class ReservationConflictWarningTest : KoinTestBase() {
 		// TrainConflictA was already holding the blocks
 		assertThat(conflict.conflictingTrainId).isEqualTo("TrainConflictA")
 		// The conflicting block must be identified (SP2 requirement)
+		assertThat(conflict.conflictingBlock).isNotNull()
+	}
+
+	// ------------------------------------------------------------------
+	// Test: routine blocked-path retry (busy, not racing) does NOT emit a warning
+	// ------------------------------------------------------------------
+
+	/**
+	 * Regression test for the false-positive an earlier version of this SP2 feature
+	 * caused (see [cz.vutbr.fit.interlockSim.context.navigation.DefaultPathReservationService]):
+	 * an `AllPathsBlocked` outcome must not, by itself, be treated as a conflict. A
+	 * single train waiting for a block that another train is *routinely* holding (not
+	 * actively racing for it) -- and which clears normally once that train releases it
+	 * -- is expected multi-train shunting choreography, not a collision.
+	 *
+	 * This reproduces, at a small scale, the shape of contention that made
+	 * `SimulationSpeedPerformanceTest`'s 300s ShuntingLoop hang: the original,
+	 * over-broad detection fired `BlockEvent.ReservationConflictDetected` (and thus
+	 * an auto-pausing collision warning) on *every* blocked-path retry, including
+	 * completely routine ones.
+	 *
+	 * Acceptance criteria:
+	 * - TrainBusy reserves A→B and holds it well past the concurrent-claim window.
+	 * - TrainWaiting's reservation attempt against the same path returns
+	 *   `AllPathsBlocked` but emits NO [CollisionWarning.ReservationConflict].
+	 * - Once TrainBusy releases the path, TrainWaiting's retry succeeds normally, and
+	 *   no conflict warning was ever emitted for this routine contention.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("Routine blocked-path contention that clears normally does not emit a ReservationConflict warning")
+	fun routineBlockedPathContentionDoesNotEmitConflictWarning() {
+		val ctx =
+			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
+				as DefaultSimulationContext
+		context = ctx
+		val inOuts = ctx.getInOuts()
+
+		val warnings = mutableListOf<CollisionWarning>()
+		ctx.getCollisionServices().onCollisionWarning { w -> warnings.add(w) }
+
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
+
+		val process =
+			object : Interlocking(ctx) {
+				override suspend fun iteration() {
+					val inA = inOuts.first { it.name == "A" }
+					val inB = inOuts.first { it.name == "B" }
+
+					// TrainBusy reserves the full A→B path -- succeeds and settles in.
+					val result1 = reservationService.reservePath("TrainBusy", inA, inB)
+					assertThat(result1)
+						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+					// Let the reservation age well past the concurrent-claim window, so a
+					// later blocked attempt is unambiguously "routine busy", not a fresh race.
+					hold(2.0)
+
+					// TrainWaiting tries the same path while it's still busy -- routine
+					// "path busy, retry later" outcome; must NOT be flagged as a conflict.
+					val result2 = reservationService.reservePath("TrainWaiting", inA, inB)
+					assertThat(result2)
+						.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
+
+					// A little more time passes before TrainBusy clears the path normally.
+					hold(1.0)
+					reservationService.releasePath("TrainBusy")
+
+					// TrainWaiting retries and now succeeds -- the contention resolved
+					// normally, exactly like a real ShuntingLoop train waiting its turn.
+					// Because it resolved (Success) before the run ends, the end-of-run
+					// flush (flushUnresolvedConflicts) never sees it either.
+					val result3 = reservationService.reservePath("TrainWaiting", inA, inB)
+					assertThat(result3)
+						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+					env.stop()
+				}
+
+				override suspend fun interLoopSleep() {
+					terminate()
+				}
+			}
+
+		ctx.setMainProcess(process)
+		ctx.run()
+
+		// Routine busy-retry contention that resolves normally must never be
+		// surfaced as a ReservationConflict warning.
+		val conflicts = warnings.filterIsInstance<CollisionWarning.ReservationConflict>()
+		assertThat(conflicts).isEmpty()
+	}
+
+	// ------------------------------------------------------------------
+	// Test: contention still unresolved when the run ends IS reported (end-of-run flush)
+	// ------------------------------------------------------------------
+
+	/**
+	 * Regression test for [DefaultCollisionDetectionService]/[DefaultPathReservationService]'s
+	 * "unresolved by end of run" fallback: contention that never produces a live concurrent
+	 * claim, and never resolves before the simulation stops, must still be surfaced as a
+	 * [CollisionWarning.ReservationConflict] -- otherwise a genuine deadlock-like situation
+	 * would silently vanish rather than being reported at all.
+	 *
+	 * Deliberately does **not** use a running-clock "stuck for N seconds" threshold (an
+	 * earlier version of this feature guessed one and produced false positives on ordinary
+	 * long waits during multi-train `ShuntingLoop` choreography). Instead, the signal is
+	 * "still unresolved when [cz.vutbr.fit.interlockSim.context.SimulationContext.run]
+	 * returns" -- checked exactly once, after the run has fully stopped, so it can never
+	 * cause [cz.vutbr.fit.interlockSim.context.SimulationController] to hang (there is
+	 * nothing left running to pause).
+	 *
+	 * Acceptance criteria:
+	 * - TrainBusy reserves A→B and never releases it.
+	 * - TrainWaiting's blocked attempt happens well outside the concurrent-claim window,
+	 *   so it produces no live warning during the run.
+	 * - The simulation stops with TrainWaiting still blocked (no further retry).
+	 * - After `ctx.run()` returns, exactly one [CollisionWarning.ReservationConflict] has
+	 *   been emitted, for the pair (TrainWaiting, TrainBusy).
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("Contention still unresolved when the run ends is reported via the end-of-run flush")
+	fun unresolvedContentionAtRunEndEmitsConflictWarning() {
+		val ctx =
+			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
+				as DefaultSimulationContext
+		context = ctx
+		val inOuts = ctx.getInOuts()
+
+		val warnings = mutableListOf<CollisionWarning>()
+		ctx.getCollisionServices().onCollisionWarning { w -> warnings.add(w) }
+
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
+
+		val process =
+			object : Interlocking(ctx) {
+				override suspend fun iteration() {
+					val inA = inOuts.first { it.name == "A" }
+					val inB = inOuts.first { it.name == "B" }
+
+					// TrainBusy reserves the full A→B path and never releases it.
+					val result1 = reservationService.reservePath("TrainBusy", inA, inB)
+					assertThat(result1)
+						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+					// Let the reservation age well past the concurrent-claim window, so this
+					// is unambiguously "routine busy" from a live-detection point of view.
+					hold(2.0)
+
+					// TrainWaiting is blocked and never gets another chance to retry --
+					// the run stops with the contention still unresolved.
+					val result2 = reservationService.reservePath("TrainWaiting", inA, inB)
+					assertThat(result2)
+						.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
+
+					// No warning yet -- live detection correctly saw only routine contention.
+					assertThat(warnings.filterIsInstance<CollisionWarning.ReservationConflict>()).isEmpty()
+
+					env.stop()
+				}
+
+				override suspend fun interLoopSleep() {
+					terminate()
+				}
+			}
+
+		ctx.setMainProcess(process)
+		ctx.run()
+
+		// The end-of-run flush must have surfaced the still-unresolved contention.
+		val conflicts = warnings.filterIsInstance<CollisionWarning.ReservationConflict>()
+		assertThat(conflicts).hasSize(1)
+
+		val conflict = conflicts.first()
+		assertThat(conflict.trainId).isEqualTo("TrainWaiting")
+		assertThat(conflict.conflictingTrainId).isEqualTo("TrainBusy")
 		assertThat(conflict.conflictingBlock).isNotNull()
 	}
 }

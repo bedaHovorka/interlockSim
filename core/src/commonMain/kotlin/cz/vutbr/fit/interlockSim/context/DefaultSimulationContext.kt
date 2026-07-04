@@ -1315,9 +1315,26 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
+			flushUnresolvedReservationConflicts(sim.time())
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
 			currentController = null
 		}
+	}
+
+	/**
+	 * Surface any reservation contention that was still unresolved when the run ended
+	 * (Issue #612 SP2 follow-up). Delivered directly to the buffered block-event
+	 * listeners rather than via `emitCustom()`: the top-level `emitCustom` is a no-op
+	 * once `Process.activeContext` is null, which is exactly the state here -- the run
+	 * has already fully stopped, so there is nothing left to pause.
+	 *
+	 * Extracted out of [run] purely to keep that method's cyclomatic complexity within
+	 * budget; carries no logic of its own beyond the guard + delivery.
+	 */
+	private fun flushUnresolvedReservationConflicts(simulationEndTime: Double) {
+		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
+			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
+			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
 	}
 
 	private fun createDynamic(i: InOut): DynamicInOut {
