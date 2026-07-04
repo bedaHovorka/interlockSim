@@ -134,13 +134,13 @@ After running tests, review the JaCoCo coverage report:
 
 ### Automated Workflows
 
-Our CI/CD pipeline includes three main workflows:
+Our CI/CD pipeline includes two main workflows:
 
 #### 1. Gradle Build (Java 21)
 
 **File:** `.github/workflows/gradle-java21.yml`
 
-**Triggers:** Push and PR to `main`, `develop`, `feature/**`, `fix/**`, `copilot/**`, `claude/**`
+**Triggers:** Push to any branch
 
 **Steps:**
 1. Compile Kotlin and Java sources
@@ -158,25 +158,21 @@ Our CI/CD pipeline includes three main workflows:
 **Artifacts Produced:**
 - `interlockSim-jar-{sha}` - Compiled JAR (90 days)
 - `test-results-{sha}` - Test results XML (30 days)
+- `sonar-inputs-{sha}` - Compiled classes, test results, JaCoCo XML for SonarQube Analysis to reuse (7 days)
 
 #### 2. SonarQube Analysis
 
 **File:** `.github/workflows/sonarqube.yml`
 
-**Triggers:** Push and PR to `main`, `develop`, `feature/**`, `fix/**`, `copilot/**`, `claude/**`
+**Triggers:** Automatically after Gradle Build completes successfully (`workflow_run`), or manual dispatch
 
 **Steps:**
-1. Build and test with coverage
-2. Generate JaCoCo coverage report
-3. Upload coverage report artifact
-4. Generate coverage report summary
-5. Run SonarCloud scan (if configured)
-6. Display quality gate status
+1. Download build/test/coverage outputs from the triggering Gradle Build run (no rebuild or re-test)
+2. Generate coverage report summary
+3. Run SonarCloud scan (if configured)
+4. Display quality gate status
 
-**Duration:** ~15-20 minutes
-
-**Artifacts Produced:**
-- `jacoco-coverage-report-{sha}` - Coverage report HTML (30 days)
+**Duration:** ~2-5 minutes (analysis only — build and test happen once, in Gradle Build)
 
 **SonarCloud:**
 - Requires `SONAR_TOKEN` and `SONAR_ORGANIZATION` secrets

@@ -45,8 +45,9 @@ Add these badges to your PR description or documentation to show build status:
 **Artifacts:**
 - `interlockSim-jar-{sha}` - Uber JAR (90-day retention)
 - `test-results-{sha}` - JUnit XML reports (30-day retention)
+- `sonar-inputs-{sha}` - Compiled classes, test results, JaCoCo XML for SonarQube Analysis (7-day retention)
 
-**Triggers:** Push/PR to `main`, `develop`, `feature/**`, `fix/**`, `copilot/**`, `claude/**`
+**Triggers:** Push to any branch
 
 ### 2. SonarQube Analysis
 
@@ -54,16 +55,12 @@ Add these badges to your PR description or documentation to show build status:
 
 | Step | Duration | Description |
 |------|----------|-------------|
-| Build & Test | ~8 min | Full build with coverage |
-| Generate Coverage | ~1 min | JaCoCo report generation |
+| Download inputs | ~1 min | Reuses Gradle Build's compiled classes/test-results/JaCoCo XML — no rebuild or re-test |
 | SonarCloud Scan | ~5 min | Code quality analysis (if configured) |
 
-**Total Duration:** ~15-20 minutes
+**Total Duration:** ~2-5 minutes
 
-**Artifacts:**
-- `jacoco-coverage-report-{sha}` - HTML coverage report (30-day retention)
-
-**Triggers:** Push/PR to `main`, `develop`, `feature/**`, `fix/**`, `copilot/**`, `claude/**`
+**Triggers:** Automatically after Gradle Build completes successfully (`workflow_run`), or manual dispatch
 
 ## Quick Commands
 
