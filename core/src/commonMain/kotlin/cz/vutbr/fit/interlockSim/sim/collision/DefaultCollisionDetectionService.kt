@@ -35,10 +35,16 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   [DEDUP_WINDOW_SECONDS]-second window.
  *
  * **Detection rules (SP3, #613):**
+ * - [CollisionWarning.BlockEntryViolation] (reservation mismatch): emitted when
+ *   [BlockEvent.OccupancySet] fires and the entering occupant's name does not match the
+ *   block's reserved train name — the interlocking let a train onto a block reserved for
+ *   another train. Entry into an **unreserved** block does not fire.
  * - [CollisionWarning.BlockEntryViolation] (double-occupancy): emitted when
  *   [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.enter] is called on an
  *   already-occupied block; `DynamicTrackBlock` emits the warning via `emitCustom` before
  *   throwing, and this service receives it via [SimulationEnvironment.onSimulationEvent].
+ *   The two paths cannot double-fire for one entry: on double-occupancy, `enter()` throws
+ *   before its [BlockEvent.OccupancySet] emission is reached.
  *
  * The [BlockEvent] and [SimulationEvent] subscriptions are registered in the constructor
  * so they are buffered by [SimulationEnvironment.onBlockEvent] /
@@ -154,7 +160,9 @@ class DefaultCollisionDetectionService(
 		}
 	}
 
-	private fun handleBlockEvent(event: BlockEvent) {
+	// Internal (not private) as a test seam: commonTest drives the detection rules
+	// directly with synthetic BlockEvents, mirroring the emitWarning() precedent.
+	internal fun handleBlockEvent(event: BlockEvent) {
 		when (event) {
 			is BlockEvent.BlockReserved -> {
 				// Check whether the block is already reserved for a different train.
@@ -171,12 +179,27 @@ class DefaultCollisionDetectionService(
 				}
 			}
 			is BlockEvent.ReservationConflictDetected -> handleReservationConflictDetected(event)
-			is BlockEvent.OccupancySet,
+			is BlockEvent.OccupancySet -> {
+				// SP3 rule (#613): the entering train must match the block's reservation.
+				// An unreserved block does not fire — only a mismatch with an existing
+				// reservation indicates the interlocking let a train onto a foreign block.
+				val reservedFor = event.block.trainName
+				val occupantId = event.occupant.name
+				if (reservedFor != null && reservedFor != occupantId) {
+					emit(
+						CollisionWarning.BlockEntryViolation(
+							trainId = occupantId,
+							block = event.block,
+							time = event.time,
+							reservedForAtDetection = reservedFor
+						)
+					)
+				}
+			}
 			is BlockEvent.BlockReleased,
 			is BlockEvent.OccupancyCleared
 			-> {
-				// No SP2 rule: OccupancySet is handled by the SP3 BlockEntryViolation
-				// rule (#613); release events do not indicate a hazard.
+				// Release events do not indicate a hazard.
 			}
 		}
 	}

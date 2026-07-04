@@ -232,7 +232,8 @@ class DynamicTrackBlock(
 				CollisionWarning.BlockEntryViolation(
 					trainId = newOccupant.name,
 					block = this,
-					time = currentSimulationTime()
+					time = currentSimulationTime(),
+					reservedForAtDetection = trainName
 				)
 			)
 		}

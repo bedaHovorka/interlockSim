@@ -48,18 +48,27 @@ sealed class CollisionWarning {
 	/**
 	 * A train physically entered a block without a valid reservation.
 	 *
-	 * Emitted when a train occupies a block that is either unreserved or reserved for a
-	 * different train.  This indicates that the interlocking logic allowed a train to proceed
-	 * onto a block it does not own.
+	 * Emitted when a train occupies a block that is reserved for a **different** train
+	 * (entry into an unreserved block does not fire — see #613), or when a train attempts
+	 * to enter a block that is already physically occupied (double-occupancy; emitted by
+	 * [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.enter] immediately before
+	 * it throws).  Either case indicates that the interlocking logic allowed a train to
+	 * proceed onto a block it does not own.
 	 *
 	 * @property trainId The train that entered the block without a matching reservation.
-	 * @property block The track block that was entered illegally.
+	 * @property block The track block that was entered illegally. **Live reference, not a
+	 *   snapshot**: the block's reservation/occupancy state continues to mutate after the
+	 *   warning is captured. Use [reservedForAtDetection] for the state at detection time.
 	 * @property time Simulation time of detection.
+	 * @property reservedForAtDetection Snapshot of the block's reserved train name
+	 *   (`block.trainName`) at the moment of detection; `null` when the block held no
+	 *   reservation at that moment.
 	 */
 	data class BlockEntryViolation(
 		val trainId: String,
 		val block: DynamicTrackBlock,
-		override val time: Double
+		override val time: Double,
+		val reservedForAtDetection: String? = null
 	) : CollisionWarning()
 
 	/**
