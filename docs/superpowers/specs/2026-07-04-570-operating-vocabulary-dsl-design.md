@@ -170,7 +170,7 @@ value class BlockId(
 @LLMDescription("Identifier of a station or line track.")
 value class TrackId(
     @LLMDescription("Track number or label.")
-    val number: String,
+    val name: String,
 )
 ```
 
