@@ -19,6 +19,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.util.concurrent.ExecutionException
 import javax.swing.BorderFactory
 import javax.swing.DefaultComboBoxModel
 import javax.swing.DefaultListModel
@@ -30,6 +31,7 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.ListSelectionModel
 import javax.swing.SwingUtilities
+import javax.swing.SwingWorker
 
 /**
  * Path preview panel for the editor.
@@ -226,15 +228,63 @@ class PathPreviewPanel :
 			return
 		}
 
-		val routes =
-			try {
-				ctx.getRouteFinder().findRoutes(from, to, ctx)
-			} catch (e: Exception) {
-				logger.warn(e) { "Path finding failed" }
-				statusLabel.text = "Path finding error."
-				return
-			}
+		// Disable button while search is in progress to prevent double-submissions.
+		findButton.isEnabled = false
+		statusLabel.text = "Searching…"
 
+		startRouteSearch(
+			search = { ctx.getRouteFinder().findRoutes(from, to, ctx) },
+			onDone = { routes -> showSearchResults(routes, from, to) }
+		)
+	}
+
+	/**
+	 * Run [search] on a [SwingWorker] background thread and deliver the result to
+	 * [onDone] on the EDT.
+	 *
+	 * Re-enables the Find button once the worker completes. On failure the status
+	 * label is updated and [onDone] is not invoked.
+	 */
+	private fun startRouteSearch(
+		search: () -> List<Route>,
+		onDone: (List<Route>) -> Unit
+	) {
+		object : SwingWorker<List<Route>, Void>() {
+			// Runs on a background thread – must not touch Swing components.
+			override fun doInBackground(): List<Route> = search()
+
+			// Runs on the EDT after doInBackground completes (or throws).
+			override fun done() {
+				findButton.isEnabled = true
+
+				val routes =
+					try {
+						get()
+					} catch (e: ExecutionException) {
+						logger.warn(e.cause ?: e) { "Path finding failed" }
+						statusLabel.text = "Path finding error."
+						return
+					} catch (e: InterruptedException) {
+						Thread.currentThread().interrupt()
+						statusLabel.text = "Path finding cancelled."
+						return
+					}
+
+				onDone(routes)
+			}
+		}.execute()
+	}
+
+	/**
+	 * Populate the route list and status label from a completed search.
+	 *
+	 * Must be called from the EDT.
+	 */
+	private fun showSearchResults(
+		routes: List<Route>,
+		from: InOut,
+		to: InOut
+	) {
 		foundRoutes = routes
 		routeListModel.clear()
 
@@ -259,7 +309,9 @@ class PathPreviewPanel :
 		routeList.selectedIndex = 0
 		onRouteSelected?.invoke(foundRoutes, 0)
 
-		logger.debug { "Path preview: found ${routes.size} route(s) from '${from.getName()}' to '${to.getName()}'" }
+		logger.debug {
+			"Path preview: found ${routes.size} route(s) from '${from.getName()}' to '${to.getName()}'"
+		}
 	}
 
 	private fun onClearClicked() {
