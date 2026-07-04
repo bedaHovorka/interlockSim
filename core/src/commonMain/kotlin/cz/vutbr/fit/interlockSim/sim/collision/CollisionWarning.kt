@@ -15,8 +15,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
  * Sealed class hierarchy for collision warnings emitted by [CollisionDetectionService].
  *
  * Each subclass represents a distinct hazard category. Warnings are delivered to listeners
- * registered via [CollisionDetectionService.onCollisionWarning] and are always accompanied
- * by a [PauseController.requestPause] call so the operator can inspect the situation.
+ * registered via [CollisionDetectionService.onCollisionWarning]. Warnings with
+ * [Severity.CRITICAL] additionally trigger [PauseController.requestPause] when
+ * [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService.autoPauseOnCritical]
+ * is enabled (the default).
  *
  * All subclasses capture the simulation time of detection in [time].
  *
@@ -25,6 +27,34 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 sealed class CollisionWarning {
 	/** Simulation time (in seconds) at which the warning was detected. */
 	abstract val time: Double
+
+	/**
+	 * How urgent this warning is.
+	 *
+	 * Governs whether [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * triggers an auto-pause when
+	 * [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService.autoPauseOnCritical]
+	 * is `true` (Goal 3 SP5).
+	 *
+	 * @since Issue #615 (Goal 3 SP5)
+	 */
+	enum class Severity {
+		/**
+		 * A safety violation that requires immediate operator attention.
+		 * Triggers [PauseController.requestPause] when [DefaultCollisionDetectionService.autoPauseOnCritical]
+		 * is `true`.
+		 */
+		CRITICAL,
+
+		/**
+		 * A pre-emptive advisory that does **not** by itself trigger an auto-pause.
+		 * Delivered to listeners like any other warning but the simulation continues.
+		 */
+		WARNING
+	}
+
+	/** How urgent this warning is; governs auto-pause behaviour (Goal 3 SP5). */
+	abstract val severity: Severity
 
 	/**
 	 * Two trains have conflicting path reservations for the same block.
@@ -37,12 +67,15 @@ sealed class CollisionWarning {
 	 * @property conflictingTrainId The train that already holds the reservation.
 	 * @property time Simulation time of detection.
 	 * @property conflictingBlock The specific block that caused the conflict, if known.
+	 * @property severity Always [Severity.CRITICAL]: a double-reservation means the
+	 *   interlocking logic has failed and a physical collision is imminent.
 	 */
 	data class ReservationConflict(
 		val trainId: String,
 		val conflictingTrainId: String,
 		override val time: Double,
-		val conflictingBlock: DynamicTrackBlock? = null
+		val conflictingBlock: DynamicTrackBlock? = null,
+		override val severity: Severity = Severity.CRITICAL
 	) : CollisionWarning()
 
 	/**
@@ -63,12 +96,15 @@ sealed class CollisionWarning {
 	 * @property reservedForAtDetection Snapshot of the block's reserved train name
 	 *   (`block.trainName`) at the moment of detection; `null` when the block held no
 	 *   reservation at that moment.
+	 * @property severity Always [Severity.CRITICAL]: the train has physically violated a
+	 *   safety boundary; the interlocking has already failed.
 	 */
 	data class BlockEntryViolation(
 		val trainId: String,
 		val block: DynamicTrackBlock,
 		override val time: Double,
-		val reservedForAtDetection: String? = null
+		val reservedForAtDetection: String? = null,
+		override val severity: Severity = Severity.CRITICAL
 	) : CollisionWarning()
 
 	/**
@@ -82,10 +118,13 @@ sealed class CollisionWarning {
 	 * @property trainId The train approaching the collision point.
 	 * @property targetTrainId The opposing train on the same path.
 	 * @property time Simulation time of detection.
+	 * @property severity Always [Severity.CRITICAL]: even a predictive collision is an
+	 *   imminent safety hazard requiring immediate operator attention.
 	 */
 	data class PredictiveCollision(
 		val trainId: String,
 		val targetTrainId: String,
-		override val time: Double
+		override val time: Double,
+		override val severity: Severity = Severity.CRITICAL
 	) : CollisionWarning()
 }

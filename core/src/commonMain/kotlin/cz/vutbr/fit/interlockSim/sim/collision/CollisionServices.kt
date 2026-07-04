@@ -16,8 +16,8 @@ package cz.vutbr.fit.interlockSim.sim.collision
  * Mirrors the [cz.vutbr.fit.interlockSim.context.navigation.RoutingServices] segregation
  * pattern: collision-related accessors are grouped behind one sub-interface rather than
  * being flattened directly onto [cz.vutbr.fit.interlockSim.context.SimulationEnvironment].
- * Future sub-phases (SP4 predictive analysis, SP5 auto-halt, SP6 UI presentation) can grow
- * this facade without bloating the top-level environment interface.
+ * Future sub-phases (SP6 UI presentation) can grow this facade without bloating the
+ * top-level environment interface.
  *
  * @since Issue #611 (Goal 3 SP1)
  */
@@ -43,4 +43,22 @@ interface CollisionServices {
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
 	fun onCollisionWarning(listener: (CollisionWarning) -> Unit)
+
+	/**
+	 * Register a halt callback for a specific train (convenience delegation).
+	 *
+	 * Delegates to [CollisionDetectionService.registerHaltCallback]. When
+	 * [DefaultCollisionDetectionService.autoHaltTrainOnViolation] is `true` and a
+	 * [CollisionWarning.BlockEntryViolation] is detected for [trainId], the [callback]
+	 * is invoked. Typically the callback calls
+	 * [cz.vutbr.fit.interlockSim.sim.Train.requestHalt] on the entering train.
+	 *
+	 * @param trainId The train identifier to associate with the callback.
+	 * @param callback The action to take to halt the train (e.g., `train::requestHalt`).
+	 * @since Issue #615 (Goal 3 SP5)
+	 */
+	fun registerHaltCallback(
+		trainId: String,
+		callback: () -> Unit
+	)
 }
