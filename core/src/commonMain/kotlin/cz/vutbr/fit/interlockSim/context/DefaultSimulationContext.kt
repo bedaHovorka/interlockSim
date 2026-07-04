@@ -243,6 +243,13 @@ open class DefaultSimulationContext(
 			override fun getCollisionDetectionService(): CollisionDetectionService = collisionDetectionServiceInstance
 
 			override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) = registerCollisionWarningListener(listener)
+
+			override fun registerHaltCallback(
+				trainId: String,
+				callback: () -> Unit
+			) {
+				collisionDetectionServiceInstance.registerHaltCallback(trainId, callback)
+			}
 		}
 	}
 

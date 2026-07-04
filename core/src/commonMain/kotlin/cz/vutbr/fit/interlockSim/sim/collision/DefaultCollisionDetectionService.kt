@@ -84,12 +84,14 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 1. Calls all registered [onCollisionWarning] listeners synchronously. Each listener
  *    is isolated — a throwing listener is logged and does **not** prevent the remaining
  *    listeners or the pause request.
- * 2. Calls [PauseController.requestPause] so the operator can inspect the state.
+ * 2. If [autoPauseOnCritical] is `true` **and** `warning.severity == CRITICAL`, calls
+ *    [PauseController.requestPause] so the operator can inspect the state.
  * 3. If [autoHaltTrainOnViolation] is true and the warning is a
  *    [CollisionWarning.BlockEntryViolation], calls the halt callback registered via
  *    [registerHaltCallback] for the entering train.
  *
- * @param pauseController Receives [PauseController.requestPause] on every emitted warning.
+ * @param pauseController Receives [PauseController.requestPause] on CRITICAL warnings when
+ *   [autoPauseOnCritical] is enabled.
  * @param env The simulation environment used to subscribe to block and simulation events. Production
  *   wiring (CoreModule) always provides it; `null` is permitted only for unit tests that
  *   exercise the emission machinery directly via [emitWarning].
@@ -101,6 +103,19 @@ class DefaultCollisionDetectionService(
 ) : CollisionDetectionService {
 	private val listeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
 	private val haltCallbacks: MutableMap<String, () -> Unit> = mutableMapOf()
+
+	/**
+	 * When true, [PauseController.requestPause] is called for every warning whose
+	 * [CollisionWarning.severity] is [CollisionWarning.Severity.CRITICAL].
+	 *
+	 * Defaults to `true`. Set to `false` to suppress auto-pausing (e.g., in automated
+	 * headless scenarios that handle warnings programmatically rather than via operator
+	 * intervention). Can be toggled at any time; the new value takes effect on the next
+	 * emitted warning.
+	 *
+	 * @since Issue #615 (Goal 3 SP5)
+	 */
+	var autoPauseOnCritical: Boolean = true
 
 	/**
 	 * When true, the halt callback registered via [registerHaltCallback] for the
@@ -119,12 +134,14 @@ class DefaultCollisionDetectionService(
 	 *
 	 * When [autoHaltTrainOnViolation] is true and a [CollisionWarning.BlockEntryViolation]
 	 * is detected for [trainId], the [callback] is invoked immediately after warning delivery.
+	 * Typically the callback calls [cz.vutbr.fit.interlockSim.sim.Train.requestHalt] on the
+	 * entering train.
 	 *
 	 * @param trainId The train identifier to associate with the callback.
-	 * @param callback The action to take to halt the train (e.g., call `fireStop()`).
+	 * @param callback The action to take to halt the train (e.g., `train::requestHalt`).
 	 * @since Issue #613 (Goal 3 SP3)
 	 */
-	fun registerHaltCallback(
+	override fun registerHaltCallback(
 		trainId: String,
 		callback: () -> Unit
 	) {
@@ -262,7 +279,9 @@ class DefaultCollisionDetectionService(
 				}
 			}
 		}
-		pauseController.requestPause()
+		if (autoPauseOnCritical && warning.severity == CollisionWarning.Severity.CRITICAL) {
+			pauseController.requestPause()
+		}
 		if (autoHaltTrainOnViolation && warning is CollisionWarning.BlockEntryViolation) {
 			haltCallbacks[warning.trainId]?.invoke()
 		}
