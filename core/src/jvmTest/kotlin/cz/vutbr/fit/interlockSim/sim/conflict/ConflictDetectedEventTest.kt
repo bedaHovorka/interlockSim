@@ -246,4 +246,72 @@ class ConflictDetectedEventTest : KoinTestBase() {
 		// Event must have been recorded at the simulated time of the conflict (≥ 5 s).
 		assertThat(event.time >= 5.0).isTrue()
 	}
+
+	// ------------------------------------------------------------------
+	// Test 4: Repeated AllPathsBlocked retries on the same contention
+	// emit only ONE ConflictDetectedEvent (dedup via blockedSince)
+	// ------------------------------------------------------------------
+
+	/**
+	 * Regression test: reservePath() is polled once per simulated second by callers like
+	 * ShuntingLoop/MultiTrainLoop while a train is queued behind a busy shared block. Each
+	 * such retry against the SAME still-unresolved contention must NOT re-emit
+	 * [ConflictDetectedEvent] -- it is a one-shot signal for the first observation of a
+	 * given (trainId, block) contention, not a per-tick heartbeat.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	@DisplayName("Repeated AllPathsBlocked retries on the same contention emit only one ConflictDetectedEvent")
+	fun repeatedRetriesOnSameContentionEmitOnlyOneConflictDetectedEvent() {
+		val ctx =
+			TestTopologies.linearPathWithSemaphoreSimulation(semaphoreAllowing = false)
+				as DefaultSimulationContext
+		context = ctx
+		val inOuts = ctx.getInOuts()
+
+		val conflicts = mutableListOf<ConflictDetectedEvent>()
+		ctx.onConflictDetectedEvent { e -> conflicts.add(e) }
+
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
+
+		val process =
+			object : Interlocking(ctx) {
+				override suspend fun iteration() {
+					val inA = inOuts.first { it.name == "A" }
+					val inB = inOuts.first { it.name == "B" }
+
+					// TrainA reserves the full A→B path — must succeed.
+					val result1 = reservationService.reservePath("TrainRetry-A", inA, inB)
+					assertThat(result1)
+						.isInstanceOf(PathReservationService.ReservationResult.Success::class)
+
+					// TrainB retries the reservation against the same still-blocked
+					// contention multiple times, simulating routine once-per-tick polling
+					// while queued behind a busy shared block.
+					repeat(3) {
+						val result = reservationService.reservePath("TrainRetry-B", inA, inB)
+						assertThat(result)
+							.isInstanceOf(PathReservationService.ReservationResult.AllPathsBlocked::class)
+						hold(1.0)
+					}
+
+					// Only the FIRST retry should have produced a ConflictDetectedEvent.
+					assertThat(conflicts).hasSize(1)
+
+					env.stop()
+				}
+
+				override suspend fun interLoopSleep() {
+					terminate()
+				}
+			}
+
+		ctx.setMainProcess(process)
+		ctx.run()
+
+		assertThat(conflicts).hasSize(1)
+		val event = conflicts.first()
+		assertThat(event.trainId).isEqualTo("TrainRetry-B")
+		assertThat(event.conflictingTrainId).isEqualTo("TrainRetry-A")
+	}
 }
