@@ -11,10 +11,9 @@
 package cz.vutbr.fit.interlockSim.gui.conflict
 
 import assertk.assertThat
+import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isTrue
-import assertk.assertions.isEqualTo
-import assertk.assertions.isEmpty
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolution
 import io.mockk.every
@@ -54,9 +53,10 @@ class ConflictResolutionPanelTest {
 			estimatedImpact = ConflictResolution.EstimatedImpact(0.0, "Reduce speed to 50%")
 		)
 
-	private val mockBlock = mockk<cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock>(relaxed = true) {
-		every { name } returns "Block-7"
-	}
+	private val mockBlock =
+		mockk<cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock>(relaxed = true) {
+			every { name } returns "Block-7"
+		}
 
 	private val conflict =
 		ConflictDetectedEvent(

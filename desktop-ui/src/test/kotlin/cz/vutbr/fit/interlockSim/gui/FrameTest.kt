@@ -368,7 +368,8 @@ class FrameTest : AbstractFrameTestBase() {
 	fun conflictResolutionPanelIsHiddenInSimulationMode() {
 		val context =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-				cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
 			)
 		runOnEDT {
 			frame.setContext(context)
@@ -384,7 +385,8 @@ class FrameTest : AbstractFrameTestBase() {
 	fun conflictResolutionPanelIsClearedWhenSwitchingToEditingMode() {
 		val simContext =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-				cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
 			)
 		val editContext = editingContextFactory.createEmptyContext()
 		runOnEDT {
@@ -403,7 +405,8 @@ class FrameTest : AbstractFrameTestBase() {
 	fun conflictResolutionPanelIsClearedOnStopSimulation() {
 		val context =
 			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
-				cz.vutbr.fit.interlockSim.testutil.TestFixtures.loadShuntingXml()
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
 			)
 		runOnEDT {
 			frame.setContext(context)

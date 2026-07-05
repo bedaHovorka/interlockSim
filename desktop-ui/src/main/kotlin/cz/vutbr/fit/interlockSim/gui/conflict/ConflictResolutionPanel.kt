@@ -137,10 +137,14 @@ class ConflictResolutionPanel : JPanel() {
 	 *
 	 * EDT-safe: may be called from any thread.
 	 */
-	fun showResolutions(conflict: ConflictDetectedEvent, resolutions: List<ConflictResolution>) {
-		val labelText = "T=${String.format(Locale.ROOT, "%05.2f", conflict.time)}s  " +
-			"${conflict.trainId} vs ${conflict.conflictingTrainId}  " +
-			"on ${conflict.block.name}"
+	fun showResolutions(
+		conflict: ConflictDetectedEvent,
+		resolutions: List<ConflictResolution>
+	) {
+		val labelText =
+			"T=${String.format(Locale.ROOT, "%05.2f", conflict.time)}s  " +
+				"${conflict.trainId} vs ${conflict.conflictingTrainId}  " +
+				"on ${conflict.block.name}"
 		if (SwingUtilities.isEventDispatchThread()) {
 			conflictLabel.text = labelText
 			applyButton.isEnabled = false
@@ -202,7 +206,10 @@ class ConflictResolutionPanel : JPanel() {
 			return this
 		}
 
-		private fun formatResolution(rank: Int, resolution: ConflictResolution): String {
+		private fun formatResolution(
+			rank: Int,
+			resolution: ConflictResolution
+		): String {
 			val strategy = resolution.strategy.name
 			val description = resolution.estimatedImpact.description
 			val delay = resolution.estimatedImpact.delaySeconds
