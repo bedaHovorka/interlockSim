@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim.conflict
 
 import assertk.assertThat
-import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
@@ -48,12 +47,13 @@ class DispatcherPreferenceStoreTest {
 		time = time
 	)
 
-	private fun makeHoldResolution(trainId: String) = ConflictResolution.HoldTrain(
-		trainId = trainId,
-		holdDurationSeconds = 30.0,
-		affectedTrains = listOf(trainId),
-		estimatedImpact = ConflictResolution.EstimatedImpact(30.0, "hold $trainId")
-	)
+	private fun makeHoldResolution(trainId: String) =
+		ConflictResolution.HoldTrain(
+			trainId = trainId,
+			holdDurationSeconds = 30.0,
+			affectedTrains = listOf(trainId),
+			estimatedImpact = ConflictResolution.EstimatedImpact(30.0, "hold $trainId")
+		)
 
 	@BeforeEach
 	fun setUp() {

@@ -51,24 +51,31 @@ class AutoConflictResolutionServiceTest {
 		preferenceStore = mockk(relaxed = true)
 		service = DefaultAutoConflictResolutionService(resolver, preferenceStore)
 		block = mockk(relaxed = true)
-		event = ConflictDetectedEvent(
-			block = block,
-			trainId = "Blocked",
-			conflictingTrainId = "Holding",
-			time = 10.0
-		)
+		event =
+			ConflictDetectedEvent(
+				block = block,
+				trainId = "Blocked",
+				conflictingTrainId = "Holding",
+				time = 10.0
+			)
 	}
 
 	// ── Helper builders ───────────────────────────────────────────────────────
 
-	private fun hold(trainId: String, delay: Double = 30.0) = ConflictResolution.HoldTrain(
+	private fun hold(
+		trainId: String,
+		delay: Double = 30.0
+	) = ConflictResolution.HoldTrain(
 		trainId = trainId,
 		holdDurationSeconds = delay,
 		affectedTrains = listOf(trainId),
 		estimatedImpact = ConflictResolution.EstimatedImpact(delay, "hold $trainId for ${delay}s")
 	)
 
-	private fun speedAdjust(trainId: String, factor: Double = 0.5) = ConflictResolution.SpeedAdjust(
+	private fun speedAdjust(
+		trainId: String,
+		factor: Double = 0.5
+	) = ConflictResolution.SpeedAdjust(
 		trainId = trainId,
 		speedReductionFactor = factor,
 		affectedTrains = listOf(trainId),

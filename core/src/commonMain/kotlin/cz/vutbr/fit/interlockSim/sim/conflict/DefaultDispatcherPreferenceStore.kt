@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim.conflict
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+
 /**
  * Default [DispatcherPreferenceStore] implementation backed by an in-memory list.
  *
@@ -19,7 +22,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * @since Issue #568 (Goal 9 → Goal 10 prereq)
  */
 class DefaultDispatcherPreferenceStore : DispatcherPreferenceStore {
-	private val lock = Any()
+	private val lock = SynchronizedObject()
 	private val choices = mutableListOf<DispatcherPreferenceStore.DispatcherChoice>()
 
 	override fun record(
@@ -34,7 +37,9 @@ class DefaultDispatcherPreferenceStore : DispatcherPreferenceStore {
 	}
 
 	override fun getChoices(): List<DispatcherPreferenceStore.DispatcherChoice> =
-		synchronized(lock) { choices.toList() }
+		synchronized(lock) {
+			choices.toList()
+		}
 
 	override fun getChoicesForTrain(trainId: String): List<DispatcherPreferenceStore.DispatcherChoice> =
 		synchronized(lock) {
