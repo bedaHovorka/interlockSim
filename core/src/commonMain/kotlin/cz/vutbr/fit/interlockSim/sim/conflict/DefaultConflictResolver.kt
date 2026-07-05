@@ -38,6 +38,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    speed to [speedReductionFactor] × its current speed.  This creates
  *    additional temporal separation before the blocked train reaches the contested block.
  *
+ * The combined candidate list is sorted by [ConflictResolutionRanker] before it is
+ * returned, from least to most operationally disruptive (see [generateResolutions]).
+ *
  * ### Context coupling
  *
  * [routeFinder], [inOuts], and [networkState] **must all come from the same
@@ -91,17 +94,19 @@ class DefaultConflictResolver(
 	}
 
 	override fun generateResolutions(conflict: ConflictDetectedEvent): List<ConflictResolution> {
-		val result = mutableListOf<ConflictResolution>()
+		val candidates = mutableListOf<ConflictResolution>()
 
-		result.add(generateHoldTrain(conflict))
-		result.addAll(generateRerouteCandidates(conflict))
-		result.add(generateSpeedAdjust(conflict))
+		candidates.add(generateHoldTrain(conflict))
+		candidates.addAll(generateRerouteCandidates(conflict))
+		candidates.add(generateSpeedAdjust(conflict))
+
+		val ranked = ConflictResolutionRanker.rank(candidates)
 
 		logger.debug {
 			"generateResolutions: conflict=(${conflict.trainId} vs ${conflict.conflictingTrainId}) " +
-				"block=${conflict.block} → ${result.size} candidates"
+				"block=${conflict.block} → ${ranked.size} candidates (ranked least → most disruptive)"
 		}
-		return result
+		return ranked
 	}
 
 	// ── Private helpers ──────────────────────────────────────────────────────
