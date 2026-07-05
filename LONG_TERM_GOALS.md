@@ -36,7 +36,7 @@ This document defines 20 prioritized functional goals for extending the Interloc
 |----|-------|----------|----------|----------|----------|
 | 1 | Multi-Train Simulation | E: Advanced Simulation | Critical | ✅ Complete | 6 months |
 | 2 | Automatic Path Finding | E: Advanced Simulation | Critical | ✅ Complete | 3 months |
-| 3 | Collision Detection and Warning | J: Safety & Compliance | Critical | 🟡 In Progress (#610) | 2 months |
+| 3 | Collision Detection and Warning | J: Safety & Compliance | Critical | ✅ Complete | 2 months |
 | 4 | Interlocking Validation and Generation | J: Safety & Compliance | High | 🆕 Open (#660) | 4 months |
 | 5 | Save and Restore Simulation State | I: System Operations | High | 🆕 Open (#666) | 3 months |
 | 6 | Performance Metrics Collection | F: Research & Analysis | High | 🆕 Open (#659) | 2 months |
@@ -55,7 +55,7 @@ This document defines 20 prioritized functional goals for extending the Interloc
 | 19 | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
 | 20 | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
 
-**Total Development Estimate: 57 months (11 months complete — Goals 1, 2, 7, 8; 46 months remaining)**
+**Total Development Estimate: 57 months (13 months complete — Goals 1, 2, 3, 7, 8; 44 months remaining)**
 
 ---
 
@@ -117,6 +117,7 @@ Users can request automatic route calculation from any entry point to any exit p
 **Category:** J: Safety & Compliance
 **Priority:** Critical
 **Development Estimate:** 2 months
+**Status:** ✅ COMPLETE
 
 **User Value:**
 Users receive immediate warnings when trains are on a collision course, enabling them to take corrective action before accidents occur. This provides a safety net during simulation and helps identify flaws in interlocking configurations.
