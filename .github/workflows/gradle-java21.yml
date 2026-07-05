@@ -67,6 +67,13 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew clean compileKotlin compileJava compileTestKotlin compileTestJava --no-daemon --warning-mode=all --stacktrace
 
+    - name: Check code formatting (ktlint)
+      timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :desktop-ui:ktlintCheck :core:ktlintCheck --no-daemon --stacktrace
+
     - name: Run unit tests
       timeout-minutes: 10
       env:
@@ -250,6 +257,13 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y --no-install-recommends libxml2-dev libicu-dev
         sudo ln -sf /usr/include/unicode /usr/include/libxml2/unicode
+
+    - name: Check code formatting (ktlint)
+      timeout-minutes: 5
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :fast-sim:ktlintCheck --no-daemon --stacktrace
 
     - name: Build fast-sim native binary (release)
       timeout-minutes: 20
