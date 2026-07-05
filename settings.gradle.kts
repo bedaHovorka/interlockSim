@@ -8,9 +8,16 @@
 pluginManagement {
 	val ktlintPluginVersion: String by settings
 	val detektPluginVersion: String by settings
+	val kotlinVersion: String by settings
+	val burstVersion: String by settings
+	val mokkeryVersion: String by settings
 	plugins {
 		id("org.jlleitschuh.gradle.ktlint") version ktlintPluginVersion
 		id("io.gitlab.arturbosch.detekt") version detektPluginVersion
+		id("org.jetbrains.kotlin.jvm") version kotlinVersion
+		id("org.jetbrains.kotlin.multiplatform") version kotlinVersion
+		id("app.cash.burst") version burstVersion
+		id("dev.mokkery") version mokkeryVersion
 	}
 }
 

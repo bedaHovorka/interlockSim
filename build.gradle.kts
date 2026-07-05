@@ -7,16 +7,17 @@
  */
 
 plugins {
-    // Declare versions for subprojects (apply false — subprojects opt in)
-    kotlin("jvm") version "2.1.10" apply
-        false
-    kotlin("multiplatform") version "2.1.10" apply false
+    // Declare versions for subprojects (apply false — subprojects opt in).
+    // kotlin/ktlint/detekt/burst/mokkery versions all come from gradle.properties
+    // via pluginManagement in settings.gradle.kts.
+    kotlin("jvm") apply false
+    kotlin("multiplatform") apply false
     id("com.gradleup.shadow") version "8.3.8" apply false
-    id("org.jlleitschuh.gradle.ktlint") apply false  // version in gradle.properties via pluginManagement
-    id("io.gitlab.arturbosch.detekt") apply false     // version in gradle.properties via pluginManagement
+    id("org.jlleitschuh.gradle.ktlint") apply false
+    id("io.gitlab.arturbosch.detekt") apply false
     id("me.champeau.jmh") version "0.7.2" apply false
-    id("app.cash.burst") version "2.4.0" apply false  // keep in sync with burstVersion in gradle.properties
-    id("dev.mokkery") version "2.7.3" apply false  // keep in sync with mokkeryVersion in gradle.properties
+    id("app.cash.burst") apply false
+    id("dev.mokkery") apply false
 
     id("org.sonarqube") version "6.2.0.5505"
     jacoco
