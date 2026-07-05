@@ -1187,5 +1187,27 @@ class Train :
 		acceleration.state = 0.0
 	}
 
+	/**
+	 * Request an immediate halt of this train.
+	 *
+	 * Brings the train to a standstill by zeroing its velocity, acceleration, and all
+	 * associated integration variables. Safe to call even if the train has already
+	 * stopped — the operation is idempotent.
+	 *
+	 * Intended for use by [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * when [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService.autoHaltTrainOnViolation]
+	 * is `true`: register this method as the halt callback via
+	 * `collisionDetectionService.registerHaltCallback(train.name, train::requestHalt)`.
+	 *
+	 * **Thread safety:** This method modifies kDisco [cz.hovorka.kdisco.Variable] state.
+	 * It must only be called from the simulation thread (e.g., from within the
+	 * [DefaultCollisionDetectionService] warning delivery, which runs on that thread).
+	 *
+	 * @since Issue #615 (Goal 3 SP5)
+	 */
+	fun requestHalt() {
+		stop()
+	}
+
 	override fun toString(): String = name
 }

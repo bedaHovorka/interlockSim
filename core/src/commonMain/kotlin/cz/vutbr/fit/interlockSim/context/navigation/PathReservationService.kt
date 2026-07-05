@@ -191,6 +191,28 @@ interface PathReservationService {
 	fun releasePath(trainId: String): List<DynamicTrackBlock>
 
 	/**
+	 * Emit [BlockEvent.ReservationConflictDetected] for every blocked-path contention
+	 * that is still unresolved when the simulation ends. This is the "unresolved by
+	 * end of run" signal for genuine, never-clearing contention (e.g. a real deadlock),
+	 * as distinct from routine "train waits its turn, then proceeds" contention -- however
+	 * long that takes mid-run -- which always resolves (via [reservePath] `Success` or
+	 * [releasePath]) before the run ends and is therefore never reported this way.
+	 *
+	 * Must be called exactly once, after [cz.vutbr.fit.interlockSim.context.SimulationContext.run]
+	 * has fully returned (see [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext]'s
+	 * post-loop cleanup). The caller is responsible for delivering the returned events to
+	 * whatever is listening for [BlockEvent]s -- this method intentionally does not emit
+	 * them onto the simulation's own event bus, since that bus stops delivering events once
+	 * the run has ended.
+	 *
+	 * @param simulationEndTime Simulation clock value to stamp on the returned event(s).
+	 * @return Events for contention that was never resolved before the run ended;
+	 *         empty if there is none.
+	 * @since Issue #612 (Goal 3 SP2 follow-up)
+	 */
+	fun flushUnresolvedConflicts(simulationEndTime: Double): List<BlockEvent.ReservationConflictDetected>
+
+	/**
 	 * Check if a path is currently available (all blocks FREE).
 	 *
 	 * This is a read-only operation that does NOT reserve the path.

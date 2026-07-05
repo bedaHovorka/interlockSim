@@ -132,7 +132,7 @@ class MenuBarTest : AbstractFrameTestBase() {
 
 	@Test
 	@Timeout(value = 5, unit = TimeUnit.SECONDS)
-	@DisplayName("Simulation menu has separator")
+	@DisplayName("Simulation menu has separators")
 	fun simulationMenuHasSeparator() {
 		runOnEDT {
 			val simMenu = menuBar.getMenu(1) as JMenu
@@ -141,7 +141,9 @@ class MenuBarTest : AbstractFrameTestBase() {
 				(0 until simMenu.itemCount)
 					.count { simMenu.getItem(it) == null }
 
-			assertThat(separatorCount).isEqualTo(1)
+			// One separator before the Speed submenu, one before the Collision Response
+			// submenu (Goal 3 SP6, Issue #616)
+			assertThat(separatorCount).isEqualTo(2)
 		}
 	}
 

@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -259,15 +260,18 @@ class FrameTest : AbstractFrameTestBase() {
 			)
 		runOnEDT {
 			frame.setContext(context)
-			// Simulation mode: EventTimelinePanel is added above PathPreviewPanel and StatusBar
+			// Simulation mode: WarningPanel and EventTimelinePanel are added above
+			// PathPreviewPanel and StatusBar (Goal 3 SP6, Issue #616)
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(3)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(EventTimelinePanel::class)
-			assertThat(southPanel.getComponent(1)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(1) as PathPreviewPanel).isVisible).isFalse()
-			assertThat(southPanel.getComponent(2)).isInstanceOf(StatusBar::class)
+			assertThat(southPanel.componentCount).isEqualTo(4)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(WarningPanel::class)
+			assertThat((southPanel.getComponent(0) as WarningPanel).isVisible).isTrue()
+			assertThat(southPanel.getComponent(1)).isInstanceOf(EventTimelinePanel::class)
+			assertThat(southPanel.getComponent(2)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(2) as PathPreviewPanel).isVisible).isFalse()
+			assertThat(southPanel.getComponent(3)).isInstanceOf(StatusBar::class)
 		}
 		runOnEDT { frame.stopSimulation() }
 		context.close()
@@ -285,14 +289,19 @@ class FrameTest : AbstractFrameTestBase() {
 		val editContext = editingContextFactory.createEmptyContext()
 		runOnEDT {
 			frame.setContext(simContext)
-			// switch back to editing — EventTimelinePanel removed, PathPreviewPanel + StatusBar remain
+			// switch back to editing — EventTimelinePanel removed, PathPreviewPanel + StatusBar remain.
+			// WarningPanel stays attached (hidden) just like PathPreviewPanel does in simulation mode
+			// (Goal 3 SP6, Issue #616).
 			frame.setContext(editContext)
 			val southPanel =
 				(frame.contentPane.layout as BorderLayout)
 					.getLayoutComponent(BorderLayout.SOUTH) as javax.swing.JPanel
-			assertThat(southPanel.componentCount).isEqualTo(2)
-			assertThat(southPanel.getComponent(0)).isInstanceOf(PathPreviewPanel::class)
-			assertThat((southPanel.getComponent(0) as PathPreviewPanel).isVisible).isTrue()
+			assertThat(southPanel.componentCount).isEqualTo(3)
+			assertThat(southPanel.getComponent(0)).isInstanceOf(WarningPanel::class)
+			assertThat((southPanel.getComponent(0) as WarningPanel).isVisible).isFalse()
+			assertThat(southPanel.getComponent(1)).isInstanceOf(PathPreviewPanel::class)
+			assertThat((southPanel.getComponent(1) as PathPreviewPanel).isVisible).isTrue()
+			assertThat(southPanel.getComponent(2)).isInstanceOf(StatusBar::class)
 			// StatusBar must still be visible after returning to editing mode
 			assertThat(frame.statusBar.isVisible).isTrue()
 		}
@@ -321,5 +330,21 @@ class FrameTest : AbstractFrameTestBase() {
 		assertThat(context1.closeCount).isEqualTo(1)
 		runOnEDT { frame.stopSimulation() }
 		context2.close()
+	}
+
+	@Test
+	@DisplayName("autoPauseOnCriticalWarning and soundOnCriticalWarning are volatile (cross-thread contract)")
+	fun collisionResponseFieldsAreVolatile() {
+		val autoPauseField = Frame::class.java.getDeclaredField("autoPauseOnCriticalWarning")
+		val soundField = Frame::class.java.getDeclaredField("soundOnCriticalWarning")
+
+		assertThat(
+			java.lang.reflect.Modifier
+				.isVolatile(autoPauseField.modifiers)
+		).isTrue()
+		assertThat(
+			java.lang.reflect.Modifier
+				.isVolatile(soundField.modifiers)
+		).isTrue()
 	}
 }

@@ -15,8 +15,10 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
+import java.awt.Toolkit
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import java.awt.event.WindowAdapter
@@ -112,6 +114,47 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	// Path preview panel (Issue #596) – visible in editing mode
 	private val pathPreviewPanel: PathPreviewPanel = PathPreviewPanel()
 
+	// Warning log panel (Issue #616, Goal 3 SP6) – visible in simulation mode
+	internal val warningPanel: WarningPanel = WarningPanel()
+
+	// ── Collision Response settings (Goal 3 SP6) ──────────────────────────────
+
+	/**
+	 * When `true`, the simulation remains paused after a collision warning
+	 * (the service always calls [SimulationRunner.requestPause]; this flag
+	 * controls whether we immediately resume on the EDT).
+	 * Defaults to `true` (auto-pause enabled).
+	 *
+	 * `@Volatile` because it is written on the EDT (via the menu toggle in [MenuBar]) and
+	 * read on the simulation thread inside the `onCollisionWarning` listener registered in
+	 * [startSimulation].
+	 */
+	@Volatile
+	var autoPauseOnCriticalWarning: Boolean = true
+
+	/**
+	 * When `true`, the [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * is asked to halt the offending train on a
+	 * [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.BlockEntryViolation].
+	 * Defaults to `false`.
+	 */
+	var autoHaltTrainOnViolation: Boolean = false
+		set(value) {
+			field = value
+			applyAutoHaltSetting(value)
+		}
+
+	/**
+	 * When `true`, a short audio beep is played for each CRITICAL collision warning.
+	 * Defaults to `false`.
+	 *
+	 * `@Volatile` because it is written on the EDT (via the menu toggle in [MenuBar]) and
+	 * read on the simulation thread inside the `onCollisionWarning` listener registered in
+	 * [startSimulation].
+	 */
+	@Volatile
+	var soundOnCriticalWarning: Boolean = false
+
 	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
 	private val southPanel: JPanel =
 		JPanel().apply {
@@ -196,6 +239,17 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		pathPreviewPanel.isVisible = true
 		southPanel.add(pathPreviewPanel, PATH_PREVIEW_SOUTH_INDEX)
 
+		// Warning panel (Issue #616, Goal 3 SP6) – initially hidden; shown in simulation mode
+		warningPanel.isVisible = false
+		// Selection highlights the involved block on the canvas when known.
+		warningPanel.onWarningSelected = { warning ->
+			railwayNetGridCanvas.highlightWarningBlock(warning)
+		}
+		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
+		warningPanel.onClear = {
+			statusBar.setWarningIndicator(false)
+		}
+
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
 			object : ComponentAdapter() {
@@ -225,6 +279,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Shows ControlPanel
 	 * - Disables editing ToolBar
 	 * - Installs global keyboard shortcuts for speed control (Phase 3.1, Issue #193)
+	 * - Shows WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -239,6 +294,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				southPanel.add(panel, TIMELINE_PANEL_SOUTH_INDEX)
 			}
 		}
+
+		// Show WarningPanel in simulation mode (Goal 3 SP6)
+		if (warningPanel.parent == null) {
+			southPanel.add(warningPanel, WARNING_PANEL_SOUTH_INDEX)
+		}
+		warningPanel.isVisible = true
 
 		// Hide PathPreviewPanel in simulation mode
 		pathPreviewPanel.isVisible = false
@@ -267,6 +328,7 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * - Hides ControlPanel
 	 * - Enables editing ToolBar
 	 * - Uninstalls global keyboard shortcuts (Phase 3.1, Issue #193)
+	 * - Hides WarningPanel (Issue #616, Goal 3 SP6)
 	 *
 	 * **Must be called from EDT.**
 	 */
@@ -279,6 +341,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		eventTimelinePanel?.let { panel ->
 			southPanel.remove(panel)
 		}
+
+		// Hide WarningPanel in editing mode (Goal 3 SP6)
+		warningPanel.isVisible = false
 
 		// Show PathPreviewPanel in editing mode
 		pathPreviewPanel.isVisible = true
@@ -420,6 +485,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * Delegates to [SimulationController.start]. Idempotent: if a simulation is already
 	 * running this call is a no-op.
 	 *
+	 * Wires the [cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService]
+	 * listener to feed incoming warnings into [warningPanel] and [statusBar], and
+	 * applies the current [autoPauseOnCriticalWarning] / [soundOnCriticalWarning] settings
+	 * (Issue #616, Goal 3 SP6).
+	 *
 	 * **Must be called from EDT.**
 	 */
 	fun startSimulation() {
@@ -432,6 +502,33 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 				logger.warn { "startSimulation called without a SimulationContext — ignoring" }
 				return
 			}
+
+		// Register collision warning listener BEFORE context.run() is called (Issue #616).
+		// The listener is delivered on the simulation thread; all UI updates are dispatched
+		// back to the EDT.
+		context.getCollisionServices().onCollisionWarning { warning ->
+			// Capture settings atomically from the volatile fields before dispatch.
+			val autoPause = autoPauseOnCriticalWarning
+			val sound = soundOnCriticalWarning
+			SwingUtilities.invokeLater {
+				warningPanel.addWarning(warning)
+				statusBar.setWarningIndicator(true)
+				if (sound) {
+					Toolkit.getDefaultToolkit().beep()
+				}
+				// If auto-pause is OFF, resume the simulation immediately.
+				if (!autoPause) {
+					simulationController.runner?.isPaused = false
+				}
+			}
+		}
+
+		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).
+		applyAutoHaltSetting(autoHaltTrainOnViolation)
+
+		// Clear any stale warnings from a previous run.
+		warningPanel.clearWarnings()
+		statusBar.setWarningIndicator(false)
 
 		try {
 			simulationController.start(context)
@@ -480,6 +577,23 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		simulationControlPanel.runner = null
 		// Clear the paused indicator when the simulation stops.
 		statusBar.setPaused(false)
+		// Clear the warning indicator when the simulation stops (Issue #616).
+		statusBar.setWarningIndicator(false)
+	}
+
+	/**
+	 * Apply [enabled] to the [cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService]
+	 * of the current simulation context (if any).
+	 *
+	 * @since Issue #616 (Goal 3 SP6)
+	 */
+	private fun applyAutoHaltSetting(enabled: Boolean) {
+		val service =
+			currentSimulationContext
+				?.getCollisionServices()
+				?.getCollisionDetectionService()
+				as? cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+		service?.autoHaltTrainOnViolation = enabled
 	}
 
 	companion object {
@@ -496,6 +610,15 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		 * timeline panel is present it sits at index 0, just above the StatusBar.
 		 */
 		private const val PATH_PREVIEW_SOUTH_INDEX = 0
+
+		/**
+		 * Index at which WarningPanel is inserted in [southPanel] (Issue #616, Goal 3 SP6).
+		 *
+		 * The WarningPanel appears above the StatusBar (and below the EventTimelinePanel and
+		 * PathPreviewPanel when they are present).  Using index 0 keeps the panel ordering
+		 * consistent with the other south-panel panels added dynamically.
+		 */
+		private const val WARNING_PANEL_SOUTH_INDEX = 0
 	}
 
 	/**

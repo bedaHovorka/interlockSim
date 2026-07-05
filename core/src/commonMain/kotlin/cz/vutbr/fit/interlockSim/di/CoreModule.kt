@@ -26,6 +26,8 @@ import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -204,6 +206,17 @@ val navigationModule: Module =
 			// Builds on AutomaticPathFindingService (same scope)
 			scoped<RouteFinder> {
 				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
+
+			// CollisionDetectionService: scoped to simulation context (Issue #611 Goal 3 SP1)
+			// SP1 thin backbone: listener registry + pause bridge. SP2 (#612) adds the
+			// ReservationConflict rules; the context serves as both PauseController and
+			// SimulationEnvironment (block-event source). SP3/SP4 add further rules.
+			scoped<CollisionDetectionService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultCollisionDetectionService(context, context)
 			}
 		}
 	}

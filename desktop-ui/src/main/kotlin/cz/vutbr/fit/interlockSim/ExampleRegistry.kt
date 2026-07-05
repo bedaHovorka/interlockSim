@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
+import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 
@@ -176,7 +177,10 @@ class ExampleRegistry {
 					)
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
-				context.setMainProcess(MultiTrainLoop(context, endTime, specs, enableRealTimeSync = false))
+				val process = MultiTrainLoop(context, endTime, specs, enableRealTimeSync = false)
+				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+				context.setMainProcess(process)
 				context
 			}
 	}
@@ -208,7 +212,10 @@ class ExampleRegistry {
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				context.setMainProcess(MultiTrainLoop(context, endTime, specs, enableRealTimeSync = true))
+				val process = MultiTrainLoop(context, endTime, specs, enableRealTimeSync = true)
+				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+				context.setMainProcess(process)
 				context
 			}
 	}
@@ -233,7 +240,10 @@ class ExampleRegistry {
 				val endTime = if (args.size >= 3) args[2].toLong() else 300L
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
-				context.setMainProcess(ThreeTrainLoop(context, endTime, enableRealTimeSync = false))
+				val process = ThreeTrainLoop(context, endTime, enableRealTimeSync = false)
+				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+				context.setMainProcess(process)
 				context
 			}
 	}
@@ -259,7 +269,10 @@ class ExampleRegistry {
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				context.setMainProcess(ThreeTrainLoop(context, endTime, enableRealTimeSync = true))
+				val process = ThreeTrainLoop(context, endTime, enableRealTimeSync = true)
+				(context.getCollisionServices().getCollisionDetectionService() as? DefaultCollisionDetectionService)
+					?.registerTrainSnapshotProvider(process::getTrainSnapshot)
+				context.setMainProcess(process)
 				context
 			}
 	}

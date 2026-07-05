@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.gui
 import cz.vutbr.fit.interlockSim.PROGRAM_NAME
 import cz.vutbr.fit.interlockSim.context.ContextChangeListener
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
+import cz.vutbr.fit.interlockSim.gui.GuiConstants.WARNING_BADGE_COLOR
 import cz.vutbr.fit.interlockSim.gui.StatusBarColors.PAUSED_BADGE_COLOR
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import java.awt.BorderLayout
@@ -33,6 +34,9 @@ import kotlin.math.abs
  * - [statusLabel] (CENTER): shows context property-change messages and mouse-position info.
  * - [pausedLabel] (EAST, leftmost): shows "[PAUSED]" when the simulation is paused; hidden
  *   otherwise. Written only from EDT via [setPaused].
+ * - [warningLabel] (EAST, second): shows "⚠ WARNING" in red when at least one CRITICAL
+ *   collision warning is unacknowledged; hidden otherwise. Written only from EDT via
+ *   [setWarningIndicator].
  * - [speedLabel] (EAST, rightmost): shows the current simulation speed multiplier when it
  *   differs from 1.0x; hidden at default speed. Written only from EDT via [updateSpeedIndicator].
  *
@@ -44,6 +48,7 @@ class StatusBar :
 	ContextChangeListener {
 	private val statusLabel = JLabel()
 	private val pausedLabel = JLabel().apply { isVisible = false }
+	private val warningLabel = JLabel().apply { isVisible = false }
 	private val speedLabel = JLabel().apply { isVisible = false }
 
 	private val mouseListener =
@@ -70,10 +75,11 @@ class StatusBar :
 	init {
 		layout = BorderLayout()
 		add(statusLabel, BorderLayout.CENTER)
-		// East panel: pausedLabel (left) + speedLabel (right) as a horizontal pair.
+		// East panel: pausedLabel (left) + warningLabel + speedLabel (right) as a horizontal pair.
 		val eastPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0))
 		eastPanel.isOpaque = false
 		eastPanel.add(pausedLabel)
+		eastPanel.add(warningLabel)
 		eastPanel.add(speedLabel)
 		add(eastPanel, BorderLayout.EAST)
 		preferredSize = Dimension(100, 25)
@@ -198,6 +204,39 @@ class StatusBar :
 
 	/** Returns the current paused indicator foreground color. */
 	internal fun pausedIndicatorForeground(): Color = pausedLabel.foreground
+
+	/**
+	 * Shows or hides the "⚠ WARNING" indicator in [warningLabel].
+	 *
+	 * When [hasCritical] is `true`, [warningLabel] shows "⚠ WARNING" in
+	 * [WARNING_BADGE_COLOR] (red) and becomes visible.  When `false`, the label text is
+	 * cleared and hidden.
+	 *
+	 * This method is EDT-safe: it executes synchronously when already on the EDT and
+	 * uses [SwingUtilities.invokeLater] when called from a background thread.
+	 *
+	 * @param hasCritical Whether at least one CRITICAL collision warning is unacknowledged.
+	 * @since Issue #616 (Goal 3 SP6)
+	 */
+	fun setWarningIndicator(hasCritical: Boolean) {
+		if (SwingUtilities.isEventDispatchThread()) {
+			applyWarningIndicator(hasCritical)
+		} else {
+			SwingUtilities.invokeLater { applyWarningIndicator(hasCritical) }
+		}
+	}
+
+	private fun applyWarningIndicator(hasCritical: Boolean) {
+		warningLabel.text = if (hasCritical) "⚠ WARNING" else ""
+		warningLabel.isVisible = hasCritical
+		warningLabel.foreground = WARNING_BADGE_COLOR
+	}
+
+	/** Returns `true` when the warning indicator label is currently visible. */
+	internal fun isWarningIndicatorVisible(): Boolean = warningLabel.isVisible
+
+	/** Returns the current warning indicator text, or an empty string when hidden. */
+	internal fun warningIndicatorText(): String = warningLabel.text ?: ""
 
 	companion object {
 		private const val DEFAULT_SPEED = 1.0

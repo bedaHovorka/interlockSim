@@ -46,6 +46,10 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.LoopProcess
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
+import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
+import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -122,7 +126,8 @@ open class DefaultSimulationContext(
 	 */
 	private val processFactory: SimulationProcessFactory
 ) : BaseContext<DynamicTrackBlock>(cols, rows),
-	SimulationContext {
+	SimulationContext,
+	PauseController {
 	/**
 	 * Koin scope for this simulation context.
 	 * Manages lifecycle of navigation services and ensures one shared PathReservationRegistry
@@ -202,6 +207,51 @@ open class DefaultSimulationContext(
 	 * Distinct from isFrozen() because fromEditingContext() freezes the context before run() is called.
 	 */
 	private var simulationHasStarted: Boolean = false
+
+	/**
+	 * Active [SimulationController] for the current run; used by [requestPause] to delegate
+	 * pause requests from the collision detection service.
+	 * Set at the start of [run] and cleared when run completes.
+	 *
+	 * Marked `@Volatile` because it is written on the control/caller thread at the start of
+	 * [run] and cleared on completion, but read from the simulation thread inside
+	 * [requestPause] (the [PauseController] contract permits call from the simulation thread).
+	 */
+	@kotlin.concurrent.Volatile
+	private var currentController: SimulationController? = null
+
+	/** Collision warning listeners registered before run(); wired into the service at run() time. */
+	private val pendingCollisionWarningListeners: MutableList<(CollisionWarning) -> Unit> = mutableListOf()
+
+	/**
+	 * Collision detection service scoped to this context.
+	 * Retrieved from this context's Koin scope. SP1 ships a thin backbone; SP2/SP3/SP4
+	 * will add the block-event subscriptions and detection rules.
+	 */
+	private val collisionDetectionServiceInstance: CollisionDetectionService by lazy {
+		scope.get<CollisionDetectionService>()
+	}
+
+	/**
+	 * Grouped collision-detection services facade for this simulation context.
+	 * Delegates to the buffered warning-subscription path and the scoped
+	 * [CollisionDetectionService], keeping them behind a single [CollisionServices]
+	 * accessor instead of flattening them onto [SimulationEnvironment].
+	 */
+	private val collisionServicesInstance: CollisionServices by lazy {
+		object : CollisionServices {
+			override fun getCollisionDetectionService(): CollisionDetectionService = collisionDetectionServiceInstance
+
+			override fun onCollisionWarning(listener: (CollisionWarning) -> Unit) = registerCollisionWarningListener(listener)
+
+			override fun registerHaltCallback(
+				trainId: String,
+				callback: () -> Unit
+			) {
+				collisionDetectionServiceInstance.registerHaltCallback(trainId, callback)
+			}
+		}
+	}
 
 	/**
 	 * Random number generator for name generation (kDisco)
@@ -1141,7 +1191,49 @@ open class DefaultSimulationContext(
 		pendingSimEventListeners += listener
 	}
 
+	/**
+	 * Buffer a collision-warning listener registered before [run]; listeners registered
+	 * after [run] has started are silently ignored (same contract as [onBlockEvent]).
+	 * Wired into the [CollisionDetectionService] at [run] time.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	private fun registerCollisionWarningListener(listener: (CollisionWarning) -> Unit) {
+		if (simulationHasStarted) return
+		pendingCollisionWarningListeners += listener
+	}
+
+	/**
+	 * Collision-detection services facade for this context. Exposes the scoped
+	 * [CollisionDetectionService] and the buffered [CollisionServices.onCollisionWarning]
+	 * subscription path behind a single accessor.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun getCollisionServices(): CollisionServices = collisionServicesInstance
+
+	/**
+	 * Request an immediate pause via the active [SimulationController].
+	 * Delegates to the controller stored at the start of [run]; safe to call from the simulation thread.
+	 * Does nothing if called before [run] or after simulation finishes.
+	 *
+	 * @since Issue #611 (Goal 3 SP1)
+	 */
+	override fun requestPause() {
+		currentController?.requestPause()
+	}
+
 	override fun run(controller: SimulationController) {
+		// Store the active controller so requestPause() can delegate to it.
+		currentController = controller
+
+		// Force initialization of the collision detection service now, regardless of whether any
+		// onCollisionWarning listeners were registered. DefaultCollisionDetectionService subscribes
+		// to env.onBlockEvent/env.onSimulationEvent in its init{} block, and detection must be active
+		// even in headless/CLI runs that never register a warning listener.
+		val collisionService = collisionDetectionServiceInstance
+		pendingCollisionWarningListeners.forEach { collisionService.onCollisionWarning(it) }
+
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.
 		simulationHasStarted = true
@@ -1232,8 +1324,26 @@ open class DefaultSimulationContext(
 			logger.error(e) { "Simulation run failed" }
 			throw SimulationException(e)
 		} finally {
+			flushUnresolvedReservationConflicts(sim.time())
 			simulation = null // Release reference once sim.run() returns (natural end or stop() called)
+			currentController = null
 		}
+	}
+
+	/**
+	 * Surface any reservation contention that was still unresolved when the run ended
+	 * (Issue #612 SP2 follow-up). Delivered directly to the buffered block-event
+	 * listeners rather than via `emitCustom()`: the top-level `emitCustom` is a no-op
+	 * once `Process.activeContext` is null, which is exactly the state here -- the run
+	 * has already fully stopped, so there is nothing left to pause.
+	 *
+	 * Extracted out of [run] purely to keep that method's cyclomatic complexity within
+	 * budget; carries no logic of its own beyond the guard + delivery.
+	 */
+	private fun flushUnresolvedReservationConflicts(simulationEndTime: Double) {
+		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
+			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
+			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
 	}
 
 	private fun createDynamic(i: InOut): DynamicInOut {

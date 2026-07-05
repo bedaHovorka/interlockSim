@@ -57,4 +57,10 @@ class SimulationControllerTest {
 		val controller: SimulationController = NoOpSimulationController
 		assertThat(controller).isSameInstanceAs(NoOpSimulationController)
 	}
+
+	@Test
+	fun `NoOpSimulationController requestPause does nothing`() {
+		// Should not throw — no-op implementation for headless/non-GUI runs
+		NoOpSimulationController.requestPause()
+	}
 }
