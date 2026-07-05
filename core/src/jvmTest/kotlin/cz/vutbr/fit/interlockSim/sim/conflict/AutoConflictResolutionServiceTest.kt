@@ -149,7 +149,7 @@ class AutoConflictResolutionServiceTest {
 
 			val result = service.applyTopRanked(event)
 
-			assertThat(result).isInstanceOf<ConflictResolution.HoldTrain>()
+			assertThat(result!!).isInstanceOf<ConflictResolution.HoldTrain>()
 		}
 	}
 
