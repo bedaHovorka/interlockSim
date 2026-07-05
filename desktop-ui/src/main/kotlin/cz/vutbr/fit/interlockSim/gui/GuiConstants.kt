@@ -57,4 +57,10 @@ object GuiConstants {
 
 	/** Default preferred height (pixels) for the [warning.WarningPanel] when visible. */
 	const val WARNING_PANEL_HEIGHT: Int = 120
+
+	/** Default preferred width (pixels) for the [conflict.ConflictResolutionPanel] when visible. */
+	const val CONFLICT_RESOLUTION_PANEL_WIDTH: Int = 320
+
+	/** Orange used for the active-conflict label in [conflict.ConflictResolutionPanel]. */
+	val CONFLICT_LABEL_COLOR: Color = Color(0xCC, 0x66, 0x00)
 }
