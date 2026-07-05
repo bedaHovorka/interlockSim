@@ -15,7 +15,9 @@ import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.gui.animation.ControlPanel
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.BorderLayout
 import java.awt.Toolkit
@@ -57,22 +59,22 @@ import javax.swing.Timer
  *
  * ### Simulation Mode
  * ```
- * ┌─────────────────────────────────┐
- * │ MenuBar                         │
- * ├─────────────────────────────────┤
- * │ ToolBar                         │
- * ├─────────────────────────────────┤
- * │ ControlPanel (NEW - Issue #205) │
- * │ [Time] [Status]                 │
- * ├─────────────────────────────────┤
- * │ RailwayNetGridCanvas            │
- * │ (animated, scrollable)          │
- * ├─────────────────────────────────┤
- * │ EventTimelinePanel (NEW)        │
- * │ [Filters] [Event log...]        │
- * ├─────────────────────────────────┤
- * │ StatusBar (speed indicator)     │
- * └─────────────────────────────────┘
+ * ┌───────────────────────────────┬─────────────────────┐
+ * │ MenuBar                       │                     │
+ * ├───────────────────────────────┤                     │
+ * │ ToolBar                       │                     │
+ * ├───────────────────────────────┤                     │
+ * │ ControlPanel (NEW - #205)     │                     │
+ * │ [Time] [Status]               │ ConflictResolution  │
+ * ├───────────────────────────────┤ Panel (EAST, #590)  │
+ * │ RailwayNetGridCanvas          │ (visible only when  │
+ * │ (animated, scrollable)        │  a conflict needs   │
+ * ├───────────────────────────────┤  dispatcher input)  │
+ * │ EventTimelinePanel (NEW)      │                     │
+ * │ [Filters] [Event log...]      │                     │
+ * ├───────────────────────────────┤                     │
+ * │ StatusBar (speed indicator)   │                     │
+ * └───────────────────────────────┴─────────────────────┘
  * ```
  *
  * ## Animation Integration (Issue #205)
@@ -116,6 +118,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 	// Warning log panel (Issue #616, Goal 3 SP6) – visible in simulation mode
 	internal val warningPanel: WarningPanel = WarningPanel()
+
+	// Conflict resolution side panel (Issue #590, Goal 9 SP5) – visible when a conflict is active
+	internal val conflictResolutionPanel: ConflictResolutionPanel = ConflictResolutionPanel()
 
 	// ── Collision Response settings (Goal 3 SP6) ──────────────────────────────
 
@@ -250,6 +255,11 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 			statusBar.setWarningIndicator(false)
 		}
 
+		// Conflict resolution side panel (Issue #590, Goal 9 SP5) – initially hidden;
+		// shown in the east slot when an active conflict requires dispatcher attention.
+		conflictResolutionPanel.isVisible = false
+		contentPane.add(conflictResolutionPanel, BorderLayout.EAST)
+
 		// Add component listener to refresh canvas when frame is resized
 		addComponentListener(
 			object : ComponentAdapter() {
@@ -344,6 +354,9 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 
 		// Hide WarningPanel in editing mode (Goal 3 SP6)
 		warningPanel.isVisible = false
+
+		// Hide ConflictResolutionPanel in editing mode (Goal 9 SP5)
+		conflictResolutionPanel.clearResolutions()
 
 		// Show PathPreviewPanel in editing mode
 		pathPreviewPanel.isVisible = true
@@ -490,6 +503,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * applies the current [autoPauseOnCriticalWarning] / [soundOnCriticalWarning] settings
 	 * (Issue #616, Goal 3 SP6).
 	 *
+	 * Also registers a [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onConflictDetectedEvent]
+	 * listener to populate [conflictResolutionPanel] with ranked resolution candidates whenever
+	 * a spatial conflict is detected (Issue #590, Goal 9 SP5).
+	 *
 	 * **Must be called from EDT.**
 	 */
 	fun startSimulation() {
@@ -526,9 +543,22 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Apply the current auto-halt setting to the newly created service (Goal 3 SP6).
 		applyAutoHaltSetting(autoHaltTrainOnViolation)
 
+		// Register conflict-detected listener to drive ConflictResolutionPanel (Goal 9 SP5).
+		// Listener is delivered on the simulation thread; UI updates dispatched to EDT.
+		val resolver = DefaultConflictResolver.forEnvironment(context)
+		context.onConflictDetectedEvent { conflict ->
+			val resolutions = resolver.generateResolutions(conflict)
+			conflictResolutionPanel.showResolutions(conflict, resolutions)
+			logger.debug {
+				"ConflictDetectedEvent: ${conflict.trainId} vs ${conflict.conflictingTrainId} " +
+					"on block ${conflict.block.name} — ${resolutions.size} resolution candidates shown"
+			}
+		}
+
 		// Clear any stale warnings from a previous run.
 		warningPanel.clearWarnings()
 		statusBar.setWarningIndicator(false)
+		conflictResolutionPanel.clearResolutions()
 
 		try {
 			simulationController.start(context)
@@ -579,6 +609,8 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		statusBar.setPaused(false)
 		// Clear the warning indicator when the simulation stops (Issue #616).
 		statusBar.setWarningIndicator(false)
+		// Clear and hide the conflict resolution panel when the simulation stops (Goal 9 SP5).
+		conflictResolutionPanel.clearResolutions()
 	}
 
 	/**
