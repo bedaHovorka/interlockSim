@@ -12,10 +12,12 @@ package cz.vutbr.fit.interlockSim.sim.conflict
 /**
  * Service that generates candidate [ConflictResolution]s for a detected conflict.
  *
- * Given a [ConflictDetectedEvent] this service produces a ranked or unranked list of
- * candidate resolutions that an operator or an automated layer (Issue #568) can apply
- * to resolve the conflict.  The service itself is **headless** — it never applies a
- * resolution; it only generates options.
+ * Given a [ConflictDetectedEvent] this service produces a list of candidate resolutions,
+ * ranked from least to most operationally disruptive
+ * ([cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]), that an operator
+ * or an automated layer (Issue #568) can apply to resolve the conflict.  The service
+ * itself is **headless** — it never applies a resolution; it only generates and ranks
+ * options.
  *
  * ## Candidate strategies
  *
@@ -49,11 +51,14 @@ interface ConflictResolver {
 	 * are included only when the Goal 2 pathfinding API discovers at least one alternative
 	 * route that avoids the contested block.
 	 *
+	 * The list is sorted from least to most operationally disruptive, per
+	 * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker].
+	 *
 	 * The list may be empty only in degenerate topologies where no feasible action
 	 * can be computed (in practice this should not occur on any valid network).
 	 *
 	 * @param conflict The conflict event to resolve.
-	 * @return A non-null list of candidate resolutions (may be empty in edge cases).
+	 * @return A non-null, ranked list of candidate resolutions (may be empty in edge cases).
 	 */
 	fun generateResolutions(conflict: ConflictDetectedEvent): List<ConflictResolution>
 }
