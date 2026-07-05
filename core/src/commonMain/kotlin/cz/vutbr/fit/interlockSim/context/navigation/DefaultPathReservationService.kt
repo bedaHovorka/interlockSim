@@ -14,7 +14,6 @@ import cz.hovorka.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.RouteFinder
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.exceptions.PathSeparatorChangeException
-import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -34,6 +33,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
