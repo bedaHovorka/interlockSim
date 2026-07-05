@@ -55,16 +55,22 @@ sealed class ConflictResolution {
 	/**
 	 * Estimated operational consequence of applying this resolution.
 	 *
-	 * @property delaySeconds Expected additional delay in simulation seconds (≥ 0).
-	 *   `0.0` when the resolution is expected to have no measurable delay (e.g. reroute
-	 *   via an equally-cost path).
+	 * @property delaySeconds Expected additional delay in simulation seconds (≥ 0,
+	 *   enforced).  `0.0` when the resolution is expected to have no measurable delay
+	 *   (e.g. reroute via an equally-cost path) — or when no numeric estimate is
+	 *   available and `0.0` is a heuristic placeholder (e.g. [SpeedAdjust]); the
+	 *   [description] states which.
 	 * @property description Human-readable summary of the impact, suitable for logging
 	 *   or operator display.
 	 */
 	data class EstimatedImpact(
 		val delaySeconds: Double,
 		val description: String
-	)
+	) {
+		init {
+			require(delaySeconds >= 0.0) { "delaySeconds must be >= 0, was $delaySeconds" }
+		}
+	}
 
 	/** Which mitigation strategy this candidate represents. */
 	abstract val strategy: Strategy
@@ -85,7 +91,7 @@ sealed class ConflictResolution {
 	 * [holdDurationSeconds].
 	 *
 	 * @property trainId  The train to hold.
-	 * @property holdDurationSeconds  How long the train should wait (> 0).
+	 * @property holdDurationSeconds  How long the train should wait (> 0, enforced).
 	 */
 	data class HoldTrain(
 		val trainId: String,
@@ -93,15 +99,22 @@ sealed class ConflictResolution {
 		override val affectedTrains: List<String>,
 		override val estimatedImpact: EstimatedImpact
 	) : ConflictResolution() {
+		init {
+			require(holdDurationSeconds > 0.0) {
+				"holdDurationSeconds must be > 0, was $holdDurationSeconds"
+			}
+		}
+
 		override val strategy: Strategy = Strategy.HOLD_TRAIN
 	}
 
 	/**
 	 * Direct [trainId] onto [alternativeRoute], bypassing the contested block.
 	 *
-	 * The route is discovered by the Goal 2 pathfinding API
-	 * ([cz.vutbr.fit.interlockSim.context.RouteFinder.findRoutes]) and is guaranteed to
-	 * contain no segment equal to the contested [ConflictDetectedEvent.block].
+	 * When produced by [DefaultConflictResolver], the route is discovered by the Goal 2
+	 * pathfinding API ([cz.vutbr.fit.interlockSim.context.RouteFinder.findRoutes]) and its
+	 * segments exclude the contested [ConflictDetectedEvent.block].  The data class itself
+	 * does not enforce this — a manually constructed instance may carry any route.
 	 *
 	 * @property trainId          The train to reroute.
 	 * @property alternativeRoute The substitute route that avoids the contested block.
@@ -123,7 +136,8 @@ sealed class ConflictResolution {
 	 * the conflicting train to clear the contested block before [trainId] arrives.
 	 *
 	 * @property trainId             The train whose speed should be reduced.
-	 * @property speedReductionFactor Target fraction of current speed, in (0.0, 1.0].
+	 * @property speedReductionFactor Target fraction of current speed, in (0.0, 1.0]
+	 *   (enforced).
 	 */
 	data class SpeedAdjust(
 		val trainId: String,
@@ -131,6 +145,12 @@ sealed class ConflictResolution {
 		override val affectedTrains: List<String>,
 		override val estimatedImpact: EstimatedImpact
 	) : ConflictResolution() {
+		init {
+			require(speedReductionFactor > 0.0 && speedReductionFactor <= 1.0) {
+				"speedReductionFactor must be in (0.0, 1.0], was $speedReductionFactor"
+			}
+		}
+
 		override val strategy: Strategy = Strategy.SPEED_ADJUST
 	}
 }

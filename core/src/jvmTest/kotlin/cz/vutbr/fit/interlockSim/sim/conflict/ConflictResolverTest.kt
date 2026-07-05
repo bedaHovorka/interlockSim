@@ -9,11 +9,13 @@
  */
 package cz.vutbr.fit.interlockSim.sim.conflict
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.NetworkState
@@ -86,13 +88,14 @@ class ConflictResolverTest {
 	private fun makeRoute(
 		from: InOut,
 		to: InOut,
-		vararg segments: TrackSection
+		vararg segments: TrackSection,
+		cost: Double? = null
 	): Route =
 		Route(
 			start = from,
 			target = to,
 			segments = segments.toList(),
-			cost = segments.size.toDouble(),
+			cost = cost ?: segments.size.toDouble(),
 			costBreakdown = segments.map { SegmentCost(it, 1.0) }
 		)
 
@@ -555,6 +558,301 @@ class ConflictResolverTest {
 
 			assertThat(impact.delaySeconds).isEqualTo(15.0)
 			assertThat(impact.description).isEqualTo("Delay of 15 seconds")
+		}
+	}
+
+	// ── 6. Reroute deduplication and cap ─────────────────────────────────────
+
+	@Nested
+	@DisplayName("Reroute deduplication and cap")
+	inner class RerouteDeduplicationAndCap {
+		@Test
+		@DisplayName("reversed-pair duplicate (same segments, reversed order) yields a single candidate")
+		fun reversedPairDuplicateIsDeduplicated() {
+			val seg1 = mockk<TrackSection>(relaxed = true)
+			val seg2 = mockk<TrackSection>(relaxed = true)
+			every { routeFinder.findRoutes(inA, inB, any(), any(), any()) } returns
+				listOf(makeRoute(inA, inB, seg1, seg2))
+			every { routeFinder.findRoutes(inB, inA, any(), any(), any()) } returns
+				listOf(makeRoute(inB, inA, seg2, seg1))
+
+			val resolver = DefaultConflictResolver(routeFinder, listOf(inA, inB), networkState)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val rerouteCandidates = resolutions.filterIsInstance<ConflictResolution.Reroute>()
+			assertThat(rerouteCandidates).hasSize(1)
+		}
+
+		@Test
+		@DisplayName("identical route returned twice yields a single candidate")
+		fun identicalRouteIsDeduplicated() {
+			val seg1 = mockk<TrackSection>(relaxed = true)
+			val route = makeRoute(inA, inB, seg1)
+			every { routeFinder.findRoutes(inA, inB, any(), any(), any()) } returns
+				listOf(route, route)
+
+			val resolver = DefaultConflictResolver(routeFinder, listOf(inA, inB), networkState)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val rerouteCandidates = resolutions.filterIsInstance<ConflictResolution.Reroute>()
+			assertThat(rerouteCandidates).hasSize(1)
+		}
+
+		@Test
+		@DisplayName("distinct routes are not collapsed by deduplication")
+		fun distinctRoutesAreNotCollapsed() {
+			val seg1 = mockk<TrackSection>(relaxed = true)
+			val seg2 = mockk<TrackSection>(relaxed = true)
+			every { routeFinder.findRoutes(inA, inB, any(), any(), any()) } returns
+				listOf(makeRoute(inA, inB, seg1), makeRoute(inA, inB, seg2))
+
+			val resolver = DefaultConflictResolver(routeFinder, listOf(inA, inB), networkState)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val rerouteCandidates = resolutions.filterIsInstance<ConflictResolution.Reroute>()
+			assertThat(rerouteCandidates).hasSize(2)
+		}
+
+		@Test
+		@DisplayName("maxRerouteCandidates caps the number of reroute candidates")
+		fun capLimitsRerouteCandidates() {
+			val routes =
+				List(4) { makeRoute(inA, inB, mockk<TrackSection>(relaxed = true)) }
+			every { routeFinder.findRoutes(inA, inB, any(), any(), any()) } returns routes
+
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder,
+					listOf(inA, inB),
+					networkState,
+					maxRerouteCandidates = 2
+				)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val rerouteCandidates = resolutions.filterIsInstance<ConflictResolution.Reroute>()
+			assertThat(rerouteCandidates).hasSize(2)
+		}
+
+		@Test
+		@DisplayName("cheapest routes are kept when the cap truncates candidates")
+		fun cheapestRoutesSurviveCap() {
+			val expensive = makeRoute(inA, inB, mockk<TrackSection>(relaxed = true), cost = 5.0)
+			val cheap = makeRoute(inA, inB, mockk<TrackSection>(relaxed = true), cost = 1.0)
+			every { routeFinder.findRoutes(inA, inB, any(), any(), any()) } returns
+				listOf(expensive, cheap)
+
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder,
+					listOf(inA, inB),
+					networkState,
+					maxRerouteCandidates = 1
+				)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val reroute = resolutions.filterIsInstance<ConflictResolution.Reroute>().first()
+			assertThat(reroute.alternativeRoute.cost).isEqualTo(1.0)
+		}
+
+		@Test
+		@DisplayName("default maxRoutesPerPair is forwarded to RouteFinder.findRoutes")
+		fun defaultMaxRoutesPerPairIsForwarded() {
+			val resolver = DefaultConflictResolver(routeFinder, listOf(inA, inB), networkState)
+
+			resolver.generateResolutions(conflict)
+
+			verify(atLeast = 1) {
+				routeFinder.findRoutes(
+					inA,
+					inB,
+					any(),
+					DefaultConflictResolver.DEFAULT_MAX_ROUTES_PER_PAIR,
+					any()
+				)
+			}
+		}
+
+		@Test
+		@DisplayName("custom maxRoutesPerPair is forwarded to RouteFinder.findRoutes")
+		fun customMaxRoutesPerPairIsForwarded() {
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder,
+					listOf(inA, inB),
+					networkState,
+					maxRoutesPerPair = 5
+				)
+
+			resolver.generateResolutions(conflict)
+
+			verify(atLeast = 1) { routeFinder.findRoutes(inA, inB, any(), 5, any()) }
+		}
+	}
+
+	// ── 7. Constructor parameters ────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("Constructor parameters")
+	inner class ConstructorParameters {
+		@Test
+		@DisplayName("custom holdDurationSeconds is reflected in HoldTrain candidate and impact")
+		fun customHoldDurationIsUsed() {
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					holdDurationSeconds = 12.0
+				)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val hold = resolutions.filterIsInstance<ConflictResolution.HoldTrain>().first()
+			assertThat(hold.holdDurationSeconds).isEqualTo(12.0)
+			assertThat(hold.estimatedImpact.delaySeconds).isEqualTo(12.0)
+		}
+
+		@Test
+		@DisplayName("custom speedReductionFactor is reflected in SpeedAdjust candidate")
+		fun customSpeedReductionFactorIsUsed() {
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					speedReductionFactor = 0.8
+				)
+
+			val resolutions = resolver.generateResolutions(conflict)
+
+			val speedAdjust = resolutions.filterIsInstance<ConflictResolution.SpeedAdjust>().first()
+			assertThat(speedAdjust.speedReductionFactor).isEqualTo(0.8)
+		}
+
+		@Test
+		@DisplayName("non-positive holdDurationSeconds is rejected")
+		fun zeroHoldDurationIsRejected() {
+			assertFailure {
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					holdDurationSeconds = 0.0
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("speedReductionFactor of 0.0 is rejected")
+		fun zeroSpeedReductionFactorIsRejected() {
+			assertFailure {
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					speedReductionFactor = 0.0
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("speedReductionFactor above 1.0 is rejected")
+		fun tooLargeSpeedReductionFactorIsRejected() {
+			assertFailure {
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					speedReductionFactor = 1.5
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("maxRoutesPerPair below 1 is rejected")
+		fun zeroMaxRoutesPerPairIsRejected() {
+			assertFailure {
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					maxRoutesPerPair = 0
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("maxRerouteCandidates below 1 is rejected")
+		fun zeroMaxRerouteCandidatesIsRejected() {
+			assertFailure {
+				DefaultConflictResolver(
+					routeFinder,
+					emptyList(),
+					networkState,
+					maxRerouteCandidates = 0
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+	}
+
+	// ── 8. ConflictResolution invariants ─────────────────────────────────────
+
+	@Nested
+	@DisplayName("ConflictResolution invariants")
+	inner class ResolutionInvariants {
+		@Test
+		@DisplayName("EstimatedImpact rejects negative delaySeconds")
+		fun estimatedImpactRejectsNegativeDelay() {
+			assertFailure {
+				ConflictResolution.EstimatedImpact(-1.0, "invalid")
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("HoldTrain rejects non-positive holdDurationSeconds")
+		fun holdTrainRejectsZeroDuration() {
+			val impact = ConflictResolution.EstimatedImpact(0.0, "impact")
+			assertFailure {
+				ConflictResolution.HoldTrain(
+					trainId = "TrainA",
+					holdDurationSeconds = 0.0,
+					affectedTrains = listOf("TrainA"),
+					estimatedImpact = impact
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("SpeedAdjust rejects speedReductionFactor above 1.0")
+		fun speedAdjustRejectsTooLargeFactor() {
+			val impact = ConflictResolution.EstimatedImpact(0.0, "impact")
+			assertFailure {
+				ConflictResolution.SpeedAdjust(
+					trainId = "TrainA",
+					speedReductionFactor = 1.5,
+					affectedTrains = listOf("TrainA"),
+					estimatedImpact = impact
+				)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("SpeedAdjust rejects speedReductionFactor of 0.0")
+		fun speedAdjustRejectsZeroFactor() {
+			val impact = ConflictResolution.EstimatedImpact(0.0, "impact")
+			assertFailure {
+				ConflictResolution.SpeedAdjust(
+					trainId = "TrainA",
+					speedReductionFactor = 0.0,
+					affectedTrains = listOf("TrainA"),
+					estimatedImpact = impact
+				)
+			}.isInstanceOf<IllegalArgumentException>()
 		}
 	}
 }
