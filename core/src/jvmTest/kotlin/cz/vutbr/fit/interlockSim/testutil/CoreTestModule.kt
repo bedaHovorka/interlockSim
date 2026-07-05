@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -159,6 +160,13 @@ val coreTestModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultCollisionDetectionService(context, context)
+			}
+
+			scoped<TemporalConflictDetector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				TemporalConflictDetector(context)
 			}
 		}
 	}

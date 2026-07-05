@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -217,6 +218,16 @@ val navigationModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultCollisionDetectionService(context, context)
+			}
+
+			// TemporalConflictDetector: scoped to simulation context (Issue #583 Goal 9 SP2)
+			// Subscribes to block events in its init{} block to run the lookahead scan.
+			// The context serves as SimulationEnvironment (block-event source).
+			scoped<TemporalConflictDetector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				TemporalConflictDetector(context)
 			}
 		}
 	}
