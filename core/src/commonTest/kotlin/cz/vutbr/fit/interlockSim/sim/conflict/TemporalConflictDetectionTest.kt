@@ -55,7 +55,6 @@ import kotlin.test.Test
  * @since Issue #583 (Goal 9 SP2)
  */
 class TemporalConflictDetectionTest : KoinComponent {
-
 	private var context: DefaultSimulationContext? = null
 
 	@BeforeTest
@@ -366,7 +365,7 @@ class TemporalConflictDetectionTest : KoinComponent {
 	 * - Both train IDs are present in the event (order may vary).
 	 */
 	@Test
-	fun `emitted event payload contains correct train IDs, block, and timestamps`() {
+	fun `emitted event payload contains correct train IDs block and timestamps`() {
 		val (detector, received) = buildDetector()
 		val block = realBlock()
 		val detectionSimTime = 5.0

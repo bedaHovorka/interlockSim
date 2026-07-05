@@ -65,8 +65,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #583 (Goal 9 SP2)
  */
-class TemporalConflictDetector(env: SimulationEnvironment? = null) {
-
+class TemporalConflictDetector(
+	env: SimulationEnvironment? = null
+) {
 	private val listeners: MutableList<(TemporalConflictEvent) -> Unit> = mutableListOf()
 
 	/**
@@ -195,11 +196,12 @@ class TemporalConflictDetector(env: SimulationEnvironment? = null) {
 
 		// Collect projections; skip trains for which no provider data is available.
 		val projections: Map<String, List<ProjectedOccupancy>> =
-			activeTrainIds.mapNotNull { trainId ->
-				projectionProvider(trainId)
-					?.takeIf { it.isNotEmpty() }
-					?.let { trainId to it }
-			}.toMap()
+			activeTrainIds
+				.mapNotNull { trainId ->
+					projectionProvider(trainId)
+						?.takeIf { it.isNotEmpty() }
+						?.let { trainId to it }
+				}.toMap()
 
 		if (projections.size < 2) return
 
