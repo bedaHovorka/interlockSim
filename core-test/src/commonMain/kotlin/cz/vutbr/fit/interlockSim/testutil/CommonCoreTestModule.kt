@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.util.Point
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -147,6 +148,13 @@ val commonCoreTestModule: Module =
 
 			scoped<RouteFinder> {
 				DefaultRouteFinder(get<AutomaticPathFindingService>())
+			}
+
+			scoped<TemporalConflictDetector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				TemporalConflictDetector(context)
 			}
 		}
 	}
