@@ -25,6 +25,8 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 
 /**
@@ -504,6 +506,40 @@ interface SimulationEnvironment : NetworkState {
 	 * @since Issue #580 (Goal 9 SP1)
 	 */
 	fun onConflictDetectedEvent(listener: (ConflictDetectedEvent) -> Unit)
+
+	/**
+	 * Subscribe to [TemporalConflictEvent]s emitted when the lookahead scan predicts that
+	 * two trains will occupy the same track block simultaneously within the configured
+	 * lookahead window.
+	 *
+	 * Unlike [onConflictDetectedEvent] (Goal 9 SP1), which fires only when a reservation
+	 * actually conflicts, [TemporalConflictEvent] is **predictive**: it fires before the
+	 * trains reach the contested block, giving the conflict-resolution layer lead time to
+	 * re-route or delay a train.
+	 *
+	 * Listener is called synchronously on the simulation thread.
+	 * Listeners registered after [run] has started are silently ignored.
+	 *
+	 * @param listener Callback invoked for each detected temporal conflict.
+	 * @since Issue #583 (Goal 9 SP2)
+	 */
+	fun onTemporalConflictEvent(listener: (TemporalConflictEvent) -> Unit)
+
+	/**
+	 * Get the [TemporalConflictDetector] scoped to this simulation context.
+	 *
+	 * Provides access to the detector so that callers can configure the lookahead window
+	 * or register a custom projection provider before the simulation starts:
+	 *
+	 * ```kotlin
+	 * env.getTemporalConflictDetector().lookaheadWindowSeconds = 60.0
+	 * env.getTemporalConflictDetector().registerProjectionProvider(loop::getProjectedOccupancies)
+	 * ```
+	 *
+	 * @return [TemporalConflictDetector] instance scoped to this context.
+	 * @since Issue #583 (Goal 9 SP2)
+	 */
+	fun getTemporalConflictDetector(): TemporalConflictDetector
 
 	// ========================================
 	// Collision Detection (Issue #611)
