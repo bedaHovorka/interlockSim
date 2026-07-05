@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackReservationException
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFree
 import cz.vutbr.fit.interlockSim.objects.tracks.areAllFreeOrOwnedBy
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -400,6 +401,14 @@ class DefaultPathReservationService(
 							time = simTime
 						)
 					)
+					emitCustom(
+						ConflictDetectedEvent(
+							block = result.conflictingBlock,
+							trainId = trainId,
+							conflictingTrainId = result.existingOwner,
+							time = simTime
+						)
+					)
 					PathReservationService.ReservationResult.Conflict(
 						result.conflictingBlock,
 						result.existingOwner
@@ -409,12 +418,47 @@ class DefaultPathReservationService(
 		}
 
 		// All paths tried, all were blocked.
-		// Deliberately NO ReservationConflictDetected emission here: a blocked-path
-		// outcome is routine "path busy, will retry" contention. The contention is only
-		// recorded so [flushUnresolvedConflicts] can surface it if it never resolves
-		// before the run ends (see the class-level disambiguation comment).
-		firstBlockedConflict?.let { (blockedBlock, _) -> recordBlockedContention(trainId, blockedBlock) }
+		// No BlockEvent.ReservationConflictDetected emission here (Goal 3): a blocked-path
+		// outcome is routine "path busy, will retry" contention for the collision-warning layer.
+		// The contention is recorded so [flushUnresolvedConflicts] can surface it if it never
+		// resolves before the run ends (see the class-level disambiguation comment).
+		//
+		// ConflictDetectedEvent (Goal 9 SP1) IS emitted mid-run (it does not trigger an
+		// automatic simulation pause, so it can be delivered without the false-positive-pause
+		// problem that led to the Goal 3 restriction) -- but only the FIRST time a given
+		// (trainId, block) contention is observed; see [recordContentionAndEmitIfNew].
+		firstBlockedConflict?.let { (blockedBlock, owningTrain) ->
+			recordContentionAndEmitIfNew(trainId, blockedBlock, owningTrain)
+		}
 		return PathReservationService.ReservationResult.AllPathsBlocked(candidatePaths.size)
+	}
+
+	/**
+	 * Record a blocked-path contention and emit [ConflictDetectedEvent] only the first time
+	 * it is observed, mirroring [recordBlockedContention]'s dedup semantics.
+	 *
+	 * reservePath() is called on every poll tick while a train is queued behind a busy
+	 * shared block (ShuntingLoop/MultiTrainLoop retry every simulated second), so without
+	 * this guard the same still-blocked contention would re-emit the event once per tick
+	 * for the entire wait instead of once per contention.
+	 *
+	 * Extracted from [reservePath] to keep that method within the cyclomatic-complexity budget.
+	 */
+	private fun recordContentionAndEmitIfNew(
+		trainId: String,
+		blockedBlock: DynamicTrackBlock,
+		owningTrain: String
+	) {
+		if (!recordBlockedContention(trainId, blockedBlock)) return
+		val simTime = currentSimulationTime()
+		emitCustom(
+			ConflictDetectedEvent(
+				block = blockedBlock,
+				trainId = trainId,
+				conflictingTrainId = owningTrain,
+				time = simTime
+			)
+		)
 	}
 
 	/**
@@ -422,12 +466,22 @@ class DefaultPathReservationService(
 	 * keeping the earliest blocked time if the same contention repeats. Never emits
 	 * anything mid-run; [flushUnresolvedConflicts] reports whatever is still unresolved
 	 * once the run has ended, and [clearBlockedTracking] forgets contention that resolved.
+	 *
+	 * @return `true` if `(trainId, blockedBlock)` was not already tracked -- i.e. this is
+	 *   the first observation of this contention since it last resolved. `false` if it was
+	 *   already present (a routine polling retry of a still-blocked, already-known
+	 *   contention). Callers use this to emit a one-shot [ConflictDetectedEvent] exactly
+	 *   once per contention rather than once per retry tick -- see the `AllPathsBlocked`
+	 *   branch of [reservePath].
 	 */
 	private fun recordBlockedContention(
 		trainId: String,
 		blockedBlock: DynamicTrackBlock
-	) {
-		blockedSince.getOrPut(trainId to blockedBlock) { currentSimulationTime() }
+	): Boolean {
+		val key = trainId to blockedBlock
+		if (blockedSince.containsKey(key)) return false
+		blockedSince[key] = currentSimulationTime()
+		return true
 	}
 
 	/**
