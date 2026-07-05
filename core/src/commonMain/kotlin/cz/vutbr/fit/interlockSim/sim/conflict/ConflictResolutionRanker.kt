@@ -46,7 +46,21 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * This class is independent of any UI so it can be shared by the resolution panel and by
  * the automated-application layer (Issue #568).
  *
- * @since Issue #588 (Goal 9 SP4)
+ * ## Preference-weighted ranking
+ *
+ * An overload of [rank] accepts a [StrategyPreferenceStore] and a conflict-type key.
+ * For each candidate the adjusted score is:
+ *
+ * ```
+ * adjustedScore = score(resolution) - preferenceStore.preferenceAdjustment(conflictTypeKey, resolution.strategy)
+ * ```
+ *
+ * Strategies chosen more frequently for the given conflict type accumulate a larger
+ * preference boost and therefore rank higher (lower adjusted score) over time.
+ * The tie-breaking rules are unchanged.
+ *
+ * @see StrategyPreferenceStore
+ * @since Issue #588 (Goal 9 SP4); preference-weighted overload since Issue #592 (Goal 9 SP6)
  */
 object ConflictResolutionRanker {
 	/** Weight applied to [ConflictResolution.EstimatedImpact.delaySeconds] (seconds → score). */
@@ -95,6 +109,39 @@ object ConflictResolutionRanker {
 		resolutions.sortedWith(
 			compareBy<ConflictResolution> { score(it) }
 				.thenBy { it.strategy.ordinal }
+				.thenBy { secondaryKey(it) }
+				.thenBy { it.affectedTrains.joinToString(",") }
+		)
+
+	/**
+	 * Sort [resolutions] from least to most disruptive using preference weights from
+	 * [preferenceStore] for [conflictTypeKey].
+	 *
+	 * The adjusted score for each candidate is:
+	 * ```
+	 * adjustedScore = score(resolution) - preferenceStore.preferenceAdjustment(conflictTypeKey, strategy)
+	 * ```
+	 *
+	 * Strategies that have been chosen more frequently for [conflictTypeKey] accumulate a
+	 * larger preference boost and therefore rank higher (lower adjusted score) over time.
+	 * Tie-breaking uses the same rules as [rank].
+	 *
+	 * @param preferenceStore  The store holding learned preferences.
+	 * @param conflictTypeKey  Key identifying the conflict type — typically the contested
+	 *   block identifier or a coarser category string.
+	 *
+	 * @see StrategyPreferenceStore
+	 * @since Issue #592 (Goal 9 SP6)
+	 */
+	fun rank(
+		resolutions: List<ConflictResolution>,
+		preferenceStore: StrategyPreferenceStore,
+		conflictTypeKey: String
+	): List<ConflictResolution> =
+		resolutions.sortedWith(
+			compareBy<ConflictResolution> {
+				score(it) - preferenceStore.preferenceAdjustment(conflictTypeKey, it.strategy)
+			}.thenBy { it.strategy.ordinal }
 				.thenBy { secondaryKey(it) }
 				.thenBy { it.affectedTrains.joinToString(",") }
 		)
