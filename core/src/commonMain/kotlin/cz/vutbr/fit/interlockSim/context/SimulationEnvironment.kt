@@ -536,6 +536,14 @@ interface SimulationEnvironment : NetworkState {
 	 * env.getTemporalConflictDetector().registerProjectionProvider(loop::getProjectedOccupancies)
 	 * ```
 	 *
+	 * **Note on listener registration:** calling [TemporalConflictDetector.onTemporalConflictEvent]
+	 * directly on the returned instance does **not** share the "silently ignored after [run]
+	 * has started" contract documented on [onTemporalConflictEvent] above — that guard only
+	 * applies to the [SimulationEnvironment]-level wrapper. Prefer [onTemporalConflictEvent]
+	 * for listener subscriptions unless you specifically need this divergent behavior.
+	 * [TemporalConflictDetector.registerProjectionProvider] is unaffected by this note: it is
+	 * intentionally always callable, at any point in the simulation lifecycle.
+	 *
 	 * @return [TemporalConflictDetector] instance scoped to this context.
 	 * @since Issue #583 (Goal 9 SP2)
 	 */

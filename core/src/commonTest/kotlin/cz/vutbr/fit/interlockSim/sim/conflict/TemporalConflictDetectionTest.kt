@@ -351,6 +351,39 @@ class TemporalConflictDetectionTest : KoinComponent {
 	}
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// Test 7b: Departed train's dedup state is pruned (no unbounded growth)
+	// ──────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * After a train fully departs (all blocks released), any [lastConflictTimeSizeForTests]-
+	 * tracked dedup entries that reference it must be evicted so that dedup state does not
+	 * grow without bound across many trains cycling through a long-running simulation.
+	 */
+	@Test
+	fun `departed train's dedup entries are pruned from internal state`() {
+		val (detector, received) = buildDetector()
+		val block = realBlock()
+
+		detector.registerProjectionProvider { trainId ->
+			when (trainId) {
+				"train-A" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 0.0, exitOffsetSeconds = 20.0))
+				"train-B" ->
+					listOf(ProjectedOccupancy(block, enterOffsetSeconds = 5.0, exitOffsetSeconds = 25.0))
+				else -> null
+			}
+		}
+
+		detector.handleBlockEvent(BlockEvent.BlockReserved(block, "train-A", time = 1.0))
+		detector.handleBlockEvent(BlockEvent.BlockReserved(block, "train-B", time = 2.0))
+		assertThat(received).hasSize(1)
+		assertThat(detector.lastConflictTimeSizeForTests).isEqualTo(1)
+
+		detector.handleBlockEvent(BlockEvent.BlockReleased(block, "train-B", time = 10.0))
+		assertThat(detector.lastConflictTimeSizeForTests).isEqualTo(0)
+	}
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Test 8: Event payload correctness
 	// ──────────────────────────────────────────────────────────────────────────
 

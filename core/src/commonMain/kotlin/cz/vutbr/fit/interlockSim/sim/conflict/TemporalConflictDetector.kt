@@ -37,6 +37,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 3. On overlap, emit one [TemporalConflictEvent] per (trainA, trainB, block) pair,
  *    suppressing duplicates within [DEDUP_WINDOW_SECONDS].
  *
+ * The pairwise scan in step 2 is O(activeTrains² × occupanciesPerTrain²) per triggering
+ * event. This is accepted as-is for expected fleet sizes (a handful of concurrent
+ * trains per simulation); revisit only if profiling shows it is a bottleneck at larger
+ * scale.
+ *
  * ## Provider contract
  *
  * Register a provider via [registerProjectionProvider].  The provider is called once
@@ -51,6 +56,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * In production, wire this via `MultiTrainLoop` or a similar loop once it knows the
  * ordered sequence of reserved blocks and each train's current velocity.  In tests,
  * register a stub that returns controlled [ProjectedOccupancy] values.
+ *
+ * **Current production status (as of Goal 9 SP2, #583):** no production code path calls
+ * [registerProjectionProvider] yet. With the default no-op provider (always returns
+ * `null`), this detector is fully wired into [BlockEvent] delivery but inert — it never
+ * emits a [TemporalConflictEvent] in a real simulation run. Spatial conflict detection
+ * (Goal 9 SP1, #580) already ships; wiring a real projection provider (e.g. from
+ * `MultiTrainLoop`) is tracked as follow-up work in a later sprint, not part of this PR.
  *
  * ## Configuring the lookahead window
  *
@@ -112,6 +124,14 @@ class TemporalConflictDetector(
 	private val lastConflictTime: MutableMap<Triple<String, String, DynamicTrackBlock>, Double> =
 		mutableMapOf()
 
+	/**
+	 * Number of dedup entries currently retained. Exposed as `internal` purely so unit
+	 * tests can assert that [pruneDedupStateForDepartedTrain] evicts stale entries; not
+	 * part of the public API.
+	 */
+	internal val lastConflictTimeSizeForTests: Int
+		get() = lastConflictTime.size
+
 	init {
 		env?.onBlockEvent { event -> handleBlockEvent(event) }
 	}
@@ -124,6 +144,13 @@ class TemporalConflictDetector(
 	 * Listeners are called synchronously on the simulation thread.  Each listener is
 	 * isolated — a throwing listener is logged but does **not** prevent delivery to the
 	 * remaining listeners.
+	 *
+	 * Unlike [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onTemporalConflictEvent],
+	 * this method has **no** "silently ignored after run() has started" guard: it always
+	 * registers the listener immediately. Callers that obtain the detector directly via
+	 * [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.getTemporalConflictDetector]
+	 * (rather than going through the `SimulationEnvironment` wrapper) do not get that
+	 * pre-run-only contract.
 	 *
 	 * @param listener Callback invoked for each detected temporal conflict.
 	 * @since Issue #583 (Goal 9 SP2)
@@ -143,6 +170,14 @@ class TemporalConflictDetector(
 	 *
 	 * In production, use the train-loop's knowledge of reserved-path ordering and
 	 * current velocity to build the list.  In tests, use a fixed stub.
+	 *
+	 * This method is intentionally callable at any time, including after the simulation
+	 * has started, and is **not** subject to the "silently ignored after run()" guard that
+	 * applies to [cz.vutbr.fit.interlockSim.context.SimulationEnvironment]'s listener
+	 * subscriptions. The real production wiring (e.g. `MultiTrainLoop`) may only learn a
+	 * train's projected path *while the simulation is running*, so registering — and
+	 * re-registering, if the provider needs to be swapped — must remain possible after
+	 * `run()` has started.
 	 *
 	 * @param provider Callback returning `List<ProjectedOccupancy>` for a trainId, or `null`.
 	 * @since Issue #583 (Goal 9 SP2)
@@ -171,6 +206,7 @@ class TemporalConflictDetector(
 				if (remaining <= 0) {
 					activeTrainIds.remove(event.trainId)
 					trainReservationCount.remove(event.trainId)
+					pruneDedupStateForDepartedTrain(event.trainId)
 				} else {
 					trainReservationCount[event.trainId] = remaining
 				}
@@ -184,10 +220,23 @@ class TemporalConflictDetector(
 		}
 	}
 
+	/**
+	 * Remove dedup-state entries that reference a train after it has fully departed
+	 * the network (all its reserved blocks released), preventing [lastConflictTime]
+	 * from growing without bound over a long-running simulation with many trains
+	 * cycling through.
+	 */
+	private fun pruneDedupStateForDepartedTrain(trainId: String) {
+		lastConflictTime.keys.removeAll { (first, second, _) -> first == trainId || second == trainId }
+	}
+
 	// ── Private detection logic ───────────────────────────────────────────────
 
 	/**
 	 * Run a full lookahead scan for all pairs of active trains.
+	 *
+	 * O(activeTrains²) pairwise scan — see the class-level "Algorithm" section for the
+	 * full complexity discussion and why it is accepted at current expected fleet sizes.
 	 *
 	 * @param detectionTime Simulation time at which the triggering block event occurred.
 	 */
