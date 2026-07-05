@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim.conflict
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEqualTo
+import assertk.assertions.isGreaterThan
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
 import cz.vutbr.fit.interlockSim.objects.paths.Route
 import cz.vutbr.fit.interlockSim.objects.paths.SegmentCost
@@ -131,8 +132,8 @@ class ConflictResolutionRankerTest {
 			// Reroute: 500.0 + 1 * 10_000.0 + 5_000.0 * 0.1 = 10_500.0 + 500 = 11_000.0
 			val oneTrainReroute = reroute(lengthMeters = 5_000.0, delaySeconds = 500.0)
 
-			assertThat(ConflictResolutionRanker.score(twoTrainHold) > ConflictResolutionRanker.score(oneTrainReroute))
-				.isEqualTo(true)
+			assertThat(ConflictResolutionRanker.score(twoTrainHold))
+				.isGreaterThan(ConflictResolutionRanker.score(oneTrainReroute))
 		}
 
 		@Test
