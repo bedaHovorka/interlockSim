@@ -51,6 +51,8 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -204,6 +206,17 @@ open class DefaultSimulationContext(
 
 	/** Spatial-conflict event listeners registered before run(); wired into kdisco at run() time. */
 	private val pendingConflictEventListeners: MutableList<(ConflictDetectedEvent) -> Unit> = mutableListOf()
+
+	/** Temporal-conflict event listeners registered before run(); wired into the detector at run() time. */
+	private val pendingTemporalConflictListeners: MutableList<(TemporalConflictEvent) -> Unit> = mutableListOf()
+
+	/**
+	 * Temporal conflict detector scoped to this context.
+	 * Retrieved from this context's Koin scope. Subscribes to block events in its init{} block.
+	 */
+	private val temporalConflictDetectorInstance: TemporalConflictDetector by lazy {
+		scope.get<TemporalConflictDetector>()
+	}
 
 	/**
 	 * True once run() has been invoked and the simulation has started.
@@ -1200,6 +1213,13 @@ open class DefaultSimulationContext(
 		pendingConflictEventListeners += listener
 	}
 
+	override fun onTemporalConflictEvent(listener: (TemporalConflictEvent) -> Unit) {
+		if (simulationHasStarted) return
+		pendingTemporalConflictListeners += listener
+	}
+
+	override fun getTemporalConflictDetector(): TemporalConflictDetector = temporalConflictDetectorInstance
+
 	/**
 	 * Buffer a collision-warning listener registered before [run]; listeners registered
 	 * after [run] has started are silently ignored (same contract as [onBlockEvent]).
@@ -1242,6 +1262,11 @@ open class DefaultSimulationContext(
 		// even in headless/CLI runs that never register a warning listener.
 		val collisionService = collisionDetectionServiceInstance
 		pendingCollisionWarningListeners.forEach { collisionService.onCollisionWarning(it) }
+
+		// Force initialization of the temporal conflict detector so its block-event subscription
+		// (registered in init{}) is active even when no listener has been registered.
+		val temporalDetector = temporalConflictDetectorInstance
+		pendingTemporalConflictListeners.forEach { temporalDetector.onTemporalConflictEvent(it) }
 
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.
