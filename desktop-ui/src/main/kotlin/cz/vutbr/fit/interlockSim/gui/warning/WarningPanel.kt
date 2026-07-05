@@ -77,6 +77,12 @@ class WarningPanel : JPanel() {
 	 */
 	var onWarningSelected: ((warning: CollisionWarning) -> Unit)? = null
 
+	/**
+	 * Invoked (on EDT) whenever [clearWarnings] runs, whether from the Clear button or a
+	 * programmatic call. Set to `null` to disable.
+	 */
+	var onClear: (() -> Unit)? = null
+
 	init {
 		layout = BorderLayout()
 		border = BorderFactory.createTitledBorder("Collision Warnings")
@@ -120,6 +126,7 @@ class WarningPanel : JPanel() {
 	fun clearWarnings() {
 		require(SwingUtilities.isEventDispatchThread()) { "clearWarnings must be called from EDT" }
 		listModel.clearWarnings()
+		onClear?.invoke()
 	}
 
 	/** Returns `true` when the model contains at least one unacknowledged warning. */

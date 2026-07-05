@@ -197,6 +197,9 @@ open class MultiTrainLoop(
 					spec.length
 				)
 			val train = Train(env, timetable)
+			// Wire the auto-halt callback so DefaultCollisionDetectionService.autoHaltTrainOnViolation
+			// can actually stop this train on a BlockEntryViolation — see Train.requestHalt() KDoc.
+			env.getCollisionServices().registerHaltCallback(train.name, train::requestHalt)
 			trainToSpec[train] = spec
 			logger.debug {
 				"MultiTrainLoop: generated ${train.name} (${spec.inName} -> ${spec.outName}) at t=$now"

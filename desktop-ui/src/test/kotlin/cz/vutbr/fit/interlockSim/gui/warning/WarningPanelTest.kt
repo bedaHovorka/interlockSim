@@ -147,6 +147,30 @@ class WarningPanelTest {
 		assertThat(panel.hasCriticalWarning()).isFalse()
 	}
 
+	@Test
+	@DisplayName("clearWarnings invokes the onClear callback")
+	fun clearWarningsInvokesOnClearCallback() {
+		var called = false
+		panel.onClear = { called = true }
+
+		panel.addWarning(reservation)
+		flushEDT()
+		SwingUtilities.invokeAndWait { panel.clearWarnings() }
+
+		assertThat(called).isTrue()
+	}
+
+	@Test
+	@DisplayName("clearWarnings does not throw when onClear is null")
+	fun clearWarningsDoesNotThrowWhenOnClearIsNull() {
+		panel.addWarning(reservation)
+		flushEDT()
+
+		SwingUtilities.invokeAndWait { panel.clearWarnings() }
+
+		assertThat(panel.listModel.isEmpty).isTrue()
+	}
+
 	private fun flushEDT() {
 		SwingUtilities.invokeAndWait { /* flush 1 */ }
 		SwingUtilities.invokeAndWait { /* flush 2 */ }

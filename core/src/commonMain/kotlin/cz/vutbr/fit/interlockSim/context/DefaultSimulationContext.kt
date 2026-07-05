@@ -1227,10 +1227,12 @@ open class DefaultSimulationContext(
 		// Store the active controller so requestPause() can delegate to it.
 		currentController = controller
 
-		// Wire pending collision warning listeners into the service before starting.
-		// This also lazily initializes the service; no separate force-init is needed because
-		// SP1's thin backbone does not subscribe to block events in its constructor.
-		pendingCollisionWarningListeners.forEach { collisionDetectionServiceInstance.onCollisionWarning(it) }
+		// Force initialization of the collision detection service now, regardless of whether any
+		// onCollisionWarning listeners were registered. DefaultCollisionDetectionService subscribes
+		// to env.onBlockEvent/env.onSimulationEvent in its init{} block, and detection must be active
+		// even in headless/CLI runs that never register a warning listener.
+		val collisionService = collisionDetectionServiceInstance
+		pendingCollisionWarningListeners.forEach { collisionService.onCollisionWarning(it) }
 
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.

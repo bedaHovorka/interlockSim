@@ -331,4 +331,20 @@ class FrameTest : AbstractFrameTestBase() {
 		runOnEDT { frame.stopSimulation() }
 		context2.close()
 	}
+
+	@Test
+	@DisplayName("autoPauseOnCriticalWarning and soundOnCriticalWarning are volatile (cross-thread contract)")
+	fun collisionResponseFieldsAreVolatile() {
+		val autoPauseField = Frame::class.java.getDeclaredField("autoPauseOnCriticalWarning")
+		val soundField = Frame::class.java.getDeclaredField("soundOnCriticalWarning")
+
+		assertThat(
+			java.lang.reflect.Modifier
+				.isVolatile(autoPauseField.modifiers)
+		).isTrue()
+		assertThat(
+			java.lang.reflect.Modifier
+				.isVolatile(soundField.modifiers)
+		).isTrue()
+	}
 }

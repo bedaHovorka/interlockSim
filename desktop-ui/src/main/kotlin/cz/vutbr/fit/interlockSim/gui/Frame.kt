@@ -124,7 +124,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	 * (the service always calls [SimulationRunner.requestPause]; this flag
 	 * controls whether we immediately resume on the EDT).
 	 * Defaults to `true` (auto-pause enabled).
+	 *
+	 * `@Volatile` because it is written on the EDT (via the menu toggle in [MenuBar]) and
+	 * read on the simulation thread inside the `onCollisionWarning` listener registered in
+	 * [startSimulation].
 	 */
+	@Volatile
 	var autoPauseOnCriticalWarning: Boolean = true
 
 	/**
@@ -142,7 +147,12 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 	/**
 	 * When `true`, a short audio beep is played for each CRITICAL collision warning.
 	 * Defaults to `false`.
+	 *
+	 * `@Volatile` because it is written on the EDT (via the menu toggle in [MenuBar]) and
+	 * read on the simulation thread inside the `onCollisionWarning` listener registered in
+	 * [startSimulation].
 	 */
+	@Volatile
 	var soundOnCriticalWarning: Boolean = false
 
 	// South panel: always at BorderLayout.SOUTH; holds StatusBar and optionally EventTimelinePanel
@@ -234,6 +244,10 @@ class Frame : JFrame(PROGRAM_FULL_NAME) {
 		// Selection highlights the involved block on the canvas when known.
 		warningPanel.onWarningSelected = { warning ->
 			railwayNetGridCanvas.highlightWarningBlock(warning)
+		}
+		// Clearing the log also silences the status-bar warning indicator (Issue #616 follow-up).
+		warningPanel.onClear = {
+			statusBar.setWarningIndicator(false)
 		}
 
 		// Add component listener to refresh canvas when frame is resized

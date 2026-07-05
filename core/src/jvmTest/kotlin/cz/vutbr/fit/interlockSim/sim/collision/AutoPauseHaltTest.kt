@@ -360,4 +360,22 @@ class AutoPauseHaltTest : KoinTestBase() {
 
 		assertThat(haltCallbackInvoked).isEqualTo(false)
 	}
+
+	// ── Integration #6: cross-thread visibility ───────────────────────────────
+
+	/**
+	 * Regression guard for the code-review finding that
+	 * [DefaultCollisionDetectionService.autoHaltTrainOnViolation] was written from the EDT
+	 * (via `cz.vutbr.fit.interlockSim.gui.Frame`'s setter) but read from the simulation thread
+	 * inside [DefaultCollisionDetectionService.emit] without a `@Volatile` annotation.
+	 */
+	@Test
+	@DisplayName("autoHaltTrainOnViolation is volatile (cross-thread contract)")
+	fun autoHaltTrainOnViolationIsVolatile() {
+		val field = DefaultCollisionDetectionService::class.java.getDeclaredField("autoHaltTrainOnViolation")
+		assertThat(
+			java.lang.reflect.Modifier
+				.isVolatile(field.modifiers)
+		).isEqualTo(true)
+	}
 }

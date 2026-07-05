@@ -125,8 +125,13 @@ class DefaultCollisionDetectionService(
 	 * Defaults to false. Can be set before [cz.vutbr.fit.interlockSim.context.SimulationContext.run]
 	 * is called.
 	 *
+	 * Marked `@Volatile` because it is written from the EDT (via
+	 * `cz.vutbr.fit.interlockSim.gui.Frame`'s `autoHaltTrainOnViolation` setter, which cascades
+	 * through `applyAutoHaltSetting`) but read from the simulation thread inside [emit].
+	 *
 	 * @since Issue #613 (Goal 3 SP3)
 	 */
+	@kotlin.concurrent.Volatile
 	var autoHaltTrainOnViolation: Boolean = false
 
 	/**
