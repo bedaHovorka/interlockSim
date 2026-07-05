@@ -88,17 +88,17 @@ tasks.compileTestJava {
 }
 
 tasks.compileKotlin {
-    kotlinOptions {
-        jvmTarget = "21"
-        allWarningsAsErrors = false
-        suppressWarnings = false
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        allWarningsAsErrors.set(false)
+        suppressWarnings.set(false)
     }
     dependsOn(rootProject.tasks.named("checkKdisco"))
 }
 
 tasks.compileTestKotlin {
-    kotlinOptions {
-        jvmTarget = "21"
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
@@ -316,13 +316,16 @@ val runExampleGui by tasks.registering(JavaExec::class) {
         "Run animated GUI example or XML simulation (use -PexampleName=name -PendTime=seconds, OR -PxmlFile=path/to/file.xml)"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
+    val xmlFileProp = providers.gradleProperty("xmlFile")
+    val exampleNameProp = providers.gradleProperty("exampleName")
+    val endTimeProp = providers.gradleProperty("endTime")
     doFirst {
-        val xmlFile = project.findProperty("xmlFile") as String?
+        val xmlFile = xmlFileProp.orNull
         if (xmlFile != null) {
             args = listOf("simgui", xmlFile)
         } else {
-            val exampleName = project.findProperty("exampleName") as String? ?: "shuntingLoop"
-            val endTime = project.findProperty("endTime") as String? ?: "60"
+            val exampleName = exampleNameProp.getOrElse("shuntingLoop")
+            val endTime = endTimeProp.getOrElse("60")
             args = listOf("exampleGui", exampleName, endTime)
         }
     }
@@ -333,9 +336,10 @@ val runSimFromXml by tasks.registering(JavaExec::class) {
     description = "Run simulation from XML file (use -PxmlFile=path/to/file.xml)"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set(application.mainClass.get())
+    val xmlFileProp = providers.gradleProperty("xmlFile")
     doFirst {
         val xmlFile =
-            project.findProperty("xmlFile") as String?
+            xmlFileProp.orNull
                 ?: throw GradleException("Please specify XML file with -PxmlFile=path/to/file.xml")
         args = listOf("sim", xmlFile)
     }

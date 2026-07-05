@@ -76,9 +76,11 @@ kotlin {
     applyDefaultHierarchyTemplate()
     jvm {
         compilations.all {
-            kotlinOptions {
-                jvmTarget = "21"
-                freeCompilerArgs += "-Xexpect-actual-classes"
+            compileTaskProvider.configure {
+                compilerOptions {
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+                    freeCompilerArgs.add("-Xexpect-actual-classes")
+                }
             }
         }
         testRuns["test"].executionTask.configure {
@@ -115,7 +117,7 @@ kotlin {
         linuxX64 {
             compilations["main"].cinterops {
                 create("libxml2") {
-                    defFile = file("src/nativeInterop/cinterop/libxml2.def")
+                    definitionFile.set(file("src/nativeInterop/cinterop/libxml2.def"))
                 }
             }
         }
