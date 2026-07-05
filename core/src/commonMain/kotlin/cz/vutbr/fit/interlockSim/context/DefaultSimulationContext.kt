@@ -50,6 +50,7 @@ import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
 import cz.vutbr.fit.interlockSim.sim.collision.PauseController
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -200,6 +201,9 @@ open class DefaultSimulationContext(
 
 	/** Raw kdisco event listeners registered before run(); wired into kdisco at run() time. */
 	private val pendingSimEventListeners: MutableList<(cz.hovorka.kdisco.SimulationEvent) -> Unit> = mutableListOf()
+
+	/** Spatial-conflict event listeners registered before run(); wired into kdisco at run() time. */
+	private val pendingConflictEventListeners: MutableList<(ConflictDetectedEvent) -> Unit> = mutableListOf()
 
 	/**
 	 * True once run() has been invoked and the simulation has started.
@@ -1191,6 +1195,11 @@ open class DefaultSimulationContext(
 		pendingSimEventListeners += listener
 	}
 
+	override fun onConflictDetectedEvent(listener: (ConflictDetectedEvent) -> Unit) {
+		if (simulationHasStarted) return
+		pendingConflictEventListeners += listener
+	}
+
 	/**
 	 * Buffer a collision-warning listener registered before [run]; listeners registered
 	 * after [run] has started are silently ignored (same contract as [onBlockEvent]).
@@ -1288,36 +1297,13 @@ open class DefaultSimulationContext(
 		simulation = sim
 		// Wire pre-registered listeners into kdisco simulation
 		pendingSimEventListeners.forEach { sim.onEvent(it) }
-		if (pendingBlockEventListeners.isNotEmpty()) {
-			val blockListeners = pendingBlockEventListeners.toList()
-			sim.onEvent { event ->
-				if (event is cz.hovorka.kdisco.SimulationEvent.Custom && event.payload is BlockEvent) {
-					blockListeners.forEach { it(event.payload as BlockEvent) }
-				}
-			}
-		}
+		wireCustomEventListeners(sim, pendingBlockEventListeners)
+		wireCustomEventListeners(sim, pendingConflictEventListeners)
 		try {
-			var prevTime = 0.0
-			var stepTimeTarget: Double? = null
+			var stepState = StepControlState(prevTime = 0.0)
 			runBlocking {
 				sim.run(Double.MAX_VALUE) {
-					val t = sim.time()
-					// Reset step-time guard when target is reached (clock caught up)
-					if (stepTimeTarget != null && t >= stepTimeTarget!!) stepTimeTarget = null
-					// Throttle wall-clock relative to simulation time advanced
-					controller.throttle(t - prevTime)
-					prevTime = t
-					// If we are NOT mid-step-time run: apply pause/step control
-					if (stepTimeTarget == null) {
-						if (controller.isPaused()) logger.debug { "Simulation paused at t=$t" }
-						controller.awaitIfPaused()
-						// Consume a step-event request. Return value intentionally not acted on:
-						// per SimulationController contract, isPaused() remains true after a
-						// step-event is consumed, so the next iteration re-enters awaitIfPaused().
-						controller.pollStepEvent()
-						// Consume a step-time request; if present, allow events to run until target
-						controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }
-					}
+					stepState = advanceControlledStep(sim, controller, stepState)
 				}
 			}
 		} catch (e: DiscoException) {
@@ -1344,6 +1330,70 @@ open class DefaultSimulationContext(
 		runCatching { pathReservationServiceInstance.flushUnresolvedConflicts(simulationEndTime) }
 			.onSuccess { events -> events.forEach { event -> pendingBlockEventListeners.forEach { it(event) } } }
 			.onFailure { e -> logger.warn(e) { "flushUnresolvedConflicts failed during run() cleanup" } }
+	}
+
+	/**
+	 * Wire a buffered listener list for one `SimulationEvent.Custom` payload type into [sim],
+	 * filtering by payload type at delivery time. No-op if [listeners] is empty.
+	 *
+	 * Extracted out of [run] to eliminate the block-event/conflict-event wiring duplication
+	 * introduced in PR #580 (Goal 9 SP1) and to keep [run]'s cyclomatic complexity within
+	 * budget -- same rationale as [flushUnresolvedReservationConflicts].
+	 */
+	private inline fun <reified T : Any> wireCustomEventListeners(
+		sim: Simulation,
+		listeners: List<(T) -> Unit>
+	) {
+		if (listeners.isEmpty()) return
+		val snapshot = listeners.toList()
+		sim.onEvent { event ->
+			if (event is cz.hovorka.kdisco.SimulationEvent.Custom) {
+				val payload = event.payload
+				if (payload is T) {
+					snapshot.forEach { it(payload) }
+				}
+			}
+		}
+	}
+
+	/** Timing state threaded across ticks of [run]'s controlled event loop. */
+	private data class StepControlState(
+		val prevTime: Double,
+		val stepTimeTarget: Double? = null
+	)
+
+	/**
+	 * Advance the controlled simulation loop by one tick: resets the step-time guard once
+	 * reached, throttles wall-clock time relative to simulation time advanced, then applies
+	 * pause/step controls unless a step-time window is still active.
+	 *
+	 * Extracted out of [run] purely to keep that method's cyclomatic complexity within
+	 * budget (same rationale as [flushUnresolvedReservationConflicts]); no logic change
+	 * relative to the inline callback it replaces.
+	 */
+	private suspend fun advanceControlledStep(
+		sim: Simulation,
+		controller: SimulationController,
+		state: StepControlState
+	): StepControlState {
+		val t = sim.time()
+		// Reset step-time guard when target is reached (clock caught up)
+		var stepTimeTarget = state.stepTimeTarget
+		if (stepTimeTarget != null && t >= stepTimeTarget) stepTimeTarget = null
+		// Throttle wall-clock relative to simulation time advanced
+		controller.throttle(t - state.prevTime)
+		// If we are NOT mid-step-time run: apply pause/step control
+		if (stepTimeTarget == null) {
+			if (controller.isPaused()) logger.debug { "Simulation paused at t=$t" }
+			controller.awaitIfPaused()
+			// Consume a step-event request. Return value intentionally not acted on:
+			// per SimulationController contract, isPaused() remains true after a
+			// step-event is consumed, so the next iteration re-enters awaitIfPaused().
+			controller.pollStepEvent()
+			// Consume a step-time request; if present, allow events to run until target
+			controller.pollStepTime()?.let { dt -> stepTimeTarget = t + dt }
+		}
+		return StepControlState(prevTime = t, stepTimeTarget = stepTimeTarget)
 	}
 
 	private fun createDynamic(i: InOut): DynamicInOut {

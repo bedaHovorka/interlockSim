@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrack
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.InOutWorker
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 
 /**
@@ -485,6 +486,24 @@ interface SimulationEnvironment : NetworkState {
 	 * @since Issue #569 (Goal 10 prereq)
 	 */
 	fun onSimulationEvent(listener: (KDiscoSimulationEvent) -> Unit)
+
+	/**
+	 * Subscribe to [ConflictDetectedEvent]s emitted when two trains spatially conflict over
+	 * the same track block during path reservation.
+	 *
+	 * Events are emitted **immediately** at reservation time — before the conflicting
+	 * reservation is accepted or committed — so the Goal 9 conflict-resolution layer can
+	 * react without waiting for the end-of-run flush. Unlike
+	 * [cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning.ReservationConflict],
+	 * receiving this event does **not** trigger an automatic simulation pause.
+	 *
+	 * Listener is called synchronously on the simulation thread in simulation-time order.
+	 * Listeners registered after [run] has started are silently ignored.
+	 *
+	 * @param listener Callback invoked for each detected spatial conflict.
+	 * @since Issue #580 (Goal 9 SP1)
+	 */
+	fun onConflictDetectedEvent(listener: (ConflictDetectedEvent) -> Unit)
 
 	// ========================================
 	// Collision Detection (Issue #611)
