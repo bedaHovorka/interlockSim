@@ -86,6 +86,7 @@ class ConflictResolutionPanel : JPanel() {
 	var onDismiss: (() -> Unit)? = null
 
 	init {
+		isVisible = false // Hidden until a conflict requires dispatcher input
 		layout = BorderLayout()
 		border = BorderFactory.createTitledBorder("Conflict Resolution")
 		preferredSize = Dimension(PANEL_WIDTH, 100)
