@@ -57,6 +57,7 @@ val coroutinesVersion: String by project
 val xmlutilVersion: String by project
 val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
+val atomicfuVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -138,6 +139,8 @@ kotlin {
                 // kotlinx-io: multiplatform file I/O — used by native Resources actual to read
                 // resource files from disk (JVM uses classpath instead).
                 implementation("org.jetbrains.kotlinx:kotlinx-io-core:$kotlinxIoVersion")
+                // atomicfu: multiplatform synchronization for DefaultDispatcherPreferenceStore
+                implementation("org.jetbrains.kotlinx:atomicfu:$atomicfuVersion")
             }
         }
         val commonTest by getting {
