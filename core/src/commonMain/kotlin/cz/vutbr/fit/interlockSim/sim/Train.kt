@@ -549,8 +549,9 @@ class Train :
 				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
 			}
 			if (next != null) {
-				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block" }
-				env.report("enter block", this@Train, ReportType.TRAIN_EVENTS)
+				val blockName = next.getTrackBlock().name ?: "unknown"
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block $blockName" }
+				env.report("enter block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				next.enter(this@Train)
 				val block = next.getTrackBlock()
 				if (block is DynamicTrackBlock) {
