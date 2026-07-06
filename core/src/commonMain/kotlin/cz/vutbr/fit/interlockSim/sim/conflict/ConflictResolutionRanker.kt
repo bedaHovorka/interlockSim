@@ -106,12 +106,7 @@ object ConflictResolutionRanker {
 	 * tie-breaking (see class documentation).
 	 */
 	fun rank(resolutions: List<ConflictResolution>): List<ConflictResolution> =
-		resolutions.sortedWith(
-			compareBy<ConflictResolution> { score(it) }
-				.thenBy { it.strategy.ordinal }
-				.thenBy { secondaryKey(it) }
-				.thenBy { it.affectedTrains.joinToString(",") }
-		)
+		resolutions.sortedWith(resolutionComparator { score(it) })
 
 	/**
 	 * Sort [resolutions] from least to most disruptive using preference weights from
@@ -139,12 +134,23 @@ object ConflictResolutionRanker {
 		conflictTypeKey: String
 	): List<ConflictResolution> =
 		resolutions.sortedWith(
-			compareBy<ConflictResolution> {
+			resolutionComparator {
 				score(it) - preferenceStore.preferenceAdjustment(conflictTypeKey, it.strategy)
-			}.thenBy { it.strategy.ordinal }
-				.thenBy { secondaryKey(it) }
-				.thenBy { it.affectedTrains.joinToString(",") }
+			}
 		)
+
+	/**
+	 * Comparator that orders candidates by [scoreFn] ascending, then applies the shared
+	 * deterministic tie-breaks documented in the class KDoc: strategy ordinal, the
+	 * strategy-specific [secondaryKey], and the joined affected-train IDs as a stable
+	 * last resort.  Both [rank] overloads route through this so the tie-break rules
+	 * exist in exactly one place.
+	 */
+	private fun resolutionComparator(scoreFn: (ConflictResolution) -> Double): Comparator<ConflictResolution> =
+		compareBy<ConflictResolution> { scoreFn(it) }
+			.thenBy { it.strategy.ordinal }
+			.thenBy { secondaryKey(it) }
+			.thenBy { it.affectedTrains.joinToString(",") }
 
 	/**
 	 * Strategy-specific tie-break key used when two candidates with the same [ConflictResolution.Strategy]

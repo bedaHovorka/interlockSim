@@ -373,5 +373,40 @@ class StrategyPreferenceStoreTest {
 				ConflictResolutionRanker.rank(listOf(rerouteCandidate, holdCandidate, speed), store, "JUNCTION_X")
 			assertThat(preferenceRanked).containsExactly(rerouteCandidate, holdCandidate, speed)
 		}
+
+		/**
+		 * Regression guard for the [StrategyPreferenceStore.MAX_PREFERENCE_ADJUSTMENT] cap.
+		 *
+		 * A preferred strategy affecting MORE trains must never outrank a less-preferred
+		 * one affecting FEWER trains, no matter how large the selection history grows.
+		 *
+		 * Base scores:
+		 * - moreAffected (REROUTE, 2 trains, 100 m): 0 + 2×10_000 + 100×0.1 = 20_010
+		 * - lessAffected (SPEED_ADJUST, 1 train):    0 + 1×10_000         = 10_000
+		 *
+		 * After 200 REROUTE selections for "B1":
+		 * - with cap:    REROUTE boost = min(200×100, 5_000) = 5_000
+		 *   → moreAffected adjusted = 20_010 − 5_000 = 15_010
+		 *   → lessAffected adjusted = 10_000 − 0     = 10_000
+		 *   → lessAffected still ranks first (invariant holds).
+		 * - without cap: REROUTE boost = 20_000
+		 *   → moreAffected adjusted = 10, which would wrongly outrank lessAffected (10_000).
+		 */
+		@Test
+		@DisplayName("a preferred strategy affecting MORE trains never outranks one affecting FEWER, regardless of history")
+		fun capPreservesAffectedTrainInvariant() {
+			val moreAffected = reroute(lengthMeters = 100.0, affectedTrains = listOf("T1", "T2"))
+			val lessAffected = speedAdjust(affectedTrains = listOf("T1"))
+
+			// Baseline: fewer affected trains ranks first.
+			val baseline = ConflictResolutionRanker.rank(listOf(moreAffected, lessAffected))
+			assertThat(baseline).containsExactly(lessAffected, moreAffected)
+
+			// Record a REROUTE history large enough to exceed AFFECTED_TRAIN_WEIGHT without the cap.
+			repeat(200) { store.recordChoice("B1", ConflictResolution.Strategy.REROUTE) }
+
+			val ranked = ConflictResolutionRanker.rank(listOf(moreAffected, lessAffected), store, "B1")
+			assertThat(ranked).containsExactly(lessAffected, moreAffected)
+		}
 	}
 }

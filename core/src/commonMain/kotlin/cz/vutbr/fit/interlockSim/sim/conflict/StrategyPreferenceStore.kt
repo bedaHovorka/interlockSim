@@ -10,8 +10,9 @@
 package cz.vutbr.fit.interlockSim.sim.conflict
 
 /**
- * Persistent in-memory store that records dispatcher conflict-resolution choices
- * and uses them to re-weight future rankings via [ConflictResolutionRanker].
+ * In-memory store that accumulates dispatcher conflict-resolution choices across a
+ * simulation session and uses them to re-weight future rankings via
+ * [ConflictResolutionRanker].
  *
  * ## Learning Behaviour
  *
@@ -21,6 +22,12 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * by the preference-aware overload of [ConflictResolutionRanker.rank].  The more times a
  * strategy has been chosen for a conflict type, the higher its effective rank becomes
  * (lower adjusted score = less disruptive in context = shown first).
+ *
+ * The boost is capped at [MAX_PREFERENCE_ADJUSTMENT], so learning can shift the ranking
+ * between candidates that affect the same number of trains, but can never make a
+ * preferred strategy affecting MORE trains outrank a less-preferred one affecting FEWER
+ * trains — preserving the affected-train dominance invariant of
+ * [ConflictResolutionRanker.AFFECTED_TRAIN_WEIGHT].
  *
  * ## Conflict-type key
  *
@@ -61,6 +68,16 @@ class StrategyPreferenceStore {
 		 * selection history can overcome typical delay differences between candidates.
 		 */
 		const val PREFERENCE_BOOST_PER_SELECTION: Double = 100.0
+
+		/**
+		 * Upper bound on the preference adjustment, in the same units as
+		 * [ConflictResolutionRanker.score].  Deliberately half of
+		 * [ConflictResolutionRanker.AFFECTED_TRAIN_WEIGHT] so that no amount of selection
+		 * history can make a preferred strategy affecting MORE trains outrank a
+		 * less-preferred one affecting FEWER trains — preserving the affected-train
+		 * dominance invariant documented on [ConflictResolutionRanker.AFFECTED_TRAIN_WEIGHT].
+		 */
+		const val MAX_PREFERENCE_ADJUSTMENT: Double = ConflictResolutionRanker.AFFECTED_TRAIN_WEIGHT / 2.0
 	}
 
 	// conflictTypeKey → (strategy → selection count)
@@ -97,12 +114,14 @@ class StrategyPreferenceStore {
 	 * a positive value means the strategy ranks higher (less disruptive in context)
 	 * relative to its unweighted position.
 	 *
-	 * Formula: `selectionCount(conflictTypeKey, strategy) × PREFERENCE_BOOST_PER_SELECTION`
+	 * Formula: `min(selectionCount(conflictTypeKey, strategy) × PREFERENCE_BOOST_PER_SELECTION, MAX_PREFERENCE_ADJUSTMENT)`
 	 */
 	fun preferenceAdjustment(
 		conflictTypeKey: String,
 		strategy: ConflictResolution.Strategy
-	): Double = selectionCount(conflictTypeKey, strategy) * PREFERENCE_BOOST_PER_SELECTION
+	): Double =
+		(selectionCount(conflictTypeKey, strategy) * PREFERENCE_BOOST_PER_SELECTION)
+			.coerceAtMost(MAX_PREFERENCE_ADJUSTMENT)
 
 	/**
 	 * Clear all learned preferences, resetting every conflict-type counter to zero.
