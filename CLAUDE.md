@@ -336,8 +336,45 @@ For detailed examples of allowed/restricted/prohibited changes, see **[docs/KOTL
 Comprehensive JUnit 5.11.4 test suite with AssertK assertions.
 
 **Test organization:**
-- **Unit tests** - Run with `./gradlew test` (excludes integration tests)
+- **Unit tests** - Run with `./gradlew test` (excludes integration and heavy tests)
 - **Integration tests** - Tagged with `@Tag("integration-test")`, run with `./gradlew integrationTest`
+- **Heavy tests** - Tagged with `@Tag("heavy-test")`, run with `./gradlew heavyTest` (see below)
+
+**Heavy tests (`@Tag("heavy-test")`):**
+
+Heavy tests are high-repetition stress tests that verify simulation stability under many repeated runs. They are **excluded from regular `test` and `integrationTest` builds** and are **never run by CI** — `./gradlew test`, `./gradlew integrationTest`, and `./gradlew build` do not invoke `heavyTest`. The `heavyTest` target is **manual-only** and must be launched explicitly in the special situations below. Running 1000-repetition stress tests on every change would slow CI to a crawl and is unnecessary when only a small region of code changed.
+
+**When to run heavy tests (special situations only — run manually, never in CI):**
+- **After changes to simulation logic** — path reservation, train physics, kDisco event scheduling, or anything in `sim/`
+- **After changes to concurrency primitives** — `waitUntil`/`hold` patterns, `Process`/`Continuous` lifecycle, kDisco scheduling internals
+- **When investigating intermittent failures** — deadlocks, race conditions, resource leaks, or flaky test reports
+- **Before merging branches that touch** `sim/`, `context/navigation/`, or kDisco integration
+- **Not as part of routine pre-push checks** — `./gradlew test` + `integrationTest` is the default gate (see [Workflow Rules](#workflow-rules)); add `heavyTest` only when one of the situations above applies
+
+```bash
+# Run all heavy tests
+JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :core:heavyTest
+
+# Run heavy tests in desktop-ui
+JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :desktop-ui:heavyTest
+```
+
+**Repetition limits:**
+- `test` and `integrationTest` tasks: max **50** repetitions per test method
+- `heavyTest` task: up to **1000** repetitions (e.g., `ThreeTrainLoopRaceHeavyTest`)
+
+These limits are Gradle-enforced via the `junit.jupiter.params.repeat.maxCount` system property on each task, and `test`/`integrationTest` both call `excludeTags("heavy-test")` so a mistagged heavy test cannot regress into CI.
+
+**Tagging convention:**
+```kotlin
+// Integration test (max 50 @RepeatedTest repetitions in integrationTest)
+@Tag("integration-test")
+@RepeatedTest(50)
+
+// Heavy test (1000 repetitions, only in heavyTest target)
+@Tag("heavy-test")
+@RepeatedTest(1000)
+```
 
 **Test coverage (February 2026):**
 - **1840 tests total** (1836 passing, 4 skipped, 0 failing)

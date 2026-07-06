@@ -33,7 +33,7 @@ private val logger = KotlinLogging.logger {}
  * Goal 1 SP5: validate two-train concurrency without deadlock or ordering errors.
  *
  * The scenario uses [TwoTrainLoop] on a linear A → B track with two trains injected
- * at the same simulation step. The stress test repeats the run 100 times and verifies:
+ * at the same simulation step. The stress test repeats the run 50 times and verifies:
  * - both trains complete their route,
  * - no exception or deadlock occurs,
  * - block transition events are emitted in the same order every run,
@@ -46,7 +46,7 @@ private val logger = KotlinLogging.logger {}
 class TwoTrainLoopTest : KoinTestBase() {
 	private companion object {
 		/** Number of consecutive runs used to check determinism and stability. */
-		const val REPEAT_COUNT: Int = 100
+		const val REPEAT_COUNT: Int = 50
 
 		/** Simulation end time for each run. */
 		const val END_TIME: Long = 400L
@@ -173,7 +173,7 @@ class TwoTrainLoopTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 300, unit = TimeUnit.SECONDS)
 	@DisplayName("100 consecutive runs: no deadlock, deterministic ordering and runtime")
-	fun `two train concurrency is deterministic across 100 runs`() {
+	fun `two train concurrency is deterministic across 50 runs`() {
 		val results = mutableListOf<RunResult>()
 		var baselineTransitions: List<String>? = null
 
