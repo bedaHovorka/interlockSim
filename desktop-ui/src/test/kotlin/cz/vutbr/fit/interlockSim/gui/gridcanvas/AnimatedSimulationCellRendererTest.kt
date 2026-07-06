@@ -568,6 +568,49 @@ class AnimatedSimulationCellRendererTest {
 		}
 	}
 
+	@Test
+	fun `drawTrain uses authoritative heading over conflicting frame delta`() {
+		// Seed the previous-position cache to the EAST of the next frame, so frame-delta
+		// inference alone would resolve a WESTBOUND (leftward) heading and flip the nose —
+		// exactly the front/tail swap reported at block boundaries.
+		renderTrainToImage(
+			TrainState(
+				trainNumber = 77,
+				position = 0.0,
+				velocity = 0.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(2.0f, 1.0f),
+				length = 20.0,
+				travelingRight = true
+			)
+		)
+
+		// Authoritative eastbound heading (0 rad from the track direction) must win despite the
+		// backward position delta from the seeded frame.
+		val movedTrain =
+			TrainState(
+				trainNumber = 77,
+				position = 4.0,
+				velocity = 4.0,
+				acceleration = 0.0,
+				frontGridLocation = PointF(1.7f, 1.0f),
+				length = 20.0,
+				travelingRight = true,
+				headingRadians = 0.0
+			)
+
+		val image = renderTrainToImage(movedTrain)
+		val bodyBounds = findOpaqueBounds(image) ?: error("Train shape not rendered")
+
+		// For an eastbound locomotive the pointed nose tip is at the EAST edge (narrow span),
+		// while the wider rear cab is at the WEST edge. If the nose had flipped west (inference
+		// wins) this relationship would be reversed.
+		val eastEdgeSpan = opaqueVerticalSpanAtX(image, bodyBounds.maxX) ?: error("No opaque pixels at east edge")
+		val westEdgeSpan = opaqueVerticalSpanAtX(image, bodyBounds.minX) ?: error("No opaque pixels at west edge")
+
+		assertThat(eastEdgeSpan < westEdgeSpan).isTrue()
+	}
+
 	// ========== Helper Methods ==========
 	// (Mock factories moved to TrackTestMocks.kt - Phase 4, 2026-02-05)
 

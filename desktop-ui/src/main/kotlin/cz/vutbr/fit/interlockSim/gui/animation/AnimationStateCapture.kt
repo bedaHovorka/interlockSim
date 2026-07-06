@@ -200,6 +200,14 @@ object AnimationStateCapture {
 				distanceAlongSection = frontPosition
 			)
 
+		// Authoritative heading from the section's entry → exit direction (never reverses at
+		// block boundaries), used by the renderer instead of fragile frame-delta inference.
+		val headingRadians =
+			positionCalculator.calculateTrainHeadingRadians(
+				train = train,
+				currentSection = currentSection
+			)
+
 		// Determine train color based on origin InOut
 		// Blue for InOut B (odd train numbers), Orange for InOut A (even train numbers)
 		val isBlueColorVariant = determineOriginColorVariant(train)
@@ -211,7 +219,8 @@ object AnimationStateCapture {
 			acceleration = acceleration,
 			frontGridLocation = frontGridLocation,
 			length = length,
-			travelingRight = isBlueColorVariant
+			travelingRight = isBlueColorVariant,
+			headingRadians = headingRadians
 		)
 	}
 

@@ -348,7 +348,7 @@ class AnimatedSimulationCellRenderer(
 			)
 		val noseLength = maxOf(MIN_NOSE_LENGTH_PIXELS, trainHeight / 2)
 		val borderWidth = maxOf(1, trainHeight / 5)
-		val heading = resolveTrainHeading(trainState.trainNumber, gridLocation)
+		val heading = resolveTrainHeading(trainState, gridLocation)
 		val trainShape = createTrainShape(pixelX, pixelY, bodyLength, trainHeight, noseLength, heading)
 
 		// Select body color based on origin InOut
@@ -427,12 +427,22 @@ class AnimatedSimulationCellRenderer(
 	}
 
 	private fun resolveTrainHeading(
-		trainNumber: Int,
+		trainState: TrainState,
 		currentLocation: PointF
 	): Double {
+		val trainNumber = trainState.trainNumber
+
+		// Prefer the authoritative heading derived from the simulation's track direction
+		// (entry → exit). Trains only ever move forward along a section, so this direction
+		// never reverses at a block boundary. Falling back to frame-to-frame delta inference
+		// caused the nose to flip (front/tail swap) whenever the position delta momentarily
+		// became zero or slightly negative at a segment crossing.
+		val authoritativeHeading = trainState.headingRadians?.let { snapHeadingToNearestCompassDirection(it) }
+
 		val previousLocation = previousTrainLocations[trainNumber]
 		val heading =
-			previousLocation?.let { inferHeading(it, currentLocation) }
+			authoritativeHeading
+				?: previousLocation?.let { inferHeading(it, currentLocation) }
 				?: previousTrainHeadings[trainNumber]
 				?: DEFAULT_TRAIN_HEADING
 

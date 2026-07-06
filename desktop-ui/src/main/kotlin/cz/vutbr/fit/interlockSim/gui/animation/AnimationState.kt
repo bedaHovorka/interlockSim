@@ -120,6 +120,10 @@ data class AnimationState(
  * @property frontGridLocation Grid coordinates for train front rendering (nullable)
  * @property length Train length in meters
  * @property travelingRight Color selector: true for blue (InOut B), false for orange (InOut A)
+ * @property headingRadians Authoritative nose direction in radians derived from the current
+ *   section's entry → exit travel direction (nullable). When present, the renderer uses this
+ *   instead of inferring heading from frame-to-frame position deltas, preventing the train from
+ *   visually flipping front/tail at block boundaries.
  */
 data class TrainState(
 	val trainNumber: Int,
@@ -128,7 +132,8 @@ data class TrainState(
 	val acceleration: Double,
 	val frontGridLocation: PointF?,
 	val length: Double,
-	val travelingRight: Boolean
+	val travelingRight: Boolean,
+	val headingRadians: Double? = null
 )
 
 /**

@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -32,7 +33,35 @@ import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
+
+/**
+ * Builds a stable, human-readable label for a track block for logging.
+ *
+ * Prefers the block's explicit `name` (from the XML configuration). When the block
+ * has no name, derives a deterministic label from the names of its two end
+ * separators (e.g. `kB-k1`), sorted so the same block always yields the same label
+ * regardless of travel direction. Falls back to `"unknown"` only when no end name is
+ * available.
+ */
+internal fun blockLabel(section: TrackSection): String {
+	val block = section.getTrackBlock()
+	val explicit = block.name
+	if (!explicit.isNullOrBlank()) {
+		return explicit
+	}
+	val endNames =
+		runCatching { block.ends() }
+			.getOrNull()
+			?.mapNotNull { end ->
+				(DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)
+					?.getName()
+					?.takeIf { it.isNotBlank() }
+			}?.sorted()
+			.orEmpty()
+	return if (endNames.isNotEmpty()) endNames.joinToString("-") else "unknown"
+}
 
 /**
  * Train Process
@@ -566,7 +595,7 @@ class Train :
 				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
 			}
 			if (next != null) {
-				val blockName = next.getTrackBlock().name ?: "unknown"
+				val blockName = blockLabel(next)
 				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block $blockName" }
 				env.report("enter block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				next.enter(this@Train)
@@ -605,7 +634,7 @@ class Train :
 			}
 
 			if (current != null) {
-				val blockName = current.getTrackBlock().name ?: "unknown"
+				val blockName = blockLabel(current)
 				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block $blockName" }
 				env.report("leave block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				current.leave(this@Train)
