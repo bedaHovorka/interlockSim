@@ -112,8 +112,10 @@ tasks.processTestResources {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("integration-test")
+        excludeTags("integration-test", "heavy-test")
     }
+
+    systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
 
     maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
@@ -152,7 +154,10 @@ val integrationTest by tasks.registering(Test::class) {
 
     useJUnitPlatform {
         includeTags("integration-test")
+        excludeTags("heavy-test")
     }
+
+    systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
 
     maxParallelForks = 1
 
@@ -201,6 +206,8 @@ val heavyTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("heavy-test")
     }
+
+    systemProperty("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
 
     maxParallelForks = 1
 
@@ -412,6 +419,7 @@ tasks.named("integrationTest") {
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
     mustRunAfter(tasks.named("integrationTest"))
+    mustRunAfter(tasks.named("heavyTest"))
 
     executionData.setFrom(
         fileTree(layout.buildDirectory).include("jacoco/*.exec"),

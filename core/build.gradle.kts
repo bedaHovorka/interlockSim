@@ -85,8 +85,9 @@ kotlin {
         }
         testRuns["test"].executionTask.configure {
             useJUnitPlatform {
-                excludeTags("integration-test")
+                excludeTags("integration-test", "heavy-test")
             }
+            systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
             maxParallelForks = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
             testLogging {
                 events("passed", "skipped", "failed")
@@ -290,7 +291,10 @@ val integrationTest by tasks.registering(Test::class) {
 
     useJUnitPlatform {
         includeTags("integration-test")
+        excludeTags("heavy-test")
     }
+
+    systemProperty("junit.jupiter.params.repeat.maxCount", properties["testRepeatMaxCount"])
 
     maxParallelForks = 1
 
@@ -344,6 +348,8 @@ val heavyTest by tasks.registering(Test::class) {
     useJUnitPlatform {
         includeTags("heavy-test")
     }
+
+    systemProperty("junit.jupiter.params.repeat.maxCount", properties["heavyTestRepeatMaxCount"])
 
     maxParallelForks = 1
 
