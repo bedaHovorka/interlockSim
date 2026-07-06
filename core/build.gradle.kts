@@ -333,6 +333,59 @@ val integrationTest by tasks.registering(Test::class) {
 }
 
 // ===========================================
+// Heavy Test Task
+// ===========================================
+
+val heavyTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run :core heavy tests (tagged with @Tag(\"heavy-test\")). " +
+        "Run after changes to simulation logic to detect deadlocks, race conditions, or resource leaks."
+
+    useJUnitPlatform {
+        includeTags("heavy-test")
+    }
+
+    maxParallelForks = 1
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+
+        afterSuite(
+            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                if (desc.parent == null) {
+                    println("\n:core Heavy Test Results: ${result.resultType}")
+                    println("  Tests run: ${result.testCount}")
+                    println("  Passed: ${result.successfulTestCount}")
+                    println("  Failed: ${result.failedTestCount}")
+                    println("  Skipped: ${result.skippedTestCount}")
+                }
+            }),
+        )
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/heavyTest"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/heavyTest"))
+    }
+
+    ignoreFailures = false
+
+    testClassesDirs =
+        kotlin
+            .jvm()
+            .compilations["test"]
+            .output.classesDirs
+    classpath = kotlin.jvm().compilations["test"].runtimeDependencyFiles
+}
+
+// ===========================================
 // SonarQube Configuration
 // ===========================================
 

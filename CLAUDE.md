@@ -336,8 +336,42 @@ For detailed examples of allowed/restricted/prohibited changes, see **[docs/KOTL
 Comprehensive JUnit 5.11.4 test suite with AssertK assertions.
 
 **Test organization:**
-- **Unit tests** - Run with `./gradlew test` (excludes integration tests)
+- **Unit tests** - Run with `./gradlew test` (excludes integration and heavy tests)
 - **Integration tests** - Tagged with `@Tag("integration-test")`, run with `./gradlew integrationTest`
+- **Heavy tests** - Tagged with `@Tag("heavy-test")`, run with `./gradlew heavyTest` (see below)
+
+**Heavy tests (`@Tag("heavy-test")`):**
+
+Heavy tests are high-repetition stress tests that verify simulation stability under many repeated runs. They are **excluded from regular `test` and `integrationTest` builds** to keep CI fast.
+
+**When to run heavy tests:**
+- After changes to simulation logic (path reservation, train physics, kDisco event scheduling)
+- After changes to concurrency primitives or `waitUntil`/`hold` patterns
+- When investigating intermittent deadlocks, race conditions, or resource leaks
+- Before merging branches that touch `sim/`, `context/navigation/`, or kDisco integration
+
+```bash
+# Run all heavy tests
+JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :core:heavyTest
+
+# Run heavy tests in desktop-ui
+JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :desktop-ui:heavyTest
+```
+
+**Repetition limits:**
+- `test` and `integrationTest` tasks: max **50** repetitions per test method
+- `heavyTest` task: up to **1000** repetitions (e.g., `ThreeTrainLoopRaceHeavyTest`)
+
+**Tagging convention:**
+```kotlin
+// Integration test (max 50 @RepeatedTest repetitions in integrationTest)
+@Tag("integration-test")
+@RepeatedTest(50)
+
+// Heavy test (1000 repetitions, only in heavyTest target)
+@Tag("heavy-test")
+@RepeatedTest(1000)
+```
 
 **Test coverage (February 2026):**
 - **1840 tests total** (1836 passing, 4 skipped, 0 failing)

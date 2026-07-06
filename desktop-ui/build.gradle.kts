@@ -193,6 +193,54 @@ val integrationTest by tasks.registering(Test::class) {
     classpath = sourceSets.test.get().runtimeClasspath
 }
 
+val heavyTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Run heavy tests (tagged with @Tag(\"heavy-test\")). " +
+        "Run after changes to simulation logic to detect deadlocks, race conditions, or resource leaks."
+
+    useJUnitPlatform {
+        includeTags("heavy-test")
+    }
+
+    maxParallelForks = 1
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+        showStandardStreams = false
+
+        afterSuite(
+            KotlinClosure2({ desc: TestDescriptor, result: TestResult ->
+                if (desc.parent == null) {
+                    println("\nHeavy Test Results: ${result.resultType}")
+                    println("  Tests run: ${result.testCount}")
+                    println("  Passed: ${result.successfulTestCount}")
+                    println("  Failed: ${result.failedTestCount}")
+                    println("  Skipped: ${result.skippedTestCount}")
+                }
+            }),
+        )
+    }
+
+    reports {
+        junitXml.required.set(true)
+        junitXml.outputLocation.set(file("${layout.buildDirectory.get()}/test-results/heavyTest"))
+        html.required.set(true)
+        html.outputLocation.set(file("${layout.buildDirectory.get()}/reports/tests/heavyTest"))
+    }
+
+    ignoreFailures = false
+
+    testClassesDirs =
+        sourceSets.test
+            .get()
+            .output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+}
+
 tasks.jar {
     archiveFileName.set("interlockSim.jar")
     manifest {

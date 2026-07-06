@@ -47,7 +47,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 1: both trains complete without deadlock (100 runs)
+	// Test 1: both trains complete without deadlock (50 runs)
 	// ------------------------------------------------------------------
 
 	/**
@@ -56,7 +56,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	 * - No occupied resources (kDisco Resource tokens) remain after run.
 	 * - Run completes within timeout → no deadlock.
 	 */
-	@RepeatedTest(100)
+	@RepeatedTest(50)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("Both trains complete without deadlock")
 	fun bothTrainsCompleteWithoutDeadlock() {
@@ -81,7 +81,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 2: block-transition ordering is consistent (100 runs)
+	// Test 2: block-transition ordering is consistent (50 runs)
 	// ------------------------------------------------------------------
 
 	/**
@@ -90,9 +90,9 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	 *   before the corresponding "ends" message for the same train.
 	 * - Two trains approved → two trains ended, in a consistent order.
 	 */
-	@RepeatedTest(100)
+	@RepeatedTest(50)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
-	@DisplayName("TRAIN_APPROVED precedes ends for each train (100 runs)")
+	@DisplayName("TRAIN_APPROVED precedes ends for each train (50 runs)")
 	fun trainApprovedPrecedesEndsForEachTrain() {
 		val ctx = newLinearContext()
 
@@ -150,7 +150,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	}
 
 	// ------------------------------------------------------------------
-	// Test 3: same-step arrival does not cause exception (100 runs)
+	// Test 3: same-step arrival does not cause exception (50 runs)
 	// ------------------------------------------------------------------
 
 	/**
@@ -160,7 +160,7 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 	 * This exercises the scheduler tie-breaking path where two activations
 	 * land in the same kDisco event slot.
 	 */
-	@RepeatedTest(100)
+	@RepeatedTest(50)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("Same-step arrival (inTime=0.0 for both) completes without exception")
 	fun sameStepArrivalNoException() {

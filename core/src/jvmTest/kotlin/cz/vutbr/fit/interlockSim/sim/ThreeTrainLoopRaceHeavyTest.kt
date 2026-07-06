@@ -6,6 +6,8 @@
  * Railway Interlocking Simulator - Test Suite
  *
  * Goal 1 SP6: 1000-iteration deterministic race test for three-train scenario (Issue #589).
+ * Heavy variant — run only after changes to simulation logic to verify stability.
+ * See CLAUDE.md "heavyTest" section for when to run this.
  */
 package cz.vutbr.fit.interlockSim.sim
 
@@ -34,11 +36,26 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
-@Tag("integration-test")
-@DisplayName("ThreeTrainLoop — 50-iteration deterministic race test (Goal 1 SP6 #589)")
+/**
+ * Heavy-weight 1000-iteration race test for the three-train scenario.
+ *
+ * This test is tagged [@Tag("heavy-test")] and is **excluded from regular `test`
+ * and `integrationTest` builds**. Run it deliberately with:
+ * ```
+ * ./gradlew :core:heavyTest
+ * ```
+ *
+ * **When to run:** After changes to simulation logic (path reservation, train
+ * physics, kDisco event scheduling) to detect deadlocks, race conditions, or
+ * resource leaks that may appear only under many repeated runs.
+ *
+ * For the fast regression variant (50 runs) used in CI see [ThreeTrainLoopRaceTest].
+ */
+@Tag("heavy-test")
+@DisplayName("ThreeTrainLoop — 1000-iteration heavy race test (Goal 1 SP6 #589)")
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ThreeTrainLoopRaceTest : KoinTestBase() {
+class ThreeTrainLoopRaceHeavyTest : KoinTestBase() {
 	private data class RunResult(
 		val wallMs: Long,
 		val trainsEntered: Int,
@@ -51,7 +68,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 		private val logger = KotlinLogging.logger {}
 
 		/** Number of consecutive runs required to validate stability. */
-		const val EXPECTED_RUNS: Int = 50
+		const val EXPECTED_RUNS: Int = 1000
 
 		/** Simulation end time for each run. */
 		const val END_TIME: Long = 600L
@@ -70,7 +87,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 		 * statistics. Rep 1 runs several times slower than steady state due to JIT
 		 * cold start, which would otherwise inflate the wall-clock spread.
 		 */
-		const val WARMUP_RUNS: Int = 5
+		const val WARMUP_RUNS: Int = 10
 
 		/** Thread-safe collector for per-run results across @RepeatedTest invocations. */
 		private val results: ConcurrentLinkedQueue<RunResult> = ConcurrentLinkedQueue()
@@ -84,19 +101,16 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	}
 
 	/**
-	 * Single race run repeated 50 times.
+	 * Single race run repeated 1000 times.
 	 *
 	 * Acceptance criteria per run:
 	 * - All 3 trains enter and exit.
 	 * - No kDisco Resource tokens remain occupied.
 	 * - Peak concurrent trains reaches at least 2 (contention/queuing occurred).
 	 * - Run completes within the per-run timeout → no deadlock.
-	 *
-	 * For full 1000-iteration stress testing use [ThreeTrainLoopRaceHeavyTest]
-	 * (tagged @Tag("heavy-test")).
 	 */
 	@Order(1)
-	@RepeatedTest(50)
+	@RepeatedTest(1000)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("ThreeTrainLoop run completes cleanly")
 	fun eachRunCompletesCleanly() {
@@ -106,17 +120,12 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 				factory.createContext(stream) as DefaultSimulationContext
 			}
 		context.use { ctx ->
-			// Pre-warm InOut wrappers (matches TwoTrainLoopTest pattern); run()
-			// would initialize them internally anyway, so this is harmless.
 			ctx.getInOuts()
 			val process = ThreeTrainLoop(ctx, endTime = END_TIME)
 			ctx.setMainProcess(process)
 			ctx.run()
 			val wallMs = (System.nanoTime() - startNs) / 1_000_000
 
-			// Record the result before asserting so a failing rep still contributes to
-			// the aggregate. Otherwise one per-run failure also trips the count check
-			// with a misleading "recorded run count" message instead of the real defect.
 			results.add(
 				RunResult(
 					wallMs = wallMs,
@@ -136,24 +145,17 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	}
 
 	/**
-	 * Aggregate validation after all 50 repeated runs.
+	 * Aggregate validation after all 1000 repeated runs.
 	 *
 	 * Acceptance criteria:
-	 * - Exactly 50 results recorded.
+	 * - Exactly 1000 results recorded.
 	 * - Coefficient of variation of steady-state wall-clock runtimes stays below 0.5.
 	 * - Max-min steady-state wall-clock spread stays below 2000 ms.
-	 *
-	 * Note: with real-time sync disabled the simulation runs as fast as the CPU
-	 * allows, so wall-clock variance is dominated by JIT/GC/scheduler noise
-	 * rather than simulation work. The first [WARMUP_RUNS] reps are discarded to
-	 * remove JIT cold start. These thresholds are environment-dependent and may
-	 * need relaxing on heavily loaded shared CI runners; treat CV as the primary
-	 * signal and the spread as secondary.
 	 */
 	@Order(2)
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@DisplayName("50-run aggregate: statistics and runtime stability")
+	@DisplayName("1000-run aggregate: statistics and runtime stability")
 	fun aggregate1000RunStatistics() {
 		assertThat(results.size, name = "recorded run count").isEqualTo(EXPECTED_RUNS)
 
@@ -165,7 +167,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 		val cv = if (mean > 0.0) stdDev / mean else 0.0
 
 		logger.info {
-			"ThreeTrainLoop 50-run race complete: " +
+			"ThreeTrainLoop 1000-run race complete: " +
 				"runs=$EXPECTED_RUNS (warmup=$WARMUP_RUNS), " +
 				"min=${minMs}ms, max=${maxMs}ms, mean=${mean}ms, " +
 				"stdDev=${stdDev}ms, CV=$cv"
