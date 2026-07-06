@@ -42,7 +42,7 @@ This document defines 20 prioritized functional goals for extending the Interloc
 | 6 | Performance Metrics Collection | F: Research & Analysis | High | 🆕 Open (#659) | 2 months |
 | 7 | Simulation Speed Control | I: System Operations | High | ✅ Complete | 1 month |
 | 8 | Pause and Single-Step Simulation | I: System Operations | High | ✅ Complete | 1 month |
-| 9 | Automatic Conflict Detection and Resolution | A: Intelligent Automation | **Critical** | 🆕 Open (#531) | 4 months |
+| 9 | Automatic Conflict Detection and Resolution | A: Intelligent Automation | **Critical** | ✅ Complete | 4 months |
 | 10 | AI Dispatcher Routing | A: Intelligent Automation | **Critical** | 🆕 Open (#532) | 6 months |
 | 11 | Track Gradients Physics | E: Advanced Simulation | High | 🆕 Open (#664) | 2 months |
 | 12 | Curved Track Modeling | E: Advanced Simulation | High | 🆕 Open (#665) | 2 months |
@@ -55,7 +55,7 @@ This document defines 20 prioritized functional goals for extending the Interloc
 | 19 | Czech Timetable Import | D: Data Integration | High | 🆕 Open (#670) | 4 months |
 | 20 | Comprehensive Accessibility | B: User Experience | Medium | 🆕 Open (#671) | 3 months |
 
-**Total Development Estimate: 57 months (13 months complete — Goals 1, 2, 3, 7, 8; 44 months remaining)**
+**Total Development Estimate: 57 months (17 months complete — Goals 1, 2, 3, 7, 8, 9; 40 months remaining)**
 
 ---
 
@@ -264,7 +264,7 @@ Users can pause the simulation at any moment and advance it one event at a time 
 **Category:** A: Intelligent Automation
 **Priority:** Critical *(re-scoped 2026-07-01 from High — direct dependency of Goal 10, now the top-priority goal)*
 **Development Estimate:** 4 months
-**Status:** 🆕 OPEN (#531)
+**Status:** ✅ COMPLETE
 
 **User Value:**
 Users receive automatic detection of routing conflicts when multiple trains request the same track resources, with suggested resolution options. This assists manual dispatching and forms the foundation for automated dispatch.
@@ -281,6 +281,22 @@ Users receive automatic detection of routing conflicts when multiple trains requ
 - Requires conflict detection logic beyond collision detection
 - Consider temporal conflicts (future resource contention)
 - Foundation for Goal 10 (AI dispatcher) — now the critical link on the path to the project's top-priority goal
+
+**Completion notes (2026-07-06):**
+- SP1–SP7 delivered: `ConflictDetectedEvent` (spatial, at reservation time),
+  `TemporalConflictDetector` (predictive lookahead, projection-provider seam),
+  `ConflictResolution` model + `DefaultConflictResolver` candidate generation,
+  `ConflictResolutionRanker` (with preference-weighted overload),
+  `AutoConflictResolutionService` (headless picker, Goal 10 wiring point),
+  `StrategyPreferenceStore` + `DispatcherPreferenceStore` (preference learning),
+  and the `ConflictResolutionPanel` operator-selection UI wired into `Frame`.
+- SC3 + SC4 are wired end-to-end: the operator's **Apply** choice is recorded in the
+  scoped `DispatcherPreferenceStore` (source = `OPERATOR`) and feeds
+  `StrategyPreferenceStore.recordChoice`; the scoped `ConflictResolver` uses the
+  preference-aware ranker overload so learned choices shift subsequent rankings.
+- `AutoConflictResolutionService` (SP5) is intentionally inert in production — it is
+  the headless wiring point for Goal 10's deliberative dispatcher and remains
+  documented-deferred (see its KDoc "Usage (SP2b pattern)").
 
 ---
 

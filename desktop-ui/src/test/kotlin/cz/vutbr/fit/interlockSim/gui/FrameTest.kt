@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.PROGRAM_FULL_NAME
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.gui.animation.EventTimelinePanel
+import cz.vutbr.fit.interlockSim.gui.conflict.ConflictResolutionPanel
 import cz.vutbr.fit.interlockSim.gui.warning.WarningPanel
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import org.junit.jupiter.api.BeforeEach
@@ -346,5 +347,73 @@ class FrameTest : AbstractFrameTestBase() {
 			java.lang.reflect.Modifier
 				.isVolatile(soundField.modifiers)
 		).isTrue()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("conflictResolutionPanel is in the EAST slot and initially hidden")
+	fun conflictResolutionPanelIsInEastSlotAndInitiallyHidden() {
+		runOnEDT {
+			val eastComponent =
+				(frame.contentPane.layout as BorderLayout).getLayoutComponent(BorderLayout.EAST)
+			assertThat(eastComponent).isNotNull()
+			assertThat(eastComponent).isInstanceOf(ConflictResolutionPanel::class)
+			assertThat(eastComponent.isVisible).isFalse()
+		}
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("conflictResolutionPanel is hidden when entering simulation mode")
+	fun conflictResolutionPanelIsHiddenInSimulationMode() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			assertThat(frame.conflictResolutionPanel.isVisible).isFalse()
+		}
+		runOnEDT { frame.stopSimulation() }
+		context.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("conflictResolutionPanel is cleared and hidden when switching to editing mode")
+	fun conflictResolutionPanelIsClearedWhenSwitchingToEditingMode() {
+		val simContext =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		val editContext = editingContextFactory.createEmptyContext()
+		runOnEDT {
+			frame.setContext(simContext)
+			frame.setContext(editContext)
+			assertThat(frame.conflictResolutionPanel.isVisible).isFalse()
+			assertThat(frame.conflictResolutionPanel.listModel.hasNoResolutions).isTrue()
+		}
+		simContext.close()
+		editContext.close()
+	}
+
+	@Test
+	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@DisplayName("conflictResolutionPanel is cleared and hidden when stopSimulation is called")
+	fun conflictResolutionPanelIsClearedOnStopSimulation() {
+		val context =
+			cz.vutbr.fit.interlockSim.testutil.createMockSimulationContext(
+				cz.vutbr.fit.interlockSim.testutil.TestFixtures
+					.loadShuntingXml()
+			)
+		runOnEDT {
+			frame.setContext(context)
+			frame.stopSimulation()
+			assertThat(frame.conflictResolutionPanel.isVisible).isFalse()
+			assertThat(frame.conflictResolutionPanel.listModel.hasNoResolutions).isTrue()
+		}
+		context.close()
 	}
 }

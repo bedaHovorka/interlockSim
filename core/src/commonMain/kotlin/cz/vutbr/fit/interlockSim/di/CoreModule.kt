@@ -28,6 +28,14 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -217,6 +225,49 @@ val navigationModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultCollisionDetectionService(context, context)
+			}
+
+			// TemporalConflictDetector: scoped to simulation context (Issue #583 Goal 9 SP2)
+			// Subscribes to block events in its init{} block to run the lookahead scan.
+			// The context serves as SimulationEnvironment (block-event source).
+			scoped<TemporalConflictDetector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				TemporalConflictDetector(context)
+			}
+
+			// ConflictResolver: scoped to simulation context (Issue #585 Goal 9 SP3)
+			// MUST be built via forEnvironment(context) so routeFinder/inOuts/networkState
+			// come from the same SimulationEnvironment that emits ConflictDetectedEvents —
+			// otherwise the contested-block filter silently breaks (see DefaultConflictResolver
+			// "Context coupling" KDoc). The scoped StrategyPreferenceStore is injected so the
+			// resolver uses the preference-aware ranker overload (Goal 9 SC4 learning loop).
+			scoped<ConflictResolver> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultConflictResolver.forEnvironment(
+					context,
+					preferenceStore = get<StrategyPreferenceStore>()
+				)
+			}
+
+			// StrategyPreferenceStore: scoped to simulation context (Issue #592 Goal 9 SC4)
+			// One learning counter per simulation run; scoped (not single) so concurrent runs
+			// don't mix. Thread-safe: read by the resolver on the simulation thread and written
+			// by the operator-selection UI on the EDT.
+			scoped<StrategyPreferenceStore> { StrategyPreferenceStore() }
+
+			// DispatcherPreferenceStore: scoped to simulation context (Issue #568 Goal 9 SP5)
+			// One history per simulation run; scoped (not single) so concurrent runs don't mix.
+			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
+
+			// AutoConflictResolutionService: scoped to simulation context (Issue #568 Goal 9 SP5)
+			// Headless picker: takes the top-ranked resolution and records it in the store.
+			// Advisory-only — enactment is a later slice (see #568).
+			scoped<AutoConflictResolutionService> {
+				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
 			}
 		}
 	}

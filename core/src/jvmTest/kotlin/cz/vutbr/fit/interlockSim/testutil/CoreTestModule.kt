@@ -25,6 +25,14 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -159,6 +167,31 @@ val coreTestModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultCollisionDetectionService(context, context)
+			}
+
+			scoped<TemporalConflictDetector> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				TemporalConflictDetector(context)
+			}
+
+			scoped<ConflictResolver> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultConflictResolver.forEnvironment(
+					context,
+					preferenceStore = get<StrategyPreferenceStore>()
+				)
+			}
+
+			scoped<StrategyPreferenceStore> { StrategyPreferenceStore() }
+
+			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
+
+			scoped<AutoConflictResolutionService> {
+				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
 			}
 		}
 	}
