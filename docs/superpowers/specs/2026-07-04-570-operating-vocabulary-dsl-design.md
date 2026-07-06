@@ -2,7 +2,11 @@
 
 **Issue:** [bedaHovorka/interlockSim#570](https://github.com/bedaHovorka/interlockSim/issues/570)  
 **Parent:** [bedaHovorka/interlockSim#533](https://github.com/bedaHovorka/interlockSim/issues/533) — SP3 Operating Language & Inter-Agent Protocol  
-**Status:** Design only. Ready for implementation planning.
+**Canonical authority:** [#532](https://github.com/bedaHovorka/interlockSim/issues/532) issue body
+(Goal 10) plus its "Superseding plan — 2026-07-06" comment. Where this document conflicts with
+them, the #532 body wins.  
+**Status:** Final design (2026-07-06), aligned with the updated #532 description. Ready for
+implementation.
 
 ---
 
@@ -19,6 +23,28 @@ This slice defines the first minimal operating vocabulary for SP3. The implement
 No actuator behavior, route setting, interlocking checks, or simulation state changes belong in this
 slice. The vocabulary is a typed language layer consumed by later SP3 message and tool slices.
 
+### Alignment with the updated #532 description (2026-07-06)
+
+The final design incorporates the following decisions from the canonical #532 body and its
+superseding companion plan:
+
+1. **Module placement:** agent-facing code lives in the new **`:dispatcher-agent`** Gradle
+   subproject (renamed from `:agent`). `:core` and `:fast-sim` native builds must stay free of
+   agent-framework (Koog/Ollama) dependencies (SP0.6, #545). Because this vocabulary carries Koog
+   `@LLMDescription` annotations, it lands in `:dispatcher-agent`, **not** `:core` (see §3).
+2. **LLM role is DISPATCHER-only.** Train agents are algorithmic, never LLM-driven (decided
+   2026-07-04). The vocabulary remains the shared typed language for dispatcher↔train exchanges;
+   only the dispatcher side is exposed to an LLM via Koog tools.
+3. **Consumers:** SP3.2 is pulled forward in parallel with SP0 and feeds **#695 (SP2b.8 — load
+   station topology into the LLM context at agent start)** in addition to SP3.3 (#571) and
+   SP3.5 (#573). SP3.9 (#577) grows the aspect set later.
+4. **Paramount example is `vyhybna.xml`.** The v0 vocabulary only needs to express the simplified
+   speed system used on that network; corridor speeds are a SP3.9 concern.
+5. **Agent runtime speed constraint (recorded, out of scope here):** agent-driven simulation runs
+   will be restricted to the slow end of the Goal 7 (#187) simulation-speed range (owner decision,
+   #532 comment 2026-07-06). This is a `SimulationRunner` runtime concern for SP1/SP2b and does not
+   affect the vocabulary types.
+
 ---
 
 ## 2. Goals and Non-Goals
@@ -32,13 +58,20 @@ slice. The vocabulary is a typed language layer consumed by later SP3 message an
 4. Annotate all public DSL types and important properties with Koog `@LLMDescription`.
 5. Keep the vocabulary independent from existing simulator internals (`RailSemaphore`,
    `RailSwitch`, `DynamicTrackBlock`, `Path`, etc.).
+6. Keep `:core` and `:fast-sim` free of Koog dependencies by hosting the vocabulary in
+   `:dispatcher-agent` (per the updated #532 body and SP0.6, #545).
 
 ### Non-Goals
 
 1. Do not implement message envelopes or speech acts; those belong to SP3.3 and later.
 2. Do not wire the vocabulary into route reservation, GUI, XML, or simulation code.
 3. Do not enforce railway safety rules in the value types. Interlocking remains the safety authority.
-4. Do not model the full Czech signalling catalogue yet; SP3.9 can extend the sealed hierarchy.
+4. Do not model the full Czech signalling catalogue yet; SP3.9 (#577) can extend the sealed
+   hierarchy when corridor-speed scenarios are modelled.
+5. Do not expose LLM tools for train agents; trains stay algorithmic (decided 2026-07-04). The
+   DISPATCHER is the project's only LLM-driven role.
+6. Do not implement the agent-runtime simulation-speed restriction (slow Goal 7 speeds only);
+   that belongs to the SP1/SP2b runtime wiring.
 
 ---
 
@@ -46,7 +79,18 @@ slice. The vocabulary is a typed language layer consumed by later SP3 message an
 
 **Package:** `interlocksim.lang.vocab`
 
-**Expected source set:** `core/src/commonMain/kotlin/interlocksim/lang/vocab/`
+**Module:** **`:dispatcher-agent`** — the new Gradle subproject defined by the updated #532 body
+(sibling of `:core`, `:desktop-ui`, `:fast-sim`; depends on `:core`; owns the Koog/Ollama
+dependencies; never depended on by `:fast-sim`).
+
+**Expected source set:** `dispatcher-agent/src/main/kotlin/interlocksim/lang/vocab/`
+
+Rationale: the vocabulary API carries Koog `@LLMDescription` annotations, and per #532/SP0.6
+(#545) `:core` and the `:fast-sim` native build must stay free of agent-framework dependencies.
+Placing the package in `:dispatcher-agent` keeps that boundary clean without needing an extra
+annotation-only module. If SP3.2 is implemented before SP1.1 (#546) creates the module, SP3.2
+creates a minimal `:dispatcher-agent` skeleton (Kotlin/JVM, `kotlinx.serialization` plugin, Koog
+annotations dependency) that #546 then extends.
 
 This package is intentionally separate from the legacy simulator namespace. It is the stable SP3
 language namespace exposed to agents and serialized inter-agent protocol payloads. Adapter code in
@@ -263,13 +307,15 @@ types should be compatible with the repository's standard `kotlinx.serialization
 
 ## 7. Dependency Notes
 
-The implementation requires two compile-time dependencies in the source set that owns the package:
+The vocabulary needs two compile-time dependencies, both owned by `:dispatcher-agent`:
 
 1. `kotlinx.serialization` runtime and compiler plugin support.
 2. Koog annotations that provide `ai.koog.agents.core.tools.annotations.LLMDescription`.
 
-If Koog is too large for `:core`, split the annotation dependency decision before implementation.
-The issue requirement still expects the public vocabulary API to carry `@LLMDescription`.
+The earlier open question ("if Koog is too large for `:core`…") is resolved by the updated #532
+description: Koog never enters `:core`. `:dispatcher-agent` owns all Koog/Ollama dependencies, so
+the public vocabulary API can carry `@LLMDescription` without leaking agent-framework dependencies
+into `:core` or the `:fast-sim` native build.
 
 ---
 
@@ -283,14 +329,20 @@ The issue requirement still expects the public vocabulary API to carry `@LLMDesc
 | `MovementAuthority ::= targetSignal speedLimit endOfAuthority` | `MovementAuthority(target, speedLimitKmh, endOfAuthority)` |
 | LLM-facing Koog tools | `@LLMDescription` on vocabulary classes and properties |
 
+Downstream consumers per the #532 superseding plan: #571 (SP3.3 message protocol), #573 (SP3.5
+DISPATCHER Koog ToolSets), **#695 (SP2b.8 topology-into-LLM-context — depends on this slice)**,
+#575 (SP3.7 benchmark), and #577 (SP3.9 aspect-set growth, future).
+
 ---
 
 ## 9. Implementation Checklist for Follow-Up
 
-- [ ] Add serialization and Koog annotation dependencies only if not already available.
-- [ ] Create `interlocksim.lang.vocab` in `:core` common source.
+- [ ] Create the `:dispatcher-agent` module skeleton if #546 (SP1.1) has not landed yet
+      (Kotlin/JVM, depends on `:core`, `kotlinx.serialization` plugin, Koog annotations).
+- [ ] Create `interlocksim.lang.vocab` in `dispatcher-agent/src/main/kotlin/`.
 - [ ] Implement `SwitchPosition`, `Aspect`, identifier value classes, `SwitchSetting`,
       `TrainRoute`, and `MovementAuthority`.
-- [ ] Add focused common/JVM serialization tests for all types.
-- [ ] Confirm the package remains independent of simulator internals.
-- [ ] Run `./gradlew test` and relevant code-quality checks.
+- [ ] Add focused serialization round-trip tests for all types in `:dispatcher-agent`.
+- [ ] Confirm the package remains independent of simulator internals and that `:core` and
+      `:fast-sim` acquire no Koog dependency.
+- [ ] Run `./gradlew :dispatcher-agent:test` and relevant code-quality checks.
