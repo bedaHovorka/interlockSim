@@ -472,6 +472,7 @@ View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actio
 - `CZECH_RAILWAY_TERMINOLOGY.md` - Czech terminology verification and translation guide (373 lines)
 - `TRAIN_PASSIVATION_FIX.md` - Train physics passivation fix (Issue #291)
 - `KOIN_SCOPE_LIFECYCLE_TESTS.md` - Koin scope lifecycle test documentation (Issue #220)
+- `GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` - LLM model comparison for the Goal 10 DISPATCHER agent (Issue #534, SP3.1; TRAIN agents are algorithmic-only, never LLM)
 
 ## Known Issues
 
