@@ -61,4 +61,18 @@ interface MetricsCollectionService {
 	 * @param listener Callback invoked with the updated snapshot.
 	 */
 	fun onSnapshot(listener: (MetricsSnapshot) -> Unit)
+
+	/**
+	 * Remove a previously-registered listener.
+	 *
+	 * The caller must pass the exact same listener reference that was passed to
+	 * [onSnapshot]; listeners are matched by identity (`===`) because lambda and
+	 * function references have no meaningful structural equality. Removal during
+	 * a listener callback is safe (the notification loop iterates a defensive copy).
+	 *
+	 * No-op if the listener was not registered.
+	 *
+	 * @param listener The callback to remove.
+	 */
+	fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit)
 }

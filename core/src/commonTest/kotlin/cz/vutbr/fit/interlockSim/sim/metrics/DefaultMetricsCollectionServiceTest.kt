@@ -79,6 +79,22 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		return ctx.getGraph().values().first()
 	}
 
+	/**
+	 * Get a real [DefaultSimulationContext] built from [NetworkResources.LINEAR_TRACK_XML].
+	 *
+	 * The linear-track fixture has exactly one track block, so `getGraph().size() == 1`.
+	 * The context is kept in [context] so the Koin scope stays alive for the test.
+	 */
+	private fun realContext(): DefaultSimulationContext {
+		val ctx =
+			CommonTestFixtures.parseSimulationContext(
+				NetworkResources.LINEAR_TRACK_XML,
+				DefaultSimulationProcessFactory()
+			)
+		context = ctx
+		return ctx
+	}
+
 	// ── Empty / initial snapshot ──────────────────────────────────────────────
 
 	@Test
@@ -209,6 +225,43 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		assertThat(service.getSnapshot().occupiedBlocks).isZero()
 	}
 
+	@Test
+	fun `utilization and totalBlocks reflect the env graph after OccupancySet`() {
+		// Construct the service against a real context so totalBlocks is derived
+		// from env.getGraph().size() rather than defaulting to 0 (env = null).
+		val ctx = realContext()
+		val block = ctx.getGraph().values().first()
+		val service = DefaultMetricsCollectionService(env = ctx)
+
+		// LINEAR_TRACK_XML has exactly one track block.
+		assertThat(service.getSnapshot().totalBlocks).isEqualTo(1)
+
+		service.handleBlockEvent(BlockEvent.OccupancySet(block, NamedOccupant("T1"), time = 1.0))
+
+		val snap = service.getSnapshot()
+		assertThat(snap.occupiedBlocks).isEqualTo(1)
+		assertThat(snap.totalBlocks).isEqualTo(1)
+		// utilization = occupiedBlocks / totalBlocks = 1 / 1 = 1.0
+		assertThat(snap.utilization).isCloseTo(1.0, delta = 1e-9)
+	}
+
+	// ── Metrics services facade (ISP accessor) ───────────────────────────────
+
+	@Test
+	fun `getMetricsServices exposes a working service via the scoped Koin binding`() {
+		val ctx = realContext()
+
+		// The accessor is the API surface SP2–SP4 will build on. Resolving it
+		// pre-run() must initialise the lazy field and construct the scoped
+		// DefaultMetricsCollectionService(env = ctx).
+		val service = ctx.getMetricsServices().getMetricsCollectionService()
+
+		// The service reflects the real graph size (1 for LINEAR_TRACK_XML),
+		// proving the scoped binding wired the context as env.
+		assertThat(service.getSnapshot().totalBlocks).isEqualTo(ctx.getGraph().size())
+		assertThat(service.getSnapshot().totalBlocks).isEqualTo(1)
+	}
+
 	// ── Snapshot listener ─────────────────────────────────────────────────────
 
 	@Test
@@ -239,6 +292,42 @@ class DefaultMetricsCollectionServiceTest : KoinComponent {
 		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
 
 		assertThat(reached.size).isEqualTo(1)
+	}
+
+	@Test
+	fun `removeSnapshotListener is a no-op for a never-registered reference`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+		val received = mutableListOf<MetricsSnapshot>()
+
+		service.onSnapshot { received.add(it) }
+
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		assertThat(received.size).isEqualTo(1)
+
+		// Removing a never-registered reference must be a no-op (no throw,
+		// registered listener still fires).
+		service.removeSnapshotListener { /* never registered */ }
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 5.0))
+		assertThat(received.size).isEqualTo(2)
+	}
+
+	@Test
+	fun `removeSnapshotListener stops the listener from receiving further snapshots`() {
+		val service = DefaultMetricsCollectionService()
+		val block = realBlock()
+		val received = mutableListOf<MetricsSnapshot>()
+		val listener: (MetricsSnapshot) -> Unit = { received.add(it) }
+
+		service.onSnapshot(listener)
+		service.handleBlockEvent(BlockEvent.BlockReserved(block, "T1", time = 1.0))
+		assertThat(received.size).isEqualTo(1)
+
+		// Identity-based removal: the same reference must be passed back.
+		service.removeSnapshotListener(listener)
+		service.handleBlockEvent(BlockEvent.BlockReleased(block, "T1", time = 5.0))
+		// No new invocation after removal.
+		assertThat(received.size).isEqualTo(1)
 	}
 
 	// ── Synthetic event → MetricsSnapshot round-trip ─────────────────────────

@@ -147,6 +147,10 @@ class DefaultMetricsCollectionService(
 		listeners += listener
 	}
 
+	override fun removeSnapshotListener(listener: (MetricsSnapshot) -> Unit) {
+		listeners -= listener
+	}
+
 	// ── Internal event handler (internal for test access) ────────────────────
 
 	/**
