@@ -494,6 +494,11 @@ To keep expectations honest, four things remain outside Goal 9's reach:
   deterministic base ranker (§4.G) and confining learned/AI policies behind the SP5
   seam where they can be swapped per scenario.
 
+> **See also:** [`GOAL_10_EXPECTATIONS_CRITIQUE.md`](GOAL_10_EXPECTATIONS_CRITIQUE.md)
+> — companion research document critiquing the current Goal 10 (#532) description
+> across its three sources and proposing a staged re-description with the Praha
+> 5-train scenario as the paramount example.
+
 ---
 
 ## 8. Summary Answer to the Review Question
