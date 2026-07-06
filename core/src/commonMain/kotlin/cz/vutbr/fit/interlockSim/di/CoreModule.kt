@@ -28,6 +28,12 @@ import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultAutoConflictResolutionService
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultConflictResolver
+import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
+import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -228,6 +234,29 @@ val navigationModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				TemporalConflictDetector(context)
+			}
+
+			// ConflictResolver: scoped to simulation context (Issue #585 Goal 9 SP3)
+			// MUST be built via forEnvironment(context) so routeFinder/inOuts/networkState
+			// come from the same SimulationEnvironment that emits ConflictDetectedEvents —
+			// otherwise the contested-block filter silently breaks (see DefaultConflictResolver
+			// "Context coupling" KDoc).
+			scoped<ConflictResolver> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultConflictResolver.forEnvironment(context)
+			}
+
+			// DispatcherPreferenceStore: scoped to simulation context (Issue #568 Goal 9 SP5)
+			// One history per simulation run; scoped (not single) so concurrent runs don't mix.
+			scoped<DispatcherPreferenceStore> { DefaultDispatcherPreferenceStore() }
+
+			// AutoConflictResolutionService: scoped to simulation context (Issue #568 Goal 9 SP5)
+			// Headless picker: takes the top-ranked resolution and records it in the store.
+			// Advisory-only — enactment is a later slice (see #568).
+			scoped<AutoConflictResolutionService> {
+				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
 			}
 		}
 	}

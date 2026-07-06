@@ -10,10 +10,11 @@
 package cz.vutbr.fit.interlockSim.sim.conflict
 
 import assertk.assertThat
+import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNotNull
 import assertk.assertions.isNull
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import io.mockk.every
 import io.mockk.mockk
@@ -156,7 +157,7 @@ class AutoConflictResolutionServiceTest {
 
 			val result = service.applyTopRanked(event)
 
-			assertThat(result!!).isInstanceOf<ConflictResolution.HoldTrain>()
+			assertThat(result).isNotNull().isInstanceOf<ConflictResolution.HoldTrain>()
 		}
 	}
 
@@ -198,7 +199,7 @@ class AutoConflictResolutionServiceTest {
 			svc.applyTopRanked(event)
 
 			val choices = realStore.getChoices()
-			assertThat(choices.size == 1).isTrue()
+			assertThat(choices).hasSize(1)
 			assertThat(choices[0].applied).isEqualTo(candidate)
 			assertThat(choices[0].source).isEqualTo(DispatcherPreferenceStore.ApplicationSource.AUTO)
 		}
