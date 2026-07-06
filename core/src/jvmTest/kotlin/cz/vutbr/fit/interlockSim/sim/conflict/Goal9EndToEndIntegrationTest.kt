@@ -82,6 +82,14 @@ import java.util.concurrent.TimeUnit
  *   in subsequent similar conflicts.
  * - AC5: Trains on separate non-conflicting paths produce no [ConflictDetectedEvent].
  *
+ * ## Scope note
+ *
+ * AC4 exercises [StrategyPreferenceStore] + [ConflictResolutionRanker] in isolation
+ * (it does not flow through [AutoConflictResolutionService] or a live `run()`). The
+ * end-to-end interaction of [AutoConflictResolutionService] with [StrategyPreferenceStore]
+ * (verifying that the auto-applied choice shifts toward the learned preference across
+ * repeated conflicts) is not covered by this suite.
+ *
  * @since Issue #593 (Goal 9 SP7)
  */
 @Tag("integration-test")
@@ -339,8 +347,10 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 				assertThat(allRoutes.size).isGreaterThan(1)
 
 				val contestedBlock =
-					allRoutes[0].segments.first { it !in allRoutes[1].segments.toSet() }
-						as DynamicTrackBlock
+					allRoutes[0]
+						.segments
+						.filterIsInstance<DynamicTrackBlock>()
+						.first { it !in allRoutes[1].segments.toSet() }
 
 				val event =
 					ConflictDetectedEvent(
@@ -526,6 +536,8 @@ class Goal9EndToEndIntegrationTest : KoinTestBase() {
 
 			// No conflict events must have been produced for sequential, non-overlapping reservations.
 			assertThat(conflictEvents).isEmpty()
+			// Also guard against temporal-detector false positives on the run-wired path.
+			assertThat(temporalConflicts).isEmpty()
 		}
 
 		/**
