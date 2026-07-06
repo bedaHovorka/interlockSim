@@ -36,6 +36,8 @@ import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
+import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -268,6 +270,16 @@ val navigationModule: Module =
 			// Advisory-only — enactment is a later slice (see #568).
 			scoped<AutoConflictResolutionService> {
 				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
+			}
+
+			// MetricsCollectionService: scoped to simulation context (Issue #672 Goal 6 SP1)
+			// Subscribes to block events in its init{} block to derive all KPIs.
+			// The context serves as SimulationEnvironment (block-event source).
+			scoped<MetricsCollectionService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultMetricsCollectionService(context)
 			}
 		}
 	}

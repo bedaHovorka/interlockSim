@@ -28,6 +28,7 @@ import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
 import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
@@ -65,6 +66,10 @@ import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
  * - [getCollisionServices] - Access grouped collision-detection services
  *   ([cz.vutbr.fit.interlockSim.sim.collision.CollisionServices.getCollisionDetectionService],
  *   [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices.onCollisionWarning])
+ *
+ * **Metrics Services:**
+ * - [getMetricsServices] - Access grouped performance-metrics services
+ *   ([cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices.getMetricsCollectionService])
  *
  * **Dynamic State Management:**
  * - [toDynamic] (PathSeparator) - Convert to dynamic wrapper
@@ -595,4 +600,30 @@ interface SimulationEnvironment : NetworkState {
 	 * @since Issue #611 (Goal 3 SP1)
 	 */
 	fun getCollisionServices(): cz.vutbr.fit.interlockSim.sim.collision.CollisionServices
+
+	// ========================================
+	// Performance Metrics (Issue #672)
+	// ========================================
+
+	/**
+	 * Get the grouped performance-metrics services for this simulation environment.
+	 *
+	 * Metrics accessors are grouped behind the [MetricsServices] sub-interface rather
+	 * than being flattened directly onto this facade, mirroring the
+	 * [getRoutingServices] / [RoutingServices] and [getCollisionServices] /
+	 * [cz.vutbr.fit.interlockSim.sim.collision.CollisionServices] segregation pattern.
+	 * Future Goal 6 sub-phases (SP2 historical recording, SP3 dashboard) can grow
+	 * this facade without bloating the top-level interface.
+	 *
+	 * ```kotlin
+	 * val service = env.getMetricsServices().getMetricsCollectionService()
+	 * val snapshot = service.getSnapshot()
+	 * println("Throughput: ${snapshot.throughput}/s  Conflicts: ${snapshot.conflictCount}")
+	 * ```
+	 *
+	 * @return [MetricsServices] instance for this simulation context
+	 * @see MetricsServices
+	 * @since Issue #672 (Goal 6 SP1)
+	 */
+	fun getMetricsServices(): MetricsServices
 }
