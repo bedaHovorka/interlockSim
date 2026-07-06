@@ -15,6 +15,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.ContextChangeEvent
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.sim.SimulationEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.awt.Component
 import javax.swing.SwingUtilities
@@ -94,6 +96,7 @@ class AnimationController(
 	private val canvas: Component,
 	private val eventPanel: EventTimelinePanel? = null
 ) : ContextPropertyChangeListener,
+	BlockEventListener,
 	AutoCloseable {
 	/**
 	 * Current animation state (immutable snapshot).
@@ -202,6 +205,7 @@ class AnimationController(
 
 		// Register as listener for simulation state changes
 		context.addPropertyChangeListener(this)
+		context.addBlockEventListener(this)
 
 		// Initialize caches with single grid scan (performance optimization)
 		semaphoreCache = buildSemaphoreCache()
@@ -246,6 +250,7 @@ class AnimationController(
 
 		// Unregister listener
 		context.removePropertyChangeListener(this)
+		context.removeBlockEventListener(this)
 
 		// Clear caches to allow GC
 		semaphoreCache = null
@@ -293,6 +298,18 @@ class AnimationController(
 			if (simulationEvent != null && eventPanel != null) {
 				eventPanel.addEvent(simulationEvent)
 			}
+		}
+	}
+
+	override fun onBlockEvent(event: BlockEvent) {
+		// This method executes on kDisco simulation thread!
+		require(!SwingUtilities.isEventDispatchThread()) {
+			"BlockEvent handler called on EDT instead of simulation thread - " +
+				"this indicates a threading violation in event dispatch."
+		}
+		
+		SwingUtilities.invokeLater {
+			captureAndUpdateState()
 		}
 	}
 

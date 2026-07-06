@@ -53,11 +53,13 @@ import cz.vutbr.fit.interlockSim.sim.collision.PauseController
 import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
+import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.runBlocking
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent as AnimBlockEvent
 
 /**
  * Default implementation of {@link SimulationContext} that extends {@link BaseContext} with [DynamicTrackBlock].
@@ -1635,6 +1637,30 @@ open class DefaultSimulationContext(
 			allowedReportTypes.clear()
 		} else {
 			allowedReportTypes.addAll(types.asList())
+		}
+	}
+
+	private val blockEventListeners = mutableListOf<BlockEventListener>()
+
+	override fun addBlockEventListener(listener: BlockEventListener) {
+		blockEventListeners.add(listener)
+	}
+
+	override fun removeBlockEventListener(listener: BlockEventListener) {
+		blockEventListeners.remove(listener)
+	}
+
+	override fun fireBlockEvent(event: AnimBlockEvent) {
+		// Create a snapshot to prevent ConcurrentModificationException if listeners add/remove during iteration
+		val snapshot = blockEventListeners.toList()
+		snapshot.forEach { listener ->
+			try {
+				listener.onBlockEvent(event)
+			} catch (e: Exception) {
+				logger.error(e) {
+					"Error dispatching BlockEvent ${event::class.simpleName} to listener ${listener::class.simpleName}"
+				}
+			}
 		}
 	}
 

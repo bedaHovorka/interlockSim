@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
@@ -31,7 +32,36 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.paths.Path
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
+import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
+
+/**
+ * Builds a stable, human-readable label for a track block for logging.
+ *
+ * Prefers the block's explicit `name` (from the XML configuration). When the block
+ * has no name, derives a deterministic label from the names of its two end
+ * separators (e.g. `kB-k1`), sorted so the same block always yields the same label
+ * regardless of travel direction. Falls back to `"unknown"` only when no end name is
+ * available.
+ */
+internal fun blockLabel(section: TrackSection): String {
+	val block = section.getTrackBlock()
+	val explicit = block.name
+	if (!explicit.isNullOrBlank()) {
+		return explicit
+	}
+	val endNames =
+		runCatching { block.ends() }
+			.getOrNull()
+			?.mapNotNull { end ->
+				(DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)
+					?.getName()
+					?.takeIf { it.isNotBlank() }
+			}?.sorted()
+			.orEmpty()
+	return if (endNames.isNotEmpty()) endNames.joinToString("-") else "unknown"
+}
 
 /**
  * Train Process
@@ -73,6 +103,18 @@ class Train :
 	// Implementation: Either swap start/end positions OR cancel/restore events with train stationary.
 
 	private abstract inner class Site : Process() { // lepsi nazev?
+
+		/**
+		 * Whether this site is the train's [Front]. The shared [entrySeparator] field tracks the
+		 * separator through which the **Front** entered its current section — it is read by the
+		 * animation calculator ([TrainPositionCalculator]) to pick the interpolation direction for
+		 * the front's section. The [Tail] trails the front by one train-length and is therefore in
+		 * a different section; if it also wrote [entrySeparator], the field would point at an end
+		 * of the tail's section (not the front's), flipping interpolation and making the rendered
+		 * front snap backward at every block boundary. Only the Front writes it.
+		 */
+		protected abstract val isFront: Boolean
+
 		private val position: Variable = Variable(0.0)
 		private val pv: SimpleIntegration = SimpleIntegration(position, velocity)
 		private var totalLengthOfPreviousBlocks: Double = 0.0
@@ -87,8 +129,9 @@ class Train :
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
-			// Initialize entry separator for animation (train enters network here)
-			this@Train.entrySeparator = where
+			// Initialize entry separator for animation (train enters network here).
+			// Only the Front writes it — see [isFront].
+			if (isFront) this@Train.entrySeparator = where
 
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
@@ -206,12 +249,41 @@ class Train :
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
 
-				// Store entry separator for animation position calculation
-				// where = separator we just crossed (entry to next section)
-				this@Train.entrySeparator = where
+				// Store entry separator for animation position calculation.
+				// where = separator we just crossed (entry to next section).
+				// Only the Front writes it — the Tail is in a different section and would
+				// corrupt the field for the front-based interpolation. See [isFront].
+				if (isFront) this@Train.entrySeparator = where
 
+				// Advance frontSection atomically with entrySeparator so the animation
+				// sees a consistent (frontSection, entry) pair. Previously `current = next`
+				// + `onNext = false` left frontSection pointing at the just-traversed
+				// section while entrySeparator already pointed at its exit (= entry of the
+				// upcoming section) — a one-section lag. Sampled at switch crossings (where
+				// path reservation suspends in waitUntil above), the heading calculator
+				// treated the exit end as the entry end and flipped the nose 180° (PR #718).
+				//
+				// The `path` found at the top of this iteration was queried from the entry of
+				// the section just traversed, so it is partial and `path.getNext(current)`
+				// is null here. Re-query from the new `where` (the separator just crossed =
+				// entry of the upcoming section) — the same query the next iteration makes
+				// at the top of the loop — and take the section after `current` as the
+				// upcoming one. Keeping onNext=true makes getSection() report the section
+				// being entered, with entrySeparator as its entry end. `next` is recomputed
+				// at the top of the next iteration anyway, so this only affects the visible
+				// state during the gap. When the upcoming section is null the front has
+				// reached the destination InOut (or the reserved path ends here); onNext=false
+				// lets the loop's destination check / passivation handle the next iteration.
 				current = next
-				onNext = false
+				val upcoming: TrackSection? =
+					if (path != null && current != null) {
+						val nextPathResult = trainNavService.findReservedPathForTrain(name, where)
+						if (nextPathResult is PathResult.Available) nextPathResult.path.getNext(current) else null
+					} else {
+						null
+					}
+				next = upcoming
+				onNext = upcoming != null
 			}
 
 			stop()
@@ -283,6 +355,8 @@ class Train :
 	}
 
 	private inner class Front : Site() {
+		override val isFront: Boolean = true
+
 		private suspend fun semaphoreAction(
 			semaphore: DynamicRailSemaphore,
 			separator: DynamicPathSeparator,
@@ -548,14 +622,28 @@ class Train :
 				"Path to semaphore first element must match current position: ${pathToSemaphore ?: "null"}"
 			}
 			if (next != null) {
-				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block" }
-				env.report("enter block", this@Train, ReportType.TRAIN_EVENTS)
+				val blockName = blockLabel(next)
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number entering block $blockName" }
+				env.report("enter block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				next.enter(this@Train)
+				val block = next.getTrackBlock()
+				if (block is DynamicTrackBlock) {
+					env.fireBlockEvent(
+						BlockEvent.OccupancySet(
+							block = block,
+							occupant = this@Train,
+							entrySeparator = where,
+							time = time()
+						)
+					)
+				}
 			}
 		}
 	}
 
 	private inner class Tail : Site() {
+		override val isFront: Boolean = false
+
 		private var fromHome: Boolean = false
 
 		override suspend fun separatorAction(
@@ -573,12 +661,20 @@ class Train :
 			}
 
 			if (current != null) {
-				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block" }
-				env.report("leave block", this@Train, ReportType.TRAIN_EVENTS)
+				val blockName = blockLabel(current)
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block $blockName" }
+				env.report("leave block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				current.leave(this@Train)
 				val block = current.getTrackBlock()
 				if (block is DynamicTrackBlock) {
 					env.unregisterBlock(name, block)
+					env.fireBlockEvent(
+						BlockEvent.OccupancyCleared(
+							block = block,
+							occupant = this@Train,
+							time = time()
+						)
+					)
 				}
 			}
 			if (next == null &&

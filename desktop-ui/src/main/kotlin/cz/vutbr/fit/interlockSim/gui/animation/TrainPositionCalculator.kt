@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.PointF
+import kotlin.math.atan2
 
 /**
  * Utility for calculating train grid positions via linear interpolation.
@@ -139,61 +140,24 @@ class TrainPositionCalculator(
 		if (distanceAlongSection > sectionLength && sectionLength > 0.0) {
 			// Distance exceeds section length - train is in transition window
 			// Return position at section exit to prevent jumping
+			val entrySeparator = train.trainEntrySeparator
 			val ends = currentSection.ends()
 			if (ends.isEmpty()) {
 				return null
 			}
 
-			// Use first end as entry, second as exit (arbitrary but consistent)
-			val entryPos = getGridPosition(ends[0]) ?: return null
-			val exitPos = getGridPosition(ends.getOrElse(1) { ends[0] }) ?: return null
+			// Use trainEntrySeparator to find the computed exit separator; fall back to arbitrary ends if unavailable (e.g. at spawn).
+			val computedExitSeparator = if (entrySeparator != null) currentSection.getSecondEnd(entrySeparator) else null
+			
+			val entryPos = getGridPosition(entrySeparator ?: ends[0]) ?: return null
+			val exitPos = getGridPosition(computedExitSeparator ?: ends.getOrElse(1) { ends[0] }) ?: return null
 
 			// Return exit position (ratio = 1.0)
 			return PointF(exitPos.x.toFloat(), exitPos.y.toFloat())
 		}
 
 		// NORMAL CASE: Calculate interpolated position using entry separator
-		val entrySeparator = train.trainEntrySeparator
-		val ends = currentSection.ends()
-		if (ends.size < 2) {
-			// Section has less than 2 ends - can't interpolate
-			return null
-		}
-
-		// Use identity-based comparison (===) to determine interpolation direction.
-		// Unwrap dynamic wrappers to static refs, then compare with === to find which
-		// end the train entered from — that end becomes the start of interpolation.
-		val (entryPos, exitPos) =
-			if (entrySeparator != null) {
-				// Unwrap to static references for identity comparison
-				val entryStatic = DynamicWrapperUtils.unwrapToStatic(entrySeparator)
-				val end0Static = DynamicWrapperUtils.unwrapToStatic(ends[0])
-				val end1Static = DynamicWrapperUtils.unwrapToStatic(ends[1])
-
-				// Get grid positions for the final result
-				val end0GridPos = getGridPosition(ends[0])
-				val end1GridPos = getGridPosition(ends[1])
-
-				when {
-					entryStatic === end0Static -> {
-						// entrySeparator matches ends[0] - use normal order
-						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
-					}
-					entryStatic === end1Static -> {
-						// entrySeparator matches ends[1] - use reversed order
-						Pair(end1GridPos ?: return null, end0GridPos ?: return null)
-					}
-					else -> {
-						// Fallback: Can't match entry separator - use arbitrary order
-						Pair(end0GridPos ?: return null, end1GridPos ?: return null)
-					}
-				}
-			} else {
-				// No entry separator available yet - use arbitrary order
-				val end0Pos = getGridPosition(ends[0]) ?: return null
-				val end1Pos = getGridPosition(ends[1]) ?: return null
-				Pair(end0Pos, end1Pos)
-			}
+		val (entryPos, exitPos) = resolveEntryExitPositions(train, currentSection) ?: return null
 
 		// Handle zero-length sections
 		if (sectionLength <= 0.0) {
@@ -208,6 +172,81 @@ class TrainPositionCalculator(
 		val x = entryPos.x.toFloat() + (exitPos.x.toFloat() - entryPos.x.toFloat()) * ratioF
 		val y = entryPos.y.toFloat() + (exitPos.y.toFloat() - entryPos.y.toFloat()) * ratioF
 		return PointF(x, y)
+	}
+
+	/**
+	 * Calculate the train's heading (nose direction) from the current section's travel direction.
+	 *
+	 * The heading is derived from the authoritative entry → exit direction of the track
+	 * section the train front occupies, NOT from frame-to-frame position deltas. Since a
+	 * train always advances from its entry separator toward the opposite end, this direction
+	 * is always "forward" and never reverses at a block boundary. This eliminates the visual
+	 * front/tail swap that occurred when the renderer inferred heading from position deltas
+	 * that momentarily became zero or slightly negative at segment crossings.
+	 *
+	 * @param train Train object to query for entry separator
+	 * @param currentSection Track section the train front is currently on
+	 * @return Heading angle in radians (atan2 of exit − entry), or null if not resolvable
+	 *         (e.g. no entry separator yet, missing grid positions, or a zero-length step)
+	 */
+	fun calculateTrainHeadingRadians(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection?
+	): Double? {
+		if (currentSection == null) {
+			return null
+		}
+		val (entryPos, exitPos) = resolveEntryExitPositions(train, currentSection) ?: return null
+		val dx = (exitPos.x - entryPos.x).toDouble()
+		val dy = (exitPos.y - entryPos.y).toDouble()
+		if (dx == 0.0 && dy == 0.0) {
+			return null
+		}
+		return atan2(dy, dx)
+	}
+
+	/**
+	 * Resolve the entry and exit grid positions of the train on its current section.
+	 *
+	 * Uses the train's entry separator to orient interpolation so it always progresses
+	 * from entry (ratio 0.0) to exit (ratio 1.0). Falls back to the section's declared
+	 * end order when the entry separator is unavailable (e.g. at spawn).
+	 *
+	 * @return Pair of (entryPos, exitPos) grid positions, or null if positions cannot be resolved
+	 */
+	private fun resolveEntryExitPositions(
+		train: cz.vutbr.fit.interlockSim.sim.Train,
+		currentSection: TrackSection
+	): Pair<Point, Point>? {
+		val ends = currentSection.ends()
+		if (ends.size < 2) {
+			// Section has less than 2 ends - can't interpolate
+			return null
+		}
+
+		val entrySeparator = train.trainEntrySeparator
+		if (entrySeparator == null) {
+			// No entry separator available yet - use arbitrary order
+			val end0Pos = getGridPosition(ends[0]) ?: return null
+			val end1Pos = getGridPosition(ends[1]) ?: return null
+			return Pair(end0Pos, end1Pos)
+		}
+
+		// Use identity-based comparison (===) to determine interpolation direction.
+		// Unwrap dynamic wrappers to static refs, then compare with === to find which
+		// end the train entered from — that end becomes the start of interpolation.
+		val entryStatic = DynamicWrapperUtils.unwrapToStatic(entrySeparator)
+		val end1Static = DynamicWrapperUtils.unwrapToStatic(ends[1])
+		val end0GridPos = getGridPosition(ends[0])
+		val end1GridPos = getGridPosition(ends[1])
+
+		return if (entryStatic === end1Static) {
+			// entrySeparator matches ends[1] - use reversed order
+			Pair(end1GridPos ?: return null, end0GridPos ?: return null)
+		} else {
+			// entrySeparator matches ends[0] (or unmatched fallback) - use normal order
+			Pair(end0GridPos ?: return null, end1GridPos ?: return null)
+		}
 	}
 
 	/**

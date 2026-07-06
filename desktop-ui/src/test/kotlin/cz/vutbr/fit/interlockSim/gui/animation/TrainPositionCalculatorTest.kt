@@ -157,6 +157,42 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 	}
 
 	@Test
+	fun testCalculateTrainGridLocation_beyondEnd_whenEnteringFromEnd1_returnsCorrectExit() {
+		// Test correct exit position calculation when train enters from ends[1] using trainEntrySeparator
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+		
+		val ends = trackSection!!.ends()
+		assertThat(ends.size).isEqualTo(2)
+		
+		val end0Dynamic = context.toDynamic(ends[0])
+		val end1Dynamic = context.toDynamic(ends[1])
+		assertThat(end1Dynamic).isNotNull()
+
+		val trainWithEntry = mockk<Train>(relaxed = true)
+		every { trainWithEntry.trainEntrySeparator } returns end1Dynamic
+
+		val sectionLength = trackSection.length()
+		val gridLocation =
+			calculator.calculateTrainGridLocation(
+				trainWithEntry,
+				trackSection,
+				sectionLength * 2.0 // Beyond end
+			)
+
+		assertThat(gridLocation).isNotNull()
+		
+		// The exit separator is determined from the train's entry separator using getSecondEnd.
+		// Since we enter from end1Dynamic (ends[1]), the exit should be ends[0].
+		val computedExitPos = calculator.getGridPosition(ends[0])
+		assertThat(computedExitPos).isNotNull()
+		
+		// When entering from end[1] and going beyond end, it should clamp to end[0] (the computed exit)
+		assertThat(gridLocation!!.x).isEqualTo(computedExitPos!!.x.toFloat())
+		assertThat(gridLocation.y).isEqualTo(computedExitPos.y.toFloat())
+	}
+
+	@Test
 	fun testCalculateTrainGridLocation_negativeDistance() {
 		// Train before start (negative distance) - should clamp to 0.0
 		val trackSection = getFirstTrackSection()
@@ -390,5 +426,77 @@ class TrainPositionCalculatorTest : KoinTestBase() {
 		// (they're on opposite sides of the midpoint)
 		val distance = positionFromEnd0!!.distanceTo(positionFromEnd1!!)
 		assertThat(distance > 0.1f).isEqualTo(true)
+	}
+
+	// ========== Heading Direction Tests (front/tail swap fix) ==========
+
+	@Test
+	fun testCalculateTrainHeadingRadians_nullSection() {
+		// Null section - cannot resolve a heading
+		val heading = calculator.calculateTrainHeadingRadians(mockTrain, null)
+		assertThat(heading).isNull()
+	}
+
+	@Test
+	fun testCalculateTrainHeadingRadians_matchesEntryToExitDirection() {
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val ends = trackSection!!.ends()
+		assertThat(ends.size >= 2).isEqualTo(true)
+
+		val end0Dynamic = ends[0] as? DynamicPathSeparator
+		assertThat(end0Dynamic).isNotNull()
+		val trainWithEntry = mockk<Train>(relaxed = true)
+		every { trainWithEntry.trainEntrySeparator } returns end0Dynamic
+
+		val heading = calculator.calculateTrainHeadingRadians(trainWithEntry, trackSection)
+		assertThat(heading).isNotNull()
+
+		// Heading must equal atan2(exit - entry): entering from ends[0], exit is ends[1]
+		val entryPos = calculator.getGridPosition(ends[0])
+		val exitPos = calculator.getGridPosition(ends[1])
+		assertThat(entryPos).isNotNull()
+		assertThat(exitPos).isNotNull()
+		val expected =
+			kotlin.math.atan2(
+				(exitPos!!.y - entryPos!!.y).toDouble(),
+				(exitPos.x - entryPos.x).toDouble()
+			)
+		assertThat(heading).isEqualTo(expected)
+	}
+
+	@Test
+	fun testCalculateTrainHeadingRadians_reversesWithEntryEnd() {
+		// A train always moves forward along its section: entering from opposite ends must
+		// produce opposite (≈180°) headings. This is the invariant that prevents the nose
+		// from flipping (front/tail swap) at block boundaries.
+		val trackSection = getFirstTrackSection()
+		assertThat(trackSection).isNotNull()
+
+		val ends = trackSection!!.ends()
+		assertThat(ends.size >= 2).isEqualTo(true)
+
+		val end0Dynamic = ends[0] as? DynamicPathSeparator
+		val end1Dynamic = ends[1] as? DynamicPathSeparator
+		assertThat(end0Dynamic).isNotNull()
+		assertThat(end1Dynamic).isNotNull()
+
+		val trainFromEnd0 = mockk<Train>(relaxed = true)
+		every { trainFromEnd0.trainEntrySeparator } returns end0Dynamic
+		val trainFromEnd1 = mockk<Train>(relaxed = true)
+		every { trainFromEnd1.trainEntrySeparator } returns end1Dynamic
+
+		val headingFromEnd0 = calculator.calculateTrainHeadingRadians(trainFromEnd0, trackSection)
+		val headingFromEnd1 = calculator.calculateTrainHeadingRadians(trainFromEnd1, trackSection)
+		assertThat(headingFromEnd0).isNotNull()
+		assertThat(headingFromEnd1).isNotNull()
+
+		// Angles are opposite: normalize the difference to [0, PI] and expect ≈ PI
+		var diff = kotlin.math.abs(headingFromEnd0!! - headingFromEnd1!!)
+		while (diff > kotlin.math.PI) {
+			diff -= 2 * kotlin.math.PI
+		}
+		assertThat(kotlin.math.abs(kotlin.math.abs(diff) - kotlin.math.PI) < 1e-6).isEqualTo(true)
 	}
 }

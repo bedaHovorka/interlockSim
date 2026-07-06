@@ -387,6 +387,17 @@ open class MultiTrainLoop(
 	fun getOccupiedResourceCount(): Int = blockResources.occupiedCount()
 
 	/**
+	 * Test-observability: snapshot of the currently approved trains.
+	 *
+	 * Returns the trains that have been dispatched and are currently running (or finishing).
+	 * Intended for tests that need to inspect per-train invariants (e.g. animation
+	 * `trainEntrySeparator` consistency) during a running simulation. Read-only copy.
+	 *
+	 * @since PR #633 — animation entrySeparator race regression test
+	 */
+	fun getApprovedTrains(): List<Train> = approvedTrains.toList()
+
+	/**
 	 * Return a [TrainSnapshot] for the approved train with the given [trainId], or `null`
 	 * if no such train is currently in [approvedTrains].
 	 *
