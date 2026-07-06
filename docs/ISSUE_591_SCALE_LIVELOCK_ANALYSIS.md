@@ -282,6 +282,13 @@ waiting (`createPathAvailableCondition`, #582). The dispatcher should adopt the
 same pattern: after `AllPathsBlocked`, subscribe/wait for a block release
 instead of polling each sim-second.
 
+> **See also:** [`ISSUE_591_GOAL9_RESOLUTION_OPTIONS.md`](ISSUE_591_GOAL9_RESOLUTION_OPTIONS.md)
+> — companion research document cataloguing how the shipped Goal 9 conflict
+> detection/resolution features (`ConflictDetectedEvent`, `TemporalConflictDetector`,
+> `ConflictResolution` strategies, `AutoConflictResolutionService`, preference
+> learning, contention telemetry) can address the dispatcher-fairness, retry, and
+> capacity problems described in this section and in §5.1–§5.5.
+
 ### 5.4 Livelock/deadlock detection and simulation watchdog
 
 **Missing.** The model has no runtime detector for "no train has moved for N
