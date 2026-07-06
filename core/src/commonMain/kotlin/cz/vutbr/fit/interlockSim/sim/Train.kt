@@ -74,6 +74,18 @@ class Train :
 	// Implementation: Either swap start/end positions OR cancel/restore events with train stationary.
 
 	private abstract inner class Site : Process() { // lepsi nazev?
+
+		/**
+		 * Whether this site is the train's [Front]. The shared [entrySeparator] field tracks the
+		 * separator through which the **Front** entered its current section — it is read by the
+		 * animation calculator ([TrainPositionCalculator]) to pick the interpolation direction for
+		 * the front's section. The [Tail] trails the front by one train-length and is therefore in
+		 * a different section; if it also wrote [entrySeparator], the field would point at an end
+		 * of the tail's section (not the front's), flipping interpolation and making the rendered
+		 * front snap backward at every block boundary. Only the Front writes it.
+		 */
+		protected abstract val isFront: Boolean
+
 		private val position: Variable = Variable(0.0)
 		private val pv: SimpleIntegration = SimpleIntegration(position, velocity)
 		private var totalLengthOfPreviousBlocks: Double = 0.0
@@ -88,8 +100,9 @@ class Train :
 			requireSimulationNotNull(where) { "PathSeparator from timetable.getIn() must not be null" }
 			// out se muze rovnat in => bude vyreseno "prepojenim lokomotivy"
 
-			// Initialize entry separator for animation (train enters network here)
-			this@Train.entrySeparator = where
+			// Initialize entry separator for animation (train enters network here).
+			// Only the Front writes it — see [isFront].
+			if (isFront) this@Train.entrySeparator = where
 
 			while (true) {
 				// Check if we've reached the destination InOut BEFORE querying for path
@@ -207,9 +220,11 @@ class Train :
 				requireSimulationNotNull(staticWhere) { "PathSeparator from getSecondEnd() must not be null" }
 				where = env.toDynamic(staticWhere)
 
-				// Store entry separator for animation position calculation
-				// where = separator we just crossed (entry to next section)
-				this@Train.entrySeparator = where
+				// Store entry separator for animation position calculation.
+				// where = separator we just crossed (entry to next section).
+				// Only the Front writes it — the Tail is in a different section and would
+				// corrupt the field for the front-based interpolation. See [isFront].
+				if (isFront) this@Train.entrySeparator = where
 
 				current = next
 				onNext = false
@@ -284,6 +299,8 @@ class Train :
 	}
 
 	private inner class Front : Site() {
+		override val isFront: Boolean = true
+
 		private suspend fun semaphoreAction(
 			semaphore: DynamicRailSemaphore,
 			separator: DynamicPathSeparator,
@@ -569,6 +586,8 @@ class Train :
 	}
 
 	private inner class Tail : Site() {
+		override val isFront: Boolean = false
+
 		private var fromHome: Boolean = false
 
 		override suspend fun separatorAction(
@@ -586,8 +605,9 @@ class Train :
 			}
 
 			if (current != null) {
-				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block" }
-				env.report("leave block", this@Train, ReportType.TRAIN_EVENTS)
+				val blockName = current.getTrackBlock().name ?: "unknown"
+				logger.info { "${time()} BLOCK_TRANSITION: Train $number leaving block $blockName" }
+				env.report("leave block $blockName", this@Train, ReportType.TRAIN_EVENTS)
 				current.leave(this@Train)
 				val block = current.getTrackBlock()
 				if (block is DynamicTrackBlock) {

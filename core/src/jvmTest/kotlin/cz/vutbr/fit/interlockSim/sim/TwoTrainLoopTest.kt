@@ -51,9 +51,14 @@ class TwoTrainLoopTest : KoinTestBase() {
 		/** Simulation end time for each run. */
 		const val END_TIME: Long = 400L
 
-		/** Regex for block-transition reports emitted by [Train]. */
+		/**
+		 * Regex for block-transition reports emitted by [Train].
+		 *
+		 * The optional trailing `(?: .*)?` captures the block name added by the
+		 * "enter block <name>" / "leave block <name>" reports (see Train.kt).
+		 */
 		val BLOCK_TRANSITION_REGEX =
-			Regex("""^(\d+(?:\.\d+)?)\s+(Train #\d+)\s+(enter|leave) block$""")
+			Regex("""^(\d+(?:\.\d+)?)\s+(Train #\d+)\s+(enter|leave) block(?: .*)?$""")
 	}
 
 	private data class RunResult(
