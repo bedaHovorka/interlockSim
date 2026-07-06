@@ -154,7 +154,7 @@ class ThreeTrainLoopRaceTest : KoinTestBase() {
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	@DisplayName("50-run aggregate: statistics and runtime stability")
-	fun aggregate1000RunStatistics() {
+	fun aggregate50RunStatistics() {
 		assertThat(results.size, name = "recorded run count").isEqualTo(EXPECTED_RUNS)
 
 		val steady = results.drop(WARMUP_RUNS).map { it.wallMs }
