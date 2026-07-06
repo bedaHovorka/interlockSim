@@ -33,6 +33,8 @@ import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
+import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -192,6 +194,13 @@ val coreTestModule: Module =
 
 			scoped<AutoConflictResolutionService> {
 				DefaultAutoConflictResolutionService(get<ConflictResolver>(), get<DispatcherPreferenceStore>())
+			}
+
+			scoped<MetricsCollectionService> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				DefaultMetricsCollectionService(context)
 			}
 		}
 	}

@@ -54,6 +54,8 @@ import cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
+import cz.vutbr.fit.interlockSim.sim.metrics.MetricsServices
 import cz.vutbr.fit.interlockSim.util.Point
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.platformIdentityCode
@@ -269,6 +271,26 @@ open class DefaultSimulationContext(
 			) {
 				collisionDetectionServiceInstance.registerHaltCallback(trainId, callback)
 			}
+		}
+	}
+
+	/**
+	 * Performance-metrics collection service scoped to this context.
+	 * Retrieved from this context's Koin scope. Subscribes to block events in its
+	 * init{} block so KPI counters are active for the full simulation run.
+	 */
+	private val metricsCollectionServiceInstance: MetricsCollectionService by lazy {
+		scope.get<MetricsCollectionService>()
+	}
+
+	/**
+	 * Grouped performance-metrics services facade for this simulation context.
+	 * Delegates to the scoped [MetricsCollectionService], keeping it behind a single
+	 * [MetricsServices] accessor instead of flattening it onto [SimulationEnvironment].
+	 */
+	private val metricsServicesInstance: MetricsServices by lazy {
+		object : MetricsServices {
+			override fun getMetricsCollectionService(): MetricsCollectionService = metricsCollectionServiceInstance
 		}
 	}
 
@@ -1244,6 +1266,14 @@ open class DefaultSimulationContext(
 	override fun getCollisionServices(): CollisionServices = collisionServicesInstance
 
 	/**
+	 * Performance-metrics services facade for this context. Exposes the scoped
+	 * [MetricsCollectionService] behind a single [MetricsServices] accessor.
+	 *
+	 * @since Issue #672 (Goal 6 SP1)
+	 */
+	override fun getMetricsServices(): MetricsServices = metricsServicesInstance
+
+	/**
 	 * Request an immediate pause via the active [SimulationController].
 	 * Delegates to the controller stored at the start of [run]; safe to call from the simulation thread.
 	 * Does nothing if called before [run] or after simulation finishes.
@@ -1269,6 +1299,12 @@ open class DefaultSimulationContext(
 		// (registered in init{}) is active even when no listener has been registered.
 		val temporalDetector = temporalConflictDetectorInstance
 		pendingTemporalConflictListeners.forEach { temporalDetector.onTemporalConflictEvent(it) }
+
+		// Force initialization of the metrics collection service so its block-event subscription
+		// (registered in init{}) is active for the entire simulation run, even in headless/CLI
+		// runs that never call getMetricsServices().
+		@Suppress("UNUSED_VARIABLE")
+		val metricsService = metricsCollectionServiceInstance
 
 		// Mark simulation as started — listeners registered after this point are silently ignored.
 		// Must be set before any simulation logic so that late-registering callers are correctly rejected.
