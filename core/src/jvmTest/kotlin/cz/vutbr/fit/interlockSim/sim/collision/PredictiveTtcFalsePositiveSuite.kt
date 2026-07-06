@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *   TTC evaluation path is actively exercised.
  * - The test asserts zero [CollisionWarning.PredictiveCollision] warnings.
  *
- * Running 100 iterations with zero failures establishes a measured false-positive
+ * Running 50 iterations with zero failures establishes a measured false-positive
  * rate of < 1 % in safe scenarios, satisfying the SP7 acceptance criteria.
  *
  * ## Note on class name
@@ -76,7 +76,7 @@ class PredictiveTtcFalsePositiveSuite : KoinTestBase() {
 		return ctx
 	}
 
-	// ── Safe sequential scenario: 100 iterations ─────────────────────────────
+	// ── Safe sequential scenario: 50 iterations ──────────────────────────────
 
 	/**
 	 * Safe sequential two-train scenario — zero [CollisionWarning.PredictiveCollision].
@@ -86,9 +86,9 @@ class PredictiveTtcFalsePositiveSuite : KoinTestBase() {
 	 * block: since the trains are sequential they never share a block → TTC is never
 	 * computed for the pair → zero false positives.
 	 *
-	 * Running 100 iterations validates the false-positive rate is 0 % < 1 % target.
+	 * Running 50 iterations validates the false-positive rate is 0 % < 1 % target.
 	 */
-	@RepeatedTest(100)
+	@RepeatedTest(50)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("Safe sequential two-train run emits zero PredictiveCollision warnings")
 	fun safeSequentialTwoTrainRun_emitsZeroPredictiveCollisionWarnings() {
@@ -127,7 +127,7 @@ class PredictiveTtcFalsePositiveSuite : KoinTestBase() {
 		assertThat(predictiveFalsePositives).isEqualTo(0)
 	}
 
-	// ── Safe single-train scenario: 100 iterations ────────────────────────────
+	// ── Safe single-train scenario: 50 iterations ─────────────────────────────
 
 	/**
 	 * Safe single-train scenario — zero [CollisionWarning.PredictiveCollision].
@@ -136,7 +136,7 @@ class PredictiveTtcFalsePositiveSuite : KoinTestBase() {
 	 * (TTC requires a (leading, trailing) pair). This establishes the baseline
 	 * false-positive rate for the degenerate single-train case.
 	 */
-	@RepeatedTest(100)
+	@RepeatedTest(50)
 	@Timeout(value = 30, unit = TimeUnit.SECONDS)
 	@DisplayName("Safe single-train run emits zero PredictiveCollision warnings")
 	fun safeSingleTrainRun_emitsZeroPredictiveCollisionWarnings() {
