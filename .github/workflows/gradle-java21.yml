@@ -429,10 +429,12 @@ jobs:
               break
             fi
             PREV=$ts
-          # Strict numeric token (integer or single-decimal) to avoid malformed tokens
-          # like "0.0194.194.0" from 't=[0-9.]+'. This change is constrained to
-          # timestamp-order validation only; event-count and summary regexes are unchanged.
-          done < <(grep -oE 't=[0-9]+([.][0-9]+)?' "$FILE" | sed 's/^t=//')
+          # Anchored sed extraction: only lines where t=<number> appears at the start
+          # (with optional leading whitespace) are considered real event timestamps.
+          # This avoids false matches from 't=' tokens embedded mid-line.
+          # Constrained to timestamp-order validation only; event-count and summary
+          # regexes are unchanged.
+          done < <(sed -nE 's/^[[:space:]]*t=([0-9]+([.][0-9]+)?).*/\1/p' "$FILE")
           if [ "$ORDERED" = true ]; then
             echo "$PLATFORM timestamps: chronological OK"
           fi
