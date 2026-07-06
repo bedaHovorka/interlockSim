@@ -855,4 +855,84 @@ class ConflictResolverTest {
 			}.isInstanceOf<IllegalArgumentException>()
 		}
 	}
+
+	// ── 5. Preference-aware ranking (Goal 9 SC4 wiring, Issue #592) ─────────────
+
+	@Nested
+	@DisplayName("Preference-aware ranking via StrategyPreferenceStore")
+	inner class PreferenceAwareRanking {
+		/**
+		 * With no reroute available the resolver produces HoldTrain + SpeedAdjust.
+		 * Base scores (1 affected train each; AFFECTED_TRAIN_WEIGHT = 10 000):
+		 *   HoldTrain   → 30 s delay → 10 000 + 30   = 10 030
+		 *   SpeedAdjust → 0 s delay  → 10 000 + 0    = 10 000
+		 * So SpeedAdjust ranks first by default.
+		 *
+		 * After recording HOLD_TRAIN three times for the contested block, the
+		 * preference-aware overload subtracts a 3 × 100 = 300 boost from HoldTrain's
+		 * score (10 030 − 300 = 9 730), promoting it above SpeedAdjust (10 000).
+		 *
+		 * This proves [DefaultConflictResolver] routes through the preference-weighted
+		 * [ConflictResolutionRanker.rank] overload when a [StrategyPreferenceStore] is
+		 * wired — the Goal 9 SC4 learning loop on the resolver side.
+		 */
+		@Test
+		@DisplayName("wired StrategyPreferenceStore reorders candidates after learning")
+		fun wiredStrategyPreferenceStore_reordersCandidatesAfterLearning() {
+			every { contestedBlock.name } returns "Block-7"
+			val strategyStore = StrategyPreferenceStore()
+			val resolver =
+				DefaultConflictResolver(
+					routeFinder = routeFinder,
+					inOuts = emptyList(),
+					networkState = networkState,
+					preferenceStore = strategyStore
+				)
+
+			// Baseline: SpeedAdjust (10 000) outranks HoldTrain (10 030).
+			val baseline = resolver.generateResolutions(conflict)
+			assertThat(baseline.first()).isInstanceOf<ConflictResolution.SpeedAdjust>()
+
+			// Learn: operator chose HOLD_TRAIN three times for "Block-7".
+			repeat(3) {
+				strategyStore.recordChoice("Block-7", ConflictResolution.Strategy.HOLD_TRAIN)
+			}
+
+			// After learning: HoldTrain (9 730) outranks SpeedAdjust (10 000).
+			val afterLearning = resolver.generateResolutions(conflict)
+			assertThat(afterLearning.first()).isInstanceOf<ConflictResolution.HoldTrain>()
+		}
+
+		@Test
+		@DisplayName("resolver without a preference store uses the base (non-preference) ranking")
+		fun resolverWithoutPreferenceStore_usesBaseRanking() {
+			val resolver = DefaultConflictResolver(routeFinder, emptyList(), networkState)
+
+			// No store wired — baseline ranking must be identical to the base ranker.
+			val expected =
+				ConflictResolutionRanker
+					.rank(
+						listOf(
+							ConflictResolution.HoldTrain(
+								trainId = "TrainBlocked",
+								holdDurationSeconds = DefaultConflictResolver.DEFAULT_HOLD_DURATION_SECONDS,
+								affectedTrains = listOf("TrainBlocked"),
+								estimatedImpact =
+									ConflictResolution.EstimatedImpact(
+										DefaultConflictResolver.DEFAULT_HOLD_DURATION_SECONDS,
+										"hold"
+									)
+							),
+							ConflictResolution.SpeedAdjust(
+								trainId = "TrainBlocked",
+								speedReductionFactor = DefaultConflictResolver.DEFAULT_SPEED_REDUCTION_FACTOR,
+								affectedTrains = listOf("TrainBlocked"),
+								estimatedImpact = ConflictResolution.EstimatedImpact(0.0, "speed")
+							)
+						)
+					).map { it.strategy }
+
+			assertThat(resolver.generateResolutions(conflict).map { it.strategy }).isEqualTo(expected)
+		}
+	}
 }

@@ -9,6 +9,9 @@
  */
 package cz.vutbr.fit.interlockSim.sim.conflict
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+
 /**
  * In-memory store that accumulates dispatcher conflict-resolution choices across a
  * simulation session and uses them to re-weight future rankings via
@@ -41,6 +44,14 @@ package cz.vutbr.fit.interlockSim.sim.conflict
  * Learned preferences can be discarded at any time via [reset] (all types) or
  * [clearFor] (single type).  This is useful for starting a new simulation run with
  * a clean slate, or for an operator-initiated preference override.
+ *
+ * ## Thread safety
+ *
+ * In production the store is read by the simulation thread (the resolver calls
+ * [preferenceAdjustment] while ranking candidates) and written by the EDT (the
+ * operator-selection UI calls [recordChoice] when the dispatcher clicks **Apply**).
+ * All public methods therefore synchronize on an internal lock, mirroring
+ * [DefaultDispatcherPreferenceStore], so concurrent read/write access is safe.
  *
  * ## Example
  *
@@ -84,6 +95,8 @@ class StrategyPreferenceStore {
 	private val selectionCounts: MutableMap<String, MutableMap<ConflictResolution.Strategy, Int>> =
 		mutableMapOf()
 
+	private val lock = SynchronizedObject()
+
 	/**
 	 * Record that [strategy] was chosen to resolve a conflict identified by [conflictTypeKey].
 	 *
@@ -93,8 +106,10 @@ class StrategyPreferenceStore {
 		conflictTypeKey: String,
 		strategy: ConflictResolution.Strategy
 	) {
-		val countsForType = selectionCounts.getOrPut(conflictTypeKey) { mutableMapOf() }
-		countsForType[strategy] = (countsForType[strategy] ?: 0) + 1
+		synchronized(lock) {
+			val countsForType = selectionCounts.getOrPut(conflictTypeKey) { mutableMapOf() }
+			countsForType[strategy] = (countsForType[strategy] ?: 0) + 1
+		}
 	}
 
 	/**
@@ -105,7 +120,10 @@ class StrategyPreferenceStore {
 	fun selectionCount(
 		conflictTypeKey: String,
 		strategy: ConflictResolution.Strategy
-	): Int = selectionCounts[conflictTypeKey]?.get(strategy) ?: 0
+	): Int =
+		synchronized(lock) {
+			selectionCounts[conflictTypeKey]?.get(strategy) ?: 0
+		}
 
 	/**
 	 * Return the score adjustment for [strategy] given [conflictTypeKey].
@@ -120,14 +138,18 @@ class StrategyPreferenceStore {
 		conflictTypeKey: String,
 		strategy: ConflictResolution.Strategy
 	): Double =
-		(selectionCount(conflictTypeKey, strategy) * PREFERENCE_BOOST_PER_SELECTION)
-			.coerceAtMost(MAX_PREFERENCE_ADJUSTMENT)
+		synchronized(lock) {
+			val count = selectionCounts[conflictTypeKey]?.get(strategy) ?: 0
+			(count * PREFERENCE_BOOST_PER_SELECTION).coerceAtMost(MAX_PREFERENCE_ADJUSTMENT)
+		}
 
 	/**
 	 * Clear all learned preferences, resetting every conflict-type counter to zero.
 	 */
 	fun reset() {
-		selectionCounts.clear()
+		synchronized(lock) {
+			selectionCounts.clear()
+		}
 	}
 
 	/**
@@ -136,6 +158,8 @@ class StrategyPreferenceStore {
 	 * Preferences for all other conflict types are not affected.
 	 */
 	fun clearFor(conflictTypeKey: String) {
-		selectionCounts.remove(conflictTypeKey)
+		synchronized(lock) {
+			selectionCounts.remove(conflictTypeKey)
+		}
 	}
 }

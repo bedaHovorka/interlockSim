@@ -232,6 +232,77 @@ class ConflictResolutionPanelTest {
 		assertThat(panel.listModel.hasNoResolutions).isTrue()
 	}
 
+	// ── onResolutionApplied (Goal 9 SC3 wiring) ──────────────────────────────
+
+	@Test
+	@DisplayName("Apply invokes onResolutionApplied with the active conflict and the selected resolution")
+	fun applyInvokesOnResolutionAppliedWithConflictAndResolution() {
+		var appliedConflict: ConflictDetectedEvent? = null
+		var appliedResolution: ConflictResolution? = null
+		panel.onResolutionApplied = { c, r ->
+			appliedConflict = c
+			appliedResolution = r
+		}
+
+		SwingUtilities.invokeAndWait {
+			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
+			selectFirstResolution(panel)
+			clickApply(panel)
+		}
+
+		// The callback must receive BOTH the active conflict (so the caller can record
+		// the operator's choice in the preference stores) and the selected resolution.
+		assertThat(appliedConflict).isEqualTo(conflict)
+		assertThat(appliedResolution).isEqualTo(holdResolution)
+		// Apply also clears the panel.
+		assertThat(panel.isVisible).isFalse()
+		assertThat(panel.listModel.hasNoResolutions).isTrue()
+	}
+
+	@Test
+	@DisplayName("Apply with a null onResolutionApplied callback does not throw")
+	fun applyWithNullCallbackDoesNotThrow() {
+		panel.onResolutionApplied = null
+
+		SwingUtilities.invokeAndWait {
+			panel.showResolutions(conflict, listOf(holdResolution))
+			selectFirstResolution(panel)
+			clickApply(panel)
+		}
+
+		// Panel is cleared regardless; no exception thrown.
+		assertThat(panel.isVisible).isFalse()
+	}
+
+	@Test
+	@DisplayName("Apply with no selection does not invoke onResolutionApplied")
+	fun applyWithNoSelectionDoesNotInvokeCallback() {
+		var invoked = false
+		panel.onResolutionApplied = { _, _ -> invoked = true }
+
+		SwingUtilities.invokeAndWait {
+			panel.showResolutions(conflict, listOf(holdResolution, speedResolution))
+			// Deliberately do NOT select anything.
+			clickApply(panel)
+		}
+
+		assertThat(invoked).isFalse()
+	}
+
+	/** Drive the private [javax.swing.JList] selection from a test. */
+	private fun selectFirstResolution(panel: ConflictResolutionPanel) {
+		val listField = ConflictResolutionPanel::class.java.getDeclaredField("resolutionList")
+		listField.isAccessible = true
+		(listField.get(panel) as javax.swing.JList<*>).setSelectedIndex(0)
+	}
+
+	/** Drive the private Apply [javax.swing.JButton] click from a test. */
+	private fun clickApply(panel: ConflictResolutionPanel) {
+		val applyField = ConflictResolutionPanel::class.java.getDeclaredField("applyButton")
+		applyField.isAccessible = true
+		(applyField.get(panel) as javax.swing.JButton).doClick()
+	}
+
 	private fun flushEDT() {
 		SwingUtilities.invokeAndWait { /* flush 1 */ }
 		SwingUtilities.invokeAndWait { /* flush 2 */ }

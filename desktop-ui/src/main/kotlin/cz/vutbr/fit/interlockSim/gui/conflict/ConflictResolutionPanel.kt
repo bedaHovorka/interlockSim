@@ -36,7 +36,9 @@ import javax.swing.SwingUtilities
  * this panel. The dispatcher:
  * 1. Reviews the ranked candidates (least → most disruptive).
  * 2. Selects a candidate in the list.
- * 3. Clicks **Apply** to invoke [onResolutionApplied] with the selected resolution.
+ * 3. Clicks **Apply** to invoke [onResolutionApplied] with the active conflict and
+ *    the selected resolution, so the caller can record the operator's choice and
+ *    feed it back into preference learning (Goal 9 SC3 + SC4).
  * 4. Clicks **Dismiss** to discard the conflict without applying any resolution.
  *
  * ## Layout
@@ -71,13 +73,21 @@ class ConflictResolutionPanel : JPanel() {
 	private val applyButton = JButton("Apply")
 
 	/**
+	 * The conflict currently presented to the dispatcher, or `null` when the panel is
+	 * empty. Captured in [showResolutions] and passed to [onResolutionApplied] so the
+	 * caller has the full `(event, resolution)` pair needed to record the operator's
+	 * choice in the preference stores.
+	 */
+	private var currentConflict: ConflictDetectedEvent? = null
+
+	/**
 	 * Invoked (on EDT) when the dispatcher clicks **Apply** with a resolution selected.
 	 *
-	 * Receives the chosen [ConflictResolution] so the caller can act on it
-	 * (e.g. log, schedule, or feed into auto-application in Issue #568).
-	 * Set to `null` to disable the apply action.
+	 * Receives the active [ConflictDetectedEvent] and the chosen [ConflictResolution] so
+	 * the caller can record the operator's selection (Goal 9 SC3) and feed it into
+	 * preference learning (Goal 9 SC4). Set to `null` to disable the apply action.
 	 */
-	var onResolutionApplied: ((resolution: ConflictResolution) -> Unit)? = null
+	var onResolutionApplied: ((conflict: ConflictDetectedEvent, resolution: ConflictResolution) -> Unit)? = null
 
 	/**
 	 * Invoked (on EDT) when the dispatcher clicks **Dismiss** or when [clearResolutions]
@@ -120,7 +130,8 @@ class ConflictResolutionPanel : JPanel() {
 		applyButton.isEnabled = false
 		applyButton.addActionListener {
 			val selected = resolutionList.selectedValue ?: return@addActionListener
-			onResolutionApplied?.invoke(selected)
+			val conflict = currentConflict ?: return@addActionListener
+			onResolutionApplied?.invoke(conflict, selected)
 			clearResolutions()
 		}
 		val footerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
@@ -146,12 +157,14 @@ class ConflictResolutionPanel : JPanel() {
 				"${conflict.trainId} vs ${conflict.conflictingTrainId}  " +
 				"on ${conflict.block.name}"
 		if (SwingUtilities.isEventDispatchThread()) {
+			currentConflict = conflict
 			conflictLabel.text = labelText
 			applyButton.isEnabled = false
 			listModel.setResolutions(resolutions)
 			isVisible = true
 		} else {
 			SwingUtilities.invokeLater {
+				currentConflict = conflict
 				conflictLabel.text = labelText
 				applyButton.isEnabled = false
 				listModel.setResolutions(resolutions)
@@ -167,6 +180,7 @@ class ConflictResolutionPanel : JPanel() {
 	 */
 	fun clearResolutions() {
 		if (SwingUtilities.isEventDispatchThread()) {
+			currentConflict = null
 			conflictLabel.text = " "
 			applyButton.isEnabled = false
 			listModel.clearResolutions()
@@ -174,6 +188,7 @@ class ConflictResolutionPanel : JPanel() {
 			onDismiss?.invoke()
 		} else {
 			SwingUtilities.invokeLater {
+				currentConflict = null
 				conflictLabel.text = " "
 				applyButton.isEnabled = false
 				listModel.clearResolutions()
