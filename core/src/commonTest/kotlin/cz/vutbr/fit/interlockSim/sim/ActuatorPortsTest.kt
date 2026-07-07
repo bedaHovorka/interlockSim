@@ -12,9 +12,9 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isTrue
-import assertk.assertions.isFalse
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -32,7 +32,6 @@ import kotlin.test.Test
  * @since Issue #542 (SP0.3 — Goal 10)
  */
 class ActuatorPortsTest {
-
 	// ── TrainActuatorPort ──────────────────────────────────────────────────────
 
 	/**
@@ -49,7 +48,7 @@ class ActuatorPortsTest {
 	@Test
 	fun `TrainActuatorPort setTargetSpeed records the speed`() {
 		val actuator = RecordingTrainActuator()
-		actuator.setTargetSpeed(27.78)  // 100 km/h in m/s
+		actuator.setTargetSpeed(27.78) // 100 km/h in m/s
 		assertThat(actuator.lastTargetSpeed).isEqualTo(27.78)
 	}
 
@@ -92,13 +91,19 @@ class ActuatorPortsTest {
 			return routeResult
 		}
 
-		override fun setSwitchPosition(switchName: String, position: RailSwitch.Conf): Boolean {
+		override fun setSwitchPosition(
+			switchName: String,
+			position: RailSwitch.Conf
+		): Boolean {
 			lastSwitchName = switchName
 			lastSwitchPosition = position
 			return switchResult
 		}
 
-		override fun setSignalAspect(semaphoreName: String, signal: Signal): Boolean {
+		override fun setSignalAspect(
+			semaphoreName: String,
+			signal: Signal
+		): Boolean {
 			lastSemaphoreName = semaphoreName
 			lastSignal = signal
 			return signalResult
@@ -173,17 +178,19 @@ class ActuatorPortsTest {
 		// This test verifies the sealed hierarchy is exhaustive by compiling the when
 		// expression without an else branch.  A compile error here means a subtype was
 		// added without updating all callers.
-		val results: List<RouteRequestResult> = listOf(
-			RouteRequestResult.Reserved("T1", 3),
-			RouteRequestResult.NoRouteExists("A", "B"),
-			RouteRequestResult.AllPathsBlocked(2)
-		)
+		val results: List<RouteRequestResult> =
+			listOf(
+				RouteRequestResult.Reserved("T1", 3),
+				RouteRequestResult.NoRouteExists("A", "B"),
+				RouteRequestResult.AllPathsBlocked(2)
+			)
 		for (result in results) {
-			val description: String = when (result) {
-				is RouteRequestResult.Reserved        -> "reserved"
-				is RouteRequestResult.NoRouteExists   -> "no-route"
-				is RouteRequestResult.AllPathsBlocked -> "blocked"
-			}
+			val description: String =
+				when (result) {
+					is RouteRequestResult.Reserved -> "reserved"
+					is RouteRequestResult.NoRouteExists -> "no-route"
+					is RouteRequestResult.AllPathsBlocked -> "blocked"
+				}
 			assertThat(description).isInstanceOf(String::class)
 		}
 	}
@@ -208,9 +215,10 @@ class ActuatorPortsTest {
 
 	@Test
 	fun `requestRoute returns NoRouteExists when stub is configured so`() {
-		val actuator = StubNetworkActuator(
-			routeResult = RouteRequestResult.NoRouteExists("X", "Y")
-		)
+		val actuator =
+			StubNetworkActuator(
+				routeResult = RouteRequestResult.NoRouteExists("X", "Y")
+			)
 		val result = actuator.requestRoute("T4", "X", "Y")
 		assertThat(result).isInstanceOf(RouteRequestResult.NoRouteExists::class)
 	}

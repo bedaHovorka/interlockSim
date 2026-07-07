@@ -98,7 +98,10 @@ interface NetworkActuatorPort {
 	 * @return `true` if the switch is now in [position]; `false` if it is locked, or if
 	 *   no switch with that name exists.
 	 */
-	fun setSwitchPosition(switchName: String, position: RailSwitch.Conf): Boolean
+	fun setSwitchPosition(
+		switchName: String,
+		position: RailSwitch.Conf
+	): Boolean
 
 	/**
 	 * Command a named semaphore to display the given signal aspect.
@@ -111,7 +114,10 @@ interface NetworkActuatorPort {
 	 * @return `true` if the signal was set successfully; `false` if no semaphore with
 	 *   that name exists.
 	 */
-	fun setSignalAspect(semaphoreName: String, signal: Signal): Boolean
+	fun setSignalAspect(
+		semaphoreName: String,
+		signal: Signal
+	): Boolean
 }
 
 /**
