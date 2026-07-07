@@ -47,7 +47,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
  */
 interface NetworkPerceptionPort {
-
 	// ── Signal aspect ─────────────────────────────────────────────────────
 
 	/**

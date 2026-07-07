@@ -37,5 +37,5 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 data class BlockOccupancyReading(
 	val blockId: String,
 	val state: TrackFacility.State,
-	val trainId: String?,
+	val trainId: String?
 )

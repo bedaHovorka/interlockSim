@@ -34,5 +34,5 @@ data class TimetableReading(
 	val originInOutName: String,
 	val destinationInOutName: String,
 	val scheduledDepartureTime: Double,
-	val scheduledArrivalTime: Double,
+	val scheduledArrivalTime: Double
 )

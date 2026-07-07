@@ -62,9 +62,8 @@ import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
  */
 class DefaultNetworkPerceptionPort(
 	private val env: SimulationEnvironment,
-	private val activeTrains: () -> List<Train>,
+	private val activeTrains: () -> List<Train>
 ) : NetworkPerceptionPort {
-
 	// ── Semaphore cache built once at construction ────────────────────────
 
 	/**
@@ -90,8 +89,7 @@ class DefaultNetworkPerceptionPort(
 	 * graph on each call.  The graph edges are stable; blocks are not added or
 	 * removed at runtime.
 	 */
-	private fun allBlocks(): Collection<DynamicTrackBlock> =
-		env.getGraph().values().filterIsInstance<DynamicTrackBlock>()
+	private fun allBlocks(): Collection<DynamicTrackBlock> = env.getGraph().values().filterIsInstance<DynamicTrackBlock>()
 
 	/**
 	 * Derives a stable, human-readable identifier for a [DynamicTrackBlock].
@@ -111,8 +109,7 @@ class DefaultNetworkPerceptionPort(
 					(DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)
 						?.getName()
 						?.takeIf { it.isNotBlank() }
-				}
-				?.sorted()
+				}?.sorted()
 				.orEmpty()
 		return if (endNames.isNotEmpty()) endNames.joinToString("-") else "unknown"
 	}
@@ -149,18 +146,18 @@ class DefaultNetworkPerceptionPort(
 		return block.toReading()
 	}
 
-	override fun allBlockOccupancies(): List<BlockOccupancyReading> =
-		allBlocks().map { it.toReading() }
+	override fun allBlockOccupancies(): List<BlockOccupancyReading> = allBlocks().map { it.toReading() }
 
 	private fun DynamicTrackBlock.toReading(): BlockOccupancyReading =
 		BlockOccupancyReading(
 			blockId = blockId(this),
 			state = getState(),
-			trainId = when (getState()) {
-				TrackFacility.State.FREE -> null
-				TrackFacility.State.RESERVED -> trainName
-				TrackFacility.State.OCCUPIED -> occupant?.name ?: trainName
-			},
+			trainId =
+				when (getState()) {
+					TrackFacility.State.FREE -> null
+					TrackFacility.State.RESERVED -> trainName
+					TrackFacility.State.OCCUPIED -> occupant?.name ?: trainName
+				}
 		)
 
 	// ── NetworkPerceptionPort — train positions ───────────────────────────
@@ -170,8 +167,7 @@ class DefaultNetworkPerceptionPort(
 		return train.toPositionReading()
 	}
 
-	override fun allTrainPositions(): List<TrainPositionReading> =
-		activeTrains().map { it.toPositionReading() }
+	override fun allTrainPositions(): List<TrainPositionReading> = activeTrains().map { it.toPositionReading() }
 
 	private fun Train.toPositionReading(): TrainPositionReading =
 		TrainPositionReading(
@@ -179,7 +175,7 @@ class DefaultNetworkPerceptionPort(
 			velocity = getVelocity(),
 			acceleration = getAcceleration(),
 			totalDistance = totalDistance,
-			frontSectionName = frontSectionName(this),
+			frontSectionName = frontSectionName(this)
 		)
 
 	// ── NetworkPerceptionPort — train timetables ──────────────────────────
@@ -189,8 +185,7 @@ class DefaultNetworkPerceptionPort(
 		return train.toTimetableReading()
 	}
 
-	override fun allTrainTimetables(): List<TimetableReading> =
-		activeTrains().map { it.toTimetableReading() }
+	override fun allTrainTimetables(): List<TimetableReading> = activeTrains().map { it.toTimetableReading() }
 
 	private fun Train.toTimetableReading(): TimetableReading {
 		val timetable = getTimetable()
@@ -199,7 +194,7 @@ class DefaultNetworkPerceptionPort(
 			originInOutName = timetable.getIn().name,
 			destinationInOutName = timetable.getOut().name,
 			scheduledDepartureTime = timetable.getInTime().value,
-			scheduledArrivalTime = timetable.getOutTime().value,
+			scheduledArrivalTime = timetable.getOutTime().value
 		)
 	}
 

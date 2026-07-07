@@ -147,7 +147,7 @@ class ShuntingLoop(
 	private val perceptionPort: cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort =
 		cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort(
 			env = context,
-			activeTrains = { approwedTrains.toList() },
+			activeTrains = { approwedTrains.toList() }
 		)
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.

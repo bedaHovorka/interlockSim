@@ -31,5 +31,5 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  */
 data class SemaphoreReading(
 	val name: String,
-	val signal: Signal,
+	val signal: Signal
 )

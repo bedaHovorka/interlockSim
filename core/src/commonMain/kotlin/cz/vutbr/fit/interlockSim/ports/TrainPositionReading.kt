@@ -42,5 +42,5 @@ data class TrainPositionReading(
 	val velocity: Double,
 	val acceleration: Double,
 	val totalDistance: Double,
-	val frontSectionName: String?,
+	val frontSectionName: String?
 )

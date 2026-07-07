@@ -47,10 +47,12 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("DefaultNetworkPerceptionPort — unit coverage")
 class DefaultNetworkPerceptionPortTest {
-
 	// ── Helpers ────────────────────────────────────────────────────────────
 
-	private fun semaphore(name: String, signal: Signal = Signal.STOP): DynamicRailSemaphore =
+	private fun semaphore(
+		name: String,
+		signal: Signal = Signal.STOP
+	): DynamicRailSemaphore =
 		mockk<DynamicRailSemaphore>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.signal } returns signal
@@ -60,7 +62,7 @@ class DefaultNetworkPerceptionPortTest {
 		name: String? = null,
 		state: TrackFacility.State = TrackFacility.State.FREE,
 		trainName: String? = null,
-		occupantName: String? = null,
+		occupantName: String? = null
 	): DynamicTrackBlock =
 		mockk<DynamicTrackBlock>(relaxed = true).also {
 			every { it.name } returns name
@@ -85,7 +87,7 @@ class DefaultNetworkPerceptionPortTest {
 		originName: String = "A",
 		destName: String = "B",
 		departureTime: Double = 0.0,
-		arrivalTime: Double = 60.0,
+		arrivalTime: Double = 60.0
 	): Train {
 		val inOut = mockk<DynamicInOut>(relaxed = true)
 		every { inOut.name } returns originName
@@ -115,7 +117,7 @@ class DefaultNetworkPerceptionPortTest {
 	@Suppress("UNCHECKED_CAST")
 	private fun env(
 		cells: Map<Pair<Int, Int>, Cell?> = emptyMap(),
-		blocks: Collection<DynamicTrackBlock> = emptyList(),
+		blocks: Collection<DynamicTrackBlock> = emptyList()
 	): SimulationEnvironment {
 		val grid = mockk<RailwayNetGrid<Cell>>(relaxed = true)
 		every { grid.cols } returns 3
@@ -138,15 +140,15 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("signalAspect()")
 	inner class SignalAspect {
-
 		@Test
 		@DisplayName("returns SemaphoreReading for a known semaphore")
 		fun knownSemaphoreReturnsReading() {
 			val sem = semaphore("zA", Signal.FREE)
-			val port = DefaultNetworkPerceptionPort(
-				env(cells = mapOf((0 to 0) to sem)),
-				activeTrains = { emptyList() },
-			)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem)),
+					activeTrains = { emptyList() }
+				)
 
 			val result = port.signalAspect("zA")
 
@@ -156,10 +158,11 @@ class DefaultNetworkPerceptionPortTest {
 		@Test
 		@DisplayName("returns null for an unknown semaphore name")
 		fun unknownSemaphoreReturnsNull() {
-			val port = DefaultNetworkPerceptionPort(
-				env(cells = emptyMap()),
-				activeTrains = { emptyList() },
-			)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = emptyMap()),
+					activeTrains = { emptyList() }
+				)
 
 			assertThat(port.signalAspect("noSuchSem")).isNull()
 		}
@@ -168,32 +171,33 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("allSignalAspects()")
 	inner class AllSignalAspects {
-
 		@Test
 		@DisplayName("returns one reading per semaphore in the grid")
 		fun returnsTwoSemaphores() {
 			val semA = semaphore("zA", Signal.STOP)
 			val semB = semaphore("doB1", Signal.S60)
-			val port = DefaultNetworkPerceptionPort(
-				env(cells = mapOf((0 to 0) to semA, (1 to 0) to semB)),
-				activeTrains = { emptyList() },
-			)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to semA, (1 to 0) to semB)),
+					activeTrains = { emptyList() }
+				)
 
 			val result = port.allSignalAspects()
 
 			assertThat(result).containsExactlyInAnyOrder(
 				SemaphoreReading("zA", Signal.STOP),
-				SemaphoreReading("doB1", Signal.S60),
+				SemaphoreReading("doB1", Signal.S60)
 			)
 		}
 
 		@Test
 		@DisplayName("returns empty list when no semaphores in the grid")
 		fun emptyGridReturnsEmptyList() {
-			val port = DefaultNetworkPerceptionPort(
-				env(cells = emptyMap()),
-				activeTrains = { emptyList() },
-			)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = emptyMap()),
+					activeTrains = { emptyList() }
+				)
 
 			assertThat(port.allSignalAspects()).isEmpty()
 		}
@@ -204,7 +208,6 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("blockOccupancy()")
 	inner class BlockOccupancy {
-
 		@Test
 		@DisplayName("FREE block returns reading with null trainId")
 		fun freeBlockTrainIdIsNull() {
@@ -234,11 +237,12 @@ class DefaultNetworkPerceptionPortTest {
 		@Test
 		@DisplayName("OCCUPIED block returns reading with occupant name as trainId")
 		fun occupiedBlockTrainIdIsOccupantName() {
-			val b = block(
-				name = "k2",
-				state = TrackFacility.State.OCCUPIED,
-				occupantName = "Train #2",
-			)
+			val b =
+				block(
+					name = "k2",
+					state = TrackFacility.State.OCCUPIED,
+					occupantName = "Train #2"
+				)
 			val port = DefaultNetworkPerceptionPort(env(blocks = listOf(b)), { emptyList() })
 
 			val result = port.blockOccupancy("k2")
@@ -260,7 +264,6 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("allBlockOccupancies()")
 	inner class AllBlockOccupancies {
-
 		@Test
 		@DisplayName("returns one reading per block")
 		fun returnsTwoBlocks() {
@@ -272,7 +275,7 @@ class DefaultNetworkPerceptionPortTest {
 
 			assertThat(result).containsExactlyInAnyOrder(
 				BlockOccupancyReading("k1", TrackFacility.State.FREE, null),
-				BlockOccupancyReading("k2", TrackFacility.State.RESERVED, "Train #1"),
+				BlockOccupancyReading("k2", TrackFacility.State.RESERVED, "Train #1")
 			)
 		}
 
@@ -290,7 +293,6 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("trainPosition()")
 	inner class TrainPosition {
-
 		@Test
 		@DisplayName("returns reading for an active train")
 		fun activeTrainReturnsReading() {
@@ -305,7 +307,7 @@ class DefaultNetworkPerceptionPortTest {
 					velocity = 20.0,
 					acceleration = 1.5,
 					totalDistance = 300.0,
-					frontSectionName = null,
+					frontSectionName = null
 				)
 			)
 		}
@@ -345,7 +347,6 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("allTrainPositions()")
 	inner class AllTrainPositions {
-
 		@Test
 		@DisplayName("returns one reading per active train")
 		fun returnsAllActiveTrains() {
@@ -372,17 +373,17 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("trainTimetable()")
 	inner class TrainTimetable {
-
 		@Test
 		@DisplayName("returns timetable reading for an active train")
 		fun activeTrainReturnsTimetable() {
-			val t = train(
-				"Train #1",
-				originName = "A",
-				destName = "B",
-				departureTime = 10.0,
-				arrivalTime = 120.0,
-			)
+			val t =
+				train(
+					"Train #1",
+					originName = "A",
+					destName = "B",
+					departureTime = 10.0,
+					arrivalTime = 120.0
+				)
 			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
 
 			val result = port.trainTimetable("Train #1")
@@ -393,7 +394,7 @@ class DefaultNetworkPerceptionPortTest {
 					originInOutName = "A",
 					destinationInOutName = "B",
 					scheduledDepartureTime = 10.0,
-					scheduledArrivalTime = 120.0,
+					scheduledArrivalTime = 120.0
 				)
 			)
 		}
@@ -410,7 +411,6 @@ class DefaultNetworkPerceptionPortTest {
 	@Nested
 	@DisplayName("allTrainTimetables()")
 	inner class AllTrainTimetables {
-
 		@Test
 		@DisplayName("returns one reading per active train")
 		fun returnsAllActiveTimetables() {
