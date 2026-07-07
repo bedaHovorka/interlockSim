@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import cz.hovorka.kdisco.DiscoException
 import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -237,11 +238,17 @@ class DefaultNetworkPerceptionPort(
 	 * interleave between them during a normal tick.
 	 *
 	 * [SimulationSnapshot.simTime] is set from [Process.time]; if called outside an
-	 * active kDisco simulation (e.g. in unit tests), it falls back to `0.0`.
+	 * active kDisco simulation (e.g. in unit tests), the resulting [DiscoException]
+	 * is caught and `simTime` falls back to `0.0`. Any other exception propagates.
 	 */
 	override fun snapshot(): SimulationSnapshot =
 		SimulationSnapshot(
-			simTime = runCatching { Process.time() }.getOrDefault(0.0),
+			simTime =
+				try {
+					Process.time()
+				} catch (_: DiscoException) {
+					0.0
+				},
 			semaphores = allSignalAspects(),
 			blocks = allBlockOccupancies(),
 			trainPositions = allTrainPositions(),

@@ -515,5 +515,36 @@ class DefaultNetworkPerceptionPortTest {
 
 			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("doB1", Signal.S60))
 		}
+
+		@Test
+		@DisplayName("snapshot is frozen — later source-state mutation does not change captured readings")
+		fun snapshotIsFrozenFromLaterSourceMutation() {
+			val sem = semaphore("zA", Signal.FREE)
+			val b = block(name = "k1", state = TrackFacility.State.RESERVED, trainName = "Train #1")
+			val t = train("Train #1", velocity = 15.0, originName = "A", destName = "B")
+			val active = mutableListOf(t)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem), blocks = listOf(b)),
+					activeTrains = { active.toList() }
+				)
+
+			val snap = port.snapshot()
+
+			// Mutate the underlying source state after capture.
+			every { sem.signal } returns Signal.STOP
+			every { b.getState() } returns TrackFacility.State.FREE
+			every { b.trainName } returns null
+			every { t.getVelocity() } returns 99.0
+			active.clear()
+
+			// The already-captured snapshot must reflect the pre-mutation state.
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(snap.blocks).containsExactlyInAnyOrder(
+				BlockOccupancyReading("k1", TrackFacility.State.RESERVED, "Train #1")
+			)
+			assertThat(snap.trainPositions.map { it.velocity }).containsExactlyInAnyOrder(15.0)
+			assertThat(snap.timetables.map { it.trainId }).containsExactlyInAnyOrder("Train #1")
+		}
 	}
 }
