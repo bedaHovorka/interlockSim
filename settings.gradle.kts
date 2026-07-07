@@ -25,6 +25,7 @@ rootProject.name = "interlockSim"
 
 include(":core")
 include(":core-test")
+include(":dispatcher-agent")
 include(":desktop-ui")
 
 // :fast-sim is a linuxX64 native CLI binary and cannot be built on non-Linux hosts
