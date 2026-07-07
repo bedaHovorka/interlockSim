@@ -86,6 +86,19 @@ interface DispatcherTickContext {
 	val approvedTrainCount: Int
 
 	/**
+	 * Current simulation time in seconds at the start of this tick.
+	 *
+	 * Provided so dispatchers can make time-aware decisions (e.g. "this train has
+	 * been waiting since [simTime] − N seconds") without reaching into kDisco
+	 * internals.  The value is taken once per tick from `Process.time()` and
+	 * remains constant for the duration of a single [approve] or [advancePaths]
+	 * call.
+	 *
+	 * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
+	 */
+	val simTime: Double
+
+	/**
 	 * Read-only view of the trains queued but not yet approved, in admission order.
 	 *
 	 * Exposing the full queue (rather than only a FIFO pop) lets a non-rule-based
