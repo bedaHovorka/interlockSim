@@ -94,6 +94,33 @@ interface DispatcherTickContext {
 	 */
 	val unapprovedTrains: List<Train>
 
+	/**
+	 * Read-only view of the trains currently approved and running in the simulation.
+	 *
+	 * Exposes the live approved-train list so the dispatcher — and the
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort] built from it — can read
+	 * position, velocity, and timetable data for every active train.
+	 *
+	 * The list must not be mutated directly; use [approveTrain] to admit new trains.
+	 *
+	 * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+	 */
+	val approvedTrains: List<Train>
+
+	/**
+	 * Perception port that reflects the network state observed at the start of this
+	 * tick.
+	 *
+	 * Provides a read-only snapshot interface for signal aspects, block occupancy,
+	 * train positions, and timetables.  Backed by the live simulation environment
+	 * so queries always return the current state (not a frozen snapshot from tick
+	 * start — callers should be aware that mutations from earlier in the same tick
+	 * are visible).
+	 *
+	 * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+	 */
+	val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+
 	/** Inner track blocks (both ends are [DynamicRailSemaphore]). */
 	val innerBlocks: List<DynamicTrackBlock>
 

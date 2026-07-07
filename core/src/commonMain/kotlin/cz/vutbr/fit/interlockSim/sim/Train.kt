@@ -1216,6 +1216,35 @@ class Train :
 		get() = timetable.getIn()
 
 	/**
+	 * Read-only snapshot of the origin/destination InOut names and scheduled times
+	 * derived from this train's [Timetable], for agent perception.
+	 *
+	 * These four properties expose exactly what the
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort] implementation needs to
+	 * build a [cz.vutbr.fit.interlockSim.ports.TimetableReading] — scalar values only,
+	 * no live references to the [Timetable] or its mutable [DynamicInOut] endpoints.
+	 * Handing out the [Timetable] itself would let callers mutate reachable sim state
+	 * (e.g. via [Timetable.reverseDirection]); these narrow properties keep the
+	 * perception data flow strictly one-directional (snapshot out, nothing back in).
+	 *
+	 * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+	 */
+	val timetableOriginName: String
+		get() = timetable.getIn().name
+
+	/** @see timetableOriginName */
+	val timetableDestinationName: String
+		get() = timetable.getOut().name
+
+	/** @see timetableOriginName */
+	val scheduledDepartureTime: Double
+		get() = timetable.getInTime().value
+
+	/** @see timetableOriginName */
+	val scheduledArrivalTime: Double
+		get() = timetable.getOutTime().value
+
+	/**
 	 * Track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.
