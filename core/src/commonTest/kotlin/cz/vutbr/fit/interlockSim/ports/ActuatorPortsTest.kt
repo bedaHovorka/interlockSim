@@ -8,7 +8,7 @@
  * Tests for TrainActuatorPort and NetworkActuatorPort interfaces (SP0.3, Issue #542).
  * Verifies interface contracts, result-type exhaustiveness, and minimal-impl correctness.
  */
-package cz.vutbr.fit.interlockSim.sim
+package cz.vutbr.fit.interlockSim.ports
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
@@ -19,6 +19,7 @@ import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * Unit tests for the SP0.3 actuator port interfaces.
@@ -59,22 +60,45 @@ class ActuatorPortsTest {
 		assertThat(actuator.lastTargetSpeed).isEqualTo(0.0)
 	}
 
+	/**
+	 * A minimal implementation that enforces the [TrainActuatorPort] input contract.
+	 *
+	 * Used to pin the `@throws IllegalArgumentException` precondition on negative speed —
+	 * the interface itself cannot enforce it, so this stub documents the expected
+	 * validation in executable form that real implementations should mirror.
+	 */
+	private class ContractValidatingTrainActuator : TrainActuatorPort {
+		override fun setTargetSpeed(speed: Double) {
+			require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
+		}
+	}
+
+	@Test
+	fun `TrainActuatorPort setTargetSpeed negative throws IllegalArgumentException`() {
+		val actuator = ContractValidatingTrainActuator()
+		assertFailsWith<IllegalArgumentException> { actuator.setTargetSpeed(-1.0) }
+	}
+
 	// ── NetworkActuatorPort ────────────────────────────────────────────────────
 
 	/**
 	 * A configurable stub implementation for [NetworkActuatorPort].
 	 *
-	 * Routes, switch commands, and signal commands each have a pre-configured return
-	 * value so tests can focus on one method at a time.
+	 * Routes, route release, switch commands, and signal commands each have a
+	 * pre-configured return value so tests can focus on one method at a time.  This stub
+	 * does **not** enforce any input contracts — it records and returns whatever it is
+	 * given.  See [ContractValidatingNetworkActuator] for contract enforcement.
 	 */
 	private class StubNetworkActuator(
 		private val routeResult: RouteRequestResult = RouteRequestResult.Reserved("T1", 3),
+		private val releaseResult: Boolean = true,
 		private val switchResult: Boolean = true,
 		private val signalResult: Boolean = true
 	) : NetworkActuatorPort {
 		var lastRouteTrainName: String? = null
 		var lastRouteFrom: String? = null
 		var lastRouteTo: String? = null
+		var lastReleaseTrainName: String? = null
 		var lastSwitchName: String? = null
 		var lastSwitchPosition: RailSwitch.Conf? = null
 		var lastSemaphoreName: String? = null
@@ -89,6 +113,11 @@ class ActuatorPortsTest {
 			lastRouteFrom = fromInOutName
 			lastRouteTo = toInOutName
 			return routeResult
+		}
+
+		override fun releaseRoute(trainName: String): Boolean {
+			lastReleaseTrainName = trainName
+			return releaseResult
 		}
 
 		override fun setSwitchPosition(
@@ -151,6 +180,84 @@ class ActuatorPortsTest {
 		assertThat(failActuator.setSignalAspect("SEM_A", Signal.STOP)).isFalse()
 	}
 
+	@Test
+	fun `NetworkActuatorPort releaseRoute forwards the train name`() {
+		val actuator = StubNetworkActuator()
+		actuator.releaseRoute("T9")
+		assertThat(actuator.lastReleaseTrainName).isEqualTo("T9")
+	}
+
+	@Test
+	fun `NetworkActuatorPort releaseRoute returns impl result`() {
+		val okActuator = StubNetworkActuator(releaseResult = true)
+		val emptyActuator = StubNetworkActuator(releaseResult = false)
+		assertThat(okActuator.releaseRoute("T9")).isTrue()
+		assertThat(emptyActuator.releaseRoute("T9")).isFalse()
+	}
+
+	/**
+	 * An implementation that enforces the [NetworkActuatorPort.requestRoute] input
+	 * contract: blank [trainName] and unknown InOut names throw fast rather than being
+	 * surfaced as a [RouteRequestResult].  Real implementations should mirror this.
+	 *
+	 * @param validInOutNames the set of InOut names the network recognises.
+	 * @param routeResult the result to return once preconditions pass.
+	 */
+	private class ContractValidatingNetworkActuator(
+		private val validInOutNames: Set<String>,
+		private val routeResult: RouteRequestResult = RouteRequestResult.Reserved("T1", 1)
+	) : NetworkActuatorPort {
+		override fun requestRoute(
+			trainName: String,
+			fromInOutName: String,
+			toInOutName: String
+		): RouteRequestResult {
+			require(trainName.isNotBlank()) { "trainName must be non-blank" }
+			require(fromInOutName in validInOutNames) { "Unknown InOut: $fromInOutName" }
+			require(toInOutName in validInOutNames) { "Unknown InOut: $toInOutName" }
+			return routeResult
+		}
+
+		override fun releaseRoute(trainName: String): Boolean {
+			require(trainName.isNotBlank()) { "trainName must be non-blank" }
+			return true
+		}
+
+		override fun setSwitchPosition(
+			switchName: String,
+			position: RailSwitch.Conf
+		): Boolean = true
+
+		override fun setSignalAspect(
+			semaphoreName: String,
+			signal: Signal
+		): Boolean = true
+	}
+
+	@Test
+	fun `NetworkActuatorPort requestRoute blank trainName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("", "IN", "OUT") }
+	}
+
+	@Test
+	fun `NetworkActuatorPort requestRoute unknown fromInOutName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("T1", "NOPE", "OUT") }
+	}
+
+	@Test
+	fun `NetworkActuatorPort requestRoute unknown toInOutName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("T1", "IN", "NOPE") }
+	}
+
+	@Test
+	fun `NetworkActuatorPort releaseRoute blank trainName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		assertFailsWith<IllegalArgumentException> { actuator.releaseRoute("") }
+	}
+
 	// ── RouteRequestResult ─────────────────────────────────────────────────────
 
 	@Test
@@ -175,24 +282,18 @@ class ActuatorPortsTest {
 
 	@Test
 	fun `RouteRequestResult when expression is exhaustive`() {
-		// This test verifies the sealed hierarchy is exhaustive by compiling the when
-		// expression without an else branch.  A compile error here means a subtype was
-		// added without updating all callers.
-		val results: List<RouteRequestResult> =
-			listOf(
-				RouteRequestResult.Reserved("T1", 3),
-				RouteRequestResult.NoRouteExists("A", "B"),
-				RouteRequestResult.AllPathsBlocked(2)
-			)
-		for (result in results) {
-			val description: String =
-				when (result) {
-					is RouteRequestResult.Reserved -> "reserved"
-					is RouteRequestResult.NoRouteExists -> "no-route"
-					is RouteRequestResult.AllPathsBlocked -> "blocked"
-				}
-			assertThat(description).isInstanceOf(String::class)
-		}
+		// Compiling the `when` without an `else` branch verifies the sealed hierarchy is
+		// exhaustive: a new subtype added later is a compile error here.  The assertions
+		// also pin the actual mapping so the test is not a no-op.
+		fun describe(result: RouteRequestResult): String =
+			when (result) {
+				is RouteRequestResult.Reserved -> "reserved"
+				is RouteRequestResult.NoRouteExists -> "no-route"
+				is RouteRequestResult.AllPathsBlocked -> "blocked"
+			}
+		assertThat(describe(RouteRequestResult.Reserved("T1", 3))).isEqualTo("reserved")
+		assertThat(describe(RouteRequestResult.NoRouteExists("A", "B"))).isEqualTo("no-route")
+		assertThat(describe(RouteRequestResult.AllPathsBlocked(2))).isEqualTo("blocked")
 	}
 
 	@Test
@@ -200,8 +301,8 @@ class ActuatorPortsTest {
 		val expected = RouteRequestResult.Reserved("T2", 2)
 		val actuator = StubNetworkActuator(routeResult = expected)
 		val result = actuator.requestRoute("T2", "IN", "OUT")
-		assertThat(result).isInstanceOf(RouteRequestResult.Reserved::class)
-		assertThat(result as RouteRequestResult.Reserved)
+		assertThat(result)
+			.isInstanceOf<RouteRequestResult.Reserved>()
 			.prop(RouteRequestResult.Reserved::trainName)
 			.isEqualTo("T2")
 	}

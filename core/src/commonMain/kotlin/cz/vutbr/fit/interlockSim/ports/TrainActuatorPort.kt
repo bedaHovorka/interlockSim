@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim
+package cz.vutbr.fit.interlockSim.ports
 
 /**
  * Actuator port for a train agent's movement commands.

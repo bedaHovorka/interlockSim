@@ -7,7 +7,7 @@
  *
  * Bedrich Hovorka
  */
-package cz.vutbr.fit.interlockSim.sim
+package cz.vutbr.fit.interlockSim.ports
 
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
@@ -25,9 +25,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  *
  * 1. **Route requests** — ask the interlocking to find and atomically reserve a free
  *    end-to-end path from one InOut to another for a named train.
- * 2. **Switch commands** — directly set a named rail switch to [RailSwitch.Conf.MAIN]
+ * 2. **Route release** — free the blocks a train holds when its journey ends or it
+ *    reverses (the symmetric counterpart of route requests).
+ * 3. **Switch commands** — directly set a named rail switch to [RailSwitch.Conf.MAIN]
  *    or [RailSwitch.Conf.BRANCH] position.
- * 3. **Signal commands** — directly set a named semaphore to a given [Signal] aspect.
+ * 4. **Signal commands** — directly set a named semaphore to a given [Signal] aspect.
  *
  * ## String-based identifiers
  *
@@ -74,17 +76,45 @@ interface NetworkActuatorPort {
 	 * The call is **synchronous** — it returns only after the reservation attempt has
 	 * completed (success or failure).
 	 *
+	 * ## Invalid input
+	 *
+	 * Invalid input is a programmer/agent error and throws rather than being surfaced as a
+	 * [RouteRequestResult]:
+	 * - A blank [trainName] throws [IllegalArgumentException].
+	 * - A [fromInOutName] or [toInOutName] that does not exist in the network throws
+	 *   [IllegalArgumentException] (unknown names must fail fast — they are not "no route").
+	 *
+	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid InOuts
+	 * but no topological path connects them.
+	 *
 	 * @param trainName     Identifier of the train that will use the reserved route.
 	 *   Must be non-blank; matched against the train registry in the simulation.
 	 * @param fromInOutName Name of the InOut entry point (must exist in the network).
 	 * @param toInOutName   Name of the InOut exit point (must exist in the network).
 	 * @return [RouteRequestResult] indicating outcome; never `null`.
+	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromInOutName] or
+	 *   [toInOutName] does not name an InOut in the network.
 	 */
 	fun requestRoute(
 		trainName: String,
 		fromInOutName: String,
 		toInOutName: String
 	): RouteRequestResult
+
+	/**
+	 * Release all track blocks reserved for [trainName].
+	 *
+	 * The symmetric counterpart of [requestRoute]: when a train completes its journey or
+	 * reverses, the dispatcher releases the route so the blocks return to the free pool.
+	 * The operation is **idempotent** — calling it when [trainName] holds no reservation is
+	 * a no-op and returns `false`.  Blocks transition RESERVED → FREE.
+	 *
+	 * @param trainName Name of the train whose route should be released (non-blank).
+	 * @return `true` if at least one block was released; `false` if the train held no
+	 *   reservation.
+	 * @throws IllegalArgumentException if [trainName] is blank.
+	 */
+	fun releaseRoute(trainName: String): Boolean
 
 	/**
 	 * Command a named rail switch to the given position.
@@ -112,7 +142,9 @@ interface NetworkActuatorPort {
 	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @param signal        Target signal aspect (e.g. [Signal.STOP], [Signal.FREE]).
 	 * @return `true` if the signal was set successfully; `false` if no semaphore with
-	 *   that name exists.
+	 *   that name exists, or if the interlocking refuses to clear the signal (no
+	 *   compatible reserved route, conflicting switch state, etc.).  Per the class-level
+	 *   safety guarantee, a clear-to-FREE is never honoured unless a route is reserved.
 	 */
 	fun setSignalAspect(
 		semaphoreName: String,
@@ -143,9 +175,11 @@ sealed class RouteRequestResult {
 	/**
 	 * No topological path exists between the requested InOut endpoints.
 	 *
-	 * This indicates a network-topology issue (disconnected graph, wrong names).  The
-	 * dispatcher should log this as an error; retrying the same request will always yield
-	 * the same result.
+	 * Both endpoints are valid InOuts in the network, but the topology graph connects no
+	 * path between them (e.g. disconnected sub-networks).  The dispatcher should log this
+	 * as an error; retrying the same request will always yield the same result.  Note: an
+	 * unknown (non-existent) endpoint name is **not** this result — it throws
+	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute].
 	 *
 	 * @property fromInOutName The requested entry point name.
 	 * @property toInOutName   The requested exit point name.
@@ -161,7 +195,8 @@ sealed class RouteRequestResult {
 	 *
 	 * The dispatcher may retry after waiting for a block to become free.
 	 *
-	 * @property attemptedPaths Number of topological candidate paths that were checked.
+	 * @property attemptedPaths Number of topological candidate paths that were checked
+	 *   (always `≥ 0`).
 	 */
 	data class AllPathsBlocked(
 		val attemptedPaths: Int
