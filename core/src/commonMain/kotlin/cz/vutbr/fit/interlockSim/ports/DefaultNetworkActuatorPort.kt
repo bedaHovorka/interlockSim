@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -87,8 +88,8 @@ class DefaultNetworkActuatorPort(
 		toInOutName: String
 	): RouteRequestResult {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
-		val from = requireInOut(fromInOutName)
-		val to = requireInOut(toInOutName)
+		val from = requireEndpoint(fromInOutName)
+		val to = requireEndpoint(toInOutName)
 
 		return when (val result = pathReservationService.reservePath(trainName, from, to)) {
 			is PathReservationService.ReservationResult.Success ->
@@ -136,7 +137,8 @@ class DefaultNetworkActuatorPort(
 				return false
 			}
 		if (sw.locked) {
-			logger.debug { "setSwitchPosition: switch '$switchName' is locked" }
+			// Switch is locked by a route reservation — cannot be moved while a path is active.
+			logger.debug { "setSwitchPosition: switch '$switchName' is locked by route reservation" }
 			return false
 		}
 		if (sw.conf == position) return true
@@ -158,6 +160,15 @@ class DefaultNetworkActuatorPort(
 				logger.debug { "setSignalAspect: unknown semaphore '$semaphoreName'" }
 				return false
 			}
+		// A semaphore whose signal is currently allowing has been set by the interlocking
+		// as part of an active route.  Overriding it would violate railway safety rules.
+		if (sem.signal.isAllowing()) {
+			logger.debug {
+				"setSignalAspect: semaphore '$semaphoreName' is locked by an active route " +
+					"(current signal=${sem.signal}); refusing to override"
+			}
+			return false
+		}
 		sem.signal = signal
 		return true
 	}
@@ -165,13 +176,19 @@ class DefaultNetworkActuatorPort(
 	// ── Helpers ───────────────────────────────────────────────────────────
 
 	/**
-	 * Returns the [DynamicInOut] for [name], throwing [IllegalArgumentException] if the
-	 * name is not recognised in this network.
+	 * Returns the [DynamicPathSeparator] for [name], searching both [inOutByName] and
+	 * [semaphoreByName].  Throws [IllegalArgumentException] if the name is not recognised
+	 * as either an InOut or a Semaphore in this network.
+	 *
+	 * Partial paths (InOut → Semaphore or Semaphore → InOut) are valid in addition to the
+	 * full end-to-end (InOut → InOut) form, so both element types are accepted here.
 	 */
-	private fun requireInOut(name: String): DynamicInOut =
-		inOutByName[name]
+	private fun requireEndpoint(name: String): DynamicPathSeparator =
+		(inOutByName[name] ?: semaphoreByName[name])
 			?: throw IllegalArgumentException(
-				"Unknown InOut '$name' in network (known: ${inOutByName.keys.sorted()})"
+				"Unknown endpoint '$name' in network " +
+					"(known InOuts: ${inOutByName.keys.sorted()}, " +
+					"known Semaphores: ${semaphoreByName.keys.sorted()})"
 			)
 
 	/**

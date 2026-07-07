@@ -234,6 +234,49 @@ class DefaultNetworkActuatorPortTest {
 
 			assertThat(result).isInstanceOf<RouteRequestResult.AllPathsBlocked>()
 		}
+
+		@Test
+		@DisplayName("partial route InOut → Semaphore is accepted")
+		fun partialRouteInOutToSemaphore() {
+			val a = inOut("A")
+			val s1 = semaphore("S1")
+			val blocks = listOf(mockk<DynamicTrackBlock>(relaxed = true))
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.reservePath("T1", a, s1) } returns
+				PathReservationService.ReservationResult.Success(blocks)
+
+			val p = port(inOuts = listOf(a), cells = mapOf((1 to 0) to s1), reservationService = svc)
+			val result = p.requestRoute("T1", "A", "S1")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.Reserved>()
+		}
+
+		@Test
+		@DisplayName("partial route Semaphore → InOut is accepted")
+		fun partialRouteSemaphoreToInOut() {
+			val s1 = semaphore("S1")
+			val b = inOut("B")
+			val blocks = listOf(mockk<DynamicTrackBlock>(relaxed = true))
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.reservePath("T1", s1, b) } returns
+				PathReservationService.ReservationResult.Success(blocks)
+
+			val p = port(inOuts = listOf(b), cells = mapOf((0 to 0) to s1), reservationService = svc)
+			val result = p.requestRoute("T1", "S1", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.Reserved>()
+		}
+
+		@Test
+		@DisplayName("unknown endpoint (neither InOut nor Semaphore) throws IllegalArgumentException")
+		fun unknownEndpointThrows() {
+			val a = inOut("A")
+			val s1 = semaphore("S1")
+			val p = port(inOuts = listOf(a), cells = mapOf((0 to 0) to s1))
+			assertFailsWith<IllegalArgumentException> {
+				p.requestRoute("T1", "A", "UNKNOWN")
+			}
+		}
 	}
 
 	// ── releaseRoute ────────────────────────────────────────────────────────
@@ -314,7 +357,7 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("returns true and sets signal on a known semaphore")
+		@DisplayName("returns true and sets signal on a known semaphore with STOP signal")
 		fun knownSemaphoreSetAndReturnsTrue() {
 			val sem = semaphore("zA", Signal.STOP)
 			val p = port(cells = mapOf((0 to 0) to sem))
@@ -322,6 +365,26 @@ class DefaultNetworkActuatorPortTest {
 			val result = p.setSignalAspect("zA", Signal.FREE)
 
 			assertThat(result).isTrue()
+		}
+
+		@Test
+		@DisplayName("returns false when semaphore is locked by active route (signal is allowing)")
+		fun lockedByRouteReturnsFalse() {
+			val sem = semaphore("zA", Signal.FREE) // locked: interlocking set it to allowing
+			val p = port(cells = mapOf((0 to 0) to sem))
+
+			assertThat(p.setSignalAspect("zA", Signal.STOP)).isFalse()
+		}
+
+		@Test
+		@DisplayName("returns false for any allowing signal aspect when semaphore is locked")
+		fun allAllowingSignalsAreLocked() {
+			for (allowingSignal in listOf(Signal.S30, Signal.S60, Signal.S80, Signal.S100, Signal.FREE)) {
+				val sem = semaphore("sA", allowingSignal)
+				val p = port(cells = mapOf((0 to 0) to sem))
+				assertThat(p.setSignalAspect("sA", Signal.STOP))
+					.isFalse()
+			}
 		}
 	}
 }

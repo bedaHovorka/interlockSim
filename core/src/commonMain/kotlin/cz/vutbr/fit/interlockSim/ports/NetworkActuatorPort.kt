@@ -69,9 +69,14 @@ interface NetworkActuatorPort {
 	/**
 	 * Request a route reservation from [fromInOutName] to [toInOutName] for train [trainName].
 	 *
-	 * The interlocking finds a topologically valid path between the two named InOut points
+	 * The interlocking finds a topologically valid path between the two named endpoints
 	 * and atomically reserves all blocks along it if they are free.  If multiple paths exist,
 	 * the implementation chooses one (typically by shortest distance or first-found).
+	 *
+	 * Endpoints may be either **InOut** names (full end-to-end route) or **Semaphore** names
+	 * (partial route from/to an intermediate signal).  Partial routes are required when a
+	 * train needs to reach a specific semaphore rather than a network boundary (e.g. Trains
+	 * #4 and #5 in the ShuntingLoop scenario).
 	 *
 	 * The call is **synchronous** — it returns only after the reservation attempt has
 	 * completed (success or failure).
@@ -81,19 +86,20 @@ interface NetworkActuatorPort {
 	 * Invalid input is a programmer/agent error and throws rather than being surfaced as a
 	 * [RouteRequestResult]:
 	 * - A blank [trainName] throws [IllegalArgumentException].
-	 * - A [fromInOutName] or [toInOutName] that does not exist in the network throws
-	 *   [IllegalArgumentException] (unknown names must fail fast — they are not "no route").
+	 * - A [fromInOutName] or [toInOutName] that does not match any InOut or Semaphore in the
+	 *   network throws [IllegalArgumentException] (unknown names must fail fast — they are
+	 *   not "no route").
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid InOuts
-	 * but no topological path connects them.
+	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
+	 * no topological path connects them.
 	 *
 	 * @param trainName     Identifier of the train that will use the reserved route.
 	 *   Must be non-blank; matched against the train registry in the simulation.
-	 * @param fromInOutName Name of the InOut entry point (must exist in the network).
-	 * @param toInOutName   Name of the InOut exit point (must exist in the network).
+	 * @param fromInOutName Name of the entry InOut or Semaphore (must exist in the network).
+	 * @param toInOutName   Name of the exit InOut or Semaphore (must exist in the network).
 	 * @return [RouteRequestResult] indicating outcome; never `null`.
 	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromInOutName] or
-	 *   [toInOutName] does not name an InOut in the network.
+	 *   [toInOutName] does not name an InOut or Semaphore in the network.
 	 */
 	fun requestRoute(
 		trainName: String,
@@ -139,12 +145,17 @@ interface NetworkActuatorPort {
 	 * Calling this method with the currently-displayed aspect is a no-op and still
 	 * returns `true`.
 	 *
+	 * A semaphore whose signal is currently an allowing aspect has been set by the
+	 * interlocking as part of an active route.  Such a semaphore is considered **locked**
+	 * and this method will return `false` without changing anything — the same safety
+	 * principle that prevents changing a locked switch.
+	 *
 	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @param signal        Target signal aspect (e.g. [Signal.STOP], [Signal.FREE]).
 	 * @return `true` if the signal was set successfully; `false` if no semaphore with
-	 *   that name exists, or if the interlocking refuses to clear the signal (no
-	 *   compatible reserved route, conflicting switch state, etc.).  Per the class-level
-	 *   safety guarantee, a clear-to-FREE is never honoured unless a route is reserved.
+	 *   that name exists, or if the semaphore is locked by an active route (its current
+	 *   signal is an allowing aspect).  Per the class-level safety guarantee, a
+	 *   clear-to-FREE is never honoured while a route is active.
 	 */
 	fun setSignalAspect(
 		semaphoreName: String,
