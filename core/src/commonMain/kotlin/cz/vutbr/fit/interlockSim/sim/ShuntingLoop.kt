@@ -21,8 +21,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
@@ -263,36 +261,40 @@ class ShuntingLoop(
 		}
 
 		// Delegate all dispatch decisions — train admission and forward-path reservation —
-		// to the injected Dispatcher (SP0.1 / Issue #540).
-		dispatcher.tick(createTickContext())
+		// to the injected Dispatcher (SP0.1 / Issue #540).  Admission runs before the
+		// polling hold so path-advancement checks (after the hold) observe block state
+		// after newly admitted trains have moved — the original ShuntingLoop ordering.
+		dispatcher.approve(createTickContext())
 
 		if (approwedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approwedTrains.size
 		}
 		// Polling interval: 1.0s (matches baseline timing)
-		// Critical: Train entry events align with polling to catch RESERVED state
+		// Train entry events align with polling to catch RESERVED state
 		hold(1.0)
+		dispatcher.advancePaths(createTickContext())
 	}
 
 	/**
 	 * Builds the [DispatcherTickContext] that exposes the current dispatch state and
 	 * actuator callbacks to [dispatcher].
 	 *
-	 * State views ([approvedTrainCount], [unapprovedTrainCount], [innerBlocks],
-	 * [outerBlocks]) reflect the snapshot at the start of the iteration.  Callbacks
-	 * ([approveTrain], [reservePath], [toDynamic], [isPathExtendedBeyond]) mutate or
-	 * query simulation state and are valid only for the duration of the tick.
+	 * State views ([approvedTrainCount], [unapprovedTrains], [innerBlocks],
+	 * [outerBlocks]) reflect the snapshot at the start of the phase.  Callbacks
+	 * ([approveTrain], [reservePath], [isPathSetUp], [isPathExtendedBeyond]) mutate or
+	 * query simulation state and are valid only for the duration of the call.
 	 */
 	private fun createTickContext(): DispatcherTickContext =
 		object : DispatcherTickContext {
 			override val approvedTrainCount get() = approwedTrains.size
-			override val unapprovedTrainCount get() = unapprowedTrains.size
+			override val unapprovedTrains: List<Train> get() = unapprowedTrains.toList()
 			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
 			override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> get() = outerTrackblocks
 
-			override fun pollUnapproved(): Train? = unapprowedTrains.removeFirstOrNull()
-
 			override fun approveTrain(train: Train) {
+				require(unapprowedTrains.remove(train)) {
+					"Train ${train.name} is not in the unapproved queue"
+				}
 				approwedTrains.add(train)
 				activate(train)
 			}
@@ -302,7 +304,10 @@ class ShuntingLoop(
 				trainName: String
 			): Boolean = tryReservePathFrom(sem, trainName)
 
-			override fun toDynamic(separator: PathSeparator): DynamicPathSeparator = env.toDynamic(separator)
+			override fun isPathSetUp(
+				block: DynamicTrackBlock,
+				to: DynamicRailSemaphore
+			): Boolean = block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
 
 			override fun isPathExtendedBeyond(
 				trainName: String,

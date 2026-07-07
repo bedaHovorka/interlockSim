@@ -22,18 +22,22 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## Dispatch policy
  *
- * Each [tick], this dispatcher:
- * 1. **Admits trains**: polls the unapproved queue and approves trains until
- *    [maxConcurrentTrains] simultaneous trains are active.
- * 2. **Advances paths on inner blocks**: for each [DispatcherTickContext.innerBlocks]
- *    entry (RailSemaphore–RailSemaphore), checks both semaphore endpoints and
- *    reserves the next forward path for any approaching or reserved train.
- * 3. **Advances paths on outer blocks**: for each [DispatcherTickContext.outerBlocks]
- *    entry (InOut–RailSemaphore), checks the semaphore endpoint and reserves the
- *    next forward path.
+ * Each iteration, the shell calls [approve] (before the polling `hold()`) and then
+ * [advancePaths] (after it):
+ * 1. **[approve]** — admits trains from the head of
+ *    [DispatcherTickContext.unapprovedTrains] until [maxConcurrentTrains]
+ *    simultaneous trains are active.
+ * 2. **[advancePaths]** — advances paths on inner blocks: for each
+ *    [DispatcherTickContext.innerBlocks] entry (RailSemaphore–RailSemaphore),
+ *    checks both semaphore endpoints and reserves the next forward path for any
+ *    approaching or reserved train.
+ * 3. **[advancePaths]** — advances paths on outer blocks: for each
+ *    [DispatcherTickContext.outerBlocks] entry (InOut–RailSemaphore), checks the
+ *    semaphore endpoint and reserves the next forward path.
  *
  * ## Determinism (Goal 10 Stage A3)
- * Train admission is strictly FIFO.  Path selection delegates to
+ * Train admission is strictly FIFO over [DispatcherTickContext.unapprovedTrains].
+ * Path selection delegates to
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePathToAnyNextSemaphore],
  * which produces deterministic results for a fixed network topology.  Given the
  * same XML network and train generation sequence, this dispatcher produces
@@ -71,11 +75,19 @@ class RuleBasedDispatcher(
 	}
 
 	/**
-	 * Performs one dispatch iteration: admit queued trains, then advance forward
-	 * paths on all monitored track blocks.
+	 * Admits queued trains (FIFO) up to [maxConcurrentTrains] concurrent trains.
+	 * Called by the shell before the per-iteration polling `hold()`.
 	 */
-	override fun tick(context: DispatcherTickContext) {
+	override fun approve(context: DispatcherTickContext) {
 		approveTrains(context)
+	}
+
+	/**
+	 * Advances forward paths on all monitored track blocks.  Called by the shell
+	 * after the per-iteration polling `hold()` so block-state checks observe state
+	 * after newly admitted trains have moved.
+	 */
+	override fun advancePaths(context: DispatcherTickContext) {
 		for (block in context.innerBlocks) {
 			checkBothEnds(block, context)
 		}
@@ -88,7 +100,7 @@ class RuleBasedDispatcher(
 
 	private fun approveTrains(context: DispatcherTickContext) {
 		while (context.approvedTrainCount < maxConcurrentTrains) {
-			val train = context.pollUnapproved() ?: break
+			val train = context.unapprovedTrains.firstOrNull() ?: break
 			logger.debug { "RuleBasedDispatcher: approving ${train.name}" }
 			context.approveTrain(train)
 		}
@@ -145,8 +157,7 @@ class RuleBasedDispatcher(
 		}
 
 		if (block.getState() == TrackFacility.State.RESERVED) {
-			val otherEnd = block.getSecondEnd(to)
-			if (block.isSetUpPath(context.toDynamic(otherEnd))) {
+			if (context.isPathSetUp(block, to)) {
 				val trainName = requireSimulationNotNull(block.trainName)
 
 				// Idempotent check for reserved blocks.

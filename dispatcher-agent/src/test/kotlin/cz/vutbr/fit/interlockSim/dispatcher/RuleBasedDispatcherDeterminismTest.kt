@@ -47,8 +47,8 @@ private val logger = KotlinLogging.logger {}
  * - Per-train block transitions verify the exact route taken was consistent.
  *
  * **Baseline (established during SP0.1):**
- * All 5 generated trains exit; max concurrent = 2; each train makes 7 block
- * transitions (kA → k1/k2 → kB → exit or reverse).
+ * All 5 generated trains exit; max concurrent = 2; each train makes 2 block
+ * transitions (sorted per-train transition counts `[2, 2, 2, 2, 2]`).
  *
  * @see RuleBasedDispatcher
  * @see ShuntingLoop
