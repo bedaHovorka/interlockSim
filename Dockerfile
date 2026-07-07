@@ -46,6 +46,13 @@ RUN (getent group ${BUILDER_GID} || groupadd --gid ${BUILDER_GID} builder) \
 
 ENV HOME=/home/builder
 ENV GRADLE_USER_HOME=/home/builder/.gradle
+# Kotlin/Native toolchain (LLVM, sysroot, gcc) is downloaded to KONAN_DATA_DIR
+# by the native-compile tasks (compileKotlinLinuxX64 / KotlinNativeLink, e.g.
+# via :core:allTests in the test-runner stage). Set explicitly so a BuildKit
+# cache mount on this path persists it across builds (see the
+# --mount=type=cache,target=/home/builder/.konan lines below); without it, the
+# toolchain is re-downloaded on every build (issue #705).
+ENV KONAN_DATA_DIR=/home/builder/.konan
 
 # Layer 1: Copy Gradle wrapper files (cached until wrapper version changes)
 # These files are checked into git and ensure consistent Gradle version
@@ -78,6 +85,7 @@ USER builder
 RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.konan,id=konan-v1,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -98,6 +106,7 @@ COPY --chown=builder:builder core-test/src/ /build/interlockSim/core-test/src/
 RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.konan,id=konan-v1,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
@@ -130,6 +139,7 @@ FROM builder AS test-runner
 RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.gradle/wrapper,id=app-wrapper-v2,uid=1001,gid=1001 \
     --mount=type=cache,target=/home/builder/.m2/repository,id=app-m2-v2,uid=1001,gid=1001 \
+    --mount=type=cache,target=/home/builder/.konan,id=konan-v1,uid=1001,gid=1001 \
     --mount=type=secret,id=github_actor,uid=1001,gid=1001,mode=0400 \
     --mount=type=secret,id=github_token,uid=1001,gid=1001,mode=0400 \
     GITHUB_ACTOR="$(cat /run/secrets/github_actor)" \
