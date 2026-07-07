@@ -82,14 +82,44 @@ class DefaultNetworkPerceptionPort(
 	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
 		semaphoreCache.filter { it.name.isNotBlank() }.associateBy { it.name }
 
+	// ── Block cache built once at construction ─────────────────────────────
+
+	/**
+	 * All [DynamicTrackBlock] edges in the network, read once from the simulation
+	 * graph during construction.  The graph edges are stable for the lifetime of a
+	 * simulation context — blocks are not added or removed at runtime — so, like
+	 * [semaphoreCache], this list is built once and never invalidated.  Live state
+	 * (occupancy, train id) is read on cached references at query time in
+	 * [DynamicTrackBlock.toReading].
+	 *
+	 * Note: [blockById] is keyed by [blockId], which falls back to `"unknown"` for
+	 * blocks that have neither an explicit name nor named endpoint separators.
+	 * Two such blocks would collide on the same id and one would shadow the other
+	 * in [blockById].  This is an edge case that the bundled `vyhybna.xml` fixture
+	 * does not exercise (all blocks there are named); callers needing unambiguous
+	 * lookup should rely on explicitly named blocks.
+	 */
+	private val blockCache: List<DynamicTrackBlock> =
+		env
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.toList()
+
+	/**
+	 * Index from [blockId] → [DynamicTrackBlock] for O(1) name-based lookup, built
+	 * from [blockCache].  Mirrors [semaphoreByName].
+	 */
+	private val blockById: Map<String, DynamicTrackBlock> =
+		blockCache.associateBy { blockId(it) }
+
 	// ── Block helper ──────────────────────────────────────────────────────
 
 	/**
-	 * All dynamic track blocks in the network, read directly from the simulation
-	 * graph on each call.  The graph edges are stable; blocks are not added or
-	 * removed at runtime.
+	 * All dynamic track blocks in the network, served from the construction-time
+	 * [blockCache] (see its KDoc for the stability rationale).
 	 */
-	private fun allBlocks(): Collection<DynamicTrackBlock> = env.getGraph().values().filterIsInstance<DynamicTrackBlock>()
+	private fun allBlocks(): Collection<DynamicTrackBlock> = blockCache
 
 	/**
 	 * Derives a stable, human-readable identifier for a [DynamicTrackBlock].
@@ -142,7 +172,7 @@ class DefaultNetworkPerceptionPort(
 	// ── NetworkPerceptionPort — block occupancies ─────────────────────────
 
 	override fun blockOccupancy(blockId: String): BlockOccupancyReading? {
-		val block = allBlocks().firstOrNull { blockId(it) == blockId } ?: return null
+		val block = blockById[blockId] ?: return null
 		return block.toReading()
 	}
 
@@ -187,16 +217,14 @@ class DefaultNetworkPerceptionPort(
 
 	override fun allTrainTimetables(): List<TimetableReading> = activeTrains().map { it.toTimetableReading() }
 
-	private fun Train.toTimetableReading(): TimetableReading {
-		val timetable = getTimetable()
-		return TimetableReading(
+	private fun Train.toTimetableReading(): TimetableReading =
+		TimetableReading(
 			trainId = name,
-			originInOutName = timetable.getIn().name,
-			destinationInOutName = timetable.getOut().name,
-			scheduledDepartureTime = timetable.getInTime().value,
-			scheduledArrivalTime = timetable.getOutTime().value
+			originInOutName = timetableOriginName,
+			destinationInOutName = timetableDestinationName,
+			scheduledDepartureTime = scheduledDepartureTime,
+			scheduledArrivalTime = scheduledArrivalTime
 		)
-	}
 
 	// ── Grid scan ─────────────────────────────────────────────────────────
 

@@ -16,7 +16,6 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
@@ -25,8 +24,6 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
-import cz.vutbr.fit.interlockSim.sim.Time
-import cz.vutbr.fit.interlockSim.sim.Timetable
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.util.ExtendedUnorientedGraph
 import cz.vutbr.fit.interlockSim.util.Point
@@ -88,25 +85,18 @@ class DefaultNetworkPerceptionPortTest {
 		destName: String = "B",
 		departureTime: Double = 0.0,
 		arrivalTime: Double = 60.0
-	): Train {
-		val inOut = mockk<DynamicInOut>(relaxed = true)
-		every { inOut.name } returns originName
-		val outOut = mockk<DynamicInOut>(relaxed = true)
-		every { outOut.name } returns destName
-		val timetable = mockk<Timetable>(relaxed = true)
-		every { timetable.getIn() } returns inOut
-		every { timetable.getOut() } returns outOut
-		every { timetable.getInTime() } returns Time(departureTime)
-		every { timetable.getOutTime() } returns Time(arrivalTime)
-		return mockk<Train>(relaxed = true).also {
+	): Train =
+		mockk<Train>(relaxed = true).also {
 			every { it.name } returns name
 			every { it.getVelocity() } returns velocity
 			every { it.getAcceleration() } returns acceleration
 			every { it.totalDistance } returns totalDistance
 			every { it.frontSection } returns frontSection
-			every { it.getTimetable() } returns timetable
+			every { it.timetableOriginName } returns originName
+			every { it.timetableDestinationName } returns destName
+			every { it.scheduledDepartureTime } returns departureTime
+			every { it.scheduledArrivalTime } returns arrivalTime
 		}
-	}
 
 	/**
 	 * Builds a [SimulationEnvironment] stub backed by a 3×1 grid.
