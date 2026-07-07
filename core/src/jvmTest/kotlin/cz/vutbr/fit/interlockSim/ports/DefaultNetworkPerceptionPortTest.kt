@@ -421,4 +421,130 @@ class DefaultNetworkPerceptionPortTest {
 			assertThat(port.allTrainTimetables()).isEmpty()
 		}
 	}
+
+	// ── snapshot() ─────────────────────────────────────────────────────────
+
+	@Nested
+	@DisplayName("snapshot()")
+	inner class Snapshot {
+		@Test
+		@DisplayName("snapshot captures all semaphores, blocks, positions and timetables")
+		fun snapshotContainsAllFacets() {
+			val sem = semaphore("zA", Signal.FREE)
+			val b = block(name = "k1", state = TrackFacility.State.RESERVED, trainName = "Train #1")
+			val t =
+				train(
+					"Train #1",
+					velocity = 15.0,
+					originName = "A",
+					destName = "B",
+					departureTime = 5.0,
+					arrivalTime = 90.0
+				)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem), blocks = listOf(b)),
+					activeTrains = { listOf(t) }
+				)
+
+			val snap = port.snapshot()
+
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(snap.blocks).containsExactlyInAnyOrder(
+				BlockOccupancyReading("k1", TrackFacility.State.RESERVED, "Train #1")
+			)
+			assertThat(snap.trainPositions.map { it.trainId }).containsExactlyInAnyOrder("Train #1")
+			assertThat(snap.timetables.map { it.trainId }).containsExactlyInAnyOrder("Train #1")
+		}
+
+		@Test
+		@DisplayName("snapshot.simTime falls back to 0.0 outside an active kDisco simulation")
+		fun simTimeFallsBackOutsideSimulation() {
+			// Process.time() throws outside an active simulation; the port must return 0.0.
+			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
+
+			val snap = port.snapshot()
+
+			// 0.0 is the documented fallback when called outside kDisco.
+			assertThat(snap.simTime).isEqualTo(0.0)
+		}
+
+		@Test
+		@DisplayName("snapshot is empty when network has no semaphores, blocks, or trains")
+		fun emptyNetworkProducesEmptySnapshot() {
+			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
+
+			val snap = port.snapshot()
+
+			assertThat(snap.semaphores).isEmpty()
+			assertThat(snap.blocks).isEmpty()
+			assertThat(snap.trainPositions).isEmpty()
+			assertThat(snap.timetables).isEmpty()
+		}
+
+		@Test
+		@DisplayName("snapshot timetable entry matches allTrainTimetables output")
+		fun snapshotTimetableMatchesDirectQuery() {
+			val t =
+				train(
+					"Train #3",
+					originName = "X",
+					destName = "Y",
+					departureTime = 10.0,
+					arrivalTime = 120.0
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val snap = port.snapshot()
+			val directTimetable = port.trainTimetable("Train #3")
+
+			assertThat(snap.timetables).containsExactlyInAnyOrder(directTimetable!!)
+		}
+
+		@Test
+		@DisplayName("snapshot semaphore entry matches allSignalAspects output")
+		fun snapshotSemaphoreMatchesDirectQuery() {
+			val sem = semaphore("doB1", Signal.S60)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((2 to 0) to sem)),
+					activeTrains = { emptyList() }
+				)
+
+			val snap = port.snapshot()
+
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("doB1", Signal.S60))
+		}
+
+		@Test
+		@DisplayName("snapshot is frozen — later source-state mutation does not change captured readings")
+		fun snapshotIsFrozenFromLaterSourceMutation() {
+			val sem = semaphore("zA", Signal.FREE)
+			val b = block(name = "k1", state = TrackFacility.State.RESERVED, trainName = "Train #1")
+			val t = train("Train #1", velocity = 15.0, originName = "A", destName = "B")
+			val active = mutableListOf(t)
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem), blocks = listOf(b)),
+					activeTrains = { active.toList() }
+				)
+
+			val snap = port.snapshot()
+
+			// Mutate the underlying source state after capture.
+			every { sem.signal } returns Signal.STOP
+			every { b.getState() } returns TrackFacility.State.FREE
+			every { b.trainName } returns null
+			every { t.getVelocity() } returns 99.0
+			active.clear()
+
+			// The already-captured snapshot must reflect the pre-mutation state.
+			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
+			assertThat(snap.blocks).containsExactlyInAnyOrder(
+				BlockOccupancyReading("k1", TrackFacility.State.RESERVED, "Train #1")
+			)
+			assertThat(snap.trainPositions.map { it.velocity }).containsExactlyInAnyOrder(15.0)
+			assertThat(snap.timetables.map { it.trainId }).containsExactlyInAnyOrder("Train #1")
+		}
+	}
 }
