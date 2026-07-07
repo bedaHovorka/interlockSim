@@ -1334,5 +1334,25 @@ class Train :
 		stop()
 	}
 
+	/**
+	 * Set the target speed for this train's motor from an external agent.
+	 *
+	 * Delegates to [Motor.accelerateTo]: the physics model (acceleration ramp, braking
+	 * ramp, speed-limit enforcement) takes effect immediately.  This is the public surface
+	 * used by [cz.vutbr.fit.interlockSim.ports.DefaultTrainActuatorPort] to bridge the
+	 * agent's [cz.vutbr.fit.interlockSim.ports.TrainActuatorPort] call into the kDisco
+	 * physics kernel.
+	 *
+	 * **Thread safety:** Must be called from the kDisco simulation thread.
+	 *
+	 * @param speed Target speed in m/s.  Must be ≥ 0.
+	 * @throws IllegalArgumentException if [speed] is negative.
+	 * @since Issue #545 (SP0.6 — Goal 10)
+	 */
+	fun setTargetSpeed(speed: Double) {
+		require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
+		motor.accelerateTo(speed)
+	}
+
 	override fun toString(): String = name
 }
