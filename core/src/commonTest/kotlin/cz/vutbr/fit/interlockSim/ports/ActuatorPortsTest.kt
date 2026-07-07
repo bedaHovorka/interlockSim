@@ -106,12 +106,12 @@ class ActuatorPortsTest {
 
 		override fun requestRoute(
 			trainName: String,
-			fromInOutName: String,
-			toInOutName: String
+			fromEndpointName: String,
+			toEndpointName: String
 		): RouteRequestResult {
 			lastRouteTrainName = trainName
-			lastRouteFrom = fromInOutName
-			lastRouteTo = toInOutName
+			lastRouteFrom = fromEndpointName
+			lastRouteTo = toEndpointName
 			return routeResult
 		}
 
@@ -197,24 +197,24 @@ class ActuatorPortsTest {
 
 	/**
 	 * An implementation that enforces the [NetworkActuatorPort.requestRoute] input
-	 * contract: blank [trainName] and unknown InOut names throw fast rather than being
+	 * contract: blank [trainName] and unknown endpoint names throw fast rather than being
 	 * surfaced as a [RouteRequestResult].  Real implementations should mirror this.
 	 *
-	 * @param validInOutNames the set of InOut names the network recognises.
+	 * @param validEndpointNames the set of endpoint names the network recognises.
 	 * @param routeResult the result to return once preconditions pass.
 	 */
 	private class ContractValidatingNetworkActuator(
-		private val validInOutNames: Set<String>,
+		private val validEndpointNames: Set<String>,
 		private val routeResult: RouteRequestResult = RouteRequestResult.Reserved("T1", 1)
 	) : NetworkActuatorPort {
 		override fun requestRoute(
 			trainName: String,
-			fromInOutName: String,
-			toInOutName: String
+			fromEndpointName: String,
+			toEndpointName: String
 		): RouteRequestResult {
 			require(trainName.isNotBlank()) { "trainName must be non-blank" }
-			require(fromInOutName in validInOutNames) { "Unknown InOut: $fromInOutName" }
-			require(toInOutName in validInOutNames) { "Unknown InOut: $toInOutName" }
+			require(fromEndpointName in validEndpointNames) { "Unknown endpoint: $fromEndpointName" }
+			require(toEndpointName in validEndpointNames) { "Unknown endpoint: $toEndpointName" }
 			return routeResult
 		}
 
@@ -236,25 +236,25 @@ class ActuatorPortsTest {
 
 	@Test
 	fun `NetworkActuatorPort requestRoute blank trainName throws`() {
-		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
 		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("", "IN", "OUT") }
 	}
 
 	@Test
-	fun `NetworkActuatorPort requestRoute unknown fromInOutName throws`() {
-		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+	fun `NetworkActuatorPort requestRoute unknown fromEndpointName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
 		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("T1", "NOPE", "OUT") }
 	}
 
 	@Test
-	fun `NetworkActuatorPort requestRoute unknown toInOutName throws`() {
-		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+	fun `NetworkActuatorPort requestRoute unknown toEndpointName throws`() {
+		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
 		assertFailsWith<IllegalArgumentException> { actuator.requestRoute("T1", "IN", "NOPE") }
 	}
 
 	@Test
 	fun `NetworkActuatorPort releaseRoute blank trainName throws`() {
-		val actuator = ContractValidatingNetworkActuator(validInOutNames = setOf("IN", "OUT"))
+		val actuator = ContractValidatingNetworkActuator(validEndpointNames = setOf("IN", "OUT"))
 		assertFailsWith<IllegalArgumentException> { actuator.releaseRoute("") }
 	}
 
@@ -270,8 +270,8 @@ class ActuatorPortsTest {
 	@Test
 	fun `RouteRequestResult NoRouteExists carries endpoint names`() {
 		val result = RouteRequestResult.NoRouteExists("IN_A", "OUT_B")
-		assertThat(result.fromInOutName).isEqualTo("IN_A")
-		assertThat(result.toInOutName).isEqualTo("OUT_B")
+		assertThat(result.fromEndpointName).isEqualTo("IN_A")
+		assertThat(result.toEndpointName).isEqualTo("OUT_B")
 	}
 
 	@Test

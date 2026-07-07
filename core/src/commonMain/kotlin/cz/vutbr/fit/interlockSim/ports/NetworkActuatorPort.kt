@@ -67,7 +67,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  */
 interface NetworkActuatorPort {
 	/**
-	 * Request a route reservation from [fromInOutName] to [toInOutName] for train [trainName].
+	 * Request a route reservation from [fromEndpointName] to [toEndpointName] for train [trainName].
 	 *
 	 * The interlocking finds a topologically valid path between the two named endpoints
 	 * and atomically reserves all blocks along it if they are free.  If multiple paths exist,
@@ -86,25 +86,25 @@ interface NetworkActuatorPort {
 	 * Invalid input is a programmer/agent error and throws rather than being surfaced as a
 	 * [RouteRequestResult]:
 	 * - A blank [trainName] throws [IllegalArgumentException].
-	 * - A [fromInOutName] or [toInOutName] that does not match any InOut or Semaphore in the
-	 *   network throws [IllegalArgumentException] (unknown names must fail fast — they are
+	 * - A [fromEndpointName] or [toEndpointName] that does not match any InOut or Semaphore in
+	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
 	 *   not "no route").
 	 *
 	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
 	 * no topological path connects them.
 	 *
-	 * @param trainName     Identifier of the train that will use the reserved route.
+	 * @param trainName        Identifier of the train that will use the reserved route.
 	 *   Must be non-blank; matched against the train registry in the simulation.
-	 * @param fromInOutName Name of the entry InOut or Semaphore (must exist in the network).
-	 * @param toInOutName   Name of the exit InOut or Semaphore (must exist in the network).
+	 * @param fromEndpointName Name of the entry InOut or Semaphore (must exist in the network).
+	 * @param toEndpointName   Name of the exit InOut or Semaphore (must exist in the network).
 	 * @return [RouteRequestResult] indicating outcome; never `null`.
-	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromInOutName] or
-	 *   [toInOutName] does not name an InOut or Semaphore in the network.
+	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromEndpointName] or
+	 *   [toEndpointName] does not name an InOut or Semaphore in the network.
 	 */
 	fun requestRoute(
 		trainName: String,
-		fromInOutName: String,
-		toInOutName: String
+		fromEndpointName: String,
+		toEndpointName: String
 	): RouteRequestResult
 
 	/**
@@ -184,20 +184,20 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * No topological path exists between the requested InOut endpoints.
+	 * No topological path exists between the requested endpoints.
 	 *
-	 * Both endpoints are valid InOuts in the network, but the topology graph connects no
-	 * path between them (e.g. disconnected sub-networks).  The dispatcher should log this
-	 * as an error; retrying the same request will always yield the same result.  Note: an
-	 * unknown (non-existent) endpoint name is **not** this result — it throws
+	 * Both endpoints are valid InOuts or Semaphores in the network, but the topology graph
+	 * connects no path between them (e.g. disconnected sub-networks).  The dispatcher should
+	 * log this as an error; retrying the same request will always yield the same result.
+	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
 	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute].
 	 *
-	 * @property fromInOutName The requested entry point name.
-	 * @property toInOutName   The requested exit point name.
+	 * @property fromEndpointName The requested entry point name.
+	 * @property toEndpointName   The requested exit point name.
 	 */
 	data class NoRouteExists(
-		val fromInOutName: String,
-		val toInOutName: String
+		val fromEndpointName: String,
+		val toEndpointName: String
 	) : RouteRequestResult()
 
 	/**

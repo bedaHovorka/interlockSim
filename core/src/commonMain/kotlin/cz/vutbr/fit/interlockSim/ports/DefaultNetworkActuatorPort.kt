@@ -84,12 +84,12 @@ class DefaultNetworkActuatorPort(
 
 	override fun requestRoute(
 		trainName: String,
-		fromInOutName: String,
-		toInOutName: String
+		fromEndpointName: String,
+		toEndpointName: String
 	): RouteRequestResult {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
-		val from = requireEndpoint(fromInOutName)
-		val to = requireEndpoint(toInOutName)
+		val from = requireEndpoint(fromEndpointName)
+		val to = requireEndpoint(toEndpointName)
 
 		return when (val result = pathReservationService.reservePath(trainName, from, to)) {
 			is PathReservationService.ReservationResult.Success ->
@@ -98,12 +98,12 @@ class DefaultNetworkActuatorPort(
 					blocksCount = result.reservedBlocks.size
 				)
 			is PathReservationService.ReservationResult.NoPathExists -> {
-				logger.debug { "requestRoute: no topology path $fromInOutName → $toInOutName" }
-				RouteRequestResult.NoRouteExists(fromInOutName, toInOutName)
+				logger.debug { "requestRoute: no topology path $fromEndpointName → $toEndpointName" }
+				RouteRequestResult.NoRouteExists(fromEndpointName, toEndpointName)
 			}
 			is PathReservationService.ReservationResult.AllPathsBlocked -> {
 				logger.debug {
-					"requestRoute: all paths blocked $fromInOutName → $toInOutName " +
+					"requestRoute: all paths blocked $fromEndpointName → $toEndpointName " +
 						"(attempted: ${result.attemptedPaths})"
 				}
 				RouteRequestResult.AllPathsBlocked(result.attemptedPaths)
@@ -112,7 +112,7 @@ class DefaultNetworkActuatorPort(
 				// Treat a reservation conflict like AllPathsBlocked(0): the path
 				// technically exists but cannot be reserved right now.
 				logger.warn {
-					"requestRoute: conflict reserving $fromInOutName → $toInOutName for " +
+					"requestRoute: conflict reserving $fromEndpointName → $toEndpointName for " +
 						"$trainName — block '${result.conflictingBlock.name ?: "unnamed"}' " +
 						"owned by '${result.existingOwner}'"
 				}

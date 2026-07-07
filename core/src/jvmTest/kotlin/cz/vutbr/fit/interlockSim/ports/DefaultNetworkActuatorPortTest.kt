@@ -131,7 +131,7 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("unknown fromInOutName throws IllegalArgumentException")
+		@DisplayName("unknown fromEndpointName throws IllegalArgumentException")
 		fun unknownFromThrows() {
 			val b = inOut("B")
 			val p = port(inOuts = listOf(b))
@@ -141,7 +141,7 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("unknown toInOutName throws IllegalArgumentException")
+		@DisplayName("unknown toEndpointName throws IllegalArgumentException")
 		fun unknownToThrows() {
 			val a = inOut("A")
 			val p = port(inOuts = listOf(a))

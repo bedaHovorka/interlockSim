@@ -48,8 +48,8 @@ class RuleBasedDispatcherTest {
 	private object NoOpNetworkActuator : cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort {
 		override fun requestRoute(
 			trainName: String,
-			fromInOutName: String,
-			toInOutName: String
+			fromEndpointName: String,
+			toEndpointName: String
 		) = cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 			.AllPathsBlocked(0)
 
