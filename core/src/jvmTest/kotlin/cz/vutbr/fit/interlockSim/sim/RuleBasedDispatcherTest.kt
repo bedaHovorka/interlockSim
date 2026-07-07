@@ -96,6 +96,7 @@ class RuleBasedDispatcherTest {
 		val reservePathCalls: MutableList<Pair<DynamicRailSemaphore, String>> = mutableListOf()
 
 		override val approvedTrainCount: Int get() = approved.size
+		override val simTime: Double get() = 0.0
 		override val unapprovedTrains: List<Train> get() = queue.toList()
 		override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 			get() =
@@ -115,6 +116,15 @@ class RuleBasedDispatcherTest {
 					override fun trainTimetable(trainId: String) = null
 
 					override fun allTrainTimetables() = emptyList<cz.vutbr.fit.interlockSim.ports.TimetableReading>()
+
+					override fun snapshot() =
+						cz.vutbr.fit.interlockSim.ports.SimulationSnapshot(
+							simTime = 0.0,
+							semaphores = emptyList(),
+							blocks = emptyList(),
+							trainPositions = emptyList(),
+							timetables = emptyList()
+						)
 				}
 
 		override fun approveTrain(train: Train) {

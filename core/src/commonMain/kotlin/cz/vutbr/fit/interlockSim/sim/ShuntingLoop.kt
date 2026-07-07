@@ -300,6 +300,7 @@ class ShuntingLoop(
 	private fun createTickContext(): DispatcherTickContext =
 		object : DispatcherTickContext {
 			override val approvedTrainCount get() = approwedTrains.size
+			override val simTime: Double get() = time()
 			override val unapprovedTrains: List<Train> get() = unapprowedTrains.toList()
 			override val approvedTrains: List<Train> get() = approwedTrains.toList()
 			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
