@@ -137,6 +137,19 @@ class ShuntingLoop(
 	private val innerTrackBlocks: MutableList<DynamicTrackBlock> = mutableListOf()
 	private val outerTrackblocks: MutableMap<DynamicTrackBlock, DynamicRailSemaphore> = mutableMapOf()
 
+	/**
+	 * Perception port backed by this loop's simulation environment and approved-train
+	 * list.  Built once here (the semaphore cache is constructed eagerly) and reused
+	 * on every tick via [createTickContext].
+	 *
+	 * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+	 */
+	private val perceptionPort: cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort =
+		cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort(
+			env = context,
+			activeTrains = { approwedTrains.toList() },
+		)
+
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
 	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
@@ -279,7 +292,7 @@ class ShuntingLoop(
 	 * Builds the [DispatcherTickContext] that exposes the current dispatch state and
 	 * actuator callbacks to [dispatcher].
 	 *
-	 * State views ([approvedTrainCount], [unapprovedTrains], [innerBlocks],
+	 * State views ([approvedTrainCount], [unapprovedTrains], [approvedTrains], [innerBlocks],
 	 * [outerBlocks]) reflect the snapshot at the start of the phase.  Callbacks
 	 * ([approveTrain], [reservePath], [isPathSetUp], [isPathExtendedBeyond]) mutate or
 	 * query simulation state and are valid only for the duration of the call.
@@ -288,8 +301,10 @@ class ShuntingLoop(
 		object : DispatcherTickContext {
 			override val approvedTrainCount get() = approwedTrains.size
 			override val unapprovedTrains: List<Train> get() = unapprowedTrains.toList()
+			override val approvedTrains: List<Train> get() = approwedTrains.toList()
 			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
 			override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> get() = outerTrackblocks
+			override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort get() = perceptionPort
 
 			override fun approveTrain(train: Train) {
 				require(unapprowedTrains.remove(train)) {

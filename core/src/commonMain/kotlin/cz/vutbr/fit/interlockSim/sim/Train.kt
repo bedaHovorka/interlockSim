@@ -1216,6 +1216,18 @@ class Train :
 		get() = timetable.getIn()
 
 	/**
+	 * Returns the train's timetable for agent perception.
+	 *
+	 * Exposes origin/destination InOuts and scheduled times to the
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort] implementation without
+	 * requiring the perception layer to hold a direct reference to the private field.
+	 *
+	 * @return The [Timetable] governing this train's current journey.
+	 * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+	 */
+	fun getTimetable(): Timetable = timetable
+
+	/**
 	 * Track section where the train's front is currently located.
 	 *
 	 * Used for train position interpolation in animation rendering.

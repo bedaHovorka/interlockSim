@@ -92,11 +92,22 @@ class RuleBasedDispatcherTest {
 	) : DispatcherTickContext {
 		private val queue: ArrayDeque<Train> = ArrayDeque(initialUnapproved)
 		private val approved: MutableList<Train> = mutableListOf()
-		val approvedTrains: List<Train> get() = approved.toList()
+		override val approvedTrains: List<Train> get() = approved.toList()
 		val reservePathCalls: MutableList<Pair<DynamicRailSemaphore, String>> = mutableListOf()
 
 		override val approvedTrainCount: Int get() = approved.size
 		override val unapprovedTrains: List<Train> get() = queue.toList()
+		override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+			get() = object : cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort {
+				override fun signalAspect(semaphoreName: String) = null
+				override fun allSignalAspects() = emptyList<cz.vutbr.fit.interlockSim.ports.SemaphoreReading>()
+				override fun blockOccupancy(blockId: String) = null
+				override fun allBlockOccupancies() = emptyList<cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading>()
+				override fun trainPosition(trainId: String) = null
+				override fun allTrainPositions() = emptyList<cz.vutbr.fit.interlockSim.ports.TrainPositionReading>()
+				override fun trainTimetable(trainId: String) = null
+				override fun allTrainTimetables() = emptyList<cz.vutbr.fit.interlockSim.ports.TimetableReading>()
+			}
 
 		override fun approveTrain(train: Train) {
 			queue.remove(train)

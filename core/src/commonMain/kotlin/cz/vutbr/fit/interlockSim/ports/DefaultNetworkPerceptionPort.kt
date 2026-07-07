@@ -1,0 +1,225 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.ports
+
+import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
+import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
+
+/**
+ * Simulation-backed implementation of [NetworkPerceptionPort].
+ *
+ * Reads the current state of the railway network from the provided
+ * [SimulationEnvironment] and a live list of active [Train] objects, and returns
+ * immutable snapshots of the observed state.
+ *
+ * ## Data sources
+ *
+ * - **Signal aspects** — derived by scanning the [SimulationEnvironment]'s grid for
+ *   [DynamicRailSemaphore] cells (same O(cols×rows) scan the animation controller
+ *   performs once at startup; `defaultSemaphores` is a cached list built at
+ *   construction time).
+ * - **Block occupancies** — derived by iterating the graph edges (all
+ *   [DynamicTrackBlock] instances) from the simulation environment's graph.
+ * - **Train positions and timetables** — derived from the [activeTrains] supplier,
+ *   which must provide the list of currently approved, running trains at the moment
+ *   of each query.  Trains in the unapproved queue are intentionally excluded
+ *   (they have no position/timetable information yet).
+ *
+ * ## Usage in dispatcher loop
+ *
+ * The standard wiring pattern (see SP0.4 Issue #543) is:
+ * ```kotlin
+ * val perceptionPort = DefaultNetworkPerceptionPort(
+ *     env = simulationEnvironment,
+ *     activeTrains = { approvedTrains }  // lambda captures the live list
+ * )
+ * ```
+ *
+ * ## Thread-safety
+ *
+ * This class is **not thread-safe**.  Both the [SimulationEnvironment] state and the
+ * [activeTrains] list are mutated by the kDisco simulation thread; all queries must be
+ * issued from the same thread.
+ *
+ * @param env The simulation environment to read semaphore and block state from.
+ * @param activeTrains A supplier that returns the list of currently active (approved
+ *   and running) trains.  Called on every query that needs train data.
+ *
+ * @see NetworkPerceptionPort
+ * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
+ */
+class DefaultNetworkPerceptionPort(
+	private val env: SimulationEnvironment,
+	private val activeTrains: () -> List<Train>,
+) : NetworkPerceptionPort {
+
+	// ── Semaphore cache built once at construction ────────────────────────
+
+	/**
+	 * Ordered snapshot of all [DynamicRailSemaphore] cells in the network.
+	 *
+	 * Built once during construction by scanning the grid — the same O(cols×rows)
+	 * scan used by the animation controller.  Semaphores are stable for the lifetime
+	 * of a simulation context (no cells are added or removed at runtime).
+	 */
+	private val semaphoreCache: List<DynamicRailSemaphore> = buildSemaphoreCache()
+
+	/**
+	 * Index from semaphore name → [DynamicRailSemaphore] for O(1) name-based lookup.
+	 * Built from [semaphoreCache]; unnamed semaphores are excluded from the index.
+	 */
+	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
+		semaphoreCache.filter { it.name.isNotBlank() }.associateBy { it.name }
+
+	// ── Block helper ──────────────────────────────────────────────────────
+
+	/**
+	 * All dynamic track blocks in the network, read directly from the simulation
+	 * graph on each call.  The graph edges are stable; blocks are not added or
+	 * removed at runtime.
+	 */
+	private fun allBlocks(): Collection<DynamicTrackBlock> =
+		env.getGraph().values().filterIsInstance<DynamicTrackBlock>()
+
+	/**
+	 * Derives a stable, human-readable identifier for a [DynamicTrackBlock].
+	 *
+	 * Prefers the block's explicit name (set in XML or by [ShuntingLoop]).
+	 * Falls back to a `"sep1-sep2"` label built from the sorted names of the
+	 * block's two endpoint separators.  Returns `"unknown"` only when no name
+	 * is available from any source.
+	 */
+	private fun blockId(block: DynamicTrackBlock): String {
+		val explicit = block.name
+		if (!explicit.isNullOrBlank()) return explicit
+		val endNames =
+			runCatching { block.ends() }
+				.getOrNull()
+				?.mapNotNull { end ->
+					(DynamicWrapperUtils.unwrapToStatic(end) as? NodeCell)
+						?.getName()
+						?.takeIf { it.isNotBlank() }
+				}
+				?.sorted()
+				.orEmpty()
+		return if (endNames.isNotEmpty()) endNames.joinToString("-") else "unknown"
+	}
+
+	// ── Train helper ──────────────────────────────────────────────────────
+
+	/**
+	 * Name of the track section containing the train's front, or `null` if the
+	 * train's front has not yet entered a section.  Uses the block's name field with
+	 * the same fallback label logic as [blockId].
+	 */
+	private fun frontSectionName(train: Train): String? {
+		val section = train.frontSection ?: return null
+		val block = section.getTrackBlock() as? DynamicTrackBlock ?: return null
+		return blockId(block)
+	}
+
+	// ── NetworkPerceptionPort — signal aspects ────────────────────────────
+
+	override fun signalAspect(semaphoreName: String): SemaphoreReading? {
+		val sem = semaphoreByName[semaphoreName] ?: return null
+		return SemaphoreReading(name = sem.name, signal = sem.signal)
+	}
+
+	override fun allSignalAspects(): List<SemaphoreReading> =
+		semaphoreCache.map { sem ->
+			SemaphoreReading(name = sem.name, signal = sem.signal)
+		}
+
+	// ── NetworkPerceptionPort — block occupancies ─────────────────────────
+
+	override fun blockOccupancy(blockId: String): BlockOccupancyReading? {
+		val block = allBlocks().firstOrNull { blockId(it) == blockId } ?: return null
+		return block.toReading()
+	}
+
+	override fun allBlockOccupancies(): List<BlockOccupancyReading> =
+		allBlocks().map { it.toReading() }
+
+	private fun DynamicTrackBlock.toReading(): BlockOccupancyReading =
+		BlockOccupancyReading(
+			blockId = blockId(this),
+			state = getState(),
+			trainId = when (getState()) {
+				TrackFacility.State.FREE -> null
+				TrackFacility.State.RESERVED -> trainName
+				TrackFacility.State.OCCUPIED -> occupant?.name ?: trainName
+			},
+		)
+
+	// ── NetworkPerceptionPort — train positions ───────────────────────────
+
+	override fun trainPosition(trainId: String): TrainPositionReading? {
+		val train = activeTrains().firstOrNull { it.name == trainId } ?: return null
+		return train.toPositionReading()
+	}
+
+	override fun allTrainPositions(): List<TrainPositionReading> =
+		activeTrains().map { it.toPositionReading() }
+
+	private fun Train.toPositionReading(): TrainPositionReading =
+		TrainPositionReading(
+			trainId = name,
+			velocity = getVelocity(),
+			acceleration = getAcceleration(),
+			totalDistance = totalDistance,
+			frontSectionName = frontSectionName(this),
+		)
+
+	// ── NetworkPerceptionPort — train timetables ──────────────────────────
+
+	override fun trainTimetable(trainId: String): TimetableReading? {
+		val train = activeTrains().firstOrNull { it.name == trainId } ?: return null
+		return train.toTimetableReading()
+	}
+
+	override fun allTrainTimetables(): List<TimetableReading> =
+		activeTrains().map { it.toTimetableReading() }
+
+	private fun Train.toTimetableReading(): TimetableReading {
+		val timetable = getTimetable()
+		return TimetableReading(
+			trainId = name,
+			originInOutName = timetable.getIn().name,
+			destinationInOutName = timetable.getOut().name,
+			scheduledDepartureTime = timetable.getInTime().value,
+			scheduledArrivalTime = timetable.getOutTime().value,
+		)
+	}
+
+	// ── Grid scan ─────────────────────────────────────────────────────────
+
+	/**
+	 * Scans the grid once at construction time to build the semaphore list.
+	 * Matches the strategy used by the animation controller.
+	 */
+	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> {
+		val grid = env.getRailWayNetGrid()
+		val result = mutableListOf<DynamicRailSemaphore>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid.getCellAt(x, y)
+				if (cell is DynamicRailSemaphore) {
+					result.add(cell)
+				}
+			}
+		}
+		return result.toList()
+	}
+}
