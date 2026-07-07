@@ -128,4 +128,31 @@ interface NetworkPerceptionPort {
 	 * @return Snapshot list of every active train's timetable.
 	 */
 	fun allTrainTimetables(): List<TimetableReading>
+
+	// ── Full snapshot ─────────────────────────────────────────────────────
+
+	/**
+	 * Capture a frozen [SimulationSnapshot] of the complete observable network state.
+	 *
+	 * Calls all `allXxx()` bulk queries in sequence and bundles the results together
+	 * with the current simulation time into a single immutable value.  Use this method
+	 * when you need a **consistent, frozen picture** of the entire network at one
+	 * moment — for example, to hand to an LLM dispatcher, to log the full state for
+	 * debugging, or to compare two tick states.
+	 *
+	 * For one-off queries (e.g. "is block k1 free right now?") prefer the individual
+	 * methods on this interface.
+	 *
+	 * ## Thread-safety
+	 *
+	 * As with all methods on this interface, implementations are expected to be called
+	 * from the single kDisco simulation thread.  The snapshot is consistent within
+	 * a single-threaded call (no interleaved simulation events), but callers that hold
+	 * the snapshot across `hold()` boundaries must treat it as potentially stale.
+	 *
+	 * @return An immutable [SimulationSnapshot] containing all observable state.
+	 *
+	 * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
+	 */
+	fun snapshot(): SimulationSnapshot
 }

@@ -9,6 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
+import cz.hovorka.kdisco.DiscoException
+import cz.hovorka.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
@@ -224,6 +226,33 @@ class DefaultNetworkPerceptionPort(
 			destinationInOutName = timetableDestinationName,
 			scheduledDepartureTime = scheduledDepartureTime,
 			scheduledArrivalTime = scheduledArrivalTime
+		)
+
+	// ── Full snapshot ─────────────────────────────────────────────────────
+
+	/**
+	 * Captures a frozen [SimulationSnapshot] of the complete observable network state.
+	 *
+	 * Calls each `allXxx()` bulk query in sequence.  Because kDisco runs on a single
+	 * simulation thread, all four calls observe the same simulation state — no events
+	 * interleave between them during a normal tick.
+	 *
+	 * [SimulationSnapshot.simTime] is set from [Process.time]; if called outside an
+	 * active kDisco simulation (e.g. in unit tests), the resulting [DiscoException]
+	 * is caught and `simTime` falls back to `0.0`. Any other exception propagates.
+	 */
+	override fun snapshot(): SimulationSnapshot =
+		SimulationSnapshot(
+			simTime =
+				try {
+					Process.time()
+				} catch (_: DiscoException) {
+					0.0
+				},
+			semaphores = allSignalAspects(),
+			blocks = allBlockOccupancies(),
+			trainPositions = allTrainPositions(),
+			timetables = allTrainTimetables()
 		)
 
 	// ── Grid scan ─────────────────────────────────────────────────────────
