@@ -16,14 +16,11 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
-import cz.vutbr.fit.interlockSim.context.navigation.TopologyNavigator
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
-import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
-import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
@@ -35,32 +32,37 @@ import org.koin.core.component.KoinComponent
  * Příklad fungování modelu
  * Ovlada sest navestidel a 2 InOuty pomoci dynamicky nalezených cest
  *
- * ## Refactored for Issue #296 (Phase 4: Path Discovery Restructuring)
+ * ## Refactored for Issue #540 (SP0.1 — Goal 10: control/kernel seam)
  *
- * **Changes from Issue #296:**
+ * **Changes from Issue #540:**
+ * - Inline dispatch logic (`approveTrains`, `checkBothEnds`, `checkOneEnd`) extracted
+ *   into [RuleBasedDispatcher] behind the [Dispatcher] seam.
+ * - ShuntingLoop is now a thin process shell: it manages the kDisco lifecycle
+ *   (`hold`, `terminate`, `activate`) and delegates every dispatch decision to the
+ *   injected [Dispatcher].
+ * - The [dispatcher] parameter defaults to [RuleBasedDispatcher] so all existing
+ *   callers (fast-sim, tests) continue to work without modification.
+ *
+ * **Previous changes (Issue #296):**
  * - Eliminated manual path construction (~100 lines removed)
  * - Integrated TopologyNavigator for dynamic path finding
  * - Uses PathReservationService architecture (Phases 1-3)
- * - Paths discovered on-demand when trains request routes
- * - Maintains backward compatibility with existing tests
  *
  * **Previous changes (Issue #280/#284):**
  * - Migrated from static cells to dynamic wrappers (DynamicInOut, DynamicRailSemaphore, DynamicRailSwitch)
- * - Updated grid coordinate lookups to retrieve dynamic wrappers
- * - All paths now use dynamic wrappers for consistent identity
  *
  * **Architecture:**
  * - Uses TopologyNavigator (Phase 1) for static path finding
- * - Compatible with PathReservationService (Phase 2) and TrainNavigationService (Phase 3)
+ * - [Dispatcher] seam (Issue #540) for pluggable control policy
  * - Koin DI integration for service injection
  *
- * **Testing:**
- * - All ShuntingLoop unit tests passing (19 tests maintained)
- * - Integration tests passing (operational and regression tests)
- * - Golden output validation (simulation results match baseline)
+ * @param dispatcher Dispatch policy; defaults to [RuleBasedDispatcher].
+ *   Pass a custom implementation to override admission and path-advancement logic.
  *
+ * @see RuleBasedDispatcher
+ * @see Dispatcher
  * @see TopologyNavigator
- * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/296">Issue #296</a>
+ * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/540">Issue #540 (SP0.1)</a>
  * @see docs/PATH_RESERVATION_ARCHITECTURE.md
  */
 class ShuntingLoop(
@@ -68,7 +70,8 @@ class ShuntingLoop(
 	private val endTime: Long,
 	private val enableRealTimeSync: Boolean = false,
 	initialSpeedMultiplier: Double = 1.0,
-	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
+	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService(),
+	val dispatcher: Dispatcher = RuleBasedDispatcher()
 ) : Interlocking(context),
 	SpeedControllable,
 	KoinComponent {
@@ -92,11 +95,6 @@ class ShuntingLoop(
 
 	companion object {
 		private val logger = KotlinLogging.logger {}
-
-		// Physical limit: only 2 parallel tracks (k1 and k2) in shunting loop
-		// MAX_TRAINS = 2 enforces physical capacity constraint
-		// All 5 generated trains complete sequentially via queueing mechanism
-		private const val MAX_TRAINS: Int = 2
 
 		/** Report types enabled by the shunting-loop simulation scenario. */
 		internal val ENABLED_REPORT_TYPES =
@@ -261,34 +259,68 @@ class ShuntingLoop(
 				trainsExitedCount++
 			}
 		}
-		// nove vlaky a inouty
-		approveTrains()
+
+		// Delegate all dispatch decisions — train admission and forward-path reservation —
+		// to the injected Dispatcher (SP0.1 / Issue #540).  Admission runs before the
+		// polling hold so path-advancement checks (after the hold) observe block state
+		// after newly admitted trains have moved — the original ShuntingLoop ordering.
+		dispatcher.approve(createTickContext())
+
 		if (approwedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approwedTrains.size
 		}
 		// Polling interval: 1.0s (matches baseline timing)
-		// Critical: Train entry events align with polling to catch RESERVED state
+		// Train entry events align with polling to catch RESERVED state
 		hold(1.0)
-		for (block in innerTrackBlocks) checkBothEnds(block)
-		for (e in outerTrackblocks.entries) checkOneEnd(e.key, e.value)
-	}
-
-	private fun checkBothEnds(block: DynamicTrackBlock) {
-		// Inner blocks (k1, k2) have RailSemaphore ends only, no InOut
-		// Check both semaphore endpoints to see if path needs to be reserved
-		for (sep in block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf<DynamicRailSemaphore>(sep))) return
-		}
+		dispatcher.advancePaths(createTickContext())
 	}
 
 	/**
-	 * Try to reserve a path from the given semaphore using PathReservationService.
+	 * Builds the [DispatcherTickContext] that exposes the current dispatch state and
+	 * actuator callbacks to [dispatcher].
 	 *
-	 * Uses the new reservePathToAny() method which handles all target discovery
-	 * and path reservation internally, eliminating manual iteration.
+	 * State views ([approvedTrainCount], [unapprovedTrains], [innerBlocks],
+	 * [outerBlocks]) reflect the snapshot at the start of the phase.  Callbacks
+	 * ([approveTrain], [reservePath], [isPathSetUp], [isPathExtendedBeyond]) mutate or
+	 * query simulation state and are valid only for the duration of the call.
+	 */
+	private fun createTickContext(): DispatcherTickContext =
+		object : DispatcherTickContext {
+			override val approvedTrainCount get() = approwedTrains.size
+			override val unapprovedTrains: List<Train> get() = unapprowedTrains.toList()
+			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
+			override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> get() = outerTrackblocks
+
+			override fun approveTrain(train: Train) {
+				require(unapprowedTrains.remove(train)) {
+					"Train ${train.name} is not in the unapproved queue"
+				}
+				approwedTrains.add(train)
+				activate(train)
+			}
+
+			override fun reservePath(
+				sem: DynamicRailSemaphore,
+				trainName: String
+			): Boolean = tryReservePathFrom(sem, trainName)
+
+			override fun isPathSetUp(
+				block: DynamicTrackBlock,
+				to: DynamicRailSemaphore
+			): Boolean = block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
+
+			override fun isPathExtendedBeyond(
+				trainName: String,
+				sem: DynamicRailSemaphore
+			): Boolean = registry.isPathExtendedBeyond(trainName, sem)
+		}
+
+	/**
+	 * Reserves a forward path from [sem] for [trainName] using [PathReservationService].
 	 *
-	 * @param sem The semaphore to reserve paths from
-	 * @param trainName The train requesting the reservation
+	 * Increments the [blockTransitionsByTrain] counter on success for test-observability
+	 * (#365); the counter is maintained here (in the shell) rather than in [dispatcher]
+	 * so it stays close to the simulation state it measures.
 	 */
 	private fun tryReservePathFrom(
 		sem: DynamicRailSemaphore,
@@ -322,64 +354,6 @@ class ShuntingLoop(
 				}
 				false
 			}
-		}
-	}
-
-	private fun checkOneEnd(
-		block: DynamicTrackBlock,
-		to: DynamicRailSemaphore
-	): Boolean {
-		if (block.getState() == TrackFacility.State.FREE) {
-			return false
-		}
-
-		if (block.getState() == TrackFacility.State.OCCUPIED) {
-			val occupant = requireSimulationNotNull(block.getTrackOccupant())
-			if (occupant.nextSemaphore() != to) {
-				return false
-			}
-
-			// NEW: Idempotent check - skip if path already extends beyond this semaphore
-			if (registry.isPathExtendedBeyond(occupant.name, to)) {
-				logger.debug {
-					"Path already extends beyond ${to.name} for ${occupant.name}, " +
-						"skipping redundant reservation"
-				}
-				return true // ← Early exit, like working tag's pattern
-			}
-
-			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
-			return tryReservePathFrom(to, occupant.name)
-		}
-
-		if (block.getState() == TrackFacility.State.RESERVED) {
-			// Check if path is already set up through this semaphore
-			val otherEnd = block.getSecondEnd(to)
-			if (block.isSetUpPath(env.toDynamic(otherEnd))) {
-				val trainName = requireSimulationNotNull(block.trainName)
-
-				// NEW: Idempotent check for reserved blocks too
-				if (registry.isPathExtendedBeyond(trainName, to)) {
-					logger.debug {
-						"Path already extends beyond ${to.name} for $trainName " +
-							"(reserved block), skipping"
-					}
-					return true
-				}
-
-				logger.debug { "Path already set up through ${to.name}, attempting extension" }
-				return tryReservePathFrom(to, trainName)
-			}
-		}
-
-		return false
-	}
-
-	private fun approveTrains() {
-		while (approwedTrains.size < MAX_TRAINS && unapprowedTrains.isNotEmpty()) {
-			val poll: Train = unapprowedTrains.removeFirst()
-			approwedTrains.add(poll)
-			activate(poll)
 		}
 	}
 
