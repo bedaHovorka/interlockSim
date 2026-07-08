@@ -1,0 +1,107 @@
+/* Brno University of Technology
+ * Faculty of Information Technology
+ *
+ * BSc Thesis  2006/2007
+ *
+ * Railway Interlocking Simulator
+ *
+ * Bedrich Hovorka
+ */
+package cz.vutbr.fit.interlockSim.dispatcher
+
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Thread-safe handoff queue for dispatcher decisions.
+ *
+ * The future driver thread (SP0.10) posts [DispatchDecision]s via [postAll]; the
+ * sim-thread applier (SP0.9) drains them via [drain] and applies each decision
+ * through the actuator ports. This component never touches simulation state — it
+ * only moves immutable [DispatchDecision] values across the driver/sim thread
+ * boundary.
+ *
+ * ## Backpressure
+ *
+ * The queue is unbounded by design. kDisco is single-threaded and the applier
+ * drains the queue synchronously on the sim thread, so the queue is expected to
+ * be nearly empty in normal operation. A configurable [capacity] is provided for
+ * tests and future backpressure policies; [postAll] rejects new decisions once
+ * the capacity is exceeded.
+ *
+ * @param capacity Maximum number of decisions the queue may hold. Defaults to
+ *   [DEFAULT_CAPACITY]. A negative capacity disables the limit.
+ *
+ * @since Issue #730 (SP0.8 — Goal 10)
+ */
+class ActuatorCommandQueue(
+	private val capacity: Int = DEFAULT_CAPACITY
+) {
+	companion object {
+		/** Default maximum queue capacity. */
+		const val DEFAULT_CAPACITY: Int = 10_000
+	}
+
+	init {
+		require(capacity != 0) { "capacity must be positive or negative (unlimited), got: 0" }
+	}
+
+	private val queue: ConcurrentLinkedQueue<DispatchDecision> = ConcurrentLinkedQueue()
+	private val size: AtomicInteger = AtomicInteger(0)
+
+	/**
+	 * Atomically posts all [decisions] to the queue.
+	 *
+	 * The call is non-blocking. If adding all decisions would exceed [capacity],
+	 * none are added and the method returns `false`. On success the method returns
+	 * `true`.
+	 *
+	 * @param decisions Decisions to post; may be empty.
+	 * @return `true` if all decisions were accepted; `false` if backpressure rejected them.
+	 */
+	fun postAll(decisions: List<DispatchDecision>): Boolean {
+		if (decisions.isEmpty()) {
+			return true
+		}
+
+		if (capacity > 0) {
+			val added = size.addAndGet(decisions.size)
+			if (added > capacity) {
+				size.addAndGet(-decisions.size)
+				return false
+			}
+		}
+
+		queue.addAll(decisions)
+		return true
+	}
+
+	/**
+	 * Drains all currently queued decisions into a list.
+	 *
+	 * The returned list preserves the FIFO order of posting. The applier calls this
+	 * from the single kDisco simulation thread and then applies each decision.
+	 *
+	 * @return All queued decisions in FIFO order; empty if the queue was empty.
+	 */
+	fun drain(): List<DispatchDecision> {
+		val result = mutableListOf<DispatchDecision>()
+		var decision: DispatchDecision? = queue.poll()
+		while (decision != null) {
+			result.add(decision)
+			if (capacity > 0) {
+				size.decrementAndGet()
+			}
+			decision = queue.poll()
+		}
+		return result
+	}
+
+	/**
+	 * Returns the current number of queued decisions.
+	 *
+	 * This is a best-effort estimate for monitoring and tests; it may briefly
+	 * disagree with [drain] under concurrent producers.
+	 */
+	fun approximateSize(): Int = size.get()
+}
