@@ -26,6 +26,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+/** Timeout for concurrency stress tests, in seconds. */
+private const val CONCURRENCY_TEST_TIMEOUT_SECONDS: Long = 30
+
 /**
  * Unit tests for [ActuatorCommandQueue].
  *
@@ -173,7 +176,7 @@ class ActuatorCommandQueueTest {
 		}
 
 		startLatch.countDown()
-		val finished = doneLatch.await(30, TimeUnit.SECONDS)
+		val finished = doneLatch.await(CONCURRENCY_TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
 
 		assertThat(finished).isTrue()
 
@@ -233,14 +236,16 @@ class ActuatorCommandQueueTest {
 					// drains, so any stragglers have been consumed.
 					break
 				}
+				// A short sleep keeps the consumer from spinning on the CPU while still
+				// reacting quickly to newly posted decisions in this test scenario.
 				Thread.sleep(1)
 			}
 			consumerDoneLatch.countDown()
 		}
 
 		startLatch.countDown()
-		val producersFinished = producerDoneLatch.await(30, TimeUnit.SECONDS)
-		val consumerFinished = consumerDoneLatch.await(30, TimeUnit.SECONDS)
+		val producersFinished = producerDoneLatch.await(CONCURRENCY_TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+		val consumerFinished = consumerDoneLatch.await(CONCURRENCY_TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
 
 		assertThat(producersFinished).isTrue()
 		assertThat(consumerFinished).isTrue()
