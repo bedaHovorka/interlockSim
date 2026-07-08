@@ -48,6 +48,7 @@ class ActuatorCommandQueue(
 
 	private val queue: ConcurrentLinkedQueue<DispatchDecision> = ConcurrentLinkedQueue()
 	private val size: AtomicInteger = AtomicInteger(0)
+	private val lock = Any()
 
 	/**
 	 * Atomically posts all [decisions] to the queue.
@@ -55,6 +56,14 @@ class ActuatorCommandQueue(
 	 * The call is non-blocking. If adding all decisions would exceed [capacity],
 	 * none are added and the method returns `false`. On success the method returns
 	 * `true`.
+	 *
+	 * ## Size/queue ordering note
+	 *
+	 * The capacity check increments [size] before the decisions are inserted into
+	 * [queue]. This means [approximateSize] may briefly report a value larger than
+	 * the actual queue contents while a producer is mid-post. This is intentional:
+	 * it prevents overshoot under concurrency and is acceptable for approximate
+	 * monitoring. Callers that need an exact count should drain the queue.
 	 *
 	 * @param decisions Decisions to post; may be empty.
 	 * @return `true` if all decisions were accepted; `false` if backpressure rejected them.
@@ -65,7 +74,7 @@ class ActuatorCommandQueue(
 		}
 
 		if (capacity > 0) {
-			synchronized(size) {
+			synchronized(lock) {
 				val added = size.addAndGet(decisions.size)
 				if (added > capacity) {
 					size.addAndGet(-decisions.size)
@@ -92,7 +101,7 @@ class ActuatorCommandQueue(
 		while (decision != null) {
 			result.add(decision)
 			if (capacity > 0) {
-				synchronized(size) {
+				synchronized(lock) {
 					size.decrementAndGet()
 				}
 			}
