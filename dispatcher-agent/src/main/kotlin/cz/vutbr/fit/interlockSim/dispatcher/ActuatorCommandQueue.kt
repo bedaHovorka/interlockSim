@@ -76,11 +76,10 @@ class ActuatorCommandQueue(
 
 		if (capacity > 0) {
 			synchronized(lock) {
-				val added = size.addAndGet(decisions.size)
-				if (added > capacity) {
-					size.addAndGet(-decisions.size)
+				if (size.get() + decisions.size > capacity) {
 					return false
 				}
+				size.addAndGet(decisions.size)
 				queue.addAll(decisions)
 			}
 		} else {

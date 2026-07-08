@@ -219,15 +219,21 @@ class ActuatorCommandQueueTest {
 
 		executor.submit {
 			startLatch.await()
+			var emptyDrains = 0
 			while (true) {
-				consumedCount.addAndGet(queue.drain().size)
-				if (producerDoneLatch.getCount() == 0L && queue.approximateSize() == 0) {
-					// Producers are done and the queue appears empty. One final drain catches
-					// any stragglers posted after the last approximateSize() check.
-					consumedCount.addAndGet(queue.drain().size)
+				val drained = queue.drain().size
+				consumedCount.addAndGet(drained)
+				if (drained == 0) {
+					emptyDrains++
+				} else {
+					emptyDrains = 0
+				}
+				if (producerDoneLatch.getCount() == 0L && emptyDrains >= 3) {
+					// Producers are done and the queue has stayed empty across multiple
+					// drains, so any stragglers have been consumed.
 					break
 				}
-				Thread.yield()
+				Thread.sleep(1)
 			}
 			consumerDoneLatch.countDown()
 		}
