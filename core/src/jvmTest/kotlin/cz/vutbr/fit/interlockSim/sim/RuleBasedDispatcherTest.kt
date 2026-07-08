@@ -12,19 +12,10 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
-import assertk.assertions.hasSize
-import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
-import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
-import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -33,341 +24,283 @@ import org.junit.jupiter.api.Test
  * `RuleBasedDispatcherDeterminismTest` integration gate cannot provide on its own
  * (determinism verifies cross-run consistency, not branch correctness).
  *
- * Uses a hand-written [FakeTickContext] that mirrors `ShuntingLoop`'s queue
- * semantics (admitting a train removes it from the unapproved queue and increments
- * the approved count) plus MockK stubs for the domain types
- * [DynamicTrackBlock], [DynamicRailSemaphore], and [TrackOccupant].
+ * [decide] is now a pure function over [DispatchObservation]/[BlockEndObservation]
+ * value classes (Issue #729 / SP0.7), so these tests build observations directly —
+ * no mocks or fake contexts required.
  *
- * @since Issue #540 (SP0.1 — Goal 10)
+ * @since Issue #540 (SP0.1 — Goal 10); rewritten for the pure seam in Issue #729
+ *   (SP0.7 — Goal 10)
  */
 @DisplayName("RuleBasedDispatcher — branch-level unit coverage")
 class RuleBasedDispatcherTest {
-	// ── Test doubles ────────────────────────────────────────────────────────
+	// ── Test data builders ──────────────────────────────────────────────────
 
-	/** No-op stub for NetworkActuatorPort — tests do not exercise actuator logic. */
-	private object NoOpNetworkActuator : cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort {
-		override fun requestRoute(
-			trainName: String,
-			fromEndpointName: String,
-			toEndpointName: String
-		) = cz.vutbr.fit.interlockSim.ports.RouteRequestResult
-			.AllPathsBlocked(0)
+	private val emptySnapshot =
+		SimulationSnapshot(
+			simTime = 0.0,
+			semaphores = emptyList(),
+			blocks = emptyList(),
+			trainPositions = emptyList(),
+			timetables = emptyList()
+		)
 
-		override fun releaseRoute(trainName: String) = false
+	private fun observation(
+		approvedTrainCount: Int = 0,
+		unapprovedTrains: List<QueuedTrainObservation> = emptyList(),
+		innerBlockEnds: List<BlockEndObservation> = emptyList(),
+		outerBlockEnds: List<BlockEndObservation> = emptyList()
+	): DispatchObservation =
+		DispatchObservation(
+			snapshot = emptySnapshot.copy(trainPositions = List(approvedTrainCount) { fakeTrainPosition() }),
+			unapprovedTrains = unapprovedTrains,
+			innerBlockEnds = innerBlockEnds,
+			outerBlockEnds = outerBlockEnds
+		)
 
-		override fun setSwitchPosition(
-			switchName: String,
-			position: cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
-		) = false
+	private fun fakeTrainPosition() =
+		cz.vutbr.fit.interlockSim.ports.TrainPositionReading(
+			trainId = "placeholder",
+			velocity = 0.0,
+			acceleration = 0.0,
+			totalDistance = 0.0,
+			frontSectionName = null
+		)
 
-		override fun setSignalAspect(
-			semaphoreName: String,
-			signal: cz.vutbr.fit.interlockSim.objects.cells.Signal
-		) = false
-	}
+	private fun queued(trainId: String): QueuedTrainObservation = QueuedTrainObservation(trainId, "outA")
 
-	private fun trainNamed(name: String): Train =
-		mockk<Train>(relaxed = true).also {
-			every { it.name } returns name
-		}
-
-	private fun semaphore(): DynamicRailSemaphore = mockk(relaxed = true)
-
-	private fun otherSeparator(): OrientedPathSeparator = mockk()
-
-	/** A mock [TrackOccupant]; [nextSemaphoreResult] is returned by `nextSemaphore()`. */
-	private fun occupant(
-		name: String,
-		nextSemaphoreResult: OrientedPathSeparator?
-	): TrackOccupant =
-		mockk<TrackOccupant>(relaxed = true).also {
-			every { it.name } returns name
-			every { it.nextSemaphore() } returns nextSemaphoreResult
-		}
-
-	private fun block(
+	private fun end(
 		state: TrackFacility.State,
-		occupant: TrackOccupant? = null,
-		trainName: String? = null,
-		ends: Array<PathSeparator> = emptyArray()
-	): DynamicTrackBlock =
-		mockk<DynamicTrackBlock>(relaxed = true).also {
-			every { it.getState() } returns state
-			if (occupant != null) every { it.getTrackOccupant() } returns occupant
-			every { it.trainName } returns trainName
-			every { it.ends() } returns ends
-		}
+		towardSemaphoreName: String = "sem",
+		ownerTrainId: String? = null,
+		isApproachingThisEnd: Boolean = false,
+		pathSetUpTowardThisEnd: Boolean = false,
+		pathAlreadyExtendedBeyond: Boolean = false
+	): BlockEndObservation =
+		BlockEndObservation(
+			blockId = "block",
+			towardSemaphoreName = towardSemaphoreName,
+			state = state,
+			ownerTrainId = ownerTrainId,
+			isApproachingThisEnd = isApproachingThisEnd,
+			pathSetUpTowardThisEnd = pathSetUpTowardThisEnd,
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
+		)
 
-	/**
-	 * Mirrors `ShuntingLoop.createTickContext`: admitting a train removes it from the
-	 * unapproved queue and counts it as approved; [reservePath] records the call.
-	 * `isPathSetUp` / `isPathExtendedBeyond` are parameter-sensitive so tests can
-	 * distinguish the two ends of a block.
-	 */
-	private class FakeTickContext(
-		initialUnapproved: List<Train> = emptyList(),
-		override val innerBlocks: List<DynamicTrackBlock> = emptyList(),
-		override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> = emptyMap(),
-		private val pathSetUp: (DynamicTrackBlock, DynamicRailSemaphore) -> Boolean = { _, _ -> false },
-		private val pathExtendedBeyond: (String, DynamicRailSemaphore) -> Boolean = { _, _ -> false },
-		private val reservePathResult: Boolean = true
-	) : DispatcherTickContext {
-		private val queue: ArrayDeque<Train> = ArrayDeque(initialUnapproved)
-		private val approved: MutableList<Train> = mutableListOf()
-		override val approvedTrains: List<Train> get() = approved.toList()
-		val reservePathCalls: MutableList<Pair<DynamicRailSemaphore, String>> = mutableListOf()
-
-		override val approvedTrainCount: Int get() = approved.size
-		override val simTime: Double get() = 0.0
-		override val unapprovedTrains: List<Train> get() = queue.toList()
-		override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
-			get() =
-				object : cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort {
-					override fun signalAspect(semaphoreName: String) = null
-
-					override fun allSignalAspects() = emptyList<cz.vutbr.fit.interlockSim.ports.SemaphoreReading>()
-
-					override fun blockOccupancy(blockId: String) = null
-
-					override fun allBlockOccupancies() = emptyList<cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading>()
-
-					override fun trainPosition(trainId: String) = null
-
-					override fun allTrainPositions() = emptyList<cz.vutbr.fit.interlockSim.ports.TrainPositionReading>()
-
-					override fun trainTimetable(trainId: String) = null
-
-					override fun allTrainTimetables() = emptyList<cz.vutbr.fit.interlockSim.ports.TimetableReading>()
-
-					override fun snapshot() =
-						cz.vutbr.fit.interlockSim.ports.SimulationSnapshot(
-							simTime = 0.0,
-							semaphores = emptyList(),
-							blocks = emptyList(),
-							trainPositions = emptyList(),
-							timetables = emptyList()
-						)
-				}
-
-		override val networkActuator: cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
-			get() = NoOpNetworkActuator
-
-		override fun approveTrain(train: Train) {
-			queue.remove(train)
-			approved.add(train)
-		}
-
-		override fun reservePath(
-			sem: DynamicRailSemaphore,
-			trainName: String
-		): Boolean {
-			reservePathCalls += sem to trainName
-			return reservePathResult
-		}
-
-		override fun isPathSetUp(
-			block: DynamicTrackBlock,
-			to: DynamicRailSemaphore
-		): Boolean = pathSetUp(block, to)
-
-		override fun isPathExtendedBeyond(
-			trainName: String,
-			sem: DynamicRailSemaphore
-		): Boolean = pathExtendedBeyond(trainName, sem)
-	}
-
-	// ── approve() ───────────────────────────────────────────────────────────
+	// ── Admission ────────────────────────────────────────────────────────────
 
 	@Test
-	@DisplayName("approve() admits queued trains in FIFO order up to maxConcurrentTrains")
-	fun approveAdmitsUpToCap() {
-		val trains = (1..5).map { trainNamed("T$it") }
-		val ctx = FakeTickContext(initialUnapproved = trains)
+	@DisplayName("decide() admits queued trains in FIFO order up to maxConcurrentTrains")
+	fun admitsUpToCap() {
+		val trains = (1..5).map { queued("T$it") }
 		val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = 2)
 
-		dispatcher.approve(ctx)
+		val decisions = dispatcher.decide(observation(unapprovedTrains = trains))
 
-		assertThat(ctx.approvedTrains).containsExactly(trains[0], trains[1])
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ApproveTrain("T1"),
+			DispatchDecision.ApproveTrain("T2")
+		)
 	}
 
 	@Test
-	@DisplayName("approve() respects a higher maxConcurrentTrains")
-	fun approveRespectsHigherCap() {
-		val trains = (1..5).map { trainNamed("T$it") }
-		val ctx = FakeTickContext(initialUnapproved = trains)
+	@DisplayName("decide() respects a higher maxConcurrentTrains")
+	fun respectsHigherCap() {
+		val trains = (1..5).map { queued("T$it") }
 		val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = 3)
 
-		dispatcher.approve(ctx)
+		val decisions = dispatcher.decide(observation(unapprovedTrains = trains))
 
-		assertThat(ctx.approvedTrains).containsExactly(trains[0], trains[1], trains[2])
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ApproveTrain("T1"),
+			DispatchDecision.ApproveTrain("T2"),
+			DispatchDecision.ApproveTrain("T3")
+		)
 	}
 
 	@Test
-	@DisplayName("approve() with empty queue approves nothing and does not throw")
-	fun approveEmptyQueueIsNoOp() {
-		val ctx = FakeTickContext(initialUnapproved = emptyList())
-		val dispatcher = RuleBasedDispatcher()
-
-		dispatcher.approve(ctx)
-
-		assertThat(ctx.approvedTrains).isEmpty()
-		assertThat(ctx.reservePathCalls).isEmpty()
-	}
-
-	@Test
-	@DisplayName("approve() admits all trains when queue size is below the cap")
-	fun approveAdmitsAllWhenBelowCap() {
-		val trains = listOf(trainNamed("only"))
-		val ctx = FakeTickContext(initialUnapproved = trains)
+	@DisplayName("decide() partially admits when already-approved trains occupy some slots")
+	fun admitsRemainingSlotsOnly() {
+		val trains = (1..3).map { queued("T$it") }
 		val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = 2)
 
-		dispatcher.approve(ctx)
+		val decisions = dispatcher.decide(observation(approvedTrainCount = 1, unapprovedTrains = trains))
 
-		assertThat(ctx.approvedTrains).containsExactly(trains[0])
-	}
-
-	// ── advancePaths() — checkOneEnd branches via outerBlocks ───────────────
-
-	@Test
-	@DisplayName("FREE block: no reservation attempted")
-	fun freeBlockMakesNoReservation() {
-		val to = semaphore()
-		val block = block(TrackFacility.State.FREE)
-		val ctx = FakeTickContext(outerBlocks = mapOf(block to to))
-
-		RuleBasedDispatcher().advancePaths(ctx)
-
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(DispatchDecision.ApproveTrain("T1"))
 	}
 
 	@Test
-	@DisplayName("OCCUPIED block, train not approaching `to`: no reservation")
+	@DisplayName("decide() admits all trains when queue size is below the cap")
+	fun admitsAllWhenBelowCap() {
+		val dispatcher = RuleBasedDispatcher(maxConcurrentTrains = 2)
+
+		val decisions = dispatcher.decide(observation(unapprovedTrains = listOf(queued("only"))))
+
+		assertThat(decisions).containsExactly(DispatchDecision.ApproveTrain("only"))
+	}
+
+	@Test
+	@DisplayName("decide() with an empty queue and no block ends returns NoAction")
+	fun emptyQueueAndFreeReturnsNoAction() {
+		val dispatcher = RuleBasedDispatcher()
+
+		val decisions = dispatcher.decide(observation())
+
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+	}
+
+	// ── Path advancement — OCCUPIED branch ──────────────────────────────────
+
+	@Test
+	@DisplayName("FREE block end: no reservation, NoAction")
+	fun freeEndMakesNoReservation() {
+		val dispatcher = RuleBasedDispatcher()
+
+		val decisions = dispatcher.decide(observation(outerBlockEnds = listOf(end(TrackFacility.State.FREE))))
+
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
+	}
+
+	@Test
+	@DisplayName("OCCUPIED end, train not approaching: no reservation")
 	fun occupiedNotApproachingMakesNoReservation() {
-		val to = semaphore()
-		val block =
-			block(
-				TrackFacility.State.OCCUPIED,
-				occupant = occupant("T1", nextSemaphoreResult = otherSeparator())
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(end(TrackFacility.State.OCCUPIED, ownerTrainId = "T1", isApproachingThisEnd = false))
 			)
-		val ctx = FakeTickContext(outerBlocks = mapOf(block to to))
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	@Test
-	@DisplayName("OCCUPIED block, approaching `to`, path already extended: idempotent skip")
+	@DisplayName("OCCUPIED end, approaching, already extended: idempotent skip")
 	fun occupiedApproachingAlreadyExtendedSkips() {
-		val to = semaphore()
-		val block =
-			block(
-				TrackFacility.State.OCCUPIED,
-				occupant = occupant("T1", nextSemaphoreResult = to)
-			)
-		val ctx =
-			FakeTickContext(
-				outerBlocks = mapOf(block to to),
-				pathExtendedBeyond = { _, _ -> true }
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(
+						end(
+							TrackFacility.State.OCCUPIED,
+							ownerTrainId = "T1",
+							isApproachingThisEnd = true,
+							pathAlreadyExtendedBeyond = true
+						)
+					)
 			)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	@Test
-	@DisplayName("OCCUPIED block, approaching `to`, not extended: reserves once with occupant name")
-	fun occupiedApproachingReservesOnce() {
-		val to = semaphore()
-		val block =
-			block(
-				TrackFacility.State.OCCUPIED,
-				occupant = occupant("T1", nextSemaphoreResult = to)
+	@DisplayName("OCCUPIED end, approaching, not extended: reserves with occupant's train id")
+	fun occupiedApproachingReserves() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(
+						end(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "za",
+							ownerTrainId = "T1",
+							isApproachingThisEnd = true
+						)
+					)
 			)
-		val ctx = FakeTickContext(outerBlocks = mapOf(block to to), reservePathResult = true)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).hasSize(1)
-		assertThat(ctx.reservePathCalls[0]).isEqualTo(to to "T1")
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "za"))
 	}
 
+	// ── Path advancement — RESERVED branch ──────────────────────────────────
+
 	@Test
-	@DisplayName("RESERVED block, path not set up toward `to`: no reservation")
+	@DisplayName("RESERVED end, path not set up: no reservation")
 	fun reservedNotSetUpMakesNoReservation() {
-		val to = semaphore()
-		val block = block(TrackFacility.State.RESERVED, trainName = "T2")
-		val ctx = FakeTickContext(outerBlocks = mapOf(block to to), pathSetUp = { _, _ -> false })
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(end(TrackFacility.State.RESERVED, ownerTrainId = "T2", pathSetUpTowardThisEnd = false))
+			)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	@Test
-	@DisplayName("RESERVED block, path set up, already extended: idempotent skip")
+	@DisplayName("RESERVED end, set up, already extended: idempotent skip")
 	fun reservedSetUpAlreadyExtendedSkips() {
-		val to = semaphore()
-		val block = block(TrackFacility.State.RESERVED, trainName = "T2")
-		val ctx =
-			FakeTickContext(
-				outerBlocks = mapOf(block to to),
-				pathSetUp = { _, _ -> true },
-				pathExtendedBeyond = { _, _ -> true }
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(
+						end(
+							TrackFacility.State.RESERVED,
+							ownerTrainId = "T2",
+							pathSetUpTowardThisEnd = true,
+							pathAlreadyExtendedBeyond = true
+						)
+					)
 			)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).isEmpty()
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	@Test
-	@DisplayName("RESERVED block, path set up, not extended: reserves once with block.trainName")
-	fun reservedSetUpReservesOnceWithBlockTrainName() {
-		val to = semaphore()
-		val block = block(TrackFacility.State.RESERVED, trainName = "T2")
-		val ctx = FakeTickContext(outerBlocks = mapOf(block to to), pathSetUp = { _, _ -> true })
+	@DisplayName("RESERVED end, set up, not extended: reserves with block's train name")
+	fun reservedSetUpReserves() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockEnds =
+					listOf(
+						end(
+							TrackFacility.State.RESERVED,
+							towardSemaphoreName = "zb",
+							ownerTrainId = "T2",
+							pathSetUpTowardThisEnd = true
+						)
+					)
+			)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observed)
 
-		assertThat(ctx.reservePathCalls).hasSize(1)
-		assertThat(ctx.reservePathCalls[0]).isEqualTo(to to "T2")
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "zb"))
 	}
 
-	// ── advancePaths() — checkBothEnds short-circuit via innerBlocks ────────
+	// ── Both ends of an inner block evaluated independently ─────────────────
 
 	@Test
-	@DisplayName("checkBothEnds short-circuits after the first end reports a reservation/skip")
-	fun checkBothEndsShortCircuitsOnFirstEnd() {
-		val semA = semaphore()
-		val semB = semaphore()
-		// First end (semA): OCCUPIED + approaching + already extended -> returns true (skip).
-		// Second end (semB): if reached, would reserve (approaching + not extended).
-		// occupant.nextSemaphore() returns semA on first call, semB on the second, so the
-		// second end WOULD reserve if it were ever evaluated.
-		val occupant = mockk<TrackOccupant>(relaxed = true)
-		every { occupant.name } returns "TA"
-		every { occupant.nextSemaphore() } returns semA andThen semB
-		val block =
-			block(
-				TrackFacility.State.OCCUPIED,
-				occupant = occupant,
-				ends = arrayOf<PathSeparator>(semA, semB)
-			)
-		val ctx =
-			FakeTickContext(
-				innerBlocks = listOf(block),
-				pathExtendedBeyond = { _, sem -> sem == semA }, // semA already extended, semB not
-				reservePathResult = true
-			)
+	@DisplayName("of a block's two ends, only the genuinely eligible one yields a decision")
+	fun onlyEligibleEndYieldsDecision() {
+		// Real domain data: a block's occupant can only be approaching one end
+		// (TrackOccupant.nextSemaphore() is single-valued), so at most one of the
+		// two BlockEndObservations built by ShuntingLoop is ever eligible. This
+		// replaces the pre-#729 short-circuit test (checkBothEndsShortCircuitsOnFirstEnd):
+		// under a pure decide(), there is no live actuation result to short-circuit
+		// on, so both ends are evaluated independently — the assertion here is that
+		// this still yields exactly one decision per block, not two.
+		val dispatcher = RuleBasedDispatcher()
+		val eligibleEnd =
+			end(TrackFacility.State.OCCUPIED, towardSemaphoreName = "semA", ownerTrainId = "TA", isApproachingThisEnd = true)
+		val ineligibleEnd =
+			end(TrackFacility.State.OCCUPIED, towardSemaphoreName = "semB", ownerTrainId = "TA", isApproachingThisEnd = false)
 
-		RuleBasedDispatcher().advancePaths(ctx)
+		val decisions = dispatcher.decide(observation(innerBlockEnds = listOf(eligibleEnd, ineligibleEnd)))
 
-		// First end returned true -> second end never evaluated.
-		assertThat(ctx.reservePathCalls).isEmpty()
-		verify(exactly = 1) { occupant.nextSemaphore() }
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("TA", "semA"))
 	}
 
 	// ── Constructor guard ───────────────────────────────────────────────────

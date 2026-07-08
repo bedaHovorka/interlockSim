@@ -9,47 +9,57 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
-import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.util.Util
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
  * Deterministic rule-based dispatcher — the baseline implementation of the
- * [Dispatcher] seam introduced by SP0.1 (Issue #540).
+ * [Dispatcher] seam introduced by SP0.1 (Issue #540), reshaped to a pure
+ * decision function by SP0.7 (Issue #729).
  *
  * ## Dispatch policy
  *
- * Each iteration, the shell calls [approve] (before the polling `hold()`) and then
- * [advancePaths] (after it):
- * 1. **[approve]** — admits trains from the head of
- *    [DispatcherTickContext.unapprovedTrains] until [maxConcurrentTrains]
+ * Each call to [decide]:
+ * 1. **Admission** — admits trains from the head of
+ *    [DispatchObservation.unapprovedTrains] until [maxConcurrentTrains]
  *    simultaneous trains are active.
- * 2. **[advancePaths]** — advances paths on inner blocks: for each
- *    [DispatcherTickContext.innerBlocks] entry (RailSemaphore–RailSemaphore),
- *    checks both semaphore endpoints and reserves the next forward path for any
- *    approaching or reserved train.
- * 3. **[advancePaths]** — advances paths on outer blocks: for each
- *    [DispatcherTickContext.outerBlocks] entry (InOut–RailSemaphore), checks the
- *    semaphore endpoint and reserves the next forward path.
+ * 2. **Path advancement** — for every [DispatchObservation.innerBlockEnds] and
+ *    [DispatchObservation.outerBlockEnds] entry, reserves the next forward path
+ *    for any approaching or reserved train.
+ *
+ * The shell ([ShuntingLoop]) calls [decide] once per phase (see [Dispatcher]
+ * KDoc), so a single call only ever sees a non-empty [DispatchObservation.unapprovedTrains]
+ * *or* non-empty block-end lists, never both.
  *
  * ## Determinism (Goal 10 Stage A3)
- * Train admission is strictly FIFO over [DispatcherTickContext.unapprovedTrains].
- * Path selection delegates to
+ * Train admission is strictly FIFO over [DispatchObservation.unapprovedTrains].
+ * Path selection is applied by the shell via
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePathToAnyNextSemaphore],
- * which produces deterministic results for a fixed network topology.  Given the
+ * which produces deterministic results for a fixed network topology. Given the
  * same XML network and train generation sequence, this dispatcher produces
- * identical outcomes across consecutive runs.
+ * identical decision sequences across consecutive runs.
+ *
+ * ## Both-ends evaluation
+ * Each end of an inner block is evaluated independently (no short-circuit). In
+ * the real domain model a block's occupant can only be approaching one end
+ * ([cz.vutbr.fit.interlockSim.objects.core.TrackOccupant.nextSemaphore] is
+ * single-valued) and a reserved block's path is only ever set up toward one end
+ * ([cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.isSetUpPath] is
+ * directional), so at most one end of a real block is ever eligible for a
+ * decision per tick — independent evaluation is behaviorally identical to the
+ * pre-#729 short-circuiting version for real data. The short-circuit itself is
+ * no longer possible under a pure [decide]: it depended on the *live return
+ * value* of a reservation attempt, which is unavailable before the shell applies
+ * the returned [DispatchDecision]s.
  *
  * ## Goal 9 integration hook
  * This class is the designated place for wiring Goal 9's
  * [cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService] and
- * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]: when a path
- * reservation returns a [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict],
- * conflict resolution can be applied here in a future iteration without touching
- * [ShuntingLoop].  The hook is intentionally left as a comment for SP2b.2 (#557).
+ * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]: when the
+ * shell's path reservation attempt returns a
+ * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict],
+ * conflict resolution can be applied in a future iteration without touching
+ * [ShuntingLoop]. The hook is intentionally left as a comment for SP2b.2 (#557).
  *
  * @param maxConcurrentTrains Maximum number of simultaneously approved trains.
  *   Defaults to [DEFAULT_MAX_CONCURRENT_TRAINS] which matches the physical capacity
@@ -57,7 +67,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @see Dispatcher
  * @see ShuntingLoop
- * @since Issue #540 (SP0.1 — Goal 10)
+ * @since Issue #540 (SP0.1 — Goal 10); reshaped to a pure seam in Issue #729
+ *   (SP0.7 — Goal 10)
  */
 class RuleBasedDispatcher(
 	val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS
@@ -74,105 +85,72 @@ class RuleBasedDispatcher(
 		}
 	}
 
-	/**
-	 * Admits queued trains (FIFO) up to [maxConcurrentTrains] concurrent trains.
-	 * Called by the shell before the per-iteration polling `hold()`.
-	 */
-	override fun approve(context: DispatcherTickContext) {
-		approveTrains(context)
-	}
-
-	/**
-	 * Advances forward paths on all monitored track blocks.  Called by the shell
-	 * after the per-iteration polling `hold()` so block-state checks observe state
-	 * after newly admitted trains have moved.
-	 */
-	override fun advancePaths(context: DispatcherTickContext) {
-		for (block in context.innerBlocks) {
-			checkBothEnds(block, context)
-		}
-		for ((block, sem) in context.outerBlocks) {
-			checkOneEnd(block, sem, context)
-		}
+	override fun decide(observed: DispatchObservation): List<DispatchDecision> {
+		val decisions = decideAdmissions(observed) + decidePathAdvancements(observed)
+		return decisions.ifEmpty { listOf(DispatchDecision.NoAction) }
 	}
 
 	// ── Train admission ─────────────────────────────────────────────────────
 
-	private fun approveTrains(context: DispatcherTickContext) {
-		while (context.approvedTrainCount < maxConcurrentTrains) {
-			val train = context.unapprovedTrains.firstOrNull() ?: break
-			logger.debug { "RuleBasedDispatcher: approving ${train.name}" }
-			context.approveTrain(train)
+	private fun decideAdmissions(observed: DispatchObservation): List<DispatchDecision.ApproveTrain> {
+		val freeSlots = maxConcurrentTrains - observed.approvedTrainCount
+		if (freeSlots <= 0) {
+			return emptyList()
+		}
+		return observed.unapprovedTrains.take(freeSlots).map { queued ->
+			logger.debug { "RuleBasedDispatcher: approving ${queued.trainId}" }
+			DispatchDecision.ApproveTrain(queued.trainId)
 		}
 	}
 
 	// ── Path advancement ────────────────────────────────────────────────────
 
-	/**
-	 * Inner blocks have [DynamicRailSemaphore] ends only; checks both endpoints.
-	 */
-	private fun checkBothEnds(
-		block: DynamicTrackBlock,
-		context: DispatcherTickContext
-	) {
-		for (sep in block.ends()) {
-			if (checkOneEnd(block, Util.assertInstanceOf<DynamicRailSemaphore>(sep), context)) {
-				return
-			}
-		}
-	}
+	private fun decidePathAdvancements(observed: DispatchObservation): List<DispatchDecision.ReservePath> =
+		(observed.innerBlockEnds + observed.outerBlockEnds).mapNotNull(::decideForEnd)
 
 	/**
-	 * Attempts to reserve a forward path from [to] if the [block] state warrants it.
+	 * Decides whether a forward path reservation is warranted from [end].
 	 *
-	 * @return `true` when a reservation was made or already exists, `false` when
-	 *   the block state requires no action (FREE, or occupied/reserved but train not
-	 *   yet approaching [to]).
+	 * @return A [DispatchDecision.ReservePath] when the block state warrants one,
+	 *   `null` when the state requires no action (FREE, or occupied/reserved but
+	 *   not eligible toward this end, or already extended).
 	 */
-	private fun checkOneEnd(
-		block: DynamicTrackBlock,
-		to: DynamicRailSemaphore,
-		context: DispatcherTickContext
-	): Boolean {
-		if (block.getState() == TrackFacility.State.FREE) {
-			return false
-		}
+	private fun decideForEnd(end: BlockEndObservation): DispatchDecision.ReservePath? =
+		when (end.state) {
+			TrackFacility.State.FREE -> null
 
-		if (block.getState() == TrackFacility.State.OCCUPIED) {
-			val occupant = requireSimulationNotNull(block.getTrackOccupant())
-			if (occupant.nextSemaphore() != to) {
-				return false
-			}
-
-			// Idempotent check — skip if path already extends beyond this semaphore.
-			if (context.isPathExtendedBeyond(occupant.name, to)) {
-				logger.debug {
-					"Path already extends beyond ${to.name} for ${occupant.name}, skipping redundant reservation"
-				}
-				return true
-			}
-
-			logger.debug { "Train ${occupant.name} approaching ${to.name}, reserving forward path" }
-			return context.reservePath(to, occupant.name)
-		}
-
-		if (block.getState() == TrackFacility.State.RESERVED) {
-			if (context.isPathSetUp(block, to)) {
-				val trainName = requireSimulationNotNull(block.trainName)
-
-				// Idempotent check for reserved blocks.
-				if (context.isPathExtendedBeyond(trainName, to)) {
+			TrackFacility.State.OCCUPIED -> {
+				if (!end.isApproachingThisEnd) {
+					null
+				} else if (end.pathAlreadyExtendedBeyond) {
 					logger.debug {
-						"Path already extends beyond ${to.name} for $trainName (reserved block), skipping"
+						"Path already extends beyond ${end.towardSemaphoreName} for ${end.ownerTrainId}, " +
+							"skipping redundant reservation"
 					}
-					return true
+					null
+				} else {
+					logger.debug {
+						"Train ${end.ownerTrainId} approaching ${end.towardSemaphoreName}, reserving forward path"
+					}
+					DispatchDecision.ReservePath(requireNotNull(end.ownerTrainId), end.towardSemaphoreName)
 				}
+			}
 
-				logger.debug { "Path already set up through ${to.name}, attempting extension" }
-				return context.reservePath(to, trainName)
+			TrackFacility.State.RESERVED -> {
+				if (!end.pathSetUpTowardThisEnd) {
+					null
+				} else if (end.pathAlreadyExtendedBeyond) {
+					logger.debug {
+						"Path already extends beyond ${end.towardSemaphoreName} for ${end.ownerTrainId} " +
+							"(reserved block), skipping"
+					}
+					null
+				} else {
+					logger.debug {
+						"Path already set up through ${end.towardSemaphoreName}, attempting extension"
+					}
+					DispatchDecision.ReservePath(requireNotNull(end.ownerTrainId), end.towardSemaphoreName)
+				}
 			}
 		}
-
-		return false
-	}
 }
