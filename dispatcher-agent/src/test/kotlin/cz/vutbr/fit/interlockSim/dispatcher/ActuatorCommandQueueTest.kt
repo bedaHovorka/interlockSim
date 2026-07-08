@@ -222,10 +222,8 @@ class ActuatorCommandQueueTest {
 			while (true) {
 				consumedCount.addAndGet(queue.drain().size)
 				if (producerDoneLatch.getCount() == 0L && queue.approximateSize() == 0) {
-					// Producers are done and the queue appears empty. A short stabilization
-					// pause plus a final drain catches any stragglers posted after the last
-					// approximateSize() check.
-					Thread.sleep(10)
+					// Producers are done and the queue appears empty. One final drain catches
+					// any stragglers posted after the last approximateSize() check.
 					consumedCount.addAndGet(queue.drain().size)
 					break
 				}

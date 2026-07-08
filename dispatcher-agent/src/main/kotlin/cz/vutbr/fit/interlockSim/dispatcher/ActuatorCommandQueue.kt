@@ -81,10 +81,11 @@ class ActuatorCommandQueue(
 					size.addAndGet(-decisions.size)
 					return false
 				}
+				queue.addAll(decisions)
 			}
+		} else {
+			queue.addAll(decisions)
 		}
-
-		queue.addAll(decisions)
 		return true
 	}
 
@@ -105,12 +106,12 @@ class ActuatorCommandQueue(
 		var decision: DispatchDecision? = queue.poll()
 		while (decision != null) {
 			result.add(decision)
-			if (capacity > 0) {
-				synchronized(lock) {
-					size.decrementAndGet()
-				}
-			}
 			decision = queue.poll()
+		}
+		if (capacity > 0 && result.isNotEmpty()) {
+			synchronized(lock) {
+				size.addAndGet(-result.size)
+			}
 		}
 		return result
 	}
