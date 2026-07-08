@@ -61,9 +61,10 @@ class ActuatorCommandQueue(
 	 *
 	 * The capacity check increments [size] before the decisions are inserted into
 	 * [queue]. This means [approximateSize] may briefly report a value larger than
-	 * the actual queue contents while a producer is mid-post. This is intentional:
-	 * it prevents overshoot under concurrency and is acceptable for approximate
-	 * monitoring. Callers that need an exact count should drain the queue.
+	 * the actual queue contents while a producer is mid-post (including during a
+	 * rollback after a failed capacity check). This is intentional: it prevents
+	 * overshoot under concurrency and is acceptable for approximate monitoring.
+	 * Callers that need an exact count should drain the queue.
 	 *
 	 * @param decisions Decisions to post; may be empty.
 	 * @return `true` if all decisions were accepted; `false` if backpressure rejected them.
@@ -92,6 +93,10 @@ class ActuatorCommandQueue(
 	 *
 	 * The returned list preserves the FIFO order of posting. The applier calls this
 	 * from the single kDisco simulation thread and then applies each decision.
+	 *
+	 * This method is single-consumer: only the sim thread may drain. The
+	 * synchronization around [size] is defensive and keeps the counter consistent
+	 * if a future change allows multiple consumers.
 	 *
 	 * @return All queued decisions in FIFO order; empty if the queue was empty.
 	 */
