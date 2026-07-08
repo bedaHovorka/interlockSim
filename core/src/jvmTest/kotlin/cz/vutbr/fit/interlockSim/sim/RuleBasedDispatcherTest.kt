@@ -44,6 +44,28 @@ import org.junit.jupiter.api.Test
 class RuleBasedDispatcherTest {
 	// ── Test doubles ────────────────────────────────────────────────────────
 
+	/** No-op stub for NetworkActuatorPort — tests do not exercise actuator logic. */
+	private object NoOpNetworkActuator : cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort {
+		override fun requestRoute(
+			trainName: String,
+			fromEndpointName: String,
+			toEndpointName: String
+		) = cz.vutbr.fit.interlockSim.ports.RouteRequestResult
+			.AllPathsBlocked(0)
+
+		override fun releaseRoute(trainName: String) = false
+
+		override fun setSwitchPosition(
+			switchName: String,
+			position: cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf
+		) = false
+
+		override fun setSignalAspect(
+			semaphoreName: String,
+			signal: cz.vutbr.fit.interlockSim.objects.cells.Signal
+		) = false
+	}
+
 	private fun trainNamed(name: String): Train =
 		mockk<Train>(relaxed = true).also {
 			every { it.name } returns name
@@ -126,6 +148,9 @@ class RuleBasedDispatcherTest {
 							timetables = emptyList()
 						)
 				}
+
+		override val networkActuator: cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+			get() = NoOpNetworkActuator
 
 		override fun approveTrain(train: Train) {
 			queue.remove(train)
