@@ -150,6 +150,18 @@ class ShuntingLoop(
 			activeTrains = { approwedTrains.toList() }
 		)
 
+	/**
+	 * Actuator port exposing string-based dispatcher commands to the network.
+	 * Built once here and reused on every tick via [createTickContext].
+	 *
+	 * @since Issue #545 (SP0.6 — Goal 10)
+	 */
+	private val actuatorPort: cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort =
+		cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort(
+			env = context,
+			pathReservationService = pathReservationService
+		)
+
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
 	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
@@ -306,6 +318,7 @@ class ShuntingLoop(
 			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
 			override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> get() = outerTrackblocks
 			override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort get() = perceptionPort
+			override val networkActuator: cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort get() = actuatorPort
 
 			override fun approveTrain(train: Train) {
 				require(unapprowedTrains.remove(train)) {

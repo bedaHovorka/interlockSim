@@ -1334,5 +1334,40 @@ class Train :
 		stop()
 	}
 
+	/**
+	 * Set the target speed for this train's motor from an external agent.
+	 *
+	 * Delegates to [Motor.accelerateTo]: the physics model (acceleration ramp, braking
+	 * ramp, speed-limit enforcement) takes effect immediately.  This is the public surface
+	 * used by [cz.vutbr.fit.interlockSim.ports.DefaultTrainActuatorPort] to bridge the
+	 * agent's [cz.vutbr.fit.interlockSim.ports.TrainActuatorPort] call into the kDisco
+	 * physics kernel.
+	 *
+	 * ## Safety: "allowed to go"
+	 *
+	 * A positive target speed is only accepted when the train has an active route
+	 * reservation (blocks reserved via [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService]).
+	 * Without a reserved route the call is a no-op (warning is logged) — the train must
+	 * not move if the interlocking has not cleared a path for it.  Setting speed to `0.0`
+	 * (emergency stop) is always accepted regardless of reservation state.
+	 *
+	 * **Thread safety:** Must be called from the kDisco simulation thread.
+	 *
+	 * @param speed Target speed in m/s.  Must be ≥ 0.
+	 * @throws IllegalArgumentException if [speed] is negative.
+	 * @since Issue #545 (SP0.6 — Goal 10)
+	 */
+	fun setTargetSpeed(speed: Double) {
+		require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
+		if (speed > 0.0) {
+			val reservedBlocks = env.getRoutingServices().getPathReservationService().getReservedBlocks(name)
+			if (reservedBlocks.isEmpty()) {
+				logger.warn { "Train $number: setTargetSpeed($speed) ignored — no route reserved for $name" }
+				return
+			}
+		}
+		motor.accelerateTo(speed)
+	}
+
 	override fun toString(): String = name
 }
