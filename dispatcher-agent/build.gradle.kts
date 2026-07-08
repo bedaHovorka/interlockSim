@@ -10,10 +10,13 @@
  *     :dispatcher-agent (circular), and :fast-sim must not pull in LLM framework
  *     transitive dependencies.
  *
+ *   - [DispatchDecision][cz.vutbr.fit.interlockSim.sim.DispatchDecision] also
+ *     lives in :core (moved there by Issue #729 / SP0.7) for the same reason.
+ *
  *   - This module is the designated home for:
  *       • SP1 (Issues #546–#551): Koog + Koin agent runtime, Ollama executor
- *       • SP2b (Issues #556–#566, #695): LLM dispatcher, DispatchDecision, Koin
- *         module, DispatcherControlPanel wiring
+ *       • SP2b (Issues #556–#566, #695): LLM dispatcher richness (e.g. HoldTrain,
+ *         switch/signal/speed decisions), Koin module, DispatcherControlPanel wiring
  *       • SP3 (Issues #570–#578): Operating-language DSL and pluggable planners
  *
  *   - It intentionally has NO Koog/Ollama dependencies at SP0.1 stage.  Those are
