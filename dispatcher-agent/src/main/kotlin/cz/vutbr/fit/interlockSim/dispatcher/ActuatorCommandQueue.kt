@@ -65,10 +65,12 @@ class ActuatorCommandQueue(
 		}
 
 		if (capacity > 0) {
-			val added = size.addAndGet(decisions.size)
-			if (added > capacity) {
-				size.addAndGet(-decisions.size)
-				return false
+			synchronized(size) {
+				val added = size.addAndGet(decisions.size)
+				if (added > capacity) {
+					size.addAndGet(-decisions.size)
+					return false
+				}
 			}
 		}
 
@@ -90,7 +92,9 @@ class ActuatorCommandQueue(
 		while (decision != null) {
 			result.add(decision)
 			if (capacity > 0) {
-				size.decrementAndGet()
+				synchronized(size) {
+					size.decrementAndGet()
+				}
 			}
 			decision = queue.poll()
 		}

@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.hasSize
@@ -222,6 +223,8 @@ class ActuatorCommandQueueTest {
 				consumedCount.addAndGet(queue.drain().size)
 				Thread.yield()
 			}
+			// Final drain catches any items posted after the last approximateSize() check.
+			consumedCount.addAndGet(queue.drain().size)
 			consumerDoneLatch.countDown()
 		}
 
@@ -253,8 +256,7 @@ class ActuatorCommandQueueTest {
 	@Test
 	@DisplayName("zero capacity is rejected")
 	fun zeroCapacityRejected() {
-		assertk
-			.assertFailure { ActuatorCommandQueue(capacity = 0) }
+		assertFailure { ActuatorCommandQueue(capacity = 0) }
 			.isInstanceOf<IllegalArgumentException>()
 	}
 }
