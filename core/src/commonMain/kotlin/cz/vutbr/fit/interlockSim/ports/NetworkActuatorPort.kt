@@ -55,6 +55,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  *         when (val result = actuator.requestRoute(trainId, entry, exit)) {
  *             is RouteRequestResult.Reserved    -> logger.info { "$trainId: route reserved" }
  *             is RouteRequestResult.AllPathsBlocked -> logger.warn { "$trainId: all paths blocked" }
+ *             is RouteRequestResult.Conflict   -> logger.warn { "$trainId: blocked by ${result.existingOwner} at ${result.blockName}" }
  *             is RouteRequestResult.NoRouteExists   -> logger.error { "$trainId: no topology route" }
  *         }
  *     }
@@ -91,7 +92,10 @@ interface NetworkActuatorPort {
 	 *   not "no route").
 	 *
 	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
-	 * no topological path connects them.
+	 * no topological path connects them.  [RouteRequestResult.Conflict] is returned when a
+	 * path exists but a block along it is already owned by another train — it carries the
+	 * conflicting block name and the owning train name so a dispatcher can wait for that
+	 * specific train rather than retrying blindly.
 	 *
 	 * @param trainName        Identifier of the train that will use the reserved route.
 	 *   Must be non-blank; matched against the train registry in the simulation.
@@ -142,20 +146,24 @@ interface NetworkActuatorPort {
 	/**
 	 * Command a named semaphore to display the given signal aspect.
 	 *
-	 * Calling this method with the currently-displayed aspect is a no-op and still
-	 * returns `true`.
+	 * Both **upgrades** (e.g. STOP → FREE) and **downgrades** (e.g. FREE → S30) are
+	 * permitted on a dynamic semaphore.  Downgrades are physically hard for a train to
+	 * reach in time due to braking distance, but they are allowed at the command
+	 * surface — the dispatcher/interlocking decides whether to issue one.
 	 *
-	 * A semaphore whose signal is currently an allowing aspect has been set by the
-	 * interlocking as part of an active route.  Such a semaphore is considered **locked**
-	 * and this method will return `false` without changing anything — the same safety
-	 * principle that prevents changing a locked switch.
+	 * A **constant** semaphore (predzvěst / narážník / rychlostnik — a fixed-aspect
+	 * signal whose value must not change) ignores writes.  Requesting a *different*
+	 * aspect on a constant semaphore returns `false` (constant semaphores must stay
+	 * constant); requesting its current aspect returns `true` as an idempotent no-op.
+	 *
+	 * Calling this method with the currently-displayed aspect on a dynamic semaphore is
+	 * likewise a no-op and returns `true`.
 	 *
 	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @param signal        Target signal aspect (e.g. [Signal.STOP], [Signal.FREE]).
-	 * @return `true` if the signal was set successfully; `false` if no semaphore with
-	 *   that name exists, or if the semaphore is locked by an active route (its current
-	 *   signal is an allowing aspect).  Per the class-level safety guarantee, a
-	 *   clear-to-FREE is never honoured while a route is active.
+	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with
+	 *   that name exists, or if the semaphore is constant and [signal] differs from its
+	 *   fixed aspect.
 	 */
 	fun setSignalAspect(
 		semaphoreName: String,
@@ -211,5 +219,27 @@ sealed class RouteRequestResult {
 	 */
 	data class AllPathsBlocked(
 		val attemptedPaths: Int
+	) : RouteRequestResult()
+
+	/**
+	 * A topological path exists but could not be reserved because a block along it is
+	 * already owned by another train.
+	 *
+	 * Unlike [AllPathsBlocked] (no candidate path was reservable right now) and
+	 * [NoRouteExists] (no topology path at all), this result identifies *who* is
+	 * blocking, so a dispatcher can wait for that specific train rather than retrying
+	 * blindly.  Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict].
+	 *
+	 * Only string identifiers are carried (no live domain object) to honour this port's
+	 * "no live domain objects leaked to callers" contract.
+	 *
+	 * @property blockName     Name of the conflicting block, or `null` if the block is
+	 *   unnamed.
+	 * @property existingOwner Name of the train that already owns the conflicting block.
+	 */
+	data class Conflict(
+		val blockName: String?,
+		val existingOwner: String
 	) : RouteRequestResult()
 }

@@ -109,14 +109,19 @@ class DefaultNetworkActuatorPort(
 				RouteRequestResult.AllPathsBlocked(result.attemptedPaths)
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
-				// Treat a reservation conflict like AllPathsBlocked(0): the path
-				// technically exists but cannot be reserved right now.
+				// A path exists but a block along it is already owned by another train.
+				// Surface who is blocking so a dispatcher can wait for that specific train
+				// rather than collapsing this into AllPathsBlocked (which would discard the
+				// owner/block and report attemptedPaths=0, contradicting its own contract).
 				logger.warn {
 					"requestRoute: conflict reserving $fromEndpointName → $toEndpointName for " +
 						"$trainName — block '${result.conflictingBlock.name ?: "unnamed"}' " +
 						"owned by '${result.existingOwner}'"
 				}
-				RouteRequestResult.AllPathsBlocked(0)
+				RouteRequestResult.Conflict(
+					blockName = result.conflictingBlock.name,
+					existingOwner = result.existingOwner
+				)
 			}
 		}
 	}
@@ -160,17 +165,14 @@ class DefaultNetworkActuatorPort(
 				logger.debug { "setSignalAspect: unknown semaphore '$semaphoreName'" }
 				return false
 			}
-		// A semaphore whose signal is currently allowing has been set by the interlocking
-		// as part of an active route.  Overriding it would violate railway safety rules.
-		if (sem.signal.isAllowing()) {
-			logger.debug {
-				"setSignalAspect: semaphore '$semaphoreName' is locked by an active route " +
-					"(current signal=${sem.signal}); refusing to override"
-			}
-			return false
-		}
+		// Both upgrades and downgrades are permitted on a dynamic semaphore (downgrades are
+		// physically hard for a train to reach due to braking, but still allowed).  A
+		// *constant* semaphore (predzvěst / narážník / rychlostník) ignores writes, so the
+		// post-condition below reports failure when a change to a different aspect is
+		// requested — constant semaphores must stay constant.  Setting the semaphore to its
+		// current aspect is a no-op that returns true.
 		sem.signal = signal
-		return true
+		return sem.signal == signal
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────

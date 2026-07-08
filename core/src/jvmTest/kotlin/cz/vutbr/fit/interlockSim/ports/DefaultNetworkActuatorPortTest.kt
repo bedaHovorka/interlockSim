@@ -13,6 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
@@ -23,8 +24,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.InOut
+import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
+import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import io.mockk.every
@@ -64,6 +68,28 @@ class DefaultNetworkActuatorPortTest {
 			every { it.name } returns name
 			every { it.signal } returns signal
 		}
+
+	/**
+	 * Real mutable [DynamicRailSemaphore] with a non-blank [name] so the port's
+	 * `buildSemaphoreCache` picks it up.  The [signal] is set through the real setter so
+	 * `setSignalAspect` post-condition checks reflect actual state.
+	 */
+	private fun realDynamicSemaphore(
+		name: String,
+		signal: Signal = Signal.STOP
+	): DynamicRailSemaphore =
+		createDynamicInstance(RailSemaphore(name, true, Cell.SpatialType.HORIZONTAL)).also {
+			it.signal = signal
+		}
+
+	/**
+	 * Real *constant* [DynamicRailSemaphore] (fixed aspect, writes ignored) — models
+	 * predzvěst / narážník / rychlostnik.
+	 */
+	private fun realConstantSemaphore(
+		name: String,
+		signal: Signal
+	): DynamicRailSemaphore = createConstantInstance(RailSemaphore(name, true, Cell.SpatialType.HORIZONTAL), signal)
 
 	private fun switch(
 		name: String,
@@ -220,19 +246,39 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("Conflict result maps to RouteRequestResult.AllPathsBlocked(0)")
-		fun conflictMapsToAllBlocked() {
+		@DisplayName("Conflict result maps to RouteRequestResult.Conflict carrying block and owner")
+		fun conflictMapsToConflict() {
 			val a = inOut("A")
 			val b = inOut("B")
 			val conflictBlock = mockk<DynamicTrackBlock>(relaxed = true)
+			every { conflictBlock.name } returns "blockX"
 			val svc = mockk<PathReservationService>(relaxed = true)
 			every { svc.reservePath("T1", a, b) } returns
 				PathReservationService.ReservationResult.Conflict(conflictBlock, "T2")
 
 			val p = port(inOuts = listOf(a, b), reservationService = svc)
-			val result = p.requestRoute("T1", "A", "B")
+			val result = p.requestRoute("T1", "A", "B") as RouteRequestResult.Conflict
 
-			assertThat(result).isInstanceOf<RouteRequestResult.AllPathsBlocked>()
+			assertThat(result.blockName).isEqualTo("blockX")
+			assertThat(result.existingOwner).isEqualTo("T2")
+		}
+
+		@Test
+		@DisplayName("Conflict result with unnamed block maps blockName to null")
+		fun conflictMapsUnnamedBlockToNull() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val conflictBlock = mockk<DynamicTrackBlock>(relaxed = true)
+			every { conflictBlock.name } returns null
+			val svc = mockk<PathReservationService>(relaxed = true)
+			every { svc.reservePath("T1", a, b) } returns
+				PathReservationService.ReservationResult.Conflict(conflictBlock, "T3")
+
+			val p = port(inOuts = listOf(a, b), reservationService = svc)
+			val result = p.requestRoute("T1", "A", "B") as RouteRequestResult.Conflict
+
+			assertThat(result.blockName).isNull()
+			assertThat(result.existingOwner).isEqualTo("T3")
 		}
 
 		@Test
@@ -357,34 +403,58 @@ class DefaultNetworkActuatorPortTest {
 		}
 
 		@Test
-		@DisplayName("returns true and sets signal on a known semaphore with STOP signal")
-		fun knownSemaphoreSetAndReturnsTrue() {
-			val sem = semaphore("zA", Signal.STOP)
+		@DisplayName("upgrade STOP → FREE on dynamic semaphore returns true and sets the signal")
+		fun upgradeOnDynamicSemaphoreReturnsTrue() {
+			val sem = realDynamicSemaphore("zA", Signal.STOP)
 			val p = port(cells = mapOf((0 to 0) to sem))
 
 			val result = p.setSignalAspect("zA", Signal.FREE)
 
 			assertThat(result).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
 		}
 
 		@Test
-		@DisplayName("returns false when semaphore is locked by active route (signal is allowing)")
-		fun lockedByRouteReturnsFalse() {
-			val sem = semaphore("zA", Signal.FREE) // locked: interlocking set it to allowing
+		@DisplayName("downgrade FREE → S30 on dynamic semaphore returns true and sets the signal")
+		fun downgradeOnDynamicSemaphoreReturnsTrue() {
+			val sem = realDynamicSemaphore("zA", Signal.FREE)
+			val p = port(cells = mapOf((0 to 0) to sem))
+
+			val result = p.setSignalAspect("zA", Signal.S30)
+
+			assertThat(result).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.S30)
+		}
+
+		@Test
+		@DisplayName("setting the current aspect is a no-op that returns true")
+		fun sameAspectReturnsTrue() {
+			val sem = realDynamicSemaphore("zA", Signal.S60)
+			val p = port(cells = mapOf((0 to 0) to sem))
+
+			assertThat(p.setSignalAspect("zA", Signal.S60)).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.S60)
+		}
+
+		@Test
+		@DisplayName("constant semaphore refuses a change to a different aspect (returns false)")
+		fun constantSemaphoreRefusesChange() {
+			val sem = realConstantSemaphore("zA", Signal.FREE)
 			val p = port(cells = mapOf((0 to 0) to sem))
 
 			assertThat(p.setSignalAspect("zA", Signal.STOP)).isFalse()
+			// Constant semaphore keeps its fixed aspect.
+			assertThat(sem.signal).isEqualTo(Signal.FREE)
 		}
 
 		@Test
-		@DisplayName("returns false for any allowing signal aspect when semaphore is locked")
-		fun allAllowingSignalsAreLocked() {
-			for (allowingSignal in listOf(Signal.S30, Signal.S60, Signal.S80, Signal.S100, Signal.FREE)) {
-				val sem = semaphore("sA", allowingSignal)
-				val p = port(cells = mapOf((0 to 0) to sem))
-				assertThat(p.setSignalAspect("sA", Signal.STOP))
-					.isFalse()
-			}
+		@DisplayName("constant semaphore returns true when requested its own fixed aspect")
+		fun constantSemaphoreSameAspectReturnsTrue() {
+			val sem = realConstantSemaphore("zA", Signal.S40)
+			val p = port(cells = mapOf((0 to 0) to sem))
+
+			assertThat(p.setSignalAspect("zA", Signal.S40)).isTrue()
+			assertThat(sem.signal).isEqualTo(Signal.S40)
 		}
 	}
 }

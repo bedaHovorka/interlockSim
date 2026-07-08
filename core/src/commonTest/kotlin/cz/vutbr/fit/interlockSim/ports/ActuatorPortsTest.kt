@@ -14,6 +14,7 @@ import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
+import assertk.assertions.isNull
 import assertk.assertions.isTrue
 import assertk.assertions.prop
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -281,6 +282,20 @@ class ActuatorPortsTest {
 	}
 
 	@Test
+	fun `RouteRequestResult Conflict carries blockName and existingOwner`() {
+		val result = RouteRequestResult.Conflict("blockX", "T2")
+		assertThat(result.blockName).isEqualTo("blockX")
+		assertThat(result.existingOwner).isEqualTo("T2")
+	}
+
+	@Test
+	fun `RouteRequestResult Conflict blockName may be null for unnamed block`() {
+		val result = RouteRequestResult.Conflict(null, "T3")
+		assertThat(result.blockName).isNull()
+		assertThat(result.existingOwner).isEqualTo("T3")
+	}
+
+	@Test
 	fun `RouteRequestResult when expression is exhaustive`() {
 		// Compiling the `when` without an `else` branch verifies the sealed hierarchy is
 		// exhaustive: a new subtype added later is a compile error here.  The assertions
@@ -290,10 +305,12 @@ class ActuatorPortsTest {
 				is RouteRequestResult.Reserved -> "reserved"
 				is RouteRequestResult.NoRouteExists -> "no-route"
 				is RouteRequestResult.AllPathsBlocked -> "blocked"
+				is RouteRequestResult.Conflict -> "conflict"
 			}
 		assertThat(describe(RouteRequestResult.Reserved("T1", 3))).isEqualTo("reserved")
 		assertThat(describe(RouteRequestResult.NoRouteExists("A", "B"))).isEqualTo("no-route")
 		assertThat(describe(RouteRequestResult.AllPathsBlocked(2))).isEqualTo("blocked")
+		assertThat(describe(RouteRequestResult.Conflict("B", "T2"))).isEqualTo("conflict")
 	}
 
 	@Test
