@@ -104,8 +104,12 @@ class ActuatorCommandQueue(
 	/**
 	 * Returns the current number of queued decisions.
 	 *
-	 * This is a best-effort estimate for monitoring and tests; it may briefly
-	 * disagree with [drain] under concurrent producers.
+	 * This is a best-effort estimate for monitoring and tests. Because [postAll]
+	 * increments [size] before inserting into [queue], the counter may briefly
+	 * exceed the actual queue contents while a producer is mid-post; conversely,
+	 * [drain] decrements [size] after polling, so the counter may briefly lag.
+	 * These windows are acceptable for approximate monitoring but not for
+	 * precise queue-state assertions under concurrency.
 	 */
 	fun approximateSize(): Int = size.get()
 }

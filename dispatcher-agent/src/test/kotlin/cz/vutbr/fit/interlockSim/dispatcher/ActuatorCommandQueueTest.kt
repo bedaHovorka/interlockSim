@@ -219,7 +219,7 @@ class ActuatorCommandQueueTest {
 
 		executor.submit {
 			startLatch.await()
-			while (producerDoneLatch.count > 0 || queue.approximateSize() > 0) {
+			while (producerDoneLatch.getCount() > 0 || queue.approximateSize() > 0) {
 				consumedCount.addAndGet(queue.drain().size)
 				Thread.yield()
 			}
