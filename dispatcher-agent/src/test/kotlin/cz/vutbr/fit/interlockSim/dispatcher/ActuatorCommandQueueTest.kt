@@ -29,6 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Timeout for concurrency stress tests, in seconds. */
 private const val CONCURRENCY_TEST_TIMEOUT_SECONDS: Long = 30
 
+/** Number of consecutive empty drains required before the consumer terminates. */
+private const val EMPTY_DRAINS_THRESHOLD: Int = 3
+
+/** Polling interval for the consumer stress-test loop, in milliseconds. */
+private const val CONSUMER_POLL_INTERVAL_MS: Long = 1
+
 /**
  * Unit tests for [ActuatorCommandQueue].
  *
@@ -231,14 +237,14 @@ class ActuatorCommandQueueTest {
 				} else {
 					emptyDrains = 0
 				}
-				if (producerDoneLatch.getCount() == 0L && emptyDrains >= 3) {
+				if (producerDoneLatch.getCount() == 0L && emptyDrains >= EMPTY_DRAINS_THRESHOLD) {
 					// Producers are done and the queue has stayed empty across multiple
 					// drains, so any stragglers have been consumed.
 					break
 				}
 				// A short sleep keeps the consumer from spinning on the CPU while still
 				// reacting quickly to newly posted decisions in this test scenario.
-				Thread.sleep(1)
+				Thread.sleep(CONSUMER_POLL_INTERVAL_MS)
 			}
 			consumerDoneLatch.countDown()
 		}

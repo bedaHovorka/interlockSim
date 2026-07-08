@@ -43,7 +43,7 @@ class ActuatorCommandQueue(
 	}
 
 	init {
-		require(capacity != 0) { "capacity must be positive (limited) or negative (unlimited), got: 0" }
+		require(capacity != 0) { "Capacity must be positive (limited) or negative (unlimited); got: 0" }
 	}
 
 	private val queue: ConcurrentLinkedQueue<DispatchDecision> = ConcurrentLinkedQueue()
