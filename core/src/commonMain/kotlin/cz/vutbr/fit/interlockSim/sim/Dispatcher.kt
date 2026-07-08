@@ -134,6 +134,24 @@ interface DispatcherTickContext {
 	 */
 	val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 
+	/**
+	 * Actuator port for issuing dispatcher commands to the network.
+	 *
+	 * Exposes a stable, string-based interface for route reservation, route release,
+	 * switch commands, and signal commands.  The underlying simulation objects
+	 * ([cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore],
+	 * [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch], …) are hidden behind
+	 * this port so that agent implementations in `:dispatcher-agent` never need a
+	 * compile-time dependency on those types.
+	 *
+	 * Backed by [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort].  Callers
+	 * should be aware that commands mutate the simulation state immediately (they are
+	 * not queued).
+	 *
+	 * @since Issue #545 (SP0.6 — Goal 10)
+	 */
+	val networkActuator: cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+
 	/** Inner track blocks (both ends are [DynamicRailSemaphore]). */
 	val innerBlocks: List<DynamicTrackBlock>
 

@@ -55,6 +55,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  *         when (val result = actuator.requestRoute(trainId, entry, exit)) {
  *             is RouteRequestResult.Reserved    -> logger.info { "$trainId: route reserved" }
  *             is RouteRequestResult.AllPathsBlocked -> logger.warn { "$trainId: all paths blocked" }
+ *             is RouteRequestResult.Conflict   -> logger.warn { "$trainId: blocked by ${result.existingOwner} at ${result.blockName}" }
  *             is RouteRequestResult.NoRouteExists   -> logger.error { "$trainId: no topology route" }
  *         }
  *     }
@@ -67,11 +68,16 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  */
 interface NetworkActuatorPort {
 	/**
-	 * Request a route reservation from [fromInOutName] to [toInOutName] for train [trainName].
+	 * Request a route reservation from [fromEndpointName] to [toEndpointName] for train [trainName].
 	 *
-	 * The interlocking finds a topologically valid path between the two named InOut points
+	 * The interlocking finds a topologically valid path between the two named endpoints
 	 * and atomically reserves all blocks along it if they are free.  If multiple paths exist,
 	 * the implementation chooses one (typically by shortest distance or first-found).
+	 *
+	 * Endpoints may be either **InOut** names (full end-to-end route) or **Semaphore** names
+	 * (partial route from/to an intermediate signal).  Partial routes are required when a
+	 * train needs to reach a specific semaphore rather than a network boundary (e.g. Trains
+	 * #4 and #5 in the ShuntingLoop scenario).
 	 *
 	 * The call is **synchronous** — it returns only after the reservation attempt has
 	 * completed (success or failure).
@@ -81,24 +87,28 @@ interface NetworkActuatorPort {
 	 * Invalid input is a programmer/agent error and throws rather than being surfaced as a
 	 * [RouteRequestResult]:
 	 * - A blank [trainName] throws [IllegalArgumentException].
-	 * - A [fromInOutName] or [toInOutName] that does not exist in the network throws
-	 *   [IllegalArgumentException] (unknown names must fail fast — they are not "no route").
+	 * - A [fromEndpointName] or [toEndpointName] that does not match any InOut or Semaphore in
+	 *   the network throws [IllegalArgumentException] (unknown names must fail fast — they are
+	 *   not "no route").
 	 *
-	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid InOuts
-	 * but no topological path connects them.
+	 * [RouteRequestResult.NoRouteExists] is returned only when both endpoints are valid but
+	 * no topological path connects them.  [RouteRequestResult.Conflict] is returned when a
+	 * path exists but a block along it is already owned by another train — it carries the
+	 * conflicting block name and the owning train name so a dispatcher can wait for that
+	 * specific train rather than retrying blindly.
 	 *
-	 * @param trainName     Identifier of the train that will use the reserved route.
+	 * @param trainName        Identifier of the train that will use the reserved route.
 	 *   Must be non-blank; matched against the train registry in the simulation.
-	 * @param fromInOutName Name of the InOut entry point (must exist in the network).
-	 * @param toInOutName   Name of the InOut exit point (must exist in the network).
+	 * @param fromEndpointName Name of the entry InOut or Semaphore (must exist in the network).
+	 * @param toEndpointName   Name of the exit InOut or Semaphore (must exist in the network).
 	 * @return [RouteRequestResult] indicating outcome; never `null`.
-	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromInOutName] or
-	 *   [toInOutName] does not name an InOut in the network.
+	 * @throws IllegalArgumentException if [trainName] is blank, or if [fromEndpointName] or
+	 *   [toEndpointName] does not name an InOut or Semaphore in the network.
 	 */
 	fun requestRoute(
 		trainName: String,
-		fromInOutName: String,
-		toInOutName: String
+		fromEndpointName: String,
+		toEndpointName: String
 	): RouteRequestResult
 
 	/**
@@ -136,15 +146,24 @@ interface NetworkActuatorPort {
 	/**
 	 * Command a named semaphore to display the given signal aspect.
 	 *
-	 * Calling this method with the currently-displayed aspect is a no-op and still
-	 * returns `true`.
+	 * Both **upgrades** (e.g. STOP → FREE) and **downgrades** (e.g. FREE → S30) are
+	 * permitted on a dynamic semaphore.  Downgrades are physically hard for a train to
+	 * reach in time due to braking distance, but they are allowed at the command
+	 * surface — the dispatcher/interlocking decides whether to issue one.
+	 *
+	 * A **constant** semaphore (predzvěst / narážník / rychlostnik — a fixed-aspect
+	 * signal whose value must not change) ignores writes.  Requesting a *different*
+	 * aspect on a constant semaphore returns `false` (constant semaphores must stay
+	 * constant); requesting its current aspect returns `true` as an idempotent no-op.
+	 *
+	 * Calling this method with the currently-displayed aspect on a dynamic semaphore is
+	 * likewise a no-op and returns `true`.
 	 *
 	 * @param semaphoreName Name of the semaphore (must exist in the network; case-sensitive).
 	 * @param signal        Target signal aspect (e.g. [Signal.STOP], [Signal.FREE]).
-	 * @return `true` if the signal was set successfully; `false` if no semaphore with
-	 *   that name exists, or if the interlocking refuses to clear the signal (no
-	 *   compatible reserved route, conflicting switch state, etc.).  Per the class-level
-	 *   safety guarantee, a clear-to-FREE is never honoured unless a route is reserved.
+	 * @return `true` if the semaphore now displays [signal]; `false` if no semaphore with
+	 *   that name exists, or if the semaphore is constant and [signal] differs from its
+	 *   fixed aspect.
 	 */
 	fun setSignalAspect(
 		semaphoreName: String,
@@ -173,20 +192,20 @@ sealed class RouteRequestResult {
 	) : RouteRequestResult()
 
 	/**
-	 * No topological path exists between the requested InOut endpoints.
+	 * No topological path exists between the requested endpoints.
 	 *
-	 * Both endpoints are valid InOuts in the network, but the topology graph connects no
-	 * path between them (e.g. disconnected sub-networks).  The dispatcher should log this
-	 * as an error; retrying the same request will always yield the same result.  Note: an
-	 * unknown (non-existent) endpoint name is **not** this result — it throws
+	 * Both endpoints are valid InOuts or Semaphores in the network, but the topology graph
+	 * connects no path between them (e.g. disconnected sub-networks).  The dispatcher should
+	 * log this as an error; retrying the same request will always yield the same result.
+	 * Note: an unknown (non-existent) endpoint name is **not** this result — it throws
 	 * [IllegalArgumentException] from [NetworkActuatorPort.requestRoute].
 	 *
-	 * @property fromInOutName The requested entry point name.
-	 * @property toInOutName   The requested exit point name.
+	 * @property fromEndpointName The requested entry point name.
+	 * @property toEndpointName   The requested exit point name.
 	 */
 	data class NoRouteExists(
-		val fromInOutName: String,
-		val toInOutName: String
+		val fromEndpointName: String,
+		val toEndpointName: String
 	) : RouteRequestResult()
 
 	/**
@@ -200,5 +219,27 @@ sealed class RouteRequestResult {
 	 */
 	data class AllPathsBlocked(
 		val attemptedPaths: Int
+	) : RouteRequestResult()
+
+	/**
+	 * A topological path exists but could not be reserved because a block along it is
+	 * already owned by another train.
+	 *
+	 * Unlike [AllPathsBlocked] (no candidate path was reservable right now) and
+	 * [NoRouteExists] (no topology path at all), this result identifies *who* is
+	 * blocking, so a dispatcher can wait for that specific train rather than retrying
+	 * blindly.  Maps from
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict].
+	 *
+	 * Only string identifiers are carried (no live domain object) to honour this port's
+	 * "no live domain objects leaked to callers" contract.
+	 *
+	 * @property blockName     Name of the conflicting block, or `null` if the block is
+	 *   unnamed.
+	 * @property existingOwner Name of the train that already owns the conflicting block.
+	 */
+	data class Conflict(
+		val blockName: String?,
+		val existingOwner: String
 	) : RouteRequestResult()
 }
