@@ -53,9 +53,11 @@ class ActuatorCommandQueue(
 	/**
 	 * Atomically posts all [decisions] to the queue.
 	 *
-	 * The call is non-blocking. If adding all decisions would exceed [capacity],
-	 * none are added and the method returns `false`. On success the method returns
-	 * `true`.
+	 * The call does not block waiting for queue space. Under bounded [capacity] the
+	 * only synchronization is a short critical section for capacity accounting, so a
+	 * producer may briefly contend with a concurrent [drain] but never waits for the
+	 * consumer to make room. If adding all decisions would exceed [capacity], none
+	 * are added and the method returns `false`. On success the method returns `true`.
 	 *
 	 * ## Size/queue ordering note
 	 *
@@ -83,6 +85,7 @@ class ActuatorCommandQueue(
 				queue.addAll(decisions)
 			}
 		} else {
+			size.addAndGet(decisions.size)
 			queue.addAll(decisions)
 		}
 		return true
@@ -107,7 +110,7 @@ class ActuatorCommandQueue(
 			result.add(decision)
 			decision = queue.poll()
 		}
-		if (capacity > 0 && result.isNotEmpty()) {
+		if (result.isNotEmpty()) {
 			synchronized(lock) {
 				size.addAndGet(-result.size)
 			}

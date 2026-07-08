@@ -29,9 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Timeout for concurrency stress tests, in seconds. */
 private const val CONCURRENCY_TEST_TIMEOUT_SECONDS: Long = 30
 
-/** Number of consecutive empty drains required before the consumer terminates. */
-private const val EMPTY_DRAINS_THRESHOLD: Int = 3
-
 /** Polling interval for the consumer stress-test loop, in milliseconds. */
 private const val CONSUMER_POLL_INTERVAL_MS: Long = 1
 
@@ -154,6 +151,7 @@ class ActuatorCommandQueueTest {
 		val posted = queue.postAll(decisions)
 
 		assertThat(posted).isTrue()
+		assertThat(queue.approximateSize()).isEqualTo(10_000)
 		assertThat(queue.drain()).hasSize(10_000)
 	}
 
@@ -228,24 +226,15 @@ class ActuatorCommandQueueTest {
 
 		executor.submit {
 			startLatch.await()
-			var emptyDrains = 0
-			while (true) {
-				val drained = queue.drain().size
-				consumedCount.addAndGet(drained)
-				if (drained == 0) {
-					emptyDrains++
-				} else {
-					emptyDrains = 0
-				}
-				if (producerDoneLatch.getCount() == 0L && emptyDrains >= EMPTY_DRAINS_THRESHOLD) {
-					// Producers are done and the queue has stayed empty across multiple
-					// drains, so any stragglers have been consumed.
-					break
-				}
-				// A short sleep keeps the consumer from spinning on the CPU while still
-				// reacting quickly to newly posted decisions in this test scenario.
-				Thread.sleep(CONSUMER_POLL_INTERVAL_MS)
+			// Drain concurrently with producers. await(timeout) returns false on timeout
+			// (producers still running) and true once the latch reaches zero — the true
+			// return establishes happens-before for the producers' final queue writes.
+			while (!producerDoneLatch.await(CONSUMER_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)) {
+				consumedCount.addAndGet(queue.drain().size)
 			}
+			// Producers are done with a happens-before guarantee; one final drain clears
+			// any stragglers in flight when the latch completed.
+			consumedCount.addAndGet(queue.drain().size)
 			consumerDoneLatch.countDown()
 		}
 
