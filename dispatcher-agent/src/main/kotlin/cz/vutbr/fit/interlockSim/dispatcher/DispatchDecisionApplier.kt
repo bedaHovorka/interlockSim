@@ -52,6 +52,15 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * @param onApproveTrain  Callback invoked (on the sim thread) to admit a queued train.
  *   Typically [ShuntingLoop.approveQueuedTrain][cz.vutbr.fit.interlockSim.sim.ShuntingLoop.approveQueuedTrain].
  *
+ *   **Design note (SP0.9 review, Minor #4):** train admission (unapproved → approved
+ *   + kDisco `activate`) is a `ShuntingLoop`-specific lifecycle step, not a generic
+ *   train-actuator command — [TrainActuatorPort][cz.vutbr.fit.interlockSim.ports.TrainActuatorPort]
+ *   only exposes `setTargetSpeed`. Routing `ApproveTrain` through a `(String) -> Unit`
+ *   callback is therefore an intentional, minimal coupling for SP0.9. If SP2b (#556)
+ *   adds more train-lifecycle commands (e.g. `HoldTrain`), extract a dedicated
+ *   `TrainAdmissionPort` and route all train commands through it — symmetric with
+ *   [NetworkActuatorPort] — rather than growing this constructor-arg list.
+ *
  * @since Issue #731 (SP0.9 — Goal 10)
  */
 class DispatchDecisionApplier(
@@ -80,7 +89,10 @@ class DispatchDecisionApplier(
 		}
 	}
 
-	private fun applyDecision(decision: DispatchDecision) {
+	// Expression-body `when` so the compiler enforces exhaustiveness over the sealed
+	// DispatchDecision type — adding a future subtype (e.g. HoldTrain in SP2b, #556)
+	// becomes a compile error here rather than a silently-dropped decision.
+	private fun applyDecision(decision: DispatchDecision) =
 		when (decision) {
 			is DispatchDecision.ApproveTrain -> {
 				logger.debug { "Applying ApproveTrain: trainId=${decision.trainId}" }
@@ -89,7 +101,6 @@ class DispatchDecisionApplier(
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
 			DispatchDecision.NoAction -> Unit
 		}
-	}
 
 	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
 		logger.debug {
@@ -102,7 +113,11 @@ class DispatchDecisionApplier(
 				decision.fromSemaphoreName,
 				decision.toSeparatorName
 			)
-		when (result) {
+		// Exhaustive `when` *expression* over the sealed RouteRequestResult type —
+		// returning the `when` forces the compiler to enforce coverage, so a future
+		// subtype addition fails to compile here instead of being silently ignored
+		// (matches the pattern in DefaultNetworkActuatorPort.requestRoute).
+		return when (result) {
 			is RouteRequestResult.Reserved ->
 				logger.debug {
 					"ReservePath: reserved ${result.blocksCount} block(s) for ${decision.trainId}"
