@@ -279,8 +279,9 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 		 * Path release happens when train's nextSemaphore points beyond exit semaphore.
 		 *
 		 * Expected: ShuntingLoop tracking logic validates train progression through
-		 * semaphores (checkOneEnd method) and will release path when train no longer
-		 * occupies inner blocks.
+		 * semaphores (per block input, via the pure [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher.checkInput]
+		 * decision consumed by [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.applyReservePath]) and
+		 * will release path when train no longer occupies inner blocks.
 		 *
 		 * Railway Safety: Path release prevents deadlock where loop remains reserved
 		 * by departed train, blocking subsequent trains.
@@ -289,16 +290,17 @@ class ShuntingLoopOperationalTest : KoinTestBase() {
 		fun `path released after train clears loop`() {
 			val shuntingLoop = ShuntingLoop(validContext, 60L)
 
-			// ShuntingLoop iteration logic (checkBothEnds, checkOneEnd) monitors
-			// track occupancy and releases paths when no longer needed
+			// ShuntingLoop iteration logic (RuleBasedDispatcher.checkAllInputs over every
+			// block input, consumed by ShuntingLoop.applyReservePath) monitors track
+			// occupancy and releases paths when no longer needed
 			// This is validated by successful construction - release logic is integrated
 			assertThat(shuntingLoop)
 				.isNotNull()
 
 			// Release mechanism:
-			// - checkBothEnds(k1): If train vacates inner block k1, release paths
-			// - checkOneEnd(kA, zA): If train clears external block kA, release entry paths
-			// - checkOneEnd(kB, zB): If train clears external block kB, release exit paths
+			// - checkAllInputs over k1's inputs: If train vacates inner block k1, release paths
+			// - checkInput(kA, zA): If train clears external block kA, release entry paths
+			// - checkInput(kB, zB): If train clears external block kB, release exit paths
 		}
 
 		/**

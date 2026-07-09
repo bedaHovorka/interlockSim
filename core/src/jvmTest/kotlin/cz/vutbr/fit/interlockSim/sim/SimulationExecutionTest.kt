@@ -371,11 +371,12 @@ class SimulationExecutionTest : KoinTestBase() {
 		 *
 		 * Code References:
 		 * - Train.kt:104-109 - Passivation logic when next path unavailable
-		 * - ShuntingLoop.kt:checkOneEnd() - Path reservation mechanism (1.0s polling)
+		 * - ShuntingLoop.applyReservePath() - Path reservation mechanism (1.0s polling),
+		 *   driven by RuleBasedDispatcher.checkAllInputs()/checkInput() decisions
 		 * - ShuntingLoop.kt:trySetupPaths() - Dispatcher path reservation logic
 		 *
 		 * @see Train.actions() method at lines 104-109 (passivation logic)
-		 * @see ShuntingLoop.checkOneEnd() (path reservation polling)
+		 * @see ShuntingLoop.applyReservePath() (path reservation polling)
 		 * @see Issue #291 Original bug report
 		 * @see PR #312 Hotfix commit 4744dd6
 		 */
