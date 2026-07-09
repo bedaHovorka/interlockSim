@@ -70,11 +70,21 @@ import org.koin.core.component.KoinComponent
  * - [Dispatcher] seam (Issue #540) for pluggable control policy
  * - Koin DI integration for service injection
  *
+ * ## SP0.9 — Cross-thread command queue draining (Issue #731)
+ *
+ * An optional [ControlStepListener] can be registered via [controlStepListener]
+ * before the simulation starts. If set, [iteration] calls [ControlStepListener.onControlStep]
+ * at the top of every tick, giving the SP0.9
+ * [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+ * an opportunity to drain the [ActuatorCommandQueue][cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue]
+ * and apply pending decisions via actuator ports — all on the kDisco sim thread.
+ *
  * @param dispatcher Dispatch policy; defaults to [RuleBasedDispatcher].
  *   Pass a custom implementation to override admission and path-advancement logic.
  *
  * @see RuleBasedDispatcher
  * @see Dispatcher
+ * @see ControlStepListener
  * @see TopologyNavigator
  * @see <a href="https://github.com/bedaHovorka/interlockSim/issues/540">Issue #540 (SP0.1)</a>
  * @see docs/PATH_RESERVATION_ARCHITECTURE.md
@@ -175,6 +185,20 @@ class ShuntingLoop(
 			env = context,
 			pathReservationService = pathReservationService
 		)
+
+	/**
+	 * Optional listener called at the start of each [iteration] to drain and apply
+	 * any pending decisions from the cross-thread command queue (SP0.9 — Issue #731).
+	 *
+	 * Set this **before** `context.run()` is called; the field is read on the kDisco
+	 * sim thread only, so no additional synchronization is needed after startup wiring
+	 * is complete.  Typical value:
+	 * [DispatchDecisionApplier][cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+	 * from `:dispatcher-agent`.
+	 *
+	 * @since Issue #731 (SP0.9 — Goal 10)
+	 */
+	var controlStepListener: ControlStepListener? = null
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
@@ -320,6 +344,11 @@ class ShuntingLoop(
 	}
 
 	override suspend fun iteration() {
+		// SP0.9: Drain and apply any decisions posted to the cross-thread command queue
+		// before the inline dispatcher runs. This ensures queued decisions are
+		// reflected in the admission/path-advancement observations built below.
+		controlStepListener?.onControlStep()
+
 		// stare vlaky
 		val iter: MutableIterator<Train> = approwedTrains.iterator()
 		while (iter.hasNext()) {
@@ -461,6 +490,18 @@ class ShuntingLoop(
 		approwedTrains.add(train)
 		activate(train)
 	}
+
+	/**
+	 * Public entry point for the SP0.9 applier to approve a queued train.
+	 *
+	 * Delegates to [applyApproveTrain]. Must be called on the kDisco simulation
+	 * thread (typically from [ControlStepListener.onControlStep]).
+	 *
+	 * @param trainId The name/identifier of the train to approve.
+	 * @throws IllegalArgumentException if no unapproved train with [trainId] exists.
+	 * @since Issue #731 (SP0.9 — Goal 10)
+	 */
+	fun approveQueuedTrain(trainId: String) = applyApproveTrain(trainId)
 
 	/** Resolves [fromSemaphoreName] and [toSeparatorName] and delegates to [tryReservePath]. */
 	private fun applyReservePath(
