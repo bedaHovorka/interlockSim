@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test
  * `RuleBasedDispatcherDeterminismTest` integration gate cannot provide on its own
  * (determinism verifies cross-run consistency, not branch correctness).
  *
- * [decide] is now a pure function over [DispatchObservation]/[BlockEndObservation]
+ * [decide] is now a pure function over [DispatchObservation]/[BlockInputObservation]
  * value classes (Issue #729 / SP0.7), so these tests build observations directly —
  * no mocks or fake contexts required.
  *
@@ -47,14 +47,14 @@ class RuleBasedDispatcherTest {
 	private fun observation(
 		approvedTrainCount: Int = 0,
 		unapprovedTrains: List<QueuedTrainObservation> = emptyList(),
-		innerBlockEnds: List<BlockEndObservation> = emptyList(),
-		outerBlockEnds: List<BlockEndObservation> = emptyList()
+		innerBlockInputs: List<BlockInputObservation> = emptyList(),
+		outerBlockInputs: List<BlockInputObservation> = emptyList()
 	): DispatchObservation =
 		DispatchObservation(
 			snapshot = emptySnapshot.copy(trainPositions = List(approvedTrainCount) { fakeTrainPosition() }),
 			unapprovedTrains = unapprovedTrains,
-			innerBlockEnds = innerBlockEnds,
-			outerBlockEnds = outerBlockEnds
+			innerBlockInputs = innerBlockInputs,
+			outerBlockInputs = outerBlockInputs
 		)
 
 	private fun fakeTrainPosition() =
@@ -66,23 +66,29 @@ class RuleBasedDispatcherTest {
 			frontSectionName = null
 		)
 
-	private fun queued(trainId: String): QueuedTrainObservation = QueuedTrainObservation(trainId, "outA")
+	private fun queued(
+		trainId: String,
+		destinationInOutName: String = "outA"
+	): QueuedTrainObservation = QueuedTrainObservation(trainId, destinationInOutName)
 
-	private fun end(
+	private fun input(
 		state: TrackFacility.State,
 		towardSemaphoreName: String = "sem",
+		toSeparatorName: String? = "nextSep",
 		ownerTrainId: String? = null,
-		isApproachingThisEnd: Boolean = false,
-		pathSetUpTowardThisEnd: Boolean = false,
-		pathAlreadyExtendedBeyond: Boolean = false
-	): BlockEndObservation =
-		BlockEndObservation(
-			blockId = "block",
+		isApproachingThisInput: Boolean = false,
+		pathSetUpTowardThisInput: Boolean = false,
+		pathAlreadyExtendedBeyond: Boolean = false,
+		blockId: String = "block"
+	): BlockInputObservation =
+		BlockInputObservation(
+			blockId = blockId,
 			towardSemaphoreName = towardSemaphoreName,
+			toSeparatorName = toSeparatorName,
 			state = state,
 			ownerTrainId = ownerTrainId,
-			isApproachingThisEnd = isApproachingThisEnd,
-			pathSetUpTowardThisEnd = pathSetUpTowardThisEnd,
+			isApproachingThisInput = isApproachingThisInput,
+			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
 		)
 
@@ -139,7 +145,7 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("decide() with an empty queue and no block ends returns NoAction")
+	@DisplayName("decide() with an empty queue and no block inputs returns NoAction")
 	fun emptyQueueAndFreeReturnsNoAction() {
 		val dispatcher = RuleBasedDispatcher()
 
@@ -151,23 +157,23 @@ class RuleBasedDispatcherTest {
 	// ── Path advancement — OCCUPIED branch ──────────────────────────────────
 
 	@Test
-	@DisplayName("FREE block end: no reservation, NoAction")
-	fun freeEndMakesNoReservation() {
+	@DisplayName("FREE block input: no reservation, NoAction")
+	fun freeInputMakesNoReservation() {
 		val dispatcher = RuleBasedDispatcher()
 
-		val decisions = dispatcher.decide(observation(outerBlockEnds = listOf(end(TrackFacility.State.FREE))))
+		val decisions = dispatcher.decide(observation(outerBlockInputs = listOf(input(TrackFacility.State.FREE))))
 
 		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	@Test
-	@DisplayName("OCCUPIED end, train not approaching: no reservation")
+	@DisplayName("OCCUPIED input, train not approaching: no reservation")
 	fun occupiedNotApproachingMakesNoReservation() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
-					listOf(end(TrackFacility.State.OCCUPIED, ownerTrainId = "T1", isApproachingThisEnd = false))
+				outerBlockInputs =
+					listOf(input(TrackFacility.State.OCCUPIED, ownerTrainId = "T1", isApproachingThisInput = false))
 			)
 
 		val decisions = dispatcher.decide(observed)
@@ -176,17 +182,17 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("OCCUPIED end, approaching, already extended: idempotent skip")
+	@DisplayName("OCCUPIED input, approaching, already extended: idempotent skip")
 	fun occupiedApproachingAlreadyExtendedSkips() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
+				outerBlockInputs =
 					listOf(
-						end(
+						input(
 							TrackFacility.State.OCCUPIED,
 							ownerTrainId = "T1",
-							isApproachingThisEnd = true,
+							isApproachingThisInput = true,
 							pathAlreadyExtendedBeyond = true
 						)
 					)
@@ -198,37 +204,61 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("OCCUPIED end, approaching, not extended: reserves with occupant's train id")
+	@DisplayName("OCCUPIED input, approaching, not extended: reserves from→to with occupant's train id")
 	fun occupiedApproachingReserves() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
+				outerBlockInputs =
 					listOf(
-						end(
+						input(
 							TrackFacility.State.OCCUPIED,
 							towardSemaphoreName = "za",
+							toSeparatorName = "zb",
 							ownerTrainId = "T1",
-							isApproachingThisEnd = true
+							isApproachingThisInput = true
 						)
 					)
 			)
 
 		val decisions = dispatcher.decide(observed)
 
-		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "za"))
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T1", "za", "zb"))
+	}
+
+	@Test
+	@DisplayName("OCCUPIED input, approaching, but no FREE next separator: NoAction (train waits)")
+	fun occupiedApproachingNoFreeSeparatorDefers() {
+		val dispatcher = RuleBasedDispatcher()
+		val observed =
+			observation(
+				outerBlockInputs =
+					listOf(
+						input(
+							TrackFacility.State.OCCUPIED,
+							towardSemaphoreName = "za",
+							toSeparatorName = null,
+							ownerTrainId = "T1",
+							isApproachingThisInput = true
+						)
+					)
+			)
+
+		val decisions = dispatcher.decide(observed)
+
+		assertThat(decisions).containsExactly(DispatchDecision.NoAction)
 	}
 
 	// ── Path advancement — RESERVED branch ──────────────────────────────────
 
 	@Test
-	@DisplayName("RESERVED end, path not set up: no reservation")
+	@DisplayName("RESERVED input, path not set up: no reservation")
 	fun reservedNotSetUpMakesNoReservation() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
-					listOf(end(TrackFacility.State.RESERVED, ownerTrainId = "T2", pathSetUpTowardThisEnd = false))
+				outerBlockInputs =
+					listOf(input(TrackFacility.State.RESERVED, ownerTrainId = "T2", pathSetUpTowardThisInput = false))
 			)
 
 		val decisions = dispatcher.decide(observed)
@@ -237,17 +267,17 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("RESERVED end, set up, already extended: idempotent skip")
+	@DisplayName("RESERVED input, set up, already extended: idempotent skip")
 	fun reservedSetUpAlreadyExtendedSkips() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
+				outerBlockInputs =
 					listOf(
-						end(
+						input(
 							TrackFacility.State.RESERVED,
 							ownerTrainId = "T2",
-							pathSetUpTowardThisEnd = true,
+							pathSetUpTowardThisInput = true,
 							pathAlreadyExtendedBeyond = true
 						)
 					)
@@ -259,48 +289,146 @@ class RuleBasedDispatcherTest {
 	}
 
 	@Test
-	@DisplayName("RESERVED end, set up, not extended: reserves with block's train name")
+	@DisplayName("RESERVED input, set up, not extended: reserves from→to with block's train name")
 	fun reservedSetUpReserves() {
 		val dispatcher = RuleBasedDispatcher()
 		val observed =
 			observation(
-				outerBlockEnds =
+				outerBlockInputs =
 					listOf(
-						end(
+						input(
 							TrackFacility.State.RESERVED,
 							towardSemaphoreName = "zb",
+							toSeparatorName = "outB",
 							ownerTrainId = "T2",
-							pathSetUpTowardThisEnd = true
+							pathSetUpTowardThisInput = true
 						)
 					)
 			)
 
 		val decisions = dispatcher.decide(observed)
 
-		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "zb"))
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("T2", "zb", "outB"))
 	}
 
-	// ── Both ends of an inner block evaluated independently ─────────────────
+	// ── All inputs evaluated independently ──────────────────────────────────
 
 	@Test
-	@DisplayName("of a block's two ends, only the genuinely eligible one yields a decision")
-	fun onlyEligibleEndYieldsDecision() {
-		// Real domain data: a block's occupant can only be approaching one end
+	@DisplayName("of a block's two inputs, only the genuinely eligible one yields a decision")
+	fun onlyEligibleInputYieldsDecision() {
+		// Real domain data: a block's occupant can only be approaching one input
 		// (TrackOccupant.nextSemaphore() is single-valued), so at most one of the
-		// two BlockEndObservations built by ShuntingLoop is ever eligible. This
+		// two BlockInputObservations built by ShuntingLoop is ever eligible. This
 		// replaces the pre-#729 short-circuit test (checkBothEndsShortCircuitsOnFirstEnd):
-		// under a pure decide(), there is no live actuation result to short-circuit
-		// on, so both ends are evaluated independently — the assertion here is that
-		// this still yields exactly one decision per block, not two.
+		// under a pure decide() there is no live actuation result to short-circuit
+		// on, so checkAllInputs/checkInput evaluate every input independently — the
+		// assertion here is that this still yields exactly one decision per block,
+		// not two.
 		val dispatcher = RuleBasedDispatcher()
-		val eligibleEnd =
-			end(TrackFacility.State.OCCUPIED, towardSemaphoreName = "semA", ownerTrainId = "TA", isApproachingThisEnd = true)
-		val ineligibleEnd =
-			end(TrackFacility.State.OCCUPIED, towardSemaphoreName = "semB", ownerTrainId = "TA", isApproachingThisEnd = false)
+		val eligibleInput =
+			input(
+				TrackFacility.State.OCCUPIED,
+				towardSemaphoreName = "semA",
+				toSeparatorName = "nextA",
+				ownerTrainId = "TA",
+				isApproachingThisInput = true
+			)
+		val ineligibleInput =
+			input(
+				TrackFacility.State.OCCUPIED,
+				towardSemaphoreName = "semB",
+				toSeparatorName = "nextB",
+				ownerTrainId = "TA",
+				isApproachingThisInput = false
+			)
 
-		val decisions = dispatcher.decide(observation(innerBlockEnds = listOf(eligibleEnd, ineligibleEnd)))
+		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(eligibleInput, ineligibleInput)))
 
-		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("TA", "semA"))
+		assertThat(decisions).containsExactly(DispatchDecision.ReservePath("TA", "semA", "nextA"))
+	}
+
+	@Test
+	@DisplayName("eligible inputs of DIFFERENT blocks each yield a from→to reservation (no cross-block dedup)")
+	fun multipleBlocksEachYieldReservation() {
+		// Documents the frozen-observation + independent-evaluation contract: a
+		// reservation decision for one block does not suppress another block's
+		// decision. The shell builds one BlockInputObservation per block input, and
+		// checkAllInputs evaluates them all; pure decide() never deduplicates across
+		// blocks.
+		val dispatcher = RuleBasedDispatcher()
+		val inputK1 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k1",
+				towardSemaphoreName = "doB1",
+				toSeparatorName = "zB",
+				ownerTrainId = "T1",
+				isApproachingThisInput = true
+			)
+		val inputK2 =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k2",
+				towardSemaphoreName = "doB2",
+				toSeparatorName = "zB",
+				ownerTrainId = "T2",
+				isApproachingThisInput = true
+			)
+
+		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(inputK1, inputK2)))
+
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ReservePath("T1", "doB1", "zB"),
+			DispatchDecision.ReservePath("T2", "doB2", "zB")
+		)
+	}
+
+	@Test
+	@DisplayName("two eligible inputs of the SAME block both yield a decision (unreachable for real data)")
+	fun sameBlockTwoEligibleInputsBothYield() {
+		// This state is unreachable for real domain data: a block's occupant
+		// approaches at most one input (TrackOccupant.nextSemaphore() is
+		// single-valued) and a reserved block's path is set up toward at most one
+		// input, so the shell never builds two eligible inputs for one block. The
+		// test documents that pure decide() does NOT deduplicate by block — if the
+		// invariant ever regressed, both inputs would yield a reservation rather
+		// than silently collapsing to one.
+		val dispatcher = RuleBasedDispatcher()
+		val inputA =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k1",
+				towardSemaphoreName = "semA",
+				toSeparatorName = "nextA",
+				ownerTrainId = "TA",
+				isApproachingThisInput = true
+			)
+		val inputB =
+			input(
+				TrackFacility.State.OCCUPIED,
+				blockId = "k1",
+				towardSemaphoreName = "semB",
+				toSeparatorName = "nextB",
+				ownerTrainId = "TB",
+				isApproachingThisInput = true
+			)
+
+		val decisions = dispatcher.decide(observation(innerBlockInputs = listOf(inputA, inputB)))
+
+		assertThat(decisions).containsExactly(
+			DispatchDecision.ReservePath("TA", "semA", "nextA"),
+			DispatchDecision.ReservePath("TB", "semB", "nextB")
+		)
+	}
+
+	// ── Observation contract ─────────────────────────────────────────────────
+
+	@Test
+	@DisplayName("QueuedTrainObservation.destinationInOutName is preserved into the observation")
+	fun queuedDestinationInOutNameIsPreserved() {
+		val observed = observation(unapprovedTrains = listOf(queued("T1", "outB")))
+
+		assertThat(observed.unapprovedTrains.first().destinationInOutName).isEqualTo("outB")
 	}
 
 	// ── Constructor guard ───────────────────────────────────────────────────

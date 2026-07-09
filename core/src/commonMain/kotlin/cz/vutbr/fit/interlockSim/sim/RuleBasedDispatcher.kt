@@ -23,34 +23,44 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * 1. **Admission** — admits trains from the head of
  *    [DispatchObservation.unapprovedTrains] until [maxConcurrentTrains]
  *    simultaneous trains are active.
- * 2. **Path advancement** — for every [DispatchObservation.innerBlockEnds] and
- *    [DispatchObservation.outerBlockEnds] entry, reserves the next forward path
- *    for any approaching or reserved train.
+ * 2. **Path advancement** — for every [DispatchObservation.innerBlockInputs] and
+ *    [DispatchObservation.outerBlockInputs] entry, reserves the next forward
+ *    section for any approaching or reserved train. Each reservation is expressed
+ *    as a from→to [DispatchDecision.ReservePath] whose `to` the shell has
+ *    pre-computed as the next FREE separator toward the train's destination.
  *
  * The shell ([ShuntingLoop]) calls [decide] once per phase (see [Dispatcher]
  * KDoc), so a single call only ever sees a non-empty [DispatchObservation.unapprovedTrains]
- * *or* non-empty block-end lists, never both.
+ * *or* non-empty block-input lists, never both.
  *
  * ## Determinism (Goal 10 Stage A3)
  * Train admission is strictly FIFO over [DispatchObservation.unapprovedTrains].
  * Path selection is applied by the shell via
- * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePathToAnyNextSemaphore],
- * which produces deterministic results for a fixed network topology. Given the
- * same XML network and train generation sequence, this dispatcher produces
- * identical decision sequences across consecutive runs.
+ * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath]
+ * using the `to` separator this dispatcher echoes from the observation, which
+ * produces deterministic results for a fixed network topology. Given the same XML
+ * network and train generation sequence, this dispatcher produces identical
+ * decision sequences across consecutive runs.
  *
- * ## Both-ends evaluation
- * Each end of an inner block is evaluated independently (no short-circuit). In
- * the real domain model a block's occupant can only be approaching one end
+ * ## All-inputs evaluation
+ * Each input of an inner block is evaluated independently (no short-circuit). In
+ * the real domain model a block's occupant can only be approaching one input
  * ([cz.vutbr.fit.interlockSim.objects.core.TrackOccupant.nextSemaphore] is
- * single-valued) and a reserved block's path is only ever set up toward one end
+ * single-valued) and a reserved block's path is only ever set up toward one input
  * ([cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.isSetUpPath] is
- * directional), so at most one end of a real block is ever eligible for a
+ * directional), so at most one input of a real block is ever eligible for a
  * decision per tick — independent evaluation is behaviorally identical to the
  * pre-#729 short-circuiting version for real data. The short-circuit itself is
  * no longer possible under a pure [decide]: it depended on the *live return
  * value* of a reservation attempt, which is unavailable before the shell applies
  * the returned [DispatchDecision]s.
+ *
+ * When the shell found no FREE next separator toward a train's destination
+ * ([BlockInputObservation.toSeparatorName] == `null`), no reservation can be
+ * requested this tick and [DispatchDecision.NoAction] effectively results for
+ * that input — the train waits and is reconsidered next tick, matching the
+ * pre-#729 behaviour where `reservePathToAnyNextSemaphore` returned
+ * `AllPathsBlocked`.
  *
  * ## Goal 9 integration hook
  * This class is the designated place for wiring Goal 9's
@@ -86,7 +96,7 @@ class RuleBasedDispatcher(
 	}
 
 	override fun decide(observed: DispatchObservation): List<DispatchDecision> {
-		val decisions = decideAdmissions(observed) + decidePathAdvancements(observed)
+		val decisions = decideAdmissions(observed) + checkAllInputs(observed)
 		return decisions.ifEmpty { listOf(DispatchDecision.NoAction) }
 	}
 
@@ -105,51 +115,75 @@ class RuleBasedDispatcher(
 
 	// ── Path advancement ────────────────────────────────────────────────────
 
-	private fun decidePathAdvancements(observed: DispatchObservation): List<DispatchDecision.ReservePath> =
-		(observed.innerBlockEnds + observed.outerBlockEnds).mapNotNull(::decideForEnd)
+	private fun checkAllInputs(observed: DispatchObservation): List<DispatchDecision.ReservePath> =
+		(observed.innerBlockInputs + observed.outerBlockInputs).mapNotNull(::checkInput)
 
 	/**
-	 * Decides whether a forward path reservation is warranted from [end].
+	 * Decides whether a forward path reservation is warranted from [input].
 	 *
-	 * @return A [DispatchDecision.ReservePath] when the block state warrants one,
-	 *   `null` when the state requires no action (FREE, or occupied/reserved but
-	 *   not eligible toward this end, or already extended).
+	 * @return A [DispatchDecision.ReservePath] when the block state warrants one
+	 *   and the shell found a FREE next separator ([BlockInputObservation.toSeparatorName]
+	 *   non-null), `null` when the state requires no action (FREE, or
+	 *   occupied/reserved but not eligible toward this input, or already extended,
+	 *   or no FREE next separator toward the destination).
 	 */
-	private fun decideForEnd(end: BlockEndObservation): DispatchDecision.ReservePath? =
-		when (end.state) {
+	private fun checkInput(input: BlockInputObservation): DispatchDecision.ReservePath? =
+		when (input.state) {
 			TrackFacility.State.FREE -> null
 
 			TrackFacility.State.OCCUPIED -> {
-				if (!end.isApproachingThisEnd) {
+				if (!input.isApproachingThisInput) {
 					null
-				} else if (end.pathAlreadyExtendedBeyond) {
+				} else if (input.pathAlreadyExtendedBeyond) {
 					logger.debug {
-						"Path already extends beyond ${end.towardSemaphoreName} for ${end.ownerTrainId}, " +
+						"Path already extends beyond ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
 							"skipping redundant reservation"
+					}
+					null
+				} else if (input.toSeparatorName == null) {
+					logger.debug {
+						"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId}, " +
+							"deferring reservation"
 					}
 					null
 				} else {
 					logger.debug {
-						"Train ${end.ownerTrainId} approaching ${end.towardSemaphoreName}, reserving forward path"
+						"Train ${input.ownerTrainId} approaching ${input.towardSemaphoreName}, " +
+							"reserving forward path to ${input.toSeparatorName}"
 					}
-					DispatchDecision.ReservePath(requireNotNull(end.ownerTrainId), end.towardSemaphoreName)
+					DispatchDecision.ReservePath(
+						requireNotNull(input.ownerTrainId),
+						input.towardSemaphoreName,
+						input.toSeparatorName
+					)
 				}
 			}
 
 			TrackFacility.State.RESERVED -> {
-				if (!end.pathSetUpTowardThisEnd) {
+				if (!input.pathSetUpTowardThisInput) {
 					null
-				} else if (end.pathAlreadyExtendedBeyond) {
+				} else if (input.pathAlreadyExtendedBeyond) {
 					logger.debug {
-						"Path already extends beyond ${end.towardSemaphoreName} for ${end.ownerTrainId} " +
+						"Path already extends beyond ${input.towardSemaphoreName} for ${input.ownerTrainId} " +
 							"(reserved block), skipping"
+					}
+					null
+				} else if (input.toSeparatorName == null) {
+					logger.debug {
+						"No FREE next separator from ${input.towardSemaphoreName} for ${input.ownerTrainId} " +
+							"(reserved block), deferring reservation"
 					}
 					null
 				} else {
 					logger.debug {
-						"Path already set up through ${end.towardSemaphoreName}, attempting extension"
+						"Path already set up through ${input.towardSemaphoreName}, " +
+							"attempting extension to ${input.toSeparatorName}"
 					}
-					DispatchDecision.ReservePath(requireNotNull(end.ownerTrainId), end.towardSemaphoreName)
+					DispatchDecision.ReservePath(
+						requireNotNull(input.ownerTrainId),
+						input.towardSemaphoreName,
+						input.toSeparatorName
+					)
 				}
 			}
 		}

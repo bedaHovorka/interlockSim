@@ -50,7 +50,7 @@ class ActuatorCommandQueueTest {
 		val decisions =
 			listOf(
 				DispatchDecision.ApproveTrain("T1"),
-				DispatchDecision.ReservePath("T1", "zA"),
+				DispatchDecision.ReservePath("T1", "zA", "doB1"),
 				DispatchDecision.NoAction
 			)
 
@@ -217,7 +217,7 @@ class ActuatorCommandQueueTest {
 				repeat(decisionsPerProducer) { decisionIndex ->
 					queue.postAll(
 						listOf(
-							DispatchDecision.ReservePath("P$producerIndex", "S$decisionIndex")
+							DispatchDecision.ReservePath("P$producerIndex", "S$decisionIndex", "T$decisionIndex")
 						)
 					)
 				}

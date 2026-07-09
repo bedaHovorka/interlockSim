@@ -27,9 +27,9 @@ package cz.vutbr.fit.interlockSim.sim
  * ## Two-phase tick
  * The shell calls [decide] twice per iteration: once **before** the per-iteration
  * polling `hold()` with an admission-phase [DispatchObservation] (real
- * [DispatchObservation.unapprovedTrains], empty block-end lists), and once
+ * [DispatchObservation.unapprovedTrains], empty block-input lists), and once
  * **after** it with a path-advancement-phase observation (empty
- * [DispatchObservation.unapprovedTrains], real block-end lists). Splitting the
+ * [DispatchObservation.unapprovedTrains], real block-input lists). Splitting the
  * tick keeps train admission aligned with the polling interval so that
  * path-advancement checks observe block state after newly admitted trains have
  * had a chance to move — the original `ShuntingLoop` ordering (Issue #540

@@ -48,15 +48,31 @@ sealed class DispatchDecision {
 	) : DispatchDecision()
 
 	/**
-	 * The dispatcher decided to reserve a forward path from
-	 * [fromSemaphoreName] for [trainId].
+	 * The dispatcher decided to reserve a forward path of **one section** from
+	 * [fromSemaphoreName] to [toSeparatorName] for [trainId].
+	 *
+	 * [fromSemaphoreName] is the semaphore the train is approaching (the value the
+	 * shell carried as [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.towardSemaphoreName]);
+	 * [toSeparatorName] is the next separator one section ahead toward the train's
+	 * destination — a semaphore, or the destination InOut for the final section. The
+	 * shell pre-computes `to` as the first FREE next separator
+	 * ([BlockInputObservation.toSeparatorName]) so the applier can call
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath]
+	 * directly. `to` is never the far destination as a multi-section shortcut: one
+	 * section is reserved per decision, matching the pre-#729
+	 * `reservePathToAnyNextSemaphore` outcome.
 	 *
 	 * @property trainId The train to reserve a path for.
-	 * @property fromSemaphoreName The semaphore to reserve the path from.
+	 * @property fromSemaphoreName The semaphore to reserve the path from (the
+	 *   semaphore the train is approaching).
+	 * @property toSeparatorName The separator to reserve the path to (the next
+	 *   separator toward the destination — a semaphore, or the destination InOut
+	 *   for the final section).
 	 */
 	data class ReservePath(
 		val trainId: String,
-		val fromSemaphoreName: String
+		val fromSemaphoreName: String,
+		val toSeparatorName: String
 	) : DispatchDecision()
 
 	/**

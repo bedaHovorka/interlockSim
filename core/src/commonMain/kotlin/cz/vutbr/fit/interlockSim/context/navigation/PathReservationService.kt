@@ -338,6 +338,43 @@ interface PathReservationService {
 	): ReservationResult
 
 	/**
+	 * Find the next reservation target one section ahead of [start] — the read-only
+	 * twin of [reservePathToAnyNextSemaphore]: it returns the separator that the
+	 * reserving overload would reserve to (the first FREE candidate), **without
+	 * reserving anything**.
+	 *
+	 * Used by the dispatch shell ([cz.vutbr.fit.interlockSim.sim.ShuntingLoop]) to
+	 * pre-compute the `to` of an explicit from→to
+	 * [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ReservePath] so the pure
+	 * [cz.vutbr.fit.interlockSim.sim.Dispatcher] can echo it and the shell can apply
+	 * it with [reservePath]. The target is a semaphore, or the destination
+	 * [cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut] for the final section
+	 * (InOuts are always valid terminal targets — see `findNextSemaphoresVia`).
+	 *
+	 * Selection mirrors [reservePathToAnyNextSemaphore]: determine the forward track
+	 * section from [start]'s orientation, enumerate reachable separators via that
+	 * section (InOuts prioritized over semaphores), and return the first whose path
+	 * is currently available ([isPathAvailable]). `null` when no FREE next separator
+	 * exists — the caller then emits [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]
+	 * and the train waits, matching the prior `AllPathsBlocked` outcome.
+	 *
+	 * Note: unlike [reservePathToAnyNextSemaphore], this does not validate that the
+	 * path goes through the required `next` block (that check needs a live
+	 * reservation). For networks with backward alternative routes that bypass the
+	 * forward section, the reserving overload may still reject a candidate this
+	 * method returns — acceptable for the `vyhybna.xml` shunting loop (no such
+	 * routes) and the determinism gate; general networks are deferred to SP0.8+.
+	 *
+	 * @param start Starting oriented path separator (typically a semaphore).
+	 * @return The first FREE next separator toward which a path can be reserved, or
+	 *   `null` if none is free.
+	 * @see reservePathToAnyNextSemaphore
+	 * @see isPathAvailable
+	 * @since Issue #729 (SP0.7 — Goal 10)
+	 */
+	fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator?
+
+	/**
 	 * Check if a path from separator to any next semaphore is currently available.
 	 *
 	 * This is a read-only operation that does NOT reserve the path. It's used as a
