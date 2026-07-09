@@ -19,6 +19,7 @@ import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isTrue
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
@@ -49,7 +50,7 @@ class ActuatorCommandQueueTest {
 		val decisions =
 			listOf(
 				DispatchDecision.ApproveTrain("T1"),
-				DispatchDecision.ReservePath("T1", "zA"),
+				DispatchDecision.ReservePath("T1", "zA", "doB1"),
 				DispatchDecision.NoAction
 			)
 
@@ -216,7 +217,7 @@ class ActuatorCommandQueueTest {
 				repeat(decisionsPerProducer) { decisionIndex ->
 					queue.postAll(
 						listOf(
-							DispatchDecision.ReservePath("P$producerIndex", "S$decisionIndex")
+							DispatchDecision.ReservePath("P$producerIndex", "S$decisionIndex", "T$decisionIndex")
 						)
 					)
 				}

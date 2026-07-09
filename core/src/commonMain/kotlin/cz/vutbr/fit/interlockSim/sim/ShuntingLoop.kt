@@ -17,10 +17,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
+import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
@@ -35,13 +38,24 @@ import org.koin.core.component.KoinComponent
  * ## Refactored for Issue #540 (SP0.1 — Goal 10: control/kernel seam)
  *
  * **Changes from Issue #540:**
- * - Inline dispatch logic (`approveTrains`, `checkBothEnds`, `checkOneEnd`) extracted
+ * - Inline dispatch logic (`approveTrains`, `checkAllInputs`, `checkInput`) extracted
  *   into [RuleBasedDispatcher] behind the [Dispatcher] seam.
  * - ShuntingLoop is now a thin process shell: it manages the kDisco lifecycle
  *   (`hold`, `terminate`, `activate`) and delegates every dispatch decision to the
  *   injected [Dispatcher].
  * - The [dispatcher] parameter defaults to [RuleBasedDispatcher] so all existing
  *   callers (fast-sim, tests) continue to work without modification.
+ *
+ * ## Reshaped for Issue #729 (SP0.7 — Goal 10: pure decide() seam)
+ *
+ * **Changes from Issue #729:**
+ * - [Dispatcher] is now a pure function: `decide(observed: DispatchObservation): List<DispatchDecision>`.
+ *   `DispatcherTickContext` (callback-based) is removed.
+ * - ShuntingLoop builds a [DispatchObservation] each phase ([buildAdmissionObservation],
+ *   [buildPathAdvancementObservation]) and applies the returned decisions inline
+ *   ([applyDecisions]) — synchronously, on the single kDisco thread, exactly as
+ *   before. This is the self-contained, in-kernel slice of the seam; the future
+ *   lifted, cross-thread driver (SP0.8–SP0.10) is a separate, later change.
  *
  * **Previous changes (Issue #296):**
  * - Eliminated manual path construction (~100 lines removed)
@@ -164,11 +178,12 @@ class ShuntingLoop(
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
-	// sites (placeTrain, iteration, tryReservePathFrom) serialize naturally. If a future
+	// sites (placeTrain, iteration, tryReservePath) serialize naturally. If a future
 	// dispatcher becomes concurrent, these need atomicfu.
 	private var trainsEnteredCount: Int = 0
 	private var trainsExitedCount: Int = 0
 	private var maxConcurrentTrainsCount: Int = 0
+	private var failedReservationsCount: Int = 0
 	private val blockTransitionsByTrain: MutableMap<String, Int> = mutableMapOf()
 
 	private inner class RealTimeSynch : LoopProcess() {
@@ -237,6 +252,36 @@ class ShuntingLoop(
 		outerTrackblocks[kA] = zA
 	}
 
+	/**
+	 * Resolves a semaphore name (as carried by [DispatchDecision.ReservePath.fromSemaphoreName])
+	 * back to the live [DynamicRailSemaphore], for [applyReservePath]. Built once after
+	 * the block-init block above has populated [innerTrackBlocks]/[outerTrackblocks].
+	 */
+	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
+		(
+			innerTrackBlocks.flatMap { block ->
+				block.ends().map { Util.assertInstanceOf<DynamicRailSemaphore>(it) }
+			} + outerTrackblocks.values
+		).associateBy { it.name }
+
+	/**
+	 * Resolves an InOut name (e.g. a train's timetable destination, or the `to`
+	 * separator of a final-section [DispatchDecision.ReservePath]) back to the live
+	 * [DynamicInOut]. Built once from the environment's InOuts.
+	 */
+	private val inoutByName: Map<String, DynamicInOut> =
+		env.getInOuts().associateBy { it.name }
+
+	/**
+	 * Resolves any separator name carried by a [DispatchDecision.ReservePath]
+	 * ([fromSemaphoreName] or [DispatchDecision.ReservePath.toSeparatorName]) back to
+	 * the live [cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator] — a
+	 * semaphore or an InOut. Used by [applyReservePath] to resolve the `to` target,
+	 * which for the final section is the destination InOut, not a semaphore.
+	 */
+	private val separatorByName: Map<String, DynamicPathSeparator> =
+		(semaphoreByName.entries.associate { it.key to (it.value as DynamicPathSeparator) }) + inoutByName
+
 	private inline fun <reified T : Cell> elementAt(
 		context: SimulationContext,
 		x: Int,
@@ -286,10 +331,11 @@ class ShuntingLoop(
 		}
 
 		// Delegate all dispatch decisions — train admission and forward-path reservation —
-		// to the injected Dispatcher (SP0.1 / Issue #540).  Admission runs before the
-		// polling hold so path-advancement checks (after the hold) observe block state
-		// after newly admitted trains have moved — the original ShuntingLoop ordering.
-		dispatcher.approve(createTickContext())
+		// to the injected Dispatcher (SP0.1 / Issue #540; pure decide() seam since
+		// SP0.7 / Issue #729). Admission runs before the polling hold so
+		// path-advancement checks (after the hold) observe block state after newly
+		// admitted trains have moved — the original ShuntingLoop ordering.
+		applyDecisions(dispatcher.decide(buildAdmissionObservation()))
 
 		if (approwedTrains.size > maxConcurrentTrainsCount) {
 			maxConcurrentTrainsCount = approwedTrains.size
@@ -297,90 +343,189 @@ class ShuntingLoop(
 		// Polling interval: 1.0s (matches baseline timing)
 		// Train entry events align with polling to catch RESERVED state
 		hold(1.0)
-		dispatcher.advancePaths(createTickContext())
+		applyDecisions(dispatcher.decide(buildPathAdvancementObservation()))
 	}
 
 	/**
-	 * Builds the [DispatcherTickContext] that exposes the current dispatch state and
-	 * actuator callbacks to [dispatcher].
-	 *
-	 * State views ([approvedTrainCount], [unapprovedTrains], [approvedTrains], [innerBlocks],
-	 * [outerBlocks]) reflect the snapshot at the start of the phase.  Callbacks
-	 * ([approveTrain], [reservePath], [isPathSetUp], [isPathExtendedBeyond]) mutate or
-	 * query simulation state and are valid only for the duration of the call.
+	 * Builds the admission-phase [DispatchObservation]: real
+	 * [DispatchObservation.unapprovedTrains], no block-end data — the pre-hold call
+	 * only ever admits trains, mirroring the pre-#729 `approve()` phase.
 	 */
-	private fun createTickContext(): DispatcherTickContext =
-		object : DispatcherTickContext {
-			override val approvedTrainCount get() = approwedTrains.size
-			override val simTime: Double get() = time()
-			override val unapprovedTrains: List<Train> get() = unapprowedTrains.toList()
-			override val approvedTrains: List<Train> get() = approwedTrains.toList()
-			override val innerBlocks: List<DynamicTrackBlock> get() = innerTrackBlocks
-			override val outerBlocks: Map<DynamicTrackBlock, DynamicRailSemaphore> get() = outerTrackblocks
-			override val perception: cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort get() = perceptionPort
-			override val networkActuator: cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort get() = actuatorPort
-
-			override fun approveTrain(train: Train) {
-				require(unapprowedTrains.remove(train)) {
-					"Train ${train.name} is not in the unapproved queue"
+	private fun buildAdmissionObservation(): DispatchObservation =
+		DispatchObservation(
+			snapshot = perceptionPort.snapshot(),
+			unapprovedTrains =
+				unapprowedTrains.map { train ->
+					QueuedTrainObservation(train.name, train.timetableDestinationName)
 				}
-				approwedTrains.add(train)
-				activate(train)
-			}
-
-			override fun reservePath(
-				sem: DynamicRailSemaphore,
-				trainName: String
-			): Boolean = tryReservePathFrom(sem, trainName)
-
-			override fun isPathSetUp(
-				block: DynamicTrackBlock,
-				to: DynamicRailSemaphore
-			): Boolean = block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
-
-			override fun isPathExtendedBeyond(
-				trainName: String,
-				sem: DynamicRailSemaphore
-			): Boolean = registry.isPathExtendedBeyond(trainName, sem)
-		}
+		)
 
 	/**
-	 * Reserves a forward path from [sem] for [trainName] using [PathReservationService].
+	 * Builds the path-advancement-phase [DispatchObservation]: no queued trains, real
+	 * block-input data for every inner and outer block — the post-hold call only ever
+	 * reserves paths, mirroring the pre-#729 `advancePaths()` phase.
 	 *
-	 * Increments the [blockTransitionsByTrain] counter on success for test-observability
-	 * (#365); the counter is maintained here (in the shell) rather than in [dispatcher]
-	 * so it stays close to the simulation state it measures.
+	 * Each input's [BlockInputObservation.toSeparatorName] is pre-computed here (the
+	 * next FREE separator one section ahead, via
+	 * [PathReservationService.findNextReservationTarget]) so the pure [Dispatcher] can
+	 * emit an explicit from→to [DispatchDecision.ReservePath] and the applier can call
+	 * [PathReservationService.reservePath] directly, reproducing the pre-#729
+	 * `reservePathToAnyNextSemaphore` outcome.
 	 */
-	private fun tryReservePathFrom(
-		sem: DynamicRailSemaphore,
+	private fun buildPathAdvancementObservation(): DispatchObservation =
+		DispatchObservation(
+			snapshot = perceptionPort.snapshot(),
+			unapprovedTrains = emptyList(),
+			innerBlockInputs =
+				innerTrackBlocks.flatMap { block ->
+					block.ends().map { toBlockInputObservation(block, Util.assertInstanceOf<DynamicRailSemaphore>(it)) }
+				},
+			outerBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
+		)
+
+	/**
+	 * Computes the [BlockInputObservation] for [block] toward [to] from live
+	 * block/registry state — the directional facts [DispatchObservation]'s
+	 * [SimulationSnapshot][cz.vutbr.fit.interlockSim.ports.SimulationSnapshot]
+	 * cannot carry (see [BlockInputObservation] KDoc).
+	 *
+	 * [toSeparatorName] is the next FREE separator one section ahead of [to]
+	 * ([PathReservationService.findNextReservationTarget]) — the read-only twin of the
+	 * pre-#729 `reservePathToAnyNextSemaphore(to)` call, so the applier's
+	 * `reservePath(train, to, target)` reproduces the prior first-FREE outcome.
+	 */
+	private fun toBlockInputObservation(
+		block: DynamicTrackBlock,
+		to: DynamicRailSemaphore
+	): BlockInputObservation {
+		val state = block.getState()
+		val ownerTrainId =
+			when (state) {
+				TrackFacility.State.FREE -> null
+				TrackFacility.State.RESERVED -> block.trainName
+				TrackFacility.State.OCCUPIED -> requireSimulationNotNull(block.getTrackOccupant()).name
+			}
+		val toSeparatorName = pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+		return BlockInputObservation(
+			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
+			towardSemaphoreName = to.name,
+			toSeparatorName = toSeparatorName,
+			state = state,
+			ownerTrainId = ownerTrainId,
+			isApproachingThisInput =
+				state == TrackFacility.State.OCCUPIED &&
+					requireSimulationNotNull(block.getTrackOccupant()).nextSemaphore() == to,
+			pathSetUpTowardThisInput =
+				state == TrackFacility.State.RESERVED &&
+					block.isSetUpPath(env.toDynamic(block.getSecondEnd(to))),
+			pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
+		)
+	}
+
+	/**
+	 * Name of a [DynamicPathSeparator] returned by
+	 * [PathReservationService.findNextReservationTarget] — a [DynamicInOut] or a
+	 * [DynamicRailSemaphore] (the only separator kinds that method returns). Used to
+	 * carry the `to` target across the pure [Dispatcher] seam as a name string.
+	 */
+	private fun nameOf(separator: DynamicPathSeparator): String? =
+		when (separator) {
+			is DynamicInOut -> separator.name
+			is DynamicRailSemaphore -> separator.name
+			else -> null
+		}
+
+	/** Applies each decision returned by [Dispatcher.decide], in order. */
+	private fun applyDecisions(decisions: List<DispatchDecision>) {
+		for (decision in decisions) {
+			when (decision) {
+				is DispatchDecision.ApproveTrain -> applyApproveTrain(decision.trainId)
+				is DispatchDecision.ReservePath ->
+					applyReservePath(decision.trainId, decision.fromSemaphoreName, decision.toSeparatorName)
+				DispatchDecision.NoAction -> Unit
+			}
+		}
+	}
+
+	/**
+	 * Moves the train named [trainId] from the unapproved queue into the approved
+	 * set and activates it. FIFO order is preserved because [RuleBasedDispatcher]
+	 * walks [DispatchObservation.unapprovedTrains] in queue order.
+	 */
+	private fun applyApproveTrain(trainId: String) {
+		val train =
+			requireNotNull(unapprowedTrains.firstOrNull { it.name == trainId }) {
+				"Dispatcher approved unknown/already-approved train: $trainId"
+			}
+		unapprowedTrains.remove(train)
+		approwedTrains.add(train)
+		activate(train)
+	}
+
+	/** Resolves [fromSemaphoreName] and [toSeparatorName] and delegates to [tryReservePath]. */
+	private fun applyReservePath(
+		trainId: String,
+		fromSemaphoreName: String,
+		toSeparatorName: String
+	) {
+		val fromSem =
+			requireNotNull(semaphoreByName[fromSemaphoreName]) {
+				"Dispatcher requested reservation from unknown semaphore: $fromSemaphoreName"
+			}
+		val toSep =
+			requireNotNull(separatorByName[toSeparatorName]) {
+				"Dispatcher requested reservation to unknown separator: $toSeparatorName"
+			}
+		tryReservePath(fromSem, toSep, toSeparatorName, trainId)
+	}
+
+	/**
+	 * Reserves a forward path of one section from [fromSem] to [toSep] for [trainName]
+	 * using [PathReservationService.reservePath] — the explicit from→to primitive.
+	 * [toSep] is the next separator toward the train's destination that the shell
+	 * pre-computed as FREE, so this reproduces the pre-#729
+	 * `reservePathToAnyNextSemaphore` outcome.
+	 *
+	 * Increments the [blockTransitionsByTrain] counter on success and the
+	 * [failedReservationsCount] counter on any failure, for test-observability
+	 * (#365); the counters are maintained here (in the shell) rather than in
+	 * [dispatcher] so they stay close to the simulation state they measure.
+	 */
+	private fun tryReservePath(
+		fromSem: DynamicRailSemaphore,
+		toSep: DynamicPathSeparator,
+		toSeparatorName: String,
 		trainName: String
 	): Boolean {
-		val result = pathReservationService.reservePathToAnyNextSemaphore(trainName, sem)
+		val result = pathReservationService.reservePath(trainName, fromSem, toSep)
 
 		return when (result) {
 			is PathReservationService.ReservationResult.Success -> {
-				logger.debug { "Reserved path from ${sem.name} for $trainName" }
+				logger.debug { "Reserved path from ${fromSem.name} to $toSeparatorName for $trainName" }
 				// KMP-safe increment: Map.merge() is a JVM-only default method.
 				blockTransitionsByTrain[trainName] = (blockTransitionsByTrain[trainName] ?: 0) + 1
 				true
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
 				logger.warn {
-					"Conflict for $trainName at ${sem.name}: " +
+					"Conflict for $trainName from ${fromSem.name} to $toSeparatorName: " +
 						"block ${result.conflictingBlock.name ?: "unnamed"} " +
 						"owned by ${result.existingOwner}"
 				}
+				failedReservationsCount++
 				false
 			}
 			is PathReservationService.ReservationResult.NoPathExists -> {
-				logger.debug { "No path exists from ${sem.name} for $trainName" }
+				logger.debug { "No path exists from ${fromSem.name} to $toSeparatorName for $trainName" }
+				failedReservationsCount++
 				false
 			}
 			is PathReservationService.ReservationResult.AllPathsBlocked -> {
 				logger.debug {
-					"All paths blocked from ${sem.name} for $trainName " +
+					"All paths blocked from ${fromSem.name} to $toSeparatorName for $trainName " +
 						"(attempted: ${result.attemptedPaths})"
 				}
+				failedReservationsCount++
 				false
 			}
 		}
@@ -426,4 +571,7 @@ class ShuntingLoop(
 	fun getBlockTransitions(trainId: String): Int = blockTransitionsByTrain[trainId] ?: 0
 
 	fun getAllBlockTransitions(): Map<String, Int> = blockTransitionsByTrain.toMap()
+
+	/** Number of dispatcher reservation attempts that failed (Conflict/NoPathExists/AllPathsBlocked). */
+	fun getFailedReservations(): Int = failedReservationsCount
 }
