@@ -819,6 +819,45 @@ class DefaultPathReservationService(
 		return reservePathToAnyNextSemaphore(trainId, dynamicStart, next)
 	}
 
+	override fun findNextReservationTarget(start: OrientedPathSeparator): DynamicPathSeparator? {
+		logger.debug {
+			"findNextReservationTarget: Finding next FREE target from oriented separator $start"
+		}
+
+		// Mirrors reservePathToAnyNextSemaphore(OrientedPathSeparator) steps 1–3, read-only.
+		val dynamicStart = environment.toDynamic(start)
+		val forwardSegment =
+			when (start) {
+				is InOut -> start.getTrackConnectionDirection()
+				is DynamicInOut -> start.getTrackConnectionDirection()
+				else -> start.direction()
+			}
+		val location = environment.getRailWayNetGrid().getLocation(start)
+		if (location == null) {
+			logger.warn { "findNextReservationTarget: No location found for $start" }
+			return null
+		}
+		val next = environment.getGraph().assignedEdges(location)[forwardSegment]
+		if (next == null) {
+			logger.warn {
+				"findNextReservationTarget: No outgoing track section from $start at $location in direction $forwardSegment"
+			}
+			return null
+		}
+
+		val targets = findNextSemaphoresVia(dynamicStart, next)
+		if (targets.isEmpty()) {
+			logger.debug { "findNextReservationTarget: No separators found from $start via $next" }
+			return null
+		}
+		val firstFree = targets.firstOrNull { isPathAvailable(dynamicStart, it) }
+		logger.debug {
+			"findNextReservationTarget: ${targets.size} target(s) from $start via $next, " +
+				"first FREE = $firstFree"
+		}
+		return firstFree
+	}
+
 	override fun isPathToAnyNextSemaphoreAvailable(
 		start: PathSeparator,
 		next: TrackSection?
