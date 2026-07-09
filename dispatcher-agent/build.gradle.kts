@@ -45,6 +45,7 @@ val assertkVersion: String by project
 val koinVersion: String by project
 val logbackVersion: String by project
 val slf4jVersion: String by project
+val mockkVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -79,6 +80,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:$junitJupiterVersion")
     testImplementation("org.junit.jupiter:junit-jupiter-params:$junitJupiterVersion")
     testImplementation("com.willowtreeapps.assertk:assertk-jvm:$assertkVersion")
+    testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("ch.qos.logback:logback-classic:$logbackVersion")
     // kDisco: :core uses implementation() so the kDisco API is not exported transitively;
     // add explicitly so test code that compiles against ShuntingLoop (a kDisco Process
