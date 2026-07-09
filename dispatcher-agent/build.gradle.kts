@@ -46,6 +46,7 @@ val koinVersion: String by project
 val logbackVersion: String by project
 val slf4jVersion: String by project
 val mockkVersion: String by project
+val coroutinesVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -86,6 +87,9 @@ dependencies {
     // add explicitly so test code that compiles against ShuntingLoop (a kDisco Process
     // subclass) can resolve kDisco supertype members.
     testImplementation("cz.hovorka.kdisco:kdisco-core-jvm:$kdiscoVersion")
+    // kotlinx-coroutines-core: :core uses implementation() so it is not exported
+    // transitively; add explicitly for test code that uses runBlocking (e.g. AgentLoopDriverTest).
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitJupiterVersion")
 }
 
