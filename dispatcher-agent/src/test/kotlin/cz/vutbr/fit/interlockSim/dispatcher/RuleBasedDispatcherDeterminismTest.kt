@@ -15,11 +15,14 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -97,15 +100,51 @@ class RuleBasedDispatcherDeterminismTest {
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
+		val loop = ShuntingLoop(context, endTime)
+
+		// SP0.11: Wire the full dispatcher-agent stack instead of passing dispatcher= inline.
+		val perceptionPort =
+			DefaultNetworkPerceptionPort(
+				env = context,
+				activeTrains = loop::getApprovedTrains
+			)
+		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+		val queue = ActuatorCommandQueue()
 		val dispatcher = RuleBasedDispatcher()
-		val shuntingLoop = ShuntingLoop(context, endTime, dispatcher = dispatcher)
-		context.setMainProcess(shuntingLoop)
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = actuatorPort,
+				onApproveTrain = loop::approveQueuedTrain,
+				onBlockTransition = loop::incrementBlockTransition,
+				onFailedReservation = loop::incrementFailedReservation
+			)
+		val driver =
+			AgentLoopDriver(
+				perceptionPort = perceptionPort,
+				dispatcher = dispatcher,
+				commandQueue = queue,
+				controller = NoOpSimulationController,
+				unapprovedTrainsProvider = loop::getQueuedTrains,
+				innerBlockInputsProvider = loop::getInnerBlockInputs,
+				outerBlockInputsProvider = loop::getOuterBlockInputs
+			)
+
+		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
+		loop.controlStepListener = applier
+		loop.agentDriverAction = {
+			while (loop.isSimActive()) {
+				driver.runCycle()
+			}
+		}
+
+		context.setMainProcess(loop)
 		context.run()
 
 		return RunResult(
-			trainsExited = shuntingLoop.getTrainsExited(),
-			maxConcurrentTrains = shuntingLoop.getMaxConcurrentTrains(),
-			sortedBlockTransitionCounts = shuntingLoop.getAllBlockTransitions().values.sorted()
+			trainsExited = loop.getTrainsExited(),
+			maxConcurrentTrains = loop.getMaxConcurrentTrains(),
+			sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted()
 		)
 	}
 

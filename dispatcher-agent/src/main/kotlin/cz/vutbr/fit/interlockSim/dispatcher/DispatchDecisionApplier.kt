@@ -66,7 +66,24 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
 	private val networkActuator: NetworkActuatorPort,
-	private val onApproveTrain: (trainId: String) -> Unit
+	private val onApproveTrain: (trainId: String) -> Unit,
+	/**
+	 * SP0.11: Callback invoked on the sim thread when a path reservation succeeds.
+	 * Increments [ShuntingLoop.incrementBlockTransition] (the counter previously
+	 * updated inside the removed [ShuntingLoop.tryReservePath]).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private val onBlockTransition: (trainId: String) -> Unit = {},
+	/**
+	 * SP0.11: Callback invoked on the sim thread when a path reservation fails
+	 * (any of AllPathsBlocked, Conflict, or NoRouteExists).
+	 * Increments [ShuntingLoop.incrementFailedReservation] (the counter previously
+	 * updated inside the removed [ShuntingLoop.tryReservePath]).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private val onFailedReservation: () -> Unit = {}
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -118,27 +135,35 @@ class DispatchDecisionApplier(
 		// subtype addition fails to compile here instead of being silently ignored
 		// (matches the pattern in DefaultNetworkActuatorPort.requestRoute).
 		return when (result) {
-			is RouteRequestResult.Reserved ->
+			is RouteRequestResult.Reserved -> {
 				logger.debug {
 					"ReservePath: reserved ${result.blocksCount} block(s) for ${decision.trainId}"
 				}
-			is RouteRequestResult.AllPathsBlocked ->
+				onBlockTransition(decision.trainId)
+			}
+			is RouteRequestResult.AllPathsBlocked -> {
 				logger.warn {
 					"ReservePath: all paths blocked for ${decision.trainId} " +
 						"(${decision.fromSemaphoreName} → ${decision.toSeparatorName}); " +
 						"attempted: ${result.attemptedPaths}"
 				}
-			is RouteRequestResult.Conflict ->
+				onFailedReservation()
+			}
+			is RouteRequestResult.Conflict -> {
 				logger.warn {
 					"ReservePath: conflict for ${decision.trainId} — " +
 						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
 				}
-			is RouteRequestResult.NoRouteExists ->
+				onFailedReservation()
+			}
+			is RouteRequestResult.NoRouteExists -> {
 				logger.warn {
 					"ReservePath: no route exists " +
 						"${decision.fromSemaphoreName} → ${decision.toSeparatorName} " +
 						"for ${decision.trainId}"
 				}
+				onFailedReservation()
+			}
 		}
 	}
 }
