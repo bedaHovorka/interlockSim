@@ -180,13 +180,13 @@ class ShuntingLoop(
 	// SP0.11: Observation data published at the start of each iteration for the off-kernel
 	// driver thread. Written on the single kDisco sim thread; @Volatile ensures visibility.
 	@kotlin.concurrent.Volatile
-	private var _latestQueuedTrains: List<QueuedTrainObservation> = emptyList()
+	private var latestQueuedTrains: List<QueuedTrainObservation> = emptyList()
 
 	@kotlin.concurrent.Volatile
-	private var _latestInnerBlockInputs: List<BlockInputObservation> = emptyList()
+	private var latestInnerBlockInputs: List<BlockInputObservation> = emptyList()
 
 	@kotlin.concurrent.Volatile
-	private var _latestOuterBlockInputs: List<BlockInputObservation> = emptyList()
+	private var latestOuterBlockInputs: List<BlockInputObservation> = emptyList()
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
@@ -328,12 +328,12 @@ class ShuntingLoop(
 		// the driver read current-tick state.  Written on the single kDisco sim thread;
 		// @Volatile declarations ensure visibility to the driver thread.
 		snapshotCaptureHook?.invoke()
-		_latestQueuedTrains = unapprowedTrains.map { QueuedTrainObservation(it.name, it.timetableDestinationName) }
-		_latestInnerBlockInputs =
+		latestQueuedTrains = unapprowedTrains.map { QueuedTrainObservation(it.name, it.timetableDestinationName) }
+		latestInnerBlockInputs =
 			innerTrackBlocks.flatMap { block ->
 				block.ends().map { end -> toBlockInputObservation(block, Util.assertInstanceOf<DynamicRailSemaphore>(end)) }
 			}
-		_latestOuterBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
+		latestOuterBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
 
 		// SP0.9: Drain and apply any decisions posted to the cross-thread command queue.
 		controlStepListener?.onControlStep()
@@ -403,7 +403,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getQueuedTrains(): List<QueuedTrainObservation> = _latestQueuedTrains
+	fun getQueuedTrains(): List<QueuedTrainObservation> = latestQueuedTrains
 
 	/**
 	 * Returns the block-input observations for all inner track blocks, as published at the
@@ -411,7 +411,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getInnerBlockInputs(): List<BlockInputObservation> = _latestInnerBlockInputs
+	fun getInnerBlockInputs(): List<BlockInputObservation> = latestInnerBlockInputs
 
 	/**
 	 * Returns the block-input observations for all outer track blocks, as published at the
@@ -419,7 +419,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getOuterBlockInputs(): List<BlockInputObservation> = _latestOuterBlockInputs
+	fun getOuterBlockInputs(): List<BlockInputObservation> = latestOuterBlockInputs
 
 	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external

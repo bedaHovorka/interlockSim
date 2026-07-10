@@ -90,6 +90,20 @@ class DispatchDecisionApplier(
 	}
 
 	/**
+	 * Reservation triples (`trainId|fromSemaphoreName|toSeparatorName`) already
+	 * successfully applied via [applyReservePath], for the duplicate-suppression
+	 * guard documented on that function.
+	 *
+	 * Only ever appended to, never cleared: within one simulation run each train
+	 * makes a bounded, one-way trip through a handful of hops (2-3 for the bundled
+	 * `vyhybna.xml` topology), so the same triple recurring for the same train is
+	 * always the duplicate-decision race below, never a legitimate second need to
+	 * reserve the identical hop again. A fresh [DispatchDecisionApplier] is created
+	 * per simulation run, so this does not grow across runs either.
+	 */
+	private val appliedReservations: MutableSet<String> = mutableSetOf()
+
+	/**
 	 * Drains [queue] and applies each pending [DispatchDecision] via the actuator ports.
 	 *
 	 * Always called on the kDisco simulation thread from
@@ -119,7 +133,56 @@ class DispatchDecisionApplier(
 			DispatchDecision.NoAction -> Unit
 		}
 
+	/**
+	 * Applies [decision] via [NetworkActuatorPort.requestRoute], guarding against
+	 * duplicate application of an already-successfully-reserved hop.
+	 *
+	 * ## Duplicate-decision race (SP0.11 regression, Issue #733 follow-up)
+	 *
+	 * [AgentLoopDriver][cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver] runs
+	 * on its own thread, decoupled from the sim thread that applies its decisions.
+	 * Because [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop]'s own
+	 * polling ticks are not wall-clock throttled (no `SimulationController`
+	 * pacing in a headless run), several ShuntingLoop ticks can elapse before the
+	 * driver thread gets scheduled again. The block-input observation it reads —
+	 * in particular [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.pathAlreadyExtendedBeyond],
+	 * the guard [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] relies on to
+	 * avoid re-deciding an already-reserved hop — only updates once a decided
+	 * [DispatchDecision.ReservePath] has actually been drained and applied here.
+	 * This means the driver can legitimately decide the *same* `ReservePath` more
+	 * than once before its first application is reflected back.
+	 *
+	 * Re-applying an already-owned hop is not a harmless no-op:
+	 * `DefaultPathReservationService.reservePath`'s already-owned fast path calls
+	 * `PathReservationRegistry.registerPathInfo` again, and that registry's merge
+	 * logic assumes the incoming path's `start` overlaps the *current* registered
+	 * `target`. Once the first (legitimate) application has already advanced that
+	 * target past the duplicate's `start`, the overlap check fails, the duplicate
+	 * segment is spliced back into the train's registered path, and the train's
+	 * `Front` process (`Train.kt`) loses track of its position — permanently
+	 * stalling (confirmed via `PathReservationRegistry` merge tracing during root
+	 * cause analysis; the malformed splice is silently "allowed" as a false-positive
+	 * "circular route" before a *third* occurrence trips the existing cycle guard).
+	 *
+	 * Skipping a triple already recorded in [appliedReservations] restores the
+	 * "at most one real application per reservation need" invariant that held
+	 * naturally under the pre-SP0.11 synchronous (decide-and-apply-in-one-step)
+	 * architecture, without touching the shared navigation/registry code that
+	 * other callers (e.g. `InOutWorker`) also depend on.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10); duplicate-suppression guard added as a
+	 *   regression fix for the resulting train-freeze/deadlock
+	 */
 	private fun applyReservePath(decision: DispatchDecision.ReservePath) {
+		val reservationKey = "${decision.trainId}|${decision.fromSemaphoreName}|${decision.toSeparatorName}"
+		if (reservationKey in appliedReservations) {
+			logger.debug {
+				"Skipping duplicate ReservePath: trainId=${decision.trainId} " +
+					"${decision.fromSemaphoreName} → ${decision.toSeparatorName} (already applied)"
+			}
+			return
+		}
+
 		logger.debug {
 			"Applying ReservePath: trainId=${decision.trainId} " +
 				"${decision.fromSemaphoreName} → ${decision.toSeparatorName}"
@@ -139,6 +202,7 @@ class DispatchDecisionApplier(
 				logger.debug {
 					"ReservePath: reserved ${result.blocksCount} block(s) for ${decision.trainId}"
 				}
+				appliedReservations.add(reservationKey)
 				onBlockTransition(decision.trainId)
 			}
 			is RouteRequestResult.AllPathsBlocked -> {

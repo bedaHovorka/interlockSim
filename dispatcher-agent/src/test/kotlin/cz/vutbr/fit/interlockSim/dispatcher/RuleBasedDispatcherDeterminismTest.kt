@@ -16,13 +16,13 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
-import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach

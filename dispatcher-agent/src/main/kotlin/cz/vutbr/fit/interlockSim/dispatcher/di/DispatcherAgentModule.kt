@@ -37,12 +37,13 @@ import org.koin.dsl.module
  *
  * @since Issue #733 (SP0.11 — Goal 10)
  */
-val dispatcherAgentModule: Module = module {
-	// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
-	single<Dispatcher> { RuleBasedDispatcher() }
+val dispatcherAgentModule: Module =
+	module {
+		// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
+		single<Dispatcher> { RuleBasedDispatcher() }
 
-	scope<DefaultSimulationContext> {
-		// ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
-		scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
+		scope<DefaultSimulationContext> {
+			// ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
+			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
+		}
 	}
-}

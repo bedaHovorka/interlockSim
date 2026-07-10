@@ -22,6 +22,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -42,6 +43,7 @@ private const val CONSUMER_POLL_INTERVAL_MS: Long = 1
  * @since Issue #730 (SP0.8 — Goal 10)
  */
 @DisplayName("ActuatorCommandQueue — thread-safe driver-to-sim command handoff")
+@Timeout(30, unit = TimeUnit.SECONDS)
 class ActuatorCommandQueueTest {
 	@Test
 	@DisplayName("drain returns decisions in FIFO order")

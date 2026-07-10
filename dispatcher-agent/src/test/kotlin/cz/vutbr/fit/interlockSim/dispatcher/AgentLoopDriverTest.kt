@@ -29,6 +29,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import java.util.concurrent.TimeUnit
 
 /**
  * Unit tests for [AgentLoopDriver].
@@ -50,6 +52,7 @@ import org.junit.jupiter.api.Test
  * @since Issue #732 (SP0.10 — Goal 10)
  */
 @DisplayName("AgentLoopDriver — paced sense-decide-act cycle")
+@Timeout(30, unit = TimeUnit.SECONDS)
 class AgentLoopDriverTest {
 	private lateinit var perceptionPort: NetworkPerceptionPort
 	private lateinit var dispatcher: Dispatcher
