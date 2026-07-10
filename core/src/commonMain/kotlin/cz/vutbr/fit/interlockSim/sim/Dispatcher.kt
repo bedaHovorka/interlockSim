@@ -37,8 +37,14 @@ package cz.vutbr.fit.interlockSim.sim
  * pre-hold state.
  *
  * ## Thread-safety
- * [decide] is always called from the single kDisco dispatcher thread — no
- * synchronisation is required inside an implementation.
+ *
+ * The kDisco simulation kernel runs on its own single thread, but [decide] is
+ * invoked from **outside** the kernel — by the external drive-loop driver (SP0.10,
+ * #732) on its own thread/coroutine, not the kDisco thread. Implementations must
+ * therefore not rely on kDisco-thread exclusivity: keep them pure and stateless
+ * ([DispatchObservation] already carries everything the policy needs — invariant 4
+ * of the SP0.5 design spec, `docs/specs/2026-07-08-544-sp05-drive-loop-design.md`),
+ * or synchronise any mutable state held across calls.
  *
  * @see RuleBasedDispatcher
  * @see DispatchObservation

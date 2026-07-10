@@ -382,7 +382,7 @@ class ShuntingLoop(
 	 */
 	private fun buildAdmissionObservation(): DispatchObservation =
 		DispatchObservation(
-			snapshot = perceptionPort.snapshot(),
+			snapshot = perceptionPort.captureSnapshot(),
 			unapprovedTrains =
 				unapprowedTrains.map { train ->
 					QueuedTrainObservation(train.name, train.timetableDestinationName)
@@ -403,7 +403,7 @@ class ShuntingLoop(
 	 */
 	private fun buildPathAdvancementObservation(): DispatchObservation =
 		DispatchObservation(
-			snapshot = perceptionPort.snapshot(),
+			snapshot = perceptionPort.captureSnapshot(),
 			unapprovedTrains = emptyList(),
 			innerBlockInputs =
 				innerTrackBlocks.flatMap { block ->

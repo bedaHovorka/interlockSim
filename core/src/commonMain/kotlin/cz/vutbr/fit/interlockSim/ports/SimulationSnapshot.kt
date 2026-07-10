@@ -65,4 +65,23 @@ data class SimulationSnapshot(
 	val blocks: List<BlockOccupancyReading>,
 	val trainPositions: List<TrainPositionReading>,
 	val timetables: List<TimetableReading>
-)
+) {
+	companion object {
+		/**
+		 * Empty snapshot returned by [NetworkPerceptionPort.snapshot] before the first
+		 * on-thread [NetworkPerceptionPort.captureSnapshot] has published a real one.
+		 *
+		 * Safe to hand to a dispatcher from any thread: it carries no live state and
+		 * carries no active trains or signal changes, so a well-behaved dispatcher
+		 * responds with a no-op decision.
+		 */
+		val EMPTY: SimulationSnapshot =
+			SimulationSnapshot(
+				simTime = 0.0,
+				semaphores = emptyList(),
+				blocks = emptyList(),
+				trainPositions = emptyList(),
+				timetables = emptyList()
+			)
+	}
+}
