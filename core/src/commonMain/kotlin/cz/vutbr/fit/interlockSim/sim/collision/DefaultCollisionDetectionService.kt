@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim.collision
 
-import cz.hovorka.kdisco.SimulationEvent
+import cz.ksimulantenbande.kdisco.SimulationEvent
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock

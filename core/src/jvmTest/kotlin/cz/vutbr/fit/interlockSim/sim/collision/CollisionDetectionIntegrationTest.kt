@@ -15,7 +15,7 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock

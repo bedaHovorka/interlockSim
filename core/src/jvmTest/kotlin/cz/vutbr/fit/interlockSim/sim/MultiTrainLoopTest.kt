@@ -14,7 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isTrue
 import assertk.assertions.isZero
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionWarning
@@ -33,7 +33,7 @@ private val logger = KotlinLogging.logger {}
 
 /**
  * Goal 1 first-slice scenarios: deterministic multi-train dispatcher using
- * kDisco [cz.hovorka.kdisco.Resource] setup-time gating and
+ * kDisco [cz.ksimulantenbande.kdisco.Resource] setup-time gating and
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService] ownership.
  */
 @Tag("integration-test")

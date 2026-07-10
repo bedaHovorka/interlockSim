@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Resource
+import cz.ksimulantenbande.kdisco.Resource
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock

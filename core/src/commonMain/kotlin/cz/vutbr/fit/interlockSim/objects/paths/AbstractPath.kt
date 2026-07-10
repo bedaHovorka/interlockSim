@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.objects.paths
 
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED

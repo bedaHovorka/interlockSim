@@ -29,7 +29,7 @@ This file defines specialized agent roles for the interlockSim project. When Cla
 
 **Focus Areas:**
 1. **Simulation Engine**
-   - kDisco 0.6.0 (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
+   - kDisco 0.6.1-SNAPSHOT (Phase 1 migration complete 2026-03-20; Koin injection now allowed in sim/)
    - Kalasim migration planning (Goal 10, Phase 2, future)
    - `:fast-sim` native CLI subproject (linuxX64, PR #421)
    - Discrete-event simulation patterns

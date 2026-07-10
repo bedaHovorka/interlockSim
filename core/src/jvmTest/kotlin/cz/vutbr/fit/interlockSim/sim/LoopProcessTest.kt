@@ -11,7 +11,7 @@ import assertk.assertThat
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isLessThanOrEqualTo
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory

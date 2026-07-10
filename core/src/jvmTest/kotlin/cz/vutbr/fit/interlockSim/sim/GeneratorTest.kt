@@ -298,7 +298,7 @@ class GeneratorTest : KoinTestBase() {
 			val generator = Generator(mockContext, shuffleInOuts = true)
 			val randomField = Generator::class.java.getDeclaredField("random")
 			randomField.isAccessible = true
-			val kdiscoRandom = randomField.get(generator) as cz.hovorka.kdisco.Random
+			val kdiscoRandom = randomField.get(generator) as cz.ksimulantenbande.kdisco.Random
 
 			// Act: shuffle a 3-element list 8 times, mirroring the shuffle step in
 			// generateRandomTimetable() without calling Process.time().

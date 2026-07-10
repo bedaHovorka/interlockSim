@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.exceptions
 
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Process
 
 /**
  * Exception thrown during simulation - at start, between start and end of simulation.

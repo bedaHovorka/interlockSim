@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertFailure
 import assertk.assertions.isInstanceOf
-import cz.hovorka.kdisco.DiscoException
+import cz.ksimulantenbande.kdisco.DiscoException
 import kotlin.test.Test
 
 /**
