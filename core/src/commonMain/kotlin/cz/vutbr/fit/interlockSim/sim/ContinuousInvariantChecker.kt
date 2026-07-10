@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Continuous
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.Continuous
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 
 /**

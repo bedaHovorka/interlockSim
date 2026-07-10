@@ -13,7 +13,7 @@ import assertk.assertThat
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
 import assertk.assertions.isTrue
-import cz.hovorka.kdisco.Head
+import cz.ksimulantenbande.kdisco.Head
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.RailSemaphore
