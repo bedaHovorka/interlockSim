@@ -163,6 +163,9 @@ class SimulationSnapshotTest {
 				trainPositions = allTrainPositions(),
 				timetables = allTrainTimetables()
 			)
+
+		// Stub is not a caching port; both accessors return the same fixed snapshot.
+		override fun captureSnapshot(): SimulationSnapshot = snapshot()
 	}
 
 	@Test
@@ -207,6 +210,9 @@ class SimulationSnapshotTest {
 						trainPositions = allTrainPositions(),
 						timetables = allTrainTimetables()
 					)
+
+				// Stub is not a caching port; both accessors return the same fixed snapshot.
+				override fun captureSnapshot(): SimulationSnapshot = snapshot()
 			}
 		val snap = emptyPort.snapshot()
 

@@ -40,8 +40,13 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * - **Core-only**: this interface lives in `:core` with no dependency on Koog, Ollama,
  *   or any agent framework. The agent framework wiring happens in `:dispatcher-agent`
  *   (SP1 Issues #546–#551).
- * - **Thread-safety**: implementations are expected to be called from the single kDisco
- *   simulation thread.  No external synchronisation is required.
+ * - **Thread-safety**: the kDisco simulation kernel runs on its own single thread;
+ *   callers outside the simulation (e.g. the SP0.10 drive-loop driver) run on their
+ *   own threads. [snapshot] is safe to call from any thread — it returns the most
+ *   recent snapshot captured on the kDisco thread (off-thread, possibly stale, and
+ *   it never blocks the kernel). [captureSnapshot] and the individual `allXxx()` /
+ *   single-query methods read live simulation state and must be called on the
+ *   kDisco thread.
  *
  * @see DefaultNetworkPerceptionPort
  * @since Issue #541 (SP0.2 — Goal 10 sensor ports)
@@ -132,27 +137,52 @@ interface NetworkPerceptionPort {
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**
-	 * Capture a frozen [SimulationSnapshot] of the complete observable network state.
+	 * Return the most recent snapshot captured on the kDisco thread, safe to call from
+	 * any thread including the external driver thread (SP0.10).
+	 *
+	 * This is the **off-thread-safe** sense call: it does **not** read live simulation
+	 * state — it returns the snapshot most recently published by [captureSnapshot],
+	 * so it never blocks or interrupts the kDisco kernel and never throws. The
+	 * returned value is a frozen, immutable [SimulationSnapshot] but may be stale
+	 * relative to the current simulation time; before the first [captureSnapshot] an
+	 * empty snapshot (simulation time at the start baseline, empty lists) is returned.
+	 * Callers that hold it across `hold()` boundaries must treat it as potentially
+	 * stale.
+	 *
+	 * For a fresh, consistent, on-thread snapshot, call [captureSnapshot] (kDisco
+	 * thread only).
+	 *
+	 * @return An immutable [SimulationSnapshot] containing all observable state.
+	 *
+	 * @since Issue #543 (SP0.4 — Goal 10 observable simulation state); made
+	 *   off-thread-safe (cached) in Issue #732 (SP0.10 — Goal 10)
+	 */
+	fun snapshot(): SimulationSnapshot
+
+	/**
+	 * Capture a fresh, consistent [SimulationSnapshot] by reading live network state,
+	 * and publish it as the latest snapshot returned by [snapshot].
 	 *
 	 * Calls all `allXxx()` bulk queries in sequence and bundles the results together
-	 * with the current simulation time into a single immutable value.  Use this method
-	 * when you need a **consistent, frozen picture** of the entire network at one
-	 * moment — for example, to hand to an LLM dispatcher, to log the full state for
-	 * debugging, or to compare two tick states.
+	 * with the current simulation time into a single immutable value, then publishes
+	 * it so an off-thread [snapshot] caller (e.g. the SP0.10 drive-loop driver) sees
+	 * a consistent picture without reading live state itself. Use this method when you
+	 * need a **consistent, frozen picture** of the entire network at one moment — for
+	 * example, to log the full state for debugging, or to compare two tick states.
+	 *
+	 * Must be called on the kDisco simulation thread (it reads mutable simulation state
+	 * that is not synchronised for off-thread access). Returns the same freshly-captured
+	 * snapshot it published, so on-thread callers (e.g. `ShuntingLoop`) get a
+	 * consistent, frozen picture identical to the previous single-threaded `snapshot`
+	 * behaviour.
 	 *
 	 * For one-off queries (e.g. "is block k1 free right now?") prefer the individual
 	 * methods on this interface.
 	 *
-	 * ## Thread-safety
+	 * @return An immutable [SimulationSnapshot] capturing the network state at the
+	 *   current simulation time.
 	 *
-	 * As with all methods on this interface, implementations are expected to be called
-	 * from the single kDisco simulation thread.  The snapshot is consistent within
-	 * a single-threaded call (no interleaved simulation events), but callers that hold
-	 * the snapshot across `hold()` boundaries must treat it as potentially stale.
-	 *
-	 * @return An immutable [SimulationSnapshot] containing all observable state.
-	 *
-	 * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
+	 * @since Issue #732 (SP0.10 — Goal 10 off-thread-safe perception)
 	 */
-	fun snapshot(): SimulationSnapshot
+	fun captureSnapshot(): SimulationSnapshot
 }
