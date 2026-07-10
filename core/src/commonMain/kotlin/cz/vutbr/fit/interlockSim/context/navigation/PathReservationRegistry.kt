@@ -9,7 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
-import cz.hovorka.kdisco.Condition
+import cz.ksimulantenbande.kdisco.Condition
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.exceptions.requireValidState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -506,7 +506,7 @@ class PathReservationRegistry(
 	 * The condition is deterministic: kDisco re-evaluates all wait notices after
 	 * every discrete event (including the block-release event that happens when
 	 * [unregister] or [unregisterBlock] removes the owner). A process can suspend
-	 * with [cz.hovorka.kdisco.Process.waitUntil] and resume without busy-polling.
+	 * with [cz.ksimulantenbande.kdisco.Process.waitUntil] and resume without busy-polling.
 	 *
 	 * @param block The block to wait for
 	 * @return A condition evaluating to true once the block is free

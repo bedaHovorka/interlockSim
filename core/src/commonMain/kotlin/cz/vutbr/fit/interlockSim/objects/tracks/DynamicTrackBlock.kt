@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.objects.tracks
 
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.navigation.BlockEvent
 import cz.vutbr.fit.interlockSim.exceptions.TrackOperationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation

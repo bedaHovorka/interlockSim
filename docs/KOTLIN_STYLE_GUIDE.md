@@ -1792,7 +1792,7 @@ Which parameterized annotation to use?
 ### Dependency Management
 
 Dependencies are managed via Gradle with fallback strategy:
-- **kDisco 0.6.0** - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
+- **kDisco 0.6.1-SNAPSHOT** - Discrete event simulation library (Kotlin Multiplatform, replaces jDisco)
   - Repository: https://github.com/bedaHovorka/kdisco
   - Published to GitHub Packages: `https://maven.pkg.github.com/bedaHovorka/kdisco`
   - Fallback order: `mavenLocal()` (local cache) → GitHub Packages → build fails
@@ -1846,7 +1846,7 @@ Then run Gradle normally. Because `mavenLocal()` is checked before GitHub Packag
 
 Verify installation:
 ```bash
-ls ~/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/0.5.0/
+ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/0.5.0/
 # Should show: kdisco-core-jvm-0.5.0.jar, kdisco-core-jvm-0.5.0.pom
 ```
 

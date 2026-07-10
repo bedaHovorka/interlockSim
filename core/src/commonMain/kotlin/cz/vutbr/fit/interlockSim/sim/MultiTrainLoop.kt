@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Resource
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Resource
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
@@ -52,7 +52,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Determinism
  *
  * Train injection times come from caller-supplied specs, so runs are repeatable
- * when paired with a fixed kDisco seed. No standalone [cz.hovorka.kdisco.Random]
+ * when paired with a fixed kDisco seed. No standalone [cz.ksimulantenbande.kdisco.Random]
  * generator is required.
  *
  * ## Scope limitations (documented)

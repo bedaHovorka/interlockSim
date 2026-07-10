@@ -21,7 +21,7 @@
  *     which benefits from commonMain staying free of JVM-only APIs.
  *  3. kDisco 0.4.0 ships multiplatform artifacts (jvm + linuxX64
  *     klibs) and this module consumes the multiplatform coordinate
- *     (`cz.hovorka.kdisco:kdisco-core`; see commonMain dependencies
+ *     (`cz.ksimulantenbande.kdisco:kdisco-core`; see commonMain dependencies
  *     below). Remaining blockers for fully portable common code are
  *     test infrastructure (MockK/JUnit5 are JVM-only; commonTest is
  *     restricted to kotlin.test) and a Koin/xmlutil native audit on
@@ -129,7 +129,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 // KMP multiplatform artifacts (jvm + linuxX64 klibsavailable in mavenLocal)
-                implementation("cz.hovorka.kdisco:kdisco-core:$kdiscoVersion")
+                implementation("cz.ksimulantenbande.kdisco:kdisco-core:$kdiscoVersion")
                 implementation("io.insert-koin:koin-core:$koinVersion")
                 implementation("io.github.oshai:kotlin-logging:$kotlinLoggingVersion")
                 implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")

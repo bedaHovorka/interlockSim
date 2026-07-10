@@ -16,8 +16,8 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isSameInstanceAs
 import assertk.assertions.isTrue
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Simulation
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Simulation
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
