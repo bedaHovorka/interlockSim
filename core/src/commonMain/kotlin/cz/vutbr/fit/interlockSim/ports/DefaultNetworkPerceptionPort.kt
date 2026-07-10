@@ -51,9 +51,17 @@ import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
  *
  * ## Thread-safety
  *
- * This class is **not thread-safe**.  Both the [SimulationEnvironment] state and the
- * [activeTrains] list are mutated by the kDisco simulation thread; all queries must be
- * issued from the same thread.
+ * The kDisco simulation kernel runs on its own single thread; both the
+ * [SimulationEnvironment] state and the [activeTrains] list are mutated by that
+ * thread without synchronisation. [captureSnapshot] and the `allXxx()` /
+ * single-query methods read that live state and **must** be called on the kDisco
+ * thread.
+ *
+ * [snapshot] is the exception: it reads only a `@Volatile` reference to the most
+ * recent snapshot published by [captureSnapshot], so it is safe to call from any
+ * thread (including the SP0.10 drive-loop driver) — it never blocks or interrupts
+ * the kDisco kernel and never throws. Before the first [captureSnapshot] it returns
+ * [SimulationSnapshot.EMPTY].
  *
  * @param env The simulation environment to read semaphore and block state from.
  * @param activeTrains A supplier that returns the list of currently active (approved
@@ -231,29 +239,58 @@ class DefaultNetworkPerceptionPort(
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**
-	 * Captures a frozen [SimulationSnapshot] of the complete observable network state.
+	 * The most recent snapshot published by [captureSnapshot], or `null` before the
+	 * first on-thread capture.
+	 *
+	 * `@Volatile` so an off-thread [snapshot] caller (the SP0.10 drive-loop driver)
+	 * observes the latest published reference without locking; the published
+	 * [SimulationSnapshot] is itself immutable, so once a reference is seen it is safe
+	 * to read concurrently. Written only from [captureSnapshot] on the kDisco thread.
+	 */
+	@kotlin.concurrent.Volatile
+	private var latestCaptured: SimulationSnapshot? = null
+
+	/**
+	 * Returns the most recent snapshot captured on the kDisco thread, safe to call
+	 * from any thread (see [NetworkPerceptionPort.snapshot]).
+	 *
+	 * This is the **off-thread-safe** accessor: it reads only [latestCaptured] and
+	 * never touches live simulation state, so it cannot block or interrupt the kDisco
+	 * kernel and cannot throw. Before the first [captureSnapshot] it returns
+	 * [SimulationSnapshot.EMPTY].
+	 */
+	override fun snapshot(): SimulationSnapshot = latestCaptured ?: SimulationSnapshot.EMPTY
+
+	/**
+	 * Captures a fresh, consistent [SimulationSnapshot] of the complete observable
+	 * network state on the kDisco thread and publishes it to [latestCaptured].
 	 *
 	 * Calls each `allXxx()` bulk query in sequence.  Because kDisco runs on a single
 	 * simulation thread, all four calls observe the same simulation state — no events
-	 * interleave between them during a normal tick.
+	 * interleave between them during a normal tick. The result is published via
+	 * [latestCaptured] so off-thread [snapshot] callers see a consistent picture.
 	 *
 	 * [SimulationSnapshot.simTime] is set from [Process.time]; if called outside an
 	 * active kDisco simulation (e.g. in unit tests), the resulting [DiscoException]
 	 * is caught and `simTime` falls back to `0.0`. Any other exception propagates.
 	 */
-	override fun snapshot(): SimulationSnapshot =
-		SimulationSnapshot(
-			simTime =
-				try {
-					Process.time()
-				} catch (_: DiscoException) {
-					0.0
-				},
-			semaphores = allSignalAspects(),
-			blocks = allBlockOccupancies(),
-			trainPositions = allTrainPositions(),
-			timetables = allTrainTimetables()
-		)
+	override fun captureSnapshot(): SimulationSnapshot {
+		val captured =
+			SimulationSnapshot(
+				simTime =
+					try {
+						Process.time()
+					} catch (_: DiscoException) {
+						0.0
+					},
+				semaphores = allSignalAspects(),
+				blocks = allBlockOccupancies(),
+				trainPositions = allTrainPositions(),
+				timetables = allTrainTimetables()
+			)
+		latestCaptured = captured
+		return captured
+	}
 
 	// ── Grid scan ─────────────────────────────────────────────────────────
 

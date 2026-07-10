@@ -101,10 +101,11 @@ class AgentLoopDriver(
 	 *    pause/step requests), then [SimulationController.throttle] with the
 	 *    simulation-time delta since the previous cycle (wall-clock pacing).
 	 *
-	 * The simulation-time delta passed to [SimulationController.throttle] is
-	 * `snapshot.simTime - prevSimTime`.  On the very first cycle [prevSimTime] is
-	 * `0.0`, so the delta equals `snapshot.simTime` — this mirrors the first-event
-	 * behaviour in [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext].
+	 * The simulation-time delta passed to [SimulationController.throttle] is the
+	 * simulation time elapsed since the previous cycle.  There is no previous
+	 * cycle on the first call, so that delta is taken from the loop's start
+	 * baseline — the same initial-delta convention used by the controlled event
+	 * loop in [cz.vutbr.fit.interlockSim.context.DefaultSimulationContext].
 	 */
 	suspend fun runCycle() {
 		// 1. SENSE — read a consistent frozen snapshot off the perception port.

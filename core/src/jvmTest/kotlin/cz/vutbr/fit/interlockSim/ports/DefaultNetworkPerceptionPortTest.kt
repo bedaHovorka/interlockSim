@@ -422,10 +422,10 @@ class DefaultNetworkPerceptionPortTest {
 		}
 	}
 
-	// ── snapshot() ─────────────────────────────────────────────────────────
+	// ── captureSnapshot() (fresh, on-thread) and snapshot() (cached, off-thread) ─
 
 	@Nested
-	@DisplayName("snapshot()")
+	@DisplayName("captureSnapshot() (fresh) and snapshot() (cached)")
 	inner class Snapshot {
 		@Test
 		@DisplayName("snapshot captures all semaphores, blocks, positions and timetables")
@@ -447,7 +447,7 @@ class DefaultNetworkPerceptionPortTest {
 					activeTrains = { listOf(t) }
 				)
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 
 			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
 			assertThat(snap.blocks).containsExactlyInAnyOrder(
@@ -463,7 +463,7 @@ class DefaultNetworkPerceptionPortTest {
 			// Process.time() throws outside an active simulation; the port must return 0.0.
 			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 
 			// 0.0 is the documented fallback when called outside kDisco.
 			assertThat(snap.simTime).isEqualTo(0.0)
@@ -474,7 +474,7 @@ class DefaultNetworkPerceptionPortTest {
 		fun emptyNetworkProducesEmptySnapshot() {
 			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 
 			assertThat(snap.semaphores).isEmpty()
 			assertThat(snap.blocks).isEmpty()
@@ -495,7 +495,7 @@ class DefaultNetworkPerceptionPortTest {
 				)
 			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 			val directTimetable = port.trainTimetable("Train #3")
 
 			assertThat(snap.timetables).containsExactlyInAnyOrder(directTimetable!!)
@@ -511,7 +511,7 @@ class DefaultNetworkPerceptionPortTest {
 					activeTrains = { emptyList() }
 				)
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 
 			assertThat(snap.semaphores).containsExactlyInAnyOrder(SemaphoreReading("doB1", Signal.S60))
 		}
@@ -529,7 +529,7 @@ class DefaultNetworkPerceptionPortTest {
 					activeTrains = { active.toList() }
 				)
 
-			val snap = port.snapshot()
+			val snap = port.captureSnapshot()
 
 			// Mutate the underlying source state after capture.
 			every { sem.signal } returns Signal.STOP
@@ -545,6 +545,45 @@ class DefaultNetworkPerceptionPortTest {
 			)
 			assertThat(snap.trainPositions.map { it.velocity }).containsExactlyInAnyOrder(15.0)
 			assertThat(snap.timetables.map { it.trainId }).containsExactlyInAnyOrder("Train #1")
+		}
+
+		@Test
+		@DisplayName("snapshot() returns the empty default before any captureSnapshot()")
+		fun snapshotReturnsEmptyBeforeFirstCapture() {
+			// snapshot() is the off-thread-safe accessor: before the first on-thread
+			// captureSnapshot() it must return SimulationSnapshot.EMPTY, never reading
+			// live state and never throwing.
+			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
+
+			assertThat(port.snapshot()).isEqualTo(SimulationSnapshot.EMPTY)
+		}
+
+		@Test
+		@DisplayName("snapshot() returns the last captureSnapshot() result and stays frozen until the next capture")
+		fun snapshotReturnsLastCaptureAndStaysFrozen() {
+			val sem = semaphore("zA", Signal.FREE)
+			val b = block(name = "k1", state = TrackFacility.State.RESERVED, trainName = "Train #1")
+			val active = mutableListOf(train("Train #1", velocity = 15.0, originName = "A", destName = "B"))
+			val port =
+				DefaultNetworkPerceptionPort(
+					env(cells = mapOf((0 to 0) to sem), blocks = listOf(b)),
+					activeTrains = { active.toList() }
+				)
+
+			// On-thread capture publishes a fresh snapshot.
+			val captured = port.captureSnapshot()
+			// Off-thread accessor returns the same instance just published.
+			assertThat(port.snapshot()).isEqualTo(captured)
+
+			// Mutate the underlying source state after capture.
+			every { sem.signal } returns Signal.STOP
+			every { b.getState() } returns TrackFacility.State.FREE
+			active.clear()
+
+			// snapshot() is still the frozen, previously-captured value — the off-thread
+			// caller never observed the mutation because it does not re-read live state.
+			assertThat(port.snapshot()).isEqualTo(captured)
+			assertThat(port.snapshot().semaphores).containsExactlyInAnyOrder(SemaphoreReading("zA", Signal.FREE))
 		}
 	}
 }
