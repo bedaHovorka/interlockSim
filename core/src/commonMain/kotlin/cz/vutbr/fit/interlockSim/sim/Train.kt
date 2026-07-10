@@ -9,12 +9,12 @@
  */
 package cz.vutbr.fit.interlockSim.sim
 
-import cz.hovorka.kdisco.Condition
-import cz.hovorka.kdisco.Continuous
-import cz.hovorka.kdisco.Process
-import cz.hovorka.kdisco.Variable
-import cz.hovorka.kdisco.dtMin
-import cz.hovorka.kdisco.maxAbsError
+import cz.ksimulantenbande.kdisco.Condition
+import cz.ksimulantenbande.kdisco.Continuous
+import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.Variable
+import cz.ksimulantenbande.kdisco.dtMin
+import cz.ksimulantenbande.kdisco.maxAbsError
 import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
@@ -1426,7 +1426,7 @@ class Train :
 	 * is `true`: register this method as the halt callback via
 	 * `collisionDetectionService.registerHaltCallback(train.name, train::requestHalt)`.
 	 *
-	 * **Thread safety:** This method modifies kDisco [cz.hovorka.kdisco.Variable] state.
+	 * **Thread safety:** This method modifies kDisco [cz.ksimulantenbande.kdisco.Variable] state.
 	 * It must only be called from the simulation thread (e.g., from within the
 	 * [DefaultCollisionDetectionService] warning delivery, which runs on that thread).
 	 *

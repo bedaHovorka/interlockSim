@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.ports
 
-import cz.hovorka.kdisco.DiscoException
-import cz.hovorka.kdisco.Process
+import cz.ksimulantenbande.kdisco.DiscoException
+import cz.ksimulantenbande.kdisco.Process
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.NodeCell

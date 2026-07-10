@@ -6,7 +6,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 /**
  * Domain events emitted when block reservation or occupancy state changes.
  *
- * Delivered via kdisco's event bus as [cz.hovorka.kdisco.SimulationEvent.Custom] payloads.
+ * Delivered via kdisco's event bus as [cz.ksimulantenbande.kdisco.SimulationEvent.Custom] payloads.
  * Subscribe via [cz.vutbr.fit.interlockSim.context.SimulationEnvironment.onBlockEvent].
  *
  * All fields are captured at emission time (simulation-thread values).

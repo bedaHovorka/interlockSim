@@ -50,7 +50,7 @@ val checkKdisco by tasks.registering {
     doLast {
         val kdiscoJar =
             file(
-                "${System.getProperty("user.home")}/.m2/repository/cz/hovorka/kdisco/kdisco-core-jvm/$kdiscoVersion/kdisco-core-jvm-$kdiscoVersion.jar",
+                "${System.getProperty("user.home")}/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/$kdiscoVersion/kdisco-core-jvm-$kdiscoVersion.jar",
             )
 
         if (kdiscoJar.exists()) {

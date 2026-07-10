@@ -11,7 +11,7 @@ package cz.vutbr.fit.interlockSim.sim.collision
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
-import cz.hovorka.kdisco.emitCustom
+import cz.ksimulantenbande.kdisco.emitCustom
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.LoopProcess

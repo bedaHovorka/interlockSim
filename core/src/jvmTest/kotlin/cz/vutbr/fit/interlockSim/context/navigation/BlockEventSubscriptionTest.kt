@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
-import cz.hovorka.kdisco.SimulationEvent as KDiscoSimulationEvent
+import cz.ksimulantenbande.kdisco.SimulationEvent as KDiscoSimulationEvent
 
 @Tag("integration-test")
 @DisplayName("BlockEvent subscription — #569 event delivery")
