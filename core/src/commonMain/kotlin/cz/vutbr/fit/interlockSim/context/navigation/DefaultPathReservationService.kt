@@ -267,30 +267,11 @@ class DefaultPathReservationService(
 							trackSections = path // path is List<TrackSection> here
 						)
 
-					// Step 2f: Register PathInfo metadata (Issue #295/#296 Phase 4)
-					registry.registerPathInfo(trainId, pathInfo)
-					logger.debug {
-						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
-							"reserved path has ${pathInfo.reservedPath.length()} elements"
-					}
-
-					// Step 2f.1: Register switches (Tier 2 - Issue #291)
-					val switches = extractUniqueSwitches(pathInfo)
-					if (switches.isNotEmpty()) {
-						registry.registerSwitches(trainId, switches)
-						logger.debug {
-							"reservePath: Registered ${switches.size} switches for $trainId"
-						}
-					}
-
-					// Step 2f.2: Configure switches based on path topology (Issue #300)
-					// Switches must be configured BEFORE semaphore signals are set up
-					// This ensures switches are in correct position (MAIN/BRANCH) for the reserved route
-					if (switches.isNotEmpty()) {
-						val configuredCount = configureSwitchesInPath(trainId, pathInfo)
-						logger.debug {
-							"reservePath: Configured $configuredCount of ${switches.size} switches for $trainId"
-						}
+					// Step 2f: Configure and register switches (Issue #300, #291, #742).
+					// A candidate whose switches cannot be configured is physically impossible
+					// and must fail the reservation — see configureAndRegisterSwitches.
+					if (!configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks)) {
+						return PathReservationService.ReservationResult.AllPathsBlocked(1)
 					}
 
 					// Step 2g: Configure semaphore signal after successful reservation
@@ -362,6 +343,17 @@ class DefaultPathReservationService(
 					// will travel through the first block, stop at the intermediate semaphore
 					// (signal=STOP) and wait forever.
 					configureIntermediateSemaphores(blocks)
+
+					// Step 2i: Register PathInfo metadata (Issue #295/#296 Phase 4; moved here by
+					// Issue #742). Registration happens only after switches AND signals configured
+					// successfully, so no rollback path can leave a poisoned PathInfo behind —
+					// a PathInfo pointing at an unusable route permanently stalls the train
+					// (isPathExtendedBeyond suppresses the corrective re-reservation).
+					registry.registerPathInfo(trainId, pathInfo)
+					logger.debug {
+						"reservePath: Registered PathInfo for $trainId with ${pathInfo.entryDirections.size} entry directions, " +
+							"reserved path has ${pathInfo.reservedPath.length()} elements"
+					}
 
 					// Emit BlockReserved for each successfully reserved block
 					val simTime = currentSimulationTime()
@@ -1580,22 +1572,30 @@ class DefaultPathReservationService(
 	 * interlocking principles: switches must be positioned and locked before
 	 * authorizing train movement.
 	 *
-	 * ## Error Handling
+	 * ## Error Handling (Issue #742)
 	 *
-	 * Any internal [PathSeparatorChangeException] from switch configuration
-	 * is handled via logging only and is not propagated to callers. Switches that
-	 * cannot be configured are skipped (this may occur when path topology doesn't
-	 * actually traverse the switch).
+	 * Two failure classes are distinguished:
+	 *
+	 * - **Undeterminable segments** (`from`/`to` is null, or no next track): the path does not
+	 *   geometrically traverse the switch, so it is skipped leniently — the pre-#742 behavior.
+	 * - **Genuinely traversed switch that no configuration joins**
+	 *   ([PathSeparatorChangeException] with both segments known): the candidate route is
+	 *   physically impossible (e.g. the sibling-branch "diversion" doB1→doB2 through vB, whose
+	 *   legs no configuration of vB connects). This now FAILS the whole configuration —
+	 *   returning `false` — instead of being silently skipped. Silently skipping reserved
+	 *   untraversable routes and permanently stalled trains (captured in failing
+	 *   `RuleBasedDispatcherDeterminismTest` runs).
 	 *
 	 * @param trainId Train identifier for logging and occupant creation
 	 * @param pathInfo PathInfo containing the reserved path with switches
-	 * @return Number of switches successfully configured
+	 * @return `true` when every genuinely traversed switch was configured, `false` when the
+	 *   route is impossible and the caller must roll the candidate back (Issue #742)
 	 * @since Issue #300 Fix switch animation regression
 	 */
 	private fun configureSwitchesInPath(
 		trainId: String,
 		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo
-	): Int {
+	): Boolean {
 		// Convert Path to list for indexed access
 		val pathElements = pathInfo.reservedPath.toList()
 
@@ -1648,9 +1648,17 @@ class DefaultPathReservationService(
 				val from = context.getSegment(element, previous, next)
 				val to = context.getSegment(element, next, previous)
 
-				// Try to configure the switch - if it fails, skip this switch
-				// Some switches in the path may not need configuration (e.g., already configured,
-				// or path doesn't actually traverse the switch in a way that changes its state)
+				// Lenient skip (pre-#742 behavior): segments undeterminable means the path does
+				// not geometrically traverse this switch, so there is nothing to configure.
+				if (from == null || to == null) {
+					logger.info {
+						"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
+							"for train $trainId - segments undeterminable, path does not traverse it " +
+							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+					}
+					return@forEachIndexed
+				}
+
 				try {
 					// Get allowed speed for this switch
 					val allowedSpeed = element.allowedSpeed()
@@ -1671,19 +1679,26 @@ class DefaultPathReservationService(
 							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
 					}
 				} catch (e: PathSeparatorChangeException) {
-					// Switch configuration failed - segments don't match any valid configuration
-					// This is expected for switches in path that aren't actually traversed (e.g., parallel routes)
-					logger.info {
-						"configureSwitchesInPath: Skipped switch ${element.staticRef.getName()} " +
-							"for train $trainId - path topology doesn't require configuration " +
-							"(from=${from?.hashCode()}, to=${to?.hashCode()})"
+					// Issue #742: the route genuinely traverses this switch (both segments known)
+					// but NO switch configuration joins them — the candidate route is physically
+					// impossible. Reject the configuration so reservePath rolls the candidate
+					// back; silently skipping here reserved untraversable routes and permanently
+					// stalled trains.
+					logger.warn {
+						"configureSwitchesInPath: Switch ${element.staticRef.getName()} cannot join " +
+							"the route's segments for train $trainId - rejecting candidate route " +
+							"(from=${from.hashCode()}, to=${to.hashCode()}, Issue #742)"
 					}
 					logger.debug(e) { "Exception details: ${e.message}" }
+					return false
 				}
 			}
 		}
 
-		return configuredCount
+		logger.debug {
+			"configureSwitchesInPath: Configured $configuredCount switch(es) for train $trainId"
+		}
+		return true
 	}
 
 	/**
@@ -1845,6 +1860,103 @@ class DefaultPathReservationService(
 
 		logger.debug {
 			"rollbackCompleteReservation: Completed full rollback for train $trainId"
+		}
+	}
+
+	/**
+	 * Configure the candidate path's switches and register them on success (Issue #742).
+	 *
+	 * ## Ordering (Issue #300, #291, #742)
+	 *
+	 * Switches must be configured BEFORE semaphore signals are set up, so they are in the
+	 * correct position (MAIN/BRANCH) for the reserved route. Configuration also runs BEFORE
+	 * [PathReservationRegistry.registerSwitches] and [PathReservationRegistry.registerPathInfo]
+	 * so a rejected candidate leaves no registry state and the rollback only needs to undo
+	 * this candidate's blocks and switch locks.
+	 *
+	 * ## Why an unconfigurable switch fails the reservation (Issue #742)
+	 *
+	 * A switch the route genuinely traverses that CANNOT be configured (no switch
+	 * configuration joins the route's entry/exit segments — e.g. the physically impossible
+	 * sibling-branch "diversion" doB1→doB2 through vB) makes the whole candidate unusable.
+	 * Returning Success anyway committed trains to untraversable routes and gridlocked the
+	 * network. Failing instead means the train keeps waiting at its current semaphore and
+	 * the through route is reserved at a future simulation time once it frees.
+	 *
+	 * @param trainId The train identifier
+	 * @param pathInfo The candidate's PathInfo (switches are extracted from its path)
+	 * @param forwardBlocks The candidate's freshly reserved blocks (for rollback on failure)
+	 * @return `true` when the candidate's switches are configured and registered (or the
+	 *   path has none), `false` when the candidate was rolled back and the reservation
+	 *   must fail
+	 */
+	private fun configureAndRegisterSwitches(
+		trainId: String,
+		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
+		forwardBlocks: List<DynamicTrackBlock>
+	): Boolean {
+		val switches = extractUniqueSwitches(pathInfo)
+		if (switches.isEmpty()) {
+			return true
+		}
+		if (!configureSwitchesInPath(trainId, pathInfo)) {
+			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches)
+			return false
+		}
+		registry.registerSwitches(trainId, switches)
+		logger.debug {
+			"reservePath: Registered ${switches.size} switches for $trainId"
+		}
+		return true
+	}
+
+	/**
+	 * Roll back a candidate path whose switches cannot be configured (Issue #742).
+	 *
+	 * Scoped strictly to THIS candidate's mutations — unlike [rollbackCompleteReservation]
+	 * (which unregisters the train entirely), it must not touch the train's pre-existing
+	 * blocks, switches or PathInfo: an extension attempt can fail mid-journey while the
+	 * train is still running on its earlier reserved path, and that path must survive so
+	 * the train simply keeps waiting for its through route.
+	 *
+	 * - Cancels path setup and unregisters ONLY the freshly reserved [forwardBlocks]
+	 * - Unlocks ONLY this candidate's switches that are not registered to the train
+	 *   (switches locked by the train's earlier hops stay locked)
+	 *
+	 * PathInfo needs no rollback: Issue #742 moved [PathReservationRegistry.registerPathInfo]
+	 * after switch and signal configuration, so nothing has been registered yet.
+	 *
+	 * @param trainId The train identifier
+	 * @param forwardBlocks The freshly reserved blocks of the rejected candidate
+	 * @param switches The rejected candidate's switches (possibly locked by setUpPath)
+	 */
+	private fun rollbackUnconfigurableCandidate(
+		trainId: String,
+		forwardBlocks: List<DynamicTrackBlock>,
+		switches: List<DynamicRailSwitch>
+	) {
+		val priorSwitches = registry.getSwitches(trainId).toSet()
+		switches.filterNot { it in priorSwitches }.forEach { switch ->
+			try {
+				switch.unlock()
+			} catch (e: Exception) {
+				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to unlock switch $switch" }
+			}
+		}
+		for (block in forwardBlocks) {
+			try {
+				val reservedFrom = block.reservedFrom
+				if (reservedFrom != null) {
+					block.cancelPathSetup(reservedFrom)
+				}
+				registry.unregisterBlock(trainId, block)
+			} catch (e: Exception) {
+				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to release block $block" }
+			}
+		}
+		logger.debug {
+			"rollbackUnconfigurableCandidate: Rolled back unconfigurable candidate for $trainId " +
+				"(${forwardBlocks.size} block(s), ${switches.size} switch(es) checked)"
 		}
 	}
 
