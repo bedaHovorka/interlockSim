@@ -28,7 +28,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.currentTimeMillisKMP
 import cz.vutbr.fit.interlockSim.util.platformSleep
-import kotlinx.coroutines.runBlocking
+import cz.vutbr.fit.interlockSim.util.platformStartDaemonThread
 import org.koin.core.component.KoinComponent
 
 /**
@@ -304,11 +304,9 @@ class ShuntingLoop(
 		// SP0.11: Launch the external agent-driver coroutine alongside the kDisco kernel.
 		// The action runs in a daemon thread so the JVM can exit cleanly when the
 		// simulation finishes; the loop inside the action checks [isSimActive].
+		// KMP: thread creation is JVM-only, hence the expect/actual indirection.
 		agentDriverAction?.let { action ->
-			val t = Thread { runBlocking { action() } }
-			t.isDaemon = true
-			t.name = "dispatcher-agent-driver"
-			t.start()
+			platformStartDaemonThread("dispatcher-agent-driver", action)
 		}
 	}
 

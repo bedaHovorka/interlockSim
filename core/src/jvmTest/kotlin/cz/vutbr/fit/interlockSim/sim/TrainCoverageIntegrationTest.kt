@@ -111,7 +111,9 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 				}
 			)
 
-			ctx.setMainProcess(ShuntingLoop(ctx, 200L))
+			val loop = ShuntingLoop(ctx, 200L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 			ctx.run()
 
 			assertThat(endEvents.get(), name = "train end events in extended sim")
@@ -138,7 +140,9 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 				}
 			)
 
-			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
+			val loop = ShuntingLoop(ctx, 60L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 			ctx.run()
 
 			assertThat(trainApproved.get(), name = "trains approved (exercising Front paths)")
@@ -272,7 +276,9 @@ class TrainCoverageIntegrationTest : KoinTestBase() {
 		fun lengthCheckerCheckExercisedThroughSimulation() {
 			val ctx = loadVyhybnaContext()
 
-			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+			val loop = ShuntingLoop(ctx, 30L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 			ctx.run()
 
 			assertThat(ctx.getGraph()).isNotNull()

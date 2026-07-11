@@ -70,6 +70,7 @@ COPY --chown=builder:builder detekt-strict.yml /build/interlockSim/
 COPY --chown=builder:builder .editorconfig /build/interlockSim/
 COPY --chown=builder:builder core/build.gradle.kts /build/interlockSim/core/
 COPY --chown=builder:builder core-test/build.gradle.kts /build/interlockSim/core-test/
+COPY --chown=builder:builder dispatcher-agent/build.gradle.kts /build/interlockSim/dispatcher-agent/
 COPY --chown=builder:builder desktop-ui/build.gradle.kts /build/interlockSim/desktop-ui/
 
 # All subsequent Gradle commands run as the builder user.
@@ -97,6 +98,7 @@ RUN --mount=type=cache,target=/home/builder/.gradle/caches,id=app-gradle-v2,uid=
 COPY --chown=builder:builder desktop-ui/src/ /build/interlockSim/desktop-ui/src/
 COPY --chown=builder:builder core/src/ /build/interlockSim/core/src/
 COPY --chown=builder:builder core-test/src/ /build/interlockSim/core-test/src/
+COPY --chown=builder:builder dispatcher-agent/src/ /build/interlockSim/dispatcher-agent/src/
 
 # Layer 5: Compile and package with cache mount (no tests).
 # Tests are decoupled from the app image build and run in the separate
