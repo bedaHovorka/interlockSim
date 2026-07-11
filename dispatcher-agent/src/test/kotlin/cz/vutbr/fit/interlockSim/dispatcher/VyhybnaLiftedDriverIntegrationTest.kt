@@ -8,7 +8,6 @@
  * Bedrich Hovorka
  */
 package cz.vutbr.fit.interlockSim.dispatcher
-
 import assertk.assertThat
 import assertk.assertions.isEmpty
 import assertk.assertions.isGreaterThanOrEqualTo
@@ -33,7 +32,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import java.util.Collections
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -125,13 +123,15 @@ class VyhybnaLiftedDriverIntegrationTest {
 	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
 		val context = loadVyhybnaContext()
+		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
 		val loop = ShuntingLoop(context, endTime = 300L)
 
 		// Collect ConflictDetectedEvents — must be empty after the run.
+		// Lock-step guarantees the listener fires only on the sim thread (no concurrent access).
 		val conflictEvents: MutableList<ConflictDetectedEvent> =
-			Collections.synchronizedList(mutableListOf())
+			mutableListOf()
 		context.onConflictDetectedEvent { conflictEvents.add(it) }
 
 		// Wire the full lifted stack — same components as production.
