@@ -16,8 +16,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
-import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -141,12 +141,12 @@ class DefaultNetworkActuatorPort(
 				logger.debug { "setSwitchPosition: unknown switch '$switchName'" }
 				return false
 			}
+		if (sw.conf == position) return true
 		if (sw.locked) {
 			// Switch is locked by a route reservation — cannot be moved while a path is active.
 			logger.debug { "setSwitchPosition: switch '$switchName' is locked by route reservation" }
 			return false
 		}
-		if (sw.conf == position) return true
 		return try {
 			sw.changeConf()
 			sw.conf == position
@@ -197,34 +197,20 @@ class DefaultNetworkActuatorPort(
 	 * Scans the grid once to build a name→semaphore index.  Mirrors the strategy in
 	 * [DefaultNetworkPerceptionPort.buildSemaphoreCache].
 	 */
-	private fun buildSemaphoreCache(): Map<String, DynamicRailSemaphore> {
-		val grid = env.getRailWayNetGrid()
-		val result = mutableMapOf<String, DynamicRailSemaphore>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell: Cell? = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore && cell.name.isNotBlank()) {
-					result[cell.name] = cell
-				}
-			}
-		}
-		return result
-	}
+	private fun buildSemaphoreCache(): Map<String, DynamicRailSemaphore> =
+		env
+			.getRailWayNetGrid()
+			.cellsOfType<DynamicRailSemaphore>()
+			.filter { it.name.isNotBlank() }
+			.associateBy { it.name }
 
 	/**
 	 * Scans the grid once to build a name→switch index.
 	 */
-	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> {
-		val grid = env.getRailWayNetGrid()
-		val result = mutableMapOf<String, DynamicRailSwitch>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell: Cell? = grid.getCellAt(x, y)
-				if (cell is DynamicRailSwitch && cell.name.isNotBlank()) {
-					result[cell.name] = cell
-				}
-			}
-		}
-		return result
-	}
+	private fun buildSwitchCache(): Map<String, DynamicRailSwitch> =
+		env
+			.getRailWayNetGrid()
+			.cellsOfType<DynamicRailSwitch>()
+			.filter { it.name.isNotBlank() }
+			.associateBy { it.name }
 }

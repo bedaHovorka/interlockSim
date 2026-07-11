@@ -157,9 +157,7 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 				dispatcher = dispatcher,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
-				unapprovedTrainsProvider = loop::getQueuedTrains,
-				innerBlockInputsProvider = loop::getInnerBlockInputs,
-				outerBlockInputsProvider = loop::getOuterBlockInputs
+				observationProvider = loop::getLatestObservation
 			)
 
 		// Lock-step handshake: same pattern as RuleBasedDispatcherDeterminismTest.

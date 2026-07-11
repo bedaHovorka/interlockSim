@@ -94,14 +94,41 @@ class DispatchDecisionApplier(
 	 * successfully applied via [applyReservePath], for the duplicate-suppression
 	 * guard documented on that function.
 	 *
-	 * Only ever appended to, never cleared: within one simulation run each train
-	 * makes a bounded, one-way trip through a handful of hops (2-3 for the bundled
-	 * `vyhybna.xml` topology), so the same triple recurring for the same train is
-	 * always the duplicate-decision race below, never a legitimate second need to
-	 * reserve the identical hop again. A fresh [DispatchDecisionApplier] is created
-	 * per simulation run, so this does not grow across runs either.
+	 * Entries are evicted via [evictReservationsFor] once the wiring layer observes a
+	 * block release for that train (see [evictReservationsFor] KDoc) — this set must
+	 * NOT be permanent: interlockSim supports bidirectional train operation (a train
+	 * can reverse and later legitimately need to reserve an identical hop it already
+	 * traversed once), which would otherwise collide with an entry left over from the
+	 * first pass and silently stall the train.
 	 */
 	private val appliedReservations: MutableSet<String> = mutableSetOf()
+
+	/**
+	 * Evicts every [appliedReservations] entry recorded for [trainId].
+	 *
+	 * ## Why eviction is needed (Goal 10 code-review fix)
+	 *
+	 * [appliedReservations] exists to suppress a *duplicate* [DispatchDecision.ReservePath]
+	 * decided twice before its first application is reflected back (see [applyReservePath]).
+	 * That in-flight race is only possible while the reservation is still active. Once ANY
+	 * block release happens for [trainId] (e.g. after a reversal re-approaches a hop it
+	 * already traversed once, or simply as it completes its journey and exits), a later
+	 * identical [DispatchDecision.ReservePath] is by construction a fresh request, not a
+	 * stale duplicate in flight — so it must not stay suppressed.
+	 *
+	 * This is intentionally coarse (it clears every recorded hop for [trainId], not just the
+	 * one whose block was released): the dedup guard is a best-effort in-flight-race filter,
+	 * not an ownership ledger, and re-issuing an already-owned reservation is already a
+	 * harmless no-op at the [NetworkActuatorPort]/registry level. Callers should invoke this
+	 * from a [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener] subscribed to
+	 * [cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType.BLOCK_RELEASED] events.
+	 *
+	 * @since Goal 10 code-review fix — latent bug found during the SP0.11 review
+	 */
+	fun evictReservationsFor(trainId: String) {
+		val prefix = "$trainId|"
+		appliedReservations.removeAll { it.startsWith(prefix) }
+	}
 
 	/**
 	 * Drains [queue] and applies each pending [DispatchDecision] via the actuator ports.

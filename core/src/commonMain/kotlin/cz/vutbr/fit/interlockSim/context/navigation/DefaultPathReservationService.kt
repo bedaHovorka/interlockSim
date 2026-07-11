@@ -870,6 +870,11 @@ class DefaultPathReservationService(
 	override fun getReservedBlocks(trainId: String): List<DynamicTrackBlock> = registry.getBlocks(trainId)
 
 	/**
+	 * Get all blocks currently physically occupied by a train.
+	 */
+	override fun getOccupiedBlocks(trainId: String): List<DynamicTrackBlock> = registry.getOccupiedBlocks(trainId)
+
+	/**
 	 * Implementation of reservePathToAny with intelligent target prioritization.
 	 *
 	 * ## Algorithm Complexity

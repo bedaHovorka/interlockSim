@@ -85,7 +85,18 @@ class RuleBasedDispatcher(
 	val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS
 ) : Dispatcher {
 	companion object {
-		/** Physical capacity of the vyhybna shunting loop: k1 and k2. */
+		/**
+		 * Physical capacity of the `vyhybna.xml` shunting loop station: 2 parallel
+		 * tracks (k1, k2).
+		 *
+		 * This is a station-topology constant, not a tunable performance knob: a real
+		 * interlocking's concurrent-train capacity is determined by railway-civil-engineering
+		 * expertise at station design time (how many parallel tracks/platforms a given
+		 * station has), the same way [maxConcurrentTrains] is fixed per [RuleBasedDispatcher]
+		 * instance rather than adjusted at runtime. Changing this default only makes sense
+		 * if the bundled `vyhybna.xml` topology itself changes; a different station layout
+		 * should pass its own capacity via the [maxConcurrentTrains] constructor parameter.
+		 */
 		const val DEFAULT_MAX_CONCURRENT_TRAINS: Int = 2
 		private val logger = KotlinLogging.logger {}
 	}

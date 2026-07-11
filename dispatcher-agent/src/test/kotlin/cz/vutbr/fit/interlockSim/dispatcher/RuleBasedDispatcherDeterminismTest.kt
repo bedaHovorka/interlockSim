@@ -142,9 +142,7 @@ class RuleBasedDispatcherDeterminismTest {
 				dispatcher = dispatcher,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
-				unapprovedTrainsProvider = loop::getQueuedTrains,
-				innerBlockInputsProvider = loop::getInnerBlockInputs,
-				outerBlockInputsProvider = loop::getOuterBlockInputs
+				observationProvider = loop::getLatestObservation
 			)
 
 		// Lock-step handshake (SP0.11 determinism): the free-running driver thread races
