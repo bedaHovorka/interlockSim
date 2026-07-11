@@ -176,6 +176,33 @@ tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configure
     jvmTarget = "21"
 }
 
+// ===========================================
+// JaCoCo Report Configuration
+// ===========================================
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named("test"))
+    mustRunAfter(tasks.named("integrationTest"))
+
+    executionData.setFrom(
+        fileTree(layout.buildDirectory).include("jacoco/*.exec"),
+    )
+    sourceDirectories.setFrom(
+        files("src/main/kotlin"),
+    )
+    classDirectories.setFrom(
+        fileTree(layout.buildDirectory.dir("classes/kotlin/main")),
+    )
+
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+        html.required.set(true)
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/test/html"))
+        csv.required.set(false)
+    }
+}
+
 dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
 }
