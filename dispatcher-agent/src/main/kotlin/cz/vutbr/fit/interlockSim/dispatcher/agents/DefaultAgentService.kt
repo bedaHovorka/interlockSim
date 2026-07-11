@@ -68,11 +68,12 @@ class DefaultAgentService : AgentService {
 
 		// SP1.2 skeleton: create agent with tools and configuration stored
 		// SP1.6: Will construct Koog agent, register tools, wire model
-		val agent = KoogDispatchAgentImpl(
-			tools = tools,
-			modelName = modelName,
-			systemPrompt = systemPrompt
-		)
+		val agent =
+			KoogDispatchAgentImpl(
+				tools = tools,
+				modelName = modelName,
+				systemPrompt = systemPrompt
+			)
 
 		logger.debug { "DefaultAgentService: created KoogDispatchAgentImpl" }
 		return agent

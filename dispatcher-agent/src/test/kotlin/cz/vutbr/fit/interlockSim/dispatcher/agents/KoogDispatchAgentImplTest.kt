@@ -27,11 +27,12 @@ import org.junit.jupiter.api.Test
  */
 class KoogDispatchAgentImplTest {
 	private val mockTool = MockDomainTool("test_tool", "A test tool")
-	private val agent = KoogDispatchAgentImpl(
-		tools = listOf(mockTool),
-		modelName = "mistral",
-		systemPrompt = "You are a railway dispatcher"
-	)
+	private val agent =
+		KoogDispatchAgentImpl(
+			tools = listOf(mockTool),
+			modelName = "mistral",
+			systemPrompt = "You are a railway dispatcher"
+		)
 
 	@Test
 	fun agentInitializesWithToolsAndModelConfiguration() {
@@ -42,12 +43,13 @@ class KoogDispatchAgentImplTest {
 	@Test
 	fun decideAsyncReturnsEmptyListInSkeleton() {
 		runBlocking {
-			val observation = DispatchObservation(
-				snapshot = SimulationSnapshot.EMPTY,
-				unapprovedTrains = emptyList(),
-				innerBlockInputs = emptyList(),
-				outerBlockInputs = emptyList()
-			)
+			val observation =
+				DispatchObservation(
+					snapshot = SimulationSnapshot.EMPTY,
+					unapprovedTrains = emptyList(),
+					innerBlockInputs = emptyList(),
+					outerBlockInputs = emptyList()
+				)
 
 			val decisions = agent.decideAsync(observation)
 
@@ -64,8 +66,6 @@ class KoogDispatchAgentImplTest {
 		override val name: String,
 		override val description: String
 	) : DomainTool {
-		override suspend fun execute(args: Map<String, Any?>): Any? {
-			return "mock result"
-		}
+		override suspend fun execute(args: Map<String, Any?>): Any? = "mock result"
 	}
 }

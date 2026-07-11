@@ -28,11 +28,12 @@ class DefaultAgentServiceTest {
 	@Test
 	fun `createDispatchAgent returns a valid agent instance`() {
 		runBlocking {
-			val agent = service.createDispatchAgent(
-				modelName = "mistral",
-				tools = emptyList(),
-				systemPrompt = "You are a railway dispatcher"
-			)
+			val agent =
+				service.createDispatchAgent(
+					modelName = "mistral",
+					tools = emptyList(),
+					systemPrompt = "You are a railway dispatcher"
+				)
 
 			assertThat(agent).isNotNull()
 		}
@@ -41,11 +42,12 @@ class DefaultAgentServiceTest {
 	@Test
 	fun `createDispatchAgent works with empty tool list`() {
 		runBlocking {
-			val agent = service.createDispatchAgent(
-				modelName = "mistral",
-				tools = emptyList(),
-				systemPrompt = null
-			)
+			val agent =
+				service.createDispatchAgent(
+					modelName = "mistral",
+					tools = emptyList(),
+					systemPrompt = null
+				)
 
 			assertThat(agent).isNotNull()
 		}
@@ -55,11 +57,12 @@ class DefaultAgentServiceTest {
 	fun `createDispatchAgent works with tool list`() {
 		runBlocking {
 			val tool = MockDomainTool("test_tool", "A test tool")
-			val agent = service.createDispatchAgent(
-				modelName = "llama2",
-				tools = listOf(tool),
-				systemPrompt = "System prompt"
-			)
+			val agent =
+				service.createDispatchAgent(
+					modelName = "llama2",
+					tools = listOf(tool),
+					systemPrompt = "System prompt"
+				)
 
 			assertThat(agent).isNotNull()
 		}
@@ -72,8 +75,6 @@ class DefaultAgentServiceTest {
 		override val name: String,
 		override val description: String
 	) : DomainTool {
-		override suspend fun execute(args: Map<String, Any?>): Any? {
-			return "mock result"
-		}
+		override suspend fun execute(args: Map<String, Any?>): Any? = "mock result"
 	}
 }
