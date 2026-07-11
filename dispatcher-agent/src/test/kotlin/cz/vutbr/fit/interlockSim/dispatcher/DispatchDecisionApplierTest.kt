@@ -345,6 +345,58 @@ class DispatchDecisionApplierTest {
 
 			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
 		}
+
+		@Test
+		@DisplayName(
+			"evictReservationsFor clears a train's suppressed keys, so a later legitimate " +
+				"re-reservation of the same triple (e.g. after a reversal) is applied again"
+		)
+		fun evictReservationsFor_allowsLegitimateReReservation() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+
+			// Simulate the wiring layer's BlockOccupancyListener reacting to a BLOCK_RELEASED
+			// event for this train (e.g. the train reversed and released the hop).
+			applier.evictReservationsFor("T1")
+
+			// The identical triple is now a fresh request, not a stale in-flight duplicate.
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+
+			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
+		}
+
+		@Test
+		@DisplayName("evictReservationsFor only clears entries for the given train, not other trains'")
+		fun evictReservationsFor_onlyAffectsGivenTrain() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ReservePath("T1", "zB", "doA1"),
+					DispatchDecision.ReservePath("T2", "zB", "doA1")
+				)
+			)
+			applier.onControlStep()
+
+			applier.evictReservationsFor("T1")
+
+			// T1's triple is fresh again (evicted); T2's identical triple must remain suppressed.
+			queue.postAll(
+				listOf(
+					DispatchDecision.ReservePath("T1", "zB", "doA1"),
+					DispatchDecision.ReservePath("T2", "zB", "doA1")
+				)
+			)
+			applier.onControlStep()
+
+			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
+			verify(exactly = 1) { networkActuator.requestRoute("T2", "zB", "doA1") }
+		}
 	}
 
 	// ── Thread-identity contract ──────────────────────────────────────────────

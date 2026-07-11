@@ -1360,9 +1360,11 @@ class Train :
 	fun setTargetSpeed(speed: Double) {
 		require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
 		if (speed > 0.0) {
-			val reservedBlocks = env.getRoutingServices().getPathReservationService().getReservedBlocks(name)
-			if (reservedBlocks.isEmpty()) {
-				logger.warn { "Train $number: setTargetSpeed($speed) ignored — no route reserved for $name" }
+			val pathReservationService = env.getRoutingServices().getPathReservationService()
+			val reservedBlocks = pathReservationService.getReservedBlocks(name)
+			val occupiedBlocks = pathReservationService.getOccupiedBlocks(name).toSet()
+			if (reservedBlocks.all { it in occupiedBlocks }) {
+				logger.warn { "Train $number: setTargetSpeed($speed) ignored — no cleared block ahead for $name" }
 				return
 			}
 		}

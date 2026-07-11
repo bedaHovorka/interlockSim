@@ -18,6 +18,7 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 
 /**
  * Simulation-backed implementation of [NetworkPerceptionPort].
@@ -298,17 +299,5 @@ class DefaultNetworkPerceptionPort(
 	 * Scans the grid once at construction time to build the semaphore list.
 	 * Matches the strategy used by the animation controller.
 	 */
-	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> {
-		val grid = env.getRailWayNetGrid()
-		val result = mutableListOf<DynamicRailSemaphore>()
-		for (x in 0 until grid.cols) {
-			for (y in 0 until grid.rows) {
-				val cell = grid.getCellAt(x, y)
-				if (cell is DynamicRailSemaphore) {
-					result.add(cell)
-				}
-			}
-		}
-		return result.toList()
-	}
+	private fun buildSemaphoreCache(): List<DynamicRailSemaphore> = env.getRailWayNetGrid().cellsOfType()
 }

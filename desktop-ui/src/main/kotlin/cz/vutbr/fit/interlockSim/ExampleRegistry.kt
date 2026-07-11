@@ -18,6 +18,9 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
+import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
@@ -206,6 +209,18 @@ class ExampleRegistry {
 				onBlockTransition = loop::incrementBlockTransition,
 				onFailedReservation = loop::incrementFailedReservation
 			)
+		// Evict the duplicate-suppression guard's entries for a train once any of its blocks
+		// releases — see DispatchDecisionApplier.evictReservationsFor for why this must not
+		// stay permanent (bidirectional trains can legitimately re-reserve a hop).
+		context.getRoutingServices().getPathReservationService().addBlockOccupancyListener(
+			object : BlockOccupancyListener {
+				override fun onBlockOccupancyChanged(event: BlockOccupancyEvent) {
+					if (event.type == BlockOccupancyEventType.BLOCK_RELEASED) {
+						event.trainId?.let(applier::evictReservationsFor)
+					}
+				}
+			}
+		)
 
 		val driver =
 			AgentLoopDriver(
@@ -213,9 +228,7 @@ class ExampleRegistry {
 				dispatcher = dispatcher,
 				commandQueue = queue,
 				controller = controller,
-				unapprovedTrainsProvider = loop::getQueuedTrains,
-				innerBlockInputsProvider = loop::getInnerBlockInputs,
-				outerBlockInputsProvider = loop::getOuterBlockInputs
+				observationProvider = loop::getLatestObservation
 			)
 
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot

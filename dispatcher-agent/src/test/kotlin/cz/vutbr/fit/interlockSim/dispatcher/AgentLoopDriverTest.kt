@@ -13,13 +13,18 @@ import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
+import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -323,6 +328,92 @@ class AgentLoopDriverTest {
 			runBlocking { makeDriver().runCycle() }
 
 			verify(exactly = 1) { perceptionPort.snapshot() }
+		}
+	}
+
+	// ── Observation provider atomicity (tearing fix) ──────────────────────────
+
+	@Nested
+	@DisplayName("observationProvider is read atomically, once per cycle")
+	inner class ObservationProviderAtomicity {
+		/**
+		 * Regression test for the tearing bug: [AgentLoopDriver] used to call three
+		 * separate providers (unapproved trains, inner/outer block inputs), each of
+		 * which could observe a different sim tick if the sim thread republished
+		 * [ShuntingLoop.TickObservation] in between. Now there is a single
+		 * `observationProvider` call per cycle, so this asserts it is invoked exactly
+		 * once and that all three [DispatchObservation] fields come from that single
+		 * returned bundle.
+		 */
+		@Test
+		@DisplayName("observationProvider is called exactly once per runCycle call")
+		fun observationProviderCalledOncePerCycle() {
+			var callCount = 0
+			val observationProvider = {
+				callCount++
+				ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+			}
+			val driver = AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controller, observationProvider)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(callCount).isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("all three DispatchObservation fields come from the same TickObservation instance")
+		fun allThreeFieldsComeFromSameTick() {
+			val tickA =
+				ShuntingLoop.TickObservation(
+					queuedTrains = listOf(QueuedTrainObservation("T1", "OUT1")),
+					innerBlockInputs =
+						listOf(
+							BlockInputObservation(
+								blockId = "innerA",
+								towardSemaphoreName = "semA",
+								state = TrackFacility.State.FREE,
+								ownerTrainId = null,
+								isApproachingThisInput = false,
+								pathSetUpTowardThisInput = false,
+								pathAlreadyExtendedBeyond = false
+							)
+						),
+					outerBlockInputs =
+						listOf(
+							BlockInputObservation(
+								blockId = "outerA",
+								towardSemaphoreName = "semB",
+								state = TrackFacility.State.FREE,
+								ownerTrainId = null,
+								isApproachingThisInput = false,
+								pathSetUpTowardThisInput = false,
+								pathAlreadyExtendedBeyond = false
+							)
+						)
+				)
+			// A second, distinguishable tick — if the driver ever split its reads across two
+			// provider calls, some fields would come from tickB instead of tickA.
+			val tickB =
+				ShuntingLoop.TickObservation(
+					queuedTrains = listOf(QueuedTrainObservation("T2", "OUT2")),
+					innerBlockInputs = emptyList(),
+					outerBlockInputs = emptyList()
+				)
+			var callCount = 0
+			val driver =
+				AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controller) {
+					callCount++
+					if (callCount == 1) tickA else tickB
+				}
+
+			val capturedObs = slot<DispatchObservation>()
+			every { dispatcher.decide(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+
+			runBlocking { driver.runCycle() }
+
+			assertThat(capturedObs.captured.unapprovedTrains).isSameAs(tickA.queuedTrains)
+			assertThat(capturedObs.captured.innerBlockInputs).isSameAs(tickA.innerBlockInputs)
+			assertThat(capturedObs.captured.outerBlockInputs).isSameAs(tickA.outerBlockInputs)
 		}
 	}
 

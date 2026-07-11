@@ -198,10 +198,15 @@ class ShuntingLoop(
 	 * [latestObservation] reference write, so a reader either sees all three from tick N
 	 * or all three from tick N-1 — never a mix.
 	 *
+	 * Public so off-kernel callers (e.g. [cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver])
+	 * can read all three fields with a single [getLatestObservation] call instead of three
+	 * separate accessor calls, which would defeat the single-tick atomicity this type exists
+	 * to guarantee.
+	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); single-snapshot publication added by the
-	 *   SP0.11 review follow-up
+	 *   SP0.11 review follow-up; made public by the tearing-fix follow-up
 	 */
-	private data class TickObservation(
+	data class TickObservation(
 		val queuedTrains: List<QueuedTrainObservation>,
 		val innerBlockInputs: List<BlockInputObservation>,
 		val outerBlockInputs: List<BlockInputObservation>
@@ -442,6 +447,21 @@ class ShuntingLoop(
 	fun getOuterBlockInputs(): List<BlockInputObservation> = latestObservation.outerBlockInputs
 
 	/**
+	 * Returns the full per-tick observation bundle (queued trains plus inner/outer block
+	 * inputs) as published at the start of the most recent [iteration], in a single
+	 * @Volatile read. Safe to call from off-kernel threads.
+	 *
+	 * Prefer this over calling [getQueuedTrains]/[getInnerBlockInputs]/[getOuterBlockInputs]
+	 * separately when a caller needs more than one of the three fields together — three
+	 * independent calls can observe different sim ticks if the sim thread republishes
+	 * [latestObservation] in between, tearing the single-tick guarantee [TickObservation]
+	 * exists to provide.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10); added by the tearing-fix follow-up
+	 */
+	fun getLatestObservation(): TickObservation = latestObservation
+
+	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external
 	 * [DefaultNetworkPerceptionPort][cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]
 	 * to build [SimulationSnapshot.trainPositions].
@@ -539,6 +559,19 @@ class ShuntingLoop(
 
 	fun getTrainsExited(): Int = trainsExitedCount
 
+	/**
+	 * Peak number of trains simultaneously approved (holding an admitted slot) at any
+	 * observed tick during this run.
+	 *
+	 * **Safety invariant:** this value must never exceed the station's fixed topology
+	 * capacity ([RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS], or whatever
+	 * `maxConcurrentTrains` the wired dispatcher was constructed with) — that capacity is
+	 * not a tunable performance knob, it is how many parallel tracks the physical station
+	 * actually has (2 for `vyhybna.xml`: k1, k2). If a dispatcher ever let a 3rd train in
+	 * concurrently on this topology, that train would have no physical track left to occupy —
+	 * an unresolvable state, not a recoverable "wait and retry" condition, since every
+	 * available parallel track is already held by the other two approved trains.
+	 */
 	fun getMaxConcurrentTrains(): Int = maxConcurrentTrainsCount
 
 	fun getBlockTransitions(trainId: String): Int = blockTransitionsByTrain[trainId] ?: 0

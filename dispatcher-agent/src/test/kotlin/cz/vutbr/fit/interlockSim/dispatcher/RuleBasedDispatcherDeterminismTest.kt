@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Timeout
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
@@ -49,10 +50,14 @@ private val logger = KotlinLogging.logger {}
  * - `trainsExited` verifies all trains complete their journeys (no deadlock).
  * - `maxConcurrentTrains` verifies the MAX_TRAINS=2 capacity constraint held.
  * - Per-train block transitions verify the exact route taken was consistent.
+ * - `conflictEventCount` verifies [RuleBasedDispatcher] never causes a block conflict —
+ *   zero [cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent]s expected
+ *   for the deterministic shunting-loop topology.
  *
- * **Baseline (established during SP0.1):**
+ * **Baseline (established during SP0.1, extended in SP0.12):**
  * All 5 generated trains exit; max concurrent = 2; each train makes 2 block
- * transitions (sorted per-train transition counts `[2, 2, 2, 2, 2]`).
+ * transitions (sorted per-train transition counts `[2, 2, 2, 2, 2]`);
+ * zero conflict events.
  *
  * @see RuleBasedDispatcher
  * @see ShuntingLoop
@@ -74,7 +79,7 @@ class RuleBasedDispatcherDeterminismTest {
 		stopKoin()
 	}
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
+	private fun loadShuntingLoopContext(): DefaultSimulationContext =
 		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
@@ -89,19 +94,30 @@ class RuleBasedDispatcherDeterminismTest {
 	 * include a global, never-reset counter (`Train.countValue`) that increments across
 	 * successive simulation runs — a known cosmetic issue (SIM-002). Sorting the
 	 * transition counts is sufficient to verify route determinism.
+	 *
+	 * [conflictEventCount] must be 0 in every run: [RuleBasedDispatcher] uses the
+	 * capacity cap and path-extension flags to avoid issuing competing reservations,
+	 * so the shunting-loop topology should never trigger a
+	 * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictDetectedEvent].
 	 */
 	private data class RunResult(
 		val trainsExited: Int,
 		val maxConcurrentTrains: Int,
-		val sortedBlockTransitionCounts: List<Int>
+		val sortedBlockTransitionCounts: List<Int>,
+		val conflictEventCount: Int
 	)
 
 	private fun executeRun(endTime: Long = 300L): RunResult {
-		val context = loadVyhybnaContext()
+		val context = loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
 		val loop = ShuntingLoop(context, endTime)
+
+		// Track ConflictDetectedEvents: RuleBasedDispatcher must produce zero conflicts
+		// on the deterministic shunting-loop topology (SP0.12 A3 gate).
+		val conflictCount = AtomicInteger(0)
+		context.onConflictDetectedEvent { conflictCount.incrementAndGet() }
 
 		// SP0.11: Wire the full dispatcher-agent stack instead of passing dispatcher= inline.
 		val perceptionPort =
@@ -126,9 +142,7 @@ class RuleBasedDispatcherDeterminismTest {
 				dispatcher = dispatcher,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
-				unapprovedTrainsProvider = loop::getQueuedTrains,
-				innerBlockInputsProvider = loop::getInnerBlockInputs,
-				outerBlockInputsProvider = loop::getOuterBlockInputs
+				observationProvider = loop::getLatestObservation
 			)
 
 		// Lock-step handshake (SP0.11 determinism): the free-running driver thread races
@@ -166,7 +180,8 @@ class RuleBasedDispatcherDeterminismTest {
 		return RunResult(
 			trainsExited = loop.getTrainsExited(),
 			maxConcurrentTrains = loop.getMaxConcurrentTrains(),
-			sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted()
+			sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted(),
+			conflictEventCount = conflictCount.get()
 		)
 	}
 
@@ -195,13 +210,20 @@ class RuleBasedDispatcherDeterminismTest {
 		assertThat(result.maxConcurrentTrains)
 			.isEqualTo(RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS)
 
+		// SP0.12 A3 gate: RuleBasedDispatcher must not cause any block conflicts on
+		// the shunting-loop topology.  A non-zero count indicates the dispatcher is
+		// issuing competing reservations — a regression in dispatch correctness.
+		assertThat(result.conflictEventCount)
+			.isEqualTo(0)
+
 		// Store baseline on first run; compare on subsequent runs.
 		if (info.currentRepetition == 1) {
 			baselineResult = result
 			logger.info {
 				"Run 1 baseline: trainsExited=${result.trainsExited}, " +
 					"maxConcurrent=${result.maxConcurrentTrains}, " +
-					"transitionCounts=${result.sortedBlockTransitionCounts}"
+					"transitionCounts=${result.sortedBlockTransitionCounts}, " +
+					"conflictEvents=${result.conflictEventCount}"
 			}
 		} else {
 			val baseline =
@@ -214,6 +236,8 @@ class RuleBasedDispatcherDeterminismTest {
 				.isEqualTo(baseline.maxConcurrentTrains)
 			assertThat(result.sortedBlockTransitionCounts)
 				.isEqualTo(baseline.sortedBlockTransitionCounts)
+			assertThat(result.conflictEventCount)
+				.isEqualTo(baseline.conflictEventCount)
 		}
 	}
 
