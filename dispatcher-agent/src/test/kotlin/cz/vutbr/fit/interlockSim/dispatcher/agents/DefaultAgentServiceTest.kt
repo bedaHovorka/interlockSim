@@ -13,6 +13,8 @@ import assertk.assertThat
 import assertk.assertions.isNotNull
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 /**
  * Unit tests for [DefaultAgentService] skeleton (SP1.2, Issue #547).
@@ -30,7 +32,7 @@ class DefaultAgentServiceTest {
 		runBlocking {
 			val agent =
 				service.createDispatchAgent(
-					modelName = "mistral",
+					modelName = "qwen2.5:7b-instruct",
 					tools = emptyList(),
 					systemPrompt = "You are a railway dispatcher"
 				)
@@ -44,7 +46,7 @@ class DefaultAgentServiceTest {
 		runBlocking {
 			val agent =
 				service.createDispatchAgent(
-					modelName = "mistral",
+					modelName = "qwen2.5:7b-instruct",
 					tools = emptyList(),
 					systemPrompt = null
 				)
@@ -53,13 +55,22 @@ class DefaultAgentServiceTest {
 		}
 	}
 
-	@Test
-	fun `createDispatchAgent works with tool list`() {
+	/**
+	 * Parameterized test for tool-capable models (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md).
+	 *
+	 * Tests that createDispatchAgent works with models that support native tool calling:
+	 * - D1: qwen2.5:7b-instruct (top pick)
+	 * - D2: llama3.1:8b (close second)
+	 * - D5: gemma3:4b (fast fallback)
+	 */
+	@ParameterizedTest
+	@ValueSource(strings = ["qwen2.5:7b-instruct", "llama3.1:8b", "gemma3:4b"])
+	fun `createDispatchAgent works with tool-capable models and tool list`(modelName: String) {
 		runBlocking {
 			val tool = MockDomainTool("test_tool", "A test tool")
 			val agent =
 				service.createDispatchAgent(
-					modelName = "llama2",
+					modelName = modelName,
 					tools = listOf(tool),
 					systemPrompt = "System prompt"
 				)

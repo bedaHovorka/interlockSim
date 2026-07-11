@@ -1,8 +1,9 @@
 # SP1.2 AIAgent/AgentService Skeleton Documentation
 
 **Issue:** #547
-**Phase:** SP1.2 (Koog dependency + skeleton)
+**Phase:** SP1.2 (Koog 1.0.0 dependency + skeleton)
 **Goal:** Goal 10 — AI-driven railway dispatcher
+**Last Updated:** 2026-07-11 (Koog 1.0.0, tool-capable model selection)
 
 ## Overview
 
@@ -93,7 +94,25 @@ Skeleton tests verify:
 - Agent accepts tools and model configuration ✓
 - Agent returns empty decisions (SP1.2 no-op) ✓
 
+Tests use **tool-capable models per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md:**
+- **qwen2.5:7b-instruct** (top pick: strong tool-calling + multilingual)
+- **llama3.1:8b** (close second: mature function calling)
+- **gemma3:4b** (fast fallback: ≤ 4B footprint)
+
+Rejected non-tool models (e.g., llama2): no native tool-calling support, unsuitable for dispatcher agent role.
+
 Real LLM integration tests come in SP1.6 (#551).
+
+## Koog Dependency
+
+**Koog 1.0.0** (first stable release, 2026-07-XX):
+- **Tool calling:** Reliably emits valid JSON for Koog tool registration
+- **OllamaModels curated set:** Pre-configured model constants (verify in SP1.3)
+- **Structured output validation:** Malformed tool calls caught before dispatcher sees them
+
+Koog 1.0 ships a curated `OllamaModels` set (`OllamaModels.Meta.*`, `OllamaModels.Alibaba.*`, etc.); 
+any model not pre-listed can be constructed via `LLModel`/`OllamaModelCard` directly. This mapping 
+is finalized in SP1.5 (#550, model configuration wiring phase).
 
 ## Spring Boot Rationale
 
