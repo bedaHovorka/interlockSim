@@ -25,6 +25,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -41,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReference
  * @since Issue #731 (SP0.9 — Goal 10)
  */
 @DisplayName("DispatchDecisionApplier — drain and apply decisions via actuator ports")
+@Timeout(30, unit = TimeUnit.SECONDS)
 class DispatchDecisionApplierTest {
 	private lateinit var networkActuator: NetworkActuatorPort
 	private val approvedTrains = mutableListOf<String>()
@@ -229,6 +232,118 @@ class DispatchDecisionApplierTest {
 			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zA", "doA1")))
 
 			applier.onControlStep() // must not throw
+		}
+	}
+
+	// ── Duplicate-reservation suppression (SP0.11 regression fix) ────────────
+
+	/**
+	 * Regression coverage for the SP0.11 async-driver race (Issue #733 follow-up):
+	 * [AgentLoopDriver] runs decoupled from the sim thread, so it can legitimately
+	 * decide the *same* `ReservePath` more than once before the block-input
+	 * observation reflects the first application. Re-applying an already-reserved
+	 * hop is not a harmless no-op — it corrupts the train's registered path via
+	 * `PathReservationRegistry.registerPathInfo`'s merge logic and permanently
+	 * stalls the train. [DispatchDecisionApplier] must apply each distinct
+	 * `(trainId, from, to)` reservation at most once.
+	 */
+	@Nested
+	@DisplayName("Duplicate-reservation suppression (SP0.11 regression fix)")
+	inner class DuplicateReservationSuppression {
+		@Test
+		@DisplayName("Identical ReservePath decision drained twice is applied to the actuator port only once")
+		fun duplicateReservePath_appliedOnlyOnce() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			// First drain: the reservation is genuinely new.
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+
+			// Second drain: the driver decided the identical hop again before observing
+			// the first application (the race this guard exists to suppress).
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB", "doA1") }
+		}
+
+		@Test
+		@DisplayName("Identical ReservePath decision applied twice within the same drain is applied only once")
+		fun duplicateReservePath_sameDrain_appliedOnlyOnce() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			queue.postAll(
+				listOf(
+					DispatchDecision.ReservePath("T1", "zB", "doA1"),
+					DispatchDecision.ReservePath("T1", "zB", "doA1")
+				)
+			)
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB", "doA1") }
+		}
+
+		@Test
+		@DisplayName("onBlockTransition fires only once for a duplicated ReservePath")
+		fun duplicateReservePath_blockTransitionCountedOnce() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			var transitionCount = 0
+			val queue = ActuatorCommandQueue()
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = onApproveTrain,
+					onBlockTransition = { transitionCount++ }
+				)
+
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+
+			assertThat(transitionCount).isEqualTo(1)
+		}
+
+		@Test
+		@DisplayName("A different (trainId, from, to) triple is not suppressed by an earlier reservation")
+		fun differentTriple_notSuppressed() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns RouteRequestResult.Reserved("T1", 1)
+			val (queue, applier) = makeApplier()
+
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep()
+			// Same train, different hop — genuine forward progress, must still be applied.
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "doA1", "A")))
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "zB", "doA1") }
+			verify(exactly = 1) { networkActuator.requestRoute("T1", "doA1", "A") }
+		}
+
+		@Test
+		@DisplayName("A failed reservation is not remembered, so a later retry of the same triple is applied")
+		fun failedReservation_retryIsApplied() {
+			var callCount = 0
+			every { networkActuator.requestRoute("T1", "zB", "doA1") } answers {
+				callCount++
+				if (callCount == 1) {
+					RouteRequestResult.AllPathsBlocked(attemptedPaths = 1)
+				} else {
+					RouteRequestResult.Reserved("T1", 1)
+				}
+			}
+			val (queue, applier) = makeApplier()
+
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep() // fails — must not be recorded as applied
+
+			queue.postAll(listOf(DispatchDecision.ReservePath("T1", "zB", "doA1")))
+			applier.onControlStep() // legitimate retry — must reach the actuator port
+
+			verify(exactly = 2) { networkActuator.requestRoute("T1", "zB", "doA1") }
 		}
 	}
 

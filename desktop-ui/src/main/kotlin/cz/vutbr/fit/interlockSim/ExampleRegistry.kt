@@ -11,8 +11,16 @@ package cz.vutbr.fit.interlockSim
 
 import cz.vutbr.fit.interlockSim.context.ContextCreationException
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
+import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
+import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
@@ -101,7 +109,9 @@ class ExampleRegistry {
 				val time = args[2].toLong()
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
-				context.setMainProcess(ShuntingLoop(context, time))
+				val loop = ShuntingLoop(context, time)
+				wireDispatcherAgent(context, loop, NoOpSimulationController)
+				context.setMainProcess(loop)
 				context
 			}
 	}
@@ -146,9 +156,75 @@ class ExampleRegistry {
 				// Initialize dynamic wrapper map by calling getInOuts()
 				context.getInOuts()
 				// Enable real-time synchronization for GUI mode with 1x speed multiplier
-				context.setMainProcess(ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0))
+				val loop = ShuntingLoop(context, time, enableRealTimeSync = true, initialSpeedMultiplier = 1.0)
+				wireDispatcherAgent(context, loop, NoOpSimulationController)
+				context.setMainProcess(loop)
 				context
 			}
+	}
+
+	/**
+	 * Wires the SP0.11 dispatcher-agent stack onto [loop]:
+	 * - creates [DefaultNetworkPerceptionPort] and [DefaultNetworkActuatorPort] backed by [context]
+	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [Dispatcher] (singleton)
+	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [Dispatcher] binding
+	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
+	 *   (e.g. to an LLM dispatcher) takes effect here too (Goal 10 seam)
+	 * - creates [DispatchDecisionApplier] (with ShuntingLoop counter callbacks) and registers
+	 *   it as [ShuntingLoop.controlStepListener]
+	 * - creates [AgentLoopDriver] (with ShuntingLoop observation providers) and registers its
+	 *   run-loop as [ShuntingLoop.agentDriverAction]
+	 * - registers [ShuntingLoop.snapshotCaptureHook] to keep the perception-port snapshot fresh
+	 *
+	 * [controller] is `[NoOpSimulationController]` for headless runs and the GUI's
+	 * [SimulationRunner][cz.vutbr.fit.interlockSim.context.SimulationController] for GUI runs.
+	 * For SP0.11, both use [NoOpSimulationController]; pacing via [SimulationRunner] is a
+	 * follow-up task (SP1.4, #549).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private fun wireDispatcherAgent(
+		context: DefaultSimulationContext,
+		loop: ShuntingLoop,
+		controller: SimulationController
+	) {
+		val perceptionPort =
+			DefaultNetworkPerceptionPort(
+				env = context,
+				activeTrains = loop::getApprovedTrains
+			)
+		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+
+		val queue = context.scope.get<ActuatorCommandQueue>()
+		val dispatcher = context.scope.get<Dispatcher>()
+
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = actuatorPort,
+				onApproveTrain = loop::approveQueuedTrain,
+				onBlockTransition = loop::incrementBlockTransition,
+				onFailedReservation = loop::incrementFailedReservation
+			)
+
+		val driver =
+			AgentLoopDriver(
+				perceptionPort = perceptionPort,
+				dispatcher = dispatcher,
+				commandQueue = queue,
+				controller = controller,
+				unapprovedTrainsProvider = loop::getQueuedTrains,
+				innerBlockInputsProvider = loop::getInnerBlockInputs,
+				outerBlockInputsProvider = loop::getOuterBlockInputs
+			)
+
+		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
+		loop.controlStepListener = applier
+		loop.agentDriverAction = {
+			while (loop.isSimActive()) {
+				driver.runCycle()
+			}
+		}
 	}
 
 	/**

@@ -80,6 +80,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 		// When: Run shunting loop simulation for 60 time units (enough for 1-2 trains)
 		logger.info { "Starting ShuntingLoop regression test (60 time units)" }
 		val shuntingLoop = ShuntingLoop(context, 60L)
+		wireSynchronousDispatcher(context, shuntingLoop)
 		context.setMainProcess(shuntingLoop)
 		context.run()
 
@@ -128,7 +129,9 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 
 		// When: Run simulation for 30 time units (short test for performance verification)
 		logger.info { "TEST: Creating ShuntingLoop..." }
-		context.setMainProcess(ShuntingLoop(context, 30L))
+		val loop = ShuntingLoop(context, 30L)
+		wireSynchronousDispatcher(context, loop)
+		context.setMainProcess(loop)
 		logger.info { "TEST: ShuntingLoop created, starting simulation..." }
 		val startWallTime = System.currentTimeMillis()
 		context.run()
@@ -159,6 +162,7 @@ class ShuntingLoopRegressionTest : KoinTestBase() {
 
 		// When: Run simulation for 100 time units (enough for 2-3 trains)
 		val shuntingLoop = ShuntingLoop(context, 100L)
+		wireSynchronousDispatcher(context, shuntingLoop)
 		context.setMainProcess(shuntingLoop)
 		context.run()
 

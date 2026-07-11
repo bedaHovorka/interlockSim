@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.MockSimulationContext
 import cz.vutbr.fit.interlockSim.testutil.TestContextBuilder
@@ -125,7 +126,9 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.getInOuts()
 
 			// Set ShuntingLoop as main process (60s simulation time)
-			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
+			val loop = ShuntingLoop(ctx, 60L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 
 			// Act: Run simulation
 			ctx.run()
@@ -221,7 +224,9 @@ class KoinGoldenOutputTest : KoinTestBase() {
 			ctx.getInOuts()
 
 			// Set ShuntingLoop as main process (60s simulation time)
-			ctx.setMainProcess(ShuntingLoop(ctx, 60L))
+			val loop = ShuntingLoop(ctx, 60L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 
 			// Act: Run simulation
 			ctx.run()

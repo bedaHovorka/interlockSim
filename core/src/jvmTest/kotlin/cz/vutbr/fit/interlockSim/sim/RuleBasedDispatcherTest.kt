@@ -18,6 +18,8 @@ import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
+import java.util.concurrent.TimeUnit
 
 /**
  * Direct unit tests for [RuleBasedDispatcher] — the branch-level coverage that the
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Test
  *   (SP0.7 — Goal 10)
  */
 @DisplayName("RuleBasedDispatcher — branch-level unit coverage")
+@Timeout(30, unit = TimeUnit.SECONDS)
 class RuleBasedDispatcherTest {
 	// ── Test data builders ──────────────────────────────────────────────────
 

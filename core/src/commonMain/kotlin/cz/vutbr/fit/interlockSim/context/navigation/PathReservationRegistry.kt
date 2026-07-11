@@ -638,6 +638,50 @@ class PathReservationRegistry(
 	}
 
 	/**
+	 * Unregister a SINGLE switch reserved by a train (Tier 2).
+	 *
+	 * Symmetric per-switch counterpart to [unregisterBlock], for scoped rollback of a
+	 * rejected candidate path whose switches were already registered (e.g. a signal-config
+	 * failure after [registerSwitches] succeeded, Issue #742 SP0.11 review follow-up).
+	 * Unlike [unregisterSwitches] (which removes ALL of the train's switches), this only
+	 * releases the one switch — leaving the train's earlier-hop switches intact.
+	 *
+	 * ## State Changes
+	 *
+	 * - Unlocks the switch (if owned by [trainId])
+	 * - Removes `switchToTrain[switch]`
+	 * - Removes the switch from `trainToSwitches[trainId]` (collapsing the list if empty)
+	 *
+	 * @param trainId The train identifier
+	 * @param switch The switch to release
+	 * @return `true` if the switch was owned by [trainId] and released, `false` otherwise
+	 *   (not owned, or owned by a different train — both are safe no-ops for rollback)
+	 * @since Issue #742 SP0.11 review follow-up
+	 */
+	fun unregisterSwitch(
+		trainId: String,
+		switch: DynamicRailSwitch
+	): Boolean {
+		if (switchToTrain[switch] != trainId) {
+			logger.debug {
+				"unregisterSwitch: Switch ${switch.hashCode()} not owned by '$trainId' " +
+					"(owner='${switchToTrain[switch]}')"
+			}
+			return false
+		}
+		switch.unlock()
+		switchToTrain.remove(switch)
+		trainToSwitches[trainId]?.remove(switch)
+		if (trainToSwitches[trainId]?.isEmpty() == true) {
+			trainToSwitches.remove(trainId)
+		}
+		logger.debug {
+			"unregisterSwitch: Released switch ${switch.hashCode()} for '$trainId'"
+		}
+		return true
+	}
+
+	/**
 	 * Get all switches registered to a train (Tier 2).
 	 *
 	 * @param trainId The train identifier

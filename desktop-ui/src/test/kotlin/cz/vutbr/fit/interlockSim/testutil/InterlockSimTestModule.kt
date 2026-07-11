@@ -7,6 +7,7 @@ import cz.vutbr.fit.interlockSim.di.interlockSimModule
 import cz.vutbr.fit.interlockSim.di.objectsModule
 import cz.vutbr.fit.interlockSim.di.simulationDesktopModule
 import cz.vutbr.fit.interlockSim.di.xmlModule
+import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -25,7 +26,8 @@ val testModuleLightweight: Module =
 			xmlModule,
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
-			simulationDesktopModule // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
+			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
+			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection
@@ -61,7 +63,8 @@ val integrationTestModule: Module =
 			xmlModule,
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
-			simulationDesktopModule // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
+			simulationDesktopModule, // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
+			dispatcherAgentModule // Goal 10 Dispatcher/ActuatorCommandQueue bindings (SP0.11 review follow-up)
 			// NOTE: guiModule excluded to prevent Frame overhead
 		)
 		// Provide a new instance of TestContextBuilder for each injection

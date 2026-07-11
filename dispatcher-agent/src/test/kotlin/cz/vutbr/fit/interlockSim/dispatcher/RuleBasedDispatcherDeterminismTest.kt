@@ -15,6 +15,10 @@ import assertk.assertions.isGreaterThan
 import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
+import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -97,15 +101,72 @@ class RuleBasedDispatcherDeterminismTest {
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
+		val loop = ShuntingLoop(context, endTime)
+
+		// SP0.11: Wire the full dispatcher-agent stack instead of passing dispatcher= inline.
+		val perceptionPort =
+			DefaultNetworkPerceptionPort(
+				env = context,
+				activeTrains = loop::getApprovedTrains
+			)
+		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+		val queue = ActuatorCommandQueue()
 		val dispatcher = RuleBasedDispatcher()
-		val shuntingLoop = ShuntingLoop(context, endTime, dispatcher = dispatcher)
-		context.setMainProcess(shuntingLoop)
+		val applier =
+			DispatchDecisionApplier(
+				queue = queue,
+				networkActuator = actuatorPort,
+				onApproveTrain = loop::approveQueuedTrain,
+				onBlockTransition = loop::incrementBlockTransition,
+				onFailedReservation = loop::incrementFailedReservation
+			)
+		val driver =
+			AgentLoopDriver(
+				perceptionPort = perceptionPort,
+				dispatcher = dispatcher,
+				commandQueue = queue,
+				controller = NoOpSimulationController,
+				unapprovedTrainsProvider = loop::getQueuedTrains,
+				innerBlockInputsProvider = loop::getInnerBlockInputs,
+				outerBlockInputsProvider = loop::getOuterBlockInputs
+			)
+
+		// Lock-step handshake (SP0.11 determinism): the free-running driver thread races
+		// the unthrottled headless sim — whether a given tick's snapshot is processed
+		// before the next tick begins depends on OS scheduling, which perturbs admission
+		// timing run-to-run. This gate asserts determinism OF THE DISPATCHER, so the sim
+		// thread hands the driver exactly one cycle per tick and drains the resulting
+		// decisions in the same tick. All production components (driver, queue, applier)
+		// still run on their production threads; only the pacing is pinned.
+		val driverTurn = java.util.concurrent.Semaphore(0)
+		val simTurn = java.util.concurrent.Semaphore(0)
+
+		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
+		loop.controlStepListener =
+			ControlStepListener {
+				driverTurn.release()
+				simTurn.acquireUninterruptibly()
+				applier.onControlStep()
+			}
+		loop.agentDriverAction = {
+			while (loop.isSimActive()) {
+				if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+					try {
+						driver.runCycle()
+					} finally {
+						simTurn.release()
+					}
+				}
+			}
+		}
+
+		context.setMainProcess(loop)
 		context.run()
 
 		return RunResult(
-			trainsExited = shuntingLoop.getTrainsExited(),
-			maxConcurrentTrains = shuntingLoop.getMaxConcurrentTrains(),
-			sortedBlockTransitionCounts = shuntingLoop.getAllBlockTransitions().values.sorted()
+			trainsExited = loop.getTrainsExited(),
+			maxConcurrentTrains = loop.getMaxConcurrentTrains(),
+			sortedBlockTransitionCounts = loop.getAllBlockTransitions().values.sorted()
 		)
 	}
 

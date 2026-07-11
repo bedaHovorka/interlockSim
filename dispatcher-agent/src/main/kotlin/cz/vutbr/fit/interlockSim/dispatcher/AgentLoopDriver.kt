@@ -12,8 +12,10 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
+import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -71,7 +73,31 @@ class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
 	private val dispatcher: Dispatcher,
 	private val commandQueue: ActuatorCommandQueue,
-	private val controller: SimulationController
+	private val controller: SimulationController,
+	/**
+	 * SP0.11: Provider for the current unapproved-train queue. Invoked on the driver
+	 * thread during SENSE; reads the [ShuntingLoop.getQueuedTrains] @Volatile field
+	 * published by the sim thread. Defaults to [emptyList] (SP0.10 compatibility).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private val unapprovedTrainsProvider: () -> List<QueuedTrainObservation> = { emptyList() },
+	/**
+	 * SP0.11: Provider for inner-block-input observations. Invoked on the driver
+	 * thread during SENSE; reads the [ShuntingLoop.getInnerBlockInputs] @Volatile field.
+	 * Defaults to [emptyList] (SP0.10 compatibility).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private val innerBlockInputsProvider: () -> List<BlockInputObservation> = { emptyList() },
+	/**
+	 * SP0.11: Provider for outer-block-input observations. Invoked on the driver
+	 * thread during SENSE; reads the [ShuntingLoop.getOuterBlockInputs] @Volatile field.
+	 * Defaults to [emptyList] (SP0.10 compatibility).
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10)
+	 */
+	private val outerBlockInputsProvider: () -> List<BlockInputObservation> = { emptyList() }
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -79,6 +105,15 @@ class AgentLoopDriver(
 
 	/** Simulation time at the end of the most recently completed cycle; 0.0 before the first cycle. */
 	private var prevSimTime: Double = 0.0
+	private var hasProcessedSnapshot: Boolean = false
+
+	private fun pauseUntilNextSnapshot() {
+		try {
+			Thread.sleep(1)
+		} catch (_: InterruptedException) {
+			Thread.currentThread().interrupt()
+		}
+	}
 
 	/**
 	 * Executes one complete sense→decide→act→pace cycle.
@@ -111,13 +146,26 @@ class AgentLoopDriver(
 		// 1. SENSE — read a consistent frozen snapshot off the perception port.
 		val snapshot = perceptionPort.snapshot()
 		logger.debug { "AgentLoopDriver: sensed snapshot at simTime=${snapshot.simTime}" }
+		if (snapshot === SimulationSnapshot.EMPTY) {
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return
+		}
+		if (hasProcessedSnapshot && snapshot.simTime == prevSimTime) {
+			controller.awaitIfPaused()
+			pauseUntilNextSnapshot()
+			return
+		}
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// unapprovedTrains and block-input lists are populated in SP0.11 (#733).
+		// SP0.11: unapprovedTrains and block-input lists now populated via @Volatile
+		// fields published by ShuntingLoop.iteration() on the sim thread.
 		val observation =
 			DispatchObservation(
 				snapshot = snapshot,
-				unapprovedTrains = emptyList()
+				unapprovedTrains = unapprovedTrainsProvider(),
+				innerBlockInputs = innerBlockInputsProvider(),
+				outerBlockInputs = outerBlockInputsProvider()
 			)
 		val decisions = dispatcher.decide(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
@@ -138,5 +186,6 @@ class AgentLoopDriver(
 		val simDelta = snapshot.simTime - prevSimTime
 		controller.throttle(simDelta)
 		prevSimTime = snapshot.simTime
+		hasProcessedSnapshot = true
 	}
 }

@@ -17,27 +17,28 @@ import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
  * decide what to do this tick, with no callbacks and no live mutable handles.
  *
  * Combines the general-purpose [SimulationSnapshot] (SP0.4, Issue #543) with the
- * unapproved-train queue and, for the path-advancement phase, per-block-input facts
- * that [SimulationSnapshot] does not carry (directional reservation state — see
- * [BlockInputObservation]).
+ * unapproved-train queue and the per-block-input facts that [SimulationSnapshot]
+ * does not carry (directional reservation state — see [BlockInputObservation]).
  *
- * ## Two-phase tick
- * The shell ([ShuntingLoop]) builds two different [DispatchObservation]s per
- * iteration, mirroring the pre/post-hold split the original two-method [Dispatcher]
- * interface (Issue #540 / #540 review) required: an admission-phase observation
- * with real [unapprovedTrains] and empty block-input lists, and a path-advancement
- * observation with an empty [unapprovedTrains] and real block-input lists.
+ * ## One observation per tick (SP0.11)
+ * The shell ([ShuntingLoop]) publishes a single [DispatchObservation] per iteration
+ * carrying ALL fields populated at once: the queued trains and both block-input
+ * lists are snapshotted together (see [ShuntingLoop.latestObservation]). Admission
+ * and path-advancement are decided in the same [Dispatcher.decide] call. The
+ * historical two-observation pre/post-hold split (Issue #540) was removed by the
+ * SP0.11 thin-shell refactor (Issue #733); the `innerBlockInputs`/`outerBlockInputs`
+ * defaults remain `emptyList()` only so bare/early callers stay valid.
  *
  * @property snapshot General sense data (signals, block occupancy, train
- *   positions, timetables) at the start of this phase.
+ *   positions, timetables) at the start of this tick.
  * @property unapprovedTrains Trains queued but not yet approved, in admission
- *   order. Empty during the path-advancement phase.
+ *   order.
  * @property innerBlockInputs All inputs of every inner track block (RailSemaphore–
  *   RailSemaphore) — one per semaphore end a train could enter the next section
- *   through. Empty during the admission phase.
+ *   through.
  * @property outerBlockInputs The [DynamicRailSemaphore][cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore]
  *   input of every outer track block (InOut–RailSemaphore) — the semaphore a train
- *   entering from the InOut proceeds toward. Empty during the admission phase.
+ *   entering from the InOut proceeds toward.
  *
  * @since Issue #729 (SP0.7 — Goal 10)
  */
