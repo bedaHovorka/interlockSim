@@ -238,9 +238,20 @@ class Train :
 				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
-				waitUntil {
-					// dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
-					position.state + dtMin >= nextLength
+				// State event (zero-crossing): resume exactly when the front reaches the section
+				// boundary. Root-finding locates the crossing time *within* one integration step,
+				// so `dtMax` no longer has to be tiny to keep the block-boundary overshoot
+				// negligible (Issue #750). The threshold mirrors the original
+				// `waitUntil { position.state + dtMin >= nextLength }`: the boundary counts as
+				// reached once the front is within `dtMin` of it. Keeping that `dtMin` slack is
+				// essential — a train decelerating to a STOP semaphore located *at* the boundary
+				// halts a few nanometres short (v→0 as distance→0), so an exact `nextLength -
+				// position` guard would asymptote to a tiny positive value and never cross zero.
+				// The `if` preserves the old "return immediately when already satisfied" semantics
+				// (`waitCrossing` otherwise waits for a *future* sign change).
+				val boundaryThreshold = nextLength - dtMin
+				if (position.state < boundaryThreshold) {
+					waitCrossing { boundaryThreshold - position.state }
 				}
 
 				position.state -= nextLength
@@ -1051,7 +1062,16 @@ class Train :
 
 		Process.activate(front)
 
-		waitUntil { front.getTotalDistance() >= getLength() }
+		// State event (zero-crossing): start the tail exactly when the front has advanced one
+		// train-length, located by root-finding within the integration step (Issue #750). The
+		// threshold carries the same `dtMin` slack as the block-boundary crossing above so that a
+		// front decelerating to a stop within one train-length of entry still triggers tail entry
+		// instead of asymptoting a few nanometres short and hanging. The `if` preserves
+		// `waitUntil`'s immediate-return-when-satisfied semantics for degenerate short-length cases.
+		val tailEntryThreshold = getLength() - dtMin
+		if (front.getTotalDistance() < tailEntryThreshold) {
+			waitCrossing { tailEntryThreshold - front.getTotalDistance() }
+		}
 		Process.activate(tail)
 
 		out()
