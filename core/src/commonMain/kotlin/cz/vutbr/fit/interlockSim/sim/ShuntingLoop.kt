@@ -399,29 +399,41 @@ class ShuntingLoop(
 			state == TrackFacility.State.RESERVED &&
 				block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
 		val pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
-
-		// Only inputs that can actually yield a forward reservation need a target searched for.
-		// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
-		// it for FREE and already-extended inputs cost ~9% of fast-sim wall time (#738).
-		val canReserveForward =
-			!pathAlreadyExtendedBeyond &&
-				(isApproachingThisInput || pathSetUpTowardThisInput)
-		val toSeparatorName =
-			if (canReserveForward) {
-				pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
-			} else {
-				null
-			}
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
-			toSeparatorName = toSeparatorName,
+			toSeparatorName =
+				findForwardReservationTargetName(
+					to,
+					isApproachingThisInput,
+					pathSetUpTowardThisInput,
+					pathAlreadyExtendedBeyond
+				),
 			state = state,
 			ownerTrainId = ownerTrainId,
 			isApproachingThisInput = isApproachingThisInput,
 			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
 			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
 		)
+	}
+
+	// Only inputs that can actually yield a forward reservation need a target searched for.
+	// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
+	// it for FREE and already-extended inputs cost ~9% of fast-sim wall time (#738).
+	private fun findForwardReservationTargetName(
+		to: DynamicRailSemaphore,
+		isApproachingThisInput: Boolean,
+		pathSetUpTowardThisInput: Boolean,
+		pathAlreadyExtendedBeyond: Boolean
+	): String? {
+		val canReserveForward =
+			!pathAlreadyExtendedBeyond &&
+				(isApproachingThisInput || pathSetUpTowardThisInput)
+		return if (canReserveForward) {
+			pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+		} else {
+			null
+		}
 	}
 
 	/**
