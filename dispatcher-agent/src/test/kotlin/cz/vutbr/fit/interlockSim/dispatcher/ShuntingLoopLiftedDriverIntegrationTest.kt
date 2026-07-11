@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
 private val logger = KotlinLogging.logger {}
 
 /**
- * SP0.12 integration gate — vyhybna end-to-end via the lifted dispatcher-agent stack.
+ * SP0.12 integration gate — shunting-loop end-to-end via the lifted dispatcher-agent stack.
  *
  * Runs `vyhybna.xml` as a single simulation with the full lifted stack
  * ([AgentLoopDriver] + [DispatchDecisionApplier] + [RuleBasedDispatcher]) under the
@@ -73,7 +73,7 @@ private val logger = KotlinLogging.logger {}
  *
  * [RuleBasedDispatcherDeterminismTest] is the *before/after determinism harness* —
  * it runs 10 consecutive lock-step runs and asserts identical outcomes.  This class
- * is a single-run **correctness gate** that closes the "Integration: vyhybna
+ * is a single-run **correctness gate** that closes the "Integration: shunting-loop
  * end-to-end via the lifted driver — all trains exit, no conflict events"
  * requirement from the SP0.12 acceptance criteria (Issue #734).
  *
@@ -82,9 +82,9 @@ private val logger = KotlinLogging.logger {}
  *   wiring alternative used by `:core` and `:fast-sim` tests
  * @since Issue #734 (SP0.12 — Goal 10 A3 integration gate)
  */
-@DisplayName("Vyhybna end-to-end via lifted dispatcher-agent stack (SP0.12 integration gate)")
+@DisplayName("ShuntingLoop end-to-end via lifted dispatcher-agent stack (SP0.12 integration gate)")
 @Tag("integration-test")
-class VyhybnaLiftedDriverIntegrationTest {
+class ShuntingLoopLiftedDriverIntegrationTest {
 	private val xmlContextFactory = XMLContextFactory()
 	private val processFactory = DefaultSimulationProcessFactory()
 
@@ -98,7 +98,7 @@ class VyhybnaLiftedDriverIntegrationTest {
 		stopKoin()
 	}
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
+	private fun loadShuntingLoopContext(): DefaultSimulationContext =
 		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
@@ -122,7 +122,7 @@ class VyhybnaLiftedDriverIntegrationTest {
 	@Timeout(60, unit = TimeUnit.SECONDS)
 	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
-		val context = loadVyhybnaContext()
+		val context = loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 

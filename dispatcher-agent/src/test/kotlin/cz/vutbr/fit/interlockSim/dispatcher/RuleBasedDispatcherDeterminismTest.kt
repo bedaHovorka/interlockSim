@@ -79,7 +79,7 @@ class RuleBasedDispatcherDeterminismTest {
 		stopKoin()
 	}
 
-	private fun loadVyhybnaContext(): DefaultSimulationContext =
+	private fun loadShuntingLoopContext(): DefaultSimulationContext =
 		TestFixtures.loadShuntingXml().use { xmlStream ->
 			val editingContext = xmlContextFactory.createContext(xmlStream) as EditingContext
 			DefaultSimulationContext.fromEditingContext(editingContext, processFactory)
@@ -108,7 +108,7 @@ class RuleBasedDispatcherDeterminismTest {
 	)
 
 	private fun executeRun(endTime: Long = 300L): RunResult {
-		val context = loadVyhybnaContext()
+		val context = loadShuntingLoopContext()
 		// Initialize the dynamic wrapper map (required before ShuntingLoop construction).
 		context.getInOuts()
 
