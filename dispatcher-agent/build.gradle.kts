@@ -47,6 +47,7 @@ val logbackVersion: String by project
 val slf4jVersion: String by project
 val mockkVersion: String by project
 val coroutinesVersion: String by project
+val koogVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -75,6 +76,9 @@ dependencies {
 
     // Koin: used for DI of dispatcher implementations (SP1 will expand this)
     implementation("io.insert-koin:koin-core:$koinVersion")
+
+    // Koog: LLM agent framework for SP1 (Goal 10 dispatcher agent runtime, Issue #547)
+    implementation("ai.koog:koog-agents:$koogVersion")
 
     // Test dependencies
     testImplementation(project(":core-test"))
