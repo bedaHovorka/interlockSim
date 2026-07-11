@@ -10,7 +10,7 @@ From the set `B` of open Backlog issues, elect the top 3 whose completion would 
 
 ## Definitions
 
-- `X` = all open GitHub issues in `bedavs/interlockSim`
+- `X` = all open GitHub issues in `bedaHovorka/interlockSim`
 - `B ⊆ X` = issues whose `milestone.title == "Backlog"`
 - **Effect of `b ∈ B`**: how much completing `b` unblocks or simplifies other issues in `X`, as judged by each team subagent from their domain perspective
 

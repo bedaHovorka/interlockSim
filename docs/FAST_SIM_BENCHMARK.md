@@ -1,6 +1,6 @@
 # Fast-Sim Performance Benchmark: Native vs JVM
 
-Issue [#418](https://github.com/bedavs/interlockSim/issues/418) — Last issue in the fastSim milestone.
+Issue [#418](https://github.com/bedaHovorka/interlockSim/issues/418) — Last issue in the fastSim milestone.
 
 ## Configuration
 
