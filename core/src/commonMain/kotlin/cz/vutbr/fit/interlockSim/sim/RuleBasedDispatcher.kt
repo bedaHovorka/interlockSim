@@ -29,9 +29,10 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *    as a from→to [DispatchDecision.ReservePath] whose `to` the shell has
  *    pre-computed as the next FREE separator toward the train's destination.
  *
- * The shell ([ShuntingLoop]) calls [decide] once per phase (see [Dispatcher]
- * KDoc), so a single call only ever sees a non-empty [DispatchObservation.unapprovedTrains]
- * *or* non-empty block-input lists, never both.
+ * The shell ([ShuntingLoop]) calls [decide] once per tick with a single
+ * [DispatchObservation] whose fields are all populated together (SP0.11,
+ * Issue #733 — see [DispatchObservation]); admission and path-advancement are
+ * handled in the same call, and the two may both be non-empty.
  *
  * ## Determinism (Goal 10 Stage A3)
  * Train admission is strictly FIFO over [DispatchObservation.unapprovedTrains].

@@ -42,6 +42,12 @@ import org.koin.core.component.KoinComponent
  * decisions posted back onto the sim thread via [controlStepListener]. Admission and
  * route-reservation policy live outside this class in the dispatcher-agent stack.
  *
+ * Both train admission and forward-path advancement happen pre-hold in the same
+ * iteration tick: [iteration] publishes one combined observation, then
+ * [controlStepListener] applies the dispatcher's decisions before the per-iteration
+ * `hold()` (SP0.11 — Issue #733). A newly admitted train therefore receives its
+ * first path reservation in the same tick it is admitted.
+ *
  * **SP0.11 responsibilities kept here:**
  * - simulation lifecycle (`hold`, `terminate`, `activate`)
  * - live block/input observation publishing for the external driver
@@ -178,15 +184,28 @@ class ShuntingLoop(
 	private var simActive: Boolean = false
 
 	// SP0.11: Observation data published at the start of each iteration for the off-kernel
-	// driver thread. Written on the single kDisco sim thread; @Volatile ensures visibility.
+	// driver thread. Written on the single kDisco sim thread as a single immutable snapshot
+	// so the driver thread always observes a consistent set of fields from the SAME sim tick
+	// (three independent @Volatile fields could be read cross-tick, producing a stale
+	// pathAlreadyExtendedBeyond and a duplicate re-decide). @Volatile ensures visibility.
 	@kotlin.concurrent.Volatile
-	private var latestQueuedTrains: List<QueuedTrainObservation> = emptyList()
+	private var latestObservation: TickObservation =
+		TickObservation(queuedTrains = emptyList(), innerBlockInputs = emptyList(), outerBlockInputs = emptyList())
 
-	@kotlin.concurrent.Volatile
-	private var latestInnerBlockInputs: List<BlockInputObservation> = emptyList()
-
-	@kotlin.concurrent.Volatile
-	private var latestOuterBlockInputs: List<BlockInputObservation> = emptyList()
+	/**
+	 * Immutable per-tick observation bundle published for the off-kernel driver thread.
+	 * The three lists are computed together on the sim thread and published via a single
+	 * [latestObservation] reference write, so a reader either sees all three from tick N
+	 * or all three from tick N-1 — never a mix.
+	 *
+	 * @since Issue #733 (SP0.11 — Goal 10); single-snapshot publication added by the
+	 *   SP0.11 review follow-up
+	 */
+	private data class TickObservation(
+		val queuedTrains: List<QueuedTrainObservation>,
+		val innerBlockInputs: List<BlockInputObservation>,
+		val outerBlockInputs: List<BlockInputObservation>
+	)
 
 	// Test-observability counters (#365) — incremented from existing lifecycle sites only.
 	// Not atomic: ShuntingLoop runs on the single kDisco dispatcher thread, so all increment
@@ -323,15 +342,18 @@ class ShuntingLoop(
 
 		// SP0.11: Publish a fresh snapshot and per-block observation data for the off-kernel
 		// driver thread.  Published before the applier fires so the applier's callbacks and
-		// the driver read current-tick state.  Written on the single kDisco sim thread;
-		// @Volatile declarations ensure visibility to the driver thread.
+		// the driver read current-tick state.  Written on the single kDisco sim thread as a
+		// single immutable [TickObservation] reference write; @Volatile ensures visibility.
 		snapshotCaptureHook?.invoke()
-		latestQueuedTrains = unapprowedTrains.map { QueuedTrainObservation(it.name, it.timetableDestinationName) }
-		latestInnerBlockInputs =
-			innerTrackBlocks.flatMap { block ->
-				block.ends().map { end -> toBlockInputObservation(block, Util.assertInstanceOf<DynamicRailSemaphore>(end)) }
-			}
-		latestOuterBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
+		latestObservation =
+			TickObservation(
+				queuedTrains = unapprowedTrains.map { QueuedTrainObservation(it.name, it.timetableDestinationName) },
+				innerBlockInputs =
+					innerTrackBlocks.flatMap { block ->
+						block.ends().map { end -> toBlockInputObservation(block, Util.assertInstanceOf<DynamicRailSemaphore>(end)) }
+					},
+				outerBlockInputs = outerTrackblocks.map { (block, sem) -> toBlockInputObservation(block, sem) }
+			)
 
 		// SP0.9: Drain and apply any decisions posted to the cross-thread command queue.
 		controlStepListener?.onControlStep()
@@ -401,7 +423,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getQueuedTrains(): List<QueuedTrainObservation> = latestQueuedTrains
+	fun getQueuedTrains(): List<QueuedTrainObservation> = latestObservation.queuedTrains
 
 	/**
 	 * Returns the block-input observations for all inner track blocks, as published at the
@@ -409,7 +431,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getInnerBlockInputs(): List<BlockInputObservation> = latestInnerBlockInputs
+	fun getInnerBlockInputs(): List<BlockInputObservation> = latestObservation.innerBlockInputs
 
 	/**
 	 * Returns the block-input observations for all outer track blocks, as published at the
@@ -417,7 +439,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getOuterBlockInputs(): List<BlockInputObservation> = latestOuterBlockInputs
+	fun getOuterBlockInputs(): List<BlockInputObservation> = latestObservation.outerBlockInputs
 
 	/**
 	 * Returns a snapshot of the currently approved (active) trains. Used by the external

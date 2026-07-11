@@ -270,67 +270,41 @@ class DefaultPathReservationService(
 					// Step 2f: Configure and register switches (Issue #300, #291, #742).
 					// A candidate whose switches cannot be configured is physically impossible
 					// and must fail the reservation — see configureAndRegisterSwitches.
-					if (!configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks)) {
-						return PathReservationService.ReservationResult.AllPathsBlocked(1)
+					// Snapshot the switches the train already owns BEFORE this candidate so the
+					// scoped rollback below (and the signal-config rollback in Step 2g) only
+					// release THIS candidate's new switches, never the train's earlier hops.
+					val priorSwitches = registry.getSwitches(trainId).toSet()
+					if (!configureAndRegisterSwitches(trainId, pathInfo, forwardBlocks, priorSwitches)) {
+						// Unconfigurable switch makes THIS candidate physically impossible. The
+						// candidate has already been rolled back inside configureAndRegisterSwitches,
+						// so try the remaining candidate paths like the other failure modes
+						// (blocks-not-free, atomic-reservation-fail) rather than giving up early —
+						// SP0.11 review follow-up (was `return AllPathsBlocked(1)`).
+						continue
 					}
 
 					// Step 2g: Configure semaphore signal after successful reservation
 					// Use forwardBlocks (blocks we just reserved) for semaphore configuration
 					if (forwardBlocks.isNotEmpty()) {
-						val signalConfigured =
-							when {
-								// Case 1: START is a semaphore -> configure it (train departing from semaphore)
-								start is DynamicRailSemaphore -> {
-									try {
-										environment.configureSemaphoreSignal(start, forwardBlocks.first())
-										logger.debug {
-											"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
-										}
-										true
-									} catch (e: Exception) {
-										logger.warn(e) {
-											"reservePath: Semaphore signal configuration failed - rolling back reservation"
-										}
-										false
-									}
-								}
-								// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
-								// Path is conceptually: inOut.inSemaphore → blocks → target
-								// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
-								start is DynamicInOut -> {
-									try {
-										val firstBlock = forwardBlocks.first()
-										val maxSpeed = firstBlock.maxSpeed(start)
-										// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
-										// For valid direction: from=anti(inSem.dir), to=inSem.dir
-										// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
-										start.inSemaphore.setUpSpeed(
-											from = start.direction(), // InOut's direction
-											to =
-												cz.vutbr.fit.interlockSim.objects.core
-													.anti(start.direction()),
-											// Anti = inSemaphore's direction
-											allowedSpeed = maxSpeed
-										)
-										logger.debug {
-											"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
-										}
-										true
-									} catch (e: Exception) {
-										logger.warn(e) {
-											"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
-										}
-										false
-									}
-								}
-								else -> false
-							}
+						val signalConfigured = configureStartSignal(start, forwardBlocks)
 
 						// Rollback reservation if signal configuration failed
-						// This prevents trains from waiting indefinitely at STOP signals
+						// This prevents trains from waiting indefinitely at STOP signals.
+						// SP0.11 review follow-up: use the scoped [rollbackUnconfigurableCandidate]
+						// rather than a full registry.unregister(trainId), which would nuke the
+						// train's ENTIRE pre-existing path on a mid-journey extension. Only this
+						// candidate's forwardBlocks and new switches are
+						// released; the train's earlier hops survive so it keeps waiting for its
+						// through route. The candidate is then rolled back cleanly, so try the
+						// remaining candidate paths like the other failure modes.
 						if (!signalConfigured) {
-							rollbackCompleteReservation(trainId, blocks, start)
-							return PathReservationService.ReservationResult.AllPathsBlocked(1)
+							rollbackUnconfigurableCandidate(
+								trainId,
+								forwardBlocks,
+								extractUniqueSwitches(pathInfo),
+								priorSwitches
+							)
+							continue
 						}
 					}
 
@@ -1814,54 +1788,77 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * Complete rollback of path reservation including registry, PathInfo, and switches.
+	 * Configure the START separator's signal for a freshly reserved candidate (Step 2g).
 	 *
-	 * Used when signal configuration fails after successful registration.
-	 * Reverts ALL mutations:
-	 * - Block reservations (cancelPathSetup)
-	 * - Registry ownership (unregister from blockToTrain/trainToBlocks)
-	 * - PathInfo metadata (unregister from trainToPathInfo)
-	 * - Switch locks (unlock and remove from switchToTrain/trainToSwitches)
+	 * Extracted from [reservePath] so the candidate-loop body stays under the cyclomatic
+	 * complexity threshold. Returns `true` when the start signal/inSemaphore was configured
+	 * for the reserved [forwardBlocks], `false` when configuration threw — in which case the
+	 * caller rolls the candidate back via [rollbackUnconfigurableCandidate] and continues to
+	 * the next candidate.
 	 *
-	 * @param trainId The train identifier
-	 * @param blocks The blocks that were reserved
-	 * @param separator The path separator that reserved the blocks (needed for cancelPathSetup)
+	 * - START is a [DynamicRailSemaphore]: configure it for the first forward block.
+	 * - START is a [DynamicInOut]: configure its embedded `inSemaphore` (train entering from
+	 *   the external network). `inSemaphore.direction() == anti(InOut.direction())` per
+	 *   `InOut.kt`, so `from = InOut.direction()` and `to = anti(InOut.direction())`.
+	 * - Any other START type: no signal to configure → `false` (rolls the candidate back).
+	 *
+	 * @param start The candidate's start separator (semaphore or InOut).
+	 * @param forwardBlocks The blocks just reserved for this candidate (first one drives the
+	 *   signal's allowed speed).
+	 * @return `true` on successful configuration, `false` on failure or unsupported START.
+	 * @since Issue #742 SP0.11 review follow-up (extracted from reservePath Step 2g)
 	 */
-	private fun rollbackCompleteReservation(
-		trainId: String,
-		blocks: List<DynamicTrackBlock>,
-		separator: PathSeparator
-	) {
-		// Step 1: Cancel block path setup
-		for (block in blocks) {
-			try {
-				// Only rollback if block was actually reserved from this separator
-				if (block.reservedFrom === separator) {
-					block.cancelPathSetup(separator)
+	private fun configureStartSignal(
+		start: DynamicPathSeparator,
+		forwardBlocks: List<DynamicTrackBlock>
+	): Boolean =
+		when {
+			// Case 1: START is a semaphore -> configure it (train departing from semaphore)
+			start is DynamicRailSemaphore -> {
+				try {
+					environment.configureSemaphoreSignal(start, forwardBlocks.first())
+					logger.debug {
+						"reservePath: Configured START semaphore ${start.name} to ${start.signal}"
+					}
+					true
+				} catch (e: Exception) {
+					logger.warn(e) {
+						"reservePath: Semaphore signal configuration failed - rolling back reservation"
+					}
+					false
 				}
-			} catch (e: Exception) {
-				logger.warn(e) { "rollbackCompleteReservation: Failed to cancel block $block" }
 			}
+			// Case 2: START is InOut -> configure inSemaphore (train entering from external network)
+			// Path is conceptually: inOut.inSemaphore → blocks → target
+			// inSemaphore.direction() == anti(InOut.direction()) per InOut.kt line 33
+			start is DynamicInOut -> {
+				try {
+					val firstBlock = forwardBlocks.first()
+					val maxSpeed = firstBlock.maxSpeed(start)
+					// Call setUpSpeed directly - inSemaphore is not a track end, it's embedded
+					// For valid direction: from=anti(inSem.dir), to=inSem.dir
+					// Since inSem.dir=anti(InOut.dir), this becomes: from=InOut.dir, to=anti(InOut.dir)
+					start.inSemaphore.setUpSpeed(
+						from = start.direction(), // InOut's direction
+						to =
+							cz.vutbr.fit.interlockSim.objects.core
+								.anti(start.direction()),
+						// Anti = inSemaphore's direction
+						allowedSpeed = maxSpeed
+					)
+					logger.debug {
+						"reservePath: Configured InOut ${start.name} inSemaphore to ${start.inSemaphore.signal}"
+					}
+					true
+				} catch (e: Exception) {
+					logger.warn(e) {
+						"reservePath: InOut inSemaphore configuration failed - rolling back reservation"
+					}
+					false
+				}
+			}
+			else -> false
 		}
-
-		// Step 2: Unregister switches (unlock them and remove from registry)
-		try {
-			registry.unregisterSwitches(trainId)
-		} catch (e: Exception) {
-			logger.warn(e) { "rollbackCompleteReservation: Failed to unregister switches for $trainId" }
-		}
-
-		// Step 3: Unregister train from registry (removes block ownership and PathInfo)
-		try {
-			registry.unregister(trainId)
-		} catch (e: Exception) {
-			logger.warn(e) { "rollbackCompleteReservation: Failed to unregister train $trainId" }
-		}
-
-		logger.debug {
-			"rollbackCompleteReservation: Completed full rollback for train $trainId"
-		}
-	}
 
 	/**
 	 * Configure the candidate path's switches and register them on success (Issue #742).
@@ -1886,6 +1883,9 @@ class DefaultPathReservationService(
 	 * @param trainId The train identifier
 	 * @param pathInfo The candidate's PathInfo (switches are extracted from its path)
 	 * @param forwardBlocks The candidate's freshly reserved blocks (for rollback on failure)
+	 * @param priorSwitches Switches the train already owned before this candidate (snapshot
+	 *   by the caller before this step), forwarded to [rollbackUnconfigurableCandidate] so
+	 *   only this candidate's new switches are released on failure
 	 * @return `true` when the candidate's switches are configured and registered (or the
 	 *   path has none), `false` when the candidate was rolled back and the reservation
 	 *   must fail
@@ -1893,14 +1893,15 @@ class DefaultPathReservationService(
 	private fun configureAndRegisterSwitches(
 		trainId: String,
 		pathInfo: cz.vutbr.fit.interlockSim.objects.paths.PathInfo,
-		forwardBlocks: List<DynamicTrackBlock>
+		forwardBlocks: List<DynamicTrackBlock>,
+		priorSwitches: Set<DynamicRailSwitch>
 	): Boolean {
 		val switches = extractUniqueSwitches(pathInfo)
 		if (switches.isEmpty()) {
 			return true
 		}
 		if (!configureSwitchesInPath(trainId, pathInfo)) {
-			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches)
+			rollbackUnconfigurableCandidate(trainId, forwardBlocks, switches, priorSwitches)
 			return false
 		}
 		registry.registerSwitches(trainId, switches)
@@ -1911,36 +1912,53 @@ class DefaultPathReservationService(
 	}
 
 	/**
-	 * Roll back a candidate path whose switches cannot be configured (Issue #742).
+	 * Roll back a candidate path whose switches cannot be configured (Issue #742), or whose
+	 * signal configuration failed after the switches were already registered (SP0.11 review
+	 * follow-up).
 	 *
-	 * Scoped strictly to THIS candidate's mutations — unlike [rollbackCompleteReservation]
-	 * (which unregisters the train entirely), it must not touch the train's pre-existing
-	 * blocks, switches or PathInfo: an extension attempt can fail mid-journey while the
-	 * train is still running on its earlier reserved path, and that path must survive so
-	 * the train simply keeps waiting for its through route.
+	 * Scoped strictly to THIS candidate's mutations — it must not touch the train's
+	 * pre-existing blocks, switches or PathInfo (no `registry.unregister(trainId)`): an
+	 * extension attempt can fail mid-journey while the train is still running on its
+	 * earlier reserved path, and that path must survive so the train simply keeps waiting
+	 * for its through route.
 	 *
 	 * - Cancels path setup and unregisters ONLY the freshly reserved [forwardBlocks]
-	 * - Unlocks ONLY this candidate's switches that are not registered to the train
-	 *   (switches locked by the train's earlier hops stay locked)
+	 * - Unlocks AND unregisters ONLY this candidate's switches that are not part of the
+	 *   train's pre-existing registered switches (switches locked/registered by the train's
+	 *   earlier hops stay locked and registered). [PathReservationRegistry.unregisterSwitch]
+	 *   is a no-op for switches not registered to the train, so this is safe whether or not
+	 *   [PathReservationRegistry.registerSwitches] has run yet (switch-config failure runs
+	 *   before registration; signal-config failure runs after it).
 	 *
 	 * PathInfo needs no rollback: Issue #742 moved [PathReservationRegistry.registerPathInfo]
 	 * after switch and signal configuration, so nothing has been registered yet.
 	 *
 	 * @param trainId The train identifier
 	 * @param forwardBlocks The freshly reserved blocks of the rejected candidate
-	 * @param switches The rejected candidate's switches (possibly locked by setUpPath)
+	 * @param switches The rejected candidate's switches (possibly locked/registered)
+	 * @param priorSwitches Switches the train already owned BEFORE this candidate was
+	 *   attempted (snapshot by the caller before Step 2f). Only candidate switches NOT in
+	 *   this set are released; switches shared with earlier hops stay locked/registered.
 	 */
 	private fun rollbackUnconfigurableCandidate(
 		trainId: String,
 		forwardBlocks: List<DynamicTrackBlock>,
-		switches: List<DynamicRailSwitch>
+		switches: List<DynamicRailSwitch>,
+		priorSwitches: Set<DynamicRailSwitch>
 	) {
-		val priorSwitches = registry.getSwitches(trainId).toSet()
 		switches.filterNot { it in priorSwitches }.forEach { switch ->
 			try {
-				switch.unlock()
+				// unregisterSwitch unlocks + removes the switch from the registry's
+				// switchToTrain/trainToSwitches maps when the switch is registered to this
+				// train (signal-config-failure path, after registerSwitches). When the switch
+				// was locked by setUpPath but NOT yet registered (switch-config-failure path,
+				// before registerSwitches), unregisterSwitch is a no-op — so fall back to an
+				// explicit unlock to release the physical lock.
+				if (!registry.unregisterSwitch(trainId, switch) && switch.locked) {
+					switch.unlock()
+				}
 			} catch (e: Exception) {
-				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to unlock switch $switch" }
+				logger.warn(e) { "rollbackUnconfigurableCandidate: Failed to release switch $switch" }
 			}
 		}
 		for (block in forwardBlocks) {

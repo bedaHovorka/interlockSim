@@ -33,12 +33,14 @@ private val logger = KotlinLogging.logger {}
  *
  * ## Semantics
  *
- * Identical decision logic to production ([RuleBasedDispatcher]) with the
- * pre-SP0.11 timing: each [ShuntingLoop.iteration] publishes fresh observations,
- * then the control-step listener decides and applies in the same tick. Because
- * observation and application are never decoupled, the duplicate-decision races
- * the async driver needs guards for (PR #740, Issue #742) cannot occur here by
- * construction, and runs are fully deterministic.
+ * Identical decision logic to production ([RuleBasedDispatcher]). Each
+ * [ShuntingLoop.iteration] publishes one fresh observation snapshot, then the
+ * control-step listener decides and applies synchronously on the kDisco sim
+ * thread in the same tick — admission and path-advancement together, pre-hold
+ * (the SP0.11 single-observation-per-tick model, Issue #733). Because
+ * observation and application are never decoupled across threads, the
+ * duplicate-decision races the async driver needs guards for (PR #740,
+ * Issue #742) cannot occur here by construction, and runs are fully deterministic.
  *
  * Usage (before `context.run()`):
  * ```kotlin

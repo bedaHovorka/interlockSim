@@ -24,17 +24,14 @@ package cz.vutbr.fit.interlockSim.sim
  * search-based, …) can be plugged in behind this seam without touching `:core`
  * simulation code.
  *
- * ## Two-phase tick
- * The shell calls [decide] twice per iteration: once **before** the per-iteration
- * polling `hold()` with an admission-phase [DispatchObservation] (real
- * [DispatchObservation.unapprovedTrains], empty block-input lists), and once
- * **after** it with a path-advancement-phase observation (empty
- * [DispatchObservation.unapprovedTrains], real block-input lists). Splitting the
- * tick keeps train admission aligned with the polling interval so that
- * path-advancement checks observe block state after newly admitted trains have
- * had a chance to move — the original `ShuntingLoop` ordering (Issue #540
- * review). A single combined call would force both decisions to observe the same
- * pre-hold state.
+ * ## One call per tick (SP0.11)
+ * The shell calls [decide] once per iteration with a single [DispatchObservation]
+ * whose fields are all populated together: the queued-train list and both
+ * block-input lists are snapshotted in the same tick (Issue #733 thin-shell
+ * refactor). Admission and path-advancement are therefore decided in one call,
+ * and both may be non-empty. The historical two-call pre/post-hold split
+ * (Issue #540 review) was removed because SP0.11 moved admission to pre-hold as
+ * well, so a single pre-hold observation is the correct input for both.
  *
  * ## Thread-safety
  *
@@ -57,8 +54,8 @@ interface Dispatcher {
 	 * Decide what to do given [observed].
 	 *
 	 * @param observed Read-only view of the current dispatch-relevant state for
-	 *   this phase of the tick.
-	 * @return The decisions to apply this phase, in the order they should be
+	 *   this tick.
+	 * @return The decisions to apply this tick, in the order they should be
 	 *   applied. Never empty — implementations return `listOf(DispatchDecision.NoAction)`
 	 *   when there is nothing to dispatch.
 	 */

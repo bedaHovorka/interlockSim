@@ -17,6 +17,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotEmpty
 import assertk.assertions.isNotNull
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -119,6 +120,21 @@ class Issue742RegressionTest : KoinTestBase() {
 		(cell as? PathSeparator)
 			?.let { simulationContext.toDynamic(it) }
 			?: throw IllegalStateException("Separator '$name' not found in vyhybna.xml")
+
+	/** Collect every [DynamicRailSwitch] present in the loaded vyhybna grid. */
+	private fun collectSwitches(): List<DynamicRailSwitch> {
+		val grid = simulationContext.getRailWayNetGrid()
+		val switches = mutableListOf<DynamicRailSwitch>()
+		for (x in 0 until grid.cols) {
+			for (y in 0 until grid.rows) {
+				val cell = grid.getCellAt(x, y)
+				if (cell is DynamicRailSwitch) {
+					switches.add(cell)
+				}
+			}
+		}
+		return switches
+	}
 
 	@AfterEach
 	fun tearDown() {
@@ -357,6 +373,53 @@ class Issue742RegressionTest : KoinTestBase() {
 			// Each block should have reservedFrom pointing to a valid path separator
 			assertThat(block.reservedFrom).isNotNull()
 		}
+	}
+
+	@Test
+	@Timeout(30, unit = TimeUnit.SECONDS)
+	@DisplayName("unregisterSwitch releases one switch and keeps the train's other switches (scoped rollback primitive)")
+	fun unregisterSwitchReleasesOneSwitchAndKeepsTheRest() {
+		// Direct unit test for the per-switch registry primitive added for the #742 SP0.11
+		// review follow-up. rollbackUnconfigurableCandidate calls this for each non-prior
+		// switch of a rejected candidate; it must release exactly that switch and leave
+		// the train's earlier-hop switches intact (unlike unregisterSwitches, which wipes
+		// all of them).
+		val switches = collectSwitches()
+		assertThat(switches.size).isGreaterThanOrEqualTo(2)
+
+		val trainId = "train_742_scoped_switch"
+		val a = switches[0]
+		val b = switches[1]
+
+		// Mirror reservePath Step 2f: register (and lock) two switches for one train.
+		registry.registerSwitches(trainId, listOf(a, b))
+		assertThat(a.locked).isTrue()
+		assertThat(b.locked).isTrue()
+		assertThat(registry.getSwitchOwner(a)).isEqualTo(trainId)
+		assertThat(registry.getSwitchOwner(b)).isEqualTo(trainId)
+
+		// Release only switch a — the scoped-rollback case.
+		val released = registry.unregisterSwitch(trainId, a)
+		assertThat(released).isTrue()
+
+		// a is unlocked and no longer mapped to the train.
+		assertThat(a.locked).isFalse()
+		assertThat(registry.getSwitchOwner(a)).isEqualTo(null)
+
+		// b survives: still locked, still owned, still listed for the train.
+		assertThat(b.locked).isTrue()
+		assertThat(registry.getSwitchOwner(b)).isEqualTo(trainId)
+		assertThat(registry.getSwitches(trainId)).contains(b)
+
+		// Safe no-op: a switch not owned by this train is left untouched.
+		val wrongOwner = registry.unregisterSwitch("someOtherTrain", b)
+		assertThat(wrongOwner).isFalse()
+		assertThat(b.locked).isTrue()
+		assertThat(registry.getSwitchOwner(b)).isEqualTo(trainId)
+
+		// Safe no-op: re-releasing an already-released switch.
+		val repeatRelease = registry.unregisterSwitch(trainId, a)
+		assertThat(repeatRelease).isFalse()
 	}
 
 	// Helper: a structurally valid reserved path never has two adjacent separators

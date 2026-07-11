@@ -20,8 +20,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
-import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
@@ -166,7 +166,10 @@ class ExampleRegistry {
 	/**
 	 * Wires the SP0.11 dispatcher-agent stack onto [loop]:
 	 * - creates [DefaultNetworkPerceptionPort] and [DefaultNetworkActuatorPort] backed by [context]
-	 * - creates [ActuatorCommandQueue] and [RuleBasedDispatcher]
+	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [Dispatcher] (singleton)
+	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [Dispatcher] binding
+	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
+	 *   (e.g. to an LLM dispatcher) takes effect here too (Goal 10 seam)
 	 * - creates [DispatchDecisionApplier] (with ShuntingLoop counter callbacks) and registers
 	 *   it as [ShuntingLoop.controlStepListener]
 	 * - creates [AgentLoopDriver] (with ShuntingLoop observation providers) and registers its
@@ -192,8 +195,8 @@ class ExampleRegistry {
 			)
 		val actuatorPort = DefaultNetworkActuatorPort(env = context)
 
-		val queue = ActuatorCommandQueue()
-		val dispatcher = RuleBasedDispatcher()
+		val queue = context.scope.get<ActuatorCommandQueue>()
+		val dispatcher = context.scope.get<Dispatcher>()
 
 		val applier =
 			DispatchDecisionApplier(
