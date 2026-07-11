@@ -6,6 +6,13 @@
 **Parent analysis:** [`ISSUE_591_SCALE_LIVELOCK_ANALYSIS.md`](ISSUE_591_SCALE_LIVELOCK_ANALYSIS.md) (root cause and missing model behaviour)
 **Scope:** Research only — no implementation. Catalogues **options**, their mechanisms, trade-offs, gaps, and recommended combinations.
 
+> **⚠️ Owner decision (2026-07-11, PR #631 review):** Goal 9 as shipped is judged
+> **not realistic**; a more realistic **Goal 9B** update will be prepared in the
+> future, **after Goal 1B** (whose paramount example is the Praha hlavní nádraží
+> 5-train scenario from this PR; Goal 10's paramount example stays the shunting
+> loop). Read the options below as an inventory of what exists to build Goal 9B
+> from — not as machinery to wire into the dispatcher as-is.
+
 ---
 
 ## 1. Executive Summary
@@ -496,8 +503,10 @@ To keep expectations honest, four things remain outside Goal 9's reach:
 
 > **See also:** [`GOAL_10_EXPECTATIONS_CRITIQUE.md`](GOAL_10_EXPECTATIONS_CRITIQUE.md)
 > — companion research document critiquing the current Goal 10 (#532) description
-> across its three sources and proposing a staged re-description with the Praha
-> 5-train scenario as the paramount example.
+> across its three sources and proposing a staged re-description. Its original
+> proposal of the Praha 5-train scenario as Goal 10's paramount example was
+> superseded by owner decision (2026-07-11): Goal 10 keeps the shunting loop as
+> its paramount example; Praha 5-train is Goal 1B's paramount example.
 
 ---
 
