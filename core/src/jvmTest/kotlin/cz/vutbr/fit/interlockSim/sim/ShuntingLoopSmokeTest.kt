@@ -12,6 +12,8 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThan
+import assertk.assertions.isGreaterThanOrEqualTo
+import assertk.assertions.isLessThanOrEqualTo
 import assertk.assertions.isNotEqualTo
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
@@ -97,7 +99,12 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 	 */
 	private fun loadVyhybnaStream() = TestFixtures.loadShuntingXml()
 
-	private fun createConfiguredSimulation(endTime: Long): SimulationContext {
+	/**
+	 * Also wires the synchronous dispatcher (see [wireSynchronousDispatcher]) — without it
+	 * a bare [ShuntingLoop] admits zero trains, so every assertion in this file about train
+	 * admission/movement/exit would otherwise pass vacuously.
+	 */
+	private fun createConfiguredSimulation(endTime: Long): Pair<SimulationContext, ShuntingLoop> {
 		val factory = getKoin().get<SimulationContextFactory>()
 		val context =
 			loadVyhybnaStream().use { stream ->
@@ -109,10 +116,13 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		// Initialize dynamic wrapper map by calling getInOuts()
 		context.getInOuts()
 
-		// Set ShuntingLoop as the main simulation process
-		context.setMainProcess(ShuntingLoop(context, endTime))
+		val loop = ShuntingLoop(context, endTime)
+		wireSynchronousDispatcher(context, loop)
 
-		return context
+		// Set ShuntingLoop as the main simulation process
+		context.setMainProcess(loop)
+
+		return context to loop
 	}
 
 	@Nested
@@ -130,14 +140,22 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 30, unit = TimeUnit.SECONDS)
 		fun `simulation initializes and starts successfully`() {
 			// Arrange: Create simulation context configured with ShuntingLoop (10s end time)
-			val context = createConfiguredSimulation(endTime = 10L)
+			val (context, loop) = createConfiguredSimulation(endTime = 10L)
 
 			// Act: Run simulation
 			context.run()
 
-			// Assert: Simulation initialization and startup completed successfully
-			// Success: context.run() returned without exception, kDisco processes terminated normally
+			// Assert: Simulation initialization and startup completed successfully, and at
+			// least one train was actually admitted by the interlocking (getTrainsEntered()
+			// only counts generation into the queue, which happens even without a wired
+			// dispatcher — getMaxConcurrentTrains() > 0 is the real proof of admission, since
+			// it only rises above 0 when approveQueuedTrain(), only reachable via the
+			// dispatcher, is called). Also verify concurrent admission never exceeded this
+			// station's fixed topology capacity (RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS —
+			// a station-design constant, not a tunable limit).
 			logger.info { "Basic simulation smoke test completed successfully" }
+			assertThat(loop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 		}
 
 		/**
@@ -151,16 +169,22 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 15, unit = TimeUnit.SECONDS)
 		fun `short simulation completes within timeout`() {
 			// Arrange: Create simulation context with 5s end time
-			val context = createConfiguredSimulation(endTime = 5L)
+			val (context, loop) = createConfiguredSimulation(endTime = 5L)
 
 			// Act: Run very short simulation
 			val startTime = System.currentTimeMillis()
 			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
-			// Assert: Simulation completed successfully
-			// Timeout protection provided by @Timeout annotation
+			// Assert: Simulation completed successfully (timeout protection provided by
+			// @Timeout annotation) and the interlocking admitted at least one train — see
+			// the getMaxConcurrentTrains() vs getTrainsEntered() note above. Also verify
+			// concurrent admission never exceeded this station's fixed topology capacity
+			// (RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS — a station-design
+			// constant, not a tunable limit).
 			logger.info { "Simulation completed in ${elapsedTime}ms real time for 5s simulation time" }
+			assertThat(loop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 		}
 	}
 
@@ -182,15 +206,21 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 30, unit = TimeUnit.SECONDS)
 		fun `trains are generated and enter approval queue`() {
 			// Arrange: Create simulation context with 30s end time
-			val context = createConfiguredSimulation(endTime = 30L)
+			val (context, loop) = createConfiguredSimulation(endTime = 30L)
 
 			// Act: Run simulation for sufficient time to generate trains
 			// ShuntingLoop.InnerGenerator schedules trains at intervals
 			context.run()
 
-			// Assert: Trains move without deadlock during initial 30s
-			// Success: Simulation progressed to end time with trains moving through system
+			// Assert: At least one generated train was actually approved by the interlocking
+			// (not just generated into the queue) — see the getMaxConcurrentTrains() vs
+			// getTrainsEntered() note in BasicExecutionTests. Also verify concurrent admission
+			// never exceeded this station's fixed topology capacity
+			// (RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS — a station-design constant,
+			// not a tunable limit).
 			logger.info { "Train movement test completed - no deadlock detected" }
+			assertThat(loop.getMaxConcurrentTrains()).isGreaterThanOrEqualTo(1)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 		}
 	}
 
@@ -216,16 +246,27 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 60, unit = TimeUnit.SECONDS)
 		fun `trains move through system without deadlock (Issue 280 regression)`() {
 			// Arrange: Create simulation context with 350s end time
-			val context = createConfiguredSimulation(endTime = 350L)
+			val (context, loop) = createConfiguredSimulation(endTime = 350L)
 
 			// Act: Run simulation long enough for trains to complete journeys
 			// Issue #280 showed deadlock at time 298-301 seconds
 			// We run for 350 seconds to ensure trains complete or deadlock is detected
 			context.run()
 
-			// Assert: Medium-duration simulation (350s) completes without deadlock
-			// Success: Path reservation system allowed concurrent train movement
-			logger.info { "Deadlock prevention test completed successfully" }
+			// Assert: Medium-duration simulation (350s) completes without deadlock — trains
+			// were admitted, exited, and every train that recorded a transition made real
+			// progress (a deadlocked train would show 0 transitions despite being admitted).
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "Deadlock prevention test completed: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isLessThanOrEqualTo(entered)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
+			for ((trainId, count) in loop.getAllBlockTransitions().filterValues { it > 0 }) {
+				logger.info { "Train $trainId block transitions: $count" }
+				assertThat(count).isGreaterThanOrEqualTo(1)
+			}
 		}
 
 		/**
@@ -241,16 +282,25 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 90, unit = TimeUnit.SECONDS)
 		fun `multiple trains operate concurrently without collision`() {
 			// Arrange: Create simulation context with 500s end time
-			val context = createConfiguredSimulation(endTime = 500L)
+			val (context, loop) = createConfiguredSimulation(endTime = 500L)
 
 			// Act: Run longer simulation to allow multiple trains to enter and exit
 			// ShuntingLoop has MAX_TRAINS = 2, so we need enough time for both trains
 			// to be approved, move through system, and exit
 			context.run()
 
-			// Assert: Full simulation run (350s) completed successfully
-			// Success: All trains generated, approved, moved through system, and exited (Issue #280)
-			logger.info { "End-to-end longevity test completed successfully" }
+			// Assert: Both trains were admitted and exited, and mutual exclusion held —
+			// at no tick did more than 2 (MAX_TRAINS) trains hold an approved slot at once.
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			val maxConcurrent = loop.getMaxConcurrentTrains()
+			logger.info {
+				"End-to-end longevity test completed: entered=$entered, exited=$exited, " +
+					"maxConcurrent=$maxConcurrent"
+			}
+			assertThat(entered).isGreaterThanOrEqualTo(2)
+			assertThat(exited).isGreaterThanOrEqualTo(2)
+			assertThat(maxConcurrent).isLessThanOrEqualTo(2)
 		}
 	}
 
@@ -274,7 +324,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		fun `full simulation run - all trains exit successfully`() {
 			// Arrange: Create simulation context with 600s end time
 			val simulationEndTime = 600L
-			val context = createConfiguredSimulation(endTime = simulationEndTime)
+			val (context, loop) = createConfiguredSimulation(endTime = simulationEndTime)
 
 			// Act: Run full simulation
 			// This is similar to the command: ./gradlew runSim
@@ -290,9 +340,18 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 					"for ${simulationEndTime}s simulation time"
 			}
 
-			// Additional validation: Verify simulation time reached expected end
-			// (This is an indirect check that simulation didn't crash or hang)
-			logger.info { "All trains completed their journeys and exited the system (Issue #280 success criterion)" }
+			// Issue #280 success criterion: "All trains must leave the system" — getTrainsEntered()
+			// counts every train generated into the queue (InnerGenerator keeps producing trains
+			// indefinitely), so exited cannot equal entered in a long run; the meaningful
+			// invariants are "at least one full journey completed" and "no train exits before
+			// it entered."
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "All trains completed their journeys and exited the system: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isLessThanOrEqualTo(entered)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 		}
 
 		/**
@@ -307,7 +366,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 60, unit = TimeUnit.SECONDS)
 		fun `simulation produces valid performance reports`() {
 			// Arrange: Create simulation context with 100s end time
-			val context = createConfiguredSimulation(endTime = 100L)
+			val (context, loop) = createConfiguredSimulation(endTime = 100L)
 
 			// Note: DefaultSimulationContext has reporting functionality
 			// that logs train state periodically. We verify simulation runs
@@ -316,9 +375,12 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Act: Run simulation with reporting enabled
 			context.run()
 
-			// Assert: Simulation with performance reporting completed successfully
-			// Success: Reports generated during execution (logged to console)
+			// Assert: Simulation with performance reporting completed successfully and at
+			// least one train actually completed its journey and exited (100s comfortably
+			// exceeds the ~49.5s baseline for the first train), so reports reflect real
+			// train state, not an empty run.
 			logger.info { "Performance reporting test completed - check logs for metrics" }
+			assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)
 		}
 	}
 
@@ -348,7 +410,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Tag("integration-test")
 		fun `shunting loop discovers and uses both k1 and k2 paths`() {
 			// Arrange: Create simulation context
-			val context = createConfiguredSimulation(endTime = 60L)
+			val (context, loop) = createConfiguredSimulation(endTime = 60L)
 			val navigator = context.getRoutingServices().getTopologyNavigator()
 
 			// Get the two InOut separators
@@ -392,9 +454,12 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Act: Run simulation to verify no crashes
 			context.run()
 
-			// Assert: Issue #291 validation - both k1 and k2 paths discovered and used
-			// Success: TopologyNavigator found multiple valid paths through shunting loop
+			// Assert: Issue #291 validation - both k1 and k2 paths discovered, and at least
+			// one train actually completed its journey and exited (60s comfortably exceeds
+			// the ~49.5s baseline for the first train), proving they were navigated, not
+			// just discovered.
 			logger.info { "Path discovery test completed - both k1 and k2 paths successfully navigated" }
+			assertThat(loop.getTrainsExited()).isGreaterThanOrEqualTo(1)
 		}
 
 		/**
@@ -430,7 +495,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		fun `both trains complete journey using consistent path navigation`() {
 			// Arrange: Create simulation context with enough time for both trains
 			// Train #1 completes at ~49.5s, Train #2 completes at ~101.5s
-			val context = createConfiguredSimulation(endTime = STANDARD_END_TIME)
+			val (context, loop) = createConfiguredSimulation(endTime = STANDARD_END_TIME)
 
 			// Act: Run simulation
 			val startTime = System.currentTimeMillis()
@@ -441,9 +506,13 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			// Timeout protection provided by @Timeout annotation
 			logger.info { "Simulation completed in ${elapsedTime}ms real time for 120s simulation time" }
 
-			// Assert: Issue #291 fix validation - both trains completed journey with consistent navigation
-			// Success: TrainNavigationService followed reserved paths correctly to destination
-			logger.info { "Consistent navigation test completed - both trains reached destination" }
+			// Assert: Issue #291 fix validation - both trains completed journey with consistent
+			// navigation and reached destination (exited).
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "Consistent navigation test completed: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(2)
+			assertThat(exited).isGreaterThanOrEqualTo(2)
 		}
 	}
 
@@ -477,16 +546,24 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		fun `Issue 280 - trains do not deadlock at semaphores`() {
 			// Arrange: Create simulation context past deadlock time
 			val simulationTime = 350L
-			val context = createConfiguredSimulation(endTime = simulationTime)
+			val (context, loop) = createConfiguredSimulation(endTime = simulationTime)
 
 			// Act: Run simulation past the original deadlock time (298-301s)
 			logger.info { "Running Issue #280 regression test for ${simulationTime}s" }
 
 			context.run()
 
-			// Assert: Extended simulation (600s) completes without resource exhaustion
-			// Success: Long-running simulation terminated normally, no memory leaks
-			logger.info { "Extended simulation test completed successfully" }
+			// Assert: trains were admitted, exited, and made real progress (a deadlocked
+			// train would be admitted but never exit and record 0 block transitions).
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "Extended simulation test completed: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isGreaterThanOrEqualTo(1)
+			for ((trainId, count) in loop.getAllBlockTransitions().filterValues { it > 0 }) {
+				logger.info { "Train $trainId block transitions: $count" }
+				assertThat(count).isGreaterThanOrEqualTo(1)
+			}
 		}
 
 		/**
@@ -503,15 +580,19 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		@Timeout(value = 90, unit = TimeUnit.SECONDS)
 		fun `Issue 275 - trains do not deadlock in path reservation cache`() {
 			// Arrange: Create simulation context to exercise path reservation
-			val context = createConfiguredSimulation(endTime = 400L)
+			val (context, loop) = createConfiguredSimulation(endTime = 400L)
 
 			// Act: Run simulation to exercise path reservation logic
 			logger.info { "Running Issue #275 regression test" }
 			context.run()
 
-			// Assert: Maximum-length simulation (600s) with reporting completed
-			// Success: Performance monitoring active throughout entire simulation duration
-			logger.info { "Maximum-length simulation with reporting completed successfully" }
+			// Assert: path reservation succeeded — trains were admitted and exited.
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "Maximum-length simulation with reporting completed: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isGreaterThanOrEqualTo(1)
+			assertThat(loop.getMaxConcurrentTrains()).isLessThanOrEqualTo(2)
 		}
 	}
 
@@ -532,7 +613,7 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 		fun `long running simulation completes successfully`() {
 			// Arrange: Create simulation context for stress test
 			val simulationTime = 1000L
-			val context = createConfiguredSimulation(endTime = simulationTime)
+			val (context, loop) = createConfiguredSimulation(endTime = simulationTime)
 
 			// Act: Run extended simulation
 			logger.info { "Running stress test for ${simulationTime}s simulation time" }
@@ -541,12 +622,21 @@ class ShuntingLoopSmokeTest : KoinTestBase() {
 			context.run()
 			val elapsedTime = System.currentTimeMillis() - startTime
 
-			// Assert: Long simulation completed successfully
+			// Assert: Long simulation completed successfully. getTrainsEntered() counts every
+			// train generated into the queue (unbounded over 1000s), so we assert the
+			// established invariants: at least one full journey completed, and no train
+			// exits before it entered.
 			logger.info {
 				"Stress test completed successfully in ${elapsedTime}ms real time " +
 					"for ${simulationTime}s simulation time"
 			}
 			assertThat(elapsedTime).isGreaterThan(0L)
+			val entered = loop.getTrainsEntered()
+			val exited = loop.getTrainsExited()
+			logger.info { "Stress test metrics: entered=$entered, exited=$exited" }
+			assertThat(entered).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isGreaterThanOrEqualTo(1)
+			assertThat(exited).isLessThanOrEqualTo(entered)
 		}
 	}
 }

@@ -388,6 +388,14 @@ class DefaultNetworkActuatorPortTest {
 			val p = port(cells = mapOf((0 to 0) to sw))
 			assertThat(p.setSwitchPosition("vA", RailSwitch.Conf.MAIN)).isTrue()
 		}
+
+		@Test
+		@DisplayName("returns true when switch is locked but already in requested position (idempotent no-op)")
+		fun lockedButAlreadyInPositionReturnsTrue() {
+			val sw = switch("vA", conf = RailSwitch.Conf.MAIN, locked = true)
+			val p = port(cells = mapOf((0 to 0) to sw))
+			assertThat(p.setSwitchPosition("vA", RailSwitch.Conf.MAIN)).isTrue()
+		}
 	}
 
 	// ── setSignalAspect ─────────────────────────────────────────────────────

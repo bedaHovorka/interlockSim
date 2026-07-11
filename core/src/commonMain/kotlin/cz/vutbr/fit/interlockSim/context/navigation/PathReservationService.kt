@@ -243,6 +243,18 @@ interface PathReservationService {
 	fun getReservedBlocks(trainId: String): List<DynamicTrackBlock>
 
 	/**
+	 * Get all blocks currently physically occupied by a train.
+	 *
+	 * This is a subset of [getReservedBlocks]: every occupied block is also reserved for
+	 * the occupying train, but a train may hold additional blocks that are reserved-but-not-yet-occupied
+	 * (the cleared path ahead of it).
+	 *
+	 * @param trainId Unique identifier for the train
+	 * @return List of blocks currently occupied by this train (empty if none)
+	 */
+	fun getOccupiedBlocks(trainId: String): List<DynamicTrackBlock>
+
+	/**
 	 * Find and reserve path from separator to any next semaphore via specific track section.
 	 *
 	 * This method navigates from the starting separator through the given track section

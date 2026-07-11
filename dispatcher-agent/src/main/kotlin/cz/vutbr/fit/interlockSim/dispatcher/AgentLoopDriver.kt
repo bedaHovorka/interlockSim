@@ -12,10 +12,9 @@ package cz.vutbr.fit.interlockSim.dispatcher
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
-import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
-import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -75,29 +74,22 @@ class AgentLoopDriver(
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**
-	 * SP0.11: Provider for the current unapproved-train queue. Invoked on the driver
-	 * thread during SENSE; reads the [ShuntingLoop.getQueuedTrains] @Volatile field
-	 * published by the sim thread. Defaults to [emptyList] (SP0.10 compatibility).
+	 * Provider for the current per-tick observation bundle (unapproved-train queue plus
+	 * inner/outer block inputs). Invoked ONCE per [runCycle] on the driver thread during
+	 * SENSE, reading the single [ShuntingLoop.getLatestObservation] @Volatile reference
+	 * published atomically by the sim thread. Defaults to an empty bundle (SP0.10
+	 * compatibility).
 	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
-	 */
-	private val unapprovedTrainsProvider: () -> List<QueuedTrainObservation> = { emptyList() },
-	/**
-	 * SP0.11: Provider for inner-block-input observations. Invoked on the driver
-	 * thread during SENSE; reads the [ShuntingLoop.getInnerBlockInputs] @Volatile field.
-	 * Defaults to [emptyList] (SP0.10 compatibility).
+	 * Must be called at most once per cycle: [ShuntingLoop.TickObservation] bundles all
+	 * three fields specifically so a reader never mixes fields from two different sim
+	 * ticks — reading the three fields via separate calls would defeat that guarantee.
 	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
+	 * @since Issue #733 (SP0.11 — Goal 10); collapsed to a single provider by the
+	 *   SP0.11 review follow-up (tearing fix)
 	 */
-	private val innerBlockInputsProvider: () -> List<BlockInputObservation> = { emptyList() },
-	/**
-	 * SP0.11: Provider for outer-block-input observations. Invoked on the driver
-	 * thread during SENSE; reads the [ShuntingLoop.getOuterBlockInputs] @Volatile field.
-	 * Defaults to [emptyList] (SP0.10 compatibility).
-	 *
-	 * @since Issue #733 (SP0.11 — Goal 10)
-	 */
-	private val outerBlockInputsProvider: () -> List<BlockInputObservation> = { emptyList() }
+	private val observationProvider: () -> ShuntingLoop.TickObservation = {
+		ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+	}
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -158,14 +150,16 @@ class AgentLoopDriver(
 		}
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// SP0.11: unapprovedTrains and block-input lists now populated via @Volatile
-		// fields published by ShuntingLoop.iteration() on the sim thread.
+		// SP0.11: unapprovedTrains and block-input lists now populated via a single
+		// @Volatile TickObservation reference published by ShuntingLoop.iteration() on
+		// the sim thread — one provider call, so all three fields come from the same tick.
+		val tick = observationProvider()
 		val observation =
 			DispatchObservation(
 				snapshot = snapshot,
-				unapprovedTrains = unapprovedTrainsProvider(),
-				innerBlockInputs = innerBlockInputsProvider(),
-				outerBlockInputs = outerBlockInputsProvider()
+				unapprovedTrains = tick.queuedTrains,
+				innerBlockInputs = tick.innerBlockInputs,
+				outerBlockInputs = tick.outerBlockInputs
 			)
 		val decisions = dispatcher.decide(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
