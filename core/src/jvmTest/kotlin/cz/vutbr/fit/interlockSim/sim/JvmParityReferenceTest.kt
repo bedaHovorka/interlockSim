@@ -69,7 +69,9 @@ class JvmParityReferenceTest : KoinTestBase() {
 				stream.use { factory.createContext(it) }
 			).use { context ->
 				context.getInOuts()
-				context.setMainProcess(ShuntingLoop(context, END_TIME))
+				val loop = ShuntingLoop(context, END_TIME)
+				wireSynchronousDispatcher(context, loop)
+				context.setMainProcess(loop)
 				val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
 				context.addPropertyChangeListener(reporter)
 				context.run()

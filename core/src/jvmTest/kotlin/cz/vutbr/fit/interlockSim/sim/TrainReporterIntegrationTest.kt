@@ -77,7 +77,9 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 	fun trainReporterEnabledPathCoverage() {
 		// ShuntingLoop.ENABLED_REPORT_TYPES includes TRAIN_CONTINUOUS — no extra setup needed
 		loadVyhybnaContext().use { ctx ->
-			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+			val loop = ShuntingLoop(ctx, 30L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
@@ -102,7 +104,9 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// `ShuntingLoop(ctx, 10L)` runs until simulation time 10 (`endTime`),
 		// with at most 2 concurrent trains active at once.
 		loadVyhybnaContext().use { ctx ->
-			ctx.setMainProcess(ShuntingLoop(ctx, 10L))
+			val loop = ShuntingLoop(ctx, 10L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 
@@ -170,7 +174,9 @@ class TrainReporterIntegrationTest : KoinTestBase() {
 		// - Lower bound: >= 25 proves ~1 Hz cadence (not spurious single event)
 		// - Upper bound: < 100 (tighter than 300) — would catch hold(0.01) throttle bug
 		loadVyhybnaContext().use { ctx ->
-			ctx.setMainProcess(ShuntingLoop(ctx, 30L))
+			val loop = ShuntingLoop(ctx, 30L)
+			wireSynchronousDispatcher(ctx, loop)
+			ctx.setMainProcess(loop)
 
 			val reportCount = countTrainContinuousEvents(ctx)
 

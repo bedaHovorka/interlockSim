@@ -269,17 +269,24 @@ class AgentLoopDriverTest {
 		}
 
 		@Test
-		@DisplayName("zero delta when simTime does not advance between cycles")
-		fun zeroDeltaWhenSimTimeStagnant() {
+		@DisplayName("stagnant simTime: cycle is skipped — no re-decide, no throttle, pause still honoured (SP0.11)")
+		fun stagnantSimTimeSkipsCycle() {
+			// SP0.11: a snapshot whose simTime equals the previous cycle's is a re-read of the
+			// same sim tick. runCycle returns early — the dispatcher must NOT re-decide on
+			// identical state (duplicate-ReservePath source, Issue #742 investigation) and
+			// throttle is not called again; only awaitIfPaused still runs so pause is honoured.
 			every { perceptionPort.snapshot() } returns emptySnapshot(10.0)
 
 			val driver = makeDriver()
 			runBlocking {
-				driver.runCycle() // prevSimTime = 0 → delta = 10.0
-				driver.runCycle() // prevSimTime = 10.0, snapshot still 10.0 → delta = 0.0
+				driver.runCycle() // prevSimTime = 0 → processed, delta = 10.0
+				driver.runCycle() // snapshot still 10.0 → skipped (early return)
 			}
 
-			assertThat(controller.lastThrottleDelta).isEqualTo(0.0)
+			assertThat(controller.lastThrottleDelta).isEqualTo(10.0)
+			assertThat(controller.throttleCalls).isEqualTo(1)
+			assertThat(controller.awaitCalls).isEqualTo(2)
+			verify(exactly = 1) { dispatcher.decide(any()) }
 		}
 	}
 
@@ -343,6 +350,12 @@ class AgentLoopDriverTest {
 		@Test
 		@DisplayName("multiple cycles each call awaitIfPaused and throttle once")
 		fun multiCycleCallsEachCallControllerOnce() {
+			// SP0.11: simTime must advance between cycles, otherwise runCycle treats the
+			// snapshot as a stale re-read and skips the PACE throttle (see
+			// stagnantSimTimeSkipsCycle for that contract).
+			every { perceptionPort.snapshot() } returnsMany
+				listOf(emptySnapshot(1.0), emptySnapshot(2.0), emptySnapshot(3.0))
+
 			val driver = makeDriver()
 			val cycleCount = 3
 
