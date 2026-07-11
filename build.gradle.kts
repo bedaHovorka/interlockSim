@@ -67,11 +67,11 @@ val checkKdisco by tasks.registering {
 // ===========================================
 
 tasks.register("test") {
-    dependsOn(":core:jvmTest", ":desktop-ui:test")
+    dependsOn(":core:jvmTest", ":desktop-ui:test", ":dispatcher-agent:test")
 }
 
 tasks.register("integrationTest") {
-    dependsOn(":core:integrationTest", ":desktop-ui:integrationTest")
+    dependsOn(":core:integrationTest", ":desktop-ui:integrationTest", ":dispatcher-agent:integrationTest")
 }
 
 listOf(
@@ -101,19 +101,21 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (desktop-ui + :core KMP subproject).
+        // Source and test paths (desktop-ui + :core KMP subproject + :dispatcher-agent).
         // Kept in sync with sonar-project.properties (used for local sonar-scanner runs).
         property(
             "sonar.sources",
             "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
-                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin",
+                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin," +
+                "dispatcher-agent/src/main/kotlin",
         )
         property(
             "sonar.tests",
-            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin",
+            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin," +
+                "dispatcher-agent/src/test/kotlin",
         )
-        property("sonar.java.binaries",  "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
-        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
+        property("sonar.java.binaries",  "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main,dispatcher-agent/build/classes/kotlin/main")
+        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test,dispatcher-agent/build/classes/kotlin/test")
 
         property("sonar.java.source", javaVersion)
         property("sonar.java.target", javaVersion)
@@ -125,13 +127,16 @@ sonar {
             "desktop-ui/build/test-results/test," +
                 "desktop-ui/build/test-results/integrationTest," +
                 "core/build/test-results/jvmTest," +
-                "core/build/test-results/integrationTest",
+                "core/build/test-results/integrationTest," +
+                "dispatcher-agent/build/test-results/test," +
+                "dispatcher-agent/build/test-results/integrationTest",
         )
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
             listOf(
                 file("desktop-ui/build/reports/jacoco/test/jacocoTestReport.xml"),
                 file("core/build/reports/jacoco/jvmTest/jacocoTestReport.xml"),
+                file("dispatcher-agent/build/reports/jacoco/test/jacocoTestReport.xml"),
             ).joinToString(",") { it.absolutePath },
         )
 
@@ -161,6 +166,7 @@ tasks.named("sonar") {
     dependsOn(
         ":desktop-ui:test", ":desktop-ui:integrationTest", ":desktop-ui:jacocoTestReport",
         ":core:jvmTest", ":core:integrationTest", ":core:jacocoTestReport",
+        ":dispatcher-agent:test", ":dispatcher-agent:integrationTest", ":dispatcher-agent:jacocoTestReport",
     )
 }
 
@@ -175,18 +181,21 @@ val jacocoAggregatedReport by tasks.registering(JacocoReport::class) {
     dependsOn(
         ":core:jvmTest", ":core:integrationTest",
         ":desktop-ui:test", ":desktop-ui:integrationTest",
+        ":dispatcher-agent:test", ":dispatcher-agent:integrationTest",
     )
 
     executionData.setFrom(
         fileTree("core/build").include("jacoco/*.exec"),
         fileTree("desktop-ui/build").include("jacoco/*.exec"),
+        fileTree("dispatcher-agent/build").include("jacoco/*.exec"),
     )
     sourceDirectories.setFrom(
-        files("core/src/commonMain/kotlin", "core/src/jvmMain/kotlin", "desktop-ui/src/main/kotlin")
+        files("core/src/commonMain/kotlin", "core/src/jvmMain/kotlin", "desktop-ui/src/main/kotlin", "dispatcher-agent/src/main/kotlin")
     )
     classDirectories.setFrom(
         fileTree("core/build/classes/kotlin/jvm/main"),
         fileTree("desktop-ui/build/classes/kotlin/main"),
+        fileTree("dispatcher-agent/build/classes/kotlin/main"),
     )
 
     reports {

@@ -122,6 +122,7 @@ jobs:
         ./gradlew sonar \
           -x :desktop-ui:test -x :desktop-ui:integrationTest -x :desktop-ui:jacocoTestReport \
           -x :core:jvmTest -x :core:integrationTest -x :core:jacocoTestReport \
+          -x :dispatcher-agent:test -x :dispatcher-agent:integrationTest -x :dispatcher-agent:jacocoTestReport \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=$SONAR_ORGANIZATION \
           -Dsonar.token=$SONAR_TOKEN \
