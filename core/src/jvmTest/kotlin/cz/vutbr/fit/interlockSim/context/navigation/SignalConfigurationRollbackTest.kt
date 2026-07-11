@@ -132,13 +132,13 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 	fun `reservePath rolls back completely when semaphore signal configuration fails`() {
 		// This test verifies the fix for incomplete rollback bug.
 		//
-		// FIXED: When signal configuration fails in reservePath(), the rollback now:
-		// - Calls cancelPathSetup() on blocks
-		// - Calls registry.unregister(trainId) to remove block ownership
-		// - Removes PathInfo from registry (trainToPathInfo)
-		// - Calls registry.unregisterSwitches(trainId) to unlock switches
+		// FIXED: When signal configuration fails in reservePath() Step 2g, the rollback now
+		// uses the scoped rollbackUnconfigurableCandidate, which releases only THIS
+		// candidate's forwardBlocks and new switches (not the train's whole path):
+		// - cancelPathSetup() + registry.unregisterBlock() per forward block
+		// - registry.unregisterSwitch() per non-prior switch (earlier-hop switches survive)
 		//
-		// See: DefaultPathReservationService.kt:1472 (rollbackCompleteReservation implementation)
+		// See: DefaultPathReservationService.reservePath Step 2g + rollbackUnconfigurableCandidate.
 
 		val target = simulationContext.getInOuts().toList()[0]
 		val trainId = "TestTrain"
@@ -160,17 +160,14 @@ class SignalConfigurationRollbackTest : KoinTestBase() {
 
 	@Test
 	fun `reservePath rolls back switches when signal configuration fails`() {
-		// This test documents the switch rollback bug and will be enhanced once the fix is implemented.
+		// This test documents the switch rollback behaviour. The scoped rollback now
+		// (rollbackUnconfigurableCandidate, Step 2g) releases the candidate's non-prior
+		// switches via registry.unregisterSwitch() — earlier-hop switches are preserved.
+		// The per-switch primitive itself is unit-tested in Issue742RegressionTest
+		// (`unregisterSwitchReleasesOneSwitchAndKeepsTheRest`); injecting a real
+		// signal-config failure on vyhybna requires mocking configureSemaphoreSignal.
 		//
-		// BUG: When signal configuration fails, rollbackReservation() does not call
-		// registry.unregisterSwitches(trainId), leaving switches permanently locked.
-		//
-		// See: DefaultPathReservationService.kt:1472 (rollbackReservation implementation)
-		//
-		// TODO: After fix is implemented, inject a signal configuration failure and verify:
-		// 1. All switches return to unlocked state
-		// 2. switchToTrain mapping is cleared for this train
-		// 3. trainToSwitches mapping is cleared
+		// See: DefaultPathReservationService.reservePath Step 2g + rollbackUnconfigurableCandidate.
 
 		val trainId = "SwitchTestTrain"
 		val target = simulationContext.getInOuts().toList()[0]

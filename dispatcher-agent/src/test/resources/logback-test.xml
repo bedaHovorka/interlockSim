@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+	<!-- Console appender for stdout (WARN level only for tests) -->
+	<appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+		</encoder>
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>WARN</level>
+		</filter>
+	</appender>
+
+	<!-- Console appender for stderr (ERROR levels) -->
+	<appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+		<target>System.err</target>
+		<encoder>
+			<pattern>%msg%n</pattern>
+		</encoder>
+		<filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+			<level>ERROR</level>
+		</filter>
+	</appender>
+
+	<!-- Suppress verbose navigation logging during tests -->
+	<logger name="cz.vutbr.fit.interlockSim.context.navigation" level="WARN"/>
+
+	<!-- Suppress verbose simulation logging during tests -->
+	<logger name="cz.vutbr.fit.interlockSim.sim.Train" level="WARN"/>
+	<logger name="cz.vutbr.fit.interlockSim.sim.ShuntingLoop" level="WARN"/>
+	<logger name="cz.vutbr.fit.interlockSim.sim.InOutWorker" level="WARN"/>
+
+	<!-- Suppress verbose object logging during tests -->
+	<logger name="cz.vutbr.fit.interlockSim.objects" level="WARN"/>
+
+	<!-- Suppress verbose dispatcher-agent drive-loop logging during tests (SP0.10/SP0.11) -->
+	<logger name="cz.vutbr.fit.interlockSim.dispatcher" level="WARN"/>
+
+	<!-- kDisco statistics suppressed during tests -->
+	<logger name="kDisco.statistics" level="ERROR"/>
+
+	<!-- Root logger - WARN level for tests -->
+	<root level="WARN">
+		<appender-ref ref="CONSOLE"/>
+		<appender-ref ref="STDERR"/>
+	</root>
+</configuration>

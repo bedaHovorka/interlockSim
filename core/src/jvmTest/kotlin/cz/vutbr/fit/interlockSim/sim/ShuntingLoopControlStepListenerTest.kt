@@ -3,7 +3,6 @@ package cz.vutbr.fit.interlockSim.sim
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import assertk.assertions.isGreaterThanOrEqualTo
-import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import org.koin.test.inject
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -49,98 +47,50 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 			simulationContextFactory.createContext(editingContext) as DefaultSimulationContext
 		}
 
-	/**
-	 * The listener is invoked exactly once per iteration, and its invocation at the
-	 * top of `iteration()` precedes the admission `Dispatcher.decide` call (i.e. it
-	 * runs before `buildAdmissionObservation()` is consumed).
-	 *
-	 * With `endTime = 0L` the simulation performs exactly one iteration, so the
-	 * listener must fire exactly once. The custom [Dispatcher] records, inside its
-	 * admission `decide()`, whether the listener has already run this tick — proving
-	 * the ordering invariant the whole SP0.9 design rests on.
-	 */
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
-	fun `controlStepListener is invoked once per iteration, before admission`() {
+	fun `controlStepListener is invoked once per iteration`() {
 		val context = loadVyhybnaContext()
-		// Initialize dynamic wrapper map before creating ShuntingLoop (matches the
-		// example/regression test pattern — see ShuntingLoopRegressionTest).
+		// Initialize dynamic wrapper map before creating ShuntingLoop.
 		context.getInOuts()
 
 		val listenerCalls = AtomicInteger(0)
-		val listenerRanBeforeAdmission = AtomicBoolean(false)
 
-		// decide() is called at the admission phase right after buildAdmissionObservation(),
-		// which is AFTER controlStepListener?.onControlStep() at the top of iteration().
-		// So if the listener ran before admission, listenerCalls is already >= 1 here.
-		val dispatcher =
-			object : Dispatcher {
-				override fun decide(observed: DispatchObservation): List<DispatchDecision> {
-					if (listenerCalls.get() >= 1) {
-						listenerRanBeforeAdmission.set(true)
-					}
-					return listOf(DispatchDecision.NoAction)
-				}
-			}
-
-		val shuntingLoop = ShuntingLoop(context, endTime = 0L, dispatcher = dispatcher)
+		// SP0.11: ShuntingLoop no longer accepts a dispatcher — inline dispatch is removed.
+		// With endTime = 0L the simulation performs exactly one iteration, so the listener
+		// must fire exactly once.
+		val shuntingLoop = ShuntingLoop(context, endTime = 0L)
 		shuntingLoop.controlStepListener = ControlStepListener { listenerCalls.incrementAndGet() }
 		context.setMainProcess(shuntingLoop)
 		context.run()
 
-		logger.info { "listenerCalls=${listenerCalls.get()}, ranBeforeAdmission=${listenerRanBeforeAdmission.get()}" }
+		logger.info { "listenerCalls=${listenerCalls.get()}" }
 		assertThat(listenerCalls.get()).isEqualTo(1)
-		assertThat(listenerRanBeforeAdmission.get()).isTrue()
 	}
 
-	/**
-	 * `approveQueuedTrain(trainId)` delegates to the private `applyApproveTrain`,
-	 * moving a queued train from the unapproved set into the approved set and
-	 * activating it — observable via `getMaxConcurrentTrains()`.
-	 *
-	 * The custom [Dispatcher] never returns an `ApproveTrain` decision (always
-	 * `NoAction`), so the **only** path by which a train can enter the approved set
-	 * is the listener calling `approveQueuedTrain`. The dispatcher captures the first
-	 * unapproved train id from the admission observation; the listener consumes that
-	 * id **once** (`getAndSet(null)`) and approves it on the next tick (the listener
-	 * runs before the `decide()` that captures the id, so there is a one-tick lag).
-	 * Consuming once is essential: re-approving an already-approved id would throw
-	 * inside `applyApproveTrain`'s `requireNotNull` and crash the ShuntingLoop
-	 * process mid-iteration. `endTime = 30L` gives enough ticks for the generator to
-	 * place a train and the listener to approve it.
-	 */
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	fun `approveQueuedTrain moves a queued train into the approved set`() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
 
-		val capturedTrainId = AtomicReference<String?>(null)
 		val approvedByCallback = AtomicInteger(0)
 		val shuntingLoopRef = AtomicReference<ShuntingLoop?>(null)
 
-		// Always NoAction: no auto-approval, no auto-reservation. The only mutation
-		// path into the approved set is the listener's approveQueuedTrain call.
-		// Re-captures the next unapproved id only after the listener has consumed the
-		// previous one, so each train is approved exactly once.
-		val dispatcher =
-			object : Dispatcher {
-				override fun decide(observed: DispatchObservation): List<DispatchDecision> {
-					if (capturedTrainId.get() == null) {
-						observed.unapprovedTrains.firstOrNull()?.let { capturedTrainId.set(it.trainId) }
-					}
-					return listOf(DispatchDecision.NoAction)
-				}
-			}
-
-		val shuntingLoop = ShuntingLoop(context, endTime = 30L, dispatcher = dispatcher)
+		// SP0.11: ShuntingLoop no longer accepts a dispatcher. Train IDs are obtained from
+		// ShuntingLoop.getQueuedTrains(), which returns the observation data published at the
+		// start of each iteration, before the listener fires.
+		//
+		// The listener approves the first unapproved train each tick; approveQueuedTrain is
+		// idempotent since SP0.11 (silently no-ops if the train is already approved), so there
+		// is no risk of a crash from the async driver posting a duplicate ApproveTrain.
+		val shuntingLoop = ShuntingLoop(context, endTime = 30L)
 		shuntingLoopRef.set(shuntingLoop)
 		shuntingLoop.controlStepListener =
 			ControlStepListener {
-				// Consume-once: approve the id captured on a previous tick's decide() and
-				// clear it so it is never re-approved (which would throw in applyApproveTrain).
-				capturedTrainId.getAndSet(null)?.let { trainId ->
-					shuntingLoopRef.get()?.approveQueuedTrain(trainId)
+				val loop = shuntingLoopRef.get() ?: return@ControlStepListener
+				loop.getQueuedTrains().firstOrNull()?.let { obs ->
+					loop.approveQueuedTrain(obs.trainId)
 					approvedByCallback.incrementAndGet()
 				}
 			}
@@ -157,8 +107,8 @@ class ShuntingLoopControlStepListenerTest : KoinTestBase() {
 		assertThat(entered).isGreaterThanOrEqualTo(1)
 		// ...and the listener approved at least one via the callback...
 		assertThat(approvedByCallback.get()).isGreaterThanOrEqualTo(1)
-		// ...and it entered the approved set. Since the dispatcher never approves,
-		// this could only happen via approveQueuedTrain -> applyApproveTrain.
+		// ...and it entered the approved set. Since no dispatcher runs inline, this could
+		// only happen via approveQueuedTrain -> moved to approwedTrains.
 		assertThat(maxConcurrent).isGreaterThanOrEqualTo(1)
 	}
 }

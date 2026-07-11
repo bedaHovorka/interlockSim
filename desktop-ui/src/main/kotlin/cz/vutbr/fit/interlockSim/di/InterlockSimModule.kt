@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.context.EditingContextFactory
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationProcessFactory
+import cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule
 import cz.vutbr.fit.interlockSim.gui.Frame
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationStateCapture
 import cz.vutbr.fit.interlockSim.xml.XMLContextFactory
@@ -152,6 +153,7 @@ val interlockSimModule: Module =
 			xmlModule,
 			editingModule,
 			coreModule, // simulationCoreModule + navigationModule (commonMain, KMP-clean)
+			dispatcherAgentModule, // Goal 10 dispatcher singleton/scope bindings
 			simulationDesktopModule // JVM-only: ContextTransformer, DefaultSimulationContextFactory, ExampleRegistry
 			// NOTE: guiModule and animationModule are NOT included by default
 			// Load them explicitly when GUI is needed (edit mode, animated sim mode)

@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.SimulationEvent
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
 import cz.vutbr.fit.interlockSim.testutil.integrationTestModule
@@ -145,6 +146,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 					enableRealTimeSync = enableRealTimeSync,
 					initialSpeedMultiplier = speedMultiplier
 				)
+			wireSynchronousDispatcher(context, loop)
 			context.setMainProcess(loop)
 			context.run()
 
@@ -205,6 +207,7 @@ class SimulationSpeedGoldenTest : KoinTestBase() {
 			context.addPropertyChangeListener(listener)
 
 			val loop = ShuntingLoop(context, END_TIME_SECONDS)
+			wireSynchronousDispatcher(context, loop)
 			context.setMainProcess(loop)
 
 			val runner = SimulationRunner(context)
