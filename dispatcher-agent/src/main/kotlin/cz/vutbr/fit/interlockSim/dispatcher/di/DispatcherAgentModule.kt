@@ -40,6 +40,7 @@ import org.koin.dsl.module
 val dispatcherAgentModule: Module =
 	module {
 		// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
+		// In future, alternate implementations may include an Agentic/LLM dispatcher alongside Rule.
 		single<Dispatcher> { RuleBasedDispatcher() }
 
 		scope<DefaultSimulationContext> {
