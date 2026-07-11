@@ -42,7 +42,7 @@ import org.koin.test.get
  *   (graph size, occupied blocks, active reservations, train count)
  * - These tests MUST pass before merging any Koin changes
  *
- * @see <a href="https://github.com/bedavs/interlockSim">docs/KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
+ * @see <a href="https://github.com/bedaHovorka/interlockSim">docs/KOTLIN_STYLE_GUIDE.md - Dependency Injection with Koin</a>
  */
 @Tag("integration-test")
 class KoinGoldenOutputTest : KoinTestBase() {

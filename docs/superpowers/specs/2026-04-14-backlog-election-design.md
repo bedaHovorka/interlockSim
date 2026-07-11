@@ -10,7 +10,7 @@ issues, via weighted subagent voting on semantic dependency impact.
 
 ## Definitions
 
-- `X` = all open GitHub issues in `bedavs/interlockSim`
+- `X` = all open GitHub issues in `bedaHovorka/interlockSim`
 - `B ⊆ X` = issues whose milestone is `Backlog`
 - **Effect of `b ∈ B`**: the aggregated, voter-weighted degree to which
   completing `b` would help (unblock, simplify, enable, de-risk) other issues

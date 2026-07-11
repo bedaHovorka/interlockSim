@@ -214,12 +214,12 @@ env:
 
 **Before:**
 ```markdown
-[![Gradle Build with Java 11](https://github.com/bedavs/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](...)
+[![Gradle Build with Java 11](https://github.com/bedaHovorka/interlockSim/actions/workflows/ant-java11.yml/badge.svg)](...)
 ```
 
 **After:**
 ```markdown
-[![Gradle Build with Java 21](https://github.com/bedavs/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](...)
+[![Gradle Build with Java 21](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](...)
 ```
 
 ### CI/CD Testing

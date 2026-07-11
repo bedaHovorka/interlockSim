@@ -32,8 +32,8 @@ TEAM.md includes decision authority hierarchy, collaboration patterns, and railw
 
 Railway Interlocking Simulator - A BSc thesis project (2006/2007) from Brno University of Technology that simulates railway interlocking systems with a graphical editor and discrete event simulation engine.
 
-[![Gradle Build with Java 21](https://github.com/bedavs/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/gradle-java21.yml)
-[![SonarQube Analysis](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedavs/interlockSim/actions/workflows/sonarqube.yml)
+[![Gradle Build with Java 21](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/gradle-java21.yml)
+[![SonarQube Analysis](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml/badge.svg)](https://github.com/bedaHovorka/interlockSim/actions/workflows/sonarqube.yml)
 
 ## Build System
 
@@ -446,7 +446,7 @@ For complete logging configuration, runtime log level override, and output confi
 
 GitHub Actions workflow (`.github/workflows/gradle-java21.yml`) runs on push/PR to main/develop branches. Compiles with Java 21, runs tests, packages JAR (90-day artifact retention), caches dependencies.
 
-View build status: [GitHub Actions](https://github.com/bedavs/interlockSim/actions)
+View build status: [GitHub Actions](https://github.com/bedaHovorka/interlockSim/actions)
 
 ## Documentation
 
