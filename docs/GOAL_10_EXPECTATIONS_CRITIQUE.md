@@ -12,6 +12,21 @@ description across its three sources, and a concrete proposal for how to change 
 under the explicit constraint stated by the project owner: **limited resources, small
 examples only for now, and the first example is the paramount of all future effort.**
 
+> **⚠️ Owner decisions (2026-07-11, PR #631 review) — supersede the recommendations
+> below where they differ:**
+>
+> 1. **Goal 10's paramount example finally remains the `vyhybna.xml` shunting loop
+>    only** — candidate (a) in §5, not the Praha 5-train scenario this document
+>    recommended (R3, §5, §6 A2).
+> 2. **The Praha hlavní nádraží 5-train scenario becomes the paramount example of
+>    Goal 1B** — the follow-up slice that closes out Goal 1's unverified scale bar
+>    (#591: 5-train correctness, 20-train performance).
+> 3. **Goal 9 as shipped is judged not realistic**; a more realistic **Goal 9B**
+>    update will be prepared in the future, **after Goal 1B**.
+>
+> Read §5's recommendation and §6's Stage-A2 wording as historical analysis;
+> the Praha scenario's acceptance role moves from Goal 10 Stage A to Goal 1B.
+
 ---
 
 ## 1. Executive Summary
@@ -45,6 +60,8 @@ unachievable on that fixture with today's search).
 - **R3 — Pick the paramount example now and write it into the goal**: the
   **Praha 5-train scenario** (green in #591) as the Stage-A acceptance scenario,
   with the 20-train scenario as the Stage-C stretch measurement.
+  *(Superseded by owner decision 2026-07-11: Goal 10's paramount example stays the
+  shunting loop; Praha 5-train becomes Goal 1B's paramount example — see note above.)*
 - **R4 — Replace the unmeasurable success criteria** with metric-based ones that the
   existing telemetry can already compute, and re-express the latency budget in terms
   that make sense for a discrete-event engine.
@@ -240,7 +257,15 @@ goal. Candidates:
 | **(c) Praha 20-train** (#591 `twentyTrainStress`) | The true scale bar | Known-livelocked; blocked on P0–P2 of the #591 sequencing — cannot be the *first* example |
 
 **Recommendation: (a) as the Stage-A smoke slice, (b) as the paramount example, (c)
-as the Stage-C stretch measurement.** Concretely:
+as the Stage-C stretch measurement.**
+
+> **Owner decision (2026-07-11) — supersedes this recommendation:** Goal 10's
+> paramount example **remains (a), the shunting loop, only**. The Praha 5-train
+> scenario (b) is instead the **paramount example of Goal 1B** (the slice closing
+> #591's scale bar), and (c) stays a Goal 1B measurement. The staged-criteria
+> structure below still applies to Goal 10, with (a) as its example throughout.
+
+Concretely (as originally recommended):
 
 - The **vertical slice** (SP4) stays on `vyhybna.xml` — it proves the port seam
   closes the loop, cheaply.
