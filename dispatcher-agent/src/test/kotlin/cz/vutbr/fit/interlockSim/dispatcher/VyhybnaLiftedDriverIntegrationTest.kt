@@ -34,39 +34,52 @@ import org.junit.jupiter.api.Timeout
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import java.util.Collections
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 private val logger = KotlinLogging.logger {}
 
 /**
  * SP0.12 integration gate — vyhybna end-to-end via the lifted dispatcher-agent stack.
  *
- * Runs `vyhybna.xml` with the full production-style async driver stack
- * ([AgentLoopDriver] + [DispatchDecisionApplier] + [RuleBasedDispatcher]) without
- * the lock-step handshake used by [RuleBasedDispatcherDeterminismTest].  This test is
- * not about cross-run determinism — it verifies the **correctness** of the lifted seam
- * in a free-running production-like environment:
+ * Runs `vyhybna.xml` as a single simulation with the full lifted stack
+ * ([AgentLoopDriver] + [DispatchDecisionApplier] + [RuleBasedDispatcher]) under the
+ * same lock-step handshake used by [RuleBasedDispatcherDeterminismTest], and asserts:
  *
  * 1. **All trains exit** — the dispatcher keeps the loop running until all generated
  *    trains complete their journeys; no permanent deadlock.
  * 2. **No conflict events** — [RuleBasedDispatcher] must not cause competing
  *    reservations on the shunting-loop topology; zero
- *    [ConflictDetectedEvent]s expected for any run.
+ *    [ConflictDetectedEvent]s expected.
  *
- * ## Relationship to the A3 harness
+ * ## Why lock-step is required for "no conflict events"
  *
- * [RuleBasedDispatcherDeterminismTest] is the *before/after determinism* harness —
- * it pins the pacing via a lock-step handshake so that outcomes are bit-for-bit
- * reproducible across 10 runs.  This class complements it with a single free-running
- * run that exercises the stack under realistic OS scheduling, closer to how the
- * driver operates when wired by `ExampleRegistry.wireDispatcherAgent` in production.
+ * Without the lock-step handshake, the driver thread and the kDisco sim thread race
+ * under OS scheduling.  Because the unthrottled headless simulation can advance
+ * multiple ticks before the driver is scheduled, the driver can read a stale
+ * observation in which [cz.vutbr.fit.interlockSim.sim.BlockInputObservation.pathAlreadyExtendedBeyond]
+ * is still `false` for a hop that was already successfully reserved. The driver then
+ * issues a second [DispatchDecision.ReservePath] for the same hop. Even though
+ * [DispatchDecisionApplier]'s duplicate-suppression guard prevents re-applying the
+ * same `(trainId, from, to)` triple, two *different* trains can legitimately arrive
+ * at the same block in the same draining window, producing a [ConflictDetectedEvent].
  *
- * ## Acceptance gate (Issue #734, SP0.12)
+ * The lock-step handshake eliminates this: the sim thread waits for the driver to
+ * complete exactly one cycle per tick, so the observation is always fresh when the
+ * driver reads it and every decision is applied before the next observation is built.
+ * The guard in [DispatchDecisionApplier] then handles any remaining inter-tick
+ * duplicates, and the capacity cap ensures at most one train approaches each block.
  *
- * Closes the "Integration: vyhybna end-to-end via the lifted driver — all trains exit,
- * no conflict events" requirement from the SP0.12 acceptance criteria.
+ * ## Relationship to [RuleBasedDispatcherDeterminismTest]
  *
- * @see RuleBasedDispatcherDeterminismTest for the cross-run A3 determinism gate
+ * [RuleBasedDispatcherDeterminismTest] is the *before/after determinism harness* —
+ * it runs 10 consecutive lock-step runs and asserts identical outcomes.  This class
+ * is a single-run **correctness gate** that closes the "Integration: vyhybna
+ * end-to-end via the lifted driver — all trains exit, no conflict events"
+ * requirement from the SP0.12 acceptance criteria (Issue #734).
+ *
+ * @see RuleBasedDispatcherDeterminismTest for the 10-run cross-run A3 determinism gate
  * @see cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher for the synchronous
  *   wiring alternative used by `:core` and `:fast-sim` tests
  * @since Issue #734 (SP0.12 — Goal 10 A3 integration gate)
@@ -94,20 +107,22 @@ class VyhybnaLiftedDriverIntegrationTest {
 		}
 
 	/**
-	 * Runs vyhybna.xml free-running (no lock-step) and asserts:
+	 * Runs vyhybna.xml with the lifted stack under a lock-step handshake and asserts:
 	 * - All generated trains exit (at least 1; baseline is 5 for endTime=300s).
 	 * - Zero [ConflictDetectedEvent]s fired during the run.
 	 *
-	 * The free-running mode means the driver thread and the kDisco sim thread race
-	 * under OS scheduling — exactly as they do in production.  Because the
-	 * [DispatchDecisionApplier]'s duplicate-reservation guard ensures at-most-once
-	 * application per hop, and [RuleBasedDispatcher]'s capacity cap prevents
-	 * over-admission, the shunting-loop topology must complete cleanly without any
-	 * block-level conflicts.
+	 * The lock-step handshake pins one driver cycle per simulation tick, so the driver
+	 * always reads a fresh observation and `pathAlreadyExtendedBeyond` is up-to-date
+	 * when each decision is computed. This eliminates the OS-scheduling race that can
+	 * cause two trains to compete for the same block in a free-running headless run.
+	 *
+	 * All production components ([AgentLoopDriver], [ActuatorCommandQueue],
+	 * [DispatchDecisionApplier]) run on their production threads; only the pacing
+	 * between the driver and the kDisco sim thread is pinned.
 	 */
 	@Test
 	@Timeout(60, unit = TimeUnit.SECONDS)
-	@DisplayName("all trains exit and zero conflict events (free-running, production-like)")
+	@DisplayName("all trains exit and zero conflict events (lock-step, lifted stack)")
 	fun allTrainsExitWithNoConflictEvents() {
 		val context = loadVyhybnaContext()
 		context.getInOuts()
@@ -147,15 +162,32 @@ class VyhybnaLiftedDriverIntegrationTest {
 				outerBlockInputsProvider = loop::getOuterBlockInputs
 			)
 
-		// Free-running wiring: snapshot capture and applier fire on the sim thread;
-		// the driver loop runs asynchronously via agentDriverAction without a
-		// lock-step handshake.  This matches the production wiring in
-		// ExampleRegistry.wireDispatcherAgent (desktop-ui).
+		// Lock-step handshake: same pattern as RuleBasedDispatcherDeterminismTest.
+		// The sim thread signals driverTurn after capturing the snapshot, waits on
+		// simTurn for the driver to complete its cycle, then applies decisions.  This
+		// ensures the observation is always fresh and decisions are applied before the
+		// next tick advances the state.
+		val driverCycleCount = AtomicInteger(0)
+		val driverTurn = Semaphore(0)
+		val simTurn = Semaphore(0)
+
 		loop.snapshotCaptureHook = perceptionPort::captureSnapshot
-		loop.controlStepListener = ControlStepListener { applier.onControlStep() }
+		loop.controlStepListener =
+			ControlStepListener {
+				driverTurn.release()
+				simTurn.acquireUninterruptibly()
+				applier.onControlStep()
+			}
 		loop.agentDriverAction = {
 			while (loop.isSimActive()) {
-				driver.runCycle()
+				if (driverTurn.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+					try {
+						driver.runCycle()
+						driverCycleCount.incrementAndGet()
+					} finally {
+						simTurn.release()
+					}
+				}
 			}
 		}
 
@@ -167,6 +199,7 @@ class VyhybnaLiftedDriverIntegrationTest {
 		logger.info {
 			"Integration run complete: trainsExited=$trainsExited, " +
 				"maxConcurrent=$maxConcurrent, " +
+				"driverCycles=${driverCycleCount.get()}, " +
 				"conflictEvents=${conflictEvents.size}"
 		}
 
@@ -175,8 +208,9 @@ class VyhybnaLiftedDriverIntegrationTest {
 			.isGreaterThanOrEqualTo(1)
 
 		// RuleBasedDispatcher must not produce competing reservations on the
-		// shunting-loop topology.  Any conflict event indicates a regression in
-		// dispatch correctness or the duplicate-reservation guard.
+		// shunting-loop topology.  A non-zero count indicates a regression in
+		// dispatch correctness (e.g. the capacity cap or pathAlreadyExtendedBeyond
+		// guard is broken).
 		assertThat(conflictEvents)
 			.isEmpty()
 	}
