@@ -82,6 +82,22 @@ data class QueuedTrainObservation(
  *   [ShuntingLoop]). `null` when no FREE next separator exists, in which case the
  *   dispatcher emits [DispatchDecision.NoAction] for this input (the train waits
  *   and is reconsidered next tick).
+ *
+ *   **Populated only where a forward reservation is possible** (Issue #749). The shell
+ *   resolves it exclusively for inputs satisfying
+ *   `!pathAlreadyExtendedBeyond && (isApproachingThisInput || pathSetUpTowardThisInput)`;
+ *   for every other input — FREE, not approaching this input, or already extended beyond
+ *   it — this is `null` **without the search having been run**. Resolving it means a BFS
+ *   plus a per-candidate topological-path enumeration
+ *   ([PathReservationService.findNextReservationTarget][cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.findNextReservationTarget]);
+ *   running it for the ~98% of inputs whose value is then discarded cost ~9% of fast-sim
+ *   wall time.
+ *
+ *   A `null` here therefore means *"no forward-reservation target applies"*, not
+ *   *"the search found nothing"* — the two are indistinguishable to a dispatcher, and
+ *   both call for the same response (no reservation for this input on this tick).
+ *   Dispatcher implementations — including future LLM-backed ones — must not read
+ *   `toSeparatorName == null` as evidence that the track ahead is occupied.
  * @property state Occupancy state of the block.
  * @property ownerTrainId Name of the train associated with this block: the
  *   occupant's name when OCCUPIED, [cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock.trainName]

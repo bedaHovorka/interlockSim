@@ -392,20 +392,35 @@ class ShuntingLoop(
 				TrackFacility.State.RESERVED -> block.trainName
 				TrackFacility.State.OCCUPIED -> requireSimulationNotNull(block.getTrackOccupant()).name
 			}
-		val toSeparatorName = pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+		val isApproachingThisInput =
+			state == TrackFacility.State.OCCUPIED &&
+				requireSimulationNotNull(block.getTrackOccupant()).nextSemaphore() == to
+		val pathSetUpTowardThisInput =
+			state == TrackFacility.State.RESERVED &&
+				block.isSetUpPath(env.toDynamic(block.getSecondEnd(to)))
+		val pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
+
+		// Only inputs that can actually yield a forward reservation need a target searched for.
+		// findNextReservationTarget is a graph walk (BFS + per-candidate path enumeration); running
+		// it for FREE and already-extended inputs cost ~9% of fast-sim wall time (#738).
+		val canReserveForward =
+			!pathAlreadyExtendedBeyond &&
+				(isApproachingThisInput || pathSetUpTowardThisInput)
+		val toSeparatorName =
+			if (canReserveForward) {
+				pathReservationService.findNextReservationTarget(to)?.let(::nameOf)
+			} else {
+				null
+			}
 		return BlockInputObservation(
 			blockId = requireNotNull(block.name) { "ShuntingLoop-owned blocks are always named" },
 			towardSemaphoreName = to.name,
 			toSeparatorName = toSeparatorName,
 			state = state,
 			ownerTrainId = ownerTrainId,
-			isApproachingThisInput =
-				state == TrackFacility.State.OCCUPIED &&
-					requireSimulationNotNull(block.getTrackOccupant()).nextSemaphore() == to,
-			pathSetUpTowardThisInput =
-				state == TrackFacility.State.RESERVED &&
-					block.isSetUpPath(env.toDynamic(block.getSecondEnd(to))),
-			pathAlreadyExtendedBeyond = ownerTrainId != null && registry.isPathExtendedBeyond(ownerTrainId, to)
+			isApproachingThisInput = isApproachingThisInput,
+			pathSetUpTowardThisInput = pathSetUpTowardThisInput,
+			pathAlreadyExtendedBeyond = pathAlreadyExtendedBeyond
 		)
 	}
 
