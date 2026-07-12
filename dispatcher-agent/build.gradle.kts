@@ -206,3 +206,26 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.7")
 }
+
+// ===========================================
+// SonarQube per-module configuration
+// ===========================================
+//
+// The SonarQube Gradle plugin v6+ auto-detects source sets for every Kotlin JVM
+// subproject. If the root build.gradle.kts ALSO lists this module's source paths in
+// sonar.sources / sonar.tests, the same files get indexed twice, causing:
+//   "File ... can't be indexed twice. Please check that inclusion/exclusion patterns
+//    produce disjoint sets for main and test files"  (Issue #762)
+//
+// Fix: declare sources/tests explicitly here so the scanner uses ONLY this configuration
+// for the :dispatcher-agent module. The root sonar{} block intentionally omits these paths.
+
+sonar {
+    properties {
+        property("sonar.sources", "src/main/kotlin")
+        property("sonar.tests", "src/test/kotlin")
+        property("sonar.java.binaries", "build/classes/kotlin/main")
+        property("sonar.java.test.binaries", "build/classes/kotlin/test")
+        property("sonar.sourceEncoding", "UTF-8")
+    }
+}
