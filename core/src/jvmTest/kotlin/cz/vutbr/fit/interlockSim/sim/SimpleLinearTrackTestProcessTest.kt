@@ -61,14 +61,15 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 
 	private fun specAB(
 		inTime: Double = 1.0,
-		outTime: Double = 15.0
+		outTime: Double = 15.0,
+		length: Double = 20.0
 	): SimpleLinearTrackTestProcess.TrainSpec =
 		SimpleLinearTrackTestProcess.TrainSpec(
 			inName = "A",
 			outName = "B",
 			inTime = inTime,
 			outTime = outTime,
-			length = 20.0
+			length = length
 		)
 
 	/** Scenario 1: train follows a pre-reserved path A→B and makes genuine forward progress. */
@@ -244,4 +245,53 @@ class SimpleLinearTrackTestProcessTest : KoinTestBase() {
 		assertThat(train.totalDistance).isGreaterThan(distanceBeforeRelease)
 		assertThat(process.getBlockTransitions(train.name)).isGreaterThan(0)
 	}
+
+	/**
+	 * Scenario 5 (Issue #750/#760 follow-up): proves the `waitCrossing` block-boundary
+	 * conversion (Train.kt:254) actually locates each section boundary rather than hanging.
+	 * The A->Sem->B topology (linearPathWithSemaphoreSimulation) has two 100.0m blocks, so
+	 * reaching B means both boundary crossings fired; total distance exceeding the first
+	 * block's length is direct evidence the A->Sem crossing was located correctly.
+	 */
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `train crosses both block boundaries and reaches destination`() {
+		val ctx = loadLinearContext()
+		val inOuts = ctx.getInOuts().toList()
+		val a = inOuts.single { it.name == "A" }
+		val b = inOuts.single { it.name == "B" }
+		val reservationService = ctx.getRoutingServices().getPathReservationService()
+
+		var capturedTrain: Train? = null
+		val process =
+			SimpleLinearTrackTestProcess(
+				ctx,
+				endTime = 50L,
+				trainSpecs = listOf(specAB()),
+				onTrainCreated = { train ->
+					capturedTrain = train
+					val res = reservationService.reservePath(train.name, a, b)
+					assertThat(res).isInstanceOf<PathReservationService.ReservationResult.Success>()
+				}
+			)
+		ctx.setMainProcess(process)
+		ctx.run()
+
+		val train = requireNotNull(capturedTrain) { "onTrainCreated was never called" }
+		// Reaching B proves both waitCrossing block-boundary calls (A->Sem, Sem->B) fired.
+		assertThat(process.getTrainsExited()).isEqualTo(1)
+		// Exceeding the first block's length (100.0m) is direct evidence the A->Sem
+		// waitCrossing call actually located that boundary rather than stalling on it.
+		assertThat(train.totalDistance).isGreaterThan(100.0)
+	}
+
+	// Note: the tail-entry "already satisfied" branch (Train.kt:1072, `if (front.getTotalDistance()
+	// < tailEntryThreshold)`) is only reachable when `length <= dtMin` (1e-6) -- but `dtMin` is
+	// itself far below `ContinuousInvariantChecker`'s `maxAbsError` (1e-2), i.e. below the
+	// simulation's own numerical noise floor for front/tail position tracking. An end-to-end
+	// scenario exercising that branch (tried during this change's verification, e.g.
+	// length = 1e-7) reliably trips the invariant checker's FATAL guard well before completion --
+	// independent of waitUntil vs waitCrossing, since it is a property of train-length realism,
+	// not of the crossing-detection primitive. This degenerate branch is effectively unreachable
+	// for any physically valid train and is not exercised here for that reason.
 }

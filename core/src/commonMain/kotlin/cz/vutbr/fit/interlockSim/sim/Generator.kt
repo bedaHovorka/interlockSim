@@ -31,11 +31,13 @@ open class Generator(
 
 	override suspend fun startAction() {
 		dtMin = 1e-6
-		// Block-boundary and velocity-target events are now located by kDisco root-finding
+		// Block-boundary and tail-entry events are now located by kDisco root-finding
 		// (`Process.waitCrossing`, see Train.kt) rather than by step granularity, so `dtMax` no
-		// longer has to be tiny to keep event overshoot negligible. Raising it to kDisco's natural
-		// value lets the adaptive RKF45 error controller pick large steps during cruise, cutting
-		// derivative evaluations by orders of magnitude (Issue #750).
+		// longer has to be tiny to keep *those* events' overshoot negligible. Motor's
+		// AccelerationStopCondition (velocity-target detection, Train.kt) is NOT yet converted —
+		// it still relies on step granularity via plain `waitUntil` — so `dtMax` is deliberately
+		// left unchanged here rather than raised further; converting Motor and re-tuning dtMax
+		// is tracked separately (Issue #760, follow-up to #750).
 		dtMax = 1e-3
 		maxRelError = 1e-2
 		maxAbsError = 1e-2
