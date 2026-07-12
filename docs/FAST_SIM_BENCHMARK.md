@@ -99,3 +99,39 @@ The native `fast-sim` binary delivers substantial improvements for CLI simulatio
 
 These characteristics make the native binary ideal for scripting, CI/CD pipelines, batch
 simulation runs, and environments where JVM installation is undesirable.
+
+---
+
+## Supplementary: kDisco Kotlin Toolchain Evaluation (Issue #752)
+
+**Date:** 2026-07-11
+**Question:** Does upgrading kDisco's Kotlin `2.1.10 → 2.3.21` (kDisco PR [bedaHovorka/kdisco#52](https://github.com/bedaHovorka/kdisco/pull/52)) speed up `fast-sim`?
+
+### Method
+
+Published kDisco PR #52's branch to `mavenLocal` as `0.6.0-k2321-SNAPSHOT`, pointed a throwaway
+interlockSim worktree at it, rebuilt the native `linuxX64` release binary, measured
+`example shuntingLoop 300` (median of 7 runs, 5 trains, 211.1 s sim time).
+
+### Result: **performance-neutral**
+
+| kDisco build | Kotlin version | Wall-clock (median of 7) |
+|---|---|---|
+| 0.6.0 (current at evaluation) | 2.1.10 | **341 ms** |
+| 0.6.0-k2321-SNAPSHOT (PR #52) | 2.3.21 | **349 ms** |
+
+The 8 ms gap is **inside run-to-run noise** (±7%; the same binary measured 307–329 ms and
+336–348 ms across repeated batches). There is no measurable performance difference in either direction.
+
+### Conclusion
+
+kDisco PR #52 is **neither an optimisation nor a pessimisation** for `fast-sim`. It should be
+merged on toolchain-currency grounds rather than performance grounds.
+
+Caveat on scope: this rebuilds only the *kDisco library* with 2.3.21. The dominant hot code
+(`Train.Motor.derivatives`, ~1.85M calls/run, see [#750](https://github.com/bedaHovorka/interlockSim/issues/750))
+lives in interlockSim and is compiled by interlockSim's own Kotlin version. The RKF45 step-count
+problem (#750) dominates by two orders of magnitude; codegen changes are not the lever for that issue.
+
+kDisco CI run for the `to0.6.1` branch (which includes the PR #52 changes):
+[bedaHovorka/kdisco/actions/runs/29184671509](https://github.com/bedaHovorka/kdisco/actions/runs/29184671509) — ✅ **passed**
