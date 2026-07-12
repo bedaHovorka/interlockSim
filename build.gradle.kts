@@ -101,21 +101,23 @@ sonar {
         property("sonar.projectName", "interlockSim - Railway Interlocking Simulator")
         property("sonar.projectVersion", version.toString())
 
-        // Source and test paths (desktop-ui + :core KMP subproject + :dispatcher-agent).
+        // Source and test paths (desktop-ui + :core KMP subproject).
+        // :dispatcher-agent sources/tests are configured in dispatcher-agent/build.gradle.kts
+        // via its own sonar {} block to avoid double-indexing (SonarQube Gradle plugin v6
+        // auto-detects JVM subproject source sets; listing them here AND in the subproject
+        // causes "can't be indexed twice" errors — Issue #762).
         // Kept in sync with sonar-project.properties (used for local sonar-scanner runs).
         property(
             "sonar.sources",
             "desktop-ui/src/main/kotlin,core/src/commonMain/kotlin," +
-                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin," +
-                "dispatcher-agent/src/main/kotlin",
+                "core/src/jvmMain/kotlin,core/src/nativeMain/kotlin",
         )
         property(
             "sonar.tests",
-            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin," +
-                "dispatcher-agent/src/test/kotlin",
+            "desktop-ui/src/test/kotlin,core/src/commonTest/kotlin,core/src/jvmTest/kotlin",
         )
-        property("sonar.java.binaries",  "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main,dispatcher-agent/build/classes/kotlin/main")
-        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test,dispatcher-agent/build/classes/kotlin/test")
+        property("sonar.java.binaries", "desktop-ui/build/classes/kotlin/main,core/build/classes/kotlin/jvm/main")
+        property("sonar.java.test.binaries", "desktop-ui/build/classes/kotlin/test,core/build/classes/kotlin/jvm/test")
 
         property("sonar.java.source", javaVersion)
         property("sonar.java.target", javaVersion)
