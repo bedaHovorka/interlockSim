@@ -92,10 +92,10 @@ open class DefaultEditingContext(
 			.defaultContext()
 			.get()
 			.createScope(
-				// DefaultEditingContext does not override hashCode(), so this.hashCode()
-				// returns the identity hash code (equivalent to System.identityHashCode(this)).
-				// Each context instance gets a unique scope ID.
-				scopeId = this.hashCode().toString(),
+				// Uses a monotonic counter rather than an identity hash code, which is not
+				// guaranteed unique and can collide under high context creation volume
+				// (Issue #757).
+				scopeId = nextContextScopeId(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultEditingContext>(),
