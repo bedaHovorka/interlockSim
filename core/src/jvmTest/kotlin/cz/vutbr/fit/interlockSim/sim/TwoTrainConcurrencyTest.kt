@@ -138,13 +138,26 @@ class TwoTrainConcurrencyTest : KoinTestBase() {
 
 		// Per-train: each train's TRAIN_APPROVED must precede its own "ends" event.
 		// Trains may run sequentially, so global ordering across both trains is not required.
+		//
+		// Train names come from a process-global counter that is never reset (Train.countValue),
+		// so by the time this test runs the numbers may be multi-digit. Names must therefore be
+		// compared as extracted whole tokens: a substring test would match "Train #1" inside
+		// "Train #12". Likewise, positions must come from withIndex() rather than List.indexOf(),
+		// which returns the first *equal* LogEntry rather than this one.
 		val trainNameRegex = Regex("""Train #\d+""")
+
+		fun LogEntry.trainName(): String? = trainNameRegex.find(message)?.value
+
+		val indexOfEntry: (LogEntry) -> Int = { target ->
+			log.withIndex().first { (_, entry) -> entry === target }.index
+		}
+
 		for (approvalEntry in approvedEntries) {
-			val trainName = trainNameRegex.find(approvalEntry.message)?.value ?: continue
-			val approvalIdx = log.indexOf(approvalEntry)
-			val endsEntry = endsEntries.firstOrNull { it.message.contains(trainName) }
+			val trainName = approvalEntry.trainName() ?: continue
+			val approvalIdx = indexOfEntry(approvalEntry)
+			val endsEntry = endsEntries.firstOrNull { it.trainName() == trainName }
 			requireNotNull(endsEntry) { "No 'ends' event found for $trainName" }
-			val endsIdx = log.indexOf(endsEntry)
+			val endsIdx = indexOfEntry(endsEntry)
 			assertThat(endsIdx).isGreaterThan(approvalIdx)
 		}
 	}
