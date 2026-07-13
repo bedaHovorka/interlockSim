@@ -100,7 +100,7 @@ Use the animated GUI when you need live speed changes:
 ./gradlew runExampleGui
 
 # Equivalent manual JAR launch
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 For XML files loaded from the desktop UI, use **Simulation → Start...** and then adjust speed with:

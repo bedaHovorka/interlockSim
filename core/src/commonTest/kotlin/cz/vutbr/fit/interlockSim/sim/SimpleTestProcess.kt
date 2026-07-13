@@ -10,6 +10,10 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.ksimulantenbande.kdisco.Process
+import cz.ksimulantenbande.kdisco.dtMax
+import cz.ksimulantenbande.kdisco.dtMin
+import cz.ksimulantenbande.kdisco.maxAbsError
+import cz.ksimulantenbande.kdisco.maxRelError
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -121,6 +125,18 @@ class SimpleTestProcess(
 	 * The train's actions() method will then begin executing.
 	 */
 	override suspend fun startAction() {
+		// Mirrors Generator.startAction()'s physics tolerances (see Generator.kt). Unlike
+		// Generator, this coordinator never runs one, so without this the simulation falls
+		// back to kDisco's own raw defaults (dtMin=1e-5, maxAbsError=1e-5 -- nearly equal in
+		// magnitude). Train's block-boundary/tail-entry waitCrossing guards (Train.kt) are
+		// designed to leave a structural gap of exactly `dtMin` at the moment a threshold is
+		// reached (see Train.kt comments), which is negligible against the intended
+		// maxAbsError=1e-2 but can spuriously trip LengthChecker's invariant when dtMin and
+		// maxAbsError are left at kDisco's near-equal raw defaults instead.
+		dtMin = 1e-6
+		dtMax = 1e-3
+		maxRelError = 1e-2
+		maxAbsError = 1e-2
 		logger.debug { "SimpleTestProcess: Starting test with train ${train.name}" }
 		Process.activate(train) // CRITICAL: activate the train process
 	}

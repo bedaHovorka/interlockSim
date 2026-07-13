@@ -1879,7 +1879,7 @@ ls ~/.m2/repository/cz/ksimulantenbande/kdisco/kdisco-core-jvm/0.5.0/
 ./gradlew runSim                  # Pre-configured shunting loop example
 ./gradlew runEditor               # Launch editor GUI
 ./gradlew runExampleGui           # Animated GUI simulation (NEW)
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300  # Custom example
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024  # Custom example
 ```
 
 **Generate JavaDoc documentation:**
@@ -1915,8 +1915,8 @@ java -jar build/libs/interlockSim.jar example [exampleName] [endTime]
 ```bash
 java -jar build/libs/interlockSim.jar exampleGui [exampleName] [endTime]
 
-# Example: Run shunting loop with animation for 300 time units
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+# Example: Run shunting loop with animation for 1024 time units
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 To list available examples:
