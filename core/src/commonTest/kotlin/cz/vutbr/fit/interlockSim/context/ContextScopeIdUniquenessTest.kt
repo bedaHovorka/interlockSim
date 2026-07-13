@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.context
 
 import assertk.assertThat
 import assertk.assertions.hasSize
+import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -43,8 +44,11 @@ class ContextScopeIdUniquenessTest {
 
 	@Test
 	fun scopeIdsAreUniqueAcrossManyEditingContexts() {
-		// Enough instances that identity-hash-code collisions (31-bit space, birthday bound)
-		// would have been likely with the old implementation, without making the test slow.
+		// Enough instances to verify the new counter's uniqueness at a volume where a
+		// non-unique scheme (e.g. a naive hash) would already show collisions, without
+		// making the test slow. Note: 5,000 is below the ~77,000 birthday-bound 50% point
+		// of the old 31-bit identity-hash space, so this guard primarily validates the new
+		// counter rather than reproducing the old collision (Issue #757).
 		val count = 5_000
 		val scopeIds = mutableSetOf<String>()
 		val contexts = mutableListOf<DefaultEditingContext>()
@@ -64,7 +68,10 @@ class ContextScopeIdUniquenessTest {
 
 	@Test
 	fun nextContextScopeIdIsMonotonicAndUnique() {
-		val ids = (1..1_000).map { nextContextScopeId() }
+		val ids = (1..1_000).map { nextContextScopeId().toLong() }
+		// Unique by construction (atomic incrementAndGet)...
 		assertThat(ids.toSet()).hasSize(ids.size)
+		// ...and strictly increasing, matching the function's name.
+		assertThat(ids.zipWithNext().all { (a, b) -> a < b }).isTrue()
 	}
 }
