@@ -279,7 +279,7 @@ docker compose run app java -ea -jar interlockSim.jar example shuntingLoop 60
 ```bash
 ./gradlew runEditor                     # Launch GUI editor
 ./gradlew runSim                        # Run simulation
-./gradlew runExample -PexampleName=shuntingLoop -PendTime=300
+./gradlew runExample -PexampleName=shuntingLoop -PendTime=1024
 ```
 
 **Manual execution:**

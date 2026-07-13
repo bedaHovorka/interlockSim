@@ -226,15 +226,15 @@ Run pre-configured simulation scenarios:
 # List all available examples
 java -jar build/libs/interlockSim.jar example
 
-# Run shunting loop example for 300 time units
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+# Run shunting loop example for 1024 time units
+java -jar build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 **Quick example:**
 ```bash
-# Build and run shunting yard simulation (5 minutes model time)
+# Build and run shunting yard simulation (1024 seconds model time)
 ./gradlew clean build
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar build/libs/interlockSim.jar example shuntingLoop 1024
 ```
 
 ### 4. Animated GUI Simulation (NEW in 2026)
@@ -248,7 +248,7 @@ Run simulation examples with animated GUI:
 ./gradlew runExampleGui
 
 # Or manually after building
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 ![AnimatedSim GUI](text/img/Screenshot%20at%202026-02-04%2013-47-30.png)
@@ -273,14 +273,14 @@ java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
 **Example Usage:**
 
 ```bash
-# Run with default settings (shunting loop, 300 time units)
+# Run with default settings (shunting loop, 1024 time units)
 ./gradlew runExampleGui
 
 # Run specific example with custom duration
 java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 600
 
 # Docker users
-docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 300
+docker compose run app java -jar interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 **Performance:**
@@ -523,7 +523,7 @@ Edit `src/main/resources/logback.xml`:
 **Method 2: System property (runtime override)**
 
 ```bash
-java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 300
+java -Dlogback.level=DEBUG -cp "build/main:lib/compile/*" cz.vutbr.fit.interlockSim.Main example shuntingLoop 1024
 ```
 
 **Method 3: Environment variable (Docker)**

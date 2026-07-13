@@ -241,10 +241,27 @@ class Train :
 				requireSimulation(position.isStarted() && pv.isStarted()) {
 					"Position and velocity integration must be active"
 				}
-				waitUntil {
-					// dtmin - horni odhad zmeny pri poslednim kroku numericke metody behem dobrzdovani k uzlu
-					position.state + dtMin >= nextLength
-				}
+				// Resume when the front reaches the section boundary. This is a LEVEL condition
+				// ("the front has reached the boundary"), not an event, so it needs a
+				// level-triggered wait — but Issue #750 also wants the crossing time located by
+				// root-finding within one integration step so `dtMax` need not be tiny.
+				// `waitUntilCrossing` (kDisco, bedaHovorka/kdisco#71/#72) is exactly that: it
+				// resumes as soon as `guard() <= 0`, re-tested after every discrete event and every
+				// accepted step (so an asymptotic approach is never missed), and locates a
+				// within-step crossing by bisection.
+				//
+				// This replaces two earlier forms. Issue #750 step 1 used the edge-triggered
+				// `waitCrossing`, which permanently parked a train that decelerates to a stop at a
+				// semaphore located *at* the boundary: the braking law `a = -v² / (2s)`
+				// (`Motor.derivatives`) drives `v → 0` as `s → 0`, so the front halts a few
+				// nanometres short, the guard's sign change is missed, and — because
+				// `separatorAction`/`semaphoreAction`/the path re-query all sit downstream of this
+				// gate — the train goes silent for the rest of the run (the #797 deadlock: Train
+				// #16 stood at `zA` showing S80, on a reserved route, from t=676 to the end). The
+				// interim #797 fix used a plain `waitUntil`, which is safe but forfeits the
+				// root-finding precision. `waitUntilCrossing` keeps both. The `dtMin` slack still
+				// makes the threshold reachable for the asymptotic approach.
+				waitUntilCrossing { (nextLength - dtMin) - position.state }
 
 				position.state -= nextLength
 				totalLengthOfPreviousBlocks += nextLength
@@ -1054,7 +1071,14 @@ class Train :
 
 		Process.activate(front)
 
-		waitUntil { front.getTotalDistance() >= getLength() }
+		// Start the tail once the front has advanced one train-length. Same level-triggered,
+		// root-found wait as the block-boundary gate above (Issue #797 / kDisco#72): a front that
+		// decelerates to a stop within one train-length of entry asymptotes short of the
+		// threshold, so an edge-triggered `waitCrossing` would never fire and the tail would stay
+		// permanently outside the network. `waitUntilCrossing` resumes as soon as the level
+		// condition holds while still root-finding a within-step crossing. The `dtMin` slack makes
+		// the threshold reachable.
+		waitUntilCrossing { (getLength() - dtMin) - front.getTotalDistance() }
 		Process.activate(tail)
 
 		out()

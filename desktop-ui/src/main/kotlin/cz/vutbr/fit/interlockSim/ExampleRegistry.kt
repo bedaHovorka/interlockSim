@@ -33,6 +33,7 @@ import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
+import cz.vutbr.fit.interlockSim.sim.wireSynchronousDispatcher
 import cz.vutbr.fit.interlockSim.util.Resources
 import cz.vutbr.fit.interlockSim.util.Util
 
@@ -59,6 +60,7 @@ class ExampleRegistry {
 	val examples: Map<String, (SimulationContextFactory, Array<String>) -> SimulationContext> =
 		mapOf(
 			"shuntingLoop" to ::createShuntingLoopExample,
+			"shuntingLoopSync" to ::createShuntingLoopSyncExample,
 			"multiTrainLoop" to ::createMultiTrainLoopExample,
 			"threeTrainLoop" to ::createThreeTrainLoopExample
 		)
@@ -119,6 +121,50 @@ class ExampleRegistry {
 				context.getInOuts()
 				val loop = ShuntingLoop(context, time)
 				wireDispatcherAgent(context, loop, NoOpSimulationController)
+				context.setMainProcess(loop)
+				context
+			}
+	}
+
+	/**
+	 * Creates a shunting loop example wired with the plain [wireSynchronousDispatcher],
+	 * mirroring the native `fast-sim` CLI's `shuntingLoop` construction exactly.
+	 *
+	 * The default console `shuntingLoop` example runs the Goal 10 dispatcher-agent stack
+	 * ([wireDispatcherAgent], Issue #733), which does not exist on the native target —
+	 * so its output can never match `fast-sim.kexe` count-for-count. This `sync` variant
+	 * exists for cross-platform determinism validation: the CI compare-outputs job and
+	 * [cz.vutbr.fit.interlockSim.sim.CrossPlatformParityTest] compare its output against
+	 * the native binary's and require **exact** equality (kDisco RNG is bit-identical
+	 * across platforms since bedaHovorka/kdisco#69 was fixed).
+	 *
+	 * @param factory The simulation context factory
+	 * @param args Command line arguments (expects endTime as args[2])
+	 * @return Configured simulation context ready to run
+	 * @throws ContextCreationException if configuration fails or endTime is missing
+	 */
+	private fun createShuntingLoopSyncExample(
+		factory: SimulationContextFactory,
+		args: Array<String>
+	): SimulationContext {
+		if (args.size < 3) {
+			throw ContextCreationException("End time of simulation not specified")
+		}
+		val xml =
+			try {
+				Resources.read("cz/vutbr/fit/interlockSim/resource/vyhybna.xml")
+			} catch (e: IllegalArgumentException) {
+				throw ContextCreationException("Resource file vyhybna.xml not found", e)
+			}
+		return xml
+			.byteInputStream()
+			.use { stream ->
+				val context = Util.assertInstanceOf<DefaultSimulationContext>(factory.createContext(stream))
+				val time = args[2].toLong()
+				// Initialize dynamic wrapper map by calling getInOuts()
+				context.getInOuts()
+				val loop = ShuntingLoop(context, time)
+				wireSynchronousDispatcher(context, loop)
 				context.setMainProcess(loop)
 				context
 			}

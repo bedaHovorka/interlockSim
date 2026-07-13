@@ -33,6 +33,8 @@
  * target is enabled, nothing in commonMain has to move.
  */
 
+import java.time.Duration
+
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
@@ -356,6 +358,11 @@ val heavyTest by tasks.registering(Test::class) {
     group = "verification"
     description = "Run :core heavy tests (tagged with @Tag(\"heavy-test\")). " +
         "Run after changes to simulation logic to detect deadlocks, race conditions, or resource leaks."
+
+    // Whole-task ceiling: a healthy 1000-rep run takes ~13 min; a wedged run (deadlocked
+    // rep, hung Gradle test worker) must self-terminate instead of blocking forever.
+    // Per-repetition deadlock detection is the @Timeout(30 s) on the test method itself.
+    timeout.set(Duration.ofMinutes(20))
 
     useJUnitPlatform {
         includeTags("heavy-test")
