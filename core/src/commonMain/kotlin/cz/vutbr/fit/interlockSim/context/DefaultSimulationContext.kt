@@ -150,7 +150,7 @@ open class DefaultSimulationContext(
 			.defaultContext()
 			.get()
 			.createScope(
-				scopeId = platformIdentityCode(this),
+				scopeId = nextContextScopeId(),
 				qualifier =
 					org.koin.core.qualifier
 						.named<DefaultSimulationContext>(),
