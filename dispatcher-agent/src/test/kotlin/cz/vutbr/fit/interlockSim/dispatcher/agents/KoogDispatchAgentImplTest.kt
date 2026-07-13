@@ -30,7 +30,9 @@ class KoogDispatchAgentImplTest {
 	private val agent =
 		KoogDispatchAgentImpl(
 			tools = listOf(mockTool),
-			modelName = "mistral",
+			// Tool-capable model per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3
+			// (bare "mistral" / "llama2" are rejected — no native tool-calling).
+			modelName = "qwen2.5:7b-instruct",
 			systemPrompt = "You are a railway dispatcher"
 		)
 
@@ -66,6 +68,8 @@ class KoogDispatchAgentImplTest {
 		override val name: String,
 		override val description: String
 	) : DomainTool {
+		override val parameters: List<DomainToolParameter> = emptyList()
+
 		override suspend fun execute(args: Map<String, Any?>): Any? = "mock result"
 	}
 }

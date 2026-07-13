@@ -99,7 +99,11 @@ Tests use **tool-capable models per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md:**
 - **llama3.1:8b** (close second: mature function calling)
 - **gemma3:4b** (fast fallback: ≤ 4B footprint)
 
-Rejected non-tool models (e.g., llama2): no native tool-calling support, unsuitable for dispatcher agent role.
+Rejected non-tool models — the bare `mistral` (Mistral 7B Instruct v0.1) and `llama2`
+(Llama 2) Ollama tags predate native function-calling and are unsuitable for the
+dispatcher agent role. (Note: `mistral-nemo:12b` is a separate, larger tool-capable
+candidate — D3 in GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3 — not to be confused
+with the bare `mistral` tag.)
 
 Real LLM integration tests come in SP1.6 (#551).
 

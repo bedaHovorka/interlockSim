@@ -86,6 +86,8 @@ class DefaultAgentServiceTest {
 		override val name: String,
 		override val description: String
 	) : DomainTool {
+		override val parameters: List<DomainToolParameter> = emptyList()
+
 		override suspend fun execute(args: Map<String, Any?>): Any? = "mock result"
 	}
 }

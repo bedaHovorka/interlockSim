@@ -41,14 +41,17 @@ interface AgentService {
 	 * The agent is ready to execute decisions once created; the caller must wire it
 	 * into [AgentLoopDriver] for the sense→decide→act loop.
 	 *
-	 * @param modelName Ollama model identifier (e.g. "mistral", "llama2")
+	 * @param modelName Tool-capable Ollama model tag, e.g. "qwen2.5:7b-instruct",
+	 *   "llama3.1:8b", "gemma3:4b" (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3).
+	 *   The bare "mistral" (Mistral 7B) and "llama2" (Llama 2) tags are NOT accepted —
+	 *   they predate native function-calling and are rejected as dispatcher models.
 	 * @param tools Domain tools this agent can invoke (e.g. perception/actuator port adapters)
 	 * @param systemPrompt Optional system message to seed the agent's personality and
 	 *   domain knowledge. Defaults to a reasonable railway dispatch prompt if not provided.
 	 *
 	 * @return A configured Koog agent, ready for dispatch decisions
 	 *
-	 * @since Issue #551 (SP1.6 — full implementation); SP1.2 is skeleton only
+	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6)
 	 */
 	suspend fun createDispatchAgent(
 		modelName: String,
@@ -91,7 +94,7 @@ interface KoogDispatchAgent {
 	 * @param observation Current network state snapshot and train queue
 	 * @return List of dispatch decisions (empty list = no action this cycle)
 	 *
-	 * @since Issue #551 (SP1.6 — full implementation)
+	 * @since Issue #547 (SP1.2 — skeleton); full implementation in Issue #551 (SP1.6)
 	 */
 	suspend fun decideAsync(observation: DispatchObservation): List<DispatchDecision>
 }

@@ -14,6 +14,8 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
+import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogDispatchAgentImpl
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -58,5 +60,23 @@ class DispatcherAgentModuleAgentServiceTest {
 		assertThat(service2).isNotNull()
 		// Both should be the same instance (singleton scope)
 		assert(service1 === service2) { "AgentService should be a singleton" }
+	}
+
+	@Test
+	fun `Koin-resolved AgentService creates a dispatch agent`() {
+		runBlocking {
+			val service: AgentService by inject(AgentService::class.java)
+
+			val agent =
+				service.createDispatchAgent(
+					// Tool-capable model per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md §3
+					modelName = "qwen2.5:7b-instruct",
+					tools = emptyList(),
+					systemPrompt = null
+				)
+
+			assertThat(agent).isNotNull()
+			assertThat(agent).isInstanceOf(KoogDispatchAgentImpl::class)
+		}
 	}
 }
