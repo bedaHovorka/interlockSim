@@ -33,6 +33,18 @@ import interlocksim.lang.vocab.MovementAuthority as VocabMovementAuthority
  * | [HoldOrder]           | Dispatcher → Train      | Stůj / mimořádné zastavení            |
  * | [ConflictNotification]| Dispatcher → Dispatcher | nabídka/přijetí, traťový souhlas      |
  *
+ * ## Dispatcher↔Dispatcher Communication (multi-station setup)
+ *
+ * [ConflictNotification] extends naturally to interstation (traťový úsek) negotiation
+ * in a multi-dispatcher network. Station dispatchers use it to:
+ * - Negotiate occupancy rights of interstation track sections
+ * - Exchange direction/priority agreements for contested interstation blocks
+ * - Coordinate "line-direction agreement" (traťový souhlas) across station boundaries
+ *
+ * The current payload supports intra-station conflicts; extensions for interstation
+ * ownership negotiation can reuse the same [ConflictNotification] structure or
+ * define specialized subtypes as the multi-dispatcher architecture evolves.
+ *
  * ## Grammar (§4 of #533)
  *
  * ```
@@ -312,6 +324,21 @@ sealed interface Message {
 	 * and the dispatcher must decide priority. In a multi-dispatcher setup this
 	 * maps to the "nabídka/přijetí" (offer/acceptance) and "traťový souhlas"
 	 * (line-direction agreement) protocols of D1/D2.
+	 *
+	 * ## Interstation Extensions
+	 *
+	 * In a multi-station dispatching network, [ConflictNotification] naturally extends to
+	 * **interstation track negotiation** between adjacent station dispatchers:
+	 * - **Occupancy negotiation:** Which dispatcher retains ownership of an interstation block
+	 * - **Direction negotiation:** Which train direction (up-line/down-line) takes priority on
+	 *   a contested interstation section when both station dispatchers claim it
+	 * - **Line-direction protocol (traťový souhlas):** Formal offer/acceptance of
+	 *   interstation track utilization between stations
+	 *
+	 * The current payload supports intra-station conflicts. Future extensions can:
+	 * - Add metadata to distinguish intra-station vs. interstation conflicts
+	 * - Add originating station dispatcher identity for negotiation context
+	 * - Reuse this message type or define specialized subtypes as needs evolve
 	 *
 	 * Real-world analogue: "nabídka/přijetí", "traťový souhlas" (D1/D2).
 	 *
