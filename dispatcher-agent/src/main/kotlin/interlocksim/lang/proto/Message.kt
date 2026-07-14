@@ -140,7 +140,7 @@ sealed interface Message {
 		@LLMDescription("Movement authority bounding how far the train may proceed.")
 		val ma: VocabMovementAuthority
 	) : Message {
-		override fun humanReadable(): String = "Pro vlak $trainNumber postaveno a volno ($aspect)."
+		override fun humanReadable(): String = "Pro vlak $trainNumber postaveno a volno (${aspect.humanLabel()})."
 	}
 
 	// -------------------------------------------------------------------------

@@ -141,4 +141,16 @@ class AspectTest {
 			}
 		assertThat(labels.size).isEqualTo(aspects.size)
 	}
+
+	@Test
+	fun humanLabelReturnsProperCzechText() {
+		assertThat(Aspect.Stuj.humanLabel()).isEqualTo("Stůj")
+		assertThat(Aspect.Volno.humanLabel()).isEqualTo("Volno")
+		assertThat(Aspect.Vystraha.humanLabel()).isEqualTo("Výstraha")
+		assertThat(Aspect.Rychlost(40).humanLabel()).isEqualTo("Rychlost 40 km/h")
+		assertThat(Aspect.Ocekavejte(60).humanLabel()).isEqualTo("Očekávejte rychlost 60 km/h")
+		assertThat(Aspect.PrivolavaciNavest.humanLabel()).isEqualTo("Přivolávací návěst")
+		assertThat(Aspect.PosunDovolen.humanLabel()).isEqualTo("Posun dovolen")
+		assertThat(Aspect.PosunZakazan.humanLabel()).isEqualTo("Posun zakázán")
+	}
 }

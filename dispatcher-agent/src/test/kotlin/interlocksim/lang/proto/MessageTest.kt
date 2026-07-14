@@ -3,7 +3,6 @@ package interlocksim.lang.proto
 import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.isEqualTo
-import assertk.assertions.isNotEmpty
 import interlocksim.lang.vocab.Aspect
 import interlocksim.lang.vocab.BlockId
 import interlocksim.lang.vocab.MovementAuthority
@@ -119,10 +118,16 @@ class MessageTest {
 		}
 
 		@Test
-		fun humanReadableContainsTrainAndVolno() {
+		fun humanReadableContainsTrainAndAspect() {
 			val text = make().humanReadable()
 			assertThat(text).contains("6485")
-			assertThat(text).isNotEmpty()
+			assertThat(text).contains("Rychlost 40 km/h")
+		}
+
+		@Test
+		fun humanReadableContainsVolnoAspect() {
+			val text = make().copy(aspect = Aspect.Volno).humanReadable()
+			assertThat(text).contains("Volno")
 		}
 
 		@Test

@@ -41,6 +41,21 @@ import kotlinx.serialization.Serializable
 @LLMDescription("Czech railway signal aspect (návěst) used by the SP3 operating language.")
 sealed interface Aspect {
 	/**
+	 * Czech human-readable label for this aspect, suitable for log output and [Message.humanReadable] text.
+	 */
+	fun humanLabel(): String =
+		when (this) {
+			is Stuj -> "Stůj"
+			is Volno -> "Volno"
+			is Vystraha -> "Výstraha"
+			is Rychlost -> "Rychlost $kmh km/h"
+			is Ocekavejte -> "Očekávejte rychlost $kmh km/h"
+			is PrivolavaciNavest -> "Přivolávací návěst"
+			is PosunDovolen -> "Posun dovolen"
+			is PosunZakazan -> "Posun zakázán"
+		}
+
+	/**
 	 * Stůj — stop at the signal.
 	 *
 	 * Absolute stop aspect; shown as a red light.
