@@ -1931,6 +1931,8 @@ java -jar build/libs/interlockSim.jar example
 **Docker Services:**
 - **app:** Java application with X11 GUI support
 - **text:** LaTeX thesis compilation
+- **ollama:** Local Ollama LLM server for `dispatcher-agent`'s `ollama-test`-tagged tests (see
+  "Local Ollama for dispatcher-agent Tests" below)
 
 **Build services:**
 ```bash
@@ -1986,6 +1988,35 @@ docker compose build app
 **Docker Architecture:**
 
 Multi-stage Dockerfile: Builder stage (Temurin 21 JDK, compiles, tests, creates uber JAR) → Runner stage (Temurin 21 JRE, X11 support). `text/Dockerfile` for LaTeX thesis compilation (Debian Bookworm, TeX Live).
+
+### Local Ollama for dispatcher-agent Tests
+
+`dispatcher-agent`'s `OllamaExecutorConfigTest` has one real proof-of-connection test
+(`@Tag("ollama-test")`, Issue #548 / SP1.3) that hits a live local Ollama instance via Koog's
+`OllamaClient` and checks that the configured model (`qwen2.5:7b-instruct`) is pulled and
+reports tool-calling support. `dispatcher-agent`'s `integrationTest` Gradle task decides
+whether this tag is even included by probing `localhost:11434` when it actually runs — no
+manual flag needed, just have Ollama reachable before invoking Gradle:
+
+- **Native install** (if you already have Ollama, e.g. `ollama serve` running as a background
+  service): nothing to configure — the probe finds it on the default port.
+- **No native install:** `docker compose up -d ollama` brings up an Ollama server on the same
+  port (11434) as an alternative — don't run both at once, they'd conflict on the port.
+
+Either way, pull the model once:
+```bash
+ollama pull qwen2.5:7b-instruct                        # native
+docker compose exec ollama ollama pull qwen2.5:7b-instruct   # containerized
+```
+
+**Behavior asymmetry (intentional, Issue #548):**
+- **Locally**, `integrationTest` **fails the build outright** if Ollama isn't reachable — no
+  silent skip. You must have it running (native or `docker compose up -d ollama`) before the
+  `ollama-test`-tagged test can pass.
+- **In CI** (`CI`/`GITHUB_ACTIONS` env var set), an unreachable Ollama instead logs a `WARN`
+  and excludes `ollama-test` for that run. GitHub Actions is intentionally kept Ollama-free —
+  real LLM-output benchmarking against a live model is SP3.5/SP2b.9's job (see
+  `docs/GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md` §7), not SP1.3's config/connectivity scope.
 
 **X11 Forwarding Troubleshooting:**
 

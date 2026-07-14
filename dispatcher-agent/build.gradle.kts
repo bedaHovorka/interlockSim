@@ -30,6 +30,11 @@
  * @since Issue #540 (SP0.1 — Goal 10)
  */
 
+import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.Socket
+
 plugins {
     kotlin("jvm")
     id("io.gitlab.arturbosch.detekt")
@@ -99,7 +104,10 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("integration-test", "heavy-test")
+        // "ollama-test" (SP1.3, Issue #548): proof-of-connection tests against a real local
+        // Ollama instance. Never run as part of the plain unit-test task; only conditionally
+        // included by the `integrationTest` task below, based on a live reachability probe.
+        excludeTags("integration-test", "heavy-test", "ollama-test")
     }
     jvmArgs("-ea")
 
@@ -109,13 +117,32 @@ tasks.test {
     }
 }
 
+/**
+ * Whether Ollama answers on its default port. Checked fresh every time [integrationTest]
+ * actually executes (see the `doFirst` block below) rather than once at configuration time,
+ * since local Ollama availability can change between builds.
+ */
+fun isOllamaReachable(): Boolean =
+    try {
+        Socket().use {
+            it.connect(InetSocketAddress("localhost", 11434), 300)
+        }
+        true
+    } catch (e: IOException) {
+        false
+    }
+
+// GitHub Actions sets both CI=true and GITHUB_ACTIONS=true; checking either covers CI running
+// outside GitHub Actions too, without hardcoding a single CI vendor's env var.
+val isCi = System.getenv("CI") == "true" || System.getenv("GITHUB_ACTIONS") == "true"
+
 val integrationTest by tasks.registering(Test::class) {
     group = "verification"
     description = "Run integration tests (tagged with @Tag(\"integration-test\"))"
 
     useJUnitPlatform {
         includeTags("integration-test")
-        excludeTags("heavy-test")
+        excludeTags("heavy-test", "ollama-test")
     }
 
     jvmArgs("-ea")
@@ -141,6 +168,32 @@ val integrationTest by tasks.registering(Test::class) {
             .get()
             .output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
+
+    // SP1.3 (Issue #548): decide whether "ollama-test"-tagged tests are part of this run based
+    // on a live reachability probe, not a manual flag. CI is intentionally Ollama-free (real
+    // LLM-output benchmarking is SP3.5/SP2b.9's job, not SP1.3's) so an unreachable Ollama there
+    // just warns and excludes the tag. Locally, an unreachable Ollama fails the build outright —
+    // integrationTest must not silently skip its proof-of-connection coverage on a dev machine.
+    doFirst {
+        val ollamaAvailable = isOllamaReachable()
+        if (!ollamaAvailable) {
+            if (isCi) {
+                logger.warn(
+                    "Ollama not reachable at localhost:11434 - excluding ollama-test-tagged tests (expected in CI)",
+                )
+            } else {
+                throw org.gradle.api.GradleException(
+                    "Ollama not reachable at localhost:11434. Local integrationTest requires Ollama - " +
+                        "start it natively ('ollama serve') or via 'docker compose up -d ollama', then retry.",
+                )
+            }
+        }
+        val options = options as JUnitPlatformOptions
+        options.setIncludeTags(
+            if (ollamaAvailable) setOf("integration-test", "ollama-test") else setOf("integration-test"),
+        )
+        options.setExcludeTags(setOf("heavy-test"))
+    }
 }
 
 // ===========================================
