@@ -16,6 +16,7 @@ pluginManagement {
 		id("io.gitlab.arturbosch.detekt") version detektPluginVersion
 		id("org.jetbrains.kotlin.jvm") version kotlinVersion
 		id("org.jetbrains.kotlin.multiplatform") version kotlinVersion
+		id("org.jetbrains.kotlin.plugin.serialization") version kotlinVersion
 		id("app.cash.burst") version burstVersion
 		id("dev.mokkery") version mokkeryVersion
 	}
