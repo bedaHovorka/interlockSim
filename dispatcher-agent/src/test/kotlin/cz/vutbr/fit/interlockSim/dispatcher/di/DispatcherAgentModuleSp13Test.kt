@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -24,17 +25,19 @@ import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.inject
 
 /**
- * Unit tests for SP1.3 Koin bindings in [dispatcherAgentModule] (Issue #548).
+ * Unit tests for SP1.3-SP1.4 Koin bindings in [dispatcherAgentModule] (Issue #548/#549).
  *
  * Tests that the module correctly wires:
  * - Singleton [OllamaExecutorConfig]
  * - Singleton [ToolGroupRegistry]
- * - Per-context [KoogAgentFactory]
+ * - Per-context [KoogAgentFactory] (SP1.4 updated to accept ports)
+ * - Per-context [NetworkPerceptionPort] (SP1.4)
+ * - Per-context [NetworkActuatorPort] (SP1.4)
  *
- * Full per-context agent instantiation testing deferred to SP1.4+ once
+ * Full per-context agent instantiation testing deferred to SP1.5+ once
  * tool implementations are available.
  *
- * @since Issue #548 (SP1.3 — Goal 10)
+ * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port bindings
  */
 class DispatcherAgentModuleSp13Test {
 	@BeforeEach
@@ -101,12 +104,17 @@ class DispatcherAgentModuleSp13Test {
 	fun toolGroupRegistryStartsWithEmptyToolLists() {
 		val registry: ToolGroupRegistry by inject(ToolGroupRegistry::class.java)
 
-		val allTools = registry.assembleAllTools()
-		val perceptionTools = registry.assemblePerceptionTools()
-		val actuatorTools = registry.assembleActuatorTools()
+		// SP1.4: Registry now requires ports to assemble tools.
+		// Since this test is at the singleton level (no context scope),
+		// we create mock ports just to verify the registry accepts them.
+		val mockPerceptionPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
+		val mockActuatorPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort>()
 
-		// SP1.3 skeleton: all tool lists are empty
-		// SP1.4 will populate them via perception/actuator port implementations
+		val allTools = registry.assembleAllTools(mockPerceptionPort, mockActuatorPort)
+		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
+		val actuatorTools = registry.assembleActuatorTools(mockActuatorPort)
+
+		// SP1.4: Port infrastructure in place; tool lists still empty (implementations in SP1.6)
 		assertThat(allTools).isInstanceOf(List::class)
 		assertThat(perceptionTools).isInstanceOf(List::class)
 		assertThat(actuatorTools).isInstanceOf(List::class)
