@@ -126,6 +126,32 @@ services:
     container_name: interlocksim-fast-sim
     command: ["example", "shuntingLoop", "60"]
 
+  # Local Ollama LLM server for dispatcher-agent's SP1.3 (Issue #548) proof-of-connection
+  # test (@Tag("ollama-test")) and, later, SP1.5's real executor. This is an ALTERNATIVE
+  # to a native Ollama install, not a companion to one -- both publish port 11434, so only
+  # run this if you don't already have `ollama serve` running on the host.
+  #
+  # On startup, pulls qwen2.5:7b-instruct only if it isn't already present in the
+  # ollama-data volume (so restarts after the first run don't re-pull ~4.7GB).
+  #
+  # Usage:
+  #   docker compose up -d ollama
+  #   ./gradlew :dispatcher-agent:integrationTest   # auto-detects localhost:11434, no config needed
+  ollama:
+    image: ollama/ollama:latest
+    container_name: interlocksim-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama list | grep -q "qwen2.5:7b-instruct" || ollama pull qwen2.5:7b-instruct
+        wait
+
   # Build LaTeX thesis with Czech language tools
   text:
     build:
@@ -154,5 +180,6 @@ secrets:
     environment: GITHUB_TOKEN
 
 # Note: BuildKit cache mounts are managed in Dockerfiles, not here
-# Runtime volumes can be added here if needed in the future
-volumes: {}
+# ollama-data persists pulled models across `docker compose down`/`up` cycles.
+volumes:
+  ollama-data:
