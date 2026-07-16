@@ -37,6 +37,7 @@ import java.net.Socket
 
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
     id("io.gitlab.arturbosch.detekt")
     id("org.jlleitschuh.gradle.ktlint")
     jacoco
@@ -53,6 +54,7 @@ val slf4jVersion: String by project
 val mockkVersion: String by project
 val coroutinesVersion: String by project
 val koogVersion: String by project
+val serializationVersion: String by project
 
 group = "cz.vutbr.fit"
 version = "1.0"
@@ -84,6 +86,12 @@ dependencies {
 
     // Koog: LLM agent framework for SP1 (Goal 10 dispatcher agent runtime, Issue #547)
     implementation("ai.koog:koog-agents:$koogVersion")
+
+    // kotlinx.serialization: SP3.2 vocab and SP3.3 proto packages use @Serializable
+    // The core and json libs are also available transitively through koog-agents,
+    // but listed explicitly here for compile-time clarity and stable versioning.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$serializationVersion")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
 
     // Test dependencies
     testImplementation(project(":core-test"))
