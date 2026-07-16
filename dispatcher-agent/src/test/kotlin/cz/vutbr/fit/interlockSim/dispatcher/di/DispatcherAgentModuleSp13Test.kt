@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.di
 
 import assertk.assertThat
+import assertk.assertions.isEmpty
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
@@ -115,8 +116,8 @@ class DispatcherAgentModuleSp13Test {
 		val actuatorTools = registry.assembleActuatorTools(mockActuatorPort)
 
 		// SP1.4: Port infrastructure in place; tool lists still empty (implementations in SP1.6)
-		assertThat(allTools).isInstanceOf(List::class)
-		assertThat(perceptionTools).isInstanceOf(List::class)
-		assertThat(actuatorTools).isInstanceOf(List::class)
+		assertThat(allTools).isEmpty()
+		assertThat(perceptionTools).isEmpty()
+		assertThat(actuatorTools).isEmpty()
 	}
 }

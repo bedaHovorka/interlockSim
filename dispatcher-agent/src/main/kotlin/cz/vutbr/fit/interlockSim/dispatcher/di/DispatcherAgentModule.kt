@@ -118,7 +118,7 @@ val dispatcherAgentModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultNetworkPerceptionPort(
 					env = context,
-					activeTrains = { emptyList() } // TODO: SP1.5 populate per main process type
+					activeTrains = { emptyList() } // TODO: SP1.4b #768 populate per main process type
 				)
 			}
 
