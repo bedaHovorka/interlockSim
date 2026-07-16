@@ -35,6 +35,7 @@
 
 plugins {
     kotlin("multiplatform")
+    kotlin("plugin.serialization")
     id("io.gitlab.arturbosch.detekt")
     id("org.jlleitschuh.gradle.ktlint")
     id("app.cash.burst")
@@ -55,6 +56,7 @@ val mockkVersion: String by project
 val koinVersion: String by project
 val coroutinesVersion: String by project
 val xmlutilVersion: String by project
+val serializationVersion: String by project
 val kotlinxIoVersion: String by project
 val ktlintVersion: String by project
 val atomicfuVersion: String by project
@@ -136,6 +138,13 @@ kotlin {
                 // runBlocking needed for DefaultSimulationContext (bridging suspend Simulation.run())
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
                 implementation("io.github.pdvrieze.xmlutil:core:$xmlutilVersion")
+                // kotlinx.serialization: SP3.2 operating-vocabulary types (Aspect, identifiers,
+                // TrainRoute, MovementAuthority, …) live in :core commonMain so they are reachable
+                // from :fast-sim linuxX64 and shareable by the dispatcher agent runtime. KMP-clean
+                // (jvm + linuxX64 klibs), satisfies the commonMain purity gate. Version aligned with
+                // the transitive dep brought in by koog-agents (see :dispatcher-agent).
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$serializationVersion")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
                 // kotlinx-io: multiplatform file I/O — used by native Resources actual to read
                 // resource files from disk (JVM uses classpath instead).
                 implementation("org.jetbrains.kotlinx:kotlinx-io-core:$kotlinxIoVersion")
