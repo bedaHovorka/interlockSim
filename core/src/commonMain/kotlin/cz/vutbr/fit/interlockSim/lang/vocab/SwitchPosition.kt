@@ -1,6 +1,5 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -16,13 +15,10 @@ import kotlinx.serialization.Serializable
  * @since Issue #570 (SP3.2 — Goal 10)
  */
 @Serializable
-@LLMDescription("Switch (výhybka) position: PLUS for normal/straight route, MINUS for diverging route.")
 enum class SwitchPosition {
 	@SerialName("plus")
-	@LLMDescription("Normal or direct switch position (přímý směr).")
 	PLUS,
 
 	@SerialName("minus")
-	@LLMDescription("Diverging switch position (odbočný směr).")
 	MINUS
 }

@@ -1,6 +1,5 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.serialization.Serializable
 
 /**
@@ -17,10 +16,7 @@ import kotlinx.serialization.Serializable
  * @since Issue #570 (SP3.2 — Goal 10)
  */
 @Serializable
-@LLMDescription("Required setting for one switch in a train or shunting route.")
 data class SwitchSetting(
-	@LLMDescription("Switch to be set.")
 	val switch: SwitchId,
-	@LLMDescription("Requested switch position.")
 	val position: SwitchPosition
 )

@@ -1,14 +1,14 @@
-package interlocksim.lang.proto
+package cz.vutbr.fit.interlockSim.lang.proto
 
 import ai.koog.agents.core.tools.annotations.LLMDescription
-import interlocksim.lang.vocab.Aspect
-import interlocksim.lang.vocab.BlockId
-import interlocksim.lang.vocab.SignalId
-import interlocksim.lang.vocab.TrackId
-import interlocksim.lang.vocab.TrainRoute
+import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
+import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
+import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
+import cz.vutbr.fit.interlockSim.lang.vocab.TrackId
+import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import interlocksim.lang.vocab.MovementAuthority as VocabMovementAuthority
+import cz.vutbr.fit.interlockSim.lang.vocab.MovementAuthority as VocabMovementAuthority
 
 /**
  * Common inter-agent message envelope with 8 starter speech acts (SP3.3, Issue #571).
@@ -25,12 +25,12 @@ import interlocksim.lang.vocab.MovementAuthority as VocabMovementAuthority
  * | Speech act            | Direction               | Czech act                              |
  * |-----------------------|-------------------------|----------------------------------------|
  * | [RouteRequest]        | Train → Dispatcher      | žádost o vlakovou cestu               |
- * | [RouteGrant]          | Dispatcher → Train      | "postaveno a volno"                    |
- * | [RouteDenial]         | Dispatcher → Train      | "Nikoliv, čekejte."                    |
- * | [MovementAuthority]   | Dispatcher → Train      | oprávnění k jízdě / rozkaz k odjezdu  |
- * | [PositionReport]      | Train → Dispatcher      | poloha vlaku                          |
- * | [OccupancyReport]     | Interlocking → Dispatcher | odhláška / kolejový obvod indikace   |
- * | [HoldOrder]           | Dispatcher → Train      | Stůj / mimořádné zastavení            |
+ * | [RouteGrant]          | Dispatcher → Train       | "postaveno a volno"                    |
+ * | [RouteDenial]         | Dispatcher → Train       | "Nikoliv, čekejte."                    |
+ * | [MovementAuthority]   | Dispatcher → Train       | oprávnění k jízdě / rozkaz k odjezdu  |
+ * | [PositionReport]      | Train → Dispatcher       | poloha vlaku                          |
+ * | [OccupancyReport]     | Interlocking → Dispatcher | odhláška / indikace kolejového obvodu   |
+ * | [HoldOrder]           | Dispatcher → Train       | Stůj / mimořádné zastavení            |
  * | [ConflictNotification]| Dispatcher → Dispatcher | nabídka/přijetí, traťový souhlas      |
  *
  * ## Dispatcher↔Dispatcher Communication (multi-station setup)
@@ -57,7 +57,9 @@ import interlocksim.lang.vocab.MovementAuthority as VocabMovementAuthority
  * ## Serialisation
  *
  * All subtypes are `@Serializable`. The `type` discriminator field in JSON uses
- * the stable `@SerialName` values defined on each subtype.
+ * the stable `@SerialName` values defined on each subtype. Production (de)serialisation
+ * MUST go through [cz.vutbr.fit.interlockSim.lang.LangSerialization.json] so the wire contract
+ * is stable and forward-compatible (`ignoreUnknownKeys = true`).
  *
  * @since Issue #571 (SP3.3 — Goal 10)
  */
@@ -73,7 +75,14 @@ sealed interface Message {
 	/** Agent that should receive the message. */
 	val receiver: AgentRef
 
-	/** Simulation time (kDisco tick) at which the message was created. */
+	/**
+	 * Simulation time in **kDisco ticks** (an abstract `Long` counter, not wall-clock time) at
+	 * which the message was created.
+	 *
+	 * Note: core's [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot.simTime] is `Double` *seconds*.
+	 * An adapter converts between the two representations where the agent layer meets the
+	 * simulation core (deferred to #572, InterlockingFacade).
+	 */
 	val simTime: Long
 
 	/** Train number this message concerns, or null for system-level messages. */
@@ -86,6 +95,12 @@ sealed interface Message {
 	 * Phrased in the style of real Czech dispatcher↔driver communication.
 	 */
 	fun humanReadable(): String
+
+	/**
+	 * Czech label for [trainNumber], substituting `"(neznámý vlak)"` when it is null so
+	 * [humanReadable] output is grammatical for system-level messages.
+	 */
+	fun trainLabel(): String = trainNumber ?: "(neznámý vlak)"
 
 	// -------------------------------------------------------------------------
 	// 1. RouteRequest — Train → Dispatcher
@@ -116,7 +131,7 @@ sealed interface Message {
 		@LLMDescription("Target track the train wants to reach, if known.")
 		val desiredTrack: TrackId? = null
 	) : Message {
-		override fun humanReadable(): String = "Vlak $trainNumber žádá vlakovou cestu u návěstidla ${atSignal.name}."
+		override fun humanReadable(): String = "Vlak ${trainLabel()} žádá vlakovou cestu u návěstidla ${atSignal.name}."
 	}
 
 	// -------------------------------------------------------------------------
@@ -152,7 +167,7 @@ sealed interface Message {
 		@LLMDescription("Movement authority bounding how far the train may proceed.")
 		val ma: VocabMovementAuthority
 	) : Message {
-		override fun humanReadable(): String = "Pro vlak $trainNumber postaveno a volno (${aspect.humanLabel()})."
+		override fun humanReadable(): String = "Pro vlak ${trainLabel()} postaveno a volno (${aspect.humanLabel()})."
 	}
 
 	// -------------------------------------------------------------------------
@@ -181,7 +196,7 @@ sealed interface Message {
 		@LLMDescription("Human-readable reason for the denial, e.g. section occupied.")
 		val reason: String
 	) : Message {
-		override fun humanReadable(): String = "Nikoliv, čekejte. Vlak $trainNumber: $reason."
+		override fun humanReadable(): String = "Nikoliv, čekejte. Vlak ${trainLabel()}: $reason."
 	}
 
 	// -------------------------------------------------------------------------
@@ -211,7 +226,7 @@ sealed interface Message {
 		val authority: VocabMovementAuthority
 	) : Message {
 		override fun humanReadable(): String =
-			"Rozkaz k odjezdu vlak $trainNumber: jeďte do ${authority.target.name}, " +
+			"Rozkaz k odjezdu vlaku ${trainLabel()}: jeďte do ${authority.target.name}, " +
 				"max ${authority.speedLimitKmh} km/h."
 	}
 
@@ -243,7 +258,7 @@ sealed interface Message {
 		@LLMDescription("Current train speed in kilometres per hour.")
 		val speedKmh: Int
 	) : Message {
-		override fun humanReadable(): String = "Vlak $trainNumber v úseku ${block.name}, rychlost $speedKmh km/h."
+		override fun humanReadable(): String = "Vlak ${trainLabel()} v úseku ${block.name}, rychlost $speedKmh km/h."
 	}
 
 	// -------------------------------------------------------------------------
@@ -264,7 +279,7 @@ sealed interface Message {
 	 */
 	@Serializable
 	@SerialName("occupancy_report")
-	@LLMDescription("Interlocking reports a block section entering or leaving occupied state (kolejový obvod indikace).")
+	@LLMDescription("Interlocking reports block occupancy change (indikace kolejového obvodu).")
 	data class OccupancyReport(
 		override val messageId: String,
 		override val sender: AgentRef,
@@ -278,7 +293,7 @@ sealed interface Message {
 	) : Message {
 		override fun humanReadable(): String =
 			if (occupied) {
-				"Vlak $trainNumber vstoupil do úseku ${block.name}."
+				"Vlak ${trainLabel()} vstoupil do úseku ${block.name}."
 			} else {
 				"Úsek ${block.name} volný."
 			}
@@ -310,7 +325,7 @@ sealed interface Message {
 		@LLMDescription("Signal at which the train must stop.")
 		val atSignal: SignalId
 	) : Message {
-		override fun humanReadable(): String = "Stůj u návěstidla ${atSignal.name}. Vlak $trainNumber."
+		override fun humanReadable(): String = "Stůj u návěstidla ${atSignal.name}. Vlak ${trainLabel()}."
 	}
 
 	// -------------------------------------------------------------------------
@@ -343,7 +358,9 @@ sealed interface Message {
 	 * Real-world analogue: "nabídka/přijetí", "traťový souhlas" (D1/D2).
 	 *
 	 * @property block     The contended block section.
-	 * @property competing Train numbers of all trains competing for the block.
+	 * @property competing Train numbers of all trains competing for the block; **must be non-empty**
+	 *                     (a conflict with zero competing trains is meaningless). Rejected at
+	 *                     construction by an `init` check.
 	 */
 	@Serializable
 	@SerialName("conflict_notification")
@@ -356,9 +373,13 @@ sealed interface Message {
 		override val trainNumber: String?,
 		@LLMDescription("Block section that is contested by multiple trains.")
 		val block: BlockId,
-		@LLMDescription("Train numbers of all trains competing for the block section.")
+		@LLMDescription("Train numbers of all trains competing for the block section; must be non-empty.")
 		val competing: List<String>
 	) : Message {
+		init {
+			require(competing.isNotEmpty()) { "competing must list at least one competing train, got empty list" }
+		}
+
 		override fun humanReadable(): String = "Konflikt na úseku ${block.name} mezi vlaky ${competing.joinToString()}."
 	}
 }

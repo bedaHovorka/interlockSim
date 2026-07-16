@@ -1,11 +1,12 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.lang.LangSerialization
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 /**
  * Serialisation round-trip tests for the vocab value and composite types (SP3.2, Issue #570).
@@ -14,7 +15,7 @@ import org.junit.jupiter.api.Test
  * [TrackId]), [SwitchSetting], [TrainRoute], [MovementAuthority].
  */
 class VocabTypesTest {
-	private val json = Json
+	private val json = LangSerialization.json
 
 	// -------------------------------------------------------------------------
 	// SwitchPosition
@@ -135,6 +136,21 @@ class VocabTypesTest {
 			val decoded = json.decodeFromString<TrainRoute>(json.encodeToString(route))
 			assertThat(decoded).isEqualTo(route)
 		}
+
+		@Test
+		fun roundTripWithEmptyRunning() {
+			// A straight route with no turnouts — running may be empty.
+			val route =
+				TrainRoute(
+					from = SignalId("L1"),
+					to = SignalId("L3"),
+					running = emptyList(),
+					blocks = listOf(BlockId("U3"))
+				)
+			val decoded = json.decodeFromString<TrainRoute>(json.encodeToString(route))
+			assertThat(decoded).isEqualTo(route)
+			assertThat(decoded.running).isEqualTo(emptyList<SwitchSetting>())
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -153,6 +169,20 @@ class VocabTypesTest {
 				)
 			val decoded = json.decodeFromString<MovementAuthority>(json.encodeToString(ma))
 			assertThat(decoded).isEqualTo(ma)
+		}
+
+		@Test
+		fun acceptsZeroSpeed() {
+			// 0 means "stop at end of authority" — permitted (non-negative).
+			val ma = MovementAuthority(SignalId("L3"), 0, BlockId("U5"))
+			assertThat(ma.speedLimitKmh).isEqualTo(0)
+		}
+
+		@Test
+		fun rejectsNegativeSpeed() {
+			assertThrows<IllegalArgumentException> {
+				MovementAuthority(SignalId("L3"), -1, BlockId("U5"))
+			}
 		}
 	}
 }

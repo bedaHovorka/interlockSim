@@ -1,6 +1,5 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -15,20 +14,22 @@ import kotlinx.serialization.Serializable
  *
  * The legacy `Signal` enum (STOP, S30, S40, S60, S80, S100, FREE) represents the internal
  * allowed-speed model of a semaphore during simulation. This `Aspect` sealed interface is
- * the *typed operating vocabulary* exchanged between agents (messages, Koog tool schemas);
- * adapter code in a later slice will bridge between the two representations.
+ * the *typed operating vocabulary* exchanged between agents (messages, tool schemas);
+ * [toSignal] / [cz.vutbr.fit.interlockSim.lang.toAspect] bridge between the two representations.
  *
  * | Signal enum      | Aspect subtype             |
  * |------------------|----------------------------|
  * | `STOP`           | `Stuj`                     |
  * | `FREE`           | `Volno`                    |
+ * | `S30`            | `Rychlost(30)`             |
  * | `S40`            | `Rychlost(40)`             |
  * | `S60`            | `Rychlost(60)`             |
  * | `S80`            | `Rychlost(80)`             |
  * | `S100`           | `Rychlost(100)`            |
  *
- * Shunting aspects (`PosunDovolen`, `PosunZakazan`) have no direct `Signal` equivalent
- * and are expressed through the route-permission protocol instead.
+ * Shunting and degraded aspects (`Vystraha`, `Ocekavejte`, `PrivolavaciNavest`, `PosunDovolen`,
+ * `PosunZakazan`) have no direct `Signal` equivalent and are expressed through the
+ * route-permission / distant-announcement protocol instead.
  *
  * ## Serialization
  *
@@ -38,10 +39,9 @@ import kotlinx.serialization.Serializable
  * @since Issue #570 (SP3.2 — Goal 10)
  */
 @Serializable
-@LLMDescription("Czech railway signal aspect (návěst) used by the SP3 operating language.")
 sealed interface Aspect {
 	/**
-	 * Czech human-readable label for this aspect, suitable for log output and [Message.humanReadable] text.
+	 * Czech human-readable label for this aspect, suitable for log output and [cz.vutbr.fit.interlockSim.lang.proto.Message.humanReadable] text.
 	 */
 	fun humanLabel(): String =
 		when (this) {
@@ -63,7 +63,6 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("stuj")
-	@LLMDescription("Stůj: stop at the signal. Absolute stop — red light.")
 	data object Stuj : Aspect
 
 	/**
@@ -74,7 +73,6 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("volno")
-	@LLMDescription("Volno: proceed at line speed; the following signal also permits movement — green light.")
 	data object Volno : Aspect
 
 	/**
@@ -85,7 +83,6 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("vystraha")
-	@LLMDescription("Výstraha: proceed and expect stop at the next main signal — yellow light.")
 	data object Vystraha : Aspect
 
 	/**
@@ -95,11 +92,13 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("rychlost")
-	@LLMDescription("Rychlost N km/h: proceed with the specified speed limit through adjacent turnouts.")
 	data class Rychlost(
-		@LLMDescription("Permitted speed in kilometres per hour (e.g. 40, 60, 80, 100).")
 		val kmh: Int
-	) : Aspect
+	) : Aspect {
+		init {
+			require(kmh > 0) { "Rychlost speed must be positive, got $kmh" }
+		}
+	}
 
 	/**
 	 * Očekávejte rychlost N km/h — prepare for speed limit N at the next signal.
@@ -109,11 +108,13 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("ocekavejte")
-	@LLMDescription("Očekávejte rychlost N km/h: expect speed limit N at the next signal.")
 	data class Ocekavejte(
-		@LLMDescription("Expected speed limit at the next signal in kilometres per hour.")
 		val kmh: Int
-	) : Aspect
+	) : Aspect {
+		init {
+			require(kmh > 0) { "Očekávejte speed must be positive, got $kmh" }
+		}
+	}
 
 	/**
 	 * Přivolávací návěst — pass a stop signal in degraded mode, on sight.
@@ -124,7 +125,6 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("privolavaci_navest")
-	@LLMDescription("Přivolávací návěst: pass a stop signal in degraded mode at ≤40 km/h on sight.")
 	data object PrivolavaciNavest : Aspect
 
 	/**
@@ -135,7 +135,6 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("posun_dovolen")
-	@LLMDescription("Posun dovolen: shunting movement permitted — white light.")
 	data object PosunDovolen : Aspect
 
 	/**
@@ -146,6 +145,5 @@ sealed interface Aspect {
 	 */
 	@Serializable
 	@SerialName("posun_zakazan")
-	@LLMDescription("Posun zakázán: shunting movement prohibited — blue light.")
 	data object PosunZakazan : Aspect
 }

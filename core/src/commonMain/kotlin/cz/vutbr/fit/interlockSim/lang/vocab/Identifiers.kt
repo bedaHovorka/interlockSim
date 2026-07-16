@@ -1,7 +1,7 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.serialization.Serializable
+import kotlin.jvm.JvmInline
 
 /**
  * Typed identifier for a signal or semaphore (návěstidlo) in the operating vocabulary.
@@ -15,9 +15,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 @JvmInline
-@LLMDescription("Identifier of a signal or semaphore in the operating vocabulary.")
 value class SignalId(
-	@LLMDescription("Human-readable signal name, for example L1 or S2.")
 	val name: String
 )
 
@@ -32,9 +30,7 @@ value class SignalId(
  */
 @Serializable
 @JvmInline
-@LLMDescription("Identifier of a railway switch or point (výhybka).")
 value class SwitchId(
-	@LLMDescription("Human-readable switch name or number, for example V7.")
 	val name: String
 )
 
@@ -50,9 +46,7 @@ value class SwitchId(
  */
 @Serializable
 @JvmInline
-@LLMDescription("Identifier of a block section (prostorový oddíl); at most one train may occupy it.")
 value class BlockId(
-	@LLMDescription("Human-readable block identifier, for example U3 or U4.")
 	val name: String
 )
 
@@ -67,8 +61,6 @@ value class BlockId(
  */
 @Serializable
 @JvmInline
-@LLMDescription("Identifier of a station track or line section.")
 value class TrackId(
-	@LLMDescription("Track number or label, for example 3 or 4a.")
 	val name: String
 )

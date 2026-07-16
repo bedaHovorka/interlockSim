@@ -1,9 +1,9 @@
-package interlocksim.lang.vocab
+package cz.vutbr.fit.interlockSim.lang.vocab
 
 import assertk.assertThat
 import assertk.assertions.isEqualTo
+import cz.vutbr.fit.interlockSim.lang.LangSerialization
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
@@ -14,9 +14,13 @@ import org.junit.jupiter.api.Test
  *  - every concrete subtype serialises to the correct JSON string,
  *  - every JSON string deserialises back to the correct Kotlin object,
  *  - parameterised aspects carry their values through the round-trip.
+ *
+ * Every subtype has an exact-JSON `*SerialName` test pinning the stable `@SerialName`
+ * discriminator, so a silent rename of a discriminator fails this suite rather than only
+ * passing round-trip.
  */
 class AspectTest {
-	private val json = Json { classDiscriminator = "type" }
+	private val json = LangSerialization.json
 
 	@Nested
 	inner class SingletonAspects {
@@ -54,6 +58,12 @@ class AspectTest {
 		}
 
 		@Test
+		fun vystrahaSerialName() {
+			val encoded = json.encodeToString<Aspect>(Aspect.Vystraha)
+			assertThat(encoded).isEqualTo("""{"type":"vystraha"}""")
+		}
+
+		@Test
 		fun privolavaciNavestRoundTrip() {
 			val aspect: Aspect = Aspect.PrivolavaciNavest
 			val encoded = json.encodeToString(aspect)
@@ -74,10 +84,22 @@ class AspectTest {
 		}
 
 		@Test
+		fun posunDovolenSerialName() {
+			val encoded = json.encodeToString<Aspect>(Aspect.PosunDovolen)
+			assertThat(encoded).isEqualTo("""{"type":"posun_dovolen"}""")
+		}
+
+		@Test
 		fun posunZakazanRoundTrip() {
 			val aspect: Aspect = Aspect.PosunZakazan
 			val encoded = json.encodeToString(aspect)
 			assertThat(json.decodeFromString<Aspect>(encoded)).isEqualTo(Aspect.PosunZakazan)
+		}
+
+		@Test
+		fun posunZakazanSerialName() {
+			val encoded = json.encodeToString<Aspect>(Aspect.PosunZakazan)
+			assertThat(encoded).isEqualTo("""{"type":"posun_zakazan"}""")
 		}
 	}
 
@@ -109,6 +131,22 @@ class AspectTest {
 		fun ocekavejteSerialName() {
 			val encoded = json.encodeToString<Aspect>(Aspect.Ocekavejte(100))
 			assertThat(encoded).isEqualTo("""{"type":"ocekavejte","kmh":100}""")
+		}
+
+		@Test
+		fun rychlostRejectsNonPositiveSpeed() {
+			org.junit.jupiter.api
+				.assertThrows<IllegalArgumentException> { Aspect.Rychlost(0) }
+			org.junit.jupiter.api
+				.assertThrows<IllegalArgumentException> { Aspect.Rychlost(-5) }
+		}
+
+		@Test
+		fun ocekavejteRejectsNonPositiveSpeed() {
+			org.junit.jupiter.api
+				.assertThrows<IllegalArgumentException> { Aspect.Ocekavejte(0) }
+			org.junit.jupiter.api
+				.assertThrows<IllegalArgumentException> { Aspect.Ocekavejte(-5) }
 		}
 	}
 
