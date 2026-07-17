@@ -22,7 +22,9 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
+import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
@@ -201,6 +203,17 @@ val coreTestModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultMetricsCollectionService(context)
+			}
+
+			// SP3.5 (Issue #573): InterlockingFacade — same binding as production CoreModule.
+			// Required so tests that wire DefaultNetworkActuatorPort via the facade chokepoint
+			// can resolve InterlockingFacade from the context scope.
+			scoped<InterlockingFacade> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val registry: PathReservationRegistry = get()
+				DefaultInterlockingFacade(context, registry)
 			}
 		}
 	}

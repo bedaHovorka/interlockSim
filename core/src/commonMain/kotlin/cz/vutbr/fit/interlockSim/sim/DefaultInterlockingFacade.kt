@@ -11,12 +11,15 @@ package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.lang.toSignal
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
+import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchPosition
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting
 import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
@@ -93,6 +96,10 @@ class DefaultInterlockingFacade(
 			.cellsOfType<DynamicRailSemaphore>()
 			.filter { it.name.isNotBlank() }
 			.associateBy { it.name }
+
+	/** All InOut endpoint cells indexed by name for O(1) lookup (SP3.5). */
+	private val inOutByName: Map<String, DynamicInOut> =
+		env.getInOuts().associateBy { it.name }
 
 	/**
 	 * The entry signal the kernel actually cleared per train in [requestRoute] (C4/I4).
@@ -198,6 +205,82 @@ class DefaultInterlockingFacade(
 			logger.info { "No tracked cleared signal for trainId=$trainId; nothing to reset" }
 		}
 	}
+
+	override fun requestRouteByEndpoints(
+		trainId: String,
+		fromEndpointName: String,
+		toEndpointName: String
+	): InterlockingFacade.RouteResponse {
+		logger.debug {
+			"requestRouteByEndpoints: trainId=$trainId, $fromEndpointName → $toEndpointName"
+		}
+
+		val fromEndpoint = resolveEndpoint(fromEndpointName)
+			?: return InterlockingFacade.RouteResponse.Denied(
+				"Neznámý bod trasy: $fromEndpointName"
+			)
+		val toEndpoint = resolveEndpoint(toEndpointName)
+			?: return InterlockingFacade.RouteResponse.Denied(
+				"Neznámý bod trasy: $toEndpointName"
+			)
+
+		return when (
+			val result = env.getRoutingServices().getPathReservationService()
+				.reservePath(trainId, fromEndpoint, toEndpoint)
+		) {
+			is PathReservationService.ReservationResult.Success -> {
+				val blocks = result.reservedBlocks.mapNotNull { it.name }.map { BlockId(it) }
+				val route =
+					TrainRoute(
+						from = SignalId(fromEndpointName),
+						to = SignalId(toEndpointName),
+						running = emptyList(),
+						blocks = blocks
+					)
+				logger.info {
+					"Route GRANTED (by endpoints) for trainId=$trainId: " +
+						"${blocks.size} blocks reserved ($fromEndpointName → $toEndpointName)"
+				}
+				InterlockingFacade.RouteResponse.Granted(Aspect.Volno, route)
+			}
+			is PathReservationService.ReservationResult.NoPathExists -> {
+				logger.info {
+					"Route DENIED for trainId=$trainId: trasa neexistuje " +
+						"$fromEndpointName → $toEndpointName"
+				}
+				InterlockingFacade.RouteResponse.Denied(
+					"Trasa neexistuje: $fromEndpointName → $toEndpointName"
+				)
+			}
+			is PathReservationService.ReservationResult.AllPathsBlocked -> {
+				logger.info {
+					"Route DENIED for trainId=$trainId: všechny cesty obsazeny " +
+						"(pokusů: ${result.attemptedPaths}, $fromEndpointName → $toEndpointName)"
+				}
+				InterlockingFacade.RouteResponse.Denied(
+					"Všechny cesty obsazeny ($fromEndpointName → $toEndpointName, " +
+						"pokusů: ${result.attemptedPaths})"
+				)
+			}
+			is PathReservationService.ReservationResult.Conflict -> {
+				val blockName = result.conflictingBlock.name ?: "?"
+				logger.info {
+					"Route DENIED for trainId=$trainId: konflikt na úseku $blockName " +
+						"(vlak ${result.existingOwner})"
+				}
+				InterlockingFacade.RouteResponse.Denied(
+					"Úsek $blockName obsazen vlakem ${result.existingOwner}"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Resolves a named endpoint to its [DynamicPathSeparator], checking [inOutByName]
+	 * first then [semaphoreByName].  Returns `null` if no element matches the name.
+	 */
+	private fun resolveEndpoint(name: String): DynamicPathSeparator? =
+		inOutByName[name] ?: semaphoreByName[name]
 
 	/**
 	 * Condition 1: Check that all blocks in the route are FREE — neither physically occupied

@@ -158,6 +158,34 @@ interface InterlockingFacade {
 	): RouteResponse
 
 	/**
+	 * SP3.5: String-based thin RPC for agent tool calls.
+	 *
+	 * Atomically checks C1 (route freedom), C3 (locking), and C4 (conflict exclusion) by
+	 * delegating to [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.reservePath].
+	 * Condition C2 (switch positions) is **skipped** — the dispatcher agent is responsible for
+	 * positioning switches via [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.setSwitchPosition]
+	 * before requesting a route. No entry signal is cleared here; signal aspect control is a
+	 * separate agent action via tool primitives.
+	 *
+	 * This method is the implementation point in [DefaultInterlockingFacade];
+	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort] delegates
+	 * [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.requestRoute] here when an
+	 * [InterlockingFacade] is wired in (SP3.5 production path).
+	 *
+	 * @param trainId            The train requesting the route (for ownership tracking).
+	 * @param fromEndpointName   Name of the entry InOut or Semaphore endpoint.
+	 * @param toEndpointName     Name of the exit InOut or Semaphore endpoint.
+	 * @return [RouteResponse.Granted] with a minimal [TrainRoute] (block list from reservation) if
+	 *         the path was reserved; [RouteResponse.Denied] with a Czech reason otherwise.
+	 * @since Issue #573 (SP3.5 — Goal 10)
+	 */
+	fun requestRouteByEndpoints(
+		trainId: String,
+		fromEndpointName: String,
+		toEndpointName: String
+	): RouteResponse
+
+	/**
 	 * Release a route — progressively clear locks as the train vacates blocks.
 	 *
 	 * **Implementation note (SP3.4 initial MVP):**

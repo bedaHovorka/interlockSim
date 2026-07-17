@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.testutil.commonCoreTestModule
@@ -68,7 +69,12 @@ val dispatcherAgentTestModule: Module =
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultNetworkActuatorPort(env = context)
+				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint.
+				// The facade is scoped by CoreModule (same scope) so it is guaranteed to exist here.
+				DefaultNetworkActuatorPort(
+					env = context,
+					interlockingFacade = context.scope.get<InterlockingFacade>()
+				)
 			}
 
 			// SP0.1+: CollisionDetectionService — scoped to context

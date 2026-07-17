@@ -20,6 +20,10 @@ import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathReservationService
 import cz.vutbr.fit.interlockSim.context.navigation.RoutingServices
+import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
+import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
+import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
+import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
@@ -31,6 +35,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.createConstantInstance
 import cz.vutbr.fit.interlockSim.objects.cells.createDynamicInstance
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.DisplayName
@@ -322,6 +327,99 @@ class DefaultNetworkActuatorPortTest {
 			assertFailsWith<IllegalArgumentException> {
 				p.requestRoute("T1", "A", "UNKNOWN")
 			}
+		}
+	}
+
+	// ── requestRoute via InterlockingFacade (SP3.5) ─────────────────────────
+
+	@Nested
+	@DisplayName("requestRoute() via InterlockingFacade (SP3.5 — Issue #573)")
+	inner class RequestRouteThroughFacade {
+		private fun portWithFacade(
+			inOuts: Collection<DynamicInOut> = emptyList(),
+			cells: Map<Pair<Int, Int>, Cell?> = emptyMap(),
+			facade: InterlockingFacade
+		): DefaultNetworkActuatorPort {
+			val (e, _) = env(inOuts, cells)
+			return DefaultNetworkActuatorPort(env = e, interlockingFacade = facade)
+		}
+
+		@Test
+		@DisplayName("Granted response maps to RouteRequestResult.Reserved with correct trainName and blocksCount")
+		fun grantedMapsToReserved() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val route =
+				TrainRoute(
+					from = SignalId("A"),
+					to = SignalId("B"),
+					running = emptyList(),
+					blocks = listOf(BlockId("U1"), BlockId("U2"))
+				)
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Granted(Aspect.Volno, route)
+
+			val result = portWithFacade(inOuts = listOf(a, b), facade = facade)
+				.requestRoute("T1", "A", "B") as RouteRequestResult.Reserved
+
+			assertThat(result.trainName).isEqualTo("T1")
+			assertThat(result.blocksCount).isEqualTo(2)
+		}
+
+		@Test
+		@DisplayName("Denied response maps to RouteRequestResult.AllPathsBlocked(0)")
+		fun deniedMapsToAllPathsBlocked() {
+			val a = inOut("A")
+			val b = inOut("B")
+			val facade = mockk<InterlockingFacade>()
+			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
+				InterlockingFacade.RouteResponse.Denied("Trasa neexistuje")
+
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B")
+
+			assertThat(result).isInstanceOf<RouteRequestResult.AllPathsBlocked>()
+			assertThat((result as RouteRequestResult.AllPathsBlocked).attemptedPaths).isEqualTo(0)
+		}
+
+		@Test
+		@DisplayName("unknown endpoint throws IllegalArgumentException even when facade is wired")
+		fun unknownEndpointThrowsWithFacade() {
+			val a = inOut("A")
+			val facade = mockk<InterlockingFacade>()
+
+			val p = portWithFacade(inOuts = listOf(a), facade = facade)
+
+			assertFailsWith<IllegalArgumentException> {
+				p.requestRoute("T1", "A", "UNKNOWN")
+			}
+		}
+
+		@Test
+		@DisplayName("blank trainName throws IllegalArgumentException even when facade is wired")
+		fun blankTrainNameThrowsWithFacade() {
+			val facade = mockk<InterlockingFacade>()
+			val (e, _) = env()
+			val p = DefaultNetworkActuatorPort(env = e, interlockingFacade = facade)
+
+			assertFailsWith<IllegalArgumentException> {
+				p.requestRoute("", "A", "B")
+			}
+		}
+
+		@Test
+		@DisplayName("facade is not called when trainName is blank (fail-fast before facade)")
+		fun facadeNotCalledOnBlankTrainName() {
+			val facade = mockk<InterlockingFacade>(relaxed = true)
+			val (e, _) = env()
+			val p = DefaultNetworkActuatorPort(env = e, interlockingFacade = facade)
+
+			runCatching { p.requestRoute("", "A", "B") }
+
+			// Verify facade was never invoked
+			io.mockk.verify(exactly = 0) { facade.requestRouteByEndpoints(any(), any(), any()) }
 		}
 	}
 
