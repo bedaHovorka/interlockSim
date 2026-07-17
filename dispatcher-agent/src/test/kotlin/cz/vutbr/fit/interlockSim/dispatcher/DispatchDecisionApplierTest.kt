@@ -9,16 +9,19 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher
 
+import assertk.assertFailure
 import assertk.assertThat
 import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
+import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
+import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import io.mockk.every
 import io.mockk.mockk
@@ -695,6 +698,145 @@ class DispatchDecisionApplierTest {
 
 			assertThat(actuatorCallThread.get()).isNotNull()
 			assertThat(actuatorCallThread.get()).isEqualTo(callerThread)
+		}
+	}
+
+	// ── SP2b.1 HoldTrain (Issue #556) ─────────────────────────────────────────
+
+	/**
+	 * Tests for [DispatchDecision.HoldTrain] routing through [TrainLifecyclePort]
+	 * introduced in SP2b.1 (Issue #556 — Goal 10).
+	 */
+	@Nested
+	@DisplayName("SP2b.1 HoldTrain decisions (Issue #556)")
+	inner class HoldTrainDecisions {
+		private lateinit var trainLifecyclePort: TrainLifecyclePort
+
+		@BeforeEach
+		fun setUpLifecyclePort() {
+			trainLifecyclePort = mockk(relaxed = true)
+		}
+
+		private fun makeApplierWithLifecyclePort(
+			capacity: Int = ActuatorCommandQueue.DEFAULT_CAPACITY
+		): Pair<ActuatorCommandQueue, DispatchDecisionApplier> {
+			val queue = ActuatorCommandQueue(capacity)
+			val applier =
+				DispatchDecisionApplier(
+					queue = queue,
+					networkActuator = networkActuator,
+					onApproveTrain = onApproveTrain,
+					trainLifecyclePort = trainLifecyclePort
+				)
+			return queue to applier
+		}
+
+		@Test
+		@DisplayName("HoldTrain is routed to TrainLifecyclePort.holdTrain")
+		fun holdTrain_routedToLifecyclePort() {
+			every { trainLifecyclePort.holdTrain(any(), any()) } returns true
+			val (queue, applier) = makeApplierWithLifecyclePort()
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { trainLifecyclePort.holdTrain("T1", 30.0) }
+			assertThat(approvedTrains).isEmpty()
+			verify(exactly = 0) { networkActuator.requestRoute(any(), any(), any()) }
+		}
+
+		@Test
+		@DisplayName("HoldTrain passes correct trainId and holdDurationSeconds to the port")
+		fun holdTrain_passesCorrectArguments() {
+			every { trainLifecyclePort.holdTrain(any(), any()) } returns true
+			val (queue, applier) = makeApplierWithLifecyclePort()
+			queue.postAll(listOf(DispatchDecision.HoldTrain("Train-7", 60.0)))
+
+			applier.onControlStep()
+
+			verify { trainLifecyclePort.holdTrain("Train-7", 60.0) }
+		}
+
+		@Test
+		@DisplayName("HoldTrain false result (train not found) does not throw")
+		fun holdTrain_falseResult_doesNotThrow() {
+			every { trainLifecyclePort.holdTrain(any(), any()) } returns false
+			val (queue, applier) = makeApplierWithLifecyclePort()
+			queue.postAll(listOf(DispatchDecision.HoldTrain("ghostTrain", 10.0)))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("HoldTrain without TrainLifecyclePort logs warning and does not throw")
+		fun holdTrain_withoutLifecyclePort_doesNotThrow() {
+			// makeApplier() creates an applier WITHOUT a TrainLifecyclePort
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+
+			applier.onControlStep() // must not throw; logs a warning
+
+			// No network actuator calls should have been made
+			verify(exactly = 0) { networkActuator.requestRoute(any(), any(), any()) }
+			assertThat(approvedTrains).isEmpty()
+		}
+
+		@Test
+		@DisplayName("HoldTrain is applied on the thread invoking onControlStep")
+		fun holdTrain_appliedOnControlStepThread() {
+			val holdCallThread = AtomicReference<Thread>()
+			every { trainLifecyclePort.holdTrain(any(), any()) } answers {
+				holdCallThread.set(Thread.currentThread())
+				true
+			}
+			val (queue, applier) = makeApplierWithLifecyclePort()
+			queue.postAll(listOf(DispatchDecision.HoldTrain("T1", 30.0)))
+
+			val callerThread = Thread.currentThread()
+			applier.onControlStep()
+
+			assertThat(holdCallThread.get()).isNotNull()
+			assertThat(holdCallThread.get()).isEqualTo(callerThread)
+		}
+
+		@Test
+		@DisplayName("HoldTrain with rationale carries the rationale string")
+		fun holdTrain_withRationale_rationaleAccessible() {
+			val decision = DispatchDecision.HoldTrain("T1", 30.0, rationale = "Train-2 is approaching; create spacing")
+			assertThat(decision.rationale).isEqualTo("Train-2 is approaching; create spacing")
+			assertThat(decision.trainId).isEqualTo("T1")
+			assertThat(decision.holdDurationSeconds).isEqualTo(30.0)
+		}
+
+		@Test
+		@DisplayName("HoldTrain without rationale has null rationale")
+		fun holdTrain_withoutRationale_rationaleIsNull() {
+			val decision = DispatchDecision.HoldTrain("T1", 30.0)
+			assertThat(decision.rationale).isEqualTo(null)
+		}
+
+		@Test
+		@DisplayName("HoldTrain validation: blank trainId throws IllegalArgumentException")
+		fun holdTrain_blankTrainId_throwsIllegalArgumentException() {
+			assertFailure {
+				DispatchDecision.HoldTrain("", 30.0)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("HoldTrain validation: zero holdDurationSeconds throws IllegalArgumentException")
+		fun holdTrain_zeroDuration_throwsIllegalArgumentException() {
+			assertFailure {
+				DispatchDecision.HoldTrain("T1", 0.0)
+			}.isInstanceOf<IllegalArgumentException>()
+		}
+
+		@Test
+		@DisplayName("HoldTrain validation: negative holdDurationSeconds throws IllegalArgumentException")
+		fun holdTrain_negativeDuration_throwsIllegalArgumentException() {
+			assertFailure {
+				DispatchDecision.HoldTrain("T1", -5.0)
+			}.isInstanceOf<IllegalArgumentException>()
 		}
 	}
 }

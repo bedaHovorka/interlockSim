@@ -126,4 +126,18 @@ internal fun applyDecision(
 	is DispatchDecision.ReleaseRoute,
 	is DispatchDecision.RequestRoute ->
 		decision.applyToolDrivenToActuator(actuatorPort, "wireSynchronousDispatcher")
+	// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
+	// HoldTrain is not supported in the synchronous wiring path: wireSynchronousDispatcher
+	// is used by fast-sim and headless tests which run without a TrainLifecyclePort.
+	// Rule-based dispatchers (RuleBasedDispatcher) never emit HoldTrain, so this branch
+	// is a defensive guard only.  LLM-backed dispatchers must use the async
+	// DispatchDecisionApplier path (DispatcherAgentModule / ExampleRegistry), which
+	// supports TrainLifecyclePort.
+	is DispatchDecision.HoldTrain -> {
+		logger.warn {
+			"wireSynchronousDispatcher: HoldTrain not supported in synchronous path " +
+				"(trainId=${decision.trainId}, duration=${decision.holdDurationSeconds}s) — ignored. " +
+				"Use the async DispatchDecisionApplier path for LLM-backed dispatchers."
+		}
+	}
 }
