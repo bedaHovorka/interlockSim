@@ -105,17 +105,20 @@ class DispatcherAgentModuleSp13Test {
 	fun toolGroupRegistryAssemblesFullToolSetViaKoinSingleton() {
 		val registry: ToolGroupRegistry by inject(ToolGroupRegistry::class.java)
 
-		// Registry requires ports to assemble tools. Since this test is at the singleton
-		// level (no context scope), we create mock ports just to verify the Koin-provided
-		// registry instance assembles the real SP1.6 tool set through them.
+		// Registry requires a perception port and a command queue to assemble tools. Since this
+		// test is at the singleton level (no context scope), we create a mock perception port
+		// and a real command queue just to verify the Koin-provided registry instance assembles
+		// the real SP1.6/SP1.7 tool set through them.
 		val mockPerceptionPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
-		val mockActuatorPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort>()
+		val commandQueue =
+			cz.vutbr.fit.interlockSim.dispatcher
+				.ActuatorCommandQueue()
 
-		val allTools = registry.assembleAllTools(mockPerceptionPort, mockActuatorPort)
+		val allTools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
-		val actuatorTools = registry.assembleActuatorTools(mockActuatorPort)
+		val actuatorTools = registry.assembleActuatorTools(commandQueue)
 
-		// SP1.6: tool implementations are in place (8 perception + 4 actuator = 12 total)
+		// SP1.6/SP1.7: tool implementations are in place (8 perception + 4 actuator = 12 total)
 		assertThat(allTools).hasSize(12)
 		assertThat(perceptionTools).hasSize(8)
 		assertThat(actuatorTools).hasSize(4)

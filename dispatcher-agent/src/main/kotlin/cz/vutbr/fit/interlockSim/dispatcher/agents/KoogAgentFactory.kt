@@ -10,10 +10,11 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
-import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -49,8 +50,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *             toolRegistry = get(),           // ToolGroupRegistry (singleton)
  *             ollamaConfig = get(),           // OllamaExecutorConfig (singleton)
  *             agentService = get(),           // AgentService (singleton)
- *             perceptionPort = get(),         // NetworkPerceptionPort (scoped, SP1.4)
- *             actuatorPort = get()            // NetworkActuatorPort (scoped, SP1.4)
+ *             perceptionPort = get(),         // NetworkPerceptionPort (scoped, SP1.4 — live port)
+ *             commandQueue = get()            // ActuatorCommandQueue (scoped, SP1.7)
  *         )
  *     }
  * }
@@ -60,27 +61,41 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * **Per-context scoping** is required because:
  * 1. Agents are instantiated per simulation run (one per context)
- * 2. Tools must access context-specific [NetworkPerceptionPort] / [NetworkActuatorPort]
+ * 2. Tools must access context-specific [NetworkPerceptionPort] / [ActuatorCommandQueue]
  * 3. Agent state (conversation history in SP1.6+) is context-specific
  * 4. Multiple simultaneous simulations may run (e.g. in tests), each with its own agent
  *
  * **Koin `scoped<DefaultSimulationContext>`** implements this pattern: objects created
  * in this scope are keyed by context instance and garbage-collected when the context dies.
  *
+ * ## SP1.7 threading contract (Issue #774)
+ *
+ * The [perceptionPort] injected here is the **live**
+ * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort] (kDisco-thread-only for its
+ * single-query / `allXxx()` methods). [createAgent] wraps it in a
+ * [SnapshotProjectionNetworkPerceptionPort] before handing it to the perception tools, so the
+ * tools read off-thread from the published [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot].
+ * The live port is also retained by the wiring layer for the sim-thread `captureSnapshot` hook.
+ * Actuator tools receive the [commandQueue] and post [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s
+ * (fire-and-forget) instead of touching an actuator port directly.
+ *
  * @property toolRegistry Tool group registry (singleton, injected into scope)
  * @property ollamaConfig Ollama executor config (singleton, global model/endpoint)
  * @property agentService Agent creation service (singleton, handles Koog wiring in SP1.6)
- * @property perceptionPort Sensor port for network perception (scoped per context, SP1.4)
- * @property actuatorPort Actuator port for network commands (scoped per context, SP1.4)
+ * @property perceptionPort Live sensor port for network perception (scoped per context, SP1.4).
+ *   Wrapped in a snapshot projection before being passed to tools (SP1.7).
+ * @property commandQueue Command queue for fire-and-forget actuator commands (scoped per
+ *   context, SP1.7).
  *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port injection
+ * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port injection; SP1.7 (#774) switches
+ *   actuators to the command queue and perception to the snapshot projection
  */
 class KoogAgentFactory(
 	private val toolRegistry: ToolGroupRegistry,
 	private val ollamaConfig: OllamaExecutorConfig,
 	private val agentService: AgentService,
 	private val perceptionPort: NetworkPerceptionPort,
-	private val actuatorPort: NetworkActuatorPort
+	private val commandQueue: ActuatorCommandQueue
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -119,11 +134,17 @@ class KoogAgentFactory(
 	suspend fun createAgent(context: DefaultSimulationContext): KoogDispatchAgent {
 		logger.debug {
 			"KoogAgentFactory.createAgent: context=${context.javaClass.simpleName}, " +
-				"model=${ollamaConfig.modelName} (SP1.4 with ports)"
+				"model=${ollamaConfig.modelName} (SP1.7 projection + queue)"
 		}
 
-		// Assemble tools for this context using injected ports (SP1.4)
-		val tools = toolRegistry.assembleAllTools(perceptionPort, actuatorPort)
+		// SP1.7 (Issue #774): wrap the live perception port in an off-thread-safe snapshot
+		// projection so perception tools can be invoked from the agent driver thread without
+		// touching mutable simulation state. snapshot() is @Volatile-backed and off-thread-safe.
+		val projection = SnapshotProjectionNetworkPerceptionPort { perceptionPort.snapshot() }
+
+		// Assemble tools for this context: perception reads via the projection, actuators post
+		// fire-and-forget decisions to the queue (applied on the kDisco thread by the applier).
+		val tools = toolRegistry.assembleAllTools(projection, commandQueue)
 
 		// Create agent via service (SP1.6 will add Koog wiring)
 		val agent =

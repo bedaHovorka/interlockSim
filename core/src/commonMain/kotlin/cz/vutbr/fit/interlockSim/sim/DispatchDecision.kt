@@ -38,10 +38,11 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * `HoldTrain` and remaining train-lifecycle subtypes are deferred to Issue #556 (SP2b.1).
  * The four tool-driven subtypes ([SetSignalAspect], [SetSwitchPosition], [ReleaseRoute],
  * [RequestRoute]) are added here in SP1.7 (Issue #774) to satisfy the kDisco threading
- * contract: actuator tools running on the agent driver thread can now marshal their commands
- * through [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] and have the
- * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] apply them on the kDisco
- * simulation thread.
+ * contract: actuator tools running on the agent driver thread marshal their commands through
+ * the `:dispatcher-agent` `ActuatorCommandQueue` and have the `:dispatcher-agent`
+ * `DispatchDecisionApplier` apply them on the kDisco simulation thread. (Those two classes live
+ * in `:dispatcher-agent`, which depends on `:core`; the references are prose here because `:core`
+ * cannot link upward to `:dispatcher-agent` in Dokka.)
  *
  * @since Issue #540 (SP0.1 — Goal 10), moved to `:core` and reworded in Issue #729
  *   (SP0.7 — Goal 10); SP1.7 tool-driven subtypes added in Issue #774
@@ -107,7 +108,7 @@ sealed class DispatchDecision {
 	 * The agent decided to set a named semaphore to a specific signal aspect.
 	 *
 	 * Applied via [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.setSignalAspect]
-	 * on the kDisco simulation thread by [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier].
+	 * on the kDisco simulation thread by the `:dispatcher-agent` `DispatchDecisionApplier`.
 	 * The effect is observable in the next [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot]
 	 * captured after this decision is applied.
 	 *
@@ -125,7 +126,7 @@ sealed class DispatchDecision {
 	 * The agent decided to set a named rail switch to a specific position.
 	 *
 	 * Applied via [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.setSwitchPosition]
-	 * on the kDisco simulation thread by [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier].
+	 * on the kDisco simulation thread by the `:dispatcher-agent` `DispatchDecisionApplier`.
 	 * The switch is set only if it is not currently locked (no train occupying or reserved
 	 * through it).
 	 *
@@ -143,7 +144,7 @@ sealed class DispatchDecision {
 	 * The agent decided to release all track blocks reserved for the named train.
 	 *
 	 * Applied via [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.releaseRoute]
-	 * on the kDisco simulation thread by [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier].
+	 * on the kDisco simulation thread by the `:dispatcher-agent` `DispatchDecisionApplier`.
 	 * The operation is idempotent — if the train holds no reservation, the call is a no-op.
 	 *
 	 * @property trainName Name of the train whose route should be released (non-blank).
@@ -158,15 +159,31 @@ sealed class DispatchDecision {
 	 * The agent decided to atomically reserve an end-to-end path for the named train.
 	 *
 	 * Applied via [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort.requestRoute]
-	 * on the kDisco simulation thread by [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier].
+	 * on the kDisco simulation thread by the `:dispatcher-agent` `DispatchDecisionApplier`.
 	 * Unlike [ReservePath] (which reserves exactly one section using pre-computed
 	 * semaphore/separator names from the block-input observation), [RequestRoute] asks
 	 * the interlocking to find and reserve a complete end-to-end path using InOut or
 	 * Semaphore names — this is the tool-callable variant intended for LLM agent use.
 	 *
-	 * @property trainName Identifier of the train that will use the reserved route.
-	 * @property fromEndpointName Name of the entry InOut or Semaphore.
-	 * @property toEndpointName Name of the exit InOut or Semaphore.
+	 * ## Why a successful `RequestRoute` does not bump the block-transition counter
+	 *
+	 * A successful [ReservePath] increments the sim-thread block-transition counter (via
+	 * `ShuntingLoop.incrementBlockTransition` / the applier's `onBlockTransition` callback).
+	 * [RequestRoute] does **not** — by design. That counter is a test-observability metric only
+	 * (Issue #365, `ShuntingLoop.getBlockTransitions`); it does not drive train movement. Trains
+	 * navigate their reserved route independently through the
+	 * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry]:
+	 * `Train.Front` resolves its next section via
+	 * [cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService.findReservedPathForTrain]
+	 * → `registry.getPathInfo`, so a route reserved by [RequestRoute] is followed regardless of
+	 * the counter. Consequence: agent-driven reservations are invisible to `getBlockTransitions`
+	 * (the counter reflects only rule-based [ReservePath] traffic) — acceptable because the
+	 * counter is test-observability only, not a control input. See also the matching note on the
+	 * `RequestRoute` apply branches in `SynchronousDispatcherWiring` and `DispatchDecisionApplier`.
+	 *
+	 * @property trainName Identifier of the train that will use the reserved route (non-blank).
+	 * @property fromEndpointName Name of the entry InOut or Semaphore (non-blank).
+	 * @property toEndpointName Name of the exit InOut or Semaphore (non-blank).
 	 *
 	 * @since Issue #774 (SP1.7 — Goal 10 threading contract)
 	 */

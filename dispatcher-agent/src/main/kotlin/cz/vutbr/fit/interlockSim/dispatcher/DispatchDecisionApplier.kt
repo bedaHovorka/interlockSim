@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -158,10 +159,14 @@ class DispatchDecisionApplier(
 			}
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
 			DispatchDecision.NoAction -> Unit
-			is DispatchDecision.SetSignalAspect -> applySetSignalAspect(decision)
-			is DispatchDecision.SetSwitchPosition -> applySetSwitchPosition(decision)
-			is DispatchDecision.ReleaseRoute -> applyReleaseRoute(decision)
-			is DispatchDecision.RequestRoute -> applyRequestRoute(decision)
+			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+			// Delegated to the shared DispatchDecision.applyToolDrivenToActuator helper in :core
+			// so the asynchronous path and SynchronousDispatcherWiring cannot drift apart.
+			is DispatchDecision.SetSignalAspect,
+			is DispatchDecision.SetSwitchPosition,
+			is DispatchDecision.ReleaseRoute,
+			is DispatchDecision.RequestRoute ->
+				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
 		}
 
 	/**
@@ -258,89 +263,6 @@ class DispatchDecisionApplier(
 						"for ${decision.trainId}"
 				}
 				onFailedReservation()
-			}
-		}
-	}
-
-	// ── SP1.7 tool-driven actuator handlers (Issue #774) ─────────────────────
-	//
-	// These methods apply the four tool-driven DispatchDecision subtypes introduced in
-	// SP1.7 to satisfy the kDisco threading contract.  They are called from onControlStep()
-	// on the kDisco simulation thread, so all NetworkActuatorPort calls are thread-safe.
-	// Results are logged; the agent driver does not wait for synchronous confirmation
-	// (fire-and-forget, matching the existing ReservePath/ApproveTrain pattern).
-
-	private fun applySetSignalAspect(decision: DispatchDecision.SetSignalAspect) {
-		logger.debug {
-			"Applying SetSignalAspect: semaphoreName=${decision.semaphoreName}, signal=${decision.signal}"
-		}
-		val success = networkActuator.setSignalAspect(decision.semaphoreName, decision.signal)
-		if (!success) {
-			logger.warn {
-				"SetSignalAspect: semaphore '${decision.semaphoreName}' does not exist or is constant — " +
-					"signal ${decision.signal} not applied"
-			}
-		}
-	}
-
-	private fun applySetSwitchPosition(decision: DispatchDecision.SetSwitchPosition) {
-		logger.debug {
-			"Applying SetSwitchPosition: switchName=${decision.switchName}, position=${decision.position}"
-		}
-		val success = networkActuator.setSwitchPosition(decision.switchName, decision.position)
-		if (!success) {
-			logger.warn {
-				"SetSwitchPosition: switch '${decision.switchName}' does not exist or is locked — " +
-					"position ${decision.position} not applied"
-			}
-		}
-	}
-
-	private fun applyReleaseRoute(decision: DispatchDecision.ReleaseRoute) {
-		logger.debug { "Applying ReleaseRoute: trainName=${decision.trainName}" }
-		val released = networkActuator.releaseRoute(decision.trainName)
-		if (!released) {
-			logger.debug { "ReleaseRoute: train '${decision.trainName}' held no reservation (no-op)" }
-		}
-	}
-
-	private fun applyRequestRoute(decision: DispatchDecision.RequestRoute) {
-		logger.debug {
-			"Applying RequestRoute: trainName=${decision.trainName}, " +
-				"from=${decision.fromEndpointName}, to=${decision.toEndpointName}"
-		}
-		return when (
-			val result =
-				networkActuator.requestRoute(
-					decision.trainName,
-					decision.fromEndpointName,
-					decision.toEndpointName
-				)
-		) {
-			is RouteRequestResult.Reserved -> {
-				logger.debug {
-					"RequestRoute: reserved ${result.blocksCount} block(s) for ${decision.trainName}"
-				}
-			}
-			is RouteRequestResult.AllPathsBlocked -> {
-				logger.warn {
-					"RequestRoute: all paths blocked for ${decision.trainName} " +
-						"(${decision.fromEndpointName} → ${decision.toEndpointName}); " +
-						"attempted: ${result.attemptedPaths}"
-				}
-			}
-			is RouteRequestResult.Conflict -> {
-				logger.warn {
-					"RequestRoute: conflict for ${decision.trainName} — " +
-						"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
-				}
-			}
-			is RouteRequestResult.NoRouteExists -> {
-				logger.warn {
-					"RequestRoute: no route exists " +
-						"${decision.fromEndpointName} → ${decision.toEndpointName} " +
-						"for ${decision.trainName}"
-				}
 			}
 		}
 	}

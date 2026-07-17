@@ -10,7 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents
 
 import assertk.assertThat
+import assertk.assertions.hasSize
 import assertk.assertions.isInstanceOf
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockOccupancyTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ReleaseRouteTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.RequestRouteTool
@@ -19,7 +21,6 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SetSwitchPositionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SignalAspectTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPositionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainTimetableTool
-import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.mockk.mockk
 import io.mockk.verify
@@ -28,13 +29,15 @@ import org.junit.jupiter.api.Test
 
 /**
  * Verifies that arg-taking tools reject invalid arguments (missing / null / blank / unknown enum)
- * with [ToolResult.Error] **without reaching the port** (#551 review #3/#4/#6).
+ * with [ToolResult.Error] **without reaching the port or posting to the queue** (#551 review
+ * #3/#4/#6; SP1.7 actuator tools now post to the [ActuatorCommandQueue] instead of an actuator
+ * port — Issue #774).
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
 class ToolParameterValidationTest {
 	private val perceptionPort = mockk<NetworkPerceptionPort>(relaxed = true)
-	private val actuatorPort = mockk<NetworkActuatorPort>(relaxed = true)
+	private val commandQueue = ActuatorCommandQueue()
 
 	@Test
 	fun `signal_aspect rejects missing null and blank semaphoreName without calling the port`() {
@@ -82,8 +85,8 @@ class ToolParameterValidationTest {
 	}
 
 	@Test
-	fun `request_route rejects any blank argument without calling the port`() {
-		val tool = RequestRouteTool(actuatorPort)
+	fun `request_route rejects any blank argument without posting to the queue`() {
+		val tool = RequestRouteTool(commandQueue)
 		runBlocking {
 			assertThat(tool.execute(mapOf("trainName" to "", "fromEndpointName" to "zA", "toEndpointName" to "doA1")))
 				.isInstanceOf<ToolResult.Error>()
@@ -94,23 +97,23 @@ class ToolParameterValidationTest {
 			assertThat(tool.execute(mapOf("trainName" to "T1")))
 				.isInstanceOf<ToolResult.Error>()
 		}
-		verify(exactly = 0) { actuatorPort.requestRoute(any(), any(), any()) }
+		assertThat(commandQueue.drain()).hasSize(0)
 	}
 
 	@Test
-	fun `release_route rejects missing null and blank trainName without calling the port`() {
-		val tool = ReleaseRouteTool(actuatorPort)
+	fun `release_route rejects missing null and blank trainName without posting to the queue`() {
+		val tool = ReleaseRouteTool(commandQueue)
 		runBlocking {
 			assertThat(tool.execute(emptyMap())).isInstanceOf<ToolResult.Error>()
 			assertThat(tool.execute(mapOf("trainName" to null))).isInstanceOf<ToolResult.Error>()
 			assertThat(tool.execute(mapOf("trainName" to ""))).isInstanceOf<ToolResult.Error>()
 		}
-		verify(exactly = 0) { actuatorPort.releaseRoute(any()) }
+		assertThat(commandQueue.drain()).hasSize(0)
 	}
 
 	@Test
-	fun `set_switch_position rejects blank switchName and unknown position without calling the port`() {
-		val tool = SetSwitchPositionTool(actuatorPort)
+	fun `set_switch_position rejects blank switchName and unknown position without posting to the queue`() {
+		val tool = SetSwitchPositionTool(commandQueue)
 		runBlocking {
 			assertThat(tool.execute(mapOf("switchName" to "", "position" to "MAIN")))
 				.isInstanceOf<ToolResult.Error>()
@@ -121,12 +124,12 @@ class ToolParameterValidationTest {
 			assertThat(tool.execute(mapOf("switchName" to "v1")))
 				.isInstanceOf<ToolResult.Error>()
 		}
-		verify(exactly = 0) { actuatorPort.setSwitchPosition(any(), any()) }
+		assertThat(commandQueue.drain()).hasSize(0)
 	}
 
 	@Test
-	fun `set_signal_aspect rejects blank semaphoreName and unknown signal without calling the port`() {
-		val tool = SetSignalAspectTool(actuatorPort)
+	fun `set_signal_aspect rejects blank semaphoreName and unknown signal without posting to the queue`() {
+		val tool = SetSignalAspectTool(commandQueue)
 		runBlocking {
 			assertThat(tool.execute(mapOf("semaphoreName" to "  ", "signal" to "STOP")))
 				.isInstanceOf<ToolResult.Error>()
@@ -137,6 +140,6 @@ class ToolParameterValidationTest {
 			assertThat(tool.execute(mapOf("semaphoreName" to "zA")))
 				.isInstanceOf<ToolResult.Error>()
 		}
-		verify(exactly = 0) { actuatorPort.setSignalAspect(any(), any()) }
+		assertThat(commandQueue.drain()).hasSize(0)
 	}
 }
