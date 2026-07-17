@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -35,6 +37,7 @@ import org.koin.dsl.module
  * | Component | Scope | Default |
  * |---|---|---|
  * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
+ * | [DispatcherPlanner] | singleton | [RuleBasedPlanAdapter] (SP3.6) |
  * | [AgentService] | singleton | [DefaultAgentService] (SP1.2) |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] (SP1.3) |
  * | [OllamaSimpleExecutor] | singleton | [OllamaSimpleExecutor] (SP1.5) |
@@ -78,7 +81,8 @@ import org.koin.dsl.module
  * - [OllamaSimpleExecutor]: Ollama client is a heavyweight stateful resource; shared per application
  * - [ToolGroupRegistry]: Registry logic is stateless; can be shared (tools assembled per context)
  * - [AgentService]: Service for creating agents is stateless (SP1.2)
- * - [Dispatcher]: Dispatcher implementation (rule-based or future LLM) is stateless
+ * - [Dispatcher]: Underlying synchronous rule-based decision function (pure function)
+ * - [DispatcherPlanner]: Pluggable planning interface (SP3.6); default is [RuleBasedPlanAdapter]
  *
  * **Per-context scope (one per [DefaultSimulationContext]):**
  * - [NetworkPerceptionPort]: One perception port per context (SP0.2 / SP1.4)
@@ -99,13 +103,18 @@ import org.koin.dsl.module
  * and [NetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort]
  * (tool implementations) are SP1.4's responsibility.
  *
- * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), and Issue #550 (SP1.5)
+ * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), Issue #550 (SP1.5), and Issue #574 (SP3.6)
  */
 val dispatcherAgentModule: Module =
 	module {
 		// Dispatcher: global singleton — RuleBasedDispatcher is stateless (pure function).
 		// In future, alternate implementations may include an Agentic/LLM dispatcher alongside Rule.
 		single<Dispatcher> { RuleBasedDispatcher() }
+
+		// SP3.6: DispatcherPlanner — pluggable planning interface (Issue #574).
+		// Default is RuleBasedPlanAdapter wrapping the Dispatcher singleton above.
+		// Swap this binding to plug in a search-based or LLM-backed planner.
+		single<DispatcherPlanner> { RuleBasedPlanAdapter(get()) }
 
 		// AgentService: global singleton for creating Koog agents (SP1.2 skeleton, Issue #547).
 		// In SP1.3+, this will be injected into per-context agent instances.

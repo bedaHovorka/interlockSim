@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -89,6 +91,28 @@ class DispatcherAgentModuleSp13Test {
 		val service: AgentService by inject(AgentService::class.java)
 
 		assertThat(service).isNotNull()
+	}
+
+	@Test
+	fun `DispatcherPlanner is provided as singleton (SP3_6)`() {
+		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assertThat(planner).isNotNull()
+	}
+
+	@Test
+	fun `DispatcherPlanner default is RuleBasedPlanAdapter (SP3_6)`() {
+		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assertThat(planner).isInstanceOf(RuleBasedPlanAdapter::class)
+	}
+
+	@Test
+	fun `DispatcherPlanner is reused as singleton (SP3_6)`() {
+		val planner1: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+		val planner2: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assert(planner1 === planner2) { "DispatcherPlanner should be a singleton" }
 	}
 
 	@Test

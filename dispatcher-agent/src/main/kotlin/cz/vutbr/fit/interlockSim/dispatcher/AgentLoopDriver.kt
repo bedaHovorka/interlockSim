@@ -10,10 +10,10 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
-import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -23,7 +23,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * Each call to [runCycle] executes one complete iteration:
  * 1. **SENSE**: reads a [SimulationSnapshot] from [perceptionPort]
- * 2. **DECIDE**: calls [Dispatcher.decide] with a [DispatchObservation] built from
+ * 2. **DECIDE**: calls [DispatcherPlanner.plan] with a [DispatchObservation] built from
  *    the snapshot
  * 3. **ACT**: posts the returned [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s to
  *    [commandQueue] — a thread-safe handoff; the sim-thread
@@ -43,7 +43,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * [controller] is injected into the driver **only** — it is never passed to
  * [SimulationController][cz.vutbr.fit.interlockSim.context.SimulationEnvironment],
- * [DispatchObservation], or [Dispatcher] implementations (locked invariant 3
+ * [DispatchObservation], or [DispatcherPlanner] implementations (locked invariant 3
  * from the SP0.5 design spec, docs/specs/2026-07-08-544-sp05-drive-loop-design.md).
  *
  * ## DispatchObservation construction
@@ -54,11 +54,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * populated in SP0.11 (#733) when [perceptionPort] is extended and the
  * [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop] shell is wired to
  * expose them.  Until then the driver creates observations with empty auxiliary
- * lists; [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] handles this case
- * gracefully (it returns [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]).
+ * lists; [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] (via
+ * [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter]) handles
+ * this case gracefully (it returns [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]).
  *
  * @param perceptionPort Read-only sense port for the railway network state (SP0.4, #543)
- * @param dispatcher     Pure decision function (SP0.7, #729); must not retain the
+ * @param planner        Pluggable planning function (SP3.6, #574); must not retain the
  *   observation beyond the call or mutate simulation state
  * @param commandQueue   Thread-safe queue to which decisions are posted (SP0.8, #730);
  *   drained and applied by the sim-thread applier (SP0.9, #731)
@@ -70,7 +71,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  */
 class AgentLoopDriver(
 	private val perceptionPort: NetworkPerceptionPort,
-	private val dispatcher: Dispatcher,
+	private val planner: DispatcherPlanner,
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**
@@ -117,7 +118,7 @@ class AgentLoopDriver(
 	 * Cycle steps:
 	 * 1. **SENSE** — [NetworkPerceptionPort.snapshot] captures a consistent, frozen
 	 *    picture of the current network state.
-	 * 2. **DECIDE** — the [dispatcher] is called with an observation built from the
+	 * 2. **DECIDE** — the [planner] is called with an observation built from the
 	 *    snapshot; [DispatchObservation.unapprovedTrains] and block-input lists are
 	 *    empty in this SP0.10 slice (populated in SP0.11).
 	 * 3. **ACT** — all returned decisions are posted to [commandQueue] in a single
@@ -161,7 +162,7 @@ class AgentLoopDriver(
 				innerBlockInputs = tick.innerBlockInputs,
 				outerBlockInputs = tick.outerBlockInputs
 			)
-		val decisions = dispatcher.decide(observation)
+		val decisions = planner.plan(observation)
 		logger.debug { "AgentLoopDriver: decided ${decisions.size} decision(s)" }
 
 		// 3. ACT — post decisions to the thread-safe handoff queue.
