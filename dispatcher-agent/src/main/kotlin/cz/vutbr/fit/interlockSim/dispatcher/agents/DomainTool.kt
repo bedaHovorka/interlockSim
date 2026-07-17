@@ -63,17 +63,66 @@ interface DomainTool {
 	/**
 	 * Execute this tool with the given arguments.
 	 *
-	 * Must be a pure function or deterministic operation that never:
-	 * - Mutates the simulation state on the kDisco thread
-	 * - Blocks for extended periods (called from the agent driver thread)
+	 * ## Threading contract
+	 *
+	 * `execute()` must be invoked on the **kDisco simulation thread**. Perception tools read
+	 * live simulation state via [NetworkPerceptionPort]; actuator tools mutate state via
+	 * [NetworkActuatorPort]. The single-query / `allXxx()` methods of the perception port and
+	 * all mutating methods of the actuator port are kDisco-thread-only (see the
+	 * [NetworkPerceptionPort] KDoc: only [NetworkPerceptionPort.snapshot] is safe off-thread).
+	 *
+	 * The SP1.7 agent executor is responsible for marshalling tool invocations onto the kDisco
+	 * thread. (For perception, SP1.7 may instead choose to read [NetworkPerceptionPort.snapshot]
+	 * off-thread and project — a design decision deferred to SP1.7.) Actuator tools mutate live
+	 * state and cannot run off-thread without a marshalling/queue mechanism; switch/signal/release
+	 * `DispatchDecision` subtypes for that are tracked under Issue #556.
+	 *
+	 * ## Result contract
+	 *
+	 * Returns a [ToolResult]; `execute()` does **not** throw for expected failures. Invalid
+	 * arguments and port [IllegalArgumentException]s are translated into [ToolResult.Error];
+	 * successful calls return [ToolResult.Success] wrapping the port's immutable snapshot / result
+	 * object. SP1.7 serializes [ToolResult.Success]`data` to the LLM and surfaces
+	 * [ToolResult.Error]`message` as a tool-error result; [ToolResult.Error]`cause` is for
+	 * logging only and must not be sent to the LLM. Serialization of `data` (a `SemaphoreReading`,
+	 * `RouteRequestResult`, `Boolean`, `List<...>`, …) is SP1.7's job — this interface is
+	 * intentionally serialization-agnostic.
 	 *
 	 * @param args Tool arguments as a map of parameter name → value
-	 * @return Tool result (typically a JSON-serializable object or string)
-	 *
-	 * @throws IllegalArgumentException if arguments are invalid
-	 * @throws RuntimeException for other tool-specific errors
+	 * @return [ToolResult] — never `null`; expected failures are [ToolResult.Error], not exceptions
 	 */
-	suspend fun execute(args: Map<String, Any?>): Any?
+	suspend fun execute(args: Map<String, Any?>): ToolResult
+}
+
+/**
+ * Outcome of a [DomainTool.execute] call (SP1.6, Issue #551).
+ *
+ * Replaces the previous raw `Any?` / thrown-exception contract so the SP1.7 Koog executor gets
+ * a uniform, exception-free result for every tool invocation: successes carry the port's
+ * immutable return value, expected failures (bad arguments, port input errors) carry a
+ * human-readable message. Unexpected non-`Exception` throwables still propagate.
+ *
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
+ */
+sealed interface ToolResult {
+	/**
+	 * The tool call succeeded. [data] is the wrapped port return value (an immutable
+	 * `Reading` / `RouteRequestResult` / `Boolean` / `List<...>`). SP1.7 serializes [data]
+	 * into the LLM-facing tool result.
+	 */
+	data class Success(
+		val data: Any?
+	) : ToolResult
+
+	/**
+	 * The tool call failed in an expected way (invalid argument, unknown entity, port input
+	 * error). [message] is safe to surface to the LLM as a tool-error result; [cause] is
+	 * retained for logging/debugging and must not be sent to the LLM.
+	 */
+	data class Error(
+		val message: String,
+		val cause: Throwable? = null
+	) : ToolResult
 }
 
 /**

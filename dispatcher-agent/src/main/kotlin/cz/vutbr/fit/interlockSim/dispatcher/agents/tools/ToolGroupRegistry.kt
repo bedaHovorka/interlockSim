@@ -69,39 +69,52 @@ class ToolGroupRegistry {
 	 * This is called **once per context** during factory creation. The resulting list is
 	 * passed to [AgentService.createDispatchAgent].
 	 *
-	 * ### Current state (SP1.4)
+	 * ### Current state (SP1.6)
 	 *
 	 * Accepts perception and actuator ports from Koin scope (scoped per context).
-	 * Returns an empty list (skeleton). Real tool implementations will be added in SP1.6+.
+	 * Returns a complete list of perception and actuator tools.
 	 *
-	 * ### Future (SP1.6+)
+	 * ### Tools included (SP1.6)
 	 *
-	 * Will include:
-	 * - Perception tools: `signal_aspect`, `block_occupancy`, `train_position`, …
-	 * - Actuator tools: `request_route`, `release_route`, `hold_train`, …
+	 * **Perception tools** (read-only network queries):
+	 * - `signal_aspect` — query signal aspect of one semaphore
+	 * - `all_signal_aspects` — query all semaphore signals
+	 * - `block_occupancy` — query occupancy of one track block
+	 * - `all_block_occupancies` — query all block occupancies
+	 * - `train_position` — query kinematics of one train
+	 * - `all_train_positions` — query all train positions
+	 * - `train_timetable` — query timetable of one train
+	 * - `all_train_timetables` — query all train timetables
+	 *
+	 * **Actuator tools** (network commands):
+	 * - `request_route` — request route reservation for a train
+	 * - `release_route` — release reserved blocks for a train
+	 * - `set_switch_position` — command a switch to MAIN or BRANCH
+	 * - `set_signal_aspect` — command a semaphore to a signal aspect
 	 *
 	 * Each tool is constructed using the provided [perceptionPort] or [actuatorPort]
 	 * so it can query/actuate the current context's network state.
 	 *
 	 * @param perceptionPort Scoped perception port for this context (SP1.4)
 	 * @param actuatorPort Scoped actuator port for this context (SP1.4)
-	 * @return All tools available in this context (empty in SP1.4, populated in SP1.6+)
+	 * @return All tools available in this context (SP1.6: 12 tools)
 	 *
-	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters
+	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters; SP1.6 (#551) implements tools
 	 */
 	fun assembleAllTools(
 		perceptionPort: NetworkPerceptionPort,
 		actuatorPort: NetworkActuatorPort
 	): List<DomainTool> {
 		logger.debug {
-			"ToolGroupRegistry.assembleAllTools: ports injected, returning empty list " +
-				"(SP1.4 port infrastructure ready, tools added in SP1.6)"
+			"ToolGroupRegistry.assembleAllTools: assembling perception + actuator tools (SP1.6 full implementation)"
 		}
 
-		// SP1.4: Ports are now available per context.
-		// SP1.6+: Assemble perception tools from network perception port
-		//         Assemble actuator tools from network actuator port
-		return emptyList()
+		return mutableListOf<DomainTool>().apply {
+			// Perception tools (read-only network queries)
+			addAll(assemblePerceptionTools(perceptionPort))
+			// Actuator tools (network commands)
+			addAll(assembleActuatorTools(actuatorPort))
+		}
 	}
 
 	/**
@@ -110,13 +123,33 @@ class ToolGroupRegistry {
 	 * Subgroup of [assembleAllTools]. Useful for testing or agents that only sense
 	 * (no decision/actuation).
 	 *
+	 * ### Tools included
+	 *
+	 * - `signal_aspect(semaphoreName)` — query signal aspect of one semaphore
+	 * - `all_signal_aspects()` — query all semaphore signals in one call
+	 * - `block_occupancy(blockId)` — query occupancy of one track block
+	 * - `all_block_occupancies()` — query all block occupancies
+	 * - `train_position(trainId)` — query kinematics of one train
+	 * - `all_train_positions()` — query all train positions
+	 * - `train_timetable(trainId)` — query timetable of one train
+	 * - `all_train_timetables()` — query all train timetables
+	 *
 	 * @param perceptionPort Scoped perception port for this context (SP1.4)
-	 * @return Perception tools (empty in SP1.4)
-	 * @since Issue #549 (SP1.4)
+	 * @return Perception tools (SP1.6: 8 tools)
+	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools
 	 */
 	fun assemblePerceptionTools(perceptionPort: NetworkPerceptionPort): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assemblePerceptionTools: port injected, returning empty (SP1.4)" }
-		return emptyList()
+		logger.debug { "ToolGroupRegistry.assemblePerceptionTools: creating 8 perception tools (SP1.6)" }
+		return listOf(
+			SignalAspectTool(perceptionPort),
+			AllSignalAspectsTool(perceptionPort),
+			BlockOccupancyTool(perceptionPort),
+			AllBlockOccupanciesTool(perceptionPort),
+			TrainPositionTool(perceptionPort),
+			AllTrainPositionsTool(perceptionPort),
+			TrainTimetableTool(perceptionPort),
+			AllTrainTimetablesTool(perceptionPort)
+		)
 	}
 
 	/**
@@ -125,12 +158,24 @@ class ToolGroupRegistry {
 	 * Subgroup of [assembleAllTools]. Useful for testing or agents that only act
 	 * (no perception/decision).
 	 *
+	 * ### Tools included
+	 *
+	 * - `request_route(trainName, fromEndpointName, toEndpointName)` — request route reservation
+	 * - `release_route(trainName)` — release reserved blocks for a train
+	 * - `set_switch_position(switchName, position)` — command a switch to MAIN or BRANCH
+	 * - `set_signal_aspect(semaphoreName, signal)` — command a semaphore to a signal aspect
+	 *
 	 * @param actuatorPort Scoped actuator port for this context (SP1.4)
-	 * @return Actuator tools (empty in SP1.4)
-	 * @since Issue #549 (SP1.4)
+	 * @return Actuator tools (SP1.6: 4 tools)
+	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools
 	 */
 	fun assembleActuatorTools(actuatorPort: NetworkActuatorPort): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assembleActuatorTools: port injected, returning empty (SP1.4)" }
-		return emptyList()
+		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 4 actuator tools (SP1.6)" }
+		return listOf(
+			RequestRouteTool(actuatorPort),
+			ReleaseRouteTool(actuatorPort),
+			SetSwitchPositionTool(actuatorPort),
+			SetSignalAspectTool(actuatorPort)
+		)
 	}
 }
