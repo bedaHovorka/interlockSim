@@ -128,8 +128,22 @@ services:
 
   # Local Ollama LLM server for dispatcher-agent's SP1.5 executor (Issue #550) and proof-of-connection
   # testing (@Tag("ollama-test")). This is an ALTERNATIVE to a native Ollama install, not a
-  # companion to one -- both publish port 11434, so only run this if you don't already have
-  # `ollama serve` running on the host.
+  # companion to one -- both would bind port 11434.
+  #
+  # ollama-port-check is a one-shot container that probes localhost:11434 via
+  # `nc -z` using network_mode: host (direct access to the real host's network stack on
+  # Linux). If something is already listening there, it exits 1, which -- via ollama's
+  # depends_on condition: service_completed_successfully below -- prevents the ollama
+  # container from starting at all. This means `docker compose up -d ollama` is safe to
+  # run unconditionally: it no-ops if a local Ollama (native or another container) is
+  # already up, and starts the container otherwise.
+  #
+  # KNOWN LIMITATION (Windows/macOS Docker Desktop): network_mode: host runs inside the
+  # Docker Desktop VM (WSL2 on Windows), not the real host OS, so it cannot see a native
+  # `ollama serve` process running directly on Windows/macOS outside of Docker. On those
+  # platforms this check effectively only detects other Docker containers already
+  # holding the port, not a native install -- no worse than the pre-existing manual
+  # coordination, just not improved for that specific case.
   #
   # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
   # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
@@ -160,9 +174,26 @@ services:
   #
   #   # Then run integrationTest which auto-detects localhost:11434, no config needed
   #   ./gradlew :dispatcher-agent:integrationTest
+  ollama-port-check:
+    image: busybox:latest
+    container_name: interlocksim-ollama-port-check
+    network_mode: host
+    command:
+      - sh
+      - -c
+      - |
+        if nc -z localhost 11434 2>/dev/null; then
+          echo "Port 11434 already in use -- assuming a local Ollama is already running. Skipping container start."
+          exit 1
+        fi
+        echo "Port 11434 is free -- proceeding to start the Ollama container."
+
   ollama:
     image: ollama/ollama:latest
     container_name: interlocksim-ollama
+    depends_on:
+      ollama-port-check:
+        condition: service_completed_successfully
     ports:
       - "11434:11434"
     volumes:
