@@ -10,14 +10,18 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.lang.toSignal
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
+import cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting
 import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
+import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
+import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -25,34 +29,61 @@ private val logger = KotlinLogging.logger {}
 /**
  * Default implementation of the ESA-11 four-condition interlocking kernel.
  *
- * This is an MVP (minimum viable product) implementation for SP3.4 (#572).
- *
  * Implements atomic route locking with verification of:
- * 1. Route freedom (blocks are FREE)
- * 2. Switch positions (running and flank switches are correctly positioned)
- * 3. Route lock (all elements are locked atomically)
- * 4. Conflict exclusion (no other train's routes are active on these elements)
+ * 1. Route freedom (blocks are FREE — unoccupied and unreserved)
+ * 2. Switch positions (running and flank switches are not locked by another train)
+ * 3. Route lock (all elements are locked atomically, rolled back on partial failure)
+ * 4. Conflict exclusion (blocks: enforced via [registry]; switches: not-locked check above)
  *
  * **Design Notes:**
  *
- * - **Block/Switch lookup:** The current MVP uses simple searching logic.
- *   A production implementation would use indexed lookups (by name) for performance.
+ * - **Block/Switch/Signal lookup:** Named elements are indexed once at construction time
+ *   (mirrors [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort]). An unknown name
+ *   anywhere in the requested route is treated as a denial (fail closed), not as "assumed free".
  *
  * - **Progressive lock release:** The current MVP releases the entire route atomically.
  *   SP3.5 will implement progressive release (block-by-block as the train physically clears).
  *
- * - **Conflict detection:** The current MVP checks if blocks/switches are already reserved
- *   by another train. A production implementation would maintain a full conflict matrix.
+ * - **Switch position matching:** Only lock-ownership is checked, not [SwitchSetting.position]
+ *   against the switch's actual [DynamicRailSwitch.conf]. Deferred to SP3.5.
  *
  * @property env The simulation environment providing access to network elements
- *              (blocks, switches, signals, and the path reservation service).
+ *              (blocks, switches, signals, and the block graph).
+ * @property registry The [PathReservationRegistry] SHARED with the context's
+ *              `PathReservationService` (same scoped instance — see `CoreModule`). Using the
+ *              same registry means a route granted here is correctly released later by
+ *              `PathReservationService.releasePath()` in [releaseRoute].
  *
  * @since Issue #572 (SP3.4 — Goal 10)
  */
 class DefaultInterlockingFacade(
-	private val env: SimulationEnvironment
+	private val env: SimulationEnvironment,
+	private val registry: PathReservationRegistry
 ) : InterlockingFacade {
+	/** All track-block edges indexed by name for O(1) lookup (unnamed blocks are excluded). */
+	private val blockByName: Map<String, DynamicTrackBlock> =
+		env
+			.getGraph()
+			.values()
+			.filterIsInstance<DynamicTrackBlock>()
+			.filter { !it.name.isNullOrBlank() }
+			.associateBy { it.name!! }
 
+	/** All rail-switch cells indexed by name for O(1) lookup. */
+	private val switchByName: Map<String, DynamicRailSwitch> =
+		env
+			.getRailWayNetGrid()
+			.cellsOfType<DynamicRailSwitch>()
+			.filter { it.name.isNotBlank() }
+			.associateBy { it.name }
+
+	/** All semaphore cells indexed by name for O(1) lookup. */
+	private val semaphoreByName: Map<String, DynamicRailSemaphore> =
+		env
+			.getRailWayNetGrid()
+			.cellsOfType<DynamicRailSemaphore>()
+			.filter { it.name.isNotBlank() }
+			.associateBy { it.name }
 
 	override fun requestRoute(
 		trainId: String,
@@ -80,38 +111,18 @@ class DefaultInterlockingFacade(
 			return InterlockingFacade.RouteResponse.Denied(switchCheckReason)
 		}
 
-		// Condition 3 & 4: Lock the route atomically
-		// Note: Full conflict detection is deferred to SP3.5.
-		// For now, we check if any switch is already locked and rely on
-		// PathReservationService to catch block conflicts.
+		// Conditions 3 & 4: Lock the route atomically (blocks via registry, switches via lock())
 		val lockReason = lockRouteAtomic(trainId, route)
 		if (lockReason != null) {
 			logger.info { "Route denied for trainId=$trainId: $lockReason" }
 			return InterlockingFacade.RouteResponse.Denied(lockReason)
 		}
 
-		// All conditions passed! Clear the entry signal.
-		val signal = findSignalByName(entrySignal.name)
-		if (signal != null) {
-			val targetSignalState = clearedAspect.toSignal()
-			if (targetSignalState != null) {
-				signal.signal = targetSignalState
-				logger.info {
-					"Signal ${entrySignal.name} cleared to ${clearedAspect.humanLabel()} for trainId=$trainId"
-				}
-			} else {
-				logger.warn {
-					"Aspect ${clearedAspect.humanLabel()} has no Signal equivalent; " +
-						"signal remains unchanged (safety fallback)"
-				}
-			}
-		} else {
-			logger.warn { "Signal ${entrySignal.name} not found in network; proceeding anyway" }
-		}
+		clearSignal(entrySignal, clearedAspect, trainId)
 
 		logger.info {
 			"Route GRANTED for trainId=$trainId: " +
-				"${route.blocks.size} blocks locked, ${route.running.size} switches locked"
+				"${route.blocks.size} blocks locked, ${route.running.size + route.flank.size} switches locked"
 		}
 		return InterlockingFacade.RouteResponse.Granted(
 			clearedAspect = clearedAspect,
@@ -126,92 +137,73 @@ class DefaultInterlockingFacade(
 		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name}" }
 
 		try {
-			// Release all blocks reserved for this train
+			// Release all blocks and switches reserved for this train (shared registry — see
+			// the class KDoc — so this correctly clears everything locked by requestRoute()).
 			val releasedBlocks = env.getRoutingServices().getPathReservationService().releasePath(trainId)
 			logger.info { "Released ${releasedBlocks.size} blocks for trainId=$trainId" }
 
-			// Reset the exit signal to STOP (safe state)
-			val signal = findSignalByName(exitSignal.name)
+			val signal = semaphoreByName[exitSignal.name]
 			if (signal != null) {
 				signal.signal = Signal.STOP
 				logger.info { "Signal ${exitSignal.name} reset to STOP after route release for trainId=$trainId" }
+			} else {
+				logger.warn { "Signal ${exitSignal.name} not found in network; nothing to reset" }
 			}
 		} catch (e: Exception) {
-			logger.error { "Error releasing route for trainId=$trainId: ${e.message}" }
+			logger.error(e) { "Error releasing route for trainId=$trainId: ${e.message}" }
 		}
 	}
 
 	/**
-	 * Condition 1: Check that all blocks in the route are FREE (not occupied or reserved).
+	 * Condition 1: Check that all blocks in the route are FREE — neither physically occupied
+	 * nor reserved for another train (via [PathReservationRegistry.isBlockAvailable]).
 	 *
 	 * @return null if all blocks are free, otherwise a Czech denial reason.
 	 */
-
 	private fun checkRouteFreedom(route: TrainRoute): String? {
-		val pathReservationService = env.getRoutingServices().getPathReservationService()
-
 		for (blockId in route.blocks) {
-			val block = findBlockByName(blockId.name)
-			if (block == null) {
-				logger.debug { "Block ${blockId.name} not found in network; assuming FREE for route check" }
-				continue
+			val block = blockByName[blockId.name] ?: return "Neznámý úsek ${blockId.name}"
+			if (!registry.isBlockAvailable(block)) {
+				val owner = block.trainName ?: block.occupant?.name ?: "neznámý vlak"
+				return "Úsek ${blockId.name} obsazen vlakem $owner"
 			}
-
-			// Check if block is occupied (a train is physically on it)
-			if (block.occupant != null) {
-				val occupantName = block.occupant?.toString() ?: "neznámý vlak"
-				return "Úsek ${blockId.name} obsazen vlakem $occupantName"
-			}
-
-			// Check if block is reserved for another train
-			// (This is a simplified check; full conflict detection comes in SP3.5)
 		}
-
 		return null // All blocks are free
 	}
 
 	/**
-	 * Condition 2: Check that all running and flank switches are available.
+	 * Condition 2: Check that all running and flank switches are not locked by another train.
 	 *
 	 * @return null if all switches are available, otherwise a Czech denial reason.
 	 */
 	private fun checkSwitchPositions(route: TrainRoute): String? {
-		// Check running switches (pojížděné výhybky)
 		for (switchSetting in route.running) {
-			val switch = findSwitchByName(switchSetting.switch.name)
-			if (switch == null) {
-				logger.debug { "Switch ${switchSetting.switch.name} not found; assuming available" }
-				continue
-			}
-
-			// If switch is locked by another train, deny the route
-			if (switch.locked) {
-				return "Výhybka ${switchSetting.switch.name} je zafixovaná"
-			}
+			checkSwitchAvailable(switchSetting, "Výhybka")?.let { return it }
 		}
-
-		// Check flank-protection switches (odvratné výhybky)
 		for (switchSetting in route.flank) {
-			val switch = findSwitchByName(switchSetting.switch.name)
-			if (switch == null) {
-				logger.debug { "Flank switch ${switchSetting.switch.name} not found; assuming available" }
-				continue
-			}
-
-			if (switch.locked) {
-				return "Odvratná výhybka ${switchSetting.switch.name} je zafixovaná"
-			}
+			checkSwitchAvailable(switchSetting, "Odvratná výhybka")?.let { return it }
 		}
-
 		return null // All switches are available for locking
 	}
 
+	private fun checkSwitchAvailable(
+		switchSetting: SwitchSetting,
+		label: String
+	): String? {
+		val switch = switchByName[switchSetting.switch.name] ?: return "Neznámá výhybka ${switchSetting.switch.name}"
+		if (switch.locked) {
+			return "$label ${switchSetting.switch.name} je zafixovaná"
+		}
+		return null
+	}
+
 	/**
-	 * Conditions 3 & 4: Atomically lock all blocks and switches in the route.
+	 * Conditions 3 & 4: Atomically lock all blocks and switches in the route via [registry].
 	 *
-	 * Also checks for conflicting routes (condition 4) during the lock attempt.
-	 * If any lock acquisition fails, automatically rolls back all previously acquired locks
-	 * and returns a Czech denial reason.
+	 * Blocks are registered with [PathReservationRegistry.registerAtomic] (which itself detects
+	 * condition-4 conflicts against other trains) and then physically reserved with
+	 * [DynamicTrackBlock.setUpPath]. Switches are locked via [PathReservationRegistry.registerSwitches]
+	 * once verified free. Any failure rolls back everything acquired so far.
 	 *
 	 * @return null if all locks acquired successfully, otherwise a Czech denial reason.
 	 */
@@ -219,98 +211,107 @@ class DefaultInterlockingFacade(
 		trainId: String,
 		route: TrainRoute
 	): String? {
-		try {
-			val pathReservationService = env.getRoutingServices().getPathReservationService()
+		val blocks = route.blocks.map { blockByName.getValue(it.name) }
+		val switches = (route.running + route.flank).map { switchByName.getValue(it.switch.name) }
 
-			// Lock all switches
-			for (switchSetting in (route.running + route.flank)) {
-				val switch = findSwitchByName(switchSetting.switch.name)
-				if (switch != null) {
-					try {
-						switch.lock()
-					} catch (e: Exception) {
-						logger.error { "Failed to lock switch ${switchSetting.switch.name}: ${e.message}" }
-						// Rollback: unlock all switches we've locked so far
-						for (switchToUnlock in (route.running + route.flank)) {
-							val s = findSwitchByName(switchToUnlock.switch.name)
-							if (s != null && s.locked) {
-								try {
-									s.unlock()
-								} catch (unlockError: Exception) {
-									logger.error {
-										"Rollback error unlocking switch ${switchToUnlock.switch.name}: ${unlockError.message}"
-									}
-								}
-							}
-						}
-						return "Výhybka ${switchSetting.switch.name} nelze zafixovat"
-					}
-				}
+		val fromSeparator = if (blocks.isEmpty()) null else semaphoreByName[route.from.name]
+		if (blocks.isNotEmpty() && fromSeparator == null) {
+			return "Neznámé návěstidlo ${route.from.name}"
+		}
+
+		if (fromSeparator != null) {
+			val blockReason = registerBlocks(trainId, blocks, fromSeparator)
+			if (blockReason != null) return blockReason
+		}
+
+		val switchReason = lockSwitches(trainId, switches)
+		if (switchReason != null) {
+			if (fromSeparator != null) rollbackBlocks(trainId, blocks, fromSeparator)
+			return switchReason
+		}
+
+		return null // All locks acquired successfully
+	}
+
+	/**
+	 * Registers and physically reserves [blocks] for [trainId], rolling back on partial failure.
+	 *
+	 * @return null on success, otherwise a Czech denial reason (nothing left reserved).
+	 */
+	private fun registerBlocks(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		fromSeparator: DynamicPathSeparator
+	): String? {
+		when (val result = registry.registerAtomic(trainId, blocks)) {
+			is PathReservationRegistry.RegistrationResult.Conflict ->
+				return "Úsek ${result.conflictingBlock.name ?: "?"} obsazen vlakem ${result.existingOwner}"
+			PathReservationRegistry.RegistrationResult.Success -> Unit
+		}
+
+		val reservedSoFar = mutableListOf<DynamicTrackBlock>()
+		try {
+			for (block in blocks) {
+				block.setUpPath(fromSeparator, trainId)
+				reservedSoFar.add(block)
 			}
-
-			return null // All locks acquired successfully
 		} catch (e: Exception) {
-			logger.error { "Unexpected error during route locking: ${e.message}" }
-			return "Vnitřní chyba interlockingu"
+			logger.error(e) { "Failed to reserve blocks for trainId=$trainId: ${e.message}" }
+			reservedSoFar.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
+			registry.unregister(trainId)
+			return "Úsek nelze zamknout"
 		}
+		return null
+	}
+
+	private fun rollbackBlocks(
+		trainId: String,
+		blocks: List<DynamicTrackBlock>,
+		fromSeparator: DynamicPathSeparator
+	) {
+		blocks.forEach { runCatching { it.cancelPathSetup(fromSeparator) } }
+		registry.unregister(trainId)
 	}
 
 	/**
-	 * Find a block in the network by name using linear search through the grid.
+	 * Locks [switches] for [trainId] via [PathReservationRegistry.registerSwitches], after
+	 * verifying none are already locked by a different train.
 	 *
-	 * **Performance note:** This is a simplified O(n) search. Production implementations
-	 * should use indexed lookups by name for O(1) performance.
-	 *
-	 * @return null if not found (logs a debug message).
+	 * @return null on success, otherwise a Czech denial reason (nothing left locked).
 	 */
-	private fun findBlockByName(blockName: String): DynamicTrackBlock? {
-		try {
-			// Linear search through the graph
-			// MVP implementation: We rely on the context to provide access to blocks
-			// Full implementation would require indexed lookup infrastructure
-			return null // Placeholder: integration with context required
-		} catch (e: Exception) {
-			logger.debug { "Error searching for block $blockName: ${e.message}" }
-			return null
+	private fun lockSwitches(
+		trainId: String,
+		switches: List<DynamicRailSwitch>
+	): String? {
+		for (switch in switches) {
+			if (switch.locked && registry.getSwitchOwner(switch) != trainId) {
+				return "Výhybka ${switch.name} je zafixovaná"
+			}
 		}
+		registry.registerSwitches(trainId, switches)
+		return null
 	}
 
-	/**
-	 * Find a switch in the network by name using linear search through the grid.
-	 *
-	 * **Performance note:** This is a simplified O(n) search. Production implementations
-	 * should use indexed lookups by name for O(1) performance.
-	 *
-	 * @return null if not found (logs a debug message).
-	 */
-	private fun findSwitchByName(switchName: String): DynamicRailSwitch? {
-		try {
-			// Linear search through all cells in the grid looking for switches
-			// MVP implementation: placeholder for production integration
-			return null // Placeholder: integration with context required
-		} catch (e: Exception) {
-			logger.debug { "Error searching for switch $switchName: ${e.message}" }
-			return null
+	/** Clears [entrySignal] to [clearedAspect] if the signal is known; safety fallback otherwise. */
+	private fun clearSignal(
+		entrySignal: SignalId,
+		clearedAspect: Aspect,
+		trainId: String
+	) {
+		val signal = semaphoreByName[entrySignal.name]
+		if (signal == null) {
+			logger.warn { "Signal ${entrySignal.name} not found in network; proceeding anyway" }
+			return
 		}
-	}
-
-	/**
-	 * Find a signal in the network by name using linear search through the grid.
-	 *
-	 * **Performance note:** This is a simplified O(n) search. Production implementations
-	 * should use indexed lookups by name for O(1) performance.
-	 *
-	 * @return null if not found (logs a debug message).
-	 */
-	private fun findSignalByName(signalName: String): DynamicRailSemaphore? {
-		try {
-			// Linear search through all cells in the grid looking for signals
-			// MVP implementation: placeholder for production integration
-			return null // Placeholder: integration with context required
-		} catch (e: Exception) {
-			logger.debug { "Error searching for signal $signalName: ${e.message}" }
-			return null
+		val targetSignalState = clearedAspect.toSignal()
+		if (targetSignalState == null) {
+			logger.warn {
+				"Aspect ${clearedAspect.humanLabel()} has no Signal equivalent; " +
+					"signal remains unchanged (safety fallback)"
+			}
+			return
 		}
+		signal.signal = targetSignalState
+		logger.info { "Signal ${entrySignal.name} cleared to ${clearedAspect.humanLabel()} for trainId=$trainId" }
 	}
 }
-

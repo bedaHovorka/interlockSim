@@ -10,11 +10,8 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
-import cz.vutbr.fit.interlockSim.lang.vocab.BlockId
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
-import cz.vutbr.fit.interlockSim.lang.vocab.SwitchPosition
 import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
-import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 
 /**
  * Deterministic safety kernel for ESA-11 interlocking route conditions.
@@ -101,9 +98,10 @@ interface InterlockingFacade {
 	 *    Returns [RouteResponse.Denied] if any block is occupied/reserved by another train.
 	 *
 	 * 2. **Switch positions (Správná poloha výhybek)** —
-	 *    All running switches in [route.running] are in the required [SwitchPosition].
-	 *    All flank switches in [route.flank] are in safe positions (MAIN/BRANCH depending on topology).
-	 *    Returns [RouteResponse.Denied] if any switch is locked by another train or in wrong position.
+	 *    All running switches in [route.running] and flank switches in [route.flank] are not
+	 *    locked by another train. Returns [RouteResponse.Denied] if any switch is locked.
+	 *    (Verifying the actual switch position against [SwitchSetting.position] is deferred
+	 *    to SP3.5 — the dispatcher is responsible for setting switches before requesting a route.)
 	 *
 	 * 3. **Route lock (Závěr)** —
 	 *    All blocks and switches are atomically locked (reserved) for [trainId].

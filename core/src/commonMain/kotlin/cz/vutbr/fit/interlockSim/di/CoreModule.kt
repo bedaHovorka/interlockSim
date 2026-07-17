@@ -25,7 +25,9 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
+import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
@@ -36,8 +38,6 @@ import cz.vutbr.fit.interlockSim.sim.conflict.DefaultDispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.DispatcherPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.StrategyPreferenceStore
 import cz.vutbr.fit.interlockSim.sim.conflict.TemporalConflictDetector
-import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
-import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.metrics.DefaultMetricsCollectionService
 import cz.vutbr.fit.interlockSim.sim.metrics.MetricsCollectionService
 import org.koin.core.module.Module
@@ -286,12 +286,15 @@ val navigationModule: Module =
 
 			// InterlockingFacade: scoped to simulation context (Issue #572 SP3.4 Goal 10)
 			// Safety kernel for ESA-11 four-condition route locking.
-			// The context serves as SimulationEnvironment for block/switch queries and PathReservationService.
+			// The context serves as SimulationEnvironment for block/switch queries; the registry
+			// is SHARED with PathReservationService (same scoped instance) so a route granted by
+			// the facade is released correctly by PathReservationService.releasePath().
 			scoped<InterlockingFacade> {
 				val context =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
-				DefaultInterlockingFacade(context)
+				val registry: PathReservationRegistry = get()
+				DefaultInterlockingFacade(context, registry)
 			}
 		}
 	}
