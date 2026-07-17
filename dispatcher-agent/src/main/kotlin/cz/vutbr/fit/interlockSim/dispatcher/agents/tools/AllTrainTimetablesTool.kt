@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -38,8 +39,9 @@ class AllTrainTimetablesTool(
 
 	override val parameters: List<DomainToolParameter> = emptyList()
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		logger.debug { "AllTrainTimetablesTool.execute" }
-		return perceptionPort.allTrainTimetables()
+		return runCatching { perceptionPort.allTrainTimetables() }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("all_train_timetables failed: ${it.message}", it) })
 	}
 }

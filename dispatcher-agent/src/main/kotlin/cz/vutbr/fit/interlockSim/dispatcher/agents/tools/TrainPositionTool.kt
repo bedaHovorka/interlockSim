@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -47,13 +48,14 @@ class TrainPositionTool(
 			)
 		)
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainId =
-			args["trainId"] as? String
-				?: throw IllegalArgumentException("trainId parameter is required and must be a string")
+			args.stringParam("trainId")
+				?: return ToolResult.Error("trainId parameter is required and must be a non-blank string")
 
 		logger.debug { "TrainPositionTool.execute: trainId=$trainId" }
 
-		return perceptionPort.trainPosition(trainId)
+		return runCatching { perceptionPort.trainPosition(trainId) }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("train_position failed: ${it.message}", it) })
 	}
 }

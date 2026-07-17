@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -48,13 +49,14 @@ class BlockOccupancyTool(
 			)
 		)
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val blockId =
-			args["blockId"] as? String
-				?: throw IllegalArgumentException("blockId parameter is required and must be a string")
+			args.stringParam("blockId")
+				?: return ToolResult.Error("blockId parameter is required and must be a non-blank string")
 
 		logger.debug { "BlockOccupancyTool.execute: blockId=$blockId" }
 
-		return perceptionPort.blockOccupancy(blockId)
+		return runCatching { perceptionPort.blockOccupancy(blockId) }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("block_occupancy failed: ${it.message}", it) })
 	}
 }

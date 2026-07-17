@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -48,13 +49,14 @@ class ReleaseRouteTool(
 			)
 		)
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainName =
-			args["trainName"] as? String
-				?: throw IllegalArgumentException("trainName parameter is required and must be a string")
+			args.stringParam("trainName")
+				?: return ToolResult.Error("trainName parameter is required and must be a non-blank string")
 
 		logger.debug { "ReleaseRouteTool.execute: trainName=$trainName" }
 
-		return actuatorPort.releaseRoute(trainName)
+		return runCatching { actuatorPort.releaseRoute(trainName) }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("release_route failed: ${it.message}", it) })
 	}
 }

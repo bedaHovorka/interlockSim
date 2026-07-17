@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -50,28 +51,25 @@ class SetSwitchPositionTool(
 			DomainToolParameter(
 				name = "position",
 				description = "Target position: MAIN or BRANCH",
-				type = DomainToolParameterType.Enum(listOf("MAIN", "BRANCH")),
+				type = DomainToolParameterType.Enum(RailSwitch.Conf.entries.map { it.name }),
 				required = true
 			)
 		)
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val switchName =
-			args["switchName"] as? String
-				?: throw IllegalArgumentException("switchName parameter is required and must be a string")
-		val positionStr =
-			args["position"] as? String
-				?: throw IllegalArgumentException("position parameter is required and must be a string")
-
+			args.stringParam("switchName")
+				?: return ToolResult.Error("switchName parameter is required and must be a non-blank string")
 		val position =
-			when (positionStr.uppercase()) {
-				"MAIN" -> RailSwitch.Conf.MAIN
-				"BRANCH" -> RailSwitch.Conf.BRANCH
-				else -> throw IllegalArgumentException("position must be MAIN or BRANCH, got: $positionStr")
-			}
+			args.enumParam<RailSwitch.Conf>("position")
+				?: return ToolResult.Error(
+					"position parameter is required and must be one of: " +
+						RailSwitch.Conf.entries.joinToString(", ") { it.name }
+				)
 
 		logger.debug { "SetSwitchPositionTool.execute: switchName=$switchName, position=$position" }
 
-		return actuatorPort.setSwitchPosition(switchName, position)
+		return runCatching { actuatorPort.setSwitchPosition(switchName, position) }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("set_switch_position failed: ${it.message}", it) })
 	}
 }

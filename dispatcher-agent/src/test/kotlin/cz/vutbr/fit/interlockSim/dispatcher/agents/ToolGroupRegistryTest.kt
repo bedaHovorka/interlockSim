@@ -133,4 +133,13 @@ class ToolGroupRegistryTest {
 
 		assertThat(allBlockOccupiesTool.parameters).hasSize(0)
 	}
+
+	@Test
+	fun `assembleAllTools returns 12 tools with distinct names`() {
+		val tools = registry.assembleAllTools(mockPerceptionPort, mockActuatorPort)
+
+		assertThat(tools).hasSize(12)
+		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).
+		assertThat(tools.map { it.name }.toSet()).hasSize(12)
+	}
 }

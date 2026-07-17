@@ -136,6 +136,21 @@ The tools are now **exposed** (available as DomainTool instances). The next phas
    - Tool invocation and result handling
    - End-to-end determinism validation
 
+4. **Threading contract (must be satisfied by the SP1.7 executor)** - `DomainTool.execute()`
+   must be invoked on the **kDisco simulation thread**. Perception tools read live state via
+   `NetworkPerceptionPort` (whose single-query / `allXxx()` methods are kDisco-thread-only —
+   only `snapshot()` is off-thread-safe); actuator tools mutate live state via
+   `NetworkActuatorPort`. The SP1.7 agent executor is responsible for marshalling tool
+   invocations onto the kDisco thread. Two viable options for SP1.7:
+   - Marshal every `execute()` call onto the kDisco thread before invoking, or
+   - For perception only, read `snapshot()` off-thread and project the requested entry from the
+     immutable `SimulationSnapshot` (carries signals, blocks, train positions, timetables).
+   Actuator tools cannot run off-thread today: `ActuatorCommandQueue` only carries
+   `DispatchDecision` values (`ApproveTrain` / `ReservePath` / `NoAction`) and has no
+   switch/signal/release subtypes — extending it is tracked under Issue #556 (SP2b.1).
+   See the reconciled `DomainTool.execute` KDoc for the full contract. A follow-up issue
+   captures this SP1.7 requirement.
+
 ### Implementation Quality
 
 - **No Breaking Changes:** All changes are additive (new tools, new registry methods)
@@ -148,16 +163,16 @@ The tools are now **exposed** (available as DomainTool instances). The next phas
 
 - ✅ All tools implement `DomainTool` interface correctly
 - ✅ No live object exposure (string identifiers only)
-- ✅ Proper error handling with clear exception messages
-- ✅ Parameter validation before port access
-- ✅ Thread-safe (via Koin scoping)
+- ✅ Structured error handling: `execute()` returns `ToolResult` (`Success`/`Error`); invalid args and port `IllegalArgumentException`s are translated into `ToolResult.Error` rather than thrown raw
+- ✅ Parameter validation (incl. blank-string rejection) before port access
+- ✅ Koin-scoped per context (one port set per simulation); thread-affinity of `execute()` is the SP1.7 executor's responsibility — see Remaining Work #4
 - ✅ No external dependencies beyond Koin and railroad domain
 
 ### Status
 
 - ✅ **SP1.6 Complete:** Tools exposed with full metadata
-- ✅ **Unit Tests Pass:** Tool registry validates all 12 tools
-- ✅ **Ready for SP1.7:** Next phase can now integrate with Koog framework
+- ✅ **Unit Tests Pass:** Tool registry, per-tool `execute()` forwarding, and parameter-validation tests cover all 12 tools
+- ✅ **Ready for SP1.7:** Next phase can integrate with the Koog framework, provided the SP1.7 executor satisfies the threading contract (Remaining Work #4)
 
 ---
 

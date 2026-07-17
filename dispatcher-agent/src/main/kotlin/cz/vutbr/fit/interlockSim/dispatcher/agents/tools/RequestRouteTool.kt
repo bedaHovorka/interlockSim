@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
+import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -60,21 +61,22 @@ class RequestRouteTool(
 			)
 		)
 
-	override suspend fun execute(args: Map<String, Any?>): Any? {
+	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainName =
-			args["trainName"] as? String
-				?: throw IllegalArgumentException("trainName parameter is required and must be a string")
+			args.stringParam("trainName")
+				?: return ToolResult.Error("trainName parameter is required and must be a non-blank string")
 		val fromEndpointName =
-			args["fromEndpointName"] as? String
-				?: throw IllegalArgumentException("fromEndpointName parameter is required and must be a string")
+			args.stringParam("fromEndpointName")
+				?: return ToolResult.Error("fromEndpointName parameter is required and must be a non-blank string")
 		val toEndpointName =
-			args["toEndpointName"] as? String
-				?: throw IllegalArgumentException("toEndpointName parameter is required and must be a string")
+			args.stringParam("toEndpointName")
+				?: return ToolResult.Error("toEndpointName parameter is required and must be a non-blank string")
 
 		logger.debug {
 			"RequestRouteTool.execute: trainName=$trainName, from=$fromEndpointName, to=$toEndpointName"
 		}
 
-		return actuatorPort.requestRoute(trainName, fromEndpointName, toEndpointName)
+		return runCatching { actuatorPort.requestRoute(trainName, fromEndpointName, toEndpointName) }
+			.fold({ ToolResult.Success(it) }, { ToolResult.Error("request_route failed: ${it.message}", it) })
 	}
 }
