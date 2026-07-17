@@ -77,7 +77,8 @@ open class MultiTrainLoop(
 	private val maxConcurrentTrains: Int = DEFAULT_MAX_CONCURRENT_TRAINS,
 	private val pathReservationService: PathReservationService = context.getRoutingServices().getPathReservationService()
 ) : Interlocking(context),
-	SpeedControllable {
+	SpeedControllable,
+	ApprovesTrains {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 
@@ -395,7 +396,7 @@ open class MultiTrainLoop(
 	 *
 	 * @since PR #633 — animation entrySeparator race regression test
 	 */
-	fun getApprovedTrains(): List<Train> = approvedTrains.toList()
+	override fun getApprovedTrains(): List<Train> = approvedTrains.toList()
 
 	/**
 	 * Return a [TrainSnapshot] for the approved train with the given [trainId], or `null`

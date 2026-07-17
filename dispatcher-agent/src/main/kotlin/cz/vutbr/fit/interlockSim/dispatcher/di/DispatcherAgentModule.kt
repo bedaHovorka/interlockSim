@@ -22,7 +22,6 @@ import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher
-import cz.vutbr.fit.interlockSim.sim.Train
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -119,20 +118,9 @@ val dispatcherAgentModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultNetworkPerceptionPort(
 					env = context,
-					activeTrains = {
-						// SP1.4b #768: Bind supplier to main process type (ShuntingLoop/MultiTrainLoop)
-						// Both ShuntingLoop and MultiTrainLoop expose getApprovedTrains()
-						// Use reflection to avoid classpath dependency on kDisco Process types
-						context.getMainProcess()?.let { mainProcess ->
-							try {
-								val method = mainProcess::class.java.getMethod("getApprovedTrains")
-								@Suppress("UNCHECKED_CAST")
-								(method.invoke(mainProcess) as List<Train>)
-							} catch (_: Exception) {
-								emptyList()
-							}
-						} ?: emptyList()
-					}
+					// SP1.4b follow-up (PR #769 review): interface-based lookup, no reflection.
+					// See mainProcessActiveTrains() for rationale.
+					activeTrains = { mainProcessActiveTrains(context) }
 				)
 			}
 
