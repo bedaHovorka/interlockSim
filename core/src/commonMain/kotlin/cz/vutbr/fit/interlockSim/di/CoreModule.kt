@@ -25,7 +25,9 @@ import cz.vutbr.fit.interlockSim.objects.paths.PathInfoBuilder
 import cz.vutbr.fit.interlockSim.pathfinding.AutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultAutomaticPathFindingService
 import cz.vutbr.fit.interlockSim.pathfinding.DefaultRouteFinder
+import cz.vutbr.fit.interlockSim.sim.DefaultInterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.DefaultSimulationProcessFactory
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.collision.CollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.collision.DefaultCollisionDetectionService
 import cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService
@@ -280,6 +282,19 @@ val navigationModule: Module =
 					getSource<DefaultSimulationContext>()
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultMetricsCollectionService(context)
+			}
+
+			// InterlockingFacade: scoped to simulation context (Issue #572 SP3.4 Goal 10)
+			// Safety kernel for ESA-11 four-condition route locking.
+			// The context serves as SimulationEnvironment for block/switch queries; the registry
+			// is SHARED with PathReservationService (same scoped instance) so a route granted by
+			// the facade is released correctly by PathReservationService.releasePath().
+			scoped<InterlockingFacade> {
+				val context =
+					getSource<DefaultSimulationContext>()
+						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
+				val registry: PathReservationRegistry = get()
+				DefaultInterlockingFacade(context, registry)
 			}
 		}
 	}
