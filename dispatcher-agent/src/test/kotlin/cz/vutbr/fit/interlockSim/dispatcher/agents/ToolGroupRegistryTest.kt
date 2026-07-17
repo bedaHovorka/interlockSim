@@ -13,12 +13,14 @@ import assertk.assertThat
 import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 
 /**
- * Unit tests for tool registry and tool assembly (SP1.6, Issue #551).
+ * Unit tests for tool registry and tool assembly (SP1.6, Issue #551; updated in SP1.7, Issue #774
+ * for actuator tools taking an [ActuatorCommandQueue] instead of an actuator port).
  *
  * Tests that:
  * - ToolGroupRegistry correctly assembles perception tools (8 tools)
@@ -30,7 +32,7 @@ import org.junit.jupiter.api.Test
  */
 class ToolGroupRegistryTest {
 	private val mockPerceptionPort = mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
-	private val mockActuatorPort = mockk<cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort>()
+	private val commandQueue = ActuatorCommandQueue()
 	private val registry = ToolGroupRegistry()
 
 	@Test
@@ -42,14 +44,14 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleActuatorTools returns 4 actuator tools`() {
-		val tools = registry.assembleActuatorTools(mockActuatorPort)
+		val tools = registry.assembleActuatorTools(commandQueue)
 
 		assertThat(tools).hasSize(4)
 	}
 
 	@Test
 	fun `assembleAllTools returns 12 total tools`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, mockActuatorPort)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 
 		assertThat(tools).hasSize(12)
 	}
@@ -75,7 +77,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have correct names`() {
-		val tools = registry.assembleActuatorTools(mockActuatorPort)
+		val tools = registry.assembleActuatorTools(commandQueue)
 		val toolNames = tools.map { it.name }
 
 		assertThat(toolNames).isEqualTo(
@@ -99,7 +101,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `actuator tools have descriptions`() {
-		val tools = registry.assembleActuatorTools(mockActuatorPort)
+		val tools = registry.assembleActuatorTools(commandQueue)
 
 		tools.forEach { tool ->
 			assertThat(tool.description).isNotEmpty()
@@ -117,7 +119,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `request_route tool has three parameters`() {
-		val tools = registry.assembleActuatorTools(mockActuatorPort)
+		val tools = registry.assembleActuatorTools(commandQueue)
 		val requestRouteTool = tools.first { it.name == "request_route" }
 
 		assertThat(requestRouteTool.parameters).hasSize(3)
@@ -136,7 +138,7 @@ class ToolGroupRegistryTest {
 
 	@Test
 	fun `assembleAllTools returns 12 tools with distinct names`() {
-		val tools = registry.assembleAllTools(mockPerceptionPort, mockActuatorPort)
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 
 		assertThat(tools).hasSize(12)
 		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).

@@ -15,6 +15,8 @@ import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isNotNull
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
@@ -495,6 +497,204 @@ class DispatchDecisionApplierTest {
 			applier.onControlStep()
 			assertThat(callbackInvoked).isEqualTo(true)
 			verify(exactly = 1) { networkActuator.requestRoute("T1", "zA", "doA1") }
+		}
+	}
+
+	// ── SP1.7 tool-driven actuator decisions (Issue #774) ─────────────────────
+
+	/**
+	 * Tests for the four SP1.7 tool-driven [DispatchDecision] subtypes introduced to satisfy
+	 * the kDisco threading contract.  These subtypes allow actuator tools running on the Koog
+	 * agent driver thread to marshal their commands through [ActuatorCommandQueue] and have
+	 * [DispatchDecisionApplier.onControlStep] apply them on the kDisco simulation thread.
+	 */
+	@Nested
+	@DisplayName("SP1.7 tool-driven actuator decisions (Issue #774)")
+	inner class ToolDrivenActuatorDecisions {
+		@Test
+		@DisplayName("SetSignalAspect is routed to NetworkActuatorPort.setSignalAspect")
+		fun setSignalAspect_routedToActuatorPort() {
+			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE) }
+			assertThat(approvedTrains).isEmpty()
+		}
+
+		@Test
+		@DisplayName("SetSignalAspect passes correct semaphore name and signal to the port")
+		fun setSignalAspect_passesCorrectArguments() {
+			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zB", Signal.STOP)))
+
+			applier.onControlStep()
+
+			verify { networkActuator.setSignalAspect("zB", Signal.STOP) }
+		}
+
+		@Test
+		@DisplayName("SetSignalAspect false result (e.g. constant semaphore) does not throw")
+		fun setSignalAspect_falseResult_doesNotThrow() {
+			every { networkActuator.setSignalAspect(any(), any()) } returns false
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zC", Signal.STOP)))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("SetSwitchPosition is routed to NetworkActuatorPort.setSwitchPosition")
+		fun setSwitchPosition_routedToActuatorPort() {
+			every { networkActuator.setSwitchPosition(any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v1", RailSwitch.Conf.MAIN)))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.setSwitchPosition("v1", RailSwitch.Conf.MAIN) }
+			assertThat(approvedTrains).isEmpty()
+		}
+
+		@Test
+		@DisplayName("SetSwitchPosition passes correct switch name and position to the port")
+		fun setSwitchPosition_passesCorrectArguments() {
+			every { networkActuator.setSwitchPosition(any(), any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v2", RailSwitch.Conf.BRANCH)))
+
+			applier.onControlStep()
+
+			verify { networkActuator.setSwitchPosition("v2", RailSwitch.Conf.BRANCH) }
+		}
+
+		@Test
+		@DisplayName("SetSwitchPosition false result (e.g. locked switch) does not throw")
+		fun setSwitchPosition_falseResult_doesNotThrow() {
+			every { networkActuator.setSwitchPosition(any(), any()) } returns false
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSwitchPosition("v3", RailSwitch.Conf.MAIN)))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("ReleaseRoute is routed to NetworkActuatorPort.releaseRoute")
+		fun releaseRoute_routedToActuatorPort() {
+			every { networkActuator.releaseRoute(any()) } returns true
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #1")))
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.releaseRoute("Train #1") }
+			assertThat(approvedTrains).isEmpty()
+		}
+
+		@Test
+		@DisplayName("ReleaseRoute false result (train held no reservation) does not throw")
+		fun releaseRoute_falseResult_doesNotThrow() {
+			every { networkActuator.releaseRoute(any()) } returns false
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.ReleaseRoute("Train #2")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("RequestRoute is routed to NetworkActuatorPort.requestRoute with train/from/to")
+		fun requestRoute_routedToActuatorPort() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.Reserved("Train #1", 3)
+			val (queue, applier) = makeApplier()
+			queue.postAll(
+				listOf(DispatchDecision.RequestRoute("Train #1", "A", "B"))
+			)
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.requestRoute("Train #1", "A", "B") }
+			assertThat(approvedTrains).isEmpty()
+		}
+
+		@Test
+		@DisplayName("RequestRoute AllPathsBlocked result does not throw")
+		fun requestRoute_allPathsBlocked_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.AllPathsBlocked(attemptedPaths = 2)
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("RequestRoute Conflict result does not throw")
+		fun requestRoute_conflict_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.Conflict(blockName = "k1", existingOwner = "Train #2")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("RequestRoute NoRouteExists result does not throw")
+		fun requestRoute_noRouteExists_doesNotThrow() {
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.NoRouteExists(fromEndpointName = "A", toEndpointName = "B")
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.RequestRoute("Train #1", "A", "B")))
+
+			applier.onControlStep() // must not throw
+		}
+
+		@Test
+		@DisplayName("All four tool-driven decisions applied in a single drain")
+		fun allFourToolDecisions_appliedInSingleDrain() {
+			every { networkActuator.setSignalAspect(any(), any()) } returns true
+			every { networkActuator.setSwitchPosition(any(), any()) } returns true
+			every { networkActuator.releaseRoute(any()) } returns true
+			every { networkActuator.requestRoute(any(), any(), any()) } returns
+				RouteRequestResult.Reserved("Train #1", 2)
+			val (queue, applier) = makeApplier()
+			queue.postAll(
+				listOf(
+					DispatchDecision.SetSignalAspect("zA", Signal.FREE),
+					DispatchDecision.SetSwitchPosition("v1", RailSwitch.Conf.BRANCH),
+					DispatchDecision.ReleaseRoute("Train #1"),
+					DispatchDecision.RequestRoute("Train #1", "A", "B")
+				)
+			)
+
+			applier.onControlStep()
+
+			verify(exactly = 1) { networkActuator.setSignalAspect("zA", Signal.FREE) }
+			verify(exactly = 1) { networkActuator.setSwitchPosition("v1", RailSwitch.Conf.BRANCH) }
+			verify(exactly = 1) { networkActuator.releaseRoute("Train #1") }
+			verify(exactly = 1) { networkActuator.requestRoute("Train #1", "A", "B") }
+		}
+
+		@Test
+		@DisplayName("Tool-driven decisions are applied on the thread invoking onControlStep")
+		fun toolDecisions_appliedOnControlStepThread() {
+			val actuatorCallThread = AtomicReference<Thread>()
+			every { networkActuator.setSignalAspect(any(), any()) } answers {
+				actuatorCallThread.set(Thread.currentThread())
+				true
+			}
+			val (queue, applier) = makeApplier()
+			queue.postAll(listOf(DispatchDecision.SetSignalAspect("zA", Signal.FREE)))
+
+			val callerThread = Thread.currentThread()
+			applier.onControlStep()
+
+			assertThat(actuatorCallThread.get()).isNotNull()
+			assertThat(actuatorCallThread.get()).isEqualTo(callerThread)
 		}
 	}
 }

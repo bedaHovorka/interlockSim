@@ -86,32 +86,44 @@ fun wireSynchronousDispatcher(
 		}
 }
 
-private fun applyDecision(
+internal fun applyDecision(
 	decision: DispatchDecision,
 	loop: ShuntingLoop,
 	actuatorPort: DefaultNetworkActuatorPort
-) {
-	when (decision) {
-		is DispatchDecision.ApproveTrain -> loop.approveQueuedTrain(decision.trainId)
-		is DispatchDecision.ReservePath -> {
-			val result =
-				actuatorPort.requestRoute(
-					decision.trainId,
-					decision.fromSemaphoreName,
-					decision.toSeparatorName
-				)
-			when (result) {
-				is RouteRequestResult.Reserved -> loop.incrementBlockTransition(decision.trainId)
-				else -> {
-					// Blocked/conflict outcomes are routine "wait and retry next tick" contention.
-					logger.debug {
-						"wireSynchronousDispatcher: ReservePath ${decision.fromSemaphoreName} → " +
-							"${decision.toSeparatorName} for ${decision.trainId} not applied: $result"
-					}
-					loop.incrementFailedReservation()
+) = when (decision) {
+	is DispatchDecision.ApproveTrain -> loop.approveQueuedTrain(decision.trainId)
+	is DispatchDecision.ReservePath -> {
+		val result =
+			actuatorPort.requestRoute(
+				decision.trainId,
+				decision.fromSemaphoreName,
+				decision.toSeparatorName
+			)
+		when (result) {
+			is RouteRequestResult.Reserved -> loop.incrementBlockTransition(decision.trainId)
+			else -> {
+				// Blocked/conflict outcomes are routine "wait and retry next tick" contention.
+				logger.debug {
+					"wireSynchronousDispatcher: ReservePath ${decision.fromSemaphoreName} → " +
+						"${decision.toSeparatorName} for ${decision.trainId} not applied: $result"
 				}
+				loop.incrementFailedReservation()
 			}
 		}
-		is DispatchDecision.NoAction -> Unit
 	}
+	DispatchDecision.NoAction -> Unit
+	// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+	// Delegated to the shared [DispatchDecision.applyToolDrivenToActuator] helper so the
+	// synchronous path and DispatchDecisionApplier cannot drift apart (the duplication here
+	// was the hazard that let the first SP1.7 commit miss this `when` and break :core).
+	// Expression-body `when` so the compiler enforces exhaustiveness over the sealed type.
+	//
+	// Note: a successful RequestRoute (handled inside the helper) intentionally does NOT call
+	// loop.incrementBlockTransition — see DispatchDecision.RequestRoute KDoc (counter is
+	// test-observability only; trains navigate via PathReservationRegistry).
+	is DispatchDecision.SetSignalAspect,
+	is DispatchDecision.SetSwitchPosition,
+	is DispatchDecision.ReleaseRoute,
+	is DispatchDecision.RequestRoute ->
+		decision.applyToolDrivenToActuator(actuatorPort, "wireSynchronousDispatcher")
 }
