@@ -15,6 +15,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
 
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test
  */
 class ToolGroupRegistryTest {
 	private val mockPerceptionPort = mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
+	private val mockSensorPort = mockk<DispatchLoopSensorPort>()
 	private val commandQueue = ActuatorCommandQueue()
 	private val registry = ToolGroupRegistry()
 
@@ -143,5 +145,68 @@ class ToolGroupRegistryTest {
 		assertThat(tools).hasSize(12)
 		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).
 		assertThat(tools.map { it.name }.toSet()).hasSize(12)
+	}
+
+	// ── SP4.1 dispatch-loop tool groups (Issue #563) ──────────────────────────
+
+	@Test
+	fun `assembleDispatchLoopSensorTools returns 2 sensor tools`() {
+		val tools = registry.assembleDispatchLoopSensorTools(mockSensorPort)
+
+		assertThat(tools).hasSize(2)
+	}
+
+	@Test
+	fun `assembleDispatchLoopActuatorTools returns 1 actuator tool`() {
+		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue)
+
+		assertThat(tools).hasSize(1)
+	}
+
+	@Test
+	fun `assembleDispatchLoopTools returns 3 total dispatch-loop tools`() {
+		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue)
+
+		assertThat(tools).hasSize(3)
+	}
+
+	@Test
+	fun `dispatch-loop sensor tools have correct names`() {
+		val tools = registry.assembleDispatchLoopSensorTools(mockSensorPort)
+		val toolNames = tools.map { it.name }
+
+		assertThat(toolNames).isEqualTo(listOf("queued_trains", "block_inputs"))
+	}
+
+	@Test
+	fun `dispatch-loop actuator tools have correct names`() {
+		val tools = registry.assembleDispatchLoopActuatorTools(commandQueue)
+		val toolNames = tools.map { it.name }
+
+		assertThat(toolNames).isEqualTo(listOf("approve_train"))
+	}
+
+	@Test
+	fun `assembleDispatchLoopTools returns 3 tools with distinct names`() {
+		val tools = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue)
+
+		assertThat(tools).hasSize(3)
+		assertThat(tools.map { it.name }.toSet()).hasSize(3)
+	}
+
+	@Test
+	fun `dispatch-loop tools do not overlap with assembleAllTools tool names`() {
+		val allToolNames = registry.assembleAllTools(mockPerceptionPort, commandQueue).map { it.name }.toSet()
+		val dispatchLoopNames = registry.assembleDispatchLoopTools(mockSensorPort, commandQueue).map { it.name }.toSet()
+
+		assertThat(allToolNames.intersect(dispatchLoopNames)).hasSize(0)
+	}
+
+	@Test
+	fun `assembleAllTools still returns exactly 12 tools after SP4 additions`() {
+		// Regression guard: SP4.1 additions must NOT affect the SP1 tool count.
+		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
+
+		assertThat(tools).hasSize(12)
 	}
 }
