@@ -511,7 +511,6 @@ class DispatchDecisionApplierTest {
 	@Nested
 	@DisplayName("SP1.7 tool-driven actuator decisions (Issue #774)")
 	inner class ToolDrivenActuatorDecisions {
-
 		@Test
 		@DisplayName("SetSignalAspect is routed to NetworkActuatorPort.setSignalAspect")
 		fun setSignalAspect_routedToActuatorPort() {

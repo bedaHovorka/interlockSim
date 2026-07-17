@@ -86,7 +86,7 @@ fun wireSynchronousDispatcher(
 		}
 }
 
-private fun applyDecision(
+internal fun applyDecision(
 	decision: DispatchDecision,
 	loop: ShuntingLoop,
 	actuatorPort: DefaultNetworkActuatorPort
@@ -113,5 +113,82 @@ private fun applyDecision(
 			}
 		}
 		is DispatchDecision.NoAction -> Unit
+		// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+		// Mirrors DispatchDecisionApplier's handling of these subtypes on the async path.
+		is DispatchDecision.SetSignalAspect -> {
+			logger.debug {
+				"wireSynchronousDispatcher: applying SetSignalAspect " +
+					"semaphoreName=${decision.semaphoreName}, signal=${decision.signal}"
+			}
+			val success = actuatorPort.setSignalAspect(decision.semaphoreName, decision.signal)
+			if (!success) {
+				logger.warn {
+					"wireSynchronousDispatcher: SetSignalAspect semaphore '${decision.semaphoreName}' " +
+						"does not exist or is constant — signal ${decision.signal} not applied"
+				}
+			}
+		}
+		is DispatchDecision.SetSwitchPosition -> {
+			logger.debug {
+				"wireSynchronousDispatcher: applying SetSwitchPosition " +
+					"switchName=${decision.switchName}, position=${decision.position}"
+			}
+			val success = actuatorPort.setSwitchPosition(decision.switchName, decision.position)
+			if (!success) {
+				logger.warn {
+					"wireSynchronousDispatcher: SetSwitchPosition switch '${decision.switchName}' " +
+						"does not exist or is locked — position ${decision.position} not applied"
+				}
+			}
+		}
+		is DispatchDecision.ReleaseRoute -> {
+			logger.debug { "wireSynchronousDispatcher: applying ReleaseRoute trainName=${decision.trainName}" }
+			val released = actuatorPort.releaseRoute(decision.trainName)
+			if (!released) {
+				logger.debug {
+					"wireSynchronousDispatcher: ReleaseRoute train '${decision.trainName}' held no reservation (no-op)"
+				}
+			}
+		}
+		is DispatchDecision.RequestRoute -> {
+			logger.debug {
+				"wireSynchronousDispatcher: applying RequestRoute trainName=${decision.trainName}, " +
+					"from=${decision.fromEndpointName}, to=${decision.toEndpointName}"
+			}
+			when (
+				val result =
+					actuatorPort.requestRoute(
+						decision.trainName,
+						decision.fromEndpointName,
+						decision.toEndpointName
+					)
+			) {
+				is RouteRequestResult.Reserved -> {
+					logger.debug {
+						"wireSynchronousDispatcher: RequestRoute reserved ${result.blocksCount} " +
+							"block(s) for ${decision.trainName}"
+					}
+				}
+				is RouteRequestResult.AllPathsBlocked -> {
+					logger.warn {
+						"wireSynchronousDispatcher: RequestRoute all paths blocked for ${decision.trainName} " +
+							"(${decision.fromEndpointName} → ${decision.toEndpointName}); " +
+							"attempted: ${result.attemptedPaths}"
+					}
+				}
+				is RouteRequestResult.Conflict -> {
+					logger.warn {
+						"wireSynchronousDispatcher: RequestRoute conflict for ${decision.trainName} — " +
+							"block '${result.blockName ?: "unnamed"}' owned by '${result.existingOwner}'"
+					}
+				}
+				is RouteRequestResult.NoRouteExists -> {
+					logger.warn {
+						"wireSynchronousDispatcher: RequestRoute no route exists " +
+							"${decision.fromEndpointName} → ${decision.toEndpointName} for ${decision.trainName}"
+					}
+				}
+			}
+		}
 	}
 }

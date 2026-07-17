@@ -36,7 +36,6 @@ import kotlin.test.assertFailsWith
  * @since Issue #774 (SP1.7 — Goal 10 threading contract)
  */
 class SnapshotProjectionNetworkPerceptionPortTest {
-
 	// ── Test helpers ──────────────────────────────────────────────────────────
 
 	private fun emptySnapshot(simTime: Double = 0.0) =

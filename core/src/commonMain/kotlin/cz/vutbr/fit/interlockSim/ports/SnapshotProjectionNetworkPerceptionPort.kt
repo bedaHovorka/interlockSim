@@ -55,7 +55,6 @@ package cz.vutbr.fit.interlockSim.ports
 class SnapshotProjectionNetworkPerceptionPort(
 	private val snapshotProvider: () -> SimulationSnapshot
 ) : NetworkPerceptionPort {
-
 	// ── Signal aspects ────────────────────────────────────────────────────
 
 	/**
