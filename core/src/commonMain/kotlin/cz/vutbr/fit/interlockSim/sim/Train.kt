@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -35,7 +36,6 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
-import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 
 /**
  * Builds a stable, human-readable label for a track block for logging.
@@ -1296,7 +1296,7 @@ class Train :
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val currentSpeedLimitMps: Double
-		get() = pathToSemaphore?.maxSpeed(pathToSemaphore!!.getFirst()) ?: ABSOLUTE_MAX_SPEED
+		get() = pathToSemaphore?.let { it.maxSpeed(it.getFirst()) } ?: ABSOLUTE_MAX_SPEED
 
 	/**
 	 * Whether the train is currently stopped (velocity = 0).
