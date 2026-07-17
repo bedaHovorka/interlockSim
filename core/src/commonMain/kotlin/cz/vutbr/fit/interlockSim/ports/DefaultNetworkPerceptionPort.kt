@@ -237,6 +237,31 @@ class DefaultNetworkPerceptionPort(
 			scheduledArrivalTime = scheduledArrivalTime
 		)
 
+	// ── NetworkPerceptionPort — train perception (SP2a.1) ─────────────────
+
+	override fun trainPerception(trainId: String): TrainPerceptionReading? {
+		val train = activeTrains().firstOrNull { it.name == trainId } ?: return null
+		return train.toPerceptionReading()
+	}
+
+	override fun allTrainPerceptions(): List<TrainPerceptionReading> = activeTrains().map { it.toPerceptionReading() }
+
+	private fun Train.toPerceptionReading(): TrainPerceptionReading =
+		TrainPerceptionReading(
+			trainId = name,
+			signalAheadName = signalAheadName,
+			signalAheadAspect = signalAheadAspect,
+			distanceToSignalAheadMetres = distanceToSemaphore(),
+			currentSpeedLimitMps = currentSpeedLimitMps,
+			velocity = getVelocity(),
+			acceleration = getAcceleration(),
+			totalDistance = totalDistance,
+			frontSectionName = frontSectionName(this),
+			destinationInOutName = timetableDestinationName,
+			scheduledArrivalTime = scheduledArrivalTime,
+			isDwelling = isDwelling
+		)
+
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**
@@ -287,7 +312,8 @@ class DefaultNetworkPerceptionPort(
 				semaphores = allSignalAspects(),
 				blocks = allBlockOccupancies(),
 				trainPositions = allTrainPositions(),
-				timetables = allTrainTimetables()
+				timetables = allTrainTimetables(),
+				trainPerceptions = allTrainPerceptions()
 			)
 		latestCaptured = captured
 		return captured

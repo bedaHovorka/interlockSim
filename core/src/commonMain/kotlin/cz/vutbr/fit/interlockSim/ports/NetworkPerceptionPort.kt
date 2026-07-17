@@ -19,9 +19,10 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * what to do next.  All query methods return **immutable snapshot values** — they never
  * expose mutable simulation objects directly.
  *
- * ## Agent tools (SP1.6)
+ * ## Agent tools (SP1.6 / SP2a.1)
  *
- * Each method maps to one Koog tool in [SP1.6][Issue #551]:
+ * Each method maps to one Koog tool in [SP1.6][Issue #551] or the SP2a.1 train
+ * perception layer [Issue #552]:
  * - [signalAspect] — `tool_signal_aspect(semaphoreName)` → current [Signal] for one semaphore
  * - [allSignalAspects] — `tool_all_signal_aspects()` → all semaphore signals in one call
  * - [blockOccupancy] — `tool_block_occupancy(blockId)` → [BlockOccupancyReading] for one block
@@ -30,6 +31,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * - [allTrainPositions] — `tool_all_train_positions()` → all active train positions
  * - [trainTimetable] — `tool_train_timetable(trainId)` → [TimetableReading] for one train
  * - [allTrainTimetables] — `tool_all_train_timetables()` → all active train timetables
+ * - [trainPerception] — `tool_train_perception(trainId)` → [TrainPerceptionReading] for one train
+ * - [allTrainPerceptions] — `tool_all_train_perceptions()` → all active train perceptions
  *
  * ## Design constraints
  *
@@ -133,6 +136,34 @@ interface NetworkPerceptionPort {
 	 * @return Snapshot list of every active train's timetable.
 	 */
 	fun allTrainTimetables(): List<TimetableReading>
+
+	// ── Per-train first-person perception (SP2a.1) ────────────────────────
+
+	/**
+	 * Read the first-person perception snapshot of the named train.
+	 *
+	 * Returns a bundled [TrainPerceptionReading] combining all five perception
+	 * facets that a reactive train agent (SP2a, Issue #537) needs:
+	 * signal ahead, speed limit, own kinematics, next timetable event, and
+	 * dwell state.
+	 *
+	 * Only trains that are currently **active** (approved and running in the simulation)
+	 * are visible; trains in the unapproved queue are not.
+	 *
+	 * @param trainId Train identifier (e.g. `"Train #1"`).
+	 * @return [TrainPerceptionReading] for the named train, or `null` if no active train
+	 *   with that ID is found.
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	fun trainPerception(trainId: String): TrainPerceptionReading?
+
+	/**
+	 * Read the first-person perception snapshot of **all** currently active trains.
+	 *
+	 * @return Snapshot list of every active train's perception reading.
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	fun allTrainPerceptions(): List<TrainPerceptionReading>
 
 	// ── Full snapshot ─────────────────────────────────────────────────────
 

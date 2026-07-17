@@ -119,6 +119,25 @@ class SnapshotProjectionNetworkPerceptionPort(
 	 */
 	override fun allTrainTimetables(): List<TimetableReading> = snapshotProvider().timetables
 
+	// ── Train perceptions (SP2a.1) ────────────────────────────────────────
+
+	/**
+	 * Projects from [SimulationSnapshot.trainPerceptions] — off-thread-safe.
+	 *
+	 * Returns the [TrainPerceptionReading] whose [TrainPerceptionReading.trainId] matches
+	 * [trainId], or `null` if no such active train appears in the snapshot.
+	 *
+	 * Note: [SimulationSnapshot.trainPerceptions] defaults to `emptyList()` for snapshots
+	 * captured before SP2a.1. This method returns `null` in that case.
+	 */
+	override fun trainPerception(trainId: String): TrainPerceptionReading? =
+		snapshotProvider().trainPerceptions.firstOrNull { it.trainId == trainId }
+
+	/**
+	 * Projects from [SimulationSnapshot.trainPerceptions] — off-thread-safe.
+	 */
+	override fun allTrainPerceptions(): List<TrainPerceptionReading> = snapshotProvider().trainPerceptions
+
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**

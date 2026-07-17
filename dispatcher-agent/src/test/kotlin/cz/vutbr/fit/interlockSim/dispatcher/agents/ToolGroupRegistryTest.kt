@@ -24,12 +24,12 @@ import org.junit.jupiter.api.Test
  * for actuator tools taking an [ActuatorCommandQueue] instead of an actuator port).
  *
  * Tests that:
- * - ToolGroupRegistry correctly assembles perception tools (8 tools)
+ * - ToolGroupRegistry correctly assembles perception tools (9 tools)
  * - ToolGroupRegistry correctly assembles actuator tools (4 tools)
- * - ToolGroupRegistry correctly assembles all tools together (12 tools)
+ * - ToolGroupRegistry correctly assembles all tools together (13 tools)
  * - Tools have proper names, descriptions, and parameters
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2a.1 (#552) adds train_perception
  */
 class ToolGroupRegistryTest {
 	private val mockPerceptionPort = mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
@@ -38,10 +38,10 @@ class ToolGroupRegistryTest {
 	private val registry = ToolGroupRegistry()
 
 	@Test
-	fun `assemblePerceptionTools returns 8 perception tools`() {
+	fun `assemblePerceptionTools returns 9 perception tools`() {
 		val tools = registry.assemblePerceptionTools(mockPerceptionPort)
 
-		assertThat(tools).hasSize(8)
+		assertThat(tools).hasSize(9)
 	}
 
 	@Test
@@ -52,10 +52,10 @@ class ToolGroupRegistryTest {
 	}
 
 	@Test
-	fun `assembleAllTools returns 12 total tools`() {
+	fun `assembleAllTools returns 13 total tools`() {
 		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 
-		assertThat(tools).hasSize(12)
+		assertThat(tools).hasSize(13)
 	}
 
 	@Test
@@ -72,7 +72,8 @@ class ToolGroupRegistryTest {
 				"train_position",
 				"all_train_positions",
 				"train_timetable",
-				"all_train_timetables"
+				"all_train_timetables",
+				"train_perception"
 			)
 		)
 	}
@@ -139,12 +140,12 @@ class ToolGroupRegistryTest {
 	}
 
 	@Test
-	fun `assembleAllTools returns 12 tools with distinct names`() {
+	fun `assembleAllTools returns 13 tools with distinct names`() {
 		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 
-		assertThat(tools).hasSize(12)
+		assertThat(tools).hasSize(13)
 		// A duplicate-name / drop-one regression must not pass the size check alone (#551 review #9).
-		assertThat(tools.map { it.name }.toSet()).hasSize(12)
+		assertThat(tools.map { it.name }.toSet()).hasSize(13)
 	}
 
 	// ── SP4.1 dispatch-loop tool groups (Issue #563) ──────────────────────────

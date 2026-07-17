@@ -25,7 +25,7 @@ import kotlin.test.assertFailsWith
  * Unit tests for [SnapshotProjectionNetworkPerceptionPort].
  *
  * Covers:
- * - All 8 projection methods read from the snapshot returned by the provider.
+ * - All 10 projection methods read from the snapshot returned by the provider.
  * - Name-based (single-entry) lookups return `null` for unknown identifiers.
  * - [SnapshotProjectionNetworkPerceptionPort.snapshot] delegates to the provider.
  * - [SnapshotProjectionNetworkPerceptionPort.captureSnapshot] throws [UnsupportedOperationException].
@@ -33,7 +33,7 @@ import kotlin.test.assertFailsWith
  *
  * All tests run on the common platform (KMP `commonTest`) — no JUnit 5 or MockK.
  *
- * @since Issue #774 (SP1.7 — Goal 10 threading contract)
+ * @since Issue #774 (SP1.7 — Goal 10 threading contract); SP2a.1 (#552) adds trainPerception tests
  */
 class SnapshotProjectionNetworkPerceptionPortTest {
 	// ── Test helpers ──────────────────────────────────────────────────────────
@@ -246,5 +246,77 @@ class SnapshotProjectionNetworkPerceptionPortTest {
 		assertFailsWith<UnsupportedOperationException> {
 			port.captureSnapshot()
 		}
+	}
+
+	// ── trainPerception / allTrainPerceptions (SP2a.1) ────────────────────────
+
+	private fun samplePerception(trainId: String = "Train #1") = TrainPerceptionReading(
+		trainId = trainId,
+		signalAheadName = "zA",
+		signalAheadAspect = cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE,
+		distanceToSignalAheadMetres = 50.0,
+		currentSpeedLimitMps = 20.0,
+		velocity = 10.0,
+		acceleration = 0.5,
+		totalDistance = 200.0,
+		frontSectionName = "k1",
+		destinationInOutName = "B",
+		scheduledArrivalTime = 120.0,
+		isDwelling = false
+	)
+
+	@Test
+	fun `trainPerception returns matching reading from snapshot`() {
+		val reading = samplePerception("Train #1")
+		val snap = emptySnapshot().copy(trainPerceptions = listOf(reading))
+		val port = makePort(snap)
+
+		assertThat(port.trainPerception("Train #1")).isEqualTo(reading)
+	}
+
+	@Test
+	fun `trainPerception returns null for unknown trainId`() {
+		val port = makePort(emptySnapshot())
+
+		assertThat(port.trainPerception("unknownTrain")).isNull()
+	}
+
+	@Test
+	fun `trainPerception returns null when snapshot has no trainPerceptions`() {
+		// Snapshot constructed without trainPerceptions (default emptyList)
+		val snap = emptySnapshot()
+		val port = makePort(snap)
+
+		assertThat(port.trainPerception("Train #1")).isNull()
+	}
+
+	@Test
+	fun `allTrainPerceptions returns all perception readings from snapshot`() {
+		val r1 = samplePerception("Train #1")
+		val r2 = samplePerception("Train #2")
+		val snap = emptySnapshot().copy(trainPerceptions = listOf(r1, r2))
+		val port = makePort(snap)
+
+		assertThat(port.allTrainPerceptions()).containsExactly(r1, r2)
+	}
+
+	@Test
+	fun `allTrainPerceptions returns empty list when snapshot has no trainPerceptions`() {
+		val port = makePort(emptySnapshot())
+
+		assertThat(port.allTrainPerceptions()).isEmpty()
+	}
+
+	@Test
+	fun `trainPerception reflects provider update between calls`() {
+		val r1 = samplePerception("Train #1").copy(velocity = 5.0)
+		val r2 = samplePerception("Train #1").copy(velocity = 15.0)
+		var current = emptySnapshot().copy(trainPerceptions = listOf(r1))
+		val port = SnapshotProjectionNetworkPerceptionPort { current }
+
+		assertThat(port.trainPerception("Train #1")).isEqualTo(r1)
+
+		current = emptySnapshot().copy(trainPerceptions = listOf(r2))
+		assertThat(port.trainPerception("Train #1")).isEqualTo(r2)
 	}
 }

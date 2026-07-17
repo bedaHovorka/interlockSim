@@ -35,6 +35,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import io.github.oshai.kotlinlogging.KotlinLogging
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 
 /**
  * Builds a stable, human-readable label for a track block for logging.
@@ -1243,6 +1244,76 @@ class Train :
 	/** @see timetableOriginName */
 	val scheduledArrivalTime: Double
 		get() = timetable.getOutTime().value
+
+	// ── SP2a.1 per-train first-person perception (Issue #552) ─────────────
+
+	/**
+	 * Name of the next semaphore ahead of this train on its reserved path.
+	 *
+	 * Derived from [nextSemaphore] — the last element of the currently assigned path
+	 * to the next semaphore. Returns `null` when no path is set (train not yet moving
+	 * or approaching its final destination with no further path reserved).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val signalAheadName: String?
+		get() =
+			when (val sep = nextSemaphore()) {
+				is DynamicRailSemaphore -> sep.name.takeIf { it.isNotBlank() }
+				is DynamicInOut -> sep.name.takeIf { it.isNotBlank() }
+				else -> null
+			}
+
+	/**
+	 * Signal aspect of the next semaphore ahead of this train.
+	 *
+	 * For a [DynamicRailSemaphore] endpoint, returns the semaphore's current signal.
+	 * For a [DynamicInOut] endpoint (the path ends at an entry/exit point), returns the
+	 * `outSemaphore` signal, which controls departure from that InOut.
+	 * Returns `null` when no semaphore is ahead (same conditions as [signalAheadName]).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val signalAheadAspect: Signal?
+		get() =
+			when (val sep = nextSemaphore()) {
+				is DynamicRailSemaphore -> sep.signal
+				is DynamicInOut -> sep.outSemaphore.signal
+				else -> null
+			}
+
+	/**
+	 * Current track speed limit in m/s derived from the reserved path.
+	 *
+	 * Computed as `path.maxSpeed(path.getFirst())` — the minimum allowed speed across
+	 * all elements of the path currently reserved for this train (track geometry, switch
+	 * positions, etc.). This is the **physical** track constraint, independent of the
+	 * signal aspect (captured separately in [signalAheadAspect]).
+	 *
+	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
+	 * interlocking has not yet reserved a route; no physical constraint is known).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val currentSpeedLimitMps: Double
+		get() = pathToSemaphore?.maxSpeed(pathToSemaphore!!.getFirst()) ?: ABSOLUTE_MAX_SPEED
+
+	/**
+	 * Whether the train is currently stopped (velocity = 0).
+	 *
+	 * `true` when the train is not moving, which occurs when:
+	 * - waiting at a [Signal.STOP] semaphore
+	 * - holding at a station during direction reversal (30-second dwell)
+	 * - before first departure (just approved, not yet started)
+	 *
+	 * A reactive train agent (SP2a.2) can distinguish these states by inspecting
+	 * [signalAheadAspect]: a STOP aspect means the train is blocked by a signal; an
+	 * allowing or null aspect means the train may be at a station dwell.
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val isDwelling: Boolean
+		get() = getVelocity() == 0.0
 
 	/**
 	 * Track section where the train's front is currently located.
