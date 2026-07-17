@@ -16,6 +16,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaSimpleExecutor
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -26,7 +27,7 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 
 /**
- * Koin DI module for `:dispatcher-agent` SP0.5-new, SP1-new, SP1.3-new, and SP1.4-new components.
+ * Koin DI module for `:dispatcher-agent` SP0.5-new, SP1-new, SP1.3-new, and SP1.5-new components.
  *
  * ## Bindings provided
  *
@@ -35,6 +36,7 @@ import org.koin.dsl.module
  * | [Dispatcher] | singleton | [RuleBasedDispatcher] |
  * | [AgentService] | singleton | [DefaultAgentService] (SP1.2) |
  * | [OllamaExecutorConfig] | singleton | [OllamaExecutorConfig.default] (SP1.3) |
+ * | [OllamaSimpleExecutor] | singleton | [OllamaSimpleExecutor] (SP1.5) |
  * | [ToolGroupRegistry] | singleton | [ToolGroupRegistry] (SP1.3) |
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] (SP1.4) |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
@@ -60,10 +62,19 @@ import org.koin.dsl.module
  * (which is not a suspend context). Instead, callers retrieve [KoogAgentFactory] from
  * the scope and call `factory.createAgent(context)` when appropriate in their suspend context.
  *
- * ### Scope decisions
+ * ## SP1.5 (#550) additions
+ *
+ * SP1.5 extends the module with Ollama executor backend:
+ * - [OllamaSimpleExecutor] — singleton wrapping Koog's `simpleOllamaAIExecutor` for local inference
+ *
+ * The executor is lazy-initialized on first access, deferring network connectivity checks
+ * until it's actually needed.
+ *
+ * ### Scope decisions (SP1.3 design rationale)
  *
  * **Singletons (shared globally):**
  * - [OllamaExecutorConfig]: Model/endpoint choice is runtime-global (all agents use same Ollama)
+ * - [OllamaSimpleExecutor]: Ollama client is a heavyweight stateful resource; shared per application
  * - [ToolGroupRegistry]: Registry logic is stateless; can be shared (tools assembled per context)
  * - [AgentService]: Service for creating agents is stateless (SP1.2)
  * - [Dispatcher]: Dispatcher implementation (rule-based or future LLM) is stateless
@@ -79,12 +90,15 @@ import org.koin.dsl.module
  * - Context-specific perception/actuator ports (scoped per context)
  * - Context-specific tool assembly (populated in SP1.4)
  * - Isolated command queues
+ * - Shared Ollama executor backend (single local LLM for all simulations)
  *
- * ## Pending SP1.5 (#550) bindings
+ * ## Pending SP1.4 (#549) bindings
  *
- * Ollama client initialization and LLM executor backend setup.
+ * [NetworkPerceptionPort][cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort]
+ * and [NetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort]
+ * (tool implementations) are SP1.4's responsibility.
  *
- * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), further extended in Issue #549 (SP1.4)
+ * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), and Issue #550 (SP1.5)
  */
 val dispatcherAgentModule: Module =
 	module {
@@ -101,6 +115,12 @@ val dispatcherAgentModule: Module =
 		// All agents share the same Ollama endpoint, model, and inference parameters.
 		// The config is immutable and stateless, safe for global sharing.
 		single<OllamaExecutorConfig> { OllamaExecutorConfig.default() }
+
+		// SP1.5: Ollama executor backend (singleton, Issue #550)
+		// Wraps Koog's simpleOllamaAIExecutor for local LLM inference.
+		// Lazy-initialized on first access (defers network connectivity check).
+		// All agents share the same Ollama-backed executor (heavyweight stateful resource).
+		single<OllamaSimpleExecutor> { OllamaSimpleExecutor(get()) }
 
 		// SP1.3: Tool group registry (singleton)
 		// Registry logic is stateless; it just coordinates tool assembly per context.

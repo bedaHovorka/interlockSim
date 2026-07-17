@@ -126,17 +126,40 @@ services:
     container_name: interlocksim-fast-sim
     command: ["example", "shuntingLoop", "60"]
 
-  # Local Ollama LLM server for dispatcher-agent's SP1.3 (Issue #548) proof-of-connection
-  # test (@Tag("ollama-test")) and, later, SP1.5's real executor. This is an ALTERNATIVE
-  # to a native Ollama install, not a companion to one -- both publish port 11434, so only
-  # run this if you don't already have `ollama serve` running on the host.
+  # Local Ollama LLM server for dispatcher-agent's SP1.5 executor (Issue #550) and proof-of-connection
+  # testing (@Tag("ollama-test")). This is an ALTERNATIVE to a native Ollama install, not a
+  # companion to one -- both publish port 11434, so only run this if you don't already have
+  # `ollama serve` running on the host.
+  #
+  # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
+  # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
+  # container GPU access, uncomment the `deploy.resources.reservations.devices` block below
+  # (NVIDIA) and have `nvidia-container-toolkit` installed + the Docker runtime configured:
+  #     sudo dnf install nvidia-container-toolkit
+  #     sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+  # Ollama then uses CUDA automatically. To FORCE a specific backend (optional), set
+  # `OLLAMA_LLM_LIBRARY=cuda_v11` (NVIDIA) or `rocm_v6` (AMD) in the environment section below;
+  # for AMD ROCm use the `ollama/ollama:rocm` image instead of `ollama/ollama:latest`.
+  # CPU-only (default, no device block uncommented) runs on any machine.
+  #
+  # VRAM limit: Set `OLLAMA_MAX_VRAM` (in BYTES, not "8GB") to cap VRAM (max 8GB per @bedaHovorka):
+  #   export OLLAMA_MAX_VRAM=8589934592   # 8 GiB exactly (8 * 1024^3)
+  # OLLAMA_MAX_VRAM is a real Ollama env var; 0 means unlimited.
   #
   # On startup, pulls qwen2.5:7b-instruct only if it isn't already present in the
   # ollama-data volume (so restarts after the first run don't re-pull ~4.7GB).
   #
   # Usage:
+  #   # CPU-only (default, slowest but works everywhere)
   #   docker compose up -d ollama
-  #   ./gradlew :dispatcher-agent:integrationTest   # auto-detects localhost:11434, no config needed
+  #
+  #   # GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit)
+  #   #   1. Uncomment the deploy.resources.reservations.devices block below.
+  #   #   2. export OLLAMA_MAX_VRAM=8589934592   # optional 8GB VRAM cap
+  #   docker compose up -d ollama
+  #
+  #   # Then run integrationTest which auto-detects localhost:11434, no config needed
+  #   ./gradlew :dispatcher-agent:integrationTest
   ollama:
     image: ollama/ollama:latest
     container_name: interlocksim-ollama
@@ -144,6 +167,24 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    environment:
+      # OLLAMA_MAX_VRAM (real Ollama env var, in BYTES): 0 = unlimited; set to
+      # 8589934592 for an 8GB VRAM cap. Note: OLLAMA_CUDA / OLLAMA_ROCM are NOT real Ollama
+      # variables -- Ollama auto-detects the GPU; use the device block below for GPU access.
+      OLLAMA_MAX_VRAM: ${OLLAMA_MAX_VRAM:-0}
+      # OLLAMA_NUM_PARALLEL=1     # Serialize model loading on low-VRAM systems
+      # OLLAMA_LLM_LIBRARY=cuda_v11   # Force CUDA backend (NVIDIA); rocm_v6 for AMD. Optional.
+    # GPU support (NVIDIA): uncomment to give the container GPU access. Requires
+    # nvidia-container-toolkit installed and the Docker runtime configured (see comment
+    # block above). Ollama then auto-detects CUDA -- no env var needed. For AMD, switch the
+    # image to ollama/ollama:rocm and use driver: amd / OLLAMA_LLM_LIBRARY=rocm_v6.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
