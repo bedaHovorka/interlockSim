@@ -18,7 +18,6 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
-import cz.vutbr.fit.interlockSim.objects.tracks.Train
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
@@ -160,7 +159,7 @@ class DefaultInterlockingFacade(
 
 			// Check if block is occupied (a train is physically on it)
 			if (block.occupant != null) {
-				val occupantName = (block.occupant as? Train)?.name ?: "neznámý vlak"
+				val occupantName = block.occupant?.toString() ?: "neznámý vlak"
 				return "Úsek ${blockId.name} obsazen vlakem $occupantName"
 			}
 
@@ -313,4 +312,5 @@ class DefaultInterlockingFacade(
 			return null
 		}
 	}
+}
 
