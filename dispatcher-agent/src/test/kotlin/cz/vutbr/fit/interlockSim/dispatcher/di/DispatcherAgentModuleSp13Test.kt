@@ -10,7 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.di
 
 import assertk.assertThat
-import assertk.assertions.isEmpty
+import assertk.assertions.hasSize
 import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
@@ -102,12 +102,12 @@ class DispatcherAgentModuleSp13Test {
 	}
 
 	@Test
-	fun toolGroupRegistryStartsWithEmptyToolLists() {
+	fun toolGroupRegistryAssemblesFullToolSetViaKoinSingleton() {
 		val registry: ToolGroupRegistry by inject(ToolGroupRegistry::class.java)
 
-		// SP1.4: Registry now requires ports to assemble tools.
-		// Since this test is at the singleton level (no context scope),
-		// we create mock ports just to verify the registry accepts them.
+		// Registry requires ports to assemble tools. Since this test is at the singleton
+		// level (no context scope), we create mock ports just to verify the Koin-provided
+		// registry instance assembles the real SP1.6 tool set through them.
 		val mockPerceptionPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort>()
 		val mockActuatorPort = io.mockk.mockk<cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort>()
 
@@ -115,9 +115,9 @@ class DispatcherAgentModuleSp13Test {
 		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
 		val actuatorTools = registry.assembleActuatorTools(mockActuatorPort)
 
-		// SP1.4: Port infrastructure in place; tool lists still empty (implementations in SP1.6)
-		assertThat(allTools).isEmpty()
-		assertThat(perceptionTools).isEmpty()
-		assertThat(actuatorTools).isEmpty()
+		// SP1.6: tool implementations are in place (8 perception + 4 actuator = 12 total)
+		assertThat(allTools).hasSize(12)
+		assertThat(perceptionTools).hasSize(8)
+		assertThat(actuatorTools).hasSize(4)
 	}
 }

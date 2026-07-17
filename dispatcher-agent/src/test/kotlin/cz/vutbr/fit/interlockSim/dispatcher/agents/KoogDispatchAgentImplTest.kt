@@ -70,6 +70,6 @@ class KoogDispatchAgentImplTest {
 	) : DomainTool {
 		override val parameters: List<DomainToolParameter> = emptyList()
 
-		override suspend fun execute(args: Map<String, Any?>): Any? = "mock result"
+		override suspend fun execute(args: Map<String, Any?>): ToolResult = ToolResult.Success("mock result")
 	}
 }
