@@ -23,7 +23,11 @@ import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
  *
  * 2. **Správná poloha pojížděných i odvratných výhybek/výkolejek** (Correct switch positions) —
  *    All running switches (pojížděné výhybky) are in the required position.
- *    All flank-protection switches (odvratné výhybky) are locked in safe positions.
+ *    All flank-protection switches (odvratné výhybky) are in their required (safe) position.
+ *    The switch's physical position ([cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch.conf])
+ *    is compared against the route's [cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting.position]
+ *    using the canonical `PLUS ↔ MAIN` / `MINUS ↔ BRANCH` mapping; a mismatch denies the route
+ *    before any lock is acquired.
  *
  * 3. **Závěr** (Locking / route lock) —
  *    All blocks and switches in the route are locked (reserved) for the requesting train.
@@ -91,6 +95,14 @@ interface InterlockingFacade {
 	/**
 	 * Request a train route — atomically check all four ESA-11 conditions.
 	 *
+	 * **Preconditions (validated before the four conditions):**
+	 *
+	 * - [route.blocks] must be non-empty — a route with no track sections is denied
+	 *   (`"Prázdná jízdní cesta"`). A real route always protects at least one block.
+	 * - [entrySignal] must identify the same signal as [route.from] — the signal the kernel
+	 *   clears must be the route's entry separator. A mismatch is denied
+	 *   (`"Návěstidlo … neodpovídá počátku cesty"`).
+	 *
 	 * **Conditions checked (in order):**
 	 *
 	 * 1. **Route freedom (Volnost jízdní cesty)** —
@@ -98,10 +110,13 @@ interface InterlockingFacade {
 	 *    Returns [RouteResponse.Denied] if any block is occupied/reserved by another train.
 	 *
 	 * 2. **Switch positions (Správná poloha výhybek)** —
-	 *    All running switches in [route.running] and flank switches in [route.flank] are not
-	 *    locked by another train. Returns [RouteResponse.Denied] if any switch is locked.
-	 *    (Verifying the actual switch position against [SwitchSetting.position] is deferred
-	 *    to SP3.5 — the dispatcher is responsible for setting switches before requesting a route.)
+	 *    All running switches in [route.running] and flank switches in [route.flank] must be in
+	 *    the position required by their [SwitchSetting.position]. The physical position
+	 *    ([cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch.conf]) is compared against
+	 *    the required position using the canonical `PLUS ↔ MAIN` / `MINUS ↔ BRANCH` mapping.
+	 *    Returns [RouteResponse.Denied] if any switch is not in the required position.
+	 *    (The dispatcher is responsible for setting switches to the required position before
+	 *    requesting a route; the kernel refuses to clear the signal until it observes them there.)
 	 *
 	 * 3. **Route lock (Závěr)** —
 	 *    All blocks and switches are atomically locked (reserved) for [trainId].
@@ -112,16 +127,21 @@ interface InterlockingFacade {
 	 *    No other train has a conflicting route (one that shares blocks or switches with this route).
 	 *    Returns [RouteResponse.Denied] if a conflicting active route exists.
 	 *
-	 * **On success:** The entry signal ([entrySignal]) is cleared to [clearedAspect], and
+	 * **On success:** The entry signal ([entrySignal]) is cleared to [clearedAspect] (and the
+	 * kernel remembers it cleared that signal for the matching [releaseRoute] call), and
 	 * [RouteResponse.Granted] is returned. This is the Czech interlocking's "postaveno a volno"
 	 * (route is set and signal is clear) response to the dispatcher.
 	 *
 	 * **On failure:** No locks are acquired, signal remains STOP, and [RouteResponse.Denied]
-	 * is returned with a Czech reason.
+	 * is returned with a Czech reason. If the locks were acquired but the signal could not be
+	 * cleared (unknown signal or unmappable aspect), the locks are rolled back and the request
+	 * is denied — [RouteResponse.Granted] is never returned unless the signal actually shows
+	 * [clearedAspect].
 	 *
 	 * @param trainId The train requesting the route (for ownership tracking and conflict detection).
-	 * @param entrySignal The signal at which the train is stopped/slowing (will be cleared if request is granted).
-	 * @param route The requested route, including switch settings and block sections.
+	 * @param entrySignal The signal at which the train is stopped/slowing (will be cleared if request
+	 *                    is granted). Must identify the same signal as [route.from].
+	 * @param route The requested route, including switch settings and block sections. Must have ≥1 block.
 	 * @param clearedAspect The signal aspect to display if the route is granted
 	 *                      (e.g., `Volno`, `Rychlost(40)`, determined by dispatcher intent and network state).
 	 *
@@ -141,14 +161,23 @@ interface InterlockingFacade {
 	 * Release a route — progressively clear locks as the train vacates blocks.
 	 *
 	 * **Implementation note (SP3.4 initial MVP):**
-	 * This implementation performs **atomic release** of the entire route.
-	 * Progressive release (blocking section-by-section as the train physically clears blocks)
-	 * is deferred to SP3.5 (#nnnn).
+	 * This implementation performs **atomic release of the entire route** — every block and
+	 * switch reserved for [trainId] is released in one call, and the signal the kernel cleared in
+	 * the matching [requestRoute] call is reset to STOP. It does **not** release locks
+	 * section-by-section as the train physically clears blocks. **Do not call this until the train
+	 * has fully vacated the route** — calling it mid-traverse releases blocks the train still
+	 * occupies, which is unsafe. Progressive (section-by-section) release is deferred to SP3.5.
+	 *
+	 * **Signal reset (C4/I4):** The kernel tracks which entry signal it cleared for [trainId]
+	 * during [requestRoute]. [exitSignal] is **for logging/audit only** and is NOT used to select
+	 * a signal to reset — the kernel resets the signal it actually cleared. If [trainId] has no
+	 * active route (no tracked cleared signal), no signal is reset, so a caller error cannot
+	 * disrupt another train's cleared entry signal.
 	 *
 	 * **On invocation:**
 	 * - All blocks reserved for [trainId] are released (state transitions: RESERVED/OCCUPIED → FREE).
 	 * - All switches locked for [trainId] are unlocked.
-	 * - The entry signal is reset to STOP (safe aspect).
+	 * - The entry signal the kernel cleared for [trainId] is reset to STOP (safe aspect).
 	 * - If [trainId] has no active route, the call succeeds silently (idempotent).
 	 *
 	 * **Conflict resolution:**
@@ -157,9 +186,9 @@ interface InterlockingFacade {
 	 * re-querying [requestRoute] for those trains; the kernel does not emit notifications.
 	 *
 	 * @param trainId The train releasing its route (must match the train that requested the route).
-	 * @param exitSignal The signal marking the end of the route (will be reset to STOP).
-	 *                   This is provided for logging/auditing; it must match the [entrySignal]
-	 *                   from the corresponding [requestRoute] call.
+	 * @param exitSignal The signal marking the end of the route. Provided for logging/auditing
+	 *                   only; the kernel resets the signal it cleared in [requestRoute], which
+	 *                   equals [cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute.from] of that request.
 	 *
 	 * @since Issue #572
 	 */

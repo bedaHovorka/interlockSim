@@ -14,10 +14,12 @@ import cz.vutbr.fit.interlockSim.context.navigation.PathReservationRegistry
 import cz.vutbr.fit.interlockSim.lang.toSignal
 import cz.vutbr.fit.interlockSim.lang.vocab.Aspect
 import cz.vutbr.fit.interlockSim.lang.vocab.SignalId
+import cz.vutbr.fit.interlockSim.lang.vocab.SwitchPosition
 import cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting
 import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
@@ -31,9 +33,11 @@ private val logger = KotlinLogging.logger {}
  *
  * Implements atomic route locking with verification of:
  * 1. Route freedom (blocks are FREE — unoccupied and unreserved)
- * 2. Switch positions (running and flank switches are not locked by another train)
+ * 2. Switch positions (each switch's [DynamicRailSwitch.conf] matches its required
+ *    [SwitchSetting.position] via the canonical `PLUS ↔ MAIN` / `MINUS ↔ BRANCH` mapping)
  * 3. Route lock (all elements are locked atomically, rolled back on partial failure)
- * 4. Conflict exclusion (blocks: enforced via [registry]; switches: not-locked check above)
+ * 4. Conflict exclusion (blocks: enforced via [registry]; switches: lock-ownership check in
+ *    [lockSwitches])
  *
  * **Design Notes:**
  *
@@ -44,8 +48,13 @@ private val logger = KotlinLogging.logger {}
  * - **Progressive lock release:** The current MVP releases the entire route atomically.
  *   SP3.5 will implement progressive release (block-by-block as the train physically clears).
  *
- * - **Switch position matching:** Only lock-ownership is checked, not [SwitchSetting.position]
- *   against the switch's actual [DynamicRailSwitch.conf]. Deferred to SP3.5.
+ * - **Switch position mapping:** [SwitchPosition] (PLUS/MINUS, route-spec layer) and
+ *   [RailSwitch.Conf] (MAIN/BRANCH, domain object layer) are disjoint in the codebase;
+ *   [SwitchPosition.toConf] below is the canonical mapping (first introduced here).
+ *
+ * - **Cleared-signal tracking:** The kernel remembers which entry signal it cleared per train
+ *   ([clearedSignals]) so [releaseRoute] resets exactly that signal, regardless of the
+ *   [exitSignal] argument supplied by the caller (which is audit-only).
  *
  * @property env The simulation environment providing access to network elements
  *              (blocks, switches, signals, and the block graph).
@@ -85,6 +94,13 @@ class DefaultInterlockingFacade(
 			.filter { it.name.isNotBlank() }
 			.associateBy { it.name }
 
+	/**
+	 * The entry signal the kernel actually cleared per train in [requestRoute] (C4/I4).
+	 * [releaseRoute] resets exactly this signal, ignoring the caller-supplied [exitSignal]
+	 * (audit-only). A train with no entry here has no active route and no signal is reset.
+	 */
+	private val clearedSignals: MutableMap<String, DynamicRailSemaphore> = mutableMapOf()
+
 	override fun requestRoute(
 		trainId: String,
 		entrySignal: SignalId,
@@ -95,6 +111,22 @@ class DefaultInterlockingFacade(
 			"requestRoute: trainId=$trainId, entrySignal=${entrySignal.name}, " +
 				"from=${route.from.name} to=${route.to.name}, " +
 				"blocks=${route.blocks.map { it.name }}, clearedAspect=${clearedAspect.humanLabel()}"
+		}
+
+		// Precondition (C1): a route with no blocks protects nothing — never clear a signal for it.
+		if (route.blocks.isEmpty()) {
+			logger.info { "Route denied for trainId=$trainId: prázdná jízdní cesta" }
+			return InterlockingFacade.RouteResponse.Denied("Prázdná jízdní cesta – žádné úseky")
+		}
+
+		// Precondition (I5): the signal to clear must be the route's entry separator.
+		if (entrySignal.name != route.from.name) {
+			logger.info {
+				"Route denied for trainId=$trainId: návěstidlo ${entrySignal.name} neodpovídá počátku cesty ${route.from.name}"
+			}
+			return InterlockingFacade.RouteResponse.Denied(
+				"Návěstidlo ${entrySignal.name} neodpovídá počátku cesty ${route.from.name}"
+			)
 		}
 
 		// Condition 1: Check route freedom (all blocks must be FREE)
@@ -118,7 +150,20 @@ class DefaultInterlockingFacade(
 			return InterlockingFacade.RouteResponse.Denied(lockReason)
 		}
 
-		clearSignal(entrySignal, clearedAspect, trainId)
+		// C2: never return Granted unless the signal actually shows clearedAspect. If the signal
+		// is unknown or the aspect is unmappable, clearSignal returns null and we roll back the
+		// locks just acquired so no state leaks.
+		val clearedSemaphore = clearSignal(entrySignal, clearedAspect, trainId)
+		if (clearedSemaphore == null) {
+			env.getRoutingServices().getPathReservationService().releasePath(trainId)
+			logger.info { "Route denied for trainId=$trainId: návěstidlo ${entrySignal.name} nelze zklidnit" }
+			return InterlockingFacade.RouteResponse.Denied(
+				"Návěstidlo ${entrySignal.name} nelze zklidnit (neznámé návěstidlo nebo neplatný návestní aspekt)"
+			)
+		}
+
+		// C4: remember which entry signal we cleared so releaseRoute resets exactly this one.
+		clearedSignals[trainId] = clearedSemaphore
 
 		logger.info {
 			"Route GRANTED for trainId=$trainId: " +
@@ -134,23 +179,23 @@ class DefaultInterlockingFacade(
 		trainId: String,
 		exitSignal: SignalId
 	) {
-		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name}" }
+		logger.debug { "releaseRoute: trainId=$trainId, exitSignal=${exitSignal.name} (audit only)" }
 
-		try {
-			// Release all blocks and switches reserved for this train (shared registry — see
-			// the class KDoc — so this correctly clears everything locked by requestRoute()).
-			val releasedBlocks = env.getRoutingServices().getPathReservationService().releasePath(trainId)
-			logger.info { "Released ${releasedBlocks.size} blocks for trainId=$trainId" }
+		// Release all blocks and switches reserved for this train (shared registry — see the
+		// class KDoc — so this clears everything locked by requestRoute()). releasePath is
+		// idempotent: an unknown trainId yields an empty list and touches nothing.
+		val releasedBlocks = env.getRoutingServices().getPathReservationService().releasePath(trainId)
+		logger.info { "Released ${releasedBlocks.size} blocks for trainId=$trainId" }
 
-			val signal = semaphoreByName[exitSignal.name]
-			if (signal != null) {
-				signal.signal = Signal.STOP
-				logger.info { "Signal ${exitSignal.name} reset to STOP after route release for trainId=$trainId" }
-			} else {
-				logger.warn { "Signal ${exitSignal.name} not found in network; nothing to reset" }
-			}
-		} catch (e: Exception) {
-			logger.error(e) { "Error releasing route for trainId=$trainId: ${e.message}" }
+		// C4/I4: reset exactly the entry signal the kernel cleared for this train. The caller's
+		// exitSignal is audit-only and never selects a signal to reset, so a caller error (wrong
+		// trainId or wrong exitSignal) cannot disrupt another train's cleared signal.
+		val cleared = clearedSignals.remove(trainId)
+		if (cleared != null) {
+			cleared.signal = Signal.STOP
+			logger.info { "Cleared entry signal reset to STOP for trainId=$trainId" }
+		} else {
+			logger.info { "No tracked cleared signal for trainId=$trainId; nothing to reset" }
 		}
 	}
 
@@ -172,9 +217,15 @@ class DefaultInterlockingFacade(
 	}
 
 	/**
-	 * Condition 2: Check that all running and flank switches are not locked by another train.
+	 * Condition 2: Check that all running and flank switches are in their required position.
 	 *
-	 * @return null if all switches are available, otherwise a Czech denial reason.
+	 * The switch's physical position ([DynamicRailSwitch.conf]) is compared against the route's
+	 * [SwitchSetting.position] via the canonical `PLUS ↔ MAIN` / `MINUS ↔ BRANCH` mapping.
+	 * Lock-ownership is NOT checked here — it is the authoritative conflict check in
+	 * [lockSwitches] (condition 3/4), which rolls back blocks if a switch turns out to be locked
+	 * by another train.
+	 *
+	 * @return null if all switches are in the required position, otherwise a Czech denial reason.
 	 */
 	private fun checkSwitchPositions(route: TrainRoute): String? {
 		for (switchSetting in route.running) {
@@ -183,7 +234,7 @@ class DefaultInterlockingFacade(
 		for (switchSetting in route.flank) {
 			checkSwitchAvailable(switchSetting, "Odvratná výhybka")?.let { return it }
 		}
-		return null // All switches are available for locking
+		return null // All switches are in the required position
 	}
 
 	private fun checkSwitchAvailable(
@@ -191,8 +242,10 @@ class DefaultInterlockingFacade(
 		label: String
 	): String? {
 		val switch = switchByName[switchSetting.switch.name] ?: return "Neznámá výhybka ${switchSetting.switch.name}"
-		if (switch.locked) {
-			return "$label ${switchSetting.switch.name} je zafixovaná"
+		val requiredConf = switchSetting.position.toConf()
+		if (switch.conf != requiredConf) {
+			return "$label ${switchSetting.switch.name} není v poloze ${switchSetting.position} " +
+				"(požadováno ${requiredConf.name}, aktuálně ${switch.conf.name})"
 		}
 		return null
 	}
@@ -283,6 +336,13 @@ class DefaultInterlockingFacade(
 		trainId: String,
 		switches: List<DynamicRailSwitch>
 	): String? {
+		// Authoritative switch lock-conflict check (M6). Condition 2 above only verifies position;
+		// lock-ownership is checked here, immediately before registration. This is the single
+		// point that decides a switch is free to lock, so [lockRouteAtomic] rolls back any blocks
+		// already reserved when this fails. The check is defence-in-depth: in a single-threaded
+		// kDisco context a switch that passed condition 2 will not change between here and
+		// [registerSwitches], but under a future concurrent model the re-check guards the TOCTOU
+		// window between the position check and the lock.
 		for (switch in switches) {
 			if (switch.locked && registry.getSwitchOwner(switch) != trainId) {
 				return "Výhybka ${switch.name} je zafixovaná"
@@ -292,26 +352,43 @@ class DefaultInterlockingFacade(
 		return null
 	}
 
-	/** Clears [entrySignal] to [clearedAspect] if the signal is known; safety fallback otherwise. */
+	/**
+	 * Clears [entrySignal] to [clearedAspect] (C2). Returns the [DynamicRailSemaphore] that was
+	 * cleared, or null if the signal is unknown or the aspect has no [Signal] equivalent — in
+	 * both cases the signal is left untouched and the caller MUST roll back the locks it just
+	 * acquired and deny the route (never return Granted without a cleared signal).
+	 */
 	private fun clearSignal(
 		entrySignal: SignalId,
 		clearedAspect: Aspect,
 		trainId: String
-	) {
+	): DynamicRailSemaphore? {
 		val signal = semaphoreByName[entrySignal.name]
 		if (signal == null) {
-			logger.warn { "Signal ${entrySignal.name} not found in network; proceeding anyway" }
-			return
+			logger.warn { "Signal ${entrySignal.name} not found in network; route will be denied" }
+			return null
 		}
 		val targetSignalState = clearedAspect.toSignal()
 		if (targetSignalState == null) {
 			logger.warn {
 				"Aspect ${clearedAspect.humanLabel()} has no Signal equivalent; " +
-					"signal remains unchanged (safety fallback)"
+					"route will be denied (signal unchanged)"
 			}
-			return
+			return null
 		}
 		signal.signal = targetSignalState
 		logger.info { "Signal ${entrySignal.name} cleared to ${clearedAspect.humanLabel()} for trainId=$trainId" }
+		return signal
 	}
 }
+
+/**
+ * Canonical mapping from the route-spec [SwitchPosition] (PLUS/MINUS) to the domain-object
+ * [RailSwitch.Conf] (MAIN/BRANCH). First such mapping in the codebase — the two layers were
+ * previously disjoint. `PLUS ↔ MAIN` (straight/main direction), `MINUS ↔ BRANCH` (diverging).
+ */
+private fun SwitchPosition.toConf(): RailSwitch.Conf =
+	when (this) {
+		SwitchPosition.PLUS -> RailSwitch.Conf.MAIN
+		SwitchPosition.MINUS -> RailSwitch.Conf.BRANCH
+	}

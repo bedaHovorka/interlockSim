@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
+import assertk.assertions.contains
 import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isInstanceOf
@@ -30,6 +31,7 @@ import cz.vutbr.fit.interlockSim.lang.vocab.SwitchSetting
 import cz.vutbr.fit.interlockSim.lang.vocab.TrainRoute
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
+import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
@@ -45,9 +47,9 @@ import io.mockk.mockk
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
-import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import org.junit.jupiter.api.assertThrows
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import java.util.concurrent.TimeUnit
@@ -90,7 +92,6 @@ class InterlockingFacadeTest : KoinTestBase() {
 	 * **Note:** With null helper methods, requests typically return Denied due to missing blocks.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `requestRoute returns valid RouteResponse sealed type`() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
@@ -111,15 +112,14 @@ class InterlockingFacadeTest : KoinTestBase() {
 	}
 
 	/**
-	 * Test: Route request with empty blocks list (edge case).
+	 * Test: Route request with empty blocks list is denied (C1).
 	 *
-	 * **Coverage:** Minimal route with no blocks.
-	 * **Expected:** Route grant (all zero blocks are trivially "free").
-	 * **Note:** In MVP with null helper methods, may behave differently.
+	 * **Coverage:** A route with no track sections protects nothing — the kernel must never
+	 * clear a signal for it.
+	 * **Expected:** `Denied` with a Czech reason mentioning the empty route.
 	 */
 	@Test
-	@Tag("integration-test")
-	fun `requestRoute with empty blocks returns Granted`() {
+	fun `requestRoute with empty blocks is Denied`() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
 		val route =
@@ -134,19 +134,18 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
 
-		// With no blocks, all conditions trivially pass
-		assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
+		assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+		assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).isNotEmpty()
 	}
 
 	/**
 	 * Test: Denial response includes Czech human-readable reason.
 	 *
-	 * **Coverage:** Error message generation for dispatcher/agent feedback.
-	 * **Expected:** Non-empty Czech reason in Denied response.
-	 * **Note:** Specific reasons depend on block/switch lookups.
+	 * **Coverage:** Error message generation for dispatcher/agent feedback. On an empty
+	 * network the requested block "U1" is unknown, so the route is denied (fail closed).
+	 * **Expected:** `Denied` with a non-empty Czech reason.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `Denied response contains non-empty Czech reason`() {
 		val trainId = "T1"
 		val entrySignal = SignalId("S1")
@@ -162,10 +161,8 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
 
-		// If denied (likely with null helper methods), reason should be non-empty
-		if (response is InterlockingFacade.RouteResponse.Denied) {
-			assertThat(response.reason).isNotEmpty()
-		}
+		assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+		assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).isNotEmpty()
 	}
 
 	/**
@@ -175,7 +172,6 @@ class InterlockingFacadeTest : KoinTestBase() {
 	 * **Expected:** No exceptions; idempotent operation succeeds.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `releaseRoute with non-existent trainId succeeds (idempotent)`() {
 		val trainId = "T-nonexistent"
 		val exitSignal = SignalId("S2")
@@ -195,7 +191,6 @@ class InterlockingFacadeTest : KoinTestBase() {
 	 * **Expected:** Each request independently evaluated.
 	 */
 	@Test
-	@Tag("integration-test")
 	fun `multiple sequential route requests are independent`() {
 		val route1 =
 			TrainRoute(
@@ -223,35 +218,6 @@ class InterlockingFacadeTest : KoinTestBase() {
 	}
 
 	/**
-	 * Test: Granted response includes clearedAspect and lockedRoute.
-	 *
-	 * **Coverage:** Response contract validation.
-	 * **Expected:** Granted response has non-null clearedAspect and route.
-	 */
-	@Test
-	@Tag("integration-test")
-	fun `Granted response includes clearedAspect and lockedRoute`() {
-		val trainId = "T1"
-		val entrySignal = SignalId("S1")
-		val route =
-			TrainRoute(
-				from = SignalId("S1"),
-				to = SignalId("S2"),
-				blocks = emptyList(),
-				running = emptyList(),
-				flank = emptyList()
-			)
-		val clearedAspect = Aspect.Volno
-
-		val response = facade.requestRoute(trainId, entrySignal, route, clearedAspect)
-
-		if (response is InterlockingFacade.RouteResponse.Granted) {
-			assertThat(response.clearedAspect).isInstanceOf(Aspect::class)
-			assertThat(response.lockedRoute).isInstanceOf(TrainRoute::class)
-		}
-	}
-
-	/**
 	 * Real four-condition enforcement against MockK-mocked network elements (no live kDisco
 	 * simulation, no Koin). Mirrors the mocking strategy in
 	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPortTest].
@@ -273,11 +239,19 @@ class InterlockingFacadeTest : KoinTestBase() {
 					}
 			}
 
-		/** Stateful mock switch: `lock()`/`unlock()` actually flip the value `locked` reports. */
-		private fun switch(name: String): DynamicRailSwitch {
+		/**
+		 * Stateful mock switch: `lock()`/`unlock()` flip the value `locked` reports, and `conf`
+		 * is stubbed (defaults to [RailSwitch.Conf.MAIN], i.e. `SwitchPosition.PLUS`). C3 reads
+		 * `conf` to verify the switch is in the route's required position.
+		 */
+		private fun switch(
+			name: String,
+			conf: RailSwitch.Conf = RailSwitch.Conf.MAIN
+		): DynamicRailSwitch {
 			var locked = false
 			return mockk<DynamicRailSwitch>(relaxed = true).also {
 				every { it.name } returns name
+				every { it.conf } returns conf
 				every { it.locked } answers { locked }
 				every { it.lock() } answers { locked = true }
 				every { it.unlock() } answers { locked = false }
@@ -306,7 +280,8 @@ class InterlockingFacadeTest : KoinTestBase() {
 		private fun env(
 			blocks: Collection<DynamicTrackBlock> = emptyList(),
 			switches: Collection<DynamicRailSwitch> = emptyList(),
-			semaphores: Collection<DynamicRailSemaphore> = emptyList()
+			semaphores: Collection<DynamicRailSemaphore> = emptyList(),
+			releasePathThrows: Boolean = false
 		): Pair<SimulationEnvironment, PathReservationRegistry> {
 			val cells: List<Cell> = switches.toList() + semaphores.toList()
 			val grid = mockk<RailwayNetGrid<Cell>>(relaxed = true)
@@ -320,13 +295,17 @@ class InterlockingFacadeTest : KoinTestBase() {
 			val registry = PathReservationRegistry(mockk(relaxed = true))
 
 			val reservationService = mockk<PathReservationService>(relaxed = true)
-			every { reservationService.releasePath(any()) } answers {
-				val trainId = firstArg<String>()
-				val released = registry.getBlocks(trainId)
-				registry.getSwitches(trainId).forEach { it.unlock() }
-				registry.unregister(trainId)
-				registry.unregisterSwitches(trainId)
-				released
+			if (releasePathThrows) {
+				every { reservationService.releasePath(any()) } throws IllegalStateException("releasePath boom")
+			} else {
+				every { reservationService.releasePath(any()) } answers {
+					val trainId = firstArg<String>()
+					val released = registry.getBlocks(trainId)
+					registry.getSwitches(trainId).forEach { it.unlock() }
+					registry.unregister(trainId)
+					registry.unregisterSwitches(trainId)
+					released
+				}
 			}
 
 			val routingServices = mockk<RoutingServices>(relaxed = true)
@@ -383,23 +362,26 @@ class InterlockingFacadeTest : KoinTestBase() {
 		}
 
 		@Test
-		@DisplayName("denies when a running switch is already locked by another train")
-		fun deniesLockedSwitch() {
-			val v1 = switch("V1")
-			v1.lock()
-			val (e, registry) = env(switches = listOf(v1), semaphores = listOf(semaphore("S1")))
+		@DisplayName("denies and rolls back reserved blocks when a switch is locked by another train (I2)")
+		fun deniesLockedSwitchAndRollsBackBlocks() {
+			val u1 = block("U1")
+			val v1 = switch("V1", conf = RailSwitch.Conf.MAIN) // matches plusSetting (PLUS -> MAIN)
+			v1.lock() // already locked by another train
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
 			val facade = DefaultInterlockingFacade(e, registry)
 			val route =
 				TrainRoute(
 					from = SignalId("S1"),
 					to = SignalId("S2"),
-					blocks = emptyList(),
+					blocks = listOf(BlockId("U1")),
 					running = listOf(plusSetting)
 				)
 
 			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			// Blocks were reserved before the switch lock failed; the atomic rollback must free them.
+			assertThat(registry.getOwner(u1)).isNull()
 		}
 
 		@Test
@@ -460,6 +442,262 @@ class InterlockingFacadeTest : KoinTestBase() {
 
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
 			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).isNotEmpty()
+		}
+
+		@Test
+		@DisplayName("Granted response carries the cleared aspect and the locked route")
+		fun grantedResponseIncludesClearedAspectAndLockedRoute() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
+			val granted = response as InterlockingFacade.RouteResponse.Granted
+			assertThat(granted.clearedAspect).isEqualTo(Aspect.Volno)
+			assertThat(granted.lockedRoute).isEqualTo(route)
+		}
+
+		@Test
+		@DisplayName("C2: denies (and rolls back locks) when the cleared aspect has no Signal equivalent")
+		fun grantedRequiresSignalActuallyCleared() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+
+			// Vystraha.toSignal() == null → signal cannot be cleared → Granted must not be returned.
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Vystraha)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			// Locks acquired before the signal-clear failure are rolled back.
+			assertThat(registry.getOwner(u1)).isNull()
+			assertThat(v1.locked).isFalse()
+			// Signal was never cleared.
+			assertThat(s1.signal).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("C3: denies when a running switch is not in the required position")
+		fun deniesWhenRunningSwitchInWrongPosition() {
+			val u1 = block("U1")
+			val v1 = switch("V1", conf = RailSwitch.Conf.BRANCH) // route requires PLUS -> MAIN; actual is BRANCH
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("poloze")
+			// Denied at condition 2, before any lock is acquired.
+			assertThat(v1.locked).isFalse()
+			assertThat(registry.getOwner(u1)).isNull()
+		}
+
+		@Test
+		@DisplayName("C3: denies when a flank switch is not in the required position")
+		fun deniesWhenFlankSwitchInWrongPosition() {
+			val u1 = block("U1")
+			val v1 = switch("V1", conf = RailSwitch.Conf.BRANCH) // flank requires PLUS -> MAIN; actual is BRANCH
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(semaphore("S1")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = emptyList(),
+					flank = listOf(plusSetting)
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("Odvratná")
+		}
+
+		@Test
+		@DisplayName("C4: releaseRoute resets the tracked entry signal, ignoring the audit-only exitSignal")
+		fun releaseRouteResetsTrackedEntrySignalIgnoringExitSignal() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val s2 = semaphore("S2", Signal.STOP)
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1, s2))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+			assertThat(s1.signal).isEqualTo(Signal.FREE) // entry cleared
+
+			// Caller passes the EXIT signal S2 as exitSignal; the kernel must still reset S1 (the
+			// entry it tracked), not S2.
+			facade.releaseRoute("T1", SignalId("S2"))
+
+			assertThat(s1.signal).isEqualTo(Signal.STOP)
+			assertThat(s2.signal).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("I1: releaseRoute propagates releasePath failures instead of swallowing them")
+		fun releaseRouteDoesNotSwallowExceptions() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) =
+				env(
+					blocks = listOf(u1),
+					switches = listOf(v1),
+					semaphores = listOf(s1),
+					releasePathThrows = true
+				)
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+			// Grant succeeds — releasePath is not called on a successful grant.
+			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			// releaseRoute must let the releasePath failure propagate (no silent swallow).
+			assertThrows<IllegalStateException> {
+				facade.releaseRoute("T1", SignalId("S1"))
+			}
+		}
+
+		@Test
+		@DisplayName("I3: denies when the entry/route.from signal is unknown in the network")
+		fun deniesWhenEntrySignalUnknownInNetwork() {
+			val u1 = block("U1")
+			val (e, registry) = env(blocks = listOf(u1)) // no semaphores → "S1" unknown
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = emptyList()
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
+			assertThat(reason).contains("návěstidlo")
+		}
+
+		@Test
+		@DisplayName("I4: releaseRoute for an unknown train does not reset any signal or other train's locks")
+		fun releaseRouteForUnknownTrainDoesNotResetAnySignal() {
+			val u1 = block("U1")
+			val v1 = switch("V1")
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) = env(blocks = listOf(u1), switches = listOf(v1), semaphores = listOf(s1))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = listOf(plusSetting)
+				)
+			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+			assertThat(s1.signal).isEqualTo(Signal.FREE)
+
+			// Wrong trainId — has no tracked cleared signal, so nothing is reset.
+			facade.releaseRoute("T-typo", SignalId("S1"))
+
+			assertThat(s1.signal).isEqualTo(Signal.FREE) // T1's cleared signal untouched
+			assertThat(registry.getOwner(u1)).isEqualTo("T1") // T1's locks untouched
+		}
+
+		@Test
+		@DisplayName("I5: denies when entrySignal differs from route.from")
+		fun deniesWhenEntrySignalDiffersFromRouteFrom() {
+			val u1 = block("U1")
+			val (e, registry) = env(blocks = listOf(u1), semaphores = listOf(semaphore("S1"), semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1")),
+					running = emptyList()
+				)
+
+			val response = facade.requestRoute("T1", SignalId("S2"), route, Aspect.Volno) // entry != from
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
+			assertThat(reason).contains("neodpovídá počátku cesty")
+			assertThat(registry.getOwner(u1)).isNull() // no locks acquired
+		}
+
+		@Test
+		@DisplayName("I7: releaseRoute releases the entire route atomically (all blocks and switches)")
+		fun releaseRouteReleasesEntireRouteAtomic() {
+			val u1 = block("U1")
+			val u2 = block("U2")
+			val v1 = switch("V1", conf = RailSwitch.Conf.MAIN) // PLUS
+			val v2 = switch("V2", conf = RailSwitch.Conf.BRANCH) // MINUS
+			val s1 = semaphore("S1", Signal.STOP)
+			val (e, registry) = env(blocks = listOf(u1, u2), switches = listOf(v1, v2), semaphores = listOf(s1))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val route =
+				TrainRoute(
+					from = SignalId("S1"),
+					to = SignalId("S2"),
+					blocks = listOf(BlockId("U1"), BlockId("U2")),
+					running = listOf(plusSetting, SwitchSetting(SwitchId("V2"), SwitchPosition.MINUS))
+				)
+			facade.requestRoute("T1", SignalId("S1"), route, Aspect.Volno)
+			assertThat(registry.getOwner(u1)).isEqualTo("T1")
+			assertThat(registry.getOwner(u2)).isEqualTo("T1")
+			assertThat(v1.locked).isTrue()
+			assertThat(v2.locked).isTrue()
+			assertThat(s1.signal).isEqualTo(Signal.FREE)
+
+			facade.releaseRoute("T1", SignalId("S1"))
+
+			// All-or-nothing MVP: every block and switch for T1 is released at once.
+			assertThat(registry.getOwner(u1)).isNull()
+			assertThat(registry.getOwner(u2)).isNull()
+			assertThat(v1.locked).isFalse()
+			assertThat(v2.locked).isFalse()
+			assertThat(s1.signal).isEqualTo(Signal.STOP)
 		}
 	}
 }
