@@ -9,24 +9,42 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
-import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
+import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
- * Actuator tool exposing [NetworkActuatorPort.requestRoute] to Koog agents (SP1.6, Issue #551).
+ * Actuator tool exposing end-to-end route reservation to Koog agents (SP1.6, Issue #551;
+ * rewired to the command queue in SP1.7, Issue #774).
  *
  * Request a route reservation from one endpoint to another for a named train.
  *
- * @param actuatorPort Scoped actuator port for this context (injected per simulation)
+ * ## Threading contract (SP1.7, Issue #774)
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
+ * `execute()` runs on the agent driver thread, **not** the kDisco simulation thread, so it
+ * must not touch the live [cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort] directly.
+ * Instead it marshals the request through the [ActuatorCommandQueue]: it builds a
+ * [DispatchDecision.RequestRoute] and posts it via [ActuatorCommandQueue.postAll].
+ * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] drains the queue on the
+ * kDisco thread and applies the decision — satisfying the threading contract.
+ *
+ * This is **fire-and-forget**: the tool returns a `Success` describing the queued request and
+ * does **not** wait for the reservation to succeed or fail. The agent observes the outcome
+ * (blocks reserved, or still free / a conflict) via the perception tools (`block_occupancy`,
+ * `signal_aspect`) on the next tick's snapshot. The synchronous grant/deny reason
+ * (`RouteRequestResult`) is therefore not returned to the LLM on this path; reintroducing it
+ * would require a request/response channel over the queue (out of scope for SP1.7).
+ *
+ * @param commandQueue Scoped command queue for this context (injected per simulation)
+ *
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); rewired to the queue in Issue #774 (SP1.7)
  */
 class RequestRouteTool(
-	private val actuatorPort: NetworkActuatorPort
+	private val commandQueue: ActuatorCommandQueue
 ) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -36,8 +54,8 @@ class RequestRouteTool(
 
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free end-to-end path for a named train. " +
-			"Returns success with block count, or failure reason (no route exists, all paths blocked, " +
-			"or conflict with existing train)."
+			"Fire-and-forget: returns once the request is queued; the reservation outcome is observed " +
+			"via block_occupancy / signal_aspect on the next tick."
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
@@ -72,11 +90,16 @@ class RequestRouteTool(
 			args.stringParam("toEndpointName")
 				?: return ToolResult.Error("toEndpointName parameter is required and must be a non-blank string")
 
+		val decision = DispatchDecision.RequestRoute(trainName, fromEndpointName, toEndpointName)
 		logger.debug {
-			"RequestRouteTool.execute: trainName=$trainName, from=$fromEndpointName, to=$toEndpointName"
+			"RequestRouteTool.execute: posting decision trainName=$trainName, " +
+				"from=$fromEndpointName, to=$toEndpointName"
 		}
-
-		return runCatching { actuatorPort.requestRoute(trainName, fromEndpointName, toEndpointName) }
-			.fold({ ToolResult.Success(it) }, { ToolResult.Error("request_route failed: ${it.message}", it) })
+		val accepted = commandQueue.postAll(listOf(decision))
+		return if (accepted) {
+			ToolResult.Success("queued request_route train=$trainName from=$fromEndpointName to=$toEndpointName")
+		} else {
+			ToolResult.Error("request_route rejected: actuator command queue is full (backpressure)")
+		}
 	}
 }

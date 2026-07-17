@@ -9,8 +9,8 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
+import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
-import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -47,13 +47,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *         KoogAgentFactory(
  *             …
  *             perceptionPort = get(),  // Scoped per context (SP1.4)
- *             actuatorPort = get()     // Scoped per context (SP1.4)
+ *             commandQueue = get()    // Scoped per context (SP1.7)
  *         )
  *     }
  * }
  * ```
  *
- * The factory then calls `toolRegistry.assembleAllTools(perceptionPort, actuatorPort)` to
+ * The factory then calls `toolRegistry.assembleAllTools(perceptionPort, commandQueue)` to
  * create tools specific to that context.
  *
  * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port parameters
@@ -92,28 +92,43 @@ class ToolGroupRegistry {
 	 * - `set_switch_position` — command a switch to MAIN or BRANCH
 	 * - `set_signal_aspect` — command a semaphore to a signal aspect
 	 *
-	 * Each tool is constructed using the provided [perceptionPort] or [actuatorPort]
+	 * Each tool is constructed using the provided [perceptionPort] or [commandQueue]
 	 * so it can query/actuate the current context's network state.
 	 *
-	 * @param perceptionPort Scoped perception port for this context (SP1.4)
-	 * @param actuatorPort Scoped actuator port for this context (SP1.4)
+	 * ## SP1.7 threading contract (Issue #774)
+	 *
+	 * The [perceptionPort] passed here MUST be off-thread-safe — i.e. a
+	 * [cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort] built from the
+	 * live port's `snapshot()`, not the live
+	 * [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort] itself (whose single-query /
+	 * `allXxx()` methods read mutable state and are kDisco-thread-only). Actuator tools no
+	 * longer take an actuator port at all: they post a [cz.vutbr.fit.interlockSim.sim.DispatchDecision]
+	 * to the [commandQueue] (fire-and-forget), and
+	 * [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] applies it on the kDisco
+	 * thread.
+	 *
+	 * @param perceptionPort Scoped perception port for this context (SP1.4); must be the
+	 *   off-thread-safe projection in SP1.7+.
+	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
+	 *   decisions here instead of calling the actuator port directly.
 	 * @return All tools available in this context (SP1.6: 12 tools)
 	 *
-	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters; SP1.6 (#551) implements tools
+	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters; SP1.6 (#551)
+	 *   implements tools; SP1.7 (#774) switches actuator tools to the command queue
 	 */
 	fun assembleAllTools(
 		perceptionPort: NetworkPerceptionPort,
-		actuatorPort: NetworkActuatorPort
+		commandQueue: ActuatorCommandQueue
 	): List<DomainTool> {
 		logger.debug {
-			"ToolGroupRegistry.assembleAllTools: assembling perception + actuator tools (SP1.6 full implementation)"
+			"ToolGroupRegistry.assembleAllTools: assembling perception + actuator tools (SP1.7 queue-wired actuators)"
 		}
 
 		return mutableListOf<DomainTool>().apply {
 			// Perception tools (read-only network queries)
 			addAll(assemblePerceptionTools(perceptionPort))
-			// Actuator tools (network commands)
-			addAll(assembleActuatorTools(actuatorPort))
+			// Actuator tools (network commands — fire-and-forget over the queue, SP1.7)
+			addAll(assembleActuatorTools(commandQueue))
 		}
 	}
 
@@ -165,17 +180,22 @@ class ToolGroupRegistry {
 	 * - `set_switch_position(switchName, position)` — command a switch to MAIN or BRANCH
 	 * - `set_signal_aspect(semaphoreName, signal)` — command a semaphore to a signal aspect
 	 *
-	 * @param actuatorPort Scoped actuator port for this context (SP1.4)
+	 * Each actuator tool posts a [cz.vutbr.fit.interlockSim.sim.DispatchDecision] to the
+	 * [commandQueue] (fire-and-forget, SP1.7 Issue #774) instead of calling the actuator port
+	 * directly — the agent driver thread must not touch live simulation state.
+	 *
+	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
+	 *   decisions here.
 	 * @return Actuator tools (SP1.6: 4 tools)
-	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools
+	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools; SP1.7 (#774) rewires to the queue
 	 */
-	fun assembleActuatorTools(actuatorPort: NetworkActuatorPort): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 4 actuator tools (SP1.6)" }
+	fun assembleActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
+		logger.debug { "ToolGroupRegistry.assembleActuatorTools: creating 4 actuator tools (SP1.7 queue-wired)" }
 		return listOf(
-			RequestRouteTool(actuatorPort),
-			ReleaseRouteTool(actuatorPort),
-			SetSwitchPositionTool(actuatorPort),
-			SetSignalAspectTool(actuatorPort)
+			RequestRouteTool(commandQueue),
+			ReleaseRouteTool(commandQueue),
+			SetSwitchPositionTool(commandQueue),
+			SetSignalAspectTool(commandQueue)
 		)
 	}
 }

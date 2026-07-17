@@ -19,9 +19,14 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents
  * ## Tool categories
  *
  * - **Perception tools** - Read-only queries on [NetworkPerceptionPort] (e.g. signal
- *   state, block occupancy, train positions). Mapped to Koog tools in SP1.6.
- * - **Actuator tools** - Commands posted to [NetworkActuatorPort] (e.g. set signal,
- *   reserve path). Mapped to Koog tools in SP1.6.
+ *   state, block occupancy, train positions). In SP1.7 the port is the off-thread-safe
+ *   [cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort] projection.
+ *   Mapped to Koog tools in SP1.6.
+ * - **Actuator tools** - Commands posted (fire-and-forget) to
+ *   [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] as
+ *   [cz.vutbr.fit.interlockSim.sim.DispatchDecision]s (e.g. set signal, request route), applied
+ *   on the kDisco thread by [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+ *   (SP1.7). Mapped to Koog tools in SP1.6.
  *
  * ## SP1 phasing
  *
@@ -63,30 +68,47 @@ interface DomainTool {
 	/**
 	 * Execute this tool with the given arguments.
 	 *
-	 * ## Threading contract
+	 * ## Threading contract (SP1.7, Issue #774)
 	 *
-	 * `execute()` must be invoked on the **kDisco simulation thread**. Perception tools read
-	 * live simulation state via [NetworkPerceptionPort]; actuator tools mutate state via
-	 * [NetworkActuatorPort]. The single-query / `allXxx()` methods of the perception port and
-	 * all mutating methods of the actuator port are kDisco-thread-only (see the
-	 * [NetworkPerceptionPort] KDoc: only [NetworkPerceptionPort.snapshot] is safe off-thread).
+	 * `execute()` is invoked by the Koog agent driver on **its own thread**, off the kDisco
+	 * simulation thread. The two tool categories satisfy the kDisco threading contract by
+	 * different mechanisms, neither of which marshals onto the kDisco thread directly:
 	 *
-	 * The SP1.7 agent executor is responsible for marshalling tool invocations onto the kDisco
-	 * thread. (For perception, SP1.7 may instead choose to read [NetworkPerceptionPort.snapshot]
-	 * off-thread and project — a design decision deferred to SP1.7.) Actuator tools mutate live
-	 * state and cannot run off-thread without a marshalling/queue mechanism; switch/signal/release
-	 * `DispatchDecision` subtypes for that are tracked under Issue #556.
+	 * - **Perception tools** read from a
+	 *   [cz.vutbr.fit.interlockSim.ports.SnapshotProjectionNetworkPerceptionPort] — an
+	 *   off-thread-safe [NetworkPerceptionPort] that projects every query from the most recently
+	 *   published [cz.vutbr.fit.interlockSim.ports.SimulationSnapshot] (the live
+	 *   [cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort]'s single-query / `allXxx()`
+	 *   methods read mutable state and are kDisco-thread-only; only
+	 *   [NetworkPerceptionPort.snapshot] is `@Volatile`-backed and off-thread-safe). The projection
+	 *   is built once in [cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory.createAgent]
+	 *   and passed to every perception tool. The projected snapshot may be one kDisco tick stale.
+	 *
+	 * - **Actuator tools** do **not** touch a [NetworkActuatorPort] directly. They build a
+	 *   [cz.vutbr.fit.interlockSim.sim.DispatchDecision] subtype and post it (fire-and-forget) to
+	 *   the [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] via
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue.postAll].
+	 *   [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] drains the queue on the
+	 *   kDisco thread (registered as a
+	 *   [cz.vutbr.fit.interlockSim.sim.ControlStepListener]) and applies the decision through the
+	 *   actuator port there. The tool returns a `Success` describing the queued request and does
+	 *   **not** wait for synchronous confirmation; the agent observes the outcome via the
+	 *   perception tools on the following tick's snapshot.
+	 *
+	 * `execute()` therefore never reads or mutates live simulation state itself, regardless of
+	 * which thread invokes it. Argument validation still happens on the driver thread before any
+	 * decision is posted; invalid arguments return [ToolResult.Error] without posting.
 	 *
 	 * ## Result contract
 	 *
 	 * Returns a [ToolResult]; `execute()` does **not** throw for expected failures. Invalid
 	 * arguments and port [IllegalArgumentException]s are translated into [ToolResult.Error];
 	 * successful calls return [ToolResult.Success] wrapping the port's immutable snapshot / result
-	 * object. SP1.7 serializes [ToolResult.Success]`data` to the LLM and surfaces
-	 * [ToolResult.Error]`message` as a tool-error result; [ToolResult.Error]`cause` is for
-	 * logging only and must not be sent to the LLM. Serialization of `data` (a `SemaphoreReading`,
-	 * `RouteRequestResult`, `Boolean`, `List<...>`, …) is SP1.7's job — this interface is
-	 * intentionally serialization-agnostic.
+	 * object (perception) or a short "queued …" descriptor (actuator). SP1.7 serializes
+	 * [ToolResult.Success]`data` to the LLM and surfaces [ToolResult.Error]`message` as a
+	 * tool-error result; [ToolResult.Error]`cause` is for logging only and must not be sent to the
+	 * LLM. Serialization of `data` (a `SemaphoreReading`, `Boolean`, `List<...>`, a queued-request
+	 * string, …) is SP1.7's job — this interface is intentionally serialization-agnostic.
 	 *
 	 * @param args Tool arguments as a map of parameter name → value
 	 * @return [ToolResult] — never `null`; expected failures are [ToolResult.Error], not exceptions

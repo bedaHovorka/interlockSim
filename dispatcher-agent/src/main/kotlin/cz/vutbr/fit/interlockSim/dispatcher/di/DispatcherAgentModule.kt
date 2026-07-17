@@ -166,8 +166,8 @@ val dispatcherAgentModule: Module =
 					toolRegistry = get(), // Singleton
 					ollamaConfig = get(), // Singleton
 					agentService = get(), // Singleton
-					perceptionPort = get(), // Scoped to this context (SP1.4)
-					actuatorPort = get() // Scoped to this context (SP1.4)
+					perceptionPort = get(), // Scoped to this context (SP1.4 — live port)
+					commandQueue = get() // Scoped to this context (SP1.7)
 				)
 			}
 

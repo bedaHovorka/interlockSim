@@ -13,6 +13,7 @@ import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -158,6 +159,14 @@ class DispatchDecisionApplier(
 			}
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
 			DispatchDecision.NoAction -> Unit
+			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
+			// Delegated to the shared DispatchDecision.applyToolDrivenToActuator helper in :core
+			// so the asynchronous path and SynchronousDispatcherWiring cannot drift apart.
+			is DispatchDecision.SetSignalAspect,
+			is DispatchDecision.SetSwitchPosition,
+			is DispatchDecision.ReleaseRoute,
+			is DispatchDecision.RequestRoute ->
+				decision.applyToolDrivenToActuator(networkActuator, "DispatchDecisionApplier")
 		}
 
 	/**
