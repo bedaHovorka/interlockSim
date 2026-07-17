@@ -34,7 +34,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * - Creates one shared [PromptExecutor] per application (singleton), backed by an [OllamaClient]
  *   at [OllamaExecutorConfig.ollamaEndpoint]
- * - Validates the configured model is tool-capable before construction
+ * - Validates the configured model is tool-capable (deferred to the first [getExecutor] call,
+ *   not at Koin wiring / construction time — see [getExecutor])
  * - Provides the executor to Koog agents for LLM-based decision-making
  *
  * Model/temperature/topP/maxTokens from [OllamaExecutorConfig] are per-call `Prompt`/`LLModel`
@@ -83,6 +84,17 @@ class OllamaSimpleExecutor(
 	 */
 	@Volatile
 	private var executorInitialized = false
+
+	/**
+	 * Set to `true` by the first [close] call, after which [getExecutor] rejects with
+	 * [IllegalStateException]. [close] is terminal: a closed executor is not re-opened.
+	 * `@Volatile` for visibility across threads; read by [getExecutor] before returning the
+	 * cached executor so a post-close call observes the closed state.
+	 *
+	 * @since SP1.5 — part of the [close] / [getExecutor] terminal contract (PR #767 review)
+	 */
+	@Volatile
+	private var closed = false
 
 	/**
 	 * Shared Koog prompt executor (lazy-initialized on first access).
@@ -137,18 +149,35 @@ class OllamaSimpleExecutor(
 	 *
 	 * @return Koog [PromptExecutor] ready for LLM inference
 	 * @throws IllegalArgumentException if model is not tool-capable
+	 * @throws IllegalStateException if [close] has already been called (terminal contract)
 	 * @throws java.io.IOException if Ollama endpoint is unreachable
 	 * @throws Exception if model is not pulled on the Ollama instance
 	 *
 	 * @since SP1.5
 	 */
-	fun getExecutor(): PromptExecutor = promptExecutor
+	fun getExecutor(): PromptExecutor {
+		if (closed) {
+			throw IllegalStateException(
+				"OllamaSimpleExecutor has been closed; getExecutor() must not be called after close()"
+			)
+		}
+		return promptExecutor
+	}
 
 	/**
 	 * Close the underlying Ollama-backed executor (resource cleanup).
 	 *
 	 * Called during application shutdown or context disposal. Safe to call multiple times;
 	 * idempotent (closing an already-closed executor has no effect).
+	 *
+	 * ### Terminal contract
+	 *
+	 * [close] is **terminal**: once called, [getExecutor] rejects with [IllegalStateException]
+	 * rather than handing out a closed executor. This class does not support re-opening after
+	 * close — a singleton that has been closed is meant to be replaced by Koin with a fresh
+	 * instance for the next application run. [closed] is set unconditionally (even if the
+	 * executor was never initialized) so a post-close [getExecutor] fails fast without touching
+	 * the network.
 	 *
 	 * ### Design note
 	 *
@@ -158,12 +187,17 @@ class OllamaSimpleExecutor(
 	 * @since SP1.5
 	 */
 	fun close() {
+		closed = true
 		// Only close if the executor has actually been built — avoids triggering the network
 		// connection just to immediately tear it down.
 		if (executorInitialized) {
 			logger.debug { "Closing Ollama executor" }
 			try {
 				promptExecutor.close()
+			} catch (e: InterruptedException) {
+				// Preserve the interrupt status rather than silently swallowing it.
+				Thread.currentThread().interrupt()
+				logger.warn(e) { "Interrupted while closing Ollama executor" }
 			} catch (e: Exception) {
 				logger.warn(e) { "Exception closing Ollama executor" }
 			}

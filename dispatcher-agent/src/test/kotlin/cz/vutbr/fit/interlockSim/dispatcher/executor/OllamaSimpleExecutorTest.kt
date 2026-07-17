@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.executor
 
 import assertk.assertThat
 import assertk.assertions.isNotNull
+import assertk.assertions.isSameAs
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -52,9 +53,30 @@ class OllamaSimpleExecutorTest {
 		val koogExecutor = executor.getExecutor()
 		assertThat(koogExecutor).isNotNull()
 
-		// Second call returns cached executor (same instance)
+		// Second call returns cached executor (same instance — reference identity)
 		val koogExecutor2 = executor.getExecutor()
-		assertThat(koogExecutor2).isNotNull()
+		assertThat(koogExecutor2).isSameAs(koogExecutor)
+	}
+
+	@Test
+	fun `getExecutor rejects non-tool-capable model`() {
+		// Validation runs inside the lazy block BEFORE OllamaClient is constructed, so this
+		// throws without any network access (no Ollama needed). "mistral" is a bare tag that
+		// lacks tool/function-calling support per OllamaExecutorConfig.validateToolCapableModel.
+		val executor = OllamaSimpleExecutor(OllamaExecutorConfig(modelName = "mistral"))
+
+		assertThrows<IllegalArgumentException> { executor.getExecutor() }
+	}
+
+	@Test
+	fun `getExecutor throws IllegalStateException after close`() {
+		// close() on an uninitialized executor sets `closed`; a subsequent getExecutor() must
+		// fail fast (terminal contract) without touching the network. No Ollama needed.
+		val executor = OllamaSimpleExecutor(OllamaExecutorConfig.forLocalTesting())
+
+		executor.close()
+
+		assertThrows<IllegalStateException> { executor.getExecutor() }
 	}
 
 	@Test

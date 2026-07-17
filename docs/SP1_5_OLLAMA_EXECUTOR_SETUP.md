@@ -3,7 +3,16 @@
 **Issue:** #550  
 **Phase:** SP1.5 (Configure local Ollama executor)  
 **Goal:** Goal 10 — AI-driven railway dispatcher  
-**Last Updated:** 2026-07-14 (Ollama CUDA support, 8GB VRAM)
+**Last Updated:** 2026-07-17 (real GPU device-passthrough config, 8GB VRAM)
+
+**Verified 2026-07-17:** The Docker Compose GPU device block (`deploy.resources.reservations.devices`,
+`driver: nvidia`) was validated with `docker compose config` (renders as well-formed Compose
+device reservation). The CPU-only path was proven end-to-end against a live container: `docker
+compose up -d ollama` → auto-pulled `qwen2.5:7b-instruct` (confirmed `"tools"` in its capability
+list) → both `@Tag("ollama-test")` proof-of-connection tests passed via
+`./gradlew :dispatcher-agent:integrationTest`, including `OllamaSimpleExecutor.getExecutor()`
+connecting to the containerized instance. Live NVIDIA GPU passthrough was not exercised (host
+lacks `nvidia-container-toolkit`); only the config's structural correctness is verified.
 
 ## Overview
 
@@ -65,11 +74,11 @@ class doc.)
    ./gradlew :dispatcher-agent:integrationTest
    ```
 
-### 2. Option B: Docker Compose (Cross-platform, CUDA support)
+### 2. Option B: Docker Compose (Cross-platform, GPU support)
 
 **Prerequisites:**
 - Docker and Docker Compose installed
-- For GPU: NVIDIA Container Toolkit installed (`nvidia-container-toolkit` package)
+- For GPU: `nvidia-container-toolkit` installed and the Docker runtime configured (NVIDIA). Ollama auto-detects the GPU — there are **no** `OLLAMA_CUDA` / `OLLAMA_ROCM` environment variables; those are not real Ollama knobs.
 
 **CPU-only (works everywhere, slower):**
 ```bash
@@ -77,22 +86,37 @@ docker compose up -d ollama
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
-**GPU with CUDA (fast, requires NVIDIA GPU):**
+**GPU with CUDA (fast, requires NVIDIA GPU + nvidia-container-toolkit):**
 ```bash
-# Set CUDA environment variables
-export OLLAMA_CUDA=1
-export OLLAMA_MAX_VRAM=8589934592  # 8GB limit (in bytes)
+# 1. One-time host setup (gives Docker access to the NVIDIA GPU):
+sudo dnf install nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
 
-# Build and start Ollama with GPU support
+# 2. Uncomment the deploy.resources.reservations.devices block (driver: nvidia)
+#    in the `ollama` service of docker-compose.yml. Ollama auto-detects CUDA -- no env
+#    var needed. Optionally cap VRAM to 8GB:
+export OLLAMA_MAX_VRAM=8589934592  # 8GB limit (in bytes; 8589934592 = 8 GiB)
+
+# 3. Build and start Ollama with GPU support
 docker compose up -d ollama
 
-# Run tests
+# 4. Verify the GPU is actually in use (Processor column should say GPU, not CPU):
+docker compose exec -T ollama ollama ps
+
+# 5. Run tests
 ./gradlew :dispatcher-agent:integrationTest
 ```
 
+To **force** a specific backend (optional, e.g. when auto-detection picks the wrong one),
+set `OLLAMA_LLM_LIBRARY=cuda_v11` (NVIDIA) in the `ollama` service environment.
+
 **GPU with ROCm (for AMD GPUs):**
 ```bash
-export OLLAMA_ROCM=1
+# Switch the image in docker-compose.yml to ollama/ollama:rocm, and use the AMD device
+# reservation (driver: amd) in the deploy.resources.reservations.devices block. Optionally
+# force the backend:
+export OLLAMA_LLM_LIBRARY=rocm_v6
 export OLLAMA_MAX_VRAM=8589934592
 
 docker compose up -d ollama
@@ -289,6 +313,10 @@ When the application shuts down:
 val executor: OllamaSimpleExecutor = get()
 executor.close()  // Closes Ollama client, idempotent
 ```
+
+**`close()` is terminal:** calling `getExecutor()` after `close()` throws `IllegalStateException`
+rather than handing back a closed executor. A closed singleton is not re-opened — only call
+`close()` when the application (or the executor's Koin scope) is actually shutting down.
 
 ## Performance Tuning
 

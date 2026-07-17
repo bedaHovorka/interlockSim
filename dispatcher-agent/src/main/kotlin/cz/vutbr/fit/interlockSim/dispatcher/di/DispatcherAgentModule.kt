@@ -98,7 +98,7 @@ import org.koin.dsl.module
  * and [NetworkActuatorPort][cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort]
  * (tool implementations) are SP1.4's responsibility.
  *
- * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), SP1.5 (SP1.5)
+ * @since Issue #733 (SP0.11 — Goal 10), expanded in Issue #547 (SP1.2), extended in Issue #548 (SP1.3), and Issue #550 (SP1.5)
  */
 val dispatcherAgentModule: Module =
 	module {
