@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.di.mainProcessActiveTrains
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -55,7 +56,9 @@ val dispatcherAgentTestModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultNetworkPerceptionPort(
 					env = context,
-					activeTrains = { emptyList() } // TODO: SP1.4b #768 populate per main process type
+					// SP1.4b follow-up (PR #769 review): interface-based lookup, no reflection.
+					// Shared with dispatcherAgentModule via mainProcessActiveTrains().
+					activeTrains = { mainProcessActiveTrains(context) }
 				)
 			}
 

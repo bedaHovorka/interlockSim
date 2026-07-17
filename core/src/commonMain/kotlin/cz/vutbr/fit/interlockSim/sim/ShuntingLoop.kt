@@ -78,7 +78,8 @@ class ShuntingLoop(
 	initialSpeedMultiplier: Double = 1.0
 ) : Interlocking(context),
 	SpeedControllable,
-	KoinComponent {
+	KoinComponent,
+	ApprovesTrains {
 	@kotlin.concurrent.Volatile
 	override var speedMultiplier: Double = initialSpeedMultiplier
 		set(value) {
@@ -497,7 +498,7 @@ class ShuntingLoop(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	fun getApprovedTrains(): List<Train> = approwedTrains.toList()
+	override fun getApprovedTrains(): List<Train> = approwedTrains.toList()
 
 	/** Returns `true` while the simulation is active (between [startAction] and [interLoopSleep] end). */
 	fun isSimActive(): Boolean = simActive
