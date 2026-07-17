@@ -24,7 +24,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class TrainTimetableTool(private val perceptionPort: NetworkPerceptionPort) : DomainTool {
+class TrainTimetableTool(
+	private val perceptionPort: NetworkPerceptionPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -46,8 +48,9 @@ class TrainTimetableTool(private val perceptionPort: NetworkPerceptionPort) : Do
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val trainId = args["trainId"] as? String
-			?: throw IllegalArgumentException("trainId parameter is required and must be a string")
+		val trainId =
+			args["trainId"] as? String
+				?: throw IllegalArgumentException("trainId parameter is required and must be a string")
 
 		logger.debug { "TrainTimetableTool.execute: trainId=$trainId" }
 

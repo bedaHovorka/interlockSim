@@ -25,7 +25,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class BlockOccupancyTool(private val perceptionPort: NetworkPerceptionPort) : DomainTool {
+class BlockOccupancyTool(
+	private val perceptionPort: NetworkPerceptionPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -47,8 +49,9 @@ class BlockOccupancyTool(private val perceptionPort: NetworkPerceptionPort) : Do
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val blockId = args["blockId"] as? String
-			?: throw IllegalArgumentException("blockId parameter is required and must be a string")
+		val blockId =
+			args["blockId"] as? String
+				?: throw IllegalArgumentException("blockId parameter is required and must be a string")
 
 		logger.debug { "BlockOccupancyTool.execute: blockId=$blockId" }
 

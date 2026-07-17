@@ -24,7 +24,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class SignalAspectTool(private val perceptionPort: NetworkPerceptionPort) : DomainTool {
+class SignalAspectTool(
+	private val perceptionPort: NetworkPerceptionPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -46,8 +48,9 @@ class SignalAspectTool(private val perceptionPort: NetworkPerceptionPort) : Doma
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val semaphoreName = args["semaphoreName"] as? String
-			?: throw IllegalArgumentException("semaphoreName parameter is required and must be a string")
+		val semaphoreName =
+			args["semaphoreName"] as? String
+				?: throw IllegalArgumentException("semaphoreName parameter is required and must be a string")
 
 		logger.debug { "SignalAspectTool.execute: semaphoreName=$semaphoreName" }
 

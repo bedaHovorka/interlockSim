@@ -25,7 +25,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class ReleaseRouteTool(private val actuatorPort: NetworkActuatorPort) : DomainTool {
+class ReleaseRouteTool(
+	private val actuatorPort: NetworkActuatorPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -47,8 +49,9 @@ class ReleaseRouteTool(private val actuatorPort: NetworkActuatorPort) : DomainTo
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val trainName = args["trainName"] as? String
-			?: throw IllegalArgumentException("trainName parameter is required and must be a string")
+		val trainName =
+			args["trainName"] as? String
+				?: throw IllegalArgumentException("trainName parameter is required and must be a string")
 
 		logger.debug { "ReleaseRouteTool.execute: trainName=$trainName" }
 

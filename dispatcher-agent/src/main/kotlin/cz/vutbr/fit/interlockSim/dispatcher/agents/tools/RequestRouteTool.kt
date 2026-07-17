@@ -24,7 +24,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class RequestRouteTool(private val actuatorPort: NetworkActuatorPort) : DomainTool {
+class RequestRouteTool(
+	private val actuatorPort: NetworkActuatorPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -33,7 +35,8 @@ class RequestRouteTool(private val actuatorPort: NetworkActuatorPort) : DomainTo
 
 	override val description: String =
 		"Request the interlocking to find and atomically reserve a free end-to-end path for a named train. " +
-			"Returns success with block count, or failure reason (no route exists, all paths blocked, or conflict with existing train)."
+			"Returns success with block count, or failure reason (no route exists, all paths blocked, " +
+			"or conflict with existing train)."
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
@@ -58,12 +61,15 @@ class RequestRouteTool(private val actuatorPort: NetworkActuatorPort) : DomainTo
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val trainName = args["trainName"] as? String
-			?: throw IllegalArgumentException("trainName parameter is required and must be a string")
-		val fromEndpointName = args["fromEndpointName"] as? String
-			?: throw IllegalArgumentException("fromEndpointName parameter is required and must be a string")
-		val toEndpointName = args["toEndpointName"] as? String
-			?: throw IllegalArgumentException("toEndpointName parameter is required and must be a string")
+		val trainName =
+			args["trainName"] as? String
+				?: throw IllegalArgumentException("trainName parameter is required and must be a string")
+		val fromEndpointName =
+			args["fromEndpointName"] as? String
+				?: throw IllegalArgumentException("fromEndpointName parameter is required and must be a string")
+		val toEndpointName =
+			args["toEndpointName"] as? String
+				?: throw IllegalArgumentException("toEndpointName parameter is required and must be a string")
 
 		logger.debug {
 			"RequestRouteTool.execute: trainName=$trainName, from=$fromEndpointName, to=$toEndpointName"

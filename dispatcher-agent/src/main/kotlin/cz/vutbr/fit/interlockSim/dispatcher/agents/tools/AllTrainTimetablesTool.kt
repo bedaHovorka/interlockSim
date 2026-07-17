@@ -23,7 +23,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class AllTrainTimetablesTool(private val perceptionPort: NetworkPerceptionPort) : DomainTool {
+class AllTrainTimetablesTool(
+	private val perceptionPort: NetworkPerceptionPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}

@@ -26,7 +26,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class SetSwitchPositionTool(private val actuatorPort: NetworkActuatorPort) : DomainTool {
+class SetSwitchPositionTool(
+	private val actuatorPort: NetworkActuatorPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -54,16 +56,19 @@ class SetSwitchPositionTool(private val actuatorPort: NetworkActuatorPort) : Dom
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val switchName = args["switchName"] as? String
-			?: throw IllegalArgumentException("switchName parameter is required and must be a string")
-		val positionStr = args["position"] as? String
-			?: throw IllegalArgumentException("position parameter is required and must be a string")
+		val switchName =
+			args["switchName"] as? String
+				?: throw IllegalArgumentException("switchName parameter is required and must be a string")
+		val positionStr =
+			args["position"] as? String
+				?: throw IllegalArgumentException("position parameter is required and must be a string")
 
-		val position = when (positionStr.uppercase()) {
-			"MAIN" -> RailSwitch.Conf.MAIN
-			"BRANCH" -> RailSwitch.Conf.BRANCH
-			else -> throw IllegalArgumentException("position must be MAIN or BRANCH, got: $positionStr")
-		}
+		val position =
+			when (positionStr.uppercase()) {
+				"MAIN" -> RailSwitch.Conf.MAIN
+				"BRANCH" -> RailSwitch.Conf.BRANCH
+				else -> throw IllegalArgumentException("position must be MAIN or BRANCH, got: $positionStr")
+			}
 
 		logger.debug { "SetSwitchPositionTool.execute: switchName=$switchName, position=$position" }
 

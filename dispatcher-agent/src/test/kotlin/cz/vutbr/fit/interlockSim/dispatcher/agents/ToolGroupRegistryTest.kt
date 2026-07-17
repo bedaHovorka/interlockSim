@@ -14,8 +14,8 @@ import assertk.assertions.hasSize
 import assertk.assertions.isEqualTo
 import assertk.assertions.isNotEmpty
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
-import org.mockk.mockk
 
 /**
  * Unit tests for tool registry and tool assembly (SP1.6, Issue #551).

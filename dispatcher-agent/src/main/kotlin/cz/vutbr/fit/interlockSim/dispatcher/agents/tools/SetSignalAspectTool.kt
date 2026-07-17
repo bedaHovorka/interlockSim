@@ -26,7 +26,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
  */
-class SetSignalAspectTool(private val actuatorPort: NetworkActuatorPort) : DomainTool {
+class SetSignalAspectTool(
+	private val actuatorPort: NetworkActuatorPort
+) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}
@@ -54,17 +56,22 @@ class SetSignalAspectTool(private val actuatorPort: NetworkActuatorPort) : Domai
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): Any? {
-		val semaphoreName = args["semaphoreName"] as? String
-			?: throw IllegalArgumentException("semaphoreName parameter is required and must be a string")
-		val signalStr = args["signal"] as? String
-			?: throw IllegalArgumentException("signal parameter is required and must be a string")
+		val semaphoreName =
+			args["semaphoreName"] as? String
+				?: throw IllegalArgumentException("semaphoreName parameter is required and must be a string")
+		val signalStr =
+			args["signal"] as? String
+				?: throw IllegalArgumentException("signal parameter is required and must be a string")
 
 		// Parse the signal aspect from string
-		val signal = try {
-			Signal.valueOf(signalStr.uppercase())
-		} catch (e: IllegalArgumentException) {
-			throw IllegalArgumentException("Invalid signal aspect: $signalStr (must be one of: ${Signal.entries.joinToString(", ") { it.name }})")
-		}
+		val signal =
+			try {
+				Signal.valueOf(signalStr.uppercase())
+			} catch (e: IllegalArgumentException) {
+				throw IllegalArgumentException(
+					"Invalid signal aspect: $signalStr (must be one of: ${Signal.entries.joinToString(", ") { it.name }})"
+				)
+			}
 
 		logger.debug { "SetSignalAspectTool.execute: semaphoreName=$semaphoreName, signal=$signal" }
 
