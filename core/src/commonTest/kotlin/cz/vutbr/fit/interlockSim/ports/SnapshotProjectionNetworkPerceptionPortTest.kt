@@ -250,20 +250,21 @@ class SnapshotProjectionNetworkPerceptionPortTest {
 
 	// ── trainPerception / allTrainPerceptions (SP2a.1) ────────────────────────
 
-	private fun samplePerception(trainId: String = "Train #1") = TrainPerceptionReading(
-		trainId = trainId,
-		signalAheadName = "zA",
-		signalAheadAspect = cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE,
-		distanceToSignalAheadMetres = 50.0,
-		currentSpeedLimitMps = 20.0,
-		velocity = 10.0,
-		acceleration = 0.5,
-		totalDistance = 200.0,
-		frontSectionName = "k1",
-		destinationInOutName = "B",
-		scheduledArrivalTime = 120.0,
-		isDwelling = false
-	)
+	private fun samplePerception(trainId: String = "Train #1") =
+		TrainPerceptionReading(
+			trainId = trainId,
+			signalAheadName = "zA",
+			signalAheadAspect = cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE,
+			distanceToSignalAheadMetres = 50.0,
+			currentSpeedLimitMps = 20.0,
+			velocity = 10.0,
+			acceleration = 0.5,
+			totalDistance = 200.0,
+			frontSectionName = "k1",
+			destinationInOutName = "B",
+			scheduledArrivalTime = 120.0,
+			isDwelling = false
+		)
 
 	@Test
 	fun `trainPerception returns matching reading from snapshot`() {

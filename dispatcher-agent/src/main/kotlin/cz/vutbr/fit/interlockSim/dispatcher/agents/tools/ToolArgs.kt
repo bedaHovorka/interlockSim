@@ -14,7 +14,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 // Each tool extracts its string/enum arguments from the `Map<String, Any?>` passed to
 // DomainTool.execute with the same shape: null out on missing / wrong-type / blank input so
 // the tool can return a ToolResult.Error with a clear, parameter-specific message rather than
-// forwarding a raw port exception. Centralising the pattern here keeps the 12 tools consistent
+// forwarding a raw port exception. Centralising the pattern here keeps the 13 tools consistent
 // and guarantees blank-string rejection (#551 review: the per-tool `as? String` checks
 // previously let `""` through to the port).
 
