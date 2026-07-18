@@ -280,7 +280,7 @@ class DispatchDecisionApplier(
 						"${decision.fromSemaphoreName} → ${decision.toSeparatorName} " +
 						"for ${decision.trainId}"
 				}
-			onFailedReservation()
+				onFailedReservation()
 			}
 		}
 	}

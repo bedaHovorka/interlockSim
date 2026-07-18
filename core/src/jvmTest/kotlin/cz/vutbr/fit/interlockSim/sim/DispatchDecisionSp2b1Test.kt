@@ -35,13 +35,11 @@ import java.util.concurrent.TimeUnit
 @DisplayName("DispatchDecision — SP2b.1 HoldTrain + rationale (Issue #556)")
 @Timeout(10, unit = TimeUnit.SECONDS)
 class DispatchDecisionSp2b1Test {
-
 	// ── HoldTrain construction and validation ─────────────────────────────────
 
 	@Nested
 	@DisplayName("HoldTrain construction and validation")
 	inner class HoldTrainConstruction {
-
 		@Test
 		@DisplayName("HoldTrain is constructed with trainId and holdDurationSeconds")
 		fun holdTrain_basicConstruction() {
@@ -60,11 +58,12 @@ class DispatchDecisionSp2b1Test {
 		@Test
 		@DisplayName("HoldTrain with rationale stores the rationale string")
 		fun holdTrain_withRationale_rationaleStored() {
-			val decision = DispatchDecision.HoldTrain(
-				trainId = "Train-1",
-				holdDurationSeconds = 45.0,
-				rationale = "Train-2 is approaching on the same track"
-			)
+			val decision =
+				DispatchDecision.HoldTrain(
+					trainId = "Train-1",
+					holdDurationSeconds = 45.0,
+					rationale = "Train-2 is approaching on the same track"
+				)
 			assertThat(decision.rationale).isEqualTo("Train-2 is approaching on the same track")
 		}
 
@@ -114,7 +113,6 @@ class DispatchDecisionSp2b1Test {
 	@Nested
 	@DisplayName("rationale property on existing subtypes (backward compatibility)")
 	inner class RationaleOnExistingSubtypes {
-
 		@Test
 		@DisplayName("ApproveTrain without rationale has null rationale (backward compat)")
 		fun approveTrain_defaultRationaleIsNull() {
@@ -145,20 +143,22 @@ class DispatchDecisionSp2b1Test {
 		@Test
 		@DisplayName("SetSignalAspect without rationale has null rationale (backward compat)")
 		fun setSignalAspect_defaultRationaleIsNull() {
-			val decision = DispatchDecision.SetSignalAspect(
-				"zA",
-				cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE
-			)
+			val decision =
+				DispatchDecision.SetSignalAspect(
+					"zA",
+					cz.vutbr.fit.interlockSim.objects.cells.Signal.FREE
+				)
 			assertThat(decision.rationale).isNull()
 		}
 
 		@Test
 		@DisplayName("SetSwitchPosition without rationale has null rationale (backward compat)")
 		fun setSwitchPosition_defaultRationaleIsNull() {
-			val decision = DispatchDecision.SetSwitchPosition(
-				"vA",
-				cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf.MAIN
-			)
+			val decision =
+				DispatchDecision.SetSwitchPosition(
+					"vA",
+					cz.vutbr.fit.interlockSim.objects.cells.RailSwitch.Conf.MAIN
+				)
 			assertThat(decision.rationale).isNull()
 		}
 
@@ -179,12 +179,13 @@ class DispatchDecisionSp2b1Test {
 		@Test
 		@DisplayName("RequestRoute with rationale stores the rationale string")
 		fun requestRoute_withRationale_rationaleStored() {
-			val decision = DispatchDecision.RequestRoute(
-				trainName = "T1",
-				fromEndpointName = "A",
-				toEndpointName = "B",
-				rationale = "Shortest free path from A to B chosen"
-			)
+			val decision =
+				DispatchDecision.RequestRoute(
+					trainName = "T1",
+					fromEndpointName = "A",
+					toEndpointName = "B",
+					rationale = "Shortest free path from A to B chosen"
+				)
 			assertThat(decision.rationale).isEqualTo("Shortest free path from A to B chosen")
 		}
 	}
