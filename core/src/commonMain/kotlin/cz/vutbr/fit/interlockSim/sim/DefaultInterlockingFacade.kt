@@ -215,21 +215,30 @@ class DefaultInterlockingFacade(
 			"requestRouteByEndpoints: trainId=$trainId, $fromEndpointName → $toEndpointName"
 		}
 
-		val fromEndpoint = resolveEndpoint(fromEndpointName)
-			?: return InterlockingFacade.RouteResponse.Denied(
-				"Neznámý bod trasy: $fromEndpointName"
-			)
-		val toEndpoint = resolveEndpoint(toEndpointName)
-			?: return InterlockingFacade.RouteResponse.Denied(
-				"Neznámý bod trasy: $toEndpointName"
-			)
+		val fromEndpoint =
+			resolveEndpoint(fromEndpointName)
+				?: return InterlockingFacade.RouteResponse.Denied(
+					"Neznámý bod trasy: $fromEndpointName"
+				)
+		val toEndpoint =
+			resolveEndpoint(toEndpointName)
+				?: return InterlockingFacade.RouteResponse.Denied(
+					"Neznámý bod trasy: $toEndpointName"
+				)
 
 		return when (
-			val result = env.getRoutingServices().getPathReservationService()
-				.reservePath(trainId, fromEndpoint, toEndpoint)
+			val result =
+				env
+					.getRoutingServices()
+					.getPathReservationService()
+					.reservePath(trainId, fromEndpoint, toEndpoint)
 		) {
 			is PathReservationService.ReservationResult.Success -> {
-				val blocks = result.reservedBlocks.mapNotNull { it.name }.map { BlockId(it) }
+				// Every physically reserved block must be represented here, even if unnamed —
+				// silently dropping unnamed blocks (via mapNotNull on the name) would undercount
+				// blocksCount downstream in DefaultNetworkActuatorPort.requestRoute's
+				// RouteRequestResult.Reserved, which is what the dispatcher/tool caller observes.
+				val blocks = result.reservedBlocks.mapIndexed { index, b -> BlockId(b.name ?: "unnamed-$index") }
 				val route =
 					TrainRoute(
 						from = SignalId(fromEndpointName),
@@ -279,8 +288,7 @@ class DefaultInterlockingFacade(
 	 * Resolves a named endpoint to its [DynamicPathSeparator], checking [inOutByName]
 	 * first then [semaphoreByName].  Returns `null` if no element matches the name.
 	 */
-	private fun resolveEndpoint(name: String): DynamicPathSeparator? =
-		inOutByName[name] ?: semaphoreByName[name]
+	private fun resolveEndpoint(name: String): DynamicPathSeparator? = inOutByName[name] ?: semaphoreByName[name]
 
 	/**
 	 * Condition 1: Check that all blocks in the route are FREE — neither physically occupied

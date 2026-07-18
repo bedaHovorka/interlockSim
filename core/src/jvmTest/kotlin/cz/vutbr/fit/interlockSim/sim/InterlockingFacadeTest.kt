@@ -699,5 +699,60 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat(v2.locked).isFalse()
 			assertThat(s1.signal).isEqualTo(Signal.STOP)
 		}
+
+		// ── requestRouteByEndpoints (SP3.5, Issue #573) ─────────────────────
+
+		@Test
+		@DisplayName(
+			"SP3.5: requestRouteByEndpoints grants and reports the true reserved block count, " +
+				"including unnamed blocks"
+		)
+		fun requestRouteByEndpointsGrantsWithAccurateBlockCountForUnnamedBlocks() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S1"), semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val named = block("U1")
+			val unnamed = mockk<DynamicTrackBlock>(relaxed = true).also { every { it.name } returns null }
+			val reservationService = e.getRoutingServices().getPathReservationService()
+			every {
+				reservationService.reservePath(any(), any(), any(), any())
+			} returns PathReservationService.ReservationResult.Success(listOf(named, unnamed))
+
+			val response = facade.requestRouteByEndpoints("T1", "S1", "S2")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Granted::class)
+			val granted = response as InterlockingFacade.RouteResponse.Granted
+			// Regression test: mapNotNull{it.name} used to silently drop the unnamed block,
+			// undercounting the block list (and therefore blocksCount) reported to the caller.
+			assertThat(granted.lockedRoute.blocks.size).isEqualTo(2)
+		}
+
+		@Test
+		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown fromEndpointName")
+		fun requestRouteByEndpointsDeniesUnknownFromEndpoint() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+
+			val response = facade.requestRouteByEndpoints("T1", "NOPE", "S2")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("NOPE")
+		}
+
+		@Test
+		@DisplayName("SP3.5: requestRouteByEndpoints denies when the reservation service reports a conflict")
+		fun requestRouteByEndpointsDeniesOnConflict() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S1"), semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val u1 = block("U1")
+			val reservationService = e.getRoutingServices().getPathReservationService()
+			every {
+				reservationService.reservePath(any(), any(), any(), any())
+			} returns PathReservationService.ReservationResult.Conflict(u1, "T-other")
+
+			val response = facade.requestRouteByEndpoints("T1", "S1", "S2")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("T-other")
+		}
 	}
 }

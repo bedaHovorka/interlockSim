@@ -360,8 +360,9 @@ class DefaultNetworkActuatorPortTest {
 			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
 				InterlockingFacade.RouteResponse.Granted(Aspect.Volno, route)
 
-			val result = portWithFacade(inOuts = listOf(a, b), facade = facade)
-				.requestRoute("T1", "A", "B") as RouteRequestResult.Reserved
+			val result =
+				portWithFacade(inOuts = listOf(a, b), facade = facade)
+					.requestRoute("T1", "A", "B") as RouteRequestResult.Reserved
 
 			assertThat(result.trainName).isEqualTo("T1")
 			assertThat(result.blocksCount).isEqualTo(2)
