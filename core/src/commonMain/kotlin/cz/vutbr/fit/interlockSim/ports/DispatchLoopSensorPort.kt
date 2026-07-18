@@ -39,26 +39,58 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
  * Implementations must be **safe to call from the agent driver thread** (off the kDisco
  * simulation thread). The default implementation ([DefaultDispatchLoopSensorPort]) reads
  * from a `@Volatile`-backed [cz.vutbr.fit.interlockSim.sim.ShuntingLoop.TickObservation]
- * reference published atomically by the kDisco sim thread, so off-thread reads are always
- * consistent (all three fields come from the same tick).
+ * reference published atomically by the kDisco sim thread as a single reference write. Each
+ * individual read is therefore self-consistent (one field from one tick), but the three
+ * per-field accessors invoke the provider independently — if the sim thread republishes
+ * between two accessor calls, the caller observes fields from **different** ticks.
+ *
+ * To read more than one field together without inter-tick tearing, use [snapshot], which
+ * invokes the provider exactly once and bundles all three fields from the same tick. This
+ * mirrors the [NetworkPerceptionPort.snapshot] / [SimulationSnapshot] pattern (SP0.4).
  *
  * ## Usage
  *
  * ```kotlin
  * val sensorPort: DispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
  *
- * // In the agent driver loop:
- * val queued = sensorPort.getQueuedTrains()       // which trains need approval?
- * val inner  = sensorPort.getInnerBlockInputs()   // inner-block approach/reservation state
- * val outer  = sensorPort.getOuterBlockInputs()   // outer-block approach/reservation state
+ * // In the agent driver loop — read all three fields from one tick atomically:
+ * val state: DispatchLoopSnapshot = sensorPort.snapshot()
+ * val queued = state.queuedTrains       // which trains need approval?
+ * val inner  = state.innerBlockInputs   // inner-block approach/reservation state
+ * val outer  = state.outerBlockInputs   // outer-block approach/reservation state
+ *
+ * // Single-field convenience (self-consistent for that one field; may differ in tick from
+ * // a separate accessor call) — prefer snapshot() when you need more than one field together:
+ * val onlyQueued = sensorPort.getQueuedTrains()
  * ```
  *
  * @see DefaultDispatchLoopSensorPort
+ * @see DispatchLoopSnapshot
  * @see DispatchLoopActuatorPort
  * @see NetworkPerceptionPort
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 interface DispatchLoopSensorPort {
+	/**
+	 * Returns a single-tick snapshot of all three dispatch-loop observation inputs in one
+	 * atomic read.
+	 *
+	 * The provider is invoked exactly once, so the returned [DispatchLoopSnapshot] is
+	 * internally consistent: [DispatchLoopSnapshot.queuedTrains],
+	 * [DispatchLoopSnapshot.innerBlockInputs] and [DispatchLoopSnapshot.outerBlockInputs]
+	 * all come from the same simulation tick. This is the method callers **must** use when
+	 * they need more than one field together — the per-field accessors below invoke the
+	 * provider independently and can observe different ticks if the sim thread republishes
+	 * between calls.
+	 *
+	 * The snapshot may be one tick stale relative to the current simulation time; this is
+	 * acceptable for the algorithmic and LLM-driven dispatch patterns this port serves.
+	 *
+	 * @return Atomic single-tick snapshot of the dispatch-loop observation inputs;
+	 *   [DispatchLoopSnapshot.EMPTY] before the simulation has published its first observation.
+	 */
+	fun snapshot(): DispatchLoopSnapshot
+
 	/**
 	 * Returns the list of trains currently queued for dispatch (not yet approved).
 	 *
@@ -66,10 +98,10 @@ interface DispatchLoopSensorPort {
 	 * simulation. An agent calls this to discover which trains are waiting and decide whether
 	 * to issue an [DispatchLoopActuatorPort.approveTrain] command.
 	 *
-	 * The returned list is a **snapshot** of the unapproved queue as of the last tick
-	 * published by the simulation shell. It may be one tick stale relative to the current
-	 * simulation time — this is acceptable for the algorithmic and LLM-driven dispatch
-	 * patterns this port serves.
+	 * This accessor invokes the observation provider independently; the returned list is
+	 * self-consistent for this one field, but may be from a different tick than a separate
+	 * [getInnerBlockInputs] / [getOuterBlockInputs] call. Prefer [snapshot] when you need the
+	 * queue together with block-input state.
 	 *
 	 * @return Snapshot of the unapproved-train queue; empty if no trains are waiting.
 	 */
@@ -84,6 +116,11 @@ interface DispatchLoopSensorPort {
 	 * approaching or reserved toward this end, and whether the path has already been extended
 	 * beyond this semaphore — allowing the agent to decide whether a forward reservation is needed.
 	 *
+	 * This accessor invokes the observation provider independently; the returned list is
+	 * self-consistent for this one field, but may be from a different tick than a separate
+	 * [getQueuedTrains] / [getOuterBlockInputs] call. Prefer [snapshot] when you need inner
+	 * block inputs together with the queue or outer block inputs.
+	 *
 	 * @return Snapshot of all inner-block inputs; empty if the simulation has not yet started.
 	 */
 	fun getInnerBlockInputs(): List<BlockInputObservation>
@@ -95,6 +132,11 @@ interface DispatchLoopSensorPort {
 	 * one [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore] separator
 	 * (e.g. `kA`, `kB` in `vyhybna.xml`). The observation is from the semaphore end — the
 	 * direction through which a train enters from the InOut side.
+	 *
+	 * This accessor invokes the observation provider independently; the returned list is
+	 * self-consistent for this one field, but may be from a different tick than a separate
+	 * [getQueuedTrains] / [getInnerBlockInputs] call. Prefer [snapshot] when you need outer
+	 * block inputs together with the queue or inner block inputs.
 	 *
 	 * @return Snapshot of all outer-block inputs; empty if the simulation has not yet started.
 	 */

@@ -25,6 +25,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.QueuedTrainsTool
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
@@ -96,12 +97,16 @@ class DispatchLoopToolsTest {
 	// ── BlockInputsTool ───────────────────────────────────────────────────────
 
 	@Test
-	fun `block_inputs returns combined inner and outer inputs`() {
+	fun `block_inputs returns combined inner and outer inputs from a single snapshot`() {
 		val inner = listOf(makeBlockInput("k1", "zA"))
 		val outer = listOf(makeBlockInput("kA", "doA1"))
 		val port = mockk<DispatchLoopSensorPort>()
-		every { port.getInnerBlockInputs() } returns inner
-		every { port.getOuterBlockInputs() } returns outer
+		every { port.snapshot() } returns
+			DispatchLoopSnapshot(
+				queuedTrains = emptyList(),
+				innerBlockInputs = inner,
+				outerBlockInputs = outer
+			)
 
 		val result = runBlocking { BlockInputsTool(port).execute(emptyMap()) }
 
@@ -109,15 +114,16 @@ class DispatchLoopToolsTest {
 		@Suppress("UNCHECKED_CAST")
 		val data = (result as ToolResult.Success).data as List<*>
 		assertThat(data).hasSize(2)
-		verify(exactly = 1) { port.getInnerBlockInputs() }
-		verify(exactly = 1) { port.getOuterBlockInputs() }
+		// Critical #2: BlockInputsTool must read inner + outer from ONE snapshot call, not two
+		// independent accessor calls (which could observe different ticks if the sim thread
+		// republishes between them — see DispatchLoopSensorPort.snapshot).
+		verify(exactly = 1) { port.snapshot() }
 	}
 
 	@Test
-	fun `block_inputs returns empty list when no blocks observed`() {
+	fun `block_inputs returns empty list when snapshot is empty`() {
 		val port = mockk<DispatchLoopSensorPort>()
-		every { port.getInnerBlockInputs() } returns emptyList()
-		every { port.getOuterBlockInputs() } returns emptyList()
+		every { port.snapshot() } returns DispatchLoopSnapshot.EMPTY
 
 		val result = runBlocking { BlockInputsTool(port).execute(emptyMap()) }
 
@@ -129,8 +135,7 @@ class DispatchLoopToolsTest {
 	@Test
 	fun `block_inputs translates port exception to ToolResult Error`() {
 		val port = mockk<DispatchLoopSensorPort>()
-		every { port.getInnerBlockInputs() } throws IllegalStateException("inner boom")
-		every { port.getOuterBlockInputs() } returns emptyList()
+		every { port.snapshot() } throws IllegalStateException("snapshot boom")
 
 		val result = runBlocking { BlockInputsTool(port).execute(emptyMap()) }
 
@@ -149,7 +154,7 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `approve_train posts ApproveTrain decision and returns queued-success`() {
-		val result = runBlocking { ApproveTrainTool(commandQueue).execute(mapOf("trainId" to "Train #1")) }
+		val result = runBlocking { approveTool().execute(mapOf("trainId" to "Train #1")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Success>()
 		val msg = (result as ToolResult.Success).data as String
@@ -163,7 +168,7 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `approve_train missing trainId returns ToolResult Error without posting`() {
-		val result = runBlocking { ApproveTrainTool(commandQueue).execute(emptyMap()) }
+		val result = runBlocking { approveTool().execute(emptyMap()) }
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
 		assertThat(commandQueue.drain()).hasSize(0)
@@ -171,7 +176,7 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `approve_train blank trainId returns ToolResult Error without posting`() {
-		val result = runBlocking { ApproveTrainTool(commandQueue).execute(mapOf("trainId" to "")) }
+		val result = runBlocking { approveTool().execute(mapOf("trainId" to "")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
 		assertThat(commandQueue.drain()).hasSize(0)
@@ -182,7 +187,7 @@ class DispatchLoopToolsTest {
 		val fullQueue = ActuatorCommandQueue(capacity = 1)
 		fullQueue.postAll(listOf(DispatchDecision.ReleaseRoute("occupier")))
 
-		val result = runBlocking { ApproveTrainTool(fullQueue).execute(mapOf("trainId" to "T1")) }
+		val result = runBlocking { approveTool(fullQueue).execute(mapOf("trainId" to "T1")) }
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
 		// The occupier decision is still the only one in the queue.
@@ -191,7 +196,7 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `approve_train tool has correct name and one trainId parameter`() {
-		val tool = ApproveTrainTool(commandQueue)
+		val tool = approveTool()
 
 		assertThat(tool.name).isEqualTo("approve_train")
 		assertThat(tool.parameters).hasSize(1)
@@ -243,6 +248,9 @@ class DispatchLoopToolsTest {
 	}
 
 	// ── helpers ───────────────────────────────────────────────────────────────
+
+	private fun approveTool(queue: ActuatorCommandQueue = commandQueue): ApproveTrainTool =
+		ApproveTrainTool(DefaultDispatchLoopActuatorPort(queue))
 
 	private fun makeBlockInput(
 		blockId: String,

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
@@ -283,7 +284,7 @@ class ToolGroupRegistry {
 	fun assembleDispatchLoopActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
 		logger.debug { "ToolGroupRegistry.assembleDispatchLoopActuatorTools: creating 1 dispatch-loop actuator tool (SP4.1)" }
 		return listOf(
-			ApproveTrainTool(commandQueue)
+			ApproveTrainTool(DefaultDispatchLoopActuatorPort(commandQueue))
 		)
 	}
 }

@@ -58,7 +58,11 @@ class BlockInputsTool(
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		logger.debug { "BlockInputsTool.execute" }
 		return runCatching {
-			sensorPort.getInnerBlockInputs() + sensorPort.getOuterBlockInputs()
+			// Single atomic snapshot read so inner + outer come from the same simulation tick
+			// (independent accessor calls could observe different ticks if the sim thread
+			// republishes between them — see DispatchLoopSensorPort.snapshot).
+			val snapshot = sensorPort.snapshot()
+			snapshot.innerBlockInputs + snapshot.outerBlockInputs
 		}.fold({ ToolResult.Success(it) }, { ToolResult.Error("block_inputs failed: ${it.message}", it) })
 	}
 }

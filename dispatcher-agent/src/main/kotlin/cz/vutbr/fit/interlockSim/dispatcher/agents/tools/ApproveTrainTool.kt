@@ -9,12 +9,11 @@
  */
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
-import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
-import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopActuatorPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 /**
@@ -26,9 +25,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * ## Threading contract
  *
  * `execute()` runs on the agent driver thread, **not** the kDisco simulation thread. It
- * posts a [DispatchDecision.ApproveTrain] to the [ActuatorCommandQueue] (fire-and-forget)
- * and returns immediately. [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
- * drains and applies it on the kDisco thread during the next control step.
+ * delegates to [DispatchLoopActuatorPort.approveTrain], which posts a
+ * [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ApproveTrain] to the
+ * [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue] (fire-and-forget) and returns
+ * immediately. [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier] drains and
+ * applies it on the kDisco thread during the next control step.
  *
  * The agent observes the outcome (the train appearing in network perception on the following
  * tick) via [AllTrainPositionsTool] or [QueuedTrainsTool].
@@ -36,12 +37,13 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * Approving a train that is already active or that does not exist in the queue is idempotent
  * (silently ignored at the sim thread).
  *
- * @param commandQueue Scoped command queue for this context (injected per simulation)
+ * @param actuatorPort Dispatch-loop actuator port for this context (injected per simulation);
+ *   the default implementation wraps the scoped [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue].
  *
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 class ApproveTrainTool(
-	private val commandQueue: ActuatorCommandQueue
+	private val actuatorPort: DispatchLoopActuatorPort
 ) : DomainTool {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -69,13 +71,17 @@ class ApproveTrainTool(
 			args.stringParam("trainId")
 				?: return ToolResult.Error("trainId parameter is required and must be a non-blank string")
 
-		val decision = DispatchDecision.ApproveTrain(trainId)
-		logger.debug { "ApproveTrainTool.execute: posting ApproveTrain(trainId=$trainId)" }
-		val accepted = commandQueue.postAll(listOf(decision))
-		return if (accepted) {
-			ToolResult.Success("queued approve_train trainId=$trainId")
-		} else {
-			ToolResult.Error("approve_train rejected: actuator command queue is full (backpressure)")
-		}
+		logger.debug { "ApproveTrainTool.execute: trainId=$trainId" }
+		return runCatching { actuatorPort.approveTrain(trainId) }
+			.fold(
+				{ accepted ->
+					if (accepted) {
+						ToolResult.Success("queued approve_train trainId=$trainId")
+					} else {
+						ToolResult.Error("approve_train rejected: actuator command queue is full (backpressure)")
+					}
+				},
+				{ ToolResult.Error("approve_train failed: ${it.message}", it) }
+			)
 	}
 }

@@ -68,7 +68,7 @@ class DispatchLoopPortsTest {
 	}
 
 	@Test
-	fun `sensor port reads from the latest observation on each call`() {
+	fun `per-field accessor reads the latest observation on each call`() {
 		var callCount = 0
 		val obs1 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T1", "A")))
 		val obs2 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T2", "B")))
@@ -80,6 +80,81 @@ class DispatchLoopPortsTest {
 
 		assertThat(port.getQueuedTrains()).isEqualTo(listOf(QueuedTrainObservation("T1", "A")))
 		assertThat(port.getQueuedTrains()).isEqualTo(listOf(QueuedTrainObservation("T2", "B")))
+	}
+
+	// ── snapshot() atomicity contract (Critical #1 / #3) ──────────────────────
+
+	@Test
+	fun `snapshot returns all three fields from a single provider invocation`() {
+		var calls = 0
+		val queued = listOf(QueuedTrainObservation("T1", "A"))
+		val inner = listOf(makeBlockInput("k1", "zA"))
+		val outer = listOf(makeBlockInput("kA", "doA1"))
+		val port =
+			DefaultDispatchLoopSensorPort {
+				calls++
+				makeObservation(queuedTrains = queued, innerBlockInputs = inner, outerBlockInputs = outer)
+			}
+
+		val s = port.snapshot()
+
+		assertThat(s.queuedTrains).isEqualTo(queued)
+		assertThat(s.innerBlockInputs).isEqualTo(inner)
+		assertThat(s.outerBlockInputs).isEqualTo(outer)
+		// All three fields came from ONE provider call — the snapshot is atomic.
+		assertThat(calls).isEqualTo(1)
+	}
+
+	@Test
+	fun `per-field accessors can observe different ticks when provider swaps between calls`() {
+		// Documents the tearing limitation that motivates snapshot(): two separate per-field
+		// accessor calls see fields from different ticks when the sim thread republishes between
+		// them. This is intentional per-field-only atomicity; callers needing cross-field
+		// consistency must use snapshot().
+		var tick = 0
+		val tick0 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T0", "A")))
+		val tick1 = makeObservation(innerBlockInputs = listOf(makeBlockInput("k1", "zA")))
+		val port =
+			DefaultDispatchLoopSensorPort {
+				val o = if (tick == 0) tick0 else tick1
+				tick++
+				o
+			}
+
+		// First accessor sees tick 0's queue; second sees tick 1's inner inputs — different ticks.
+		assertThat(port.getQueuedTrains()).isEqualTo(listOf(QueuedTrainObservation("T0", "A")))
+		assertThat(port.getInnerBlockInputs()).isEqualTo(listOf(makeBlockInput("k1", "zA")))
+	}
+
+	@Test
+	fun `snapshot stays internally consistent when provider swaps between calls`() {
+		// Same swapping provider as above, but a single snapshot() call reads one tick atomically:
+		// the returned bundle's fields all belong to the SAME tick (here tick 0), so the
+		// innerBlockInputs that were absent in tick0 read back empty alongside tick0's queue.
+		var tick = 0
+		val tick0 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T0", "A")))
+		val tick1 = makeObservation(innerBlockInputs = listOf(makeBlockInput("k1", "zA")))
+		val port =
+			DefaultDispatchLoopSensorPort {
+				val o = if (tick == 0) tick0 else tick1
+				tick++
+				o
+			}
+
+		val s = port.snapshot()
+
+		assertThat(s.queuedTrains).isEqualTo(listOf(QueuedTrainObservation("T0", "A")))
+		// tick0 had no innerBlockInputs — atomicity means we see tick0's emptiness, not tick1's data.
+		assertThat(s.innerBlockInputs).isEmpty()
+	}
+
+	@Test
+	fun `DispatchLoopSnapshot EMPTY has all empty lists`() {
+		val empty = DispatchLoopSnapshot.EMPTY
+
+		assertThat(empty.queuedTrains).isEmpty()
+		assertThat(empty.innerBlockInputs).isEmpty()
+		assertThat(empty.outerBlockInputs).isEmpty()
 	}
 
 	// ── DispatchLoopActuatorPort contract ─────────────────────────────────────
