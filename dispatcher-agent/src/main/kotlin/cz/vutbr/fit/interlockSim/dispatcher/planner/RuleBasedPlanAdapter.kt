@@ -44,8 +44,9 @@ import cz.vutbr.fit.interlockSim.sim.Dispatcher
  *
  * @since Issue #574 (SP3.6 — Goal 10)
  */
-class RuleBasedPlanAdapter(private val dispatcher: Dispatcher) : DispatcherPlanner {
-
+class RuleBasedPlanAdapter(
+	private val dispatcher: Dispatcher
+) : DispatcherPlanner {
 	override val capabilities: PlannerCapabilities =
 		PlannerCapabilities(
 			name = "RuleBased",
@@ -59,6 +60,5 @@ class RuleBasedPlanAdapter(private val dispatcher: Dispatcher) : DispatcherPlann
 	 * Callers may freely use this inside a coroutine — the underlying call is non-suspending
 	 * and finishes in constant time.
 	 */
-	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> =
-		dispatcher.decide(observation)
+	override suspend fun plan(observation: DispatchObservation): List<DispatchDecision> = dispatcher.decide(observation)
 }

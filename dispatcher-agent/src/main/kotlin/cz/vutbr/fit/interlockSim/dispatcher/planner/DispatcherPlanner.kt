@@ -46,7 +46,6 @@ import cz.vutbr.fit.interlockSim.sim.DispatchObservation
  * @since Issue #574 (SP3.6 — Goal 10)
  */
 interface DispatcherPlanner {
-
 	/**
 	 * Static metadata describing this planner's capabilities and constraints.
 	 *

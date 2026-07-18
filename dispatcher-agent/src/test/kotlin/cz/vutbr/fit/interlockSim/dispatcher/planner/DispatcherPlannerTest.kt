@@ -14,6 +14,7 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isGreaterThan
 import assertk.assertions.isTrue
+import assertk.fail
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -30,13 +31,11 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("SP3.6 Pluggable planner interface")
 class DispatcherPlannerTest {
-
 	// ── PlannerCapabilities ──────────────────────────────────────────────────
 
 	@Nested
 	@DisplayName("PlannerCapabilities")
 	inner class PlannerCapabilitiesTests {
-
 		@Test
 		@DisplayName("UNRESTRICTED is Double.MAX_VALUE")
 		fun unrestrictedIsDoubleMaxValue() {
@@ -100,7 +99,6 @@ class DispatcherPlannerTest {
 	@Nested
 	@DisplayName("RuleBasedPlanAdapter capabilities")
 	inner class RuleBasedPlanAdapterCapabilities {
-
 		private val adapter = RuleBasedPlanAdapter(RuleBasedDispatcher())
 
 		@Test
@@ -128,7 +126,6 @@ class DispatcherPlannerTest {
 	@Nested
 	@DisplayName("RuleBasedPlanAdapter.plan() delegates to Dispatcher.decide()")
 	inner class RuleBasedPlanAdapterDelegation {
-
 		private val adapter = RuleBasedPlanAdapter(RuleBasedDispatcher())
 
 		private fun emptyObservation(): DispatchObservation =
