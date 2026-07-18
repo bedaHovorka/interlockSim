@@ -204,10 +204,10 @@ class ToolGroupRegistryTest {
 	}
 
 	@Test
-	fun `assembleAllTools still returns exactly 12 tools after SP4 additions`() {
-		// Regression guard: SP4.1 additions must NOT affect the SP1 tool count.
+	fun `assembleAllTools still returns exactly 13 tools after SP4 additions`() {
+		// Regression guard: SP4.1 additions must NOT affect the SP1/SP2a tool count.
 		val tools = registry.assembleAllTools(mockPerceptionPort, commandQueue)
 
-		assertThat(tools).hasSize(12)
+		assertThat(tools).hasSize(13)
 	}
 }
