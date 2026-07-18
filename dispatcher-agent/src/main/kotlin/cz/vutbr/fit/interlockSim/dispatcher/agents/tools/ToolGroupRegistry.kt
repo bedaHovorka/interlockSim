@@ -10,7 +10,9 @@
 package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -196,6 +198,93 @@ class ToolGroupRegistry {
 			ReleaseRouteTool(commandQueue),
 			SetSwitchPositionTool(commandQueue),
 			SetSignalAspectTool(commandQueue)
+		)
+	}
+
+	// ── SP4.1 dispatch-loop tool groups (Issue #563) ──────────────────────────────────────────
+
+	/**
+	 * Assemble all dispatch-loop-specific tools (sensor + actuator) for a ShuntingLoop context.
+	 *
+	 * These tools are **separate** from the general-purpose network tools returned by
+	 * [assembleAllTools]. They are added on top of [assembleAllTools] for agents that
+	 * drive [cz.vutbr.fit.interlockSim.sim.ShuntingLoop] (SP4 and later milestones).
+	 *
+	 * ### Tools included (SP4.1: 3 tools)
+	 *
+	 * **Sensor tools** (dispatch-loop inputs):
+	 * - `queued_trains` — pending trains awaiting approval
+	 * - `block_inputs` — combined inner + outer block-input observations
+	 *
+	 * **Actuator tools** (dispatch-loop commands):
+	 * - `approve_train(trainId)` — admit a queued train to the active network
+	 *
+	 * @param sensorPort Dispatch-loop sensor port for this context (SP4.1)
+	 * @param commandQueue Scoped command queue for this context (fire-and-forget, SP4.1)
+	 * @return All dispatch-loop tools (SP4.1: 3 tools)
+	 *
+	 * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
+	 */
+	fun assembleDispatchLoopTools(
+		sensorPort: DispatchLoopSensorPort,
+		commandQueue: ActuatorCommandQueue
+	): List<DomainTool> {
+		logger.debug {
+			"ToolGroupRegistry.assembleDispatchLoopTools: assembling dispatch-loop sensor + actuator tools (SP4.1)"
+		}
+		return mutableListOf<DomainTool>().apply {
+			addAll(assembleDispatchLoopSensorTools(sensorPort))
+			addAll(assembleDispatchLoopActuatorTools(commandQueue))
+		}
+	}
+
+	/**
+	 * Get dispatch-loop sensor tools (read-only ShuntingLoop dispatch inputs).
+	 *
+	 * Subgroup of [assembleDispatchLoopTools]. Useful for testing or agents that only observe
+	 * dispatch-loop state without issuing approval commands.
+	 *
+	 * ### Tools included
+	 *
+	 * - `queued_trains()` — list of trains queued for approval
+	 * - `block_inputs()` — all inner + outer block-input observations
+	 *
+	 * @param sensorPort Dispatch-loop sensor port for this context (SP4.1)
+	 * @return Dispatch-loop sensor tools (SP4.1: 2 tools)
+	 *
+	 * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
+	 */
+	fun assembleDispatchLoopSensorTools(sensorPort: DispatchLoopSensorPort): List<DomainTool> {
+		logger.debug { "ToolGroupRegistry.assembleDispatchLoopSensorTools: creating 2 dispatch-loop sensor tools (SP4.1)" }
+		return listOf(
+			QueuedTrainsTool(sensorPort),
+			BlockInputsTool(sensorPort)
+		)
+	}
+
+	/**
+	 * Get dispatch-loop actuator tools (train-admission commands for ShuntingLoop).
+	 *
+	 * Subgroup of [assembleDispatchLoopTools]. Useful for testing or agents that only
+	 * admit trains (no perception).
+	 *
+	 * ### Tools included
+	 *
+	 * - `approve_train(trainId)` — admit a queued train to the active network (fire-and-forget)
+	 *
+	 * Posts a [cz.vutbr.fit.interlockSim.sim.DispatchDecision.ApproveTrain] to the
+	 * [commandQueue]; [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]
+	 * applies it on the kDisco thread.
+	 *
+	 * @param commandQueue Scoped command queue for this context (SP4.1)
+	 * @return Dispatch-loop actuator tools (SP4.1: 1 tool)
+	 *
+	 * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
+	 */
+	fun assembleDispatchLoopActuatorTools(commandQueue: ActuatorCommandQueue): List<DomainTool> {
+		logger.debug { "ToolGroupRegistry.assembleDispatchLoopActuatorTools: creating 1 dispatch-loop actuator tool (SP4.1)" }
+		return listOf(
+			ApproveTrainTool(DefaultDispatchLoopActuatorPort(commandQueue))
 		)
 	}
 }
