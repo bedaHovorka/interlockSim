@@ -174,4 +174,22 @@ class SynchronousDispatcherWiringTest : KoinTestBase() {
 		// something — this is the observable proof that the Reserved branch was applied.
 		assertThat(released.get()).isTrue()
 	}
+
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	fun `HoldTrain is a no-op in the synchronous path and does not throw`() {
+		// HoldTrain is not supported in the synchronous wiring (TrainLifecyclePort is not
+		// available here); it should log a warning and drop the decision without throwing.
+		val context = loadVyhybnaContext()
+		context.getInOuts()
+		val loop = ShuntingLoop(context, endTime = 0L)
+		context.setMainProcess(loop)
+		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+
+		loop.controlStepListener =
+			ControlStepListener {
+				applyDecision(DispatchDecision.HoldTrain("ghostTrain", 30.0), loop, actuatorPort)
+			}
+		context.run() // must complete without throwing
+	}
 }

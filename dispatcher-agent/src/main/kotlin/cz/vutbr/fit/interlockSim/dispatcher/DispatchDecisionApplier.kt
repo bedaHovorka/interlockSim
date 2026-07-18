@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
+import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
@@ -33,6 +34,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * |---|---|
  * | [DispatchDecision.ApproveTrain] | [onApproveTrain] callback (into [ShuntingLoop.approveQueuedTrain][cz.vutbr.fit.interlockSim.sim.ShuntingLoop.approveQueuedTrain]) |
  * | [DispatchDecision.ReservePath] | [NetworkActuatorPort.requestRoute] |
+ * | [DispatchDecision.HoldTrain] | [TrainLifecyclePort.holdTrain] (no-op + warning if port is null) |
  * | [DispatchDecision.NoAction] | no-op |
  *
  * Decisions are applied in FIFO order matching the posting order on the driver thread.
@@ -48,21 +50,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * context.run()
  * ```
  *
- * @param queue           The command queue to drain on each control step.
- * @param networkActuator Network actuator port used to apply path-reservation commands.
- * @param onApproveTrain  Callback invoked (on the sim thread) to admit a queued train.
+ * To enable [DispatchDecision.HoldTrain] support, supply a [TrainLifecyclePort]:
+ * ```kotlin
+ * val trainLifecycle = DefaultTrainLifecyclePort(context)
+ * val applier = DispatchDecisionApplier(queue, networkActuator, loop::approveQueuedTrain,
+ *     trainLifecyclePort = trainLifecycle)
+ * ```
+ *
+ * @param queue             The command queue to drain on each control step.
+ * @param networkActuator   Network actuator port used to apply path-reservation commands.
+ * @param onApproveTrain    Callback invoked (on the sim thread) to admit a queued train.
  *   Typically [ShuntingLoop.approveQueuedTrain][cz.vutbr.fit.interlockSim.sim.ShuntingLoop.approveQueuedTrain].
  *
- *   **Design note (SP0.9 review, Minor #4):** train admission (unapproved → approved
- *   + kDisco `activate`) is a `ShuntingLoop`-specific lifecycle step, not a generic
- *   train-actuator command — [TrainActuatorPort][cz.vutbr.fit.interlockSim.ports.TrainActuatorPort]
- *   only exposes `setTargetSpeed`. Routing `ApproveTrain` through a `(String) -> Unit`
- *   callback is therefore an intentional, minimal coupling for SP0.9. If SP2b (#556)
- *   adds more train-lifecycle commands (e.g. `HoldTrain`), extract a dedicated
- *   `TrainAdmissionPort` and route all train commands through it — symmetric with
- *   [NetworkActuatorPort] — rather than growing this constructor-arg list.
+ *   **Design note (SP0.9 review, Minor #4 / SP2b.1 follow-up):** `ApproveTrain` is
+ *   kept as a `(String) -> Unit` callback for backward compatibility; `HoldTrain`
+ *   is routed through [trainLifecyclePort] — the new dedicated port introduced by
+ *   SP2b.1 (#556), symmetric with [NetworkActuatorPort].
+ * @param trainLifecyclePort Train lifecycle actuator port for [DispatchDecision.HoldTrain]
+ *   commands (SP2b.1 — Issue #556).  `null` by default for backward compatibility with
+ *   callers that do not need train-lifecycle commands; when `null` and a [DispatchDecision.HoldTrain]
+ *   is received, a warning is logged and the decision is dropped.
  *
- * @since Issue #731 (SP0.9 — Goal 10)
+ * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1)
  */
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
@@ -84,7 +93,14 @@ class DispatchDecisionApplier(
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10)
 	 */
-	private val onFailedReservation: () -> Unit = {}
+	private val onFailedReservation: () -> Unit = {},
+	/**
+	 * SP2b.1: Train lifecycle actuator port for [DispatchDecision.HoldTrain] commands.
+	 * Null by default for backward compatibility with callers that do not supply one.
+	 *
+	 * @since Issue #556 (SP2b.1 — Goal 10)
+	 */
+	private val trainLifecyclePort: TrainLifecyclePort? = null
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -149,8 +165,8 @@ class DispatchDecisionApplier(
 	}
 
 	// Expression-body `when` so the compiler enforces exhaustiveness over the sealed
-	// DispatchDecision type — adding a future subtype (e.g. HoldTrain in SP2b, #556)
-	// becomes a compile error here rather than a silently-dropped decision.
+	// DispatchDecision type — adding a future subtype becomes a compile error here
+	// rather than a silently-dropped decision.
 	private fun applyDecision(decision: DispatchDecision) =
 		when (decision) {
 			is DispatchDecision.ApproveTrain -> {
@@ -159,6 +175,8 @@ class DispatchDecisionApplier(
 			}
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
 			DispatchDecision.NoAction -> Unit
+			// ── SP2b.1 train-lifecycle subtypes (Issue #556) ─────────────────────
+			is DispatchDecision.HoldTrain -> applyHoldTrain(decision)
 			// ── SP1.7 tool-driven actuator subtypes (Issue #774) ─────────────────
 			// Delegated to the shared DispatchDecision.applyToolDrivenToActuator helper in :core
 			// so the asynchronous path and SynchronousDispatcherWiring cannot drift apart.
@@ -263,6 +281,39 @@ class DispatchDecisionApplier(
 						"for ${decision.trainId}"
 				}
 				onFailedReservation()
+			}
+		}
+	}
+
+	/**
+	 * Applies [decision] via [trainLifecyclePort].
+	 *
+	 * Instructs the named train to hold in place for [DispatchDecision.HoldTrain.holdDurationSeconds]
+	 * simulation seconds.  If no [trainLifecyclePort] was supplied at construction time, this
+	 * logs a warning and drops the decision (backward-compatible no-op for callers that do not
+	 * need train-lifecycle commands).
+	 *
+	 * @since Issue #556 (SP2b.1 — Goal 10)
+	 */
+	private fun applyHoldTrain(decision: DispatchDecision.HoldTrain) {
+		val port = trainLifecyclePort
+		if (port == null) {
+			logger.warn {
+				"HoldTrain decision received (trainId=${decision.trainId}, " +
+					"duration=${decision.holdDurationSeconds}s) but no TrainLifecyclePort is wired — " +
+					"decision dropped. Supply a TrainLifecyclePort to DispatchDecisionApplier to enable " +
+					"hold-train support."
+			}
+			return
+		}
+		logger.debug {
+			"Applying HoldTrain: trainId=${decision.trainId}, " +
+				"duration=${decision.holdDurationSeconds}s"
+		}
+		val accepted = port.holdTrain(decision.trainId, decision.holdDurationSeconds)
+		if (!accepted) {
+			logger.warn {
+				"HoldTrain: no active train found with id='${decision.trainId}' — decision dropped"
 			}
 		}
 	}

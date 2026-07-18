@@ -59,9 +59,9 @@ fun DispatchDecision.applyToolDrivenToActuator(
 	logPrefix: String
 ) {
 	// Exhaustive `when` *expression* over the sealed DispatchDecision — the compiler
-	// enforces coverage, so adding a future subtype (e.g. HoldTrain in SP2b, #556) fails
-	// to compile here until it is handled. The three non-tool-driven subtypes must never
-	// reach this helper (the caller handles them); reaching them is a programming error.
+	// enforces coverage, so adding a future subtype fails to compile here until it
+	// is handled. The non-tool-driven subtypes must never reach this helper (the
+	// caller handles them); reaching them is a programming error.
 	when (this) {
 		is DispatchDecision.SetSignalAspect -> {
 			toolDrivenLogger.debug {
@@ -133,10 +133,11 @@ fun DispatchDecision.applyToolDrivenToActuator(
 		}
 		DispatchDecision.NoAction,
 		is DispatchDecision.ApproveTrain,
-		is DispatchDecision.ReservePath ->
+		is DispatchDecision.ReservePath,
+		is DispatchDecision.HoldTrain ->
 			error(
 				"applyToolDrivenToActuator must not be called for $this — " +
-					"ApproveTrain/ReservePath/NoAction are handled by the caller, not this helper."
+					"ApproveTrain/ReservePath/NoAction/HoldTrain are handled by the caller, not this helper."
 			)
 	}
 }
