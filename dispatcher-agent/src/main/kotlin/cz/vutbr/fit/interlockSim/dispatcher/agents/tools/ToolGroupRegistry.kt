@@ -228,7 +228,9 @@ class ToolGroupRegistry {
 		sensorPort: DispatchLoopSensorPort,
 		commandQueue: ActuatorCommandQueue
 	): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assembleDispatchLoopTools: assembling dispatch-loop sensor + actuator tools (SP4.1)" }
+		logger.debug {
+			"ToolGroupRegistry.assembleDispatchLoopTools: assembling dispatch-loop sensor + actuator tools (SP4.1)"
+		}
 		return mutableListOf<DomainTool>().apply {
 			addAll(assembleDispatchLoopSensorTools(sensorPort))
 			addAll(assembleDispatchLoopActuatorTools(commandQueue))

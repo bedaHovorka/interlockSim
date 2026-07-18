@@ -18,6 +18,7 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNotNull
 import assertk.assertions.isSameAs
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ApproveTrainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockInputsTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.QueuedTrainsTool
@@ -43,7 +44,6 @@ import org.junit.jupiter.api.Test
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 class DispatchLoopToolsTest {
-
 	private val commandQueue = ActuatorCommandQueue()
 
 	// ── QueuedTrainsTool ──────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `DefaultDispatchLoopActuatorPort approveTrain posts ApproveTrain to queue`() {
-		val port = cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort(commandQueue)
+		val port = DefaultDispatchLoopActuatorPort(commandQueue)
 
 		val result = port.approveTrain("Train #2")
 
@@ -214,9 +214,10 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `DefaultDispatchLoopActuatorPort approveTrain rejects blank trainId`() {
-		val port = cz.vutbr.fit.interlockSim.dispatcher.DefaultDispatchLoopActuatorPort(commandQueue)
+		val port = DefaultDispatchLoopActuatorPort(commandQueue)
 
-		org.junit.jupiter.api.assertThrows<IllegalArgumentException> { port.approveTrain("") }
+		org.junit.jupiter.api
+			.assertThrows<IllegalArgumentException> { port.approveTrain("") }
 		assertThat(commandQueue.drain()).hasSize(0)
 	}
 
@@ -224,11 +225,12 @@ class DispatchLoopToolsTest {
 
 	@Test
 	fun `QueuedTrainsTool with DefaultDispatchLoopSensorPort reads from the observation provider`() {
-		val obs = ShuntingLoop.TickObservation(
-			queuedTrains = listOf(QueuedTrainObservation("T1", "A")),
-			innerBlockInputs = emptyList(),
-			outerBlockInputs = emptyList()
-		)
+		val obs =
+			ShuntingLoop.TickObservation(
+				queuedTrains = listOf(QueuedTrainObservation("T1", "A")),
+				innerBlockInputs = emptyList(),
+				outerBlockInputs = emptyList()
+			)
 		val port = DefaultDispatchLoopSensorPort { obs }
 
 		val result = runBlocking { QueuedTrainsTool(port).execute(emptyMap()) }
@@ -242,7 +244,10 @@ class DispatchLoopToolsTest {
 
 	// ── helpers ───────────────────────────────────────────────────────────────
 
-	private fun makeBlockInput(blockId: String, semaphoreName: String): BlockInputObservation =
+	private fun makeBlockInput(
+		blockId: String,
+		semaphoreName: String
+	): BlockInputObservation =
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = semaphoreName,

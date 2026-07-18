@@ -59,7 +59,6 @@ import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 interface DispatchLoopSensorPort {
-
 	/**
 	 * Returns the list of trains currently queued for dispatch (not yet approved).
 	 *

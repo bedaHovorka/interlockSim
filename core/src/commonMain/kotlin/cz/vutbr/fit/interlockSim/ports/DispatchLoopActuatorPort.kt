@@ -44,7 +44,6 @@ package cz.vutbr.fit.interlockSim.ports
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 interface DispatchLoopActuatorPort {
-
 	/**
 	 * Approve a queued train by name, moving it from the pending admission queue into the
 	 * active simulation.

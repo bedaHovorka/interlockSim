@@ -37,7 +37,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 class DefaultDispatchLoopActuatorPort(
 	private val commandQueue: ActuatorCommandQueue
 ) : DispatchLoopActuatorPort {
-
 	companion object {
 		private val logger = KotlinLogging.logger {}
 	}

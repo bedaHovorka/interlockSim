@@ -47,13 +47,9 @@ import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 class DefaultDispatchLoopSensorPort(
 	private val observationProvider: () -> ShuntingLoop.TickObservation
 ) : DispatchLoopSensorPort {
+	override fun getQueuedTrains(): List<QueuedTrainObservation> = observationProvider().queuedTrains
 
-	override fun getQueuedTrains(): List<QueuedTrainObservation> =
-		observationProvider().queuedTrains
+	override fun getInnerBlockInputs(): List<BlockInputObservation> = observationProvider().innerBlockInputs
 
-	override fun getInnerBlockInputs(): List<BlockInputObservation> =
-		observationProvider().innerBlockInputs
-
-	override fun getOuterBlockInputs(): List<BlockInputObservation> =
-		observationProvider().outerBlockInputs
+	override fun getOuterBlockInputs(): List<BlockInputObservation> = observationProvider().outerBlockInputs
 }

@@ -31,7 +31,6 @@ import kotlin.test.assertFailsWith
  * @since Issue #563 (SP4.1 — Goal 10 reactive-train agent)
  */
 class DispatchLoopPortsTest {
-
 	// ── DefaultDispatchLoopSensorPort ─────────────────────────────────────────
 
 	@Test
@@ -73,10 +72,11 @@ class DispatchLoopPortsTest {
 		var callCount = 0
 		val obs1 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T1", "A")))
 		val obs2 = makeObservation(queuedTrains = listOf(QueuedTrainObservation("T2", "B")))
-		val port = DefaultDispatchLoopSensorPort {
-			callCount++
-			if (callCount == 1) obs1 else obs2
-		}
+		val port =
+			DefaultDispatchLoopSensorPort {
+				callCount++
+				if (callCount == 1) obs1 else obs2
+			}
 
 		assertThat(port.getQueuedTrains()).isEqualTo(listOf(QueuedTrainObservation("T1", "A")))
 		assertThat(port.getQueuedTrains()).isEqualTo(listOf(QueuedTrainObservation("T2", "B")))
@@ -87,12 +87,13 @@ class DispatchLoopPortsTest {
 	@Test
 	fun `approveTrain contract rejects blank trainId`() {
 		// Test the interface contract using a minimal stub implementation.
-		val stub = object : DispatchLoopActuatorPort {
-			override fun approveTrain(trainId: String): Boolean {
-				require(trainId.isNotBlank()) { "trainId must not be blank" }
-				return true
+		val stub =
+			object : DispatchLoopActuatorPort {
+				override fun approveTrain(trainId: String): Boolean {
+					require(trainId.isNotBlank()) { "trainId must not be blank" }
+					return true
+				}
 			}
-		}
 
 		assertFailsWith<IllegalArgumentException> { stub.approveTrain("") }
 		assertFailsWith<IllegalArgumentException> { stub.approveTrain("   ") }
@@ -106,7 +107,10 @@ class DispatchLoopPortsTest {
 		outerBlockInputs: List<BlockInputObservation> = emptyList()
 	): ShuntingLoop.TickObservation = ShuntingLoop.TickObservation(queuedTrains, innerBlockInputs, outerBlockInputs)
 
-	private fun makeBlockInput(blockId: String, semaphoreName: String): BlockInputObservation =
+	private fun makeBlockInput(
+		blockId: String,
+		semaphoreName: String
+	): BlockInputObservation =
 		BlockInputObservation(
 			blockId = blockId,
 			towardSemaphoreName = semaphoreName,
