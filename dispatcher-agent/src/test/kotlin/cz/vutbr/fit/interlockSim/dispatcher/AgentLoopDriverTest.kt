@@ -18,6 +18,7 @@ import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
+import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
@@ -333,29 +334,31 @@ class AgentLoopDriverTest {
 		}
 	}
 
-	// ── Observation provider atomicity (tearing fix) ──────────────────────────
+	// ── Sensor-port atomicity (tearing fix) ───────────────────────────────────
 
 	@Nested
-	@DisplayName("observationProvider is read atomically, once per cycle")
+	@DisplayName("dispatchLoopSensorPort is read atomically, once per cycle")
 	inner class ObservationProviderAtomicity {
 		/**
 		 * Regression test for the tearing bug: [AgentLoopDriver] used to call three
 		 * separate providers (unapproved trains, inner/outer block inputs), each of
 		 * which could observe a different sim tick if the sim thread republished
 		 * [ShuntingLoop.TickObservation] in between. Now there is a single
-		 * `observationProvider` call per cycle, so this asserts it is invoked exactly
-		 * once and that all three [DispatchObservation] fields come from that single
+		 * [cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort.snapshot] call per
+		 * cycle (SP4.2, Issue #564), so this asserts it is invoked exactly once and
+		 * that all three [DispatchObservation] fields come from that single
 		 * returned bundle.
 		 */
 		@Test
-		@DisplayName("observationProvider is called exactly once per runCycle call")
+		@DisplayName("sensor port snapshot is taken exactly once per runCycle call")
 		fun observationProviderCalledOncePerCycle() {
 			var callCount = 0
-			val observationProvider = {
-				callCount++
-				ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
-			}
-			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, observationProvider)
+			val sensorPort =
+				DefaultDispatchLoopSensorPort {
+					callCount++
+					ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+				}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, sensorPort)
 
 			runBlocking { driver.runCycle() }
 
@@ -402,11 +405,12 @@ class AgentLoopDriverTest {
 					outerBlockInputs = emptyList()
 				)
 			var callCount = 0
-			val driver =
-				AgentLoopDriver(perceptionPort, planner, commandQueue, controller) {
+			val sensorPort =
+				DefaultDispatchLoopSensorPort {
 					callCount++
 					if (callCount == 1) tickA else tickB
 				}
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, sensorPort)
 
 			val capturedObs = slot<DispatchObservation>()
 			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)

@@ -15,6 +15,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
+import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
@@ -159,7 +160,7 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 				planner = planner,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
-				observationProvider = loop::getLatestObservation
+				dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
 			)
 
 		// Lock-step handshake: same pattern as RuleBasedDispatcherDeterminismTest.

@@ -85,5 +85,9 @@ val dispatcherAgentTestModule: Module =
 						?: throw IllegalStateException("DefaultSimulationContext source not found in scope")
 				DefaultCollisionDetectionService(context, context)
 			}
+
+			// SP4.2 (Issue #564): Late-bound pacing controller — kept in sync with
+			// dispatcherAgentModule so scope-resolution tests exercise the same binding.
+			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
 		}
 	}
