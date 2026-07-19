@@ -40,17 +40,15 @@ import java.util.concurrent.TimeUnit
  *
  * **Expected outcome (verified by manual run):** with the fixed-seed train
  * generator (`Generator.random = Random(0L)`) and this branch's `kdisco 0.6.1-SNAPSHOT`
- * `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml on the
- * JVM always produces exactly 28 trains entered and 14 fully exited.
+ * `waitCrossing`-based block-boundary detection, a 1024s run against vyhybna.xml
+ * always produces exactly 28 trains entered and 14 fully exited.
  *
- * **These counts intentionally differ from the native
- * [cz.vutbr.fit.interlockSim.fastsim.ShuntingLoopDeterminismTest]** (16 entered / 14
- * exited, same seed, same construction path via `wireSynchronousDispatcher`). kDisco's
- * `Random.exp()`/`.normal()` route the (bit-identical) raw uniform draws through
- * `kotlin.math.ln`/`exp`, which resolve to different native math libraries per platform
- * and are not required to be bit-identical by IEEE-754/the Java Math spec — amplified by
- * kDisco's discrete-event scheduling into a different train count over a long run. This
- * is a documented, tracked limitation, not a test bug:
+ * **These counts are cross-platform identical** and must match the native
+ * [cz.vutbr.fit.interlockSim.fastsim.ShuntingLoopDeterminismTest] (same seed, same
+ * construction path via `wireSynchronousDispatcher`). kDisco's `Random.exp()`/`.normal()`
+ * historically diverged between JVM and native builds because they routed the
+ * (bit-identical) raw uniform draws through platform-delegating `kotlin.math.ln`/`exp`;
+ * that was fixed upstream by a pure-Kotlin fdlibm `PortableMath` implementation:
  * https://github.com/bedaHovorka/kdisco/issues/69.
  *
  * For the shorter integration-test variants (120s/300s) see [ShuntingLoopSmokeTest].

@@ -10,6 +10,7 @@
 package cz.vutbr.fit.interlockSim.fastsim
 
 import cz.vutbr.fit.interlockSim.di.coreModule
+import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.TextReporter
 import cz.vutbr.fit.interlockSim.sim.Verbosity
 import org.koin.core.context.startKoin
@@ -17,14 +18,14 @@ import org.koin.core.context.stopKoin
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * Structural invariant tests for native simulation output.
  *
  * Verifies that the native (linuxX64) simulation produces structurally valid results
- * by checking platform-independent invariants. Exact event times are **not** compared
- * because kDisco.Random determinism across JVM and native platforms is unknown.
+ * by checking platform-independent invariants.
  *
  * A matching JVM reference test ([JvmParityReferenceTest]) verifies the same invariants,
  * confirming semantic parity between platforms.
@@ -36,6 +37,12 @@ import kotlin.test.assertTrue
  * 4. All events have non-negative timestamps
  * 5. Events are in chronological order (timestamps non-decreasing)
  * 6. Summary statistics are present and reasonable
+ * 7. Exact entered/exited train counts (cross-platform determinism)
+ *
+ * Invariant 7 asserts **exact** counts, which must equal the JVM test's constants:
+ * kDisco's `Random.exp()`/`.normal()` are bit-identical across JVM and native since
+ * bedaHovorka/kdisco#69 was fixed (pure-Kotlin fdlibm `PortableMath` replacing
+ * platform-delegating `kotlin.math.ln`/`exp`).
  *
  * @since Issue #417 (native vs JVM semantic parity)
  * @see TextReporter
@@ -45,6 +52,14 @@ class NativeJvmParityTest {
 	companion object {
 		private const val END_TIME = 60L
 		private val timestampRegex = Regex("""t=([\d.]+)\s+""")
+
+		/**
+		 * Exact expected counts for `ShuntingLoop(endTime=60)` with the fixed-seed
+		 * generator. Cross-platform identical (bedaHovorka/kdisco#69 fixed); must match
+		 * [cz.vutbr.fit.interlockSim.sim.JvmParityReferenceTest] in `:core`.
+		 */
+		private const val EXPECTED_TRAINS_ENTERED = 2
+		private const val EXPECTED_TRAINS_EXITED = 1
 	}
 
 	@BeforeTest
@@ -57,22 +72,46 @@ class NativeJvmParityTest {
 		stopKoin()
 	}
 
+	/** Collected output plus final train counters of one simulation run. */
+	private data class SimRun(
+		val events: List<String>,
+		val summary: String,
+		val trainsEntered: Int,
+		val trainsExited: Int
+	)
+
 	/**
-	 * Runs the shuntingLoop simulation and collects output lines via [TextReporter].
-	 *
-	 * @return Pair of (event lines excluding summary, summary line)
+	 * Runs the shuntingLoop simulation and collects output lines via [TextReporter]
+	 * plus the final train counters.
 	 */
-	private fun runSimulationAndCollect(): Pair<List<String>, String> {
+	private fun runSimulation(): SimRun {
 		val output = mutableListOf<String>()
 		val reporter = TextReporter(Verbosity.DEFAULT) { output.add(it) }
+		var trainsEntered = -1
+		var trainsExited = -1
 		NativeExampleRegistry.create("shuntingLoop", END_TIME, NativeContextFactory()).use { ctx ->
 			ctx.addPropertyChangeListener(reporter)
 			ctx.run()
 			reporter.printSummary()
+			val loop = ctx.getMainProcess() as ShuntingLoop
+			trainsEntered = loop.getTrainsEntered()
+			trainsExited = loop.getTrainsExited()
 		}
 		val eventLines = output.filter { !it.startsWith("---") }
 		val summary = output.last { it.startsWith("---") }
-		return eventLines to summary
+		return SimRun(eventLines, summary, trainsEntered, trainsExited)
+	}
+
+	private fun runSimulationAndCollect(): Pair<List<String>, String> {
+		val run = runSimulation()
+		return run.events to run.summary
+	}
+
+	@Test
+	fun `invariant 7 - exact train counts match cross-platform constants`() {
+		val run = runSimulation()
+		assertEquals(EXPECTED_TRAINS_ENTERED, run.trainsEntered, "trains entered")
+		assertEquals(EXPECTED_TRAINS_EXITED, run.trainsExited, "trains exited")
 	}
 
 	@Test
