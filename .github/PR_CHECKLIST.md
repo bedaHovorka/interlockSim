@@ -29,7 +29,7 @@ This checklist ensures all PRs properly document CI status and test coverage imp
 
 - [ ] **Smoke test passes**
   ```bash
-  java -jar build/libs/interlockSim.jar example shuntingLoop 300
+  java -jar build/libs/interlockSim.jar example shuntingLoop 1024
   ```
 
 ### Coverage Analysis
@@ -215,7 +215,7 @@ As a reviewer, verify:
 open build/reports/jacoco/test/html/index.html
 
 # Run smoke test
-java -jar build/libs/interlockSim.jar example shuntingLoop 300
+java -jar build/libs/interlockSim.jar example shuntingLoop 1024
 
 # Check CI status (requires GitHub CLI)
 gh run list --branch $(git branch --show-current)

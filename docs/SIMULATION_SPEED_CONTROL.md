@@ -30,7 +30,7 @@ Start the animated GUI:
 Or run the JAR directly after building:
 
 ```bash
-java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 300
+java -jar build/libs/interlockSim.jar exampleGui shuntingLoop 1024
 ```
 
 For your own XML file, open the desktop UI and use **Simulation → Start...**.

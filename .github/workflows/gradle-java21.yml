@@ -181,7 +181,7 @@ jobs:
       if: success()
       timeout-minutes: 8
       run: |
-        echo "Starting smoke test (shunting loop, 300 simulated seconds with Koin)..."
+        echo "Starting smoke test (shunting loop, 1024 simulated seconds with Koin)..."
         echo "Timeout: 8 minutes. Expected: ~4-5 minutes."
         echo ""
 
@@ -190,7 +190,7 @@ jobs:
         START_TIME=$(date +%s%N)
 
         if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml \
-          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 300 \
+          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024 \
           | tee jvm-smoke-output.txt; then
 
           END_TIME=$(date +%s%N)
@@ -284,15 +284,15 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./gradlew :fast-sim:linuxX64Test --no-daemon --stacktrace
 
-    - name: Smoke test — native binary (shuntingLoop 300s)
+    - name: Smoke test — native binary (shuntingLoop 1024s)
       timeout-minutes: 8
       run: |
         BINARY=fast-sim/build/bin/linuxX64/releaseExecutable/fast-sim.kexe
-        echo "Starting native smoke test (shunting loop, 300 simulated seconds)..."
+        echo "Starting native smoke test (shunting loop, 1024 simulated seconds)..."
 
         START_TIME=$(date +%s%N)
 
-        if OUTPUT=$("$BINARY" example shuntingLoop 300 2>&1); then
+        if OUTPUT=$("$BINARY" example shuntingLoop 1024 2>&1); then
           END_TIME=$(date +%s%N)
           ELAPSED_MS=$(( (END_TIME - START_TIME) / 1000000 ))
           ELAPSED_SEC=$(awk "BEGIN {printf \"%.2f\", $ELAPSED_MS / 1000}")
@@ -478,7 +478,7 @@ jobs:
       run: |
         echo "## Cross-Platform Output Comparison (Issue #439)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Scenario:** shuntingLoop (endTime=300)" >> $GITHUB_STEP_SUMMARY
+        echo "**Scenario:** shuntingLoop (endTime=1024)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
         JVM_EVENTS=$(grep -cE 't=[0-9]' jvm-smoke-output.txt 2>/dev/null || echo 0)
