@@ -18,12 +18,13 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.assertPlannerPacingCompatible
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEvent
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyEventType
 import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
-import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
@@ -170,10 +171,10 @@ class ExampleRegistry {
 	/**
 	 * Wires the SP0.11 dispatcher-agent stack onto [loop]:
 	 * - creates [DefaultNetworkPerceptionPort] and [DefaultNetworkActuatorPort] backed by [context]
-	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [Dispatcher] (singleton)
-	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [Dispatcher] binding
+	 * - resolves [ActuatorCommandQueue] (scoped, one per context) and [DispatcherPlanner] (singleton)
+	 *   from [DefaultSimulationContext.scope] via Koin — so swapping the [DispatcherPlanner] binding
 	 *   in [dispatcherAgentModule][cz.vutbr.fit.interlockSim.dispatcher.di.dispatcherAgentModule]
-	 *   (e.g. to an LLM dispatcher) takes effect here too (Goal 10 seam)
+	 *   (e.g. to an LLM-backed planner, SP3.6) takes effect here too (Goal 10 seam)
 	 * - creates [DispatchDecisionApplier] (with ShuntingLoop counter callbacks) and registers
 	 *   it as [ShuntingLoop.controlStepListener]
 	 * - creates [AgentLoopDriver] (with ShuntingLoop observation providers) and registers its
@@ -206,7 +207,11 @@ class ExampleRegistry {
 			)
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
-		val dispatcher = context.scope.get<Dispatcher>()
+		val planner = context.scope.get<DispatcherPlanner>()
+		// SP3.6 (#574 / #187): reject async/LLM planners until SimulationRunner pacing is wired
+		// (SP1.4, #549). NoOpSimulationController provides no speed cap, so an async planner cannot
+		// honour the 2× real-time limit. The rule-based planner is synchronous and exempt.
+		assertPlannerPacingCompatible(planner, controller)
 
 		val applier =
 			DispatchDecisionApplier(
@@ -232,7 +237,7 @@ class ExampleRegistry {
 		val driver =
 			AgentLoopDriver(
 				perceptionPort = perceptionPort,
-				dispatcher = dispatcher,
+				planner = planner,
 				commandQueue = queue,
 				controller = controller,
 				observationProvider = loop::getLatestObservation

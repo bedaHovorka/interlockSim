@@ -21,6 +21,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
 import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -60,7 +61,7 @@ import java.util.concurrent.atomic.AtomicReference
  * SP1.4 (#549) — verifies the per-[DefaultSimulationContext] Koin scoped bindings added to the
  * production [dispatcherAgentModule] actually resolve from a real context scope.
  *
- * `DispatcherAgentModuleSp13Test` only exercises the singleton bindings (it starts Koin with
+ * `DispatcherAgentModuleTest` only exercises the singleton bindings (it starts Koin with
  * `dispatcherAgentModule` alone and never creates a [DefaultSimulationContext]), so the
  * `scope<DefaultSimulationContext> { scoped<NetworkPerceptionPort> / scoped<NetworkActuatorPort>
  * / scoped<KoogAgentFactory> }` bindings — including the `getSource<DefaultSimulationContext>()
@@ -172,6 +173,7 @@ class DispatcherAgentPortBindingTest {
 
 			val queue = ActuatorCommandQueue()
 			val dispatcher = RuleBasedDispatcher()
+			val planner = RuleBasedPlanAdapter(dispatcher)
 			val applier =
 				DispatchDecisionApplier(
 					queue = queue,
@@ -183,7 +185,7 @@ class DispatcherAgentPortBindingTest {
 			val driver =
 				AgentLoopDriver(
 					perceptionPort = perceptionPort,
-					dispatcher = dispatcher,
+					planner = planner,
 					commandQueue = queue,
 					controller = NoOpSimulationController,
 					observationProvider = loop::getLatestObservation
