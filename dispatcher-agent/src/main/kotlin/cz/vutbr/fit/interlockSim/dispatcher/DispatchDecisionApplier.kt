@@ -157,6 +157,15 @@ class DispatchDecisionApplier(
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
+
+		/**
+		 * Format a rationale list as a log suffix: returns empty string when the list
+		 * is empty, otherwise `" | rationale: [entry1; entry2; …]"` (SP2b.5).
+		 *
+		 * @since Issue #560 (SP2b.5 — Goal 10)
+		 */
+		internal fun List<String>.toRationaleLogSuffix(): String =
+			if (isEmpty()) "" else " | rationale: [${joinToString("; ")}]"
 	}
 
 	/**
@@ -271,7 +280,10 @@ class DispatchDecisionApplier(
 	private fun applyDecision(decision: DispatchDecision) =
 		when (decision) {
 			is DispatchDecision.ApproveTrain -> {
-				logger.debug { "Applying ApproveTrain: trainId=${decision.trainId}" }
+				logger.debug {
+					"Applying ApproveTrain: trainId=${decision.trainId}" +
+						decision.rationale.toRationaleLogSuffix()
+				}
 				onApproveTrain(decision.trainId)
 			}
 			is DispatchDecision.ReservePath -> applyReservePath(decision)
@@ -409,7 +421,8 @@ class DispatchDecisionApplier(
 		}
 		logger.debug {
 			"Applying HoldTrain: trainId=${decision.trainId}, " +
-				"duration=${decision.holdDurationSeconds}s"
+				"duration=${decision.holdDurationSeconds}s" +
+				decision.rationale.toRationaleLogSuffix()
 		}
 		val accepted = port.holdTrain(decision.trainId, decision.holdDurationSeconds)
 		if (!accepted) {

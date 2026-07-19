@@ -800,19 +800,19 @@ class DispatchDecisionApplierTest {
 		}
 
 		@Test
-		@DisplayName("HoldTrain with rationale carries the rationale string")
+		@DisplayName("HoldTrain with rationale carries the rationale list")
 		fun holdTrain_withRationale_rationaleAccessible() {
-			val decision = DispatchDecision.HoldTrain("T1", 30.0, rationale = "Train-2 is approaching; create spacing")
-			assertThat(decision.rationale).isEqualTo("Train-2 is approaching; create spacing")
+			val decision = DispatchDecision.HoldTrain("T1", 30.0, rationale = listOf("Train-2 is approaching; create spacing"))
+			assertThat(decision.rationale).isEqualTo(listOf("Train-2 is approaching; create spacing"))
 			assertThat(decision.trainId).isEqualTo("T1")
 			assertThat(decision.holdDurationSeconds).isEqualTo(30.0)
 		}
 
 		@Test
-		@DisplayName("HoldTrain without rationale has null rationale")
-		fun holdTrain_withoutRationale_rationaleIsNull() {
+		@DisplayName("HoldTrain without rationale has empty rationale list")
+		fun holdTrain_withoutRationale_rationaleIsEmpty() {
 			val decision = DispatchDecision.HoldTrain("T1", 30.0)
-			assertThat(decision.rationale).isEqualTo(null)
+			assertThat(decision.rationale).isEmpty()
 		}
 
 		@Test
