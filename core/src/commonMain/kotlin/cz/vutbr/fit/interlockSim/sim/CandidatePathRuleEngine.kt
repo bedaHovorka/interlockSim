@@ -88,6 +88,13 @@ class CandidatePathRuleEngine(
 	}
 
 	/**
+	 * Lexicographic comparator derived once from [priority] (the engine is stateless and
+	 * [priority] is immutable), so [rank] does not rebuild it on every call.
+	 */
+	private val comparator: Comparator<PathCandidate> =
+		priority.map(::comparatorFor).reduce { acc, next -> acc.then(next) }
+
+	/**
 	 * A single deterministic scoring dimension.  Each rule sorts ascending — smaller is
 	 * better — so lower conflict risk, fewer sections, and fewer switch movements all rank
 	 * a candidate higher.
@@ -117,7 +124,6 @@ class CandidatePathRuleEngine(
 		if (candidates.size <= 1) {
 			return candidates.toList()
 		}
-		val comparator = priority.map(::comparatorFor).reduce { acc, next -> acc.then(next) }
 		return candidates.sortedWith(comparator)
 	}
 
