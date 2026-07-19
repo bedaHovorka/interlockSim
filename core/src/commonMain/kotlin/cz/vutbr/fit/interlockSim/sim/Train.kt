@@ -1473,5 +1473,51 @@ class Train :
 		motor.accelerateTo(speed)
 	}
 
+	/**
+	 * Hold this train stationary at a station for [dwellDurationSeconds] simulation seconds.
+	 *
+	 * SP2a.3 act step for station dwell (Issue #554).  Cancels any in-progress motor
+	 * acceleration (stopping the train immediately at its current position) and spawns a
+	 * fire-and-forget [StationDwellProcess] that waits for [dwellDurationSeconds] sim-seconds.
+	 * After the dwell, the process completes and the motor remains stopped; the agent's
+	 * next [setTargetSpeed] call will restart it.
+	 *
+	 * **Thread safety:** Must be called from the kDisco simulation thread.
+	 *
+	 * @param dwellDurationSeconds Dwell time in simulation seconds (must be > 0).
+	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
+	 * @since Issue #554 (SP2a.3 — Goal 10)
+	 */
+	fun holdAtStation(dwellDurationSeconds: Double) {
+		require(dwellDurationSeconds > 0.0) {
+			"dwellDurationSeconds must be > 0, got $dwellDurationSeconds"
+		}
+		logger.info {
+			"Train $number: holding at station for ${dwellDurationSeconds}s"
+		}
+		motor.cancelAccelerating()
+		Process.activate(StationDwellProcess(dwellDurationSeconds))
+	}
+
+	/**
+	 * Fire-and-forget kDisco process that implements a station dwell pause.
+	 *
+	 * Spawned by [holdAtStation]; holds for [dwellSeconds] simulation seconds and then
+	 * completes.  The motor is not restarted here — the agent's next [setTargetSpeed]
+	 * call will do that.
+	 *
+	 * @since Issue #554 (SP2a.3 — Goal 10)
+	 */
+	private inner class StationDwellProcess(
+		private val dwellSeconds: Double
+	) : Process() {
+		override suspend fun actions() {
+			env.report("dwell start ${dwellSeconds}s", this@Train, ReportType.TRAIN_EVENTS)
+			hold(dwellSeconds)
+			logger.info { "Train $number: station dwell of ${dwellSeconds}s complete; ready to resume" }
+			env.report("dwell end", this@Train, ReportType.TRAIN_EVENTS)
+		}
+	}
+
 	override fun toString(): String = name
 }

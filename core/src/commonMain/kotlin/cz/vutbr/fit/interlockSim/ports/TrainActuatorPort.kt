@@ -18,12 +18,12 @@ package cz.vutbr.fit.interlockSim.ports
  *
  * ## Responsibility
  *
- * A train agent's only physical output is controlling the train's target speed.
- * It never plans routes, operates switches, or reasons about other trains — those
- * concerns belong to the dispatcher ([NetworkActuatorPort]).  The underlying physics
- * (acceleration ramp, braking ramp, speed-limit enforcement) are handled entirely by
- * the simulation kernel; the agent supplies only the desired *target speed* and the
- * kernel does the rest.
+ * A train agent's only physical output is controlling the train's target speed and
+ * scheduling station dwells.  It never plans routes, operates switches, or reasons
+ * about other trains — those concerns belong to the dispatcher ([NetworkActuatorPort]).
+ * The underlying physics (acceleration ramp, braking ramp, speed-limit enforcement) are
+ * handled entirely by the simulation kernel; the agent supplies only the desired
+ * *target speed* and the kernel does the rest.
  *
  * ## Design constraint
  *
@@ -42,6 +42,10 @@ package cz.vutbr.fit.interlockSim.ports
  *
  *     fun onStationApproach() {
  *         actuator.setTargetSpeed(0.0)   // full stop at platform
+ *     }
+ *
+ *     fun onStationDwell(dwellSeconds: Double) {
+ *         actuator.holdAtStation(dwellSeconds)  // hold; resume after dwell expires
  *     }
  * }
  * ```
@@ -63,4 +67,28 @@ interface TrainActuatorPort {
 	 * @throws IllegalArgumentException if [speed] is negative.
 	 */
 	fun setTargetSpeed(speed: Double)
+
+	/**
+	 * Hold the train stationary at a station for [dwellDurationSeconds] simulation seconds.
+	 *
+	 * SP2a.3 act step for station dwell (Issue #554).  The implementation:
+	 * 1. Immediately cancels any in-progress motor acceleration so the train stops.
+	 * 2. Schedules a *fire-and-forget* dwell period of [dwellDurationSeconds] sim-seconds.
+	 *    After this period the train is released; the **next** [setTargetSpeed] call from
+	 *    the agent's act step will restart the motor.
+	 *
+	 * This call is **fire-and-forget** from the agent's perspective — the act step does
+	 * not block waiting for the dwell to expire.  The agent's subsequent sense cycles will
+	 * observe `isDwelling = true` and `velocity = 0` during the dwell; once the dwell
+	 * expires the agent will naturally decide to resume and call [setTargetSpeed].
+	 *
+	 * ## Thread safety
+	 *
+	 * Must be called on the kDisco simulation thread, identical to [setTargetSpeed].
+	 *
+	 * @param dwellDurationSeconds Dwell time in simulation seconds (must be > 0).
+	 * @throws IllegalArgumentException if [dwellDurationSeconds] is ≤ 0.
+	 * @since Issue #554 (SP2a.3 — Goal 10)
+	 */
+	fun holdAtStation(dwellDurationSeconds: Double)
 }

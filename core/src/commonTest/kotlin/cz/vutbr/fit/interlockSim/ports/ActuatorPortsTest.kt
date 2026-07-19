@@ -41,9 +41,14 @@ class ActuatorPortsTest {
 	 */
 	private class RecordingTrainActuator : TrainActuatorPort {
 		var lastTargetSpeed: Double = -1.0
+		var lastDwellDuration: Double = -1.0
 
 		override fun setTargetSpeed(speed: Double) {
 			lastTargetSpeed = speed
+		}
+
+		override fun holdAtStation(dwellDurationSeconds: Double) {
+			lastDwellDuration = dwellDurationSeconds
 		}
 	}
 
@@ -61,6 +66,25 @@ class ActuatorPortsTest {
 		assertThat(actuator.lastTargetSpeed).isEqualTo(0.0)
 	}
 
+	@Test
+	fun `TrainActuatorPort holdAtStation records the dwell duration`() {
+		val actuator = RecordingTrainActuator()
+		actuator.holdAtStation(60.0)
+		assertThat(actuator.lastDwellDuration).isEqualTo(60.0)
+	}
+
+	@Test
+	fun `TrainActuatorPort holdAtStation zero duration throws`() {
+		val actuator = ContractValidatingTrainActuator()
+		assertFailsWith<IllegalArgumentException> { actuator.holdAtStation(0.0) }
+	}
+
+	@Test
+	fun `TrainActuatorPort holdAtStation negative duration throws`() {
+		val actuator = ContractValidatingTrainActuator()
+		assertFailsWith<IllegalArgumentException> { actuator.holdAtStation(-5.0) }
+	}
+
 	/**
 	 * A minimal implementation that enforces the [TrainActuatorPort] input contract.
 	 *
@@ -71,6 +95,12 @@ class ActuatorPortsTest {
 	private class ContractValidatingTrainActuator : TrainActuatorPort {
 		override fun setTargetSpeed(speed: Double) {
 			require(speed >= 0.0) { "Target speed must be >= 0, got $speed" }
+		}
+
+		override fun holdAtStation(dwellDurationSeconds: Double) {
+			require(dwellDurationSeconds > 0.0) {
+				"dwellDurationSeconds must be > 0, got $dwellDurationSeconds"
+			}
 		}
 	}
 
