@@ -63,14 +63,23 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * pre-#729 behaviour where `reservePathToAnyNextSemaphore` returned
  * `AllPathsBlocked`.
  *
+ * ## Route-scoring rule engine (SP2b.2)
+ * Deterministic priority-rule scoring of candidate routes (shortest path, lowest
+ * conflict risk, fewest switch movements) is implemented by [CandidatePathRuleEngine]
+ * (SP2b.2, Issue #557). That engine enumerates candidates via Goal 2 pathfinding,
+ * attaches a conflict-risk weight (conflict-aware selection), and ranks them. This
+ * per-tick [decide] currently reserves a single pre-computed section per input and does
+ * not yet route through [CandidatePathRuleEngine]; wiring the engine into multi-route
+ * selection here is deferred to a later SP2b sub-issue.
+ *
  * ## Goal 9 integration hook
- * This class is the designated place for wiring Goal 9's
+ * This class is also the designated place for wiring Goal 9's
  * [cz.vutbr.fit.interlockSim.sim.conflict.AutoConflictResolutionService] and
  * [cz.vutbr.fit.interlockSim.sim.conflict.ConflictResolutionRanker]: when the
  * shell's path reservation attempt returns a
  * [cz.vutbr.fit.interlockSim.context.navigation.PathReservationService.ReservationResult.Conflict],
  * conflict resolution can be applied in a future iteration without touching
- * [ShuntingLoop]. The hook is intentionally left as a comment for SP2b.2 (#557).
+ * [ShuntingLoop].
  *
  * @param maxConcurrentTrains Maximum number of simultaneously approved trains.
  *   Defaults to [DEFAULT_MAX_CONCURRENT_TRAINS] which matches the physical capacity
