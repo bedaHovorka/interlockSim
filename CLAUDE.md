@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-07-19
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -12,6 +12,31 @@ Throughout this documentation, the following status markers are used:
 - ⏸️ **BLOCKED** - Waiting on dependencies
 - 🆕 **OPEN/NEW** - Not started but planned
 - ❌ **CANCELLED** - Work abandoned
+
+## Language: English Only (Critical)
+
+**English is mandatory for ALL project output.** This is a hard rule, not a preference.
+
+**Must be English:**
+- Runtime log messages (`logger.debug/info/warn/error { … }`) — including interpolated values that form a sentence
+- User-facing output, denial/error reason strings, exception messages
+- Code comments and KDoc
+- Commit messages, PR titles/bodies, code review comments, issue text
+- Agent-to-agent and agent-to-human communication
+
+**Czech is permitted ONLY** as inline, genuinely untranslatable railway technical terms —
+e.g. the canonical ESA-11 interlocking condition names (`Volnost jízdní cesty`, `Závěr`,
+`postaveno a volno`) or a proper noun that has no English equivalent. A full Czech sentence
+in a log message or denial reason is never "an untranslatable term" — translate it.
+
+**Rationale:** Mixed-language logs make runtime diagnostics, grep-based debugging, and
+external review unreadable. A denial reason like `"Neznámý bod trasy: X"` is an English
+sentence with Czech words substituted in; it must be `"Unknown route endpoint: X"`.
+
+**Enforcement:** Code review (kotlin-tech-lead) rejects any new/changed code that introduces
+non-English log or reason strings. When fixing existing Czech strings, also update the tests
+that assert on those strings to the English equivalents. Do not add `@Suppress` or comment
+workarounds to bypass this rule.
 
 ## Agent Team Structure
 

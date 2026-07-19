@@ -24,6 +24,7 @@ import cz.vutbr.fit.interlockSim.objects.tracks.BlockOccupancyListener
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.Dispatcher
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
 import cz.vutbr.fit.interlockSim.sim.ThreeTrainLoop
@@ -196,7 +197,13 @@ class ExampleRegistry {
 				env = context,
 				activeTrains = loop::getApprovedTrains
 			)
-		val actuatorPort = DefaultNetworkActuatorPort(env = context)
+		val actuatorPort =
+			DefaultNetworkActuatorPort(
+				env = context,
+				// SP3.5 (Issue #573): wire InterlockingFacade as the single chokepoint so all
+				// requestRoute calls (tool → queue → applier → port) pass through the safety kernel.
+				interlockingFacade = context.scope.get<InterlockingFacade>()
+			)
 
 		val queue = context.scope.get<ActuatorCommandQueue>()
 		val dispatcher = context.scope.get<Dispatcher>()

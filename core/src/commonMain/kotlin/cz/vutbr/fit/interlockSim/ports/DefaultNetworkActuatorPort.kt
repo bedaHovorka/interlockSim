@@ -17,6 +17,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.RailSwitch
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.DynamicPathSeparator
+import cz.vutbr.fit.interlockSim.sim.InterlockingFacade
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -56,6 +57,14 @@ private val logger = KotlinLogging.logger {}
  * @param env The simulation environment providing element lookups and routing services.
  * @param pathReservationService Path reservation service (defaults to
  *   `env.getRoutingServices().getPathReservationService()`); injectable for testing.
+ * @param interlockingFacade SP3.5 (Issue #573): when non-null, [requestRoute] is routed
+ *   through the interlocking safety kernel as the **single chokepoint** protecting all
+ *   callers (Koog tools arriving via [cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue],
+ *   [cz.vutbr.fit.interlockSim.sim.SynchronousDispatcherWiring],
+ *   [cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier]).
+ *   When `null` (default), falls back to the legacy direct
+ *   [PathReservationService.reservePath] path — used by `:fast-sim` and tests that run
+ *   without Koin DI. Production wiring always provides the facade.
  *
  * @see NetworkActuatorPort
  * @see DefaultNetworkPerceptionPort
@@ -64,7 +73,8 @@ private val logger = KotlinLogging.logger {}
 class DefaultNetworkActuatorPort(
 	private val env: SimulationEnvironment,
 	private val pathReservationService: PathReservationService =
-		env.getRoutingServices().getPathReservationService()
+		env.getRoutingServices().getPathReservationService(),
+	private val interlockingFacade: InterlockingFacade? = null
 ) : NetworkActuatorPort {
 	// ── Caches built once at construction ─────────────────────────────────
 
@@ -88,6 +98,34 @@ class DefaultNetworkActuatorPort(
 		toEndpointName: String
 	): RouteRequestResult {
 		require(trainName.isNotBlank()) { "trainName must be non-blank" }
+
+		// SP3.5: route through the interlocking safety kernel when wired in production.
+		// Endpoint existence is validated first (preserving the IllegalArgumentException
+		// contract for unknown names), then the facade handles C1/C3/C4 safety checks.
+		val facade = interlockingFacade
+		if (facade != null) {
+			requireEndpoint(fromEndpointName)
+			requireEndpoint(toEndpointName)
+			return when (val response = facade.requestRouteByEndpoints(trainName, fromEndpointName, toEndpointName)) {
+				is InterlockingFacade.RouteResponse.Granted ->
+					RouteRequestResult.Reserved(
+						trainName = trainName,
+						blocksCount = response.lockedRoute.blocks.size
+					)
+				is InterlockingFacade.RouteResponse.Denied -> {
+					logger.debug {
+						"requestRoute: denied by interlocking for $trainName " +
+							"($fromEndpointName → $toEndpointName): ${response.reason}"
+					}
+					// All interlocking denials collapse to AllPathsBlocked(0); callers retry
+					// on the next tick. The specific reason is logged above and in the facade.
+					RouteRequestResult.AllPathsBlocked(0)
+				}
+			}
+		}
+
+		// Legacy path (no facade): direct PathReservationService.reservePath.
+		// Used by :fast-sim native binary and tests that run without Koin DI.
 		val from = requireEndpoint(fromEndpointName)
 		val to = requireEndpoint(toEndpointName)
 
