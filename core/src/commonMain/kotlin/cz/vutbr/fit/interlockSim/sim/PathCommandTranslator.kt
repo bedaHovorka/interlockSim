@@ -112,7 +112,10 @@ object PathCommandTranslator {
 
 		for (index in sections.indices) {
 			val section = sections[index]
-			val nextSeparator = section.getSecondEnd(currentSeparator)
+			// getSecondEnd() always returns the STATIC separator (see AbstractTrack.getSecondEnd);
+			// convert to its Dynamic wrapper — required by context.getSegment() below and by the
+			// `is DynamicRailSwitch` check, same pattern as PathInfoBuilder.buildFullPath.
+			val nextSeparator = context.toDynamic(section.getSecondEnd(currentSeparator))
 			val nextSection = sections.getOrNull(index + 1)
 
 			// Only configure switches that the train passes THROUGH.
