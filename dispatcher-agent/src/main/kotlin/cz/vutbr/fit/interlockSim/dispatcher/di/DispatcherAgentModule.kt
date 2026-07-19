@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.dispatcher.di
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.dispatcher.ActuatorCommandQueue
+import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DefaultAgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
@@ -45,6 +46,7 @@ import org.koin.dsl.module
  * | [NetworkPerceptionPort] | per [DefaultSimulationContext] | [DefaultNetworkPerceptionPort] (SP1.4) |
  * | [NetworkActuatorPort] | per [DefaultSimulationContext] | [DefaultNetworkActuatorPort] (SP1.4) |
  * | [ActuatorCommandQueue] | per [DefaultSimulationContext] | new instance |
+ * | [DelegatingSimulationController] | per [DefaultSimulationContext] | new instance (SP4.2) |
  * | [KoogAgentFactory] | per [DefaultSimulationContext] | [KoogAgentFactory] (SP1.3, updated in SP1.4) |
  *
  * ## SP1.3 (#548) additions
@@ -172,6 +174,14 @@ val dispatcherAgentModule: Module =
 
 			// SP0.5: ActuatorCommandQueue: one thread-safe handoff queue per simulation context.
 			scoped<ActuatorCommandQueue> { ActuatorCommandQueue() }
+
+			// SP4.2 (Issue #564): Late-bound pacing controller for the agent-driver loop.
+			// Wiring layers (e.g. :desktop-ui's ExampleRegistry.wireDispatcherAgent) hand this
+			// to AgentLoopDriver at context-creation time; the GUI attaches the live
+			// SimulationRunner as delegate when the run starts, pacing the agent loop with
+			// the existing real-time sync (speed multiplier, pause). One per context so
+			// concurrent simulations pace independently.
+			scoped<DelegatingSimulationController> { DelegatingSimulationController() }
 
 			// SP1.3: KoogAgentFactory (per-context builder, receives tools/config)
 			// Factory is scoped because it receives context-scoped dependencies (ports from SP1.4, tools in SP1.4+).

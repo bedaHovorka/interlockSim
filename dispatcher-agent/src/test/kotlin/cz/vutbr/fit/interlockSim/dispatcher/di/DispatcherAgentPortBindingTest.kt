@@ -22,6 +22,7 @@ import cz.vutbr.fit.interlockSim.dispatcher.AgentLoopDriver
 import cz.vutbr.fit.interlockSim.dispatcher.DispatchDecisionApplier
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
+import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.NetworkActuatorPort
@@ -188,7 +189,7 @@ class DispatcherAgentPortBindingTest {
 					planner = planner,
 					commandQueue = queue,
 					controller = NoOpSimulationController,
-					observationProvider = loop::getLatestObservation
+					dispatchLoopSensorPort = DefaultDispatchLoopSensorPort(loop::getLatestObservation)
 				)
 
 			// Lock-step handshake (same pattern as RuleBasedDispatcherDeterminismTest) so the
