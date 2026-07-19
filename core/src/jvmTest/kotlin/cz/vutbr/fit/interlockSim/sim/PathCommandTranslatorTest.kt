@@ -164,13 +164,13 @@ class PathCommandTranslatorTest : KoinTestBase() {
 
 			val commands = PathCommandTranslator.translate("train1", zA, candidate, context)
 
-			// All SetSwitchPosition decisions must appear before the SetSignalAspect
+			// Both command types must be present
 			val lastSwitchIndex = commands.indexOfLast { it is DispatchDecision.SetSwitchPosition }
 			val firstSignalIndex = commands.indexOfFirst { it is DispatchDecision.SetSignalAspect }
-			if (lastSwitchIndex >= 0 && firstSignalIndex >= 0) {
-				assertThat(lastSwitchIndex).isEqualTo(0) // switch at index 0
-				assertThat(firstSignalIndex).isEqualTo(1) // signal at index 1
-			}
+			assertThat(lastSwitchIndex).isGreaterThanOrEqualTo(0)
+			assertThat(firstSignalIndex).isGreaterThanOrEqualTo(0)
+			// All SetSwitchPosition decisions appear before the first SetSignalAspect
+			assertThat(lastSwitchIndex).isLessThan(firstSignalIndex)
 		}
 	}
 
@@ -250,6 +250,10 @@ class PathCommandTranslatorTest : KoinTestBase() {
 			// No switch commands for an empty path (no sections to traverse)
 			val switchCmds = commands.filterIsInstance<DispatchDecision.SetSwitchPosition>()
 			assertThat(switchCmds).isEmpty()
+
+			// But the entry signal (zA is a semaphore) must still be requested
+			val signalCmds = commands.filterIsInstance<DispatchDecision.SetSignalAspect>()
+			assertThat(signalCmds).hasSize(1)
 		}
 
 		@Test
