@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.AgentService
 import cz.vutbr.fit.interlockSim.dispatcher.agents.KoogAgentFactory
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.ToolGroupRegistry
 import cz.vutbr.fit.interlockSim.dispatcher.executor.OllamaExecutorConfig
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -26,11 +28,13 @@ import org.koin.core.context.stopKoin
 import org.koin.java.KoinJavaComponent.inject
 
 /**
- * Unit tests for SP1.3-SP1.4 Koin bindings in [dispatcherAgentModule] (Issue #548/#549).
+ * Unit tests for the SP1.3 / SP1.4 / SP3.6 Koin bindings in [dispatcherAgentModule]
+ * (Issue #548/#549/#574).
  *
  * Tests that the module correctly wires:
  * - Singleton [OllamaExecutorConfig]
  * - Singleton [ToolGroupRegistry]
+ * - Singleton [DispatcherPlanner] (SP3.6, default [RuleBasedPlanAdapter])
  * - Per-context [KoogAgentFactory] (SP1.4 updated to accept ports)
  * - Per-context [NetworkPerceptionPort] (SP1.4)
  * - Per-context [NetworkActuatorPort] (SP1.4)
@@ -38,9 +42,9 @@ import org.koin.java.KoinJavaComponent.inject
  * Full per-context agent instantiation testing deferred to SP1.5+ once
  * tool implementations are available.
  *
- * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port bindings
+ * @since Issue #548 (SP1.3 — Goal 10); SP1.4 (#549) adds port bindings; SP3.6 (#574) adds the planner binding
  */
-class DispatcherAgentModuleSp13Test {
+class DispatcherAgentModuleTest {
 	@BeforeEach
 	fun setup() {
 		startKoin {
@@ -89,6 +93,28 @@ class DispatcherAgentModuleSp13Test {
 		val service: AgentService by inject(AgentService::class.java)
 
 		assertThat(service).isNotNull()
+	}
+
+	@Test
+	fun `DispatcherPlanner is provided as singleton (SP3_6)`() {
+		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assertThat(planner).isNotNull()
+	}
+
+	@Test
+	fun `DispatcherPlanner default is RuleBasedPlanAdapter (SP3_6)`() {
+		val planner: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assertThat(planner).isInstanceOf(RuleBasedPlanAdapter::class)
+	}
+
+	@Test
+	fun `DispatcherPlanner is reused as singleton (SP3_6)`() {
+		val planner1: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+		val planner2: DispatcherPlanner by inject(DispatcherPlanner::class.java)
+
+		assert(planner1 === planner2) { "DispatcherPlanner should be a singleton" }
 	}
 
 	@Test

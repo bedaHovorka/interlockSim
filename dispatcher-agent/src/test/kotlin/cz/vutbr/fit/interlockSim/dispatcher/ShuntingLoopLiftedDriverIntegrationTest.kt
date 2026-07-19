@@ -14,6 +14,7 @@ import assertk.assertions.isGreaterThanOrEqualTo
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.EditingContext
 import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
@@ -143,6 +144,7 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 		val actuatorPort = DefaultNetworkActuatorPort(env = context)
 		val queue = ActuatorCommandQueue()
 		val dispatcher = RuleBasedDispatcher()
+		val planner = RuleBasedPlanAdapter(dispatcher)
 		val applier =
 			DispatchDecisionApplier(
 				queue = queue,
@@ -154,7 +156,7 @@ class ShuntingLoopLiftedDriverIntegrationTest {
 		val driver =
 			AgentLoopDriver(
 				perceptionPort = perceptionPort,
-				dispatcher = dispatcher,
+				planner = planner,
 				commandQueue = queue,
 				controller = NoOpSimulationController,
 				observationProvider = loop::getLatestObservation

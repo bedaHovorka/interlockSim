@@ -16,15 +16,17 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isSameAs
 import assertk.assertions.isTrue
 import cz.vutbr.fit.interlockSim.context.SimulationController
+import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.BlockInputObservation
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
-import cz.vutbr.fit.interlockSim.sim.Dispatcher
 import cz.vutbr.fit.interlockSim.sim.QueuedTrainObservation
 import cz.vutbr.fit.interlockSim.sim.ShuntingLoop
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -43,16 +45,16 @@ import java.util.concurrent.TimeUnit
  * Verifies:
  * - Correct cycle order: sense → decide → post → [SimulationController.awaitIfPaused]
  *   → [SimulationController.throttle]
- * - Decisions returned by [Dispatcher.decide] are posted to [ActuatorCommandQueue]
+ * - Decisions returned by [DispatcherPlanner.plan] are posted to [ActuatorCommandQueue]
  * - Decisions are **posted** (not applied in-process) — the driver thread never
  *   mutates simulation state
  * - [SimulationController.throttle] receives the correct simulation-time delta
  *   (`snapshot.simTime - prevSimTime` from the previous cycle)
  * - [SimulationController] is only used in the driver; it is not accessible to the
- *   dispatcher or observation
+ *   planner or observation
  *
  * Uses a hand-written [RecordingSimulationController] to capture call order and
- * mockk for [NetworkPerceptionPort] and [Dispatcher].
+ * mockk for [NetworkPerceptionPort] and [DispatcherPlanner].
  *
  * @since Issue #732 (SP0.10 — Goal 10)
  */
@@ -60,23 +62,23 @@ import java.util.concurrent.TimeUnit
 @Timeout(30, unit = TimeUnit.SECONDS)
 class AgentLoopDriverTest {
 	private lateinit var perceptionPort: NetworkPerceptionPort
-	private lateinit var dispatcher: Dispatcher
+	private lateinit var planner: DispatcherPlanner
 	private lateinit var commandQueue: ActuatorCommandQueue
 	private lateinit var controller: RecordingSimulationController
 
 	@BeforeEach
 	fun setUp() {
 		perceptionPort = mockk(relaxed = true)
-		dispatcher = mockk(relaxed = true)
+		planner = mockk(relaxed = true)
 		commandQueue = ActuatorCommandQueue()
 		controller = RecordingSimulationController()
 
-		// Default: snapshot at simTime=0.0; dispatcher returns NoAction
+		// Default: snapshot at simTime=0.0; planner returns NoAction
 		every { perceptionPort.snapshot() } returns emptySnapshot(0.0)
-		every { dispatcher.decide(any()) } returns listOf(DispatchDecision.NoAction)
+		coEvery { planner.plan(any()) } returns listOf(DispatchDecision.NoAction)
 	}
 
-	private fun makeDriver(): AgentLoopDriver = AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controller)
+	private fun makeDriver(): AgentLoopDriver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller)
 
 	// ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -112,7 +114,7 @@ class AgentLoopDriverTest {
 			}
 
 			val dispatchObsSlot = slot<DispatchObservation>()
-			every { dispatcher.decide(capture(dispatchObsSlot)) } answers {
+			coEvery { planner.plan(capture(dispatchObsSlot)) } answers {
 				// Sense must have happened before decide
 				assertThat(callOrder.last()).isEqualTo("sense")
 				callOrder += "decide"
@@ -145,7 +147,7 @@ class AgentLoopDriverTest {
 					override fun requestPause() = Unit
 				}
 
-			val driver = AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controllerWithOrder)
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controllerWithOrder)
 
 			runBlocking { driver.runCycle() }
 
@@ -175,7 +177,7 @@ class AgentLoopDriverTest {
 					override fun requestPause() = Unit
 				}
 
-			val driver = AgentLoopDriver(perceptionPort, dispatcher, commandQueue, orderedController)
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, orderedController)
 
 			runBlocking { driver.runCycle() }
 
@@ -198,7 +200,7 @@ class AgentLoopDriverTest {
 					DispatchDecision.ApproveTrain("T1"),
 					DispatchDecision.ReservePath("T1", "zA", "doA1")
 				)
-			every { dispatcher.decide(any()) } returns expected
+			coEvery { planner.plan(any()) } returns expected
 
 			runBlocking { makeDriver().runCycle() }
 
@@ -209,7 +211,7 @@ class AgentLoopDriverTest {
 		@Test
 		@DisplayName("driver does not apply decisions itself — queue holds them until drained")
 		fun driverDoesNotApplyDecisions() {
-			every { dispatcher.decide(any()) } returns listOf(DispatchDecision.ApproveTrain("T1"))
+			coEvery { planner.plan(any()) } returns listOf(DispatchDecision.ApproveTrain("T1"))
 
 			// No actuator ports or approval callbacks are involved — this driver only posts.
 			// Verify that the queue grows after runCycle and that the driver returned normally.
@@ -222,7 +224,7 @@ class AgentLoopDriverTest {
 		@Test
 		@DisplayName("NoAction is posted to queue (dispatcher always returns at least NoAction)")
 		fun noActionIsPosted() {
-			every { dispatcher.decide(any()) } returns listOf(DispatchDecision.NoAction)
+			coEvery { planner.plan(any()) } returns listOf(DispatchDecision.NoAction)
 
 			runBlocking { makeDriver().runCycle() }
 
@@ -233,8 +235,8 @@ class AgentLoopDriverTest {
 		@Test
 		@DisplayName("empty decision list results in nothing posted")
 		fun emptyDecisionListPostsNothing() {
-			// Dispatcher may return an empty list (though RuleBasedDispatcher returns at least NoAction)
-			every { dispatcher.decide(any()) } returns emptyList()
+			// Planner may return an empty list (though RuleBasedDispatcher returns at least NoAction)
+			coEvery { planner.plan(any()) } returns emptyList()
 
 			runBlocking { makeDriver().runCycle() }
 
@@ -291,7 +293,7 @@ class AgentLoopDriverTest {
 			assertThat(controller.lastThrottleDelta).isEqualTo(10.0)
 			assertThat(controller.throttleCalls).isEqualTo(1)
 			assertThat(controller.awaitCalls).isEqualTo(2)
-			verify(exactly = 1) { dispatcher.decide(any()) }
+			coVerify(exactly = 1) { planner.plan(any()) }
 		}
 	}
 
@@ -307,7 +309,7 @@ class AgentLoopDriverTest {
 			every { perceptionPort.snapshot() } returns expectedSnapshot
 
 			val capturedObs = slot<DispatchObservation>()
-			every { dispatcher.decide(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
 
 			runBlocking { makeDriver().runCycle() }
 
@@ -319,7 +321,7 @@ class AgentLoopDriverTest {
 		fun dispatcherCalledOncePerCycle() {
 			runBlocking { makeDriver().runCycle() }
 
-			verify(exactly = 1) { dispatcher.decide(any()) }
+			coVerify(exactly = 1) { planner.plan(any()) }
 		}
 
 		@Test
@@ -353,7 +355,7 @@ class AgentLoopDriverTest {
 				callCount++
 				ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
 			}
-			val driver = AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controller, observationProvider)
+			val driver = AgentLoopDriver(perceptionPort, planner, commandQueue, controller, observationProvider)
 
 			runBlocking { driver.runCycle() }
 
@@ -401,13 +403,13 @@ class AgentLoopDriverTest {
 				)
 			var callCount = 0
 			val driver =
-				AgentLoopDriver(perceptionPort, dispatcher, commandQueue, controller) {
+				AgentLoopDriver(perceptionPort, planner, commandQueue, controller) {
 					callCount++
 					if (callCount == 1) tickA else tickB
 				}
 
 			val capturedObs = slot<DispatchObservation>()
-			every { dispatcher.decide(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
+			coEvery { planner.plan(capture(capturedObs)) } returns listOf(DispatchDecision.NoAction)
 
 			runBlocking { driver.runCycle() }
 
