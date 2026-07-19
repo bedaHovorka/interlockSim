@@ -83,8 +83,10 @@ interface InterlockingFacade {
 		/**
 		 * Route request was **denied**: one or more conditions failed, no locks acquired.
 		 *
-		 * @property reason Czech human-readable reason (e.g., "úsek U7 obsazen vlaku 42",
-		 *                 "výhybka V3 zafixovaná vlaku 99").
+		 * @property reason English human-readable reason (e.g., "Block U7 occupied by train 42",
+		 *                 "Switch V3 locked by train 99"). Czech is permitted only as inline,
+		 *                 genuinely untranslatable railway technical terms — see the project
+		 *                 CLAUDE.md "Language: English Only" rule.
 		 *                 Suitable for dispatcher operator display and agent LLM context.
 		 */
 		data class Denied(
@@ -176,7 +178,7 @@ interface InterlockingFacade {
 	 * @param fromEndpointName   Name of the entry InOut or Semaphore endpoint.
 	 * @param toEndpointName     Name of the exit InOut or Semaphore endpoint.
 	 * @return [RouteResponse.Granted] with a minimal [TrainRoute] (block list from reservation) if
-	 *         the path was reserved; [RouteResponse.Denied] with a Czech reason otherwise.
+	 *         the path was reserved; [RouteResponse.Denied] with an English reason otherwise.
 	 * @since Issue #573 (SP3.5 — Goal 10)
 	 */
 	fun requestRouteByEndpoints(

@@ -218,12 +218,12 @@ class DefaultInterlockingFacade(
 		val fromEndpoint =
 			resolveEndpoint(fromEndpointName)
 				?: return InterlockingFacade.RouteResponse.Denied(
-					"Neznámý bod trasy: $fromEndpointName"
+					"Unknown route endpoint: $fromEndpointName"
 				)
 		val toEndpoint =
 			resolveEndpoint(toEndpointName)
 				?: return InterlockingFacade.RouteResponse.Denied(
-					"Neznámý bod trasy: $toEndpointName"
+					"Unknown route endpoint: $toEndpointName"
 				)
 
 		return when (
@@ -254,31 +254,31 @@ class DefaultInterlockingFacade(
 			}
 			is PathReservationService.ReservationResult.NoPathExists -> {
 				logger.info {
-					"Route DENIED for trainId=$trainId: trasa neexistuje " +
+					"Route DENIED for trainId=$trainId: no path exists " +
 						"$fromEndpointName → $toEndpointName"
 				}
 				InterlockingFacade.RouteResponse.Denied(
-					"Trasa neexistuje: $fromEndpointName → $toEndpointName"
+					"No path exists: $fromEndpointName → $toEndpointName"
 				)
 			}
 			is PathReservationService.ReservationResult.AllPathsBlocked -> {
 				logger.info {
-					"Route DENIED for trainId=$trainId: všechny cesty obsazeny " +
-						"(pokusů: ${result.attemptedPaths}, $fromEndpointName → $toEndpointName)"
+					"Route DENIED for trainId=$trainId: all paths blocked " +
+						"(attempts: ${result.attemptedPaths}, $fromEndpointName → $toEndpointName)"
 				}
 				InterlockingFacade.RouteResponse.Denied(
-					"Všechny cesty obsazeny ($fromEndpointName → $toEndpointName, " +
-						"pokusů: ${result.attemptedPaths})"
+					"All paths blocked ($fromEndpointName → $toEndpointName, " +
+						"attempts: ${result.attemptedPaths})"
 				)
 			}
 			is PathReservationService.ReservationResult.Conflict -> {
 				val blockName = result.conflictingBlock.name ?: "?"
 				logger.info {
-					"Route DENIED for trainId=$trainId: konflikt na úseku $blockName " +
-						"(vlak ${result.existingOwner})"
+					"Route DENIED for trainId=$trainId: conflict at block $blockName " +
+						"(train ${result.existingOwner})"
 				}
 				InterlockingFacade.RouteResponse.Denied(
-					"Úsek $blockName obsazen vlakem ${result.existingOwner}"
+					"Block $blockName occupied by train ${result.existingOwner}"
 				)
 			}
 		}

@@ -375,7 +375,7 @@ class DefaultNetworkActuatorPortTest {
 			val b = inOut("B")
 			val facade = mockk<InterlockingFacade>()
 			every { facade.requestRouteByEndpoints("T1", "A", "B") } returns
-				InterlockingFacade.RouteResponse.Denied("Trasa neexistuje")
+				InterlockingFacade.RouteResponse.Denied("No path exists")
 
 			val result =
 				portWithFacade(inOuts = listOf(a, b), facade = facade)

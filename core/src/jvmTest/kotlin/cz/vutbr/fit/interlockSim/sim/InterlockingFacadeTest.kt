@@ -754,5 +754,51 @@ class InterlockingFacadeTest : KoinTestBase() {
 			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
 			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("T-other")
 		}
+
+		@Test
+		@DisplayName("SP3.5: requestRouteByEndpoints denies an unknown toEndpointName")
+		fun requestRouteByEndpointsDeniesUnknownToEndpoint() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S1")))
+			val facade = DefaultInterlockingFacade(e, registry)
+
+			val response = facade.requestRouteByEndpoints("T1", "S1", "NOPE")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("NOPE")
+		}
+
+		@Test
+		@DisplayName("SP3.5: requestRouteByEndpoints denies when no topological path exists between the endpoints")
+		fun requestRouteByEndpointsDeniesWhenNoPathExists() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S1"), semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val reservationService = e.getRoutingServices().getPathReservationService()
+			every {
+				reservationService.reservePath(any(), any(), any(), any())
+			} returns PathReservationService.ReservationResult.NoPathExists
+
+			val response = facade.requestRouteByEndpoints("T1", "S1", "S2")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			assertThat((response as InterlockingFacade.RouteResponse.Denied).reason).contains("No path exists")
+		}
+
+		@Test
+		@DisplayName("SP3.5: requestRouteByEndpoints denies when every candidate path is blocked")
+		fun requestRouteByEndpointsDeniesWhenAllPathsBlocked() {
+			val (e, registry) = env(semaphores = listOf(semaphore("S1"), semaphore("S2")))
+			val facade = DefaultInterlockingFacade(e, registry)
+			val reservationService = e.getRoutingServices().getPathReservationService()
+			every {
+				reservationService.reservePath(any(), any(), any(), any())
+			} returns PathReservationService.ReservationResult.AllPathsBlocked(attemptedPaths = 3)
+
+			val response = facade.requestRouteByEndpoints("T1", "S1", "S2")
+
+			assertThat(response).isInstanceOf(InterlockingFacade.RouteResponse.Denied::class)
+			val reason = (response as InterlockingFacade.RouteResponse.Denied).reason
+			assertThat(reason).contains("All paths blocked")
+			assertThat(reason).contains("attempts: 3")
+		}
 	}
 }
