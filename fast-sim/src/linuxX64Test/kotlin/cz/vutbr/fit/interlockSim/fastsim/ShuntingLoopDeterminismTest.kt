@@ -48,7 +48,14 @@ import kotlin.time.TimeSource
 class ShuntingLoopDeterminismTest {
 	private companion object {
 		const val END_TIME: Long = 1024L
-		const val REPETITIONS: Int = 20
+
+		/**
+		 * Kept low because the **debug** test binary is 10-20x slower than release
+		 * (~14 s per 1024s rep unloaded, ~26 s+ on the 2-core CI runner): 20 reps blew
+		 * the CI step's 10-minute timeout. 5 reps still catch rep-to-rep
+		 * non-determinism; the 1000-rep JVM heavy test covers the long tail.
+		 */
+		const val REPETITIONS: Int = 5
 		const val EXPECTED_TRAINS_ENTERED: Int = 28
 		const val EXPECTED_TRAINS_EXITED: Int = 14
 
@@ -72,8 +79,8 @@ class ShuntingLoopDeterminismTest {
 	@BeforeTest
 	fun setUp() {
 		// Silence per-event INFO logging (kotlin-logging native defaults to INFO -> stdout).
-		// 20 repetitions x 1024s of simulation otherwise flood Gradle's test-output reader
-		// with enough stdout to exhaust its heap (observed as OutOfMemoryError in CI).
+		// Repeated 1024s runs otherwise flood Gradle's test-output reader with enough
+		// stdout to exhaust its heap (observed as OutOfMemoryError in CI).
 		previousLogLevel = KotlinLoggingConfiguration.logLevel
 		KotlinLoggingConfiguration.logLevel = Level.WARN
 		startKoin { modules(coreModule) }
