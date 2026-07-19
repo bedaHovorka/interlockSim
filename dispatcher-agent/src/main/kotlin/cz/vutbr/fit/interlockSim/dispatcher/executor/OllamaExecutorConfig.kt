@@ -40,7 +40,8 @@ import java.time.Duration
  * 3. Timeout/retry settings are global tuning (not per-context)
  * 4. Config is immutable after creation → safe to share
  *
- * @property ollamaEndpoint HTTP endpoint of local Ollama instance (default: `http://localhost:11434`)
+ * @property ollamaEndpoint HTTP endpoint of local Ollama instance (default: `http://localhost:11434`,
+ *   overridable via the `OLLAMA_BASE_URL` environment variable — see [default])
  * @property modelName Ollama model tag, e.g. "qwen2.5:7b-instruct" (per GOAL_10_SP3_1_LLM_MODEL_EVALUATION.md)
  * @property temperature Model sampling temperature (0.0–1.0, default 0.7)
  * @property topP Nucleus sampling parameter (0.0–1.0, default 0.9)
@@ -60,6 +61,7 @@ data class OllamaExecutorConfig(
 	val retryAttempts: Int = DEFAULT_RETRY_ATTEMPTS
 ) {
 	companion object {
+		private const val OLLAMA_BASE_URL_ENV_VAR = "OLLAMA_BASE_URL"
 		private const val DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434"
 		private const val DEFAULT_MODEL_NAME = "qwen2.5:7b-instruct"
 		private const val DEFAULT_TEMPERATURE = 0.7f
@@ -72,8 +74,24 @@ data class OllamaExecutorConfig(
 		 * Create a production config with defaults (singleton).
 		 *
 		 * Used by [DispatcherAgentModule] to provide the global Ollama executor config.
+		 *
+		 * [ollamaEndpoint][OllamaExecutorConfig.ollamaEndpoint] defaults to `http://localhost:11434`,
+		 * overridable via the `OLLAMA_BASE_URL` environment variable. This matters once
+		 * dispatcher-agent is wired into the `app` container (Stage B, Issue #770): on
+		 * Windows/macOS Docker Desktop, `localhost` inside a container does not reach a native
+		 * Ollama install or the host, even under `network_mode: host` — but
+		 * `host.docker.internal` does (verified 2026-07-19 on Windows 11 + Docker Desktop 29.5.3,
+		 * WSL2 backend, including from a `network_mode: host` container matching `app`'s actual
+		 * config). Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in that scenario.
+		 *
+		 * @param env Environment variables to read the override from; defaults to the real
+		 *   process environment. Exposed as a parameter so tests can inject a fake map instead
+		 *   of mutating real environment variables.
 		 */
-		fun default(): OllamaExecutorConfig = OllamaExecutorConfig()
+		fun default(env: Map<String, String> = System.getenv()): OllamaExecutorConfig =
+			OllamaExecutorConfig(
+				ollamaEndpoint = env[OLLAMA_BASE_URL_ENV_VAR]?.takeIf { it.isNotBlank() } ?: DEFAULT_OLLAMA_ENDPOINT
+			)
 
 		/**
 		 * Create a test config for local Ollama testing (@Tag("ollama-test")).
