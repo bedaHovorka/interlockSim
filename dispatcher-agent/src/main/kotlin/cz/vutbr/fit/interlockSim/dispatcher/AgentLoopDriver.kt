@@ -93,9 +93,10 @@ class AgentLoopDriver(
 	 *   SP0.11 review follow-up (tearing fix); lifted to the SP4.1
 	 *   [DispatchLoopSensorPort] seam in SP4.2 (Issue #564)
 	 */
-	private val dispatchLoopSensorPort: DispatchLoopSensorPort = DefaultDispatchLoopSensorPort {
-		ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
-	}
+	private val dispatchLoopSensorPort: DispatchLoopSensorPort =
+		DefaultDispatchLoopSensorPort {
+			ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
+		}
 ) {
 	companion object {
 		private val logger = KotlinLogging.logger {}
