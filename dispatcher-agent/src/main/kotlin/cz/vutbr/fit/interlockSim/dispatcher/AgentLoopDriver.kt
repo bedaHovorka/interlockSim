@@ -11,6 +11,8 @@ package cz.vutbr.fit.interlockSim.dispatcher
 
 import cz.vutbr.fit.interlockSim.context.SimulationController
 import cz.vutbr.fit.interlockSim.dispatcher.planner.DispatcherPlanner
+import cz.vutbr.fit.interlockSim.ports.DefaultDispatchLoopSensorPort
+import cz.vutbr.fit.interlockSim.ports.DispatchLoopSensorPort
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SimulationSnapshot
 import cz.vutbr.fit.interlockSim.sim.DispatchObservation
@@ -48,13 +50,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * ## DispatchObservation construction
  *
- * For the initial SP0.10 slice the observation contains only the general-purpose
- * [SimulationSnapshot] (signals, block occupancy, train positions, timetables).
- * The [DispatchObservation.unapprovedTrains] list and the block-input lists are
- * populated in SP0.11 (#733) when [perceptionPort] is extended and the
- * [ShuntingLoop][cz.vutbr.fit.interlockSim.sim.ShuntingLoop] shell is wired to
- * expose them.  Until then the driver creates observations with empty auxiliary
- * lists; [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] (via
+ * The observation combines the general-purpose [SimulationSnapshot] (signals, block
+ * occupancy, train positions, timetables) with the ShuntingLoop-specific dispatch
+ * inputs read from [dispatchLoopSensorPort] — the SP4.1 sensor seam (Issue #563):
+ * the [DispatchObservation.unapprovedTrains] list and the block-input lists all come
+ * from one atomic [DispatchLoopSensorPort.snapshot] read. With the default (empty)
+ * sensor port, [cz.vutbr.fit.interlockSim.sim.RuleBasedDispatcher] (via
  * [cz.vutbr.fit.interlockSim.dispatcher.planner.RuleBasedPlanAdapter]) handles
  * this case gracefully (it returns [cz.vutbr.fit.interlockSim.sim.DispatchDecision.NoAction]).
  *
@@ -75,20 +76,24 @@ class AgentLoopDriver(
 	private val commandQueue: ActuatorCommandQueue,
 	private val controller: SimulationController,
 	/**
-	 * Provider for the current per-tick observation bundle (unapproved-train queue plus
-	 * inner/outer block inputs). Invoked ONCE per [runCycle] on the driver thread during
-	 * SENSE, reading the single [ShuntingLoop.getLatestObservation] @Volatile reference
-	 * published atomically by the sim thread. Defaults to an empty bundle (SP0.10
-	 * compatibility).
+	 * Sensor port for the current per-tick dispatch-loop observation bundle
+	 * (unapproved-train queue plus inner/outer block inputs) — the SP4.1 "sense" seam
+	 * (Issue #563). Its [DispatchLoopSensorPort.snapshot] is invoked ONCE per
+	 * [runCycle] on the driver thread during SENSE; the default implementation reads
+	 * the single [ShuntingLoop.getLatestObservation] @Volatile reference published
+	 * atomically by the sim thread. Defaults to a port over an empty bundle
+	 * (SP0.10 compatibility).
 	 *
-	 * Must be called at most once per cycle: [ShuntingLoop.TickObservation] bundles all
-	 * three fields specifically so a reader never mixes fields from two different sim
-	 * ticks — reading the three fields via separate calls would defeat that guarantee.
+	 * [DispatchLoopSensorPort.snapshot] must be called at most once per cycle: it
+	 * bundles all three fields specifically so a reader never mixes fields from two
+	 * different sim ticks — reading the three fields via the per-field accessors
+	 * would defeat that guarantee.
 	 *
 	 * @since Issue #733 (SP0.11 — Goal 10); collapsed to a single provider by the
-	 *   SP0.11 review follow-up (tearing fix)
+	 *   SP0.11 review follow-up (tearing fix); lifted to the SP4.1
+	 *   [DispatchLoopSensorPort] seam in SP4.2 (Issue #564)
 	 */
-	private val observationProvider: () -> ShuntingLoop.TickObservation = {
+	private val dispatchLoopSensorPort: DispatchLoopSensorPort = DefaultDispatchLoopSensorPort {
 		ShuntingLoop.TickObservation(emptyList(), emptyList(), emptyList())
 	}
 ) {
@@ -119,8 +124,8 @@ class AgentLoopDriver(
 	 * 1. **SENSE** — [NetworkPerceptionPort.snapshot] captures a consistent, frozen
 	 *    picture of the current network state.
 	 * 2. **DECIDE** — the [planner] is called with an observation built from the
-	 *    snapshot; [DispatchObservation.unapprovedTrains] and block-input lists are
-	 *    empty in this SP0.10 slice (populated in SP0.11).
+	 *    snapshot; [DispatchObservation.unapprovedTrains] and block-input lists come
+	 *    from one atomic [DispatchLoopSensorPort.snapshot] read (SP4.1/SP4.2).
 	 * 3. **ACT** — all returned decisions are posted to [commandQueue] in a single
 	 *    atomic [ActuatorCommandQueue.postAll] call.  The sim-thread
 	 *    [DispatchDecisionApplier] applies them; no simulation state is mutated on
@@ -151,10 +156,11 @@ class AgentLoopDriver(
 		}
 
 		// 2. DECIDE — call the pure dispatcher with a read-only observation.
-		// SP0.11: unapprovedTrains and block-input lists now populated via a single
-		// @Volatile TickObservation reference published by ShuntingLoop.iteration() on
-		// the sim thread — one provider call, so all three fields come from the same tick.
-		val tick = observationProvider()
+		// SP0.11/SP4.2: unapprovedTrains and block-input lists populated via a single
+		// DispatchLoopSensorPort.snapshot() read — one atomic port call, so all three
+		// fields come from the same sim tick (published as one @Volatile reference by
+		// ShuntingLoop.iteration() on the sim thread).
+		val tick = dispatchLoopSensorPort.snapshot()
 		val observation =
 			DispatchObservation(
 				snapshot = snapshot,

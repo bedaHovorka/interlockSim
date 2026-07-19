@@ -189,7 +189,7 @@ class DispatcherPlannerTest {
 		private val realController: SimulationController = mockk()
 
 		@Test
-		@DisplayName("async planner + NoOpSimulationController throws IllegalStateException (#187 / #549)")
+		@DisplayName("async planner + NoOpSimulationController throws IllegalStateException (#187 / #564)")
 		fun asyncPlannerWithNoOpControllerThrows() {
 			val ex =
 				assertThrows<IllegalStateException> {
@@ -198,7 +198,7 @@ class DispatcherPlannerTest {
 			assertThat(ex.message ?: "").contains("FakeAsync")
 			assertThat(ex.message ?: "").contains(PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER.toString())
 			assertThat(ex.message ?: "").contains("Issue #187")
-			assertThat(ex.message ?: "").contains("#549")
+			assertThat(ex.message ?: "").contains("#564")
 		}
 
 		@Test

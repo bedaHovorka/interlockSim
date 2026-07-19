@@ -11,7 +11,9 @@
 package cz.vutbr.fit.interlockSim.gui
 
 import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
+import cz.vutbr.fit.interlockSim.context.NoOpSimulationController
 import cz.vutbr.fit.interlockSim.context.SimulationContext
+import cz.vutbr.fit.interlockSim.dispatcher.DelegatingSimulationController
 import cz.vutbr.fit.interlockSim.sim.SpeedControllable
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.beans.PropertyChangeListener
@@ -75,6 +77,16 @@ internal class SimulationController(
 	private var speedControllable: SpeedControllable? = null
 
 	/**
+	 * SP4.2 (Issue #564): the context-scoped [DelegatingSimulationController] that paces
+	 * the dispatcher-agent loop. While a simulation is running, its delegate is the live
+	 * [SimulationRunner] so the agent loop follows the existing real-time sync (speed
+	 * multiplier, pause); on stop/completion the delegate is reset to
+	 * [NoOpSimulationController]. `null` when the context has no dispatcher agent wired.
+	 */
+	@Volatile
+	private var agentPacing: DelegatingSimulationController? = null
+
+	/**
 	 * Desired speed multiplier applied to new and currently running simulations.
 	 *
 	 * Stored so that a speed selection before [start] is honoured once the runner is created.
@@ -123,6 +135,12 @@ internal class SimulationController(
 		val controllable = mainProcess as? SpeedControllable
 		speedControllable = controllable
 		controllable?.speedMultiplier = desiredSpeed
+
+		// SP4.2 (Issue #564): pace the dispatcher-agent loop with this run's runner.
+		// getOrNull: the binding is absent in Koin setups without :dispatcher-agent's module.
+		val pacing = (context as? DefaultSimulationContext)?.scope?.getOrNull<DelegatingSimulationController>()
+		agentPacing = pacing
+		pacing?.delegate = newRunner
 
 		// Start synchronously BEFORE enabling the Stop button or launching the monitor
 		// thread. This ensures stopSimulation() always has a live thread to interrupt.
@@ -173,6 +191,7 @@ internal class SimulationController(
 							cleanupSpeedListener(newRunner)
 							runner = null
 							speedControllable = null
+							detachAgentPacing()
 							onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
 							onStateChanged(SimulationStatus.STOPPED)
 							onCompleted()
@@ -196,8 +215,20 @@ internal class SimulationController(
 		r.stop()
 		runner = null
 		speedControllable = null
+		detachAgentPacing()
 		onSpeedChanged(SimulationRunner.DEFAULT_SPEED)
 		onStateChanged(SimulationStatus.STOPPED)
+	}
+
+	/**
+	 * Detach the live runner from the agent-pacing seam (SP4.2, Issue #564).
+	 *
+	 * Resets the delegate to [NoOpSimulationController] so a still-draining agent-driver
+	 * thread never throttles against a stopped runner, and clears the local reference.
+	 */
+	private fun detachAgentPacing() {
+		agentPacing?.delegate = NoOpSimulationController
+		agentPacing = null
 	}
 
 	/** Removes the speed [PropertyChangeListener] from [r] and clears the reference. */

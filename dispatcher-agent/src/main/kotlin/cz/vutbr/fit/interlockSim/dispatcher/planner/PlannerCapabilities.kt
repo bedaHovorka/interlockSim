@@ -103,7 +103,7 @@ fun assertPlannerPacingCompatible(
 				"SimulationController to enforce the " +
 				"${PlannerCapabilities.AGENT_MAX_SPEED_MULTIPLIER}x speed cap (Issue #187), " +
 				"but $controller is a NoOpSimulationController. " +
-				"Wire SimulationRunner pacing first (SP1.4, #549)."
+				"Wire a pacing controller (SimulationRunner via DelegatingSimulationController, SP4.2 #564)."
 		)
 	}
 }
