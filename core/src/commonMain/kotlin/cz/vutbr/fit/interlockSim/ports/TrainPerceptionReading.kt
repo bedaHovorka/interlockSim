@@ -24,7 +24,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  *
  * | Perception facet | Fields |
  * |---|---|
- * | Signal ahead  | [signalAheadName], [signalAheadAspect], [distanceToSignalAheadMetres] |
+ * | Signal ahead (immediate) | [signalAheadName], [signalAheadAspect], [distanceToSignalAheadMetres] |
+ * | Second signal ahead (next along reserved route) | [nextSignalAheadName], [nextSignalAheadAspect] |
  * | Speed limit   | [currentSpeedLimitMps] |
  * | Own kinematics | [velocity], [acceleration], [totalDistance], [frontSectionName] |
  * | Next timetable event | [destinationInOutName], [scheduledArrivalTime] |
@@ -36,6 +37,53 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * path, as seen by the train's [cz.vutbr.fit.interlockSim.sim.Train.nextSemaphore]
  * method. Both fields are `null` when no path is currently reserved for the train
  * (e.g. the train is still queued at an InOut waiting for the interlocking to set a route).
+ *
+ * [nextSignalAheadAspect] reflects the signal at the **second** semaphore along the reserved
+ * route — the one after [signalAheadName]. It is `null` when there is no second semaphore on the
+ * reserved route (no route reserved, or the train is within one semaphore of its destination InOut).
+ * Only the **aspect/name** of the second signal is exposed (not its distance) — the SP2a.2
+ * decision-maker derives the second signal's distance from the immediate
+ * [distanceToSignalAheadMetres] and the known track-segment lengths along the reserved route.
+ *
+ * ## Předvěst / Výstraha are ENCODED by the 2-aspects pair (SŽ D1)
+ *
+ * Per Czech railway signalling rules (SŽ D1), a *předvěst* (distant signal) does not introduce a
+ * new aspect — it **encodes the next main signal's aspect**, because "brzdná dráha je delší než
+ * viditelnost návěstidla" (the braking distance may exceed the sight distance to the main signal).
+ * Likewise an *oddílové návěstidlo* (block signal) "zároveň informuje o návěsti následujícího
+ * návěstidla", and the *LS* liniový vlakový zabezpečovač (cab signalling) conveys the next aspect
+ * in-cab for the same reason. The `Signal` enum deliberately has **no** `Výstraha` (Caution) value
+ * (see [cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore.Signal]: `STOP, S30…S100,
+ * FREE`, where `isAllowing() = allowedSpeed > 0`); Výstraha is *derived*, not stored.
+ *
+ * The `(signalAheadAspect, nextSignalAheadAspect)` pair this reading exposes **is** that
+ * distant-signal model — a reactive train agent (SP2a.2) decodes it as driver intent:
+ *
+ * - `signalAheadAspect == STOP` → stop at the immediate signal.
+ * - `signalAheadAspect.isAllowing() && nextSignalAheadAspect == STOP` → **Výstraha**: may proceed
+ *   past the immediate signal but must brake to stop at the second signal — begin braking now
+ *   (braking distance may exceed the sight to the second signal).
+ * - `signalAheadAspect.isAllowing() && nextSignalAheadAspect.isAllowing()` → **Volno ahead**: no
+ *   advance braking needed.
+ * - `signalAheadAspect == S<X> && nextSignalAheadAspect == STOP` → speed-restricted caution
+ *   ("očekávej rychlost X" combined with Výstraha): proceed at ≤ X km/h, then brake to stop.
+ * - `signalAheadAspect == S<X> && nextSignalAheadAspect.isAllowing()` → proceed at ≤ X km/h, next
+ *   signal clear.
+ * - `nextSignalAheadAspect == null` → no second signal on the reserved route (within one semaphore
+ *   of the destination InOut); only the immediate aspect governs.
+ *
+ * This is why exposing up to 2 aspects ahead replaces the need for a dedicated `Výstraha` enum
+ * value: the pair carries exactly what a předvěst / oddílové návěstidlo / LS conveys to a driver.
+ *
+ * ### SP2b-scope gaps (not this PR)
+ *
+ * - Signal **type** (hlavní / cestové / oddílové / předvěst) is not surfaced in the perception —
+ *   `DynamicRailSemaphore.signal` is a single aspect with no type distinction. The 2-aspects pair
+ *   carries braking intent, but type still matters for movement authority; deferred to SP2b.
+ * - Sight / braking-distance context ("rozhledové poměry", `zábrzdná vzdálenost`) is not exposed —
+ *   only the immediate [distanceToSignalAheadMetres] is; the decision-maker derives the rest.
+ * - LS-style continuous supervision is out of scope (the train decision-maker is an algorithmic
+ *   `:core` policy, not a cab-signalling system).
  *
  * ## Speed-limit semantics
  *
@@ -56,6 +104,14 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
  * @property trainId Train identifier (e.g. `"Train #1"`).
  * @property signalAheadName Name of the next semaphore ahead, or `null` if no path set.
  * @property signalAheadAspect [Signal] aspect of the next semaphore, or `null` if no path.
+ * @property nextSignalAheadName Name of the **second** semaphore ahead (the one after the
+ *   immediate next semaphore along the reserved route), or `null` if there is no second
+ *   semaphore on the reserved route. Defaults to `null` for call sites that predate this
+ *   field (snapshot EMPTY, projection, tool).
+ * @property nextSignalAheadAspect [Signal] aspect of the **second** semaphore ahead, or
+ *   `null` if there is none. Together with [signalAheadAspect] this pair encodes předvěst /
+ *   Výstraha semantics (see "Předvěst / Výstraha are ENCODED by the 2-aspects pair" above).
+ *   Defaults to `null` for legacy call sites.
  * @property distanceToSignalAheadMetres Distance from the train's front to the next
  *   semaphore in metres (≥ 0). Zero when no path is reserved.
  * @property currentSpeedLimitMps Maximum allowed speed from the reserved path in **m/s**.
@@ -88,5 +144,7 @@ data class TrainPerceptionReading(
 	val frontSectionName: String?,
 	val destinationInOutName: String,
 	val scheduledArrivalTime: Double,
-	val isDwelling: Boolean
+	val isDwelling: Boolean,
+	val nextSignalAheadName: String? = null,
+	val nextSignalAheadAspect: Signal? = null
 )

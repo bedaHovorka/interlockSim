@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.sim.separatorAspect
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 
@@ -246,11 +248,16 @@ class DefaultNetworkPerceptionPort(
 
 	override fun allTrainPerceptions(): List<TrainPerceptionReading> = activeTrains().map { it.toPerceptionReading() }
 
-	private fun Train.toPerceptionReading(): TrainPerceptionReading =
-		TrainPerceptionReading(
+	private fun Train.toPerceptionReading(): TrainPerceptionReading {
+		// Read the immediate next semaphore once (M1) and derive the second signal from it, so
+		// the shared separatorName/separatorAspect mapping runs on at most one nextSemaphore()
+		// call per capture instead of once per facet.
+		val firstSep = nextSemaphore()
+		val secondSep = secondSemaphoreAhead(firstSep)
+		return TrainPerceptionReading(
 			trainId = name,
-			signalAheadName = signalAheadName,
-			signalAheadAspect = signalAheadAspect,
+			signalAheadName = separatorName(firstSep),
+			signalAheadAspect = separatorAspect(firstSep),
 			distanceToSignalAheadMetres = distanceToSemaphore(),
 			currentSpeedLimitMps = currentSpeedLimitMps,
 			velocity = getVelocity(),
@@ -259,8 +266,11 @@ class DefaultNetworkPerceptionPort(
 			frontSectionName = frontSectionName(this),
 			destinationInOutName = timetableDestinationName,
 			scheduledArrivalTime = scheduledArrivalTime,
-			isDwelling = isDwelling
+			isDwelling = isDwelling,
+			nextSignalAheadName = separatorName(secondSep),
+			nextSignalAheadAspect = separatorAspect(secondSep)
 		)
+	}
 
 	// ── Full snapshot ─────────────────────────────────────────────────────
 

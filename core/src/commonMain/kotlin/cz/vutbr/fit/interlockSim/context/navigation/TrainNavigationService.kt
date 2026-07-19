@@ -9,6 +9,7 @@
  */
 package cz.vutbr.fit.interlockSim.context.navigation
 
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 
 /**
@@ -181,4 +182,32 @@ interface TrainNavigationService {
 		trainId: String,
 		separator: PathSeparator
 	): Boolean
+
+	/**
+	 * Return up to [limit] oriented separators ahead of [separator] along the train's
+	 * RESERVED route (`PathInfo.reservedPath`), in travel order, skipping intermediate
+	 * non-oriented separators (e.g. switches) and the [TrackSection]s between them.
+	 *
+	 * Read-only: walks the registry's reserved path by index using the same `element == separator`
+	 * matching as [findReservedPathForTrain] / `determineNextFromPathInfo`. Returns an empty list
+	 * when the train has no `PathInfo`, [separator] is not on the reserved route, or there are no
+	 * further oriented separators (the train is within one semaphore of its destination InOut).
+	 *
+	 * Used by SP2a.1 train perception (Issue #552) to expose the **second** signal ahead — the
+	 * semaphore after the immediate `nextSemaphore()` — so a reactive train agent (SP2a.2) can
+	 * derive předvěst / Výstraha semantics from the `(immediate, second)` aspect pair per SŽ D1
+	 * (a distant signal encodes the next main signal's aspect; no dedicated `Výstraha` enum value
+	 * is needed — see `TrainPerceptionReading`).
+	 *
+	 * @param trainId Train identifier (typically `Train.name`).
+	 * @param separator Anchor separator already on the reserved route (typically `nextSemaphore()`).
+	 * @param limit Max number of subsequent oriented separators to return (≥ 0).
+	 * @return Subsequent oriented separators along the reserved route, in order; empty if none.
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	fun reservedSeparatorsAhead(
+		trainId: String,
+		separator: PathSeparator,
+		limit: Int
+	): List<OrientedPathSeparator>
 }

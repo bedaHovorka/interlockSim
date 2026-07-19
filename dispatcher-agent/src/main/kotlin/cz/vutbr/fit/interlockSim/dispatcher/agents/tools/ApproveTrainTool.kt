@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
-import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.DispatchLoopActuatorPort
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -58,18 +57,12 @@ class ApproveTrainTool(
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
-			DomainToolParameter(
-				name = "trainId",
-				description = "Identifier of the train to approve (non-blank; as returned by queued_trains)",
-				type = DomainToolParameterType.String,
-				required = true
-			)
+			trainIdParameter("Identifier of the train to approve (non-blank; as returned by queued_trains)")
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainId =
-			args.stringParam("trainId")
-				?: return ToolResult.Error("trainId parameter is required and must be a non-blank string")
+			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
 
 		logger.debug { "ApproveTrainTool.execute: trainId=$trainId" }
 		return runCatching { actuatorPort.approveTrain(trainId) }

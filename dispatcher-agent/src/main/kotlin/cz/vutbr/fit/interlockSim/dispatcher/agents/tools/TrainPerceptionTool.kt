@@ -11,7 +11,6 @@ package cz.vutbr.fit.interlockSim.dispatcher.agents.tools
 
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameter
-import cz.vutbr.fit.interlockSim.dispatcher.agents.DomainToolParameterType
 import cz.vutbr.fit.interlockSim.dispatcher.agents.ToolResult
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -46,18 +45,12 @@ class TrainPerceptionTool(
 
 	override val parameters: List<DomainToolParameter> =
 		listOf(
-			DomainToolParameter(
-				name = "trainId",
-				description = "Train identifier (e.g. \"Train #1\", \"Train #2\")",
-				type = DomainToolParameterType.String,
-				required = true
-			)
+			trainIdParameter("Train identifier (e.g. \"Train #1\", \"Train #2\")")
 		)
 
 	override suspend fun execute(args: Map<String, Any?>): ToolResult {
 		val trainId =
-			args.stringParam("trainId")
-				?: return ToolResult.Error("trainId parameter is required and must be a non-blank string")
+			args.stringParam(TRAIN_ID_PARAM) ?: return ToolResult.Error(TRAIN_ID_REQUIRED_MSG)
 
 		logger.debug { "TrainPerceptionTool.execute: trainId=$trainId" }
 

@@ -23,6 +23,7 @@ import cz.vutbr.fit.interlockSim.context.DefaultSimulationContext
 import cz.vutbr.fit.interlockSim.context.JvmEditingContextFactory
 import cz.vutbr.fit.interlockSim.context.SimulationContextFactory
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.objects.tracks.TrackSection
@@ -469,6 +470,109 @@ class TrainNavigationServiceTest : KoinTestBase() {
 					// Assert
 					assertThat(result).isFalse()
 				}
+		}
+	}
+
+	@Nested
+	@DisplayName("reservedSeparatorsAhead (SP2a.1)")
+	inner class ReservedSeparatorsAheadTests {
+		private val editingContextFactory: JvmEditingContextFactory by inject()
+		private val simulationContextFactory: SimulationContextFactory by inject()
+
+		@Test
+		fun `returns oriented separators after the anchor along the reserved route, in order`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val registry: PathReservationRegistry = context.scope.get()
+
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						// Independent manual walk of the reserved path: every OrientedPathSeparator
+						// after the anchor, in route order. vyhybna's A→B route has intermediate
+						// signals, so this list is non-empty.
+						val reservedPath = registry.getPathInfo("train1")!!.reservedPath
+						val anchorIndex = reservedPath.indexOfFirst { it == inOutA }
+						assertThat(anchorIndex).isGreaterThan(-1)
+						val expected =
+							(anchorIndex + 1 until reservedPath.size)
+								.mapNotNull { reservedPath.elementAt(it) as? OrientedPathSeparator }
+						assertThat(expected).isNotEmpty()
+
+						// limit larger than available returns all of them.
+						val result = service.reservedSeparatorsAhead("train1", inOutA, expected.size + 5)
+						assertThat(result).isEqualTo(expected)
+
+						// limit 1 returns only the first oriented separator after the anchor.
+						val firstOnly = service.reservedSeparatorsAhead("train1", inOutA, 1)
+						assertThat(firstOnly).isEqualTo(expected.take(1))
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `limit 0 returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						assertThat(service.reservedSeparatorsAhead("train1", inOutA, 0)).isEmpty()
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `unknown train (no PathInfo) returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+
+						// "noTrain" has no reserved path registered.
+						assertThat(service.reservedSeparatorsAhead("noTrain", inOutA, 5)).isEmpty()
+					}
+				}
+			}
+		}
+
+		@Test
+		fun `terminal anchor (within one semaphore of destination) returns an empty list`() {
+			TestFixtures.loadShuntingXml().use { xmlStream ->
+				editingContextFactory.createContext(xmlStream).use { editingCtx ->
+					simulationContextFactory.createContext(editingCtx as DefaultEditingContext).use { ctx ->
+						val context = ctx as DefaultSimulationContext
+						val service = context.getRoutingServices().getTrainNavigationService()
+						val pathService = context.getRoutingServices().getPathReservationService()
+						val grid = context.getRailWayNetGrid()
+						val inOutA = grid.getCellAt(11, 8) as DynamicInOut
+						val inOutB = grid.getCellAt(30, 8) as DynamicInOut
+						pathService.reservePath("train1", inOutA, inOutB)
+
+						// The destination InOut is the last element of the reserved route — there
+						// are no oriented separators after it.
+						assertThat(service.reservedSeparatorsAhead("train1", inOutB, 5)).isEmpty()
+					}
+				}
+			}
 		}
 	}
 

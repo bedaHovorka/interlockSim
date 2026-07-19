@@ -1250,44 +1250,75 @@ class Train :
 	/**
 	 * Name of the next semaphore ahead of this train on its reserved path.
 	 *
-	 * Derived from [nextSemaphore] — the last element of the currently assigned path
-	 * to the next semaphore. Returns `null` when no path is set (train not yet moving
-	 * or approaching its final destination with no further path reserved).
+	 * The destination semaphore of the currently reserved path
+	 * (`pathToSemaphore.getLast()`). Returns `null` when no path is set (train not yet
+	 * moving, or approaching its final destination with no further path reserved).
 	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val signalAheadName: String?
-		get() =
-			when (val sep = nextSemaphore()) {
-				is DynamicRailSemaphore -> sep.name.takeIf { it.isNotBlank() }
-				is DynamicInOut -> sep.name.takeIf { it.isNotBlank() }
-				else -> null
-			}
+		get() = separatorName(nextSemaphore())
 
 	/**
 	 * Signal aspect of the next semaphore ahead of this train.
 	 *
 	 * For a [DynamicRailSemaphore] endpoint, returns the semaphore's current signal.
 	 * For a [DynamicInOut] endpoint (the path ends at an entry/exit point), returns the
-	 * `outSemaphore` signal, which controls departure from that InOut.
+	 * `outSemaphore` signal, which controls departure from that InOut. `DynamicInOut.outSemaphore`
+	 * is non-null by construction (`DynamicInOut` declares it non-nullable), the same invariant the
+	 * pre-existing `accelerateToSignal` relies on — the `else -> null` arm here only covers the
+	 * no-reserved-path case (`nextSemaphore() == null`).
+	 *
 	 * Returns `null` when no semaphore is ahead (same conditions as [signalAheadName]).
 	 *
 	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
 	 */
 	val signalAheadAspect: Signal?
-		get() =
-			when (val sep = nextSemaphore()) {
-				is DynamicRailSemaphore -> sep.signal
-				is DynamicInOut -> sep.outSemaphore.signal
-				else -> null
-			}
+		get() = separatorAspect(nextSemaphore())
+
+	/**
+	 * Name of the **second** semaphore ahead — the one after [nextSemaphore] along the
+	 * reserved route — or `null` when there is no second signal (no reserved route, or the
+	 * train is within one semaphore of its destination InOut).
+	 *
+	 * Together with [signalAheadAspect] this forms the `(immediate, second)` aspect pair that
+	 * encodes předvěst / Výstraha semantics for the SP2a.2 decision-maker (see `TrainPerceptionReading`).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val nextSignalAheadName: String?
+		get() = separatorName(secondSemaphoreAhead())
+
+	/**
+	 * Signal aspect of the **second** semaphore ahead (see [nextSignalAheadName]), or `null`
+	 * when there is no second signal. See [signalAheadAspect] for the `DynamicInOut.outSemaphore`
+	 * non-null invariant.
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val nextSignalAheadAspect: Signal?
+		get() = separatorAspect(secondSemaphoreAhead())
+
+	/**
+	 * The oriented separator after [firstSep] along this train's reserved route, or `null`
+	 * when [firstSep] is `null` or is the last oriented separator on the route.
+	 *
+	 * [firstSep] defaults to [nextSemaphore] so the public perception properties
+	 * ([nextSignalAheadName], [nextSignalAheadAspect]) read the immediate-then-second pair with no
+	 * extra arguments; the live perception port passes the already-computed immediate separator to
+	 * avoid a second `nextSemaphore()` call per capture (M1).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	internal fun secondSemaphoreAhead(firstSep: OrientedPathSeparator? = nextSemaphore()): OrientedPathSeparator? =
+		firstSep?.let { trainNavService.reservedSeparatorsAhead(name, it, 1).getOrNull(0) }
 
 	/**
 	 * Current track speed limit in m/s derived from the reserved path.
 	 *
-	 * Computed as `path.maxSpeed(path.getFirst())` — the minimum allowed speed across
-	 * all elements of the path currently reserved for this train (track geometry, switch
-	 * positions, etc.). This is the **physical** track constraint, independent of the
+	 * Computed as `path.maxSpeed(path.getFirst())` — the minimum speed limit across all tracks
+	 * of the reserved path, as approached from the train's current separator (track geometry,
+	 * switch positions, etc.). This is the **physical** track constraint, independent of the
 	 * signal aspect (captured separately in [signalAheadAspect]).
 	 *
 	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
