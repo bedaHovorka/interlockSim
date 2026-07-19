@@ -70,7 +70,7 @@ class ReactiveTrainActuatorTest {
 	}
 
 	@Test
-	fun `applyDecision COAST with zero speed calls setTargetSpeed(0)`() {
+	fun `applyDecision COAST with zero speed calls setTargetSpeed with 0`() {
 		val actuator = RecordingActuator()
 		val decision = TrainAccelerationDecision(AccelerationTarget.COAST, 0.0, "Holding stop at STOP signal")
 
@@ -82,7 +82,7 @@ class ReactiveTrainActuatorTest {
 	// ── applyDecision: BRAKE ──────────────────────────────────────────────────
 
 	@Test
-	fun `applyDecision BRAKE with zero targetSpeed calls setTargetSpeed(0)`() {
+	fun `applyDecision BRAKE with zero targetSpeed calls setTargetSpeed with 0`() {
 		val actuator = RecordingActuator()
 		val decision = TrainAccelerationDecision(AccelerationTarget.BRAKE, 0.0, "STOP signal ahead")
 
