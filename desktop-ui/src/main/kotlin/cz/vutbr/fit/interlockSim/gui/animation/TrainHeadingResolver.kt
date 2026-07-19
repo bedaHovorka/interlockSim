@@ -179,7 +179,8 @@ class TrainHeadingResolver(
 		return snapHeadingToNearestCompassDirection(atan2(dy, dx))
 	}
 
-	private fun snapHeadingToNearestCompassDirection(angle: Double): Double = round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
+	private fun snapHeadingToNearestCompassDirection(angle: Double): Double =
+		round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
 
 	private fun isOppositeHeading(
 		a: Double,
