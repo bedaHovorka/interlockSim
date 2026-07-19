@@ -181,12 +181,13 @@ class AlgorithmicTrainDecisionPolicyTest {
 	@Test
 	fun `decision always yields non-negative target speed and non-empty rationale`() {
 		val aspects = listOf(null, Signal.STOP, Signal.S30, Signal.S60, Signal.FREE)
-		val directives = listOf(
-			null,
-			TrainDirective.HoldImmediately,
-			TrainDirective.RouteGranted(Aspect.Volno, 60),
-			TrainDirective.RouteDenied("test")
-		)
+		val directives =
+			listOf(
+				null,
+				TrainDirective.HoldImmediately,
+				TrainDirective.RouteGranted(Aspect.Volno, 60),
+				TrainDirective.RouteDenied("test")
+			)
 		for (directiveToApply in directives) {
 			val policy = AlgorithmicTrainDecisionPolicy()
 			if (directiveToApply != null) policy.acceptDirective(directiveToApply)

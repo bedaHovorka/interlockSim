@@ -70,7 +70,7 @@ class AlgorithmicTrainDecisionPolicy : TrainDecisionPolicy {
 	 * When `true`, a dispatcher hold order is active and has not yet been cleared by a
 	 * [TrainDirective.RouteGranted].  [decide] returns `(BRAKE/COAST, 0.0)` until cleared.
 	 */
-	@Volatile
+	@kotlin.concurrent.Volatile
 	private var holdActive: Boolean = false
 
 	/**

@@ -81,7 +81,9 @@ sealed interface TrainDirective {
 	 *
 	 * @property reason Human-readable denial reason (e.g. `"section U3 occupied"`).
 	 */
-	data class RouteDenied(val reason: String) : TrainDirective
+	data class RouteDenied(
+		val reason: String
+	) : TrainDirective
 
 	/**
 	 * Dispatcher orders the train to stop at or before the named signal.
@@ -93,7 +95,9 @@ sealed interface TrainDirective {
 	 *
 	 * @property signalName Name of the signal at which the train must stop (e.g. `"L1"`, `"zA"`).
 	 */
-	data class HoldAt(val signalName: String) : TrainDirective {
+	data class HoldAt(
+		val signalName: String
+	) : TrainDirective {
 		init {
 			require(signalName.isNotBlank()) { "signalName must not be blank" }
 		}
