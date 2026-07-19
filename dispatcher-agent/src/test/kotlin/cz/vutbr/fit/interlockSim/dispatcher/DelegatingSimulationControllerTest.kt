@@ -52,6 +52,8 @@ class DelegatingSimulationControllerTest {
 
 		@Volatile
 		var paused: Boolean = false
+
+		@Volatile
 		var throttleThrowsInterrupted: Boolean = false
 		var lastThrottleDelta: Double? = null
 

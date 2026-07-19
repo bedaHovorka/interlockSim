@@ -46,10 +46,25 @@ import cz.vutbr.fit.interlockSim.context.SimulationController
  * driver runs on its own daemon thread, never on a shared coroutine pool
  * (SP0.5 invariant — the kDisco kernel never blocks on the driver).
  *
+ * ## SonarCloud suppressions
+ *
+ * `@Suppress("kotlin:S6307")` — [awaitIfPaused] deliberately uses `Thread.sleep` (not
+ * `delay()`); see its KDoc. It is `suspend` only because the [SimulationController] interface
+ * forces it; the method blocks a dedicated daemon thread and handles interruption
+ * cooperatively, which `delay()`/`CancellationException` cannot express without either
+ * busy-spinning or exiting early.
+ *
+ * `@Suppress("kotlin:S6514")` — interface delegation `by` requires a stable expression, but
+ * [delegate] is a `@Volatile var` swapped at runtime (NoOp ↔ live `SimulationRunner`); `by`
+ * cannot follow a mutable target. The class also deliberately overrides
+ * [pollStepEvent]/[pollStepTime] to NOT forward (they protect the sim thread's step-request
+ * ownership), which `by` would undo.
+ *
  * @see AgentLoopDriver
  * @see NoOpSimulationController
  * @since Issue #564 (SP4.2 — Goal 10 close the loop)
  */
+@Suppress("kotlin:S6307", "kotlin:S6514")
 class DelegatingSimulationController : SimulationController {
 	/**
 	 * Current pacing target. [NoOpSimulationController] until a live pacing controller
@@ -66,6 +81,17 @@ class DelegatingSimulationController : SimulationController {
 	 * the delegate's implementation may consume step requests that belong to the
 	 * simulation thread. Returns promptly once the delegate resumes, or immediately
 	 * if the driver thread is interrupted (interrupt status is preserved).
+	 *
+	 * Uses `Thread.sleep` (not `delay()`) deliberately: this `suspend` function is forced
+	 * by the [SimulationController] interface contract, but it runs on the dedicated
+	 * `dispatcher-agent-driver` daemon thread inside `runBlocking`. The poll-sleep +
+	 * `catch (InterruptedException) { interrupt(); return }` pattern is the correct
+	 * cooperative-interruption idiom for a blocking dedicated thread — on interrupt it
+	 * stops sleeping and returns so the driver's `while (isSimActive())` loop can re-check.
+	 * `delay()` would surface interruption as `CancellationException`, which cannot be
+	 * swallowed (busy-spin risk inside a cancelled coroutine) nor cleanly propagated
+	 * (would end the driver thread early instead of looping until `isSimActive()` is false).
+	 * See the class-level `@Suppress("kotlin:S6307")`.
 	 */
 	override suspend fun awaitIfPaused() {
 		while (delegate.isPaused()) {
@@ -82,8 +108,10 @@ class DelegatingSimulationController : SimulationController {
 	 * Forwards wall-clock throttling to the [delegate].
 	 *
 	 * An interrupt during the delegate's sleep (e.g. simulation shutdown) is swallowed
-	 * with the interrupt status preserved, so the driver loop can observe
-	 * `isSimActive() == false` and exit cleanly instead of dying on an exception.
+	 * with the interrupt status preserved. The driver loop exits via its own
+	 * `isSimActive()` check, not via this interrupt: preserving the flag lets any
+	 * cooperative-shutdown check elsewhere observe it, while swallowing the exception
+	 * keeps the driver from dying mid-throttle before it can re-check `isSimActive()`.
 	 */
 	override fun throttle(simDeltaSeconds: Double) {
 		try {
