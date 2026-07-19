@@ -399,8 +399,11 @@ jobs:
         fi
 
         # --- Invariant 2: Both contain event lines (t=<number>) ---
-        JVM_EVENTS=$(grep -cE 't=[0-9]' jvm-smoke-output.txt || true)
-        NATIVE_EVENTS=$(grep -cE 't=[0-9]' native-smoke-output.txt || true)
+        # Anchored to line start (like the invariant-4 sed below): logger lines such as
+        # "Train completed journey: trainId=... t=51.48..." contain t=<digits> mid-line
+        # and must not be counted as simulation events.
+        JVM_EVENTS=$(grep -cE '^[[:space:]]*t=[0-9]' jvm-smoke-output.txt || true)
+        NATIVE_EVENTS=$(grep -cE '^[[:space:]]*t=[0-9]' native-smoke-output.txt || true)
         echo "JVM event lines:    $JVM_EVENTS"
         echo "Native event lines: $NATIVE_EVENTS"
         if [ "$JVM_EVENTS" -eq 0 ]; then
