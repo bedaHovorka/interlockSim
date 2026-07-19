@@ -189,8 +189,13 @@ jobs:
         set -o pipefail  # Ensure pipe propagates java exit code, not tee's
         START_TIME=$(date +%s%N)
 
+        # shuntingLoopSync mirrors the native fast-sim `shuntingLoop` construction
+        # (wireSynchronousDispatcher) exactly. The default JVM `shuntingLoop` example
+        # runs the Goal 10 dispatcher-agent stack, which does not exist on native, so
+        # its output can never be count-equal with the native smoke output that the
+        # compare-outputs job checks.
         if java -Dlogback.configurationFile=.github/workflows/logback-ci.xml \
-          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoop 1024 \
+          -jar desktop-ui/build/libs/interlockSim.jar example shuntingLoopSync 1024 \
           | tee jvm-smoke-output.txt; then
 
           END_TIME=$(date +%s%N)
@@ -278,7 +283,7 @@ jobs:
       run: ./gradlew :fast-sim:linkReleaseExecutableLinuxX64 --no-daemon --stacktrace
 
     - name: Run fast-sim native tests
-      timeout-minutes: 5
+      timeout-minutes: 10
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -455,14 +460,28 @@ jobs:
           FAIL=1
         fi
 
-        # --- Invariant 6: Event counts within same order of magnitude (0.5x-2.0x) ---
-        if [ "$JVM_EVENTS" -gt 0 ] && [ "$NATIVE_EVENTS" -gt 0 ]; then
-          RATIO=$(awk "BEGIN { printf \"%.2f\", $JVM_EVENTS / $NATIVE_EVENTS }")
-          echo "Event count ratio (JVM/Native): $RATIO"
-          if awk "BEGIN { exit ($RATIO < 0.5 || $RATIO > 2.0) ? 0 : 1 }"; then
-            echo "FAIL: Event count ratio $RATIO outside acceptable range [0.5, 2.0]"
-            FAIL=1
-          fi
+        # --- Invariant 6: Exact cross-platform equality ---
+        # Since kDisco's Random.exp()/normal() became bit-identical across platforms
+        # (bedaHovorka/kdisco#69, fixed via pure-Kotlin fdlibm PortableMath), the same
+        # seed must produce the same event count and the same summary train count on
+        # JVM and native. An inequality here is a cross-platform determinism regression.
+        if [ "$JVM_EVENTS" -ne "$NATIVE_EVENTS" ]; then
+          echo "FAIL: Event counts differ (JVM=$JVM_EVENTS, Native=$NATIVE_EVENTS) — cross-platform determinism regression"
+          FAIL=1
+        else
+          echo "Event counts identical: $JVM_EVENTS"
+        fi
+
+        JVM_TRAINS=$(sed -nE 's/^--- Simulation complete: ([0-9]+) trains.*/\1/p' jvm-smoke-output.txt)
+        NATIVE_TRAINS=$(sed -nE 's/^--- Simulation complete: ([0-9]+) trains.*/\1/p' native-smoke-output.txt)
+        echo "JVM train count:    $JVM_TRAINS"
+        echo "Native train count: $NATIVE_TRAINS"
+        if [ -z "$JVM_TRAINS" ] || [ -z "$NATIVE_TRAINS" ]; then
+          echo "FAIL: Could not extract train count from one or both summaries"
+          FAIL=1
+        elif [ "$JVM_TRAINS" -ne "$NATIVE_TRAINS" ]; then
+          echo "FAIL: Train counts differ (JVM=$JVM_TRAINS, Native=$NATIVE_TRAINS) — cross-platform determinism regression"
+          FAIL=1
         fi
 
         echo ""
