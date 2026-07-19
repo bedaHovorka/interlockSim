@@ -155,6 +155,10 @@ class SimulationSnapshotTest {
 
 		override fun allTrainTimetables(): List<TimetableReading> = listOf(TimetableReading("stubTrain", "A", "B", 0.0, 60.0))
 
+		override fun trainPerception(trainId: String): TrainPerceptionReading? = null
+
+		override fun allTrainPerceptions(): List<TrainPerceptionReading> = emptyList()
+
 		override fun snapshot(): SimulationSnapshot =
 			SimulationSnapshot(
 				simTime = 99.0,
@@ -201,6 +205,10 @@ class SimulationSnapshotTest {
 				override fun trainTimetable(trainId: String): TimetableReading? = null
 
 				override fun allTrainTimetables(): List<TimetableReading> = emptyList()
+
+				override fun trainPerception(trainId: String): TrainPerceptionReading? = null
+
+				override fun allTrainPerceptions(): List<TrainPerceptionReading> = emptyList()
 
 				override fun snapshot(): SimulationSnapshot =
 					SimulationSnapshot(

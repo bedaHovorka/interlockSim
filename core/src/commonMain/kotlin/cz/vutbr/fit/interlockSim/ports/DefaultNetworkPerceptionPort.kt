@@ -17,6 +17,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.tracks.DynamicTrackBlock
 import cz.vutbr.fit.interlockSim.sim.Train
+import cz.vutbr.fit.interlockSim.sim.separatorAspect
+import cz.vutbr.fit.interlockSim.sim.separatorName
 import cz.vutbr.fit.interlockSim.util.DynamicWrapperUtils
 import cz.vutbr.fit.interlockSim.util.cellsOfType
 
@@ -237,6 +239,39 @@ class DefaultNetworkPerceptionPort(
 			scheduledArrivalTime = scheduledArrivalTime
 		)
 
+	// ── NetworkPerceptionPort — train perception (SP2a.1) ─────────────────
+
+	override fun trainPerception(trainId: String): TrainPerceptionReading? {
+		val train = activeTrains().firstOrNull { it.name == trainId } ?: return null
+		return train.toPerceptionReading()
+	}
+
+	override fun allTrainPerceptions(): List<TrainPerceptionReading> = activeTrains().map { it.toPerceptionReading() }
+
+	private fun Train.toPerceptionReading(): TrainPerceptionReading {
+		// Read the immediate next semaphore once (M1) and derive the second signal from it, so
+		// the shared separatorName/separatorAspect mapping runs on at most one nextSemaphore()
+		// call per capture instead of once per facet.
+		val firstSep = nextSemaphore()
+		val secondSep = secondSemaphoreAhead(firstSep)
+		return TrainPerceptionReading(
+			trainId = name,
+			signalAheadName = separatorName(firstSep),
+			signalAheadAspect = separatorAspect(firstSep),
+			distanceToSignalAheadMetres = distanceToSemaphore(),
+			currentSpeedLimitMps = currentSpeedLimitMps,
+			velocity = getVelocity(),
+			acceleration = getAcceleration(),
+			totalDistance = totalDistance,
+			frontSectionName = frontSectionName(this),
+			destinationInOutName = timetableDestinationName,
+			scheduledArrivalTime = scheduledArrivalTime,
+			isDwelling = isDwelling,
+			nextSignalAheadName = separatorName(secondSep),
+			nextSignalAheadAspect = separatorAspect(secondSep)
+		)
+	}
+
 	// ── Full snapshot ─────────────────────────────────────────────────────
 
 	/**
@@ -287,7 +322,8 @@ class DefaultNetworkPerceptionPort(
 				semaphores = allSignalAspects(),
 				blocks = allBlockOccupancies(),
 				trainPositions = allTrainPositions(),
-				timetables = allTrainTimetables()
+				timetables = allTrainTimetables(),
+				trainPerceptions = allTrainPerceptions()
 			)
 		latestCaptured = captured
 		return captured

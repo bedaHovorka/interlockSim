@@ -16,9 +16,12 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isNull
 import cz.vutbr.fit.interlockSim.context.RailwayNetGrid
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
+import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
 import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
+import cz.vutbr.fit.interlockSim.objects.core.OrientedPathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.objects.core.TrackFacility
 import cz.vutbr.fit.interlockSim.objects.core.TrackOccupant
@@ -75,6 +78,15 @@ class DefaultNetworkPerceptionPortTest {
 			every { it.ends() } returns emptyArray<PathSeparator>()
 		}
 
+	private fun inOut(
+		name: String,
+		signal: Signal = Signal.STOP
+	): DynamicInOut =
+		mockk<DynamicInOut>(relaxed = true).also {
+			every { it.name } returns name
+			every { it.outSemaphore } returns semaphore("out-$name", signal)
+		}
+
 	private fun train(
 		name: String,
 		velocity: Double = 0.0,
@@ -84,7 +96,12 @@ class DefaultNetworkPerceptionPortTest {
 		originName: String = "A",
 		destName: String = "B",
 		departureTime: Double = 0.0,
-		arrivalTime: Double = 60.0
+		arrivalTime: Double = 60.0,
+		nextSemaphore: OrientedPathSeparator? = null,
+		secondSemaphore: OrientedPathSeparator? = null,
+		distanceToSemaphore: Double = 0.0,
+		speedLimitMps: Double = ABSOLUTE_MAX_SPEED,
+		dwelling: Boolean = true
 	): Train =
 		mockk<Train>(relaxed = true).also {
 			every { it.name } returns name
@@ -96,6 +113,14 @@ class DefaultNetworkPerceptionPortTest {
 			every { it.timetableDestinationName } returns destName
 			every { it.scheduledDepartureTime } returns departureTime
 			every { it.scheduledArrivalTime } returns arrivalTime
+			// SP2a.1 perception facets (Issue #552). nextSemaphore()/secondSemaphoreAhead() are
+			// stubbed so the port's single nextSemaphore() call + shared mapping (separatorName/
+			// separatorAspect, exercised for real on the mocked separator) drives the reading.
+			every { it.nextSemaphore() } returns nextSemaphore
+			every { it.secondSemaphoreAhead(any()) } returns secondSemaphore
+			every { it.distanceToSemaphore() } returns distanceToSemaphore
+			every { it.currentSpeedLimitMps } returns speedLimitMps
+			every { it.isDwelling } returns dwelling
 		}
 
 	/**
@@ -419,6 +444,222 @@ class DefaultNetworkPerceptionPortTest {
 			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
 
 			assertThat(port.allTrainTimetables()).isEmpty()
+		}
+	}
+
+	// ── Train perception (SP2a.1) ──────────────────────────────────────────
+
+	@Nested
+	@DisplayName("trainPerception() / allTrainPerceptions() — SP2a.1")
+	inner class TrainPerception {
+		@Test
+		@DisplayName("round-trips a fully-populated reading through trainPerception()")
+		fun fullyPopulatedReadingRoundTrips() {
+			val namedBlock = block(name = "k1")
+			val section = mockk<TrackSection>(relaxed = true)
+			every { section.getTrackBlock() } returns namedBlock
+			val t =
+				train(
+					"Train #1",
+					velocity = 25.0,
+					acceleration = -0.5,
+					totalDistance = 1000.0,
+					frontSection = section,
+					destName = "B",
+					arrivalTime = 120.0,
+					nextSemaphore = semaphore("doB1", Signal.S60),
+					secondSemaphore = semaphore("doB2", Signal.STOP),
+					distanceToSemaphore = 150.0,
+					speedLimitMps = 30.0,
+					dwelling = false
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result).isEqualTo(
+				TrainPerceptionReading(
+					trainId = "Train #1",
+					signalAheadName = "doB1",
+					signalAheadAspect = Signal.S60,
+					distanceToSignalAheadMetres = 150.0,
+					currentSpeedLimitMps = 30.0,
+					velocity = 25.0,
+					acceleration = -0.5,
+					totalDistance = 1000.0,
+					frontSectionName = "k1",
+					destinationInOutName = "B",
+					scheduledArrivalTime = 120.0,
+					isDwelling = false,
+					nextSignalAheadName = "doB2",
+					nextSignalAheadAspect = Signal.STOP
+				)
+			)
+		}
+
+		@Test
+		@DisplayName("returns null for a train not in the active list")
+		fun inactiveTrainReturnsNull() {
+			val port = DefaultNetworkPerceptionPort(env(), { emptyList() })
+
+			assertThat(port.trainPerception("Train #1")).isNull()
+		}
+
+		@Test
+		@DisplayName("no reserved path → null signal facets, ABSOLUTE_MAX_SPEED, dwelling, zero distance")
+		fun noReservedPathProducesNullSignalsAndMaxSpeed() {
+			val t = train("Train #1", velocity = 0.0) // nextSemaphore defaults null
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.signalAheadName).isNull()
+			assertThat(result?.signalAheadAspect).isNull()
+			assertThat(result?.nextSignalAheadName).isNull()
+			assertThat(result?.nextSignalAheadAspect).isNull()
+			assertThat(result?.currentSpeedLimitMps).isEqualTo(ABSOLUTE_MAX_SPEED)
+			assertThat(result?.isDwelling).isEqualTo(true)
+			assertThat(result?.distanceToSignalAheadMetres).isEqualTo(0.0)
+		}
+
+		@Test
+		@DisplayName("DynamicRailSemaphore destination → aspect from the semaphore's own signal")
+		fun dynamicRailSemaphoreDestinationAspectFromSignal() {
+			val t = train("Train #1", nextSemaphore = semaphore("doB1", Signal.S60))
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.signalAheadName).isEqualTo("doB1")
+			assertThat(result?.signalAheadAspect).isEqualTo(Signal.S60)
+		}
+
+		@Test
+		@DisplayName("DynamicInOut destination → aspect from outSemaphore.signal (I3 invariant)")
+		fun dynamicInOutDestinationAspectFromOutSemaphore() {
+			// DynamicInOut.outSemaphore is non-null by construction; separatorAspect reads
+			// outSemaphore.signal for an InOut endpoint.
+			val t = train("Train #1", nextSemaphore = inOut("B", Signal.FREE))
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.signalAheadName).isEqualTo("B")
+			assertThat(result?.signalAheadAspect).isEqualTo(Signal.FREE)
+		}
+
+		@Test
+		@DisplayName("second signal present → nextSignalAheadName/Aspect populated")
+		fun secondSignalAheadPopulated() {
+			val t =
+				train(
+					"Train #1",
+					nextSemaphore = semaphore("doB1", Signal.FREE),
+					secondSemaphore = semaphore("doB2", Signal.STOP)
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.nextSignalAheadName).isEqualTo("doB2")
+			assertThat(result?.nextSignalAheadAspect).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("second signal absent (within one semaphore of destination) → null nextSignalAhead*")
+		fun secondSignalAheadAbsent() {
+			val t = train("Train #1", nextSemaphore = semaphore("doB1", Signal.FREE))
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.nextSignalAheadName).isNull()
+			assertThat(result?.nextSignalAheadAspect).isNull()
+		}
+
+		@Test
+		@DisplayName("dwelling at STOP → isDwelling true and STOP aspect (blocked by signal)")
+		fun dwellingAtStopSignal() {
+			val t =
+				train(
+					"Train #1",
+					velocity = 0.0,
+					nextSemaphore = semaphore("doB1", Signal.STOP),
+					dwelling = true
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.isDwelling).isEqualTo(true)
+			assertThat(result?.signalAheadAspect).isEqualTo(Signal.STOP)
+		}
+
+		@Test
+		@DisplayName("dwelling with FREE aspect → isDwelling true but not blocked by a signal (station dwell)")
+		fun dwellingAtStation() {
+			val t =
+				train(
+					"Train #1",
+					velocity = 0.0,
+					nextSemaphore = semaphore("doB1", Signal.FREE),
+					dwelling = true
+				)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			val result = port.trainPerception("Train #1")
+
+			assertThat(result?.isDwelling).isEqualTo(true)
+			assertThat(result?.signalAheadAspect).isEqualTo(Signal.FREE)
+		}
+
+		@Test
+		@DisplayName("no front section yet → frontSectionName null")
+		fun noFrontSectionProducesNullName() {
+			val t = train("Train #1", frontSection = null)
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t) })
+
+			assertThat(port.trainPerception("Train #1")?.frontSectionName).isNull()
+		}
+
+		@Test
+		@DisplayName("allTrainPerceptions() returns one reading per active train")
+		fun allTrainPerceptionsReturnsAll() {
+			val t1 = train("Train #1", nextSemaphore = semaphore("zA", Signal.FREE))
+			val t2 = train("Train #2", nextSemaphore = semaphore("zB", Signal.STOP))
+			val port = DefaultNetworkPerceptionPort(env(), { listOf(t1, t2) })
+
+			val result = port.allTrainPerceptions()
+
+			assertThat(result.map { it.trainId }).containsExactlyInAnyOrder("Train #1", "Train #2")
+		}
+
+		@Test
+		@DisplayName("perception in a captured snapshot is frozen from later source mutation")
+		fun snapshotPerceptionIsFrozenFromLaterSourceMutation() {
+			val t =
+				train(
+					"Train #1",
+					velocity = 15.0,
+					nextSemaphore = semaphore("doB1", Signal.FREE),
+					secondSemaphore = semaphore("doB2", Signal.STOP)
+				)
+			val active = mutableListOf(t)
+			val port = DefaultNetworkPerceptionPort(env(), { active.toList() })
+
+			val snap = port.captureSnapshot()
+
+			// Mutate the underlying source state after capture.
+			every { t.getVelocity() } returns 99.0
+			every { t.nextSemaphore() } returns semaphore("doB1", Signal.STOP)
+			every { t.secondSemaphoreAhead(any()) } returns semaphore("doB2", Signal.FREE)
+			active.clear()
+
+			// The captured perception must reflect the pre-mutation state.
+			val perception = snap.trainPerceptions.single()
+			assertThat(perception.velocity).isEqualTo(15.0)
+			assertThat(perception.signalAheadAspect).isEqualTo(Signal.FREE)
+			assertThat(perception.nextSignalAheadAspect).isEqualTo(Signal.STOP)
 		}
 	}
 

@@ -19,6 +19,7 @@ import cz.vutbr.fit.interlockSim.context.SimulationContext.ReportType
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.context.navigation.PathResult
 import cz.vutbr.fit.interlockSim.context.navigation.TrainNavigationService
+import cz.vutbr.fit.interlockSim.domain.ABSOLUTE_MAX_SPEED
 import cz.vutbr.fit.interlockSim.exceptions.SimulationException
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulation
 import cz.vutbr.fit.interlockSim.exceptions.requireSimulationNotNull
@@ -1243,6 +1244,107 @@ class Train :
 	/** @see timetableOriginName */
 	val scheduledArrivalTime: Double
 		get() = timetable.getOutTime().value
+
+	// ── SP2a.1 per-train first-person perception (Issue #552) ─────────────
+
+	/**
+	 * Name of the next semaphore ahead of this train on its reserved path.
+	 *
+	 * The destination semaphore of the currently reserved path
+	 * (`pathToSemaphore.getLast()`). Returns `null` when no path is set (train not yet
+	 * moving, or approaching its final destination with no further path reserved).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val signalAheadName: String?
+		get() = separatorName(nextSemaphore())
+
+	/**
+	 * Signal aspect of the next semaphore ahead of this train.
+	 *
+	 * For a [DynamicRailSemaphore] endpoint, returns the semaphore's current signal.
+	 * For a [DynamicInOut] endpoint (the path ends at an entry/exit point), returns the
+	 * `outSemaphore` signal, which controls departure from that InOut. `DynamicInOut.outSemaphore`
+	 * is non-null by construction (`DynamicInOut` declares it non-nullable), the same invariant the
+	 * pre-existing `accelerateToSignal` relies on — the `else -> null` arm here only covers the
+	 * no-reserved-path case (`nextSemaphore() == null`).
+	 *
+	 * Returns `null` when no semaphore is ahead (same conditions as [signalAheadName]).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val signalAheadAspect: Signal?
+		get() = separatorAspect(nextSemaphore())
+
+	/**
+	 * Name of the **second** semaphore ahead — the one after [nextSemaphore] along the
+	 * reserved route — or `null` when there is no second signal (no reserved route, or the
+	 * train is within one semaphore of its destination InOut).
+	 *
+	 * Together with [signalAheadAspect] this forms the `(immediate, second)` aspect pair that
+	 * encodes předvěst / Výstraha semantics for the SP2a.2 decision-maker (see `TrainPerceptionReading`).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val nextSignalAheadName: String?
+		get() = separatorName(secondSemaphoreAhead())
+
+	/**
+	 * Signal aspect of the **second** semaphore ahead (see [nextSignalAheadName]), or `null`
+	 * when there is no second signal. See [signalAheadAspect] for the `DynamicInOut.outSemaphore`
+	 * non-null invariant.
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val nextSignalAheadAspect: Signal?
+		get() = separatorAspect(secondSemaphoreAhead())
+
+	/**
+	 * The oriented separator after [firstSep] along this train's reserved route, or `null`
+	 * when [firstSep] is `null` or is the last oriented separator on the route.
+	 *
+	 * [firstSep] defaults to [nextSemaphore] so the public perception properties
+	 * ([nextSignalAheadName], [nextSignalAheadAspect]) read the immediate-then-second pair with no
+	 * extra arguments; the live perception port passes the already-computed immediate separator to
+	 * avoid a second `nextSemaphore()` call per capture (M1).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	internal fun secondSemaphoreAhead(firstSep: OrientedPathSeparator? = nextSemaphore()): OrientedPathSeparator? =
+		firstSep?.let { trainNavService.reservedSeparatorsAhead(name, it, 1).getOrNull(0) }
+
+	/**
+	 * Current track speed limit in m/s derived from the reserved path.
+	 *
+	 * Computed as `path.maxSpeed(path.getFirst())` — the minimum speed limit across all tracks
+	 * of the reserved path, as approached from the train's current separator (track geometry,
+	 * switch positions, etc.). This is the **physical** track constraint, independent of the
+	 * signal aspect (captured separately in [signalAheadAspect]).
+	 *
+	 * Returns [ABSOLUTE_MAX_SPEED] when no path is currently set for this train (the
+	 * interlocking has not yet reserved a route; no physical constraint is known).
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val currentSpeedLimitMps: Double
+		get() = pathToSemaphore?.let { it.maxSpeed(it.getFirst()) } ?: ABSOLUTE_MAX_SPEED
+
+	/**
+	 * Whether the train is currently stopped (velocity = 0).
+	 *
+	 * `true` when the train is not moving, which occurs when:
+	 * - waiting at a [Signal.STOP] semaphore
+	 * - holding at a station during direction reversal (30-second dwell)
+	 * - before first departure (just approved, not yet started)
+	 *
+	 * A reactive train agent (SP2a.2) can distinguish these states by inspecting
+	 * [signalAheadAspect]: a STOP aspect means the train is blocked by a signal; an
+	 * allowing or null aspect means the train may be at a station dwell.
+	 *
+	 * @since Issue #552 (SP2a.1 — Goal 10 train perception)
+	 */
+	val isDwelling: Boolean
+		get() = getVelocity() == 0.0
 
 	/**
 	 * Track section where the train's front is currently located.

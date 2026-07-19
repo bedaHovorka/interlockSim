@@ -87,6 +87,7 @@ class ToolGroupRegistry {
 	 * - `all_train_positions` — query all train positions
 	 * - `train_timetable` — query timetable of one train
 	 * - `all_train_timetables` — query all train timetables
+	 * - `train_perception` — query first-person perception of one train (SP2a.1)
 	 *
 	 * **Actuator tools** (network commands):
 	 * - `request_route` — request route reservation for a train
@@ -113,10 +114,11 @@ class ToolGroupRegistry {
 	 *   off-thread-safe projection in SP1.7+.
 	 * @param commandQueue Scoped command queue for this context (SP1.7); actuator tools post
 	 *   decisions here instead of calling the actuator port directly.
-	 * @return All tools available in this context (SP1.6: 12 tools)
+	 * @return All tools available in this context (SP2a.1: 13 tools)
 	 *
 	 * @since Issue #548 (SP1.3 — skeleton); SP1.4 (#549) adds port parameters; SP1.6 (#551)
-	 *   implements tools; SP1.7 (#774) switches actuator tools to the command queue
+	 *   implements tools; SP1.7 (#774) switches actuator tools to the command queue;
+	 *   SP2a.1 (#552) adds train_perception
 	 */
 	fun assembleAllTools(
 		perceptionPort: NetworkPerceptionPort,
@@ -150,13 +152,14 @@ class ToolGroupRegistry {
 	 * - `all_train_positions()` — query all train positions
 	 * - `train_timetable(trainId)` — query timetable of one train
 	 * - `all_train_timetables()` — query all train timetables
+	 * - `train_perception(trainId)` — query first-person perception of one train (SP2a.1)
 	 *
 	 * @param perceptionPort Scoped perception port for this context (SP1.4)
-	 * @return Perception tools (SP1.6: 8 tools)
-	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools
+	 * @return Perception tools (SP2a.1: 9 tools)
+	 * @since Issue #549 (SP1.4); SP1.6 (#551) implements tools; SP2a.1 (#552) adds train_perception
 	 */
 	fun assemblePerceptionTools(perceptionPort: NetworkPerceptionPort): List<DomainTool> {
-		logger.debug { "ToolGroupRegistry.assemblePerceptionTools: creating 8 perception tools (SP1.6)" }
+		logger.debug { "ToolGroupRegistry.assemblePerceptionTools: creating 9 perception tools (SP2a.1)" }
 		return listOf(
 			SignalAspectTool(perceptionPort),
 			AllSignalAspectsTool(perceptionPort),
@@ -165,7 +168,8 @@ class ToolGroupRegistry {
 			TrainPositionTool(perceptionPort),
 			AllTrainPositionsTool(perceptionPort),
 			TrainTimetableTool(perceptionPort),
-			AllTrainTimetablesTool(perceptionPort)
+			AllTrainTimetablesTool(perceptionPort),
+			TrainPerceptionTool(perceptionPort)
 		)
 	}
 
