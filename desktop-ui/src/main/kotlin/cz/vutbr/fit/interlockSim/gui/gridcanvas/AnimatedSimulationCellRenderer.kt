@@ -11,6 +11,7 @@ package cz.vutbr.fit.interlockSim.gui.gridcanvas
 
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationColors
 import cz.vutbr.fit.interlockSim.gui.animation.AnimationController
+import cz.vutbr.fit.interlockSim.gui.animation.TrainHeadingResolver
 import cz.vutbr.fit.interlockSim.gui.animation.TrainState
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicInOut
 import cz.vutbr.fit.interlockSim.objects.cells.DynamicRailSemaphore
@@ -27,11 +28,7 @@ import java.awt.RenderingHints
 import java.awt.Shape
 import java.awt.geom.AffineTransform
 import java.awt.geom.Path2D
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -105,8 +102,7 @@ class AnimatedSimulationCellRenderer(
 	cellHeight: Int,
 	private val animationController: AnimationController
 ) : SimulationCellRenderer(cellWidth, cellHeight) {
-	private val previousTrainLocations = mutableMapOf<Int, PointF>()
-	private val previousTrainHeadings = mutableMapOf<Int, Double>()
+	private val headingResolver = TrainHeadingResolver()
 	private val baseTrainShapeCache = mutableMapOf<TrainShapeKey, Shape>()
 	private val rotatedTrainShapeCache = mutableMapOf<TrainRotationKey, Shape>()
 	private val trainTranslationTransform = AffineTransform()
@@ -417,8 +413,7 @@ class AnimatedSimulationCellRenderer(
 		cellHeight: Int
 	) {
 		val state = animationController.getCurrentState()
-		previousTrainLocations.keys.retainAll(state.trainStates.keys)
-		previousTrainHeadings.keys.retainAll(state.trainStates.keys)
+		headingResolver.retainTrains(state.trainStates.keys)
 
 		// Render each train
 		for ((_, trainState) in state.trainStates) {
@@ -429,44 +424,17 @@ class AnimatedSimulationCellRenderer(
 	private fun resolveTrainHeading(
 		trainState: TrainState,
 		currentLocation: PointF
-	): Double {
-		val trainNumber = trainState.trainNumber
-
+	): Double =
 		// Prefer the authoritative heading derived from the simulation's track direction
-		// (entry → exit). Trains only ever move forward along a section, so this direction
-		// never reverses at a block boundary. Falling back to frame-to-frame delta inference
-		// caused the nose to flip (front/tail swap) whenever the position delta momentarily
-		// became zero or slightly negative at a segment crossing.
-		val authoritativeHeading = trainState.headingRadians?.let { snapHeadingToNearestCompassDirection(it) }
-
-		val previousLocation = previousTrainLocations[trainNumber]
-		val heading =
-			authoritativeHeading
-				?: previousLocation?.let { inferHeading(it, currentLocation) }
-				?: previousTrainHeadings[trainNumber]
-				?: DEFAULT_TRAIN_HEADING
-
-		previousTrainLocations[trainNumber] = currentLocation
-		previousTrainHeadings[trainNumber] = heading
-
-		return heading
-	}
-
-	private fun inferHeading(
-		previousLocation: PointF,
-		currentLocation: PointF
-	): Double? {
-		val dx = (currentLocation.x - previousLocation.x).toDouble()
-		val dy = (currentLocation.y - previousLocation.y).toDouble()
-		if (abs(dx) < HEADING_EPSILON && abs(dy) < HEADING_EPSILON) {
-			return null
-		}
-
-		return snapHeadingToNearestCompassDirection(atan2(dy, dx))
-	}
-
-	private fun snapHeadingToNearestCompassDirection(angle: Double): Double =
-		round(angle / SEGMENT_ANGLE_STEP) * SEGMENT_ANGLE_STEP
+		// (entry → exit); the resolver suppresses spurious 180° flips at stale boundary
+		// states (arrival at the destination InOut, waiting before a RED signal — #719)
+		// and falls back to frame-to-frame delta inference when no authoritative heading
+		// is available.
+		headingResolver.resolveHeading(
+			trainNumber = trainState.trainNumber,
+			authoritativeHeadingRadians = trainState.headingRadians,
+			currentLocation = currentLocation
+		)
 
 	private fun createTrainShape(
 		pixelX: Int,
@@ -534,9 +502,6 @@ class AnimatedSimulationCellRenderer(
 	)
 
 	private companion object {
-		const val HEADING_EPSILON = 0.001
-		const val DEFAULT_TRAIN_HEADING = 0.0
-		const val SEGMENT_ANGLE_STEP = PI / 4.0
 		const val TRAIN_HEIGHT_CELL_RATIO = 0.55
 		const val BODY_LENGTH_CELL_RATIO = 0.9
 		const val MIN_TRAIN_HEIGHT_PIXELS = 8

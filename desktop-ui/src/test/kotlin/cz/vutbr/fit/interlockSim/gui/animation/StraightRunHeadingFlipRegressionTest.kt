@@ -21,9 +21,15 @@
  * The fix advances `frontSection` to the upcoming section atomically with
  * `entrySeparator`, so position AND heading stay consistent.
  *
- * NOTE: a single remaining flip when the front reaches the destination InOut (the
- * last section can't be advanced past the InOut) is a known separate edge case
- * tracked in #719; this test excludes the arrival sample.
+ * NOTE: at two boundaries the simulation state is *inherently* stale (there is no
+ * upcoming TrackSection to advance `frontSection` to): when the front reaches the
+ * destination InOut, and when the front waits before a RED signal. There the raw
+ * calculator heading still reverses; the animated canvas corrects it via
+ * [TrainHeadingResolver] (#719). This test therefore asserts two things:
+ * 1. the RAW calculator heading has no mid-journey flips (guards the PR #718 sim fix;
+ *    the arrival sample is excluded because the raw flip there is expected), and
+ * 2. the RESOLVED heading (what the renderer draws) has no flips at all, including
+ *    the arrival samples (guards the #719 canvas fix).
  *
  * Drives `MultiTrainLoop` (one A→B spec) on `vyhybna.xml`, samples the authoritative
  * heading at every block/section transition, and asserts no >90° flip occurs
@@ -42,6 +48,7 @@ import cz.vutbr.fit.interlockSim.objects.cells.NodeCell
 import cz.vutbr.fit.interlockSim.objects.core.ContextPropertyChangeListener
 import cz.vutbr.fit.interlockSim.objects.core.PathSeparator
 import cz.vutbr.fit.interlockSim.sim.MultiTrainLoop
+import cz.vutbr.fit.interlockSim.sim.Train
 import cz.vutbr.fit.interlockSim.sim.events.BlockEvent
 import cz.vutbr.fit.interlockSim.sim.events.BlockEventListener
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
@@ -56,9 +63,12 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	private val processFactory: SimulationProcessFactory by inject()
 
 	private lateinit var calculator: TrainPositionCalculator
+	private val resolver = TrainHeadingResolver()
 	private val prevHeading = mutableMapOf<Int, Double>()
+	private val prevResolvedHeading = mutableMapOf<Int, Double>()
 	private val arrived = mutableSetOf<Int>()
 	private val flips = mutableListOf<String>()
+	private val resolvedFlips = mutableListOf<String>()
 
 	private fun sample(
 		loop: MultiTrainLoop,
@@ -66,13 +76,19 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 	) {
 		for (train in loop.getApprovedTrains()) {
 			val trainNumber = train.getNumber()
-			if (trainNumber in arrived) return
 			val section = train.frontSection ?: return
 			val heading = calculator.calculateTrainHeadingRadians(train, section) ?: return
 			val entry = train.trainEntrySeparator
 			val entryName = (DynamicWrapperUtils.unwrapToStatic(entry) as? NodeCell)?.getName()
+
+			// The RESOLVED heading (what the renderer draws) must never flip — including
+			// the arrival sample at the destination InOut (#719 canvas-side fix).
+			sampleResolved(train, section, heading)
+
+			if (trainNumber in arrived) return
 			// The front has reached the destination InOut: the last section can't be
-			// advanced past the InOut, so the arrival sample is excluded (separate issue).
+			// advanced past the InOut, so the RAW arrival sample is excluded — the raw
+			// flip there is expected and corrected canvas-side by TrainHeadingResolver.
 			if (entryName == destinationName) {
 				arrived.add(trainNumber)
 				return
@@ -99,6 +115,29 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 			}
 			prevHeading[trainNumber] = heading
 		}
+	}
+
+	private fun sampleResolved(
+		train: Train,
+		section: cz.vutbr.fit.interlockSim.objects.tracks.TrackSection,
+		rawHeading: Double
+	) {
+		val trainNumber = train.getNumber()
+		val location =
+			calculator.calculateTrainGridLocation(train, section, train.frontPosition)
+				?: return
+		val resolved = resolver.resolveHeading(trainNumber, rawHeading, location)
+		val prev = prevResolvedHeading[trainNumber]
+		if (prev != null) {
+			val delta = normalizeAngleDiff(resolved - prev)
+			if (abs(delta) > Math.PI / 2.0) {
+				resolvedFlips.add(
+					"RESOLVED_FLIP train#$trainNumber ${deg(prev)} -> ${deg(resolved)} (delta ${deg(delta)}); " +
+						"raw=${deg(rawHeading)}; entrySep=${endLabel(train.trainEntrySeparator)}"
+				)
+			}
+		}
+		prevResolvedHeading[trainNumber] = resolved
 	}
 
 	private fun endLabel(end: PathSeparator?): String {
@@ -165,6 +204,10 @@ class StraightRunHeadingFlipRegressionTest : KoinTestBase() {
 		if (flips.isNotEmpty()) {
 			flips.forEach { println("HEADING_FLIP: $it") }
 		}
+		if (resolvedFlips.isNotEmpty()) {
+			resolvedFlips.forEach { println("HEADING_FLIP: $it") }
+		}
 		assertThat(flips).isEmpty()
+		assertThat(resolvedFlips).isEmpty()
 	}
 }
