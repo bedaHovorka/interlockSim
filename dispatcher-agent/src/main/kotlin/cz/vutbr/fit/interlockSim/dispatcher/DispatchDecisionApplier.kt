@@ -14,6 +14,8 @@ import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import cz.vutbr.fit.interlockSim.ports.TrainLifecyclePort
 import cz.vutbr.fit.interlockSim.sim.ControlStepListener
 import cz.vutbr.fit.interlockSim.sim.DispatchDecision
+import cz.vutbr.fit.interlockSim.sim.DispatcherMode
+import cz.vutbr.fit.interlockSim.sim.DispatcherModeState
 import cz.vutbr.fit.interlockSim.sim.applyToolDrivenToActuator
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -38,6 +40,18 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  * | [DispatchDecision.NoAction] | no-op |
  *
  * Decisions are applied in FIFO order matching the posting order on the driver thread.
+ *
+ * ## Mode gating (SP2b.4)
+ *
+ * When a [DispatcherModeState] is wired (default: `null`, gate disabled) every drained
+ * decision is filtered through the effective [DispatcherMode] before it reaches the
+ * actuator ports:
+ *
+ * - [DispatcherMode.AUTO] — apply directly (pre-SP2b.4 behaviour).
+ * - [DispatcherMode.SEMI_AUTO] — forward to the wired approver callback and apply
+ *   only if it returns `true`; if no approver is wired, drop with a warning.
+ * - [DispatcherMode.MANUAL] — drop every actuating decision (a debug line is logged).
+ *   [DispatchDecision.NoAction] is unaffected — it is a no-op regardless of mode.
  *
  * ## Wiring (before `context.run()`)
  *
@@ -71,7 +85,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *   callers that do not need train-lifecycle commands; when `null` and a [DispatchDecision.HoldTrain]
  *   is received, a warning is logged and the decision is dropped.
  *
- * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1)
+ * @since Issue #731 (SP0.9 — Goal 10); [trainLifecyclePort] added in Issue #556 (SP2b.1);
+ *   [modeState] + [semiAutoApprover] added in Issue #559 (SP2b.4)
  */
 class DispatchDecisionApplier(
 	private val queue: ActuatorCommandQueue,
@@ -100,7 +115,45 @@ class DispatchDecisionApplier(
 	 *
 	 * @since Issue #556 (SP2b.1 — Goal 10)
 	 */
-	private val trainLifecyclePort: TrainLifecyclePort? = null
+	private val trainLifecyclePort: TrainLifecyclePort? = null,
+	/**
+	 * SP2b.4: Dispatcher operating-mode state that gates decision application.
+	 *
+	 * When `null` (the default), the applier behaves exactly as before SP2b.4 — every
+	 * drained decision is applied.  When non-null, the effective mode
+	 * ([DispatcherModeState.getEffectiveMode]) is consulted on every drained
+	 * decision and controls whether it is applied, forwarded to [semiAutoApprover] for
+	 * human approval, or dropped:
+	 *
+	 * | Effective mode | Behaviour |
+	 * |---|---|
+	 * | [DispatcherMode.AUTO] | Apply directly (pre-SP2b.4 behaviour). |
+	 * | [DispatcherMode.SEMI_AUTO] | Forward to [semiAutoApprover]; apply only if it returns `true`. If no approver is wired, the decision is dropped with a warning. |
+	 * | [DispatcherMode.MANUAL] | Drop the decision without invoking the actuator port; a debug line is logged. [DispatchDecision.NoAction] passes through as a no-op regardless of mode. |
+	 *
+	 * The mode is read once per decision via [DispatcherModeState.getEffectiveMode], so
+	 * a mode change becomes effective on the next drained decision.
+	 *
+	 * @since Issue #559 (SP2b.4 — Goal 10)
+	 */
+	private val modeState: DispatcherModeState? = null,
+	/**
+	 * SP2b.4: Approver callback consulted when the effective [DispatcherMode] is
+	 * [DispatcherMode.SEMI_AUTO].
+	 *
+	 * Called on the sim thread (same thread as [onControlStep]) with the pending
+	 * decision; must return `true` to apply the decision or `false` to drop it.  Wired
+	 * in Stage B1 (Issue #532) to the Goal 9 `ConflictResolutionPanel` propose-approve
+	 * flow; `null` in headless contexts, in which case every actuating decision is
+	 * dropped with a warning while in SEMI_AUTO mode.
+	 *
+	 * Implementations must be non-blocking (or at least short-lived) — the callback
+	 * runs inline on the kDisco simulation thread and stalling it stalls the whole
+	 * simulation.
+	 *
+	 * @since Issue #559 (SP2b.4 — Goal 10)
+	 */
+	private val semiAutoApprover: ((DispatchDecision) -> Boolean)? = null
 ) : ControlStepListener {
 	companion object {
 		private val logger = KotlinLogging.logger {}
@@ -160,7 +213,55 @@ class DispatchDecisionApplier(
 		if (decisions.isEmpty()) return
 		logger.debug { "onControlStep: applying ${decisions.size} pending decision(s)" }
 		for (decision in decisions) {
-			applyDecision(decision)
+			if (shouldApply(decision)) {
+				applyDecision(decision)
+			}
+		}
+	}
+
+	/**
+	 * SP2b.4 gate: consults [modeState] (if wired) to decide whether [decision] should
+	 * be applied, sent to the [semiAutoApprover], or dropped outright.
+	 *
+	 * Returns `true` when the caller should proceed to [applyDecision], `false` when
+	 * the decision has been dropped by the mode gate (a debug/warn line has been
+	 * logged and no actuator side effect must occur).
+	 *
+	 * [DispatchDecision.NoAction] always returns `true` — applying it is a no-op
+	 * regardless of mode, and short-circuiting it here would suppress the exhaustive-
+	 * `when` guarantee in [applyDecision].
+	 *
+	 * @since Issue #559 (SP2b.4 — Goal 10)
+	 */
+	private fun shouldApply(decision: DispatchDecision): Boolean {
+		val state = modeState ?: return true
+		if (decision is DispatchDecision.NoAction) return true
+		return when (state.getEffectiveMode()) {
+			DispatcherMode.AUTO -> true
+			DispatcherMode.MANUAL -> {
+				logger.debug {
+					"Dropping decision under DispatcherMode.MANUAL: ${decision::class.simpleName}"
+				}
+				false
+			}
+			DispatcherMode.SEMI_AUTO -> {
+				val approver = semiAutoApprover
+				if (approver == null) {
+					logger.warn {
+						"Dropping decision under DispatcherMode.SEMI_AUTO: no approver wired " +
+							"(${decision::class.simpleName})"
+					}
+					false
+				} else {
+					val approved = approver(decision)
+					if (!approved) {
+						logger.debug {
+							"Decision rejected by SEMI_AUTO approver: ${decision::class.simpleName}"
+						}
+					}
+					approved
+				}
+			}
 		}
 	}
 
