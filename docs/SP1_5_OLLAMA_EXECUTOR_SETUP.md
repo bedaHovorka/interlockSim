@@ -164,9 +164,23 @@ val config = OllamaExecutorConfig(
 val executor = OllamaSimpleExecutor(config)
 ```
 
-### Customize via Environment (Future)
+### Customize via Environment
 
-Environment variable support planned for SP1.6+. Currently, modify `OllamaExecutorConfig.default()` in `DispatcherAgentModule.kt`.
+Set `OLLAMA_BASE_URL` to override `ollamaEndpoint` without touching code — `OllamaExecutorConfig.default()`
+(used by `DispatcherAgentModule.kt`'s Koin binding) reads it, falling back to `http://localhost:11434`
+when unset or blank:
+
+```bash
+export OLLAMA_BASE_URL=http://my-ollama:11434
+./gradlew :dispatcher-agent:integrationTest
+```
+
+**Windows/macOS Docker Desktop note (Issue #770):** once dispatcher-agent is wired into the `app`
+container (Stage B), `localhost` inside the container won't reach a native Ollama install or the
+`ollama` Compose service — not even under `app`'s `network_mode: host`. Verified 2026-07-19 on
+Windows 11 + Docker Desktop 29.5.3 (WSL2 backend): `host.docker.internal` *is* reachable from a
+`network_mode: host` container, so set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in that
+scenario. No change to `app`'s network mode is needed.
 
 ## Model Selection
 
@@ -348,7 +362,7 @@ For parallel simulations, consider:
 
 ## Future Enhancements (SP1.6+)
 
-- [ ] Environment variable override for `OllamaExecutorConfig`
+- [x] Environment variable override for `OllamaExecutorConfig` (`OLLAMA_BASE_URL`, Issue #770/PR #771)
 - [ ] LLM call caching (avoid re-inferencing identical observations)
 - [ ] Ollama health checks and auto-restart
 - [ ] Support for remote Ollama instances (not just localhost)
