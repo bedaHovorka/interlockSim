@@ -101,7 +101,7 @@ object PathCommandTranslator {
 		trainId: String,
 		start: PathSeparator,
 		candidate: PathCandidate,
-		context: SimulationContext,
+		context: SimulationContext
 	): List<DispatchDecision> {
 		val switchCommands = mutableListOf<DispatchDecision.SetSwitchPosition>()
 		val sections = candidate.sections
@@ -132,7 +132,7 @@ object PathCommandTranslator {
 							DispatchDecision.SetSwitchPosition(
 								switchName = nextSeparator.staticRef.getName(),
 								position = conf,
-								rationale = "SP2b.3: switch on selected path for $trainId",
+								rationale = "SP2b.3: switch on selected path for $trainId"
 							)
 						)
 					} else {
@@ -163,7 +163,7 @@ object PathCommandTranslator {
 					DispatchDecision.SetSignalAspect(
 						semaphoreName = start.name,
 						signal = Signal.FREE,
-						rationale = "SP2b.3: entry signal on selected path for $trainId",
+						rationale = "SP2b.3: entry signal on selected path for $trainId"
 					)
 				else -> {
 					val staticCell = CellUtilities.assertNodeCell(start)
@@ -171,7 +171,7 @@ object PathCommandTranslator {
 						DispatchDecision.SetSignalAspect(
 							semaphoreName = staticCell.getName(),
 							signal = Signal.FREE,
-							rationale = "SP2b.3: entry signal on selected path for $trainId",
+							rationale = "SP2b.3: entry signal on selected path for $trainId"
 						)
 					} else {
 						null

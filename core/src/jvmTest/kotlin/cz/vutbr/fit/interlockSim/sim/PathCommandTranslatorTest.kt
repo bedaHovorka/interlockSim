@@ -10,7 +10,6 @@
 package cz.vutbr.fit.interlockSim.sim
 
 import assertk.assertThat
-import assertk.assertions.containsExactly
 import assertk.assertions.isEmpty
 import assertk.assertions.isEqualTo
 import assertk.assertions.isInstanceOf
@@ -29,8 +28,8 @@ import cz.vutbr.fit.interlockSim.objects.cells.Signal
 import cz.vutbr.fit.interlockSim.objects.core.Cell
 import cz.vutbr.fit.interlockSim.testutil.KoinTestBase
 import cz.vutbr.fit.interlockSim.testutil.TestFixtures
-import cz.vutbr.fit.interlockSim.util.Util
 import cz.vutbr.fit.interlockSim.util.Point
+import cz.vutbr.fit.interlockSim.util.Util
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -74,11 +73,11 @@ class PathCommandTranslatorTest : KoinTestBase() {
 	private lateinit var navigator: TopologyNavigator
 
 	// vyhybna.xml element coords (same as ShuntingLoop companion constants)
-	private lateinit var zA: DynamicRailSemaphore   // (14,8) entry semaphore
+	private lateinit var zA: DynamicRailSemaphore // (14,8) entry semaphore
 	private lateinit var doA1: DynamicRailSemaphore // (16,8) upper-route exit semaphore
 	private lateinit var doA2: DynamicRailSemaphore // (17,9) lower-route exit semaphore
-	private lateinit var vA: DynamicRailSwitch      // (15,8) entry switch
-	private lateinit var inOutA: DynamicInOut       // (11,8) InOut A
+	private lateinit var vA: DynamicRailSwitch // (15,8) entry switch
+	private lateinit var inOutA: DynamicInOut // (11,8) InOut A
 
 	@BeforeEach
 	fun setUp() {
@@ -97,7 +96,10 @@ class PathCommandTranslatorTest : KoinTestBase() {
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
-	private inline fun <reified T : Cell> elementAt(x: Int, y: Int): T {
+	private inline fun <reified T : Cell> elementAt(
+		x: Int,
+		y: Int
+	): T {
 		val cell =
 			context.getRailWayNetGrid()[Point(x, y)]
 				?: throw AssertionError("No cell at ($x,$y) in vyhybna.xml")
@@ -115,13 +117,14 @@ class PathCommandTranslatorTest : KoinTestBase() {
 	private fun findCandidateWithConf(
 		start: DynamicRailSemaphore,
 		target: DynamicRailSemaphore,
-		wantConf: RailSwitch.Conf,
+		wantConf: RailSwitch.Conf
 	): PathCandidate {
 		val candidates = navigator.findCandidatePaths(start, target)
 		check(candidates.isNotEmpty()) { "No candidate path from ${start.name} to ${target.name}" }
 		return candidates.first { candidate ->
 			val commands = PathCommandTranslator.translate("train1", start, candidate, context)
-			commands.filterIsInstance<DispatchDecision.SetSwitchPosition>()
+			commands
+				.filterIsInstance<DispatchDecision.SetSwitchPosition>()
 				.any { it.switchName == vA.staticRef.getName() && it.position == wantConf }
 		}
 	}
@@ -211,10 +214,14 @@ class PathCommandTranslatorTest : KoinTestBase() {
 			val mainCandidate = findCandidateWithConf(zA, doA1, RailSwitch.Conf.MAIN)
 			val branchCandidate = findCandidateWithConf(zA, doA2, RailSwitch.Conf.BRANCH)
 
-			val mainCmds = PathCommandTranslator.translate("t", zA, mainCandidate, context)
-				.filterIsInstance<DispatchDecision.SetSwitchPosition>()
-			val branchCmds = PathCommandTranslator.translate("t", zA, branchCandidate, context)
-				.filterIsInstance<DispatchDecision.SetSwitchPosition>()
+			val mainCmds =
+				PathCommandTranslator
+					.translate("t", zA, mainCandidate, context)
+					.filterIsInstance<DispatchDecision.SetSwitchPosition>()
+			val branchCmds =
+				PathCommandTranslator
+					.translate("t", zA, branchCandidate, context)
+					.filterIsInstance<DispatchDecision.SetSwitchPosition>()
 
 			assertThat(mainCmds[0].position).isEqualTo(RailSwitch.Conf.MAIN)
 			assertThat(branchCmds[0].position).isEqualTo(RailSwitch.Conf.BRANCH)
