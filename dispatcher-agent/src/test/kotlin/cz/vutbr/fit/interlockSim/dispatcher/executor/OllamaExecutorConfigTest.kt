@@ -41,6 +41,27 @@ class OllamaExecutorConfigTest {
 	}
 
 	@Test
+	fun `default config falls back to standard endpoint when OLLAMA_BASE_URL is absent`() {
+		val config = OllamaExecutorConfig.default(env = emptyMap())
+
+		assertThat(config.ollamaEndpoint).isEqualTo("http://localhost:11434")
+	}
+
+	@Test
+	fun `default config falls back to standard endpoint when OLLAMA_BASE_URL is blank`() {
+		val config = OllamaExecutorConfig.default(env = mapOf("OLLAMA_BASE_URL" to "   "))
+
+		assertThat(config.ollamaEndpoint).isEqualTo("http://localhost:11434")
+	}
+
+	@Test
+	fun `default config uses OLLAMA_BASE_URL override when present`() {
+		val config = OllamaExecutorConfig.default(env = mapOf("OLLAMA_BASE_URL" to "http://host.docker.internal:11434"))
+
+		assertThat(config.ollamaEndpoint).isEqualTo("http://host.docker.internal:11434")
+	}
+
+	@Test
 	fun `local testing config reduces inference timeout`() {
 		val config = OllamaExecutorConfig.forLocalTesting()
 

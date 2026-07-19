@@ -145,6 +145,16 @@ services:
   # holding the port, not a native install -- no worse than the pre-existing manual
   # coordination, just not improved for that specific case.
   #
+  # VERIFIED 2026-07-19 (Windows 11 + Docker Desktop 29.5.3, WSL2 backend, Issue #770):
+  # a `network_mode: host` container genuinely cannot reach `localhost:11434` when Ollama
+  # is a native Windows install (confirmed with `docker run --rm --network host busybox
+  # nc -zv localhost 11434` against a running native `ollama serve` -- connection failed).
+  # `host.docker.internal:11434` IS reachable from a `network_mode: host` container on the
+  # same setup, which is why dispatcher-agent's OLLAMA_BASE_URL (see OllamaExecutorConfig
+  # and docs/SP1_5_OLLAMA_EXECUTOR_SETUP.md) should be set to
+  # `http://host.docker.internal:11434` once Stage B wires it into the `app` service below --
+  # `app` already runs with `network_mode: host` and that works without changing it.
+  #
   # GPU support: Ollama auto-detects the GPU at runtime -- there are NO `OLLAMA_CUDA` /
   # `OLLAMA_ROCM` environment variables (those are not real Ollama knobs). To give the
   # container GPU access, uncomment the `deploy.resources.reservations.devices` block below
