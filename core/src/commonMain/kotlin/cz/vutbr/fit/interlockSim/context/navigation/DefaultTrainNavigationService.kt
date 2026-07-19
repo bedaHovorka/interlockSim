@@ -192,6 +192,40 @@ class DefaultTrainNavigationService(
 		return isAvailable
 	}
 
+	override fun reservedSeparatorsAhead(
+		trainId: String,
+		separator: PathSeparator,
+		limit: Int
+	): List<OrientedPathSeparator> {
+		require(limit >= 0) { "limit must be >= 0: $limit" }
+		if (limit == 0) return emptyList()
+
+		val reservedPath = registry.getPathInfo(trainId)?.reservedPath ?: return emptyList()
+
+		// Find the anchor separator on the reserved route (same element == separator matching
+		// as determineNextFromPathInfo), then collect subsequent OrientedPathSeparators in order.
+		val anchorIndex = reservedPath.indexOfFirst { it == separator }
+		if (anchorIndex < 0) {
+			logger.trace {
+				"reservedSeparatorsAhead: anchor $separator not on reserved path of train '$trainId'"
+			}
+			return emptyList()
+		}
+
+		val result = mutableListOf<OrientedPathSeparator>()
+		for (i in (anchorIndex + 1) until reservedPath.size) {
+			val element = reservedPath.elementAt(i)
+			if (element is OrientedPathSeparator) {
+				result.add(element)
+				if (result.size == limit) break
+			}
+		}
+		logger.trace {
+			"reservedSeparatorsAhead: ${result.size} separator(s) ahead of $separator for train '$trainId'"
+		}
+		return result
+	}
+
 	/**
 	 * Determine the next track section from PathInfo based on current separator position.
 	 *

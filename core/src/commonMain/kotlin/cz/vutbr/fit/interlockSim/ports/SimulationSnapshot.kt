@@ -28,6 +28,7 @@ package cz.vutbr.fit.interlockSim.ports
  * | [blocks]        | [NetworkPerceptionPort.allBlockOccupancies] | Current state of every track block |
  * | [trainPositions]| [NetworkPerceptionPort.allTrainPositions] | Position and velocity of every active train |
  * | [timetables]    | [NetworkPerceptionPort.allTrainTimetables] | Route and schedule of every active train |
+ * | [trainPerceptions] | [NetworkPerceptionPort.allTrainPerceptions] | First-person perception of every active train |
  *
  * ## Design note
  *
@@ -56,6 +57,10 @@ package cz.vutbr.fit.interlockSim.ports
  * @property trainPositions Position and motion of every currently active (approved)
  *   train.  Trains in the unapproved queue are absent.
  * @property timetables  Timetable of every currently active (approved) train.
+ * @property trainPerceptions  First-person perception reading of every currently active
+ *   train (SP2a.1 Issue #552). Includes signal ahead, speed limit, kinematics, timetable
+ *   event, and dwell state. Defaults to [emptyList] for backwards compatibility with
+ *   snapshots captured before SP2a.1.
  *
  * @since Issue #543 (SP0.4 — Goal 10 observable simulation state)
  */
@@ -64,7 +69,8 @@ data class SimulationSnapshot(
 	val semaphores: List<SemaphoreReading>,
 	val blocks: List<BlockOccupancyReading>,
 	val trainPositions: List<TrainPositionReading>,
-	val timetables: List<TimetableReading>
+	val timetables: List<TimetableReading>,
+	val trainPerceptions: List<TrainPerceptionReading> = emptyList()
 ) {
 	companion object {
 		/**

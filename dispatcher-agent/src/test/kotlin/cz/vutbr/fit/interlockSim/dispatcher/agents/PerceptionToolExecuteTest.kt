@@ -21,12 +21,14 @@ import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.AllTrainPositionsTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.AllTrainTimetablesTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.BlockOccupancyTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.SignalAspectTool
+import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPerceptionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainPositionTool
 import cz.vutbr.fit.interlockSim.dispatcher.agents.tools.TrainTimetableTool
 import cz.vutbr.fit.interlockSim.ports.BlockOccupancyReading
 import cz.vutbr.fit.interlockSim.ports.NetworkPerceptionPort
 import cz.vutbr.fit.interlockSim.ports.SemaphoreReading
 import cz.vutbr.fit.interlockSim.ports.TimetableReading
+import cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading
 import cz.vutbr.fit.interlockSim.ports.TrainPositionReading
 import io.mockk.every
 import io.mockk.mockk
@@ -36,10 +38,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
- * Verifies the 8 perception tools forward arguments to [NetworkPerceptionPort] correctly and
- * wrap the port result in [ToolResult.Success] (SP1.6, Issue #551 review #3).
+ * Verifies the 9 perception tools forward arguments to [NetworkPerceptionPort] correctly and
+ * wrap the port result in [ToolResult.Success] (SP1.6, Issue #551 review #3; SP2a.1 #552).
  *
- * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop)
+ * @since Issue #551 (SP1.6 — Goal 10 tool-calling loop); SP2a.1 (#552) adds TrainPerceptionTool
  */
 class PerceptionToolExecuteTest {
 	private val perceptionPort = mockk<NetworkPerceptionPort>(relaxed = true)
@@ -166,5 +168,34 @@ class PerceptionToolExecuteTest {
 
 		assertThat(result).isInstanceOf<ToolResult.Error>()
 		assertThat((result as ToolResult.Error).cause).isNotNull()
+	}
+
+	@Test
+	fun `train_perception forwards trainId and wraps the reading`() {
+		val reading = mockk<TrainPerceptionReading>()
+		every { perceptionPort.trainPerception("Train #1") } returns reading
+
+		val result = runBlocking { TrainPerceptionTool(perceptionPort).execute(mapOf("trainId" to "Train #1")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		assertThat((result as ToolResult.Success).data).isSameAs(reading)
+		verify(exactly = 1) { perceptionPort.trainPerception("Train #1") }
+	}
+
+	@Test
+	fun `train_perception wraps null when trainId is unknown`() {
+		every { perceptionPort.trainPerception("ghost") } returns null
+
+		val result = runBlocking { TrainPerceptionTool(perceptionPort).execute(mapOf("trainId" to "ghost")) }
+
+		assertThat(result).isInstanceOf<ToolResult.Success>()
+		assertThat((result as ToolResult.Success).data).isNull()
+	}
+
+	@Test
+	fun `train_perception returns Error when trainId param is missing`() {
+		val result = runBlocking { TrainPerceptionTool(perceptionPort).execute(emptyMap()) }
+
+		assertThat(result).isInstanceOf<ToolResult.Error>()
 	}
 }

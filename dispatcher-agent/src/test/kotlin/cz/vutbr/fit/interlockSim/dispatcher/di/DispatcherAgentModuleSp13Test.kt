@@ -118,9 +118,9 @@ class DispatcherAgentModuleSp13Test {
 		val perceptionTools = registry.assemblePerceptionTools(mockPerceptionPort)
 		val actuatorTools = registry.assembleActuatorTools(commandQueue)
 
-		// SP1.6/SP1.7: tool implementations are in place (8 perception + 4 actuator = 12 total)
-		assertThat(allTools).hasSize(12)
-		assertThat(perceptionTools).hasSize(8)
+		// SP1.6/SP1.7/SP2a.1: tool implementations are in place (9 perception + 4 actuator = 13 total)
+		assertThat(allTools).hasSize(13)
+		assertThat(perceptionTools).hasSize(9)
 		assertThat(actuatorTools).hasSize(4)
 	}
 }
