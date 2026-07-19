@@ -12,6 +12,7 @@ package cz.vutbr.fit.interlockSim.sim
 import cz.vutbr.fit.interlockSim.context.SimulationEnvironment
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkActuatorPort
 import cz.vutbr.fit.interlockSim.ports.DefaultNetworkPerceptionPort
+import cz.vutbr.fit.interlockSim.ports.DefaultTrainActuatorPort
 import cz.vutbr.fit.interlockSim.ports.RouteRequestResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 
@@ -42,6 +43,19 @@ private val logger = KotlinLogging.logger {}
  * duplicate-decision races the async driver needs guards for (PR #740,
  * Issue #742) cannot occur here by construction, and runs are fully deterministic.
  *
+ * ## SP4.3 reactive train policy
+ *
+ * After applying dispatcher decisions (admission, path reservation), the
+ * [TrainDecisionPolicy] is applied once per approved train:
+ * 1. The train's first-person [cz.vutbr.fit.interlockSim.ports.TrainPerceptionReading]
+ *    is read live from the sim thread (after any signal changes from the dispatcher).
+ * 2. [TrainDecisionPolicy.decide] computes the [TrainAccelerationDecision], then
+ *    [cz.vutbr.fit.interlockSim.ports.TrainActuatorPort.setTargetSpeed] applies it for that train.
+ *
+ * Applying the reactive policy AFTER dispatcher decisions ensures the perception
+ * reflects the most up-to-date signal aspects for this tick.  Trains with no cleared
+ * path ahead are silently skipped by [Train.setTargetSpeed]'s internal safety gate.
+ *
  * Usage (before `context.run()`):
  * ```kotlin
  * val loop = ShuntingLoop(context, endTime)
@@ -59,13 +73,18 @@ private val logger = KotlinLogging.logger {}
  *   is routed through the interlocking safety kernel as the single chokepoint.
  *   Pass `null` (default) for `:fast-sim` native binary and legacy test wiring that runs
  *   without Koin DI; those callers fall back to the direct [PathReservationService] path.
- * @since Issue #733 / #742 follow-up (SP0.11 green-up)
+ * @param trainDecisionPolicy SP4.3 (Issue #565): per-train reactive acceleration policy,
+ *   applied once per approved train after dispatcher decisions.  Defaults to
+ *   [AlgorithmicTrainDecisionPolicy].  Pass a custom implementation to spy on or
+ *   replace the algorithmic acceleration logic in tests.
+ * @since Issue #733 / #742 follow-up (SP0.11 green-up); SP4.3 (#565) adds [trainDecisionPolicy]
  */
 fun wireSynchronousDispatcher(
 	env: SimulationEnvironment,
 	loop: ShuntingLoop,
 	maxConcurrentTrains: Int = RuleBasedDispatcher.DEFAULT_MAX_CONCURRENT_TRAINS,
-	interlockingFacade: InterlockingFacade? = null
+	interlockingFacade: InterlockingFacade? = null,
+	trainDecisionPolicy: TrainDecisionPolicy = AlgorithmicTrainDecisionPolicy()
 ) {
 	val perceptionPort =
 		DefaultNetworkPerceptionPort(
@@ -88,7 +107,38 @@ fun wireSynchronousDispatcher(
 			dispatcher.decide(observation).forEach { decision ->
 				applyDecision(decision, loop, actuatorPort)
 			}
+			// SP4.3: apply reactive train decisions for each active train (Issue #565).
+			// The perception is read live (post-dispatcher) so signal changes from
+			// admission/reservation this tick are visible.
+			applyTrainDecisions(loop, perceptionPort, trainDecisionPolicy)
 		}
+}
+
+/**
+ * SP4.3 helper: for each approved train, reads the live perception, decides via
+ * [trainDecisionPolicy], and applies the resulting target speed.
+ *
+ * Called on the kDisco sim thread from [wireSynchronousDispatcher]'s
+ * [ControlStepListener], after all dispatcher decisions have been applied for this
+ * tick (so signal aspects are current).  Trains with no cleared path are silently
+ * skipped by [Train.setTargetSpeed]'s internal safety gate.
+ *
+ * @since Issue #565 (SP4.3 — Goal 10 single reactive train end-to-end)
+ */
+internal fun applyTrainDecisions(
+	loop: ShuntingLoop,
+	perceptionPort: DefaultNetworkPerceptionPort,
+	trainDecisionPolicy: TrainDecisionPolicy
+) {
+	loop.getApprovedTrains().forEach { train ->
+		val reading = perceptionPort.trainPerception(train.name)
+		if (reading == null) {
+			logger.trace { "applyTrainDecisions: no perception for train ${train.name} — skipping" }
+			return@forEach
+		}
+		val decision = trainDecisionPolicy.decide(reading)
+		DefaultTrainActuatorPort(train).setTargetSpeed(decision.targetSpeedMps)
+	}
 }
 
 internal fun applyDecision(
