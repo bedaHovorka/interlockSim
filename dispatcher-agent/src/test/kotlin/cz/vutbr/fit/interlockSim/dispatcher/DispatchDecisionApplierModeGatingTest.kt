@@ -265,7 +265,10 @@ class DispatchDecisionApplierModeGatingTest {
 		fun semiAuto_noAction_bypassesApprover() {
 			val state = DispatcherModeState().apply { setOverride(DispatcherMode.SEMI_AUTO) }
 			var calls = 0
-			val approver: (DispatchDecision) -> Boolean = { calls++; false }
+			val approver: (DispatchDecision) -> Boolean = {
+				calls++
+				false
+			}
 			val (queue, applier) = makeApplier(modeState = state, semiAutoApprover = approver)
 			queue.postAll(listOf(DispatchDecision.NoAction))
 
