@@ -123,7 +123,11 @@ class DispatchDecisionSp2b1Test {
 		@Test
 		@DisplayName("ApproveTrain with rationale stores the rationale list")
 		fun approveTrain_withRationale_rationaleStored() {
-			val decision = DispatchDecision.ApproveTrain("T1", rationale = listOf("Main track free; admitting first queued train"))
+			val decision =
+				DispatchDecision.ApproveTrain(
+					"T1",
+					rationale = listOf("Main track free; admitting first queued train")
+				)
 			assertThat(decision.rationale).isEqualTo(listOf("Main track free; admitting first queued train"))
 		}
 

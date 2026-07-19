@@ -108,8 +108,8 @@ class DispatchDecisionSp2b5Test {
 
 			val metricsEntry = rationale.first { it.contains("section") }
 			assertThat(metricsEntry).contains("3")
-			assertThat(metricsEntry).contains("1")    // switchMovements
-			assertThat(metricsEntry).contains("0.5")  // conflictRisk
+			assertThat(metricsEntry).contains("1") // switchMovements
+			assertThat(metricsEntry).contains("0.5") // conflictRisk
 		}
 
 		@Test

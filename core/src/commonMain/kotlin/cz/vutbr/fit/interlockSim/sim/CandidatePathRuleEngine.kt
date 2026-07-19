@@ -166,19 +166,20 @@ class CandidatePathRuleEngine(
 			"CandidatePathRuleEngine selected route with ${best.sections.size} section(s), " +
 				"switchMovementCount=${best.switchMovementCount}, conflictRiskWeight=${best.conflictRiskWeight}"
 		}
-		val rationale = buildList {
-			add(
-				"Rules (priority): ${priority.joinToString(" → ") { it.name }}"
-			)
-			add(
-				"Selected: ${best.sections.size} section(s), " +
-					"switches=${best.switchMovementCount}, " +
-					"conflictRisk=${best.conflictRiskWeight}"
-			)
-			if (ranked.size > 1) {
-				add("Ranked ${ranked.size} candidate path(s); top-ranked selected")
+		val rationale =
+			buildList {
+				add(
+					"Rules (priority): ${priority.joinToString(" → ") { it.name }}"
+				)
+				add(
+					"Selected: ${best.sections.size} section(s), " +
+						"switches=${best.switchMovementCount}, " +
+						"conflictRisk=${best.conflictRiskWeight}"
+				)
+				if (ranked.size > 1) {
+					add("Ranked ${ranked.size} candidate path(s); top-ranked selected")
+				}
 			}
-		}
 		return best to rationale
 	}
 
